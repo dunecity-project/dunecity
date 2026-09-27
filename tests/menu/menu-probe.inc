@@ -1,5 +1,6 @@
 #include <Network/NetworkManager.h>
 #include <Network/WorkshopGameContent.h>
+#include <misc/OMemoryStream.h>
 #include <fstream>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
 #include <Menu/HouseChoiceMenu.h>
@@ -1455,6 +1456,123 @@ int runMenuProbe() {
         menuRequire(separate!=installed && readCompleteFile(installed)==data
                     && readCompleteFile(separate)==data,
                     "A same-name local map without metadata was overwritten");
+    }
+    {
+        // A guest that has never played the host's mod receives the map first: the join
+        // resolves - and if necessary downloads - that mod only after the lobby opens, and
+        // the packet handler must not wait for it. This drives the real SENDGAMEINFO path
+        // with the dependency genuinely absent from the local store.
+        namespace fs = std::filesystem;
+        auto& manager = ModManager::instance();
+        menuRequire(std::getenv("DUNECITY_USERDIR") != nullptr,
+                    "Fresh guest probe requires the isolated user profile");
+        const std::string draft = "Workshop Guest Probe";
+        const auto draftPath = fs::path(manager.getModPath(draft));
+        const auto previousMod = manager.getActiveModName();
+        fs::remove_all(draftPath);
+        menuRequire(manager.createMod(draft,"vanilla"),"Cannot create the host's mod fixture");
+        const auto mod = Workshop::saveMod(draft);
+        const std::string data = "[BASIC]\nName=Fresh guest map\n";
+        const auto source = Workshop::saveMapData("Fresh guest map.ini",data,mod.hash);
+        const auto root = Workshop::store().root();
+        const auto cachedMod = root/"revisions"/mod.hash;
+        const auto held = root/(".probe-guest-"+mod.hash);
+        const auto installed = (fs::path(std::getenv("DUNECITY_USERDIR"))/"maps/multiplayer"
+                                /"Fresh guest map.ini").string();
+        struct Cleanup {
+            std::function<void()> run;
+            ~Cleanup() { try { run(); } catch(const std::exception& error) { SDL_Log("Fresh guest cleanup: %s", error.what()); } }
+        } cleanup{[&] {
+            manager.setActiveMod(previousMod);
+            std::error_code code;
+            fs::remove_all(manager.getModPath("ws-"+mod.hash),code);
+            fs::remove_all(held,code); fs::remove_all(draftPath,code);
+            fs::remove(installed,code); fs::remove(installed+".workshop.ini",code);
+            for(const auto& item : Workshop::store().list("mod"))
+                if(item.id==mod.id) fs::remove_all(root/"revisions"/item.hash,code);
+            for(const auto& item : Workshop::store().list("map"))
+                if(item.id==source.id) fs::remove_all(root/"revisions"/item.hash,code);
+        }};
+        // Become that guest: the map arrives inside the packet, the mod does not exist here.
+        fs::rename(cachedMod,held);
+        fs::remove_all(root/"revisions"/source.hash);
+        { std::error_code code; fs::remove(installed,code); fs::remove(installed+".workshop.ini",code); }
+        menuRequire(!fs::exists(cachedMod),"The guest fixture still holds the host's mod revision");
+
+        struct Peer final : GamePayloadPeer {
+            int refusals=0; std::string reason, value="host";
+            Uint32 clientId() const override {return 1;}
+            const std::string& name() const override {return value;}
+            bool nameAssigned() const override {return true;}
+            bool bindName(const std::string&) override {return false;}
+            bool isHostPeer() const override {return true;}
+            void refuse(const char* text) override {++refusals; reason = text?text:"";}
+            void replyConfigHash() override {}
+            std::string& gameVersion() override {return value;}
+            std::string& quantBotConfigHash() override {return value;}
+            std::string& objectDataHash() override {return value;}
+            std::string& modRevisionHash() override {return value;}
+            void disconnectWithCause(int) override {++refusals;}
+        } peer;
+        int accepted=0;
+        std::unique_ptr<GameInitSettings> joined;
+        const std::function<void(const GameInitSettings&,const ChangeEventList&)> receive=
+            [&](const GameInitSettings& init,const ChangeEventList&) {
+                joined=std::make_unique<GameInitSettings>(init); ++accepted;
+            };
+        GamePayloadContext context; context.isHost=false; context.allowMapWrite=true;
+        NetworkSessionCallbacks callbacks; callbacks.onReceiveGameInfo=&receive;
+        const auto host=[&](const std::string& bytes,const std::string& modHash,const std::string& manifest) {
+            GameInitSettings hosted("Fresh guest map.ini",bytes,"Fresh guest probe",false,settings.gameOptions);
+            // The host announces its own mod, which this guest has neither installed nor cached.
+            hosted.setModIdentity(draft,"");
+            hosted.setModRevision(modHash,mod.version);
+            hosted.setMapRevision(source.hash,source.version,manifest);
+            OMemoryStream out; out.open(); hosted.save(out); ChangeEventList().save(out);
+            IMemoryStream in(out.getData(),static_cast<int>(out.getDataLength()));
+            GamePayloadRouter::handle(NETWORKPACKET_SENDGAMEINFO,in,peer,context,callbacks);
+        };
+
+        host(data,mod.hash,source.manifest);
+        const std::string refusal = "A guest without the host's mod refused the shared map: "+peer.reason;
+        menuRequire(peer.refusals==0 && accepted==1,refusal.c_str());
+        menuRequire(joined && joined->getMapRevisionHash()==source.hash,
+                    "The accepted setup lost the host's map revision");
+        menuRequire(readCompleteFile(installed)==data,"The received map was not installed for the guest");
+        menuRequire(fs::exists(installed+".workshop.ini"),"The received map lost its revision metadata");
+        {
+            INIFile metadata(installed+".workshop.ini");
+            menuRequire(metadata.getStringValue("Workshop","Hash","")==source.hash,
+                        "Guest metadata does not pin the received map revision");
+            menuRequire(metadata.getStringValue("Workshop","Mod","").empty(),
+                        "Guest recorded a dependency name it never received");
+        }
+        menuRequire(!fs::exists(cachedMod),"Receiving a map invented the missing mod revision");
+        // Exact content and dependency checks are unchanged: altered bytes and a map pinned
+        // to another mod revision are still refused, and neither touches the verified copy.
+        host(data+"Altered=1\n",mod.hash,source.manifest);
+        menuRequire(peer.refusals==1 && accepted==1,"Altered map bytes reached the lobby");
+        host(data,std::string(64,'a'),source.manifest);
+        menuRequire(peer.refusals==2 && accepted==1,"A map pinned to another mod revision was accepted");
+        menuRequire(readCompleteFile(installed)==data && fs::exists(installed+".workshop.ini"),
+                    "A refused payload damaged the verified received map");
+
+        // The mod arrives afterwards, as the lobby's own resolution does it.
+        fs::rename(held,cachedMod);
+        menuRequire(Workshop::saveMod(draft).hash==mod.hash,
+                    "The mod that arrived later is not the revision the map was pinned to");
+        auto resolved=*joined;
+        WorkshopGameContent::resolveMod(resolved,false);
+        menuRequire(manager.getActiveModName()=="ws-"+mod.hash,
+                    "The guest did not activate the host's mod revision once it was available");
+        menuRequire(Workshop::installMap(Workshop::store().get(source.hash))==installed,
+                    "Reinstalling the received map moved it");
+        INIFile refreshed(installed+".workshop.ini");
+        menuRequire(refreshed.getStringValue("Workshop","Mod","")==mod.base,
+                    "The resolved dependency was not recorded for the catalogue");
+        menuRequire(readCompleteFile(installed)==data,"Recording the dependency changed the map");
+        SDL_Log("MENU_PROBE_FRESH_GUEST_PASS: received map installs without its mod, keeps exact "
+                "content checks and records the dependency once the mod resolves");
     }
     { DisplayMenu menu;menuCapture(menu,"display"); }
     {

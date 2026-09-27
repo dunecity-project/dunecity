@@ -35,7 +35,16 @@ void pointer(const fs::path& path,const Revision& r,bool immutable=false) {
     INIFile ini(false, std::string("Workshop revision"));ini.setStringValue("Workshop","ID",r.id);
     ini.setIntValue("Workshop","Version",r.version);ini.setStringValue("Workshop","Hash",r.hash);
     ini.setStringValue("Workshop","Name",r.name);
-    if(r.kind=="map"&&!r.modHash.empty()) ini.setStringValue("Workshop","Mod",store().get(r.modHash).base);
+    // The dependency's engine base is a catalogue hint, not part of the map's identity: the
+    // exact mod revision stays pinned by the manifest this file's Hash names. A received map
+    // is installed before that mod can be resolved - joining downloads it afterwards, and the
+    // packet handler must not block on a download - so a dependency that is not cached yet
+    // leaves the hint out instead of failing the download. Installing the map again once the
+    // revision is present writes it.
+    if(r.kind=="map"&&!r.modHash.empty()) {
+        try { ini.setStringValue("Workshop","Mod",store().get(r.modHash).base); }
+        catch(const std::exception& e) { SDL_Log("Workshop: map dependency not cached yet: %s",e.what()); }
+    }
     ini.setStringValue("Workshop","Base",r.base);ini.setBoolValue("Workshop","Immutable",immutable);
     if(immutable && r.kind=="mod") ini.setStringValue("Workshop","Manifest",hex(r.manifest));
     const auto temp=path.string()+".tmp";

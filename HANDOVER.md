@@ -1,3 +1,21 @@
+## 2026-09-27 — Fresh guest multiplayer map reception
+
+Fixed a live 1.0.783 join failure on current main a676d235. The guest's map
+metadata writer required a mod revision that is resolved only after map reception.
+It now omits the optional catalogue hint until that revision is available, while
+the immutable manifest still pins the exact dependency and normal lobby checks
+remain in place. The real SENDGAMEINFO regression fails against the old native
+object with the observed Workshop error and passes with the fix, including
+altered-byte and mismatched-dependency rejection and later mod activation.
+
+An unchanged 1.0.786 browser host and a fresh patched browser guest reached
+gameplay through the real local PHP service. Two-way chat, guest movement, clean
+guest exit and map/metadata persistence after reload passed. Native and browser
+builds, dependency/package checks and all 43 CTest targets pass.
+See docs/multiplayer-fresh-guest.md
+and ../outputs/multiplayer-check-20260927/ for evidence. This is a local fix;
+no production release or installed-app replacement has been performed.
+
 ## 2026-09-26 — Graphics PR integration candidate (1.0.786)
 
 Clean integration branch from main 6d8e2a92 replays PR77 (bb88766b, bb2c1481)
