@@ -328,6 +328,25 @@ void runAirDefenseProbe(Game& game) {
                     "A launcher kept chasing an aircraft that was no longer attacking anything");
             }
             peak->setType(peakTerrain);
+
+            // A borrowed unit is not withheld for repair. Our repair yards refuse a deviated
+            // unit, so reserving one parks it for the whole deviation without ever healing it -
+            // the same dead weight the damaged-aircraft rule above avoids. Our own damaged
+            // vehicles are still reserved.
+            groundOnly->setHealth(groundOnly->getMaxHealth()/8);
+            require(groundOnly->isBadlyDamaged() && bot->reserveDamagedUnitForRepair(groundOnly),
+                "Our own badly damaged vehicle is no longer reserved for repair");
+            attacker->setHealth(attacker->getMaxHealth()/8);
+            attacker->deviate(owner);
+            require(attacker->wasDeviated() && attacker->getOwner()==owner && attacker->isBadlyDamaged(),
+                "The deviation fixture did not hand a badly damaged enemy vehicle to the bot's house");
+            require(!bot->reserveDamagedUnitForRepair(attacker),
+                "A deviated vehicle the bot cannot repair was still reserved for repair");
+            attacker->quitDeviation();
+            require(!attacker->wasDeviated() && bot->reserveDamagedUnitForRepair(groundOnly),
+                "Reverting the deviation disturbed ordinary repair reservation");
+            attacker->setHealth(attacker->getMaxHealth());
+            groundOnly->setHealth(groundOnly->getMaxHealth());
         }
     } catch(...) {unitList=savedUnits;structureList=savedStructures;throw;}
     unitList=savedUnits;structureList=savedStructures;
@@ -336,6 +355,7 @@ void runAirDefenseProbe(Game& game) {
         " proximity safety, resumption and human control preserved;"
         " launchers leave a ground skirmish and a rally point for aircraft over an outlying colony,"
         " reach holdable ground covering it through threatened approaches, fire in range without"
-        " being force-moved, hold across ordinary unit passes and clear when the attack ends");
+        " being force-moved, hold across ordinary unit passes and clear when the attack ends;"
+        " deviated vehicles are not reserved for repair while our own damaged ones still are");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=air_defense outcome=passed");
 }

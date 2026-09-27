@@ -259,6 +259,14 @@ public:
 
     inline bool wasDeviated() const { return (owner->getHouseID() != originalHouseID); }
 
+    /**
+        A temporarily deviated unit is never repaired by the house that converted it: no automatic
+        trip, no explicit order, no repair-yard booking and no carryall docking. The single check
+        lives here so every repair path shares it, and repairs resume by themselves once the
+        deviation timer reverts ownership.
+    */
+    inline bool isEligibleForRepair() const { return !wasDeviated(); }
+
     inline int getAngle() const { return drawnAngle; }
 
     inline ATTACKMODE getAttackMode() const { return attackMode; }

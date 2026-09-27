@@ -593,6 +593,14 @@ void UnitBase::deviate(House* newOwner) {
 
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
         deviationTimer = DEVIATIONTIME;
+
+        // The interrupted repair trip does not survive the conversion. setTarget(nullptr) above
+        // already released the repair-yard booking; the carryall booked for the same trip has to
+        // go with it, otherwise the unit waits for a lift its old owner will never send and
+        // GroundUnit::navigate() keeps it parked for the whole deviation.
+        if(isAGroundUnit()) {
+            static_cast<GroundUnit*>(this)->cancelCarryallPickup();
+        }
     }
 
     // Keep conversion reward in the same credit units as damage value, without
@@ -1471,6 +1479,12 @@ void UnitBase::setAngle(int newAngle) {
 }
 
 void UnitBase::setGettingRepaired() {
+    if(!isEligibleForRepair()) {
+        // Last line of defence for a deviated unit. Callers keep it on the map: the two that
+        // exist check the same condition first, so nothing is left removed from the map here.
+        return;
+    }
+
     if(target.getObjPointer() != nullptr && (target.getObjPointer()->getItemID() == Structure_RepairYard)) {
         if(selected) {
             removeFromSelectionLists();
@@ -1634,7 +1648,10 @@ void UnitBase::setTarget(const ObjectBase* newTarget) {
     ObjectBase* pNewTarget = target.getObjPointer();
     if(pNewTarget != nullptr
         && (pNewTarget->getOwner() == getOwner())
-        && (pNewTarget->getItemID() == Structure_RepairYard)) {
+        && (pNewTarget->getItemID() == Structure_RepairYard)
+        // An explicit move onto the captor's repair yard must not turn into a repair trip
+        // for a deviated unit: without the booking it never reaches setGettingRepaired().
+        && isEligibleForRepair()) {
         static_cast<RepairYard*>(pNewTarget)->book();
         goingToRepairYard = true;
     }

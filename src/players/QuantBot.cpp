@@ -1061,6 +1061,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 
 					// Medium can use an authored or player-built yard; Easy keeps engine auto-repair.
 					&& !(gameMode == GameMode::Campaign && difficulty == Difficulty::Easy)
+					// A deviated unit cannot be repaired, so send it to reposition instead of
+					// spending the pass on a repair order the engine will refuse.
+					&& pGroundUnit->isEligibleForRepair()
 					) {
 					doRepair(pGroundUnit);
 				}
@@ -3870,8 +3873,11 @@ void QuantBot::build(int militaryValue) {
         if (unit->canAttack() && unit->getItemID()!=Unit_Sandworm) ++combatVehicles;
         if (unit->getAttackMode()==CARRYALLREQUESTED && !ground->hasBookedCarrier()) pickupQueue.insert(unit->getObjectID());
         const auto* target=unit->getTarget();
-        if (unit->isBadlyDamaged() || (target && target->getItemID()==Structure_RepairYard
-            && target->getOwner()==getHouse() && unit->getHealth()<unit->getMaxHealth())) repairQueue.insert(unit->getObjectID());
+        // A borrowed unit is never admitted to our bays, so it is not repair demand and must not
+        // reserve a bay or justify building another one.
+        if (ground->isEligibleForRepair()
+            && (unit->isBadlyDamaged() || (target && target->getItemID()==Structure_RepairYard
+            && target->getOwner()==getHouse() && unit->getHealth()<unit->getMaxHealth()))) repairQueue.insert(unit->getObjectID());
     }
     for (const auto* structure:getStructureList()) {
         if (structure->getOwner()!=getHouse()) continue;

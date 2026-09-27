@@ -93,7 +93,8 @@
 // Version 37: Opening space, prompt MCV colonies and launcher air defence change AI orders.
 // Version 38: Gas deviation targets aircraft at one shared chance for every house
 //             and mode, so target selection and synchronized deviation draws differ.
-#define NETWORK_PROTOCOL_VERSION            38
+// Version 39: Deviated units cannot request or enter repairs, changing AI orders.
+#define NETWORK_PROTOCOL_VERSION            39
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

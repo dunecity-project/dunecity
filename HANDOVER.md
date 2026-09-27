@@ -1,3 +1,25 @@
+## 2026-09-27 — Deviated units cannot seek repairs (local 1.0.789)
+
+Shared repair eligibility rejects temporarily deviated units for explicit/automatic
+repair orders, yard bookings and Carryall delivery. Conversion cancels inherited
+pickup requests. QuantBot excludes these units from repair reservations and repair
+demand; QuantBot and Mentat use their combat fallback instead of issuing a rejected
+repair order. Ordinary repairs resume after ownership reverts. Protocol is 39;
+save format is unchanged.
+
+Native build and six focused CTest targets passed: unit suite, Carryall repair
+regression, gas combat regression, and QuantBot air-defense/repair reservation
+probes in Vanilla, Dune City and Dune2R. Packaged app passed signature and hidden
+rendering verification on the MacBook Air. Per user request it is staged at
+~/Downloads/DuneCity-1.0.789-staged/dunecity.app on the MBA; /Applications remains
+1.0.788 and the running game was not interrupted. No publication.
+
+MBA match 1790508268440308-0 was analysed from a completed telemetry copy. The
+37-minute 1.0.788 4-corners match began with 22 Deviators per house; Ordos produced
+54 more. Rebels also had production availability but built none. Detailed reward
+comparison and current conversion-proxy limitations are recorded outside this
+repository in ../dunecity-deviator-analysis/mba-1790508268440308/analysis.md.
+
 ## 2026-09-27 — Deviator aircraft conversion
 
 Deviators can target and convert hostile Ornithopters and Carryalls (including

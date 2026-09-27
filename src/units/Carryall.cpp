@@ -248,7 +248,9 @@ void Carryall::deployUnit(Uint32 unitID)
             // that is still hostile is simply dropped on the ground instead.
             if (object->getOwner() == getOwner()
                 && object->getOwner()->getTeamID() == pUnit->getOwner()->getTeamID()) {
-                if (object->getItemID() == Structure_RepairYard) {
+                // Deviated cargo is dropped on the ground as well: the captor does not get to
+                // repair a unit it only borrowed, and the bay stays free and unbooked.
+                if (object->getItemID() == Structure_RepairYard && pUnit->isEligibleForRepair()) {
                     if (static_cast<RepairYard*>(object)->isFree()) {
                         pUnit->setTarget(object);   // unit books repair yard again
                         pUnit->setGettingRepaired();
