@@ -131,6 +131,7 @@ target_sources(dunecity
         Tile.cpp
 
         # Audio
+        audio/AudioStartup.cpp
         audio/sounds.cpp
 
         # INIMap

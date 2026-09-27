@@ -1,3 +1,27 @@
+## 2026-09-27 — Native Linux silent-audio fallback (issue #56)
+
+Fixed audio recovery when the selected backend cannot initialise or open a
+sound device. The old `SDL_AudioInit("dummy")` call did not establish an SDL
+audio-subsystem reference. SDL_mixer therefore selected the failed backend
+again. The new startup helper resets audio, selects dummy through SDL's hint
+and environment, and initialises the subsystem before retrying the mixer.
+Normal audio still opens on the first attempt. Linux vcpkg builds now enable
+ALSA; portable-package CI tests both direct dummy startup and recovery from
+an unavailable backend, requiring an open dummy mixer in the log.
+
+Codex reproduced the exact `dsp: No such audio device` failure in a Linux
+container using SDL 2.32.10 with modern audio backends disabled. The production
+helper passes that case and an explicitly unavailable driver. All four real
+SDL_mixer regression cases pass on Linux (29 assertions), and the focused
+native tests pass. A native menu integration probe also passes with the audio
+backend deliberately unavailable. The native app builds and dependency audits pass.
+All 44 native CTest targets pass. Evidence is under
+`../outputs/linux-audio-56/`. Claude implemented the helper and tests; Codex
+reviewed, integrated packaging changes and performed validation. This is a
+fix branch at version 1.0.788; no AppImage release or Linux Mint desktop
+playback test is claimed. The 1.0.788 native rebuild, dependency audits and
+focused audio tests also pass.
+
 ## 2026-09-27 — Fresh guest multiplayer map reception
 
 Fixed a live 1.0.783 join failure on current main a676d235. The guest's map

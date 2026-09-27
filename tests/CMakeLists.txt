@@ -75,6 +75,9 @@ target_sources(dunelegacy_tests
         EnhancedAtlasCacheTestCase/EnhancedAtlasCacheTestCase.cpp
         EnhancedBuildingGeometryTestCase/EnhancedBuildingGeometryTestCase.cpp
         MenuLayoutTestCase/MenuLayoutTestCase.cpp
+        # Audio startup: real SDL_mixer against a deliberately unusable device.
+        AudioStartupTestCase/AudioStartupTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/audio/AudioStartup.cpp
         ${CMAKE_SOURCE_DIR}/src/mmath.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/EnhancedAtlasCache.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/lodepng.cpp
@@ -169,6 +172,10 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+# Focused rerun of the issue #56 startup regressions. They force the audio
+# driver per scenario and restore it again, so they also run inside the full
+# suite; this entry is for checking them on their own.
+add_test(NAME audio_startup_tests COMMAND dunelegacy_tests "[audio]")
 
 # Standalone network wire harness.
 #
@@ -363,7 +370,7 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # Set test properties
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests audio_startup_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 

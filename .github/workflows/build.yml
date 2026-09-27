@@ -769,7 +769,7 @@ jobs:
             set +e
             (
               cd "$launch_dir"
-              HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software \
+              HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER="${SMOKE_AUDIO_DRIVER:-dummy}" SDL_RENDER_DRIVER=software \
                 timeout 12s xvfb-run -a "$executable" "$@" --showlog
             ) >"$SMOKE_ROOT/${label}.log" 2>&1
             local status=$?
@@ -788,11 +788,21 @@ jobs:
               echo "::error title=${label} portable startup failed (status ${status})::${details:-No process output was captured.}"
               return 1
             fi
+            if ! grep -q 'Audio driver: dummy; mixer:' "$SMOKE_ROOT/${label}.log"; then
+              echo "::error title=${label} audio startup failed::The packaged game did not reach an open dummy mixer."
+              cat "$SMOKE_ROOT/${label}.log"
+              return 1
+            fi
           }
 
           smoke_status=0
           smoke_launch tgz "$TGZ_BIN" || smoke_status=1
           APPIMAGE_EXTRACT_AND_RUN=1 smoke_launch appimage "$APPIMAGE" || smoke_status=1
+          # Exercise the recovery path too: starting with dummy alone never
+          # caught issue #56, where the fallback reselected a broken backend.
+          SMOKE_AUDIO_DRIVER=dunecity-unavailable smoke_launch tgz-audio-fallback "$TGZ_BIN" || smoke_status=1
+          SMOKE_AUDIO_DRIVER=dunecity-unavailable APPIMAGE_EXTRACT_AND_RUN=1 \
+            smoke_launch appimage-audio-fallback "$APPIMAGE" || smoke_status=1
           exit "$smoke_status"
 
       - name: Upload Packages

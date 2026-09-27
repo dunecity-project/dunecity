@@ -61,6 +61,7 @@
 
 #include <CrashHandler.h>
 #include <SoundPlayer.h>
+#include <audio/AudioStartup.h>
 
 #include <mmath.h>
 
@@ -1429,12 +1430,13 @@ int main(int argc, char *argv[]) {
             if(bFirstInit == true) {
                 SDL_Log("Initializing audio...");
                 constexpr int AUDIO_BUFFER_FRAMES = 1024;
-                if( Mix_OpenAudio(AUDIO_FREQUENCY, AUDIO_S16SYS, 2, AUDIO_BUFFER_FRAMES) < 0 ) {
-                    const std::string audioError=Mix_GetError();
-                    SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO,"Audio device unavailable: %s. Continuing with silent audio; restart to retry the device.",audioError.c_str());
-                    SDL_AudioQuit();
-                    if(SDL_AudioInit("dummy")<0 || Mix_OpenAudio(AUDIO_FREQUENCY,AUDIO_S16SYS,2,AUDIO_BUFFER_FRAMES)<0)
-                        THROW(sdl_error,"Audio device failed (%s); silent mixer also failed: %s",audioError.c_str(),Mix_GetError());
+                const DuneAudio::MixerStartup audioStartup = DuneAudio::openMixerWithSilentFallback(
+                        AUDIO_FREQUENCY, AUDIO_S16SYS, 2, AUDIO_BUFFER_FRAMES);
+                if(!audioStartup.deviceError.empty()) {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO,"Audio device unavailable: %s. Continuing with silent audio; restart to retry the device.",audioStartup.deviceError.c_str());
+                }
+                if(!audioStartup.opened) {
+                    THROW(sdl_error,"Audio device failed (%s); silent mixer also failed: %s",audioStartup.deviceError.c_str(),audioStartup.silentError.c_str());
                 }
                 {
                     int actualFrequency = 0;
