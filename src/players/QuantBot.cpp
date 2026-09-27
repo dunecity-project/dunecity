@@ -301,6 +301,10 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
         }
         performanceHistory.load(stream);
     }
+    // The measured Deviator ledger replaces the old flat conversion estimate, and House
+    // resets the whole unit-mix learning ledger on the same load. A decayed window computed
+    // from the old counters would keep the replaced accounting alive, so it starts empty too.
+    if (currentGame->getLoadedSavegameVersion() < 9849) resetLearningForMeasuredScoring();
     if (currentGame->getLoadedSavegameVersion() >= 9831) {
         groundSquadProgressCycle=stream.readUint32();
         groundSquadProgressLocation.x=stream.readSint32();
@@ -4798,7 +4802,8 @@ void QuantBot::build(int militaryValue) {
                 .set("refineries", house->getNumItems(Structure_Refinery))
                 .set("heavy_factories", house->getNumItems(Structure_HeavyFactory))
                 .set("construction_yards", house->getNumItems(Structure_ConstructionYard))
-                .set("economy_totals", AITelemetry::log().economyTotals(h)).set("combat_rewards", house->combatRewardStats(currentGame->objectData)));
+                .set("economy_totals", AITelemetry::log().economyTotals(h)).set("combat_rewards", house->combatRewardStats(currentGame->objectData))
+                .set("deviation_rewards", house->deviationRewardStats()));
         }
         telemetryState = AITelemetry::log().write(getGameCycleCount(), getHouse()->getHouseID(), getPlayerID(), "state_snapshot",
             AITelemetry::Record().set("ai", "QuantBot").set("name", getPlayername())
@@ -9818,6 +9823,10 @@ void QuantBot::releaseLegacyGroundSquad() {
     rallySelectedCycle=std::numeric_limits<Uint32>::max();
 }
 
+void QuantBot::resetLearningForMeasuredScoring() {
+    performanceHistory = UnitMixPolicy::PerformanceHistory();
+}
+
 void QuantBot::onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) {
     for (auto& raid : harvesterStrikeTraces) for (auto& member : raid.members) if (member.id==attacker) {
         member.reward.damageMilli += reward.damageMilli;
@@ -10674,6 +10683,27 @@ void QuantBot::retreatAllUnits() {
             // controller may replace their orders, including forced orders.
             if (pUnit->getItemID()==Unit_Saboteur) continue;
             if (pUnit->getOwner()==getHouse() && humanControls(pUnit)) continue;
+            // A captured Devastator is worth exactly one thing, so arm it at the first scan
+            // that sees it - ahead of kiting, campaign holds, rally, escort and every other
+            // role early return that would otherwise keep deferring the order. Support mode
+            // and campaign waves manage their own units the same way. Human-controlled units
+            // were released on the line above and are never armed automatically.
+            if (pUnit->getOwner() == getHouse() && pUnit->isActive()
+                && pUnit->getItemID() == Unit_Devastator
+                && pUnit->getDeviationEpisode().credits()) {
+                const auto* pDevastator = static_cast<const Devastator*>(pUnit);
+                // Re-ordering never restarts the running fuse; skip the order once it is lit.
+                if (!pDevastator->isArmedToDevastate()) {
+                    doStartDevastate(pDevastator);
+                    doSetAttackMode(pDevastator, HUNT);
+                    traceDecision("captured_devastator_armed", AITelemetry::Record()
+                        .set("unit", pUnit->getObjectID())
+                        .set("original_house", pUnit->getOriginalHouseID())
+                        .set("support_mode", supportMode)
+                        .set("health", pUnit->getHealth().lround()));
+                }
+                continue;
+            }
             // Combat spacing applies to defenders and escorts too, before their
             // strategic-role early return. Guard orders already leave targets alone.
             if (!supportMode && pUnit->getOwner() == getHouse()
@@ -10820,19 +10850,9 @@ void QuantBot::retreatAllUnits() {
 
                     // Safety check: ensure owner is valid before comparing
                     if (pUnit->getOwner() != nullptr && pUnit->getOwner()->getHouseID() != pUnit->getOriginalHouseID()) {
-                        // If its a devastator and its not ours, blow it up!!
-                        if (pUnit->getItemID() == Unit_Devastator) {
-                            const Devastator* pDevastator = static_cast<const Devastator*>(pUnit);
-                            doStartDevastate(pDevastator);
-                            doSetAttackMode(pDevastator, HUNT);
-                        }
-                        /*
-                        else if (pUnit->getItemID() == Unit_Ornithopter) {
-                            if (pUnit->getAttackMode() != HUNT) {
-                                doSetAttackMode(pUnit, HUNT);
-                            }
-                        }*/
-                        else if (pUnit->getItemID() == Unit_Harvester) {
+                        // Captured Devastators are armed centrally above, before any role or
+                        // rally early return can divert them, so they never reach this switch.
+                        if (pUnit->getItemID() == Unit_Harvester) {
                             const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
                             if (pHarvester->getAmountOfSpice() >= HARVESTERMAXSPICE / 5) {
                                 doReturn(pHarvester);

@@ -267,7 +267,8 @@ int ObjectBase::getMaxHealth() const {
     return currentGame->objectData.data[itemID][originalHouseID].hitpoints;
 }
 
-void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                              const DeviationReward::Provenance& provenance) {
     // Multi-impact missiles must not award repeated kills for the same dead object.
     if (damage >= 0 && getHealth() <= 0) return;
     // Immortality guard: Human-controlled houses are invulnerable in single-player modes when option is enabled
@@ -312,22 +313,40 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner)
 
     if (damagerOwner != nullptr && damage != 0) {
         ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
-        if (pDamager != nullptr) {
+        // Attribution belongs to the moment the shot left the weapon. A shooter that died,
+        // reverted to its original house or was recaptured in the meantime no longer decides
+        // which learning bucket its shot pays.
+        const auto credit = provenance.known() || !provenance.allowsLiveLookup()
+            ? provenance : DeviationReward::liveProvenance(pDamager, damagerOwner);
+        // The reward goes to the house that owned the shot when it was fired, which is not
+        // always the house the engine damages on behalf of: an armed Devastator that reverts
+        // mid-fuse explodes under its original owner but still pays its captor. Simulation
+        // effects below stay with damagerOwner; only the ledger follows the snapshot.
+        House* beneficiary = DeviationReward::beneficiaryOf(credit, damagerOwner);
+        if (credit.known() && beneficiary != nullptr) {
             const auto reward = CombatReward::hit(
                 currentGame->objectData.data[itemID][originalHouseID].price,
                 int64_t(getMaxHealth())*1000, (healthBefore*1000).lround(), (getHealth()*1000).lround(),
-                damage > 0 && damagerOwner->getTeamID() != getOwner()->getTeamID(), isAUnit());
-            damagerOwner->addCombatReward(pDamager->getItemID(), reward);
+                damage > 0 && damagerID != objectID && beneficiary->getTeamID() != getOwner()->getTeamID(), isAUnit());
+            // A borrowed unit's damage pays its controller's Deviator and nothing else: the
+            // natural type must not be credited a second time for the same hit.
+            beneficiary->addCombatReward(credit.rewardItemID, reward);
+            DeviationReward::recordOutgoing(credit, *beneficiary, reward, this);
             if (AITelemetry::log().enabled() && reward.hits > 0)
-                for (const auto& player : damagerOwner->getPlayerList())
+                for (const auto& player : beneficiary->getPlayerList())
                     player->onCombatReward(damagerID, objectID, reward);
             int appliedDamage = damage;
-            if (damagerOwner == getOwner()) {
+            if (beneficiary == getOwner()) {
                 appliedDamage *= -1;
             }
-            damagerOwner->informHasDamaged(pDamager->getItemID(), appliedDamage);
+            beneficiary->informHasDamaged(credit.rewardItemID, appliedDamage);
         }
     }
+
+    // Hit points a borrowed unit soaked up for the house controlling it. The control
+    // interval is still the one that was current when this hit was dispatched: a timer
+    // exhausted by this very hit only reverts ownership on the next update.
+    DeviationReward::recordAbsorbed(this, (healthBefore*1000).lround(), damage, damagerOwner, damagerID);
 
     getOwner()->noteDamageLocation(this, damage, damagerID);
 }

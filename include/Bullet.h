@@ -22,6 +22,7 @@
 
 #include <ObjectPointer.h>
 #include <DataTypes.h>
+#include <players/DeviationReward.h>
 #include <ScreenBorder.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
@@ -78,6 +79,9 @@ private:
 
     Uint32   shooterID;                  ///< the ItemId of the shooter
     House*   owner;                      ///< the owner of this bullet
+    /// Who this shot pays, decided when it was fired. Survives the shooter's death,
+    /// its reversion to its original house and its recapture by a third house.
+    DeviationReward::Provenance provenance;
 
     Coord    source;                     ///< the source location (in world coordinates) of this bullet
     Coord    destination;                ///< the destination (in world coordinates) of this bullet

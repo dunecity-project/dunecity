@@ -203,9 +203,10 @@ void TurretBase::doAttackObject(const ObjectBase* pObject) {
     setForced(true);
 }
 
-void TurretBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void TurretBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                                 const DeviationReward::Provenance& provenance) {
     // Call base class damage handling
-    ObjectBase::handleDamage(damage, damagerID, damagerOwner);
+    ObjectBase::handleDamage(damage, damagerID, damagerOwner, provenance);
     
     // If turret doesn't have a target, scan soon (but not immediately to prevent spam)
     // This allows turrets to retaliate quickly when attacked

@@ -46,9 +46,25 @@ public:
 
     void playAttackSound() override;
 
+    /// True once a commanded detonation has been ordered and the fuse is running or spent.
+    bool isArmedToDevastate() const { return armed; }
+
 private:
     // devastator state
     Sint32      devastateTimer;       ///< When will this devastator devastate
+
+    /**
+        Commanded-detonation accounting (SAVEGAMEVERSION 9849).
+
+        The credit is fixed when the fuse is lit, so it survives the capturing Deviator's
+        death and this unit's reversion to its original house during the 200-cycle fuse.
+        terminalCredited makes the completion bonus a once-only event and keeps an ordinary
+        combat death - which also runs destroy() and the same blast - from being counted
+        as a completed commanded detonation.
+    */
+    bool        armed = false;
+    bool        terminalCredited = false;
+    DeviationReward::Provenance armedProvenance;
 
     // drawing information
     zoomable_texture turretGraphic{}; ///< The graphic of the turret

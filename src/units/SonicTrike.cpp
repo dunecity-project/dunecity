@@ -56,11 +56,12 @@ void SonicTrike::destroy() {
     GroundUnit::destroy();
 }
 
-void SonicTrike::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void SonicTrike::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                                 const DeviationReward::Provenance& provenance) {
     ObjectBase* damager = currentGame->getObjectManager().getObject(damagerID);
 
     if(!damager || damager->getItemID() != Unit_SonicTrike) {
-        GroundUnit::handleDamage(damage, damagerID, damagerOwner);
+        GroundUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
     }
 }
 

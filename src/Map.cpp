@@ -182,7 +182,8 @@ void Map::createSandRegions() {
     }
 }
 
-void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Uint32 bulletID, FixPoint damage, int damageRadius, bool air, bool affectTerrain, Uint32 interceptedAirUnit) {
+void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Uint32 bulletID, FixPoint damage, int damageRadius, bool air, bool affectTerrain, Uint32 interceptedAirUnit,
+                 const DeviationReward::Provenance& provenance) {
     const bool dynastyBlast = DynastyProjectile::parameters(bulletID).step != 0
         || (bulletID == Bullet_ShellTurret && air);
     const auto blastDistance = [&](Coord point) {
@@ -217,7 +218,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                 && (pObject->getLocation() == location))
             {
                 pObject->setVisible(VIS_ALL, false);
-                pObject->handleDamage(lround(damage), damagerID, damagerOwner);
+                pObject->handleDamage(lround(damage), damagerID, damagerOwner, provenance);
             }
         }
     } else {
@@ -244,13 +245,13 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                         // per eligible target keeps lockstep peers in step.
                         if(GasDeviationPolicy::eligibleTarget(pAirUnit->getItemID())) {
                             if(currentGame->randomGen.randFixPoint() < GasDeviationPolicy::conversionChance()) {
-                                pAirUnit->deviate(damagerOwner);
+                                pAirUnit->deviate(damagerOwner, provenance.known() ? provenance.sourceObjectID : damagerID);
                             }
                         }
                     } else {
                         const int scaledDamage = lround(damage) >> (distance/(TILESIZE/4));
                         const auto healthBefore = pAirUnit->getHealth();
-                        pAirUnit->handleDamage(scaledDamage, damagerID, damagerOwner);
+                        pAirUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         
                         // MULTIPLAYER-SAFE: Track rocket hits/kills on ornithopters (after damage)
                         if(pAirUnit->getItemID() == Unit_Ornithopter && healthBefore > 0) {
@@ -282,7 +283,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                     const auto bottomRightCorner = topLeftCorner + pStructure->getStructureSize()*TILESIZE;
 
                     if(bulletID != Bullet_DRocket && realPos.x >= topLeftCorner.x && realPos.y >= topLeftCorner.y && realPos.x < bottomRightCorner.x && realPos.y < bottomRightCorner.y) {
-                        pStructure->handleDamage(lround(damage), damagerID, damagerOwner);
+                        pStructure->handleDamage(lround(damage), damagerID, damagerOwner, provenance);
 
                         if( (bulletID == Bullet_LargeRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket || bulletID == Bullet_Flame)
                             && (pStructure->getHealth() < pStructure->getMaxHealth()/2)) {
@@ -306,20 +307,20 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                             // Same shared eligibility list and chance as the air branch.
                             if(GasDeviationPolicy::eligibleTarget(pUnit->getItemID())) {
                                 if(currentGame->randomGen.randFixPoint() < GasDeviationPolicy::conversionChance()) {
-                                    pUnit->deviate(damagerOwner);
+                                    pUnit->deviate(damagerOwner, provenance.known() ? provenance.sourceObjectID : damagerID);
                                 }
                             }
                         } else if(bulletID == Bullet_Sonic || bulletID == Bullet_SonicTrike) {
-                            pUnit->handleDamage(lround(damage), damagerID, damagerOwner);
+                            pUnit->handleDamage(lround(damage), damagerID, damagerOwner, provenance);
                         } else if(bulletID == Bullet_Flame) {
                             auto scaledDamage = lround(damage) >> (distance/16 + 1);
                             if(pUnit->isInfantry()) {
                                 scaledDamage = std::max<int>(lround(damage), scaledDamage * 2);
                             }
-                            pUnit->handleDamage(scaledDamage, damagerID, damagerOwner);
+                            pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         } else {
                             const auto scaledDamage = lround(damage) >> (distance/(TILESIZE/4) + (dynastyBlast ? 0 : 1));
-                            pUnit->handleDamage(scaledDamage, damagerID, damagerOwner);
+                            pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         }
                         
                         // MULTIPLAYER-SAFE: Track rocket hits/kills on ornithopters (after damage)

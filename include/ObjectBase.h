@@ -28,6 +28,7 @@
 #include <mmath.h>
 
 #include <globals.h>
+#include <players/DeviationReward.h>
 
 #include <algorithm>
 #include <bitset>
@@ -76,7 +77,16 @@ public:
 
     virtual Coord getCenterPoint() const;
 
-    virtual void handleDamage(int damage, Uint32 damagerID, House* damagerOwner);
+    /**
+        Applies damage to this object and books the resulting combat reward.
+        \param  damage        hit points to remove (negative values only run the side effects)
+        \param  damagerID     the object that caused it, may already be gone
+        \param  damagerOwner  the house that caused it
+        \param  provenance    who to credit, snapshotted when the shot was fired. An unknown
+                              provenance means "decide now from the live damager".
+    */
+    virtual void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                              const DeviationReward::Provenance& provenance = DeviationReward::Provenance());
 
     /**
         This method is called when an object is ordered by a right click

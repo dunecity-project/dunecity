@@ -44,6 +44,15 @@ Devastator::Devastator(InputStream& stream) : TrackedUnit(stream)
     Devastator::init();
 
     devastateTimer = stream.readSint32();
+    if(currentGame->getLoadedSavegameVersion() >= 9849) {
+        stream.readBools(&armed, &terminalCredited);
+        armedProvenance.load(stream);
+    } else if(devastateTimer > 0) {
+        // A fuse restored from an older save has no recorded beneficiary. It still
+        // detonates; it simply pays nobody, rather than inventing an attribution.
+        armed = true;
+        armedProvenance.beneficiaryHouse = DeviationReward::Provenance::LegacyUnknownBeneficiary;
+    }
 }
 
 void Devastator::init()
@@ -70,6 +79,8 @@ void Devastator::save(OutputStream& stream) const
 {
     TrackedUnit::save(stream);
     stream.writeSint32(devastateTimer);
+    stream.writeBools(armed, terminalCredited);
+    armedProvenance.save(stream);
 }
 
 void Devastator::blitToScreen()
@@ -140,8 +151,12 @@ void Devastator::handleStartDevastateClick() {
 
 void Devastator::doStartDevastate()
 {
-    if (devastateTimer <= 0)
-        devastateTimer = 200;
+    if (devastateTimer > 0) return; // repeated orders never restart the running fuse
+    devastateTimer = 200;
+    // Fix the credit now. Whoever holds this Devastator at this moment earns the
+    // detonation, even if they lose it again before the fuse burns down.
+    armed = true;
+    armedProvenance = DeviationReward::liveProvenance(this, getOwner());
 }
 
 void Devastator::destroy()
@@ -151,7 +166,10 @@ void Devastator::destroy()
             for(int j = 0; j < 3; j++) {
                 Coord realPos(lround(realX) + (i - 1)*TILESIZE, lround(realY) + (j - 1)*TILESIZE);
 
-                currentGameMap->damage(objectID, owner, realPos, itemID, 150, 16, false);
+                // The blast is the armed house's doing for the whole fuse, and an
+                // unarmed Devastator's death explosion belongs to whoever holds it now.
+                currentGameMap->damage(objectID, owner, realPos, itemID, 150, 16, false, true, NONE_ID,
+                                       armed ? armedProvenance : DeviationReward::liveProvenance(this, getOwner()));
 
                 Uint32 explosionID = currentGame->randomGen.getRandOf({Explosion_Large1, Explosion_Large2});
                 currentGame->getExplosionList().push_back(new Explosion(explosionID, realPos, owner->getHouseID()));
@@ -171,6 +189,14 @@ bool Devastator::update()
 {
     if (active) {
         if ((devastateTimer > 0) && (--devastateTimer == 0)) {
+            // The fuse actually completed. destroy() never raises a lethal damage event for
+            // the Devastator itself, so the remaining value is booked once, here.
+            // A Devastator whose hit points were removed on this very tick was killed, not
+            // detonated: it must not be counted as a completed commanded detonation.
+            if (!terminalCredited && getHealth() > 0) {
+                terminalCredited = true;
+                DeviationReward::creditCommandedDetonation(armedProvenance, *this);
+            }
             destroy();
             return false;
         }

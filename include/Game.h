@@ -143,6 +143,13 @@ public:
     Uint32 getLoadedSavegameVersion() const { return loadedSavegameVersion; };
 
     /**
+        Hands out the next deviation control-interval id. Deterministic and serialized, so
+        every peer and every reload numbers the same captures the same way.
+    */
+    Uint32 allocateDeviationEpisode() { return nextDeviationEpisodeID++; }
+    Uint32 peekDeviationEpisodeCounter() const { return nextDeviationEpisodeID; }
+
+    /**
         Return the game time in milliseconds.
         \return the current game time in milliseconds
     */
@@ -888,6 +895,8 @@ private:
     Uint32      lastPathInstrumentationLogCycle = 0;
     
     Uint32      loadedSavegameVersion = 0;      ///< Version of loaded savegame (for backward compatibility)
+    /// Next deviation control-interval id; 0 is reserved for "not deviated" (SAVEGAMEVERSION 9849).
+    Uint32      nextDeviationEpisodeID = 1;
 
     bool        takePeriodicalScreenshots = false;      ///< take a screenshot every 10 seconds
 

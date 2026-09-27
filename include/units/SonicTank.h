@@ -32,7 +32,8 @@ public:
 
     void destroy() override;
 
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
     bool canAttack(const ObjectBase* object) const override;
 

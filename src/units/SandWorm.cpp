@@ -340,14 +340,15 @@ void Sandworm::setTarget(const ObjectBase* newTarget) {
     }
 }
 
-void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                               const DeviationReward::Provenance& provenance) {
     // Switch to HUNT mode BEFORE calling parent so counter-attack logic works
     if(damage > 0) {
         doSetAttackMode(HUNT);
     }
     
     // Then call parent to handle counter-attack logic (now that we're in HUNT mode)
-    GroundUnit::handleDamage(damage, damagerID, damagerOwner);
+    GroundUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
     
     // Additionally, if we were damaged, directly attack the damager's location if they're on sand
     if(damage > 0) {

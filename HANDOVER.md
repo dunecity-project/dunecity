@@ -1,3 +1,45 @@
+## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
+
+Replaces the old instant conversion estimate in the active QuantBot learning
+ledger. A captured hostile unit's damage and unit killing blows now pay the
+controller's Deviator bucket: target price times actual HP removed / maximum HP,
+plus 20% of target price for a unit kill. Hostile damage absorbed while controlled
+also pays the Deviator, without a kill bonus. Refreshing control alone earns zero.
+Friendly, self and environmental damage do not earn absorption credit.
+
+QuantBot arms captured hostile Devastators on its first eligible unit scan,
+before rally, support and campaign orders. The existing 200-cycle fuse remains.
+Completed detonation pays remaining HP value and one 20% Devastator kill bonus;
+hostile blast damage and kills are additional. Self-blast cannot duplicate the
+terminal reward. Allied-origin and human-controlled Devastators are excluded.
+
+Projectiles, persistent flames and armed fuses retain firing/arming attribution
+through source death, reversion, recapture and save/load. Telemetry declares
+`deviation_reward_version: 1` and separates outgoing, absorbed and terminal value.
+Save format is 9849; network protocol is 40. Loading an older save resets the
+whole unit learning ledger and cached learning window, so new measured rewards
+and loss denominators start together. Historical overall match totals and
+structure losses used by build prerequisites are preserved. Already controlled
+units begin measured intervals at load. Old in-flight projectiles/fuses lack
+historical attribution and earn no outgoing reward; their physical damage remains.
+Old matches cannot be retroactively measured from their conversion-proxy logs.
+
+Includes the earlier 80% aircraft conversion, map revision labels and no-repair
+changes. The new real-engine scoring probe passes 38 decisions in Vanilla,
+Dune City and Dune2R, including saved fuses, single terminal credit, hostile
+absorption, killing blows, source death/reversion/recapture and legacy attribution.
+An independent 50-HP reverted Devastator probe now earns exactly 260 credits,
+not the erroneous 520, in all three modes. Native build and dependency audits pass.
+All 44 CTest targets pass: 41 in the full run, followed by the three stats probes
+after updating their synthetic 9840 House records to omit the new counter block.
+The old-projectile fixture similarly omits the new 24-byte attribution block.
+
+The portable app is staged on the MBA at
+~/Downloads/DuneCity-1.0.790-staged/dunecity.app. Signature, bundled runtime,
+hidden rendering, version and executable SHA-256 were verified there. The
+installed /Applications/dunecity.app remains 1.0.788 per the user's stage-only
+instruction. No running game was stopped and nothing was published.
+
 ## 2026-09-27 — Deviated units cannot seek repairs (local 1.0.789)
 
 Shared repair eligibility rejects temporarily deviated units for explicit/automatic

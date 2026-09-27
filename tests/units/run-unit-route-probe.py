@@ -23,6 +23,7 @@ parser.add_argument('--projectile-combat', action='store_true', help='Run full a
 parser.add_argument('--weapon-reloads', action='store_true', help='Measure actual turret/launcher shot timestamps')
 parser.add_argument('--rocket-reload-cycles', type=int,
                     help='Diagnostic combat-only turret reload override (shipped data is unchanged)')
+parser.add_argument('--deviation-reward', action='store_true', help='Measure the Deviator contribution ledger')
 parser.add_argument('--projectiles', action='store_true', help='Audit projectile mechanics instead of ground routes')
 parser.add_argument('--continuation', action='store_true', help='Check exact mid-route save/observer continuation')
 args = parser.parse_args()
@@ -41,7 +42,7 @@ if main.count(needle) != 1:
 main = main.replace(needle, 'int menuResult = runUnitSpeedProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
 pos = main.index('int main(')
-include = root / ('tests/units/weapon-reload-probe.inc' if args.weapon_reloads else 'tests/units/projectile-trace.inc' if args.projectile_trace else 'tests/units/projectile-continuation.inc' if args.projectile_continuation else 'tests/units/projectile-combat.inc' if args.projectile_combat else 'tests/units/projectile-audit.inc' if args.projectiles else 'tests/units/unit-route-continuation.inc' if args.continuation else 'tests/units/unit-route-probe.inc')
+include = root / ('tests/units/deviation-reward.inc' if args.deviation_reward else 'tests/units/weapon-reload-probe.inc' if args.weapon_reloads else 'tests/units/projectile-trace.inc' if args.projectile_trace else 'tests/units/projectile-continuation.inc' if args.projectile_continuation else 'tests/units/projectile-combat.inc' if args.projectile_combat else 'tests/units/projectile-audit.inc' if args.projectiles else 'tests/units/unit-route-continuation.inc' if args.continuation else 'tests/units/unit-route-probe.inc')
 main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
 source = out / 'unit-speed-probe-main.cpp'
 source.write_text(main)
@@ -57,7 +58,8 @@ for option in ('-MD', '-MMD'):
 obj = out / 'unit-speed-probe-main.o'
 cc[cc.index('-o') + 1] = str(obj)
 cc[cc.index('-c') + 1] = str(source)
-map_path = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
+map_path = root / ('data/maps/multiplayer/3P - 128x128 - FFA - Tuono-Avon.ini' if args.deviation_reward
+                   else 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini')
 cc.append('-DPROBE_MAP_PATH="' + str(map_path) + '"')
 cc.append('-fno-access-control')  # Inspect production movement state only in this diagnostic binary.
 app = out / 'unit-speed-probe.app/Contents'
@@ -91,6 +93,12 @@ for mod in modes:
         raise RuntimeError('Missing unit speed result: ' + str(logfile))
 if len({(out / (mod + '.csv')).read_bytes() for mod in ('vanilla', 'dunecity', 'Dune2R')}) != 1:
     raise RuntimeError('The three modes produced different unit trajectories')
+if args.deviation_reward:
+    # Amounts follow each mod's prices; the accounting decisions must not.
+    for mod in ('vanilla', 'dunecity', 'Dune2R'):
+        rows = (out / (mod + '-deviation.csv')).read_text().splitlines()
+        if len(rows) < 2:
+            raise RuntimeError('No deviation amounts recorded for ' + mod)
 if args.projectile_combat:
     deviator = [out / (mod + '-deviator.csv') for mod in ('vanilla', 'dunecity', 'Dune2R')]
     if len({path.read_bytes() for path in deviator}) != 1:

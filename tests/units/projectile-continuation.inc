@@ -86,7 +86,7 @@ int runUnitSpeedProbe() {
     for(int type : {Bullet_Rocket,Bullet_TurretRocket,Bullet_Flame,Bullet_Heal}) {
         Bullet original(shooter->getObjectID(),&start,&end,type,8,false,nullptr);
         OMemoryStream out;out.open();original.save(out);
-        std::string bytes(out.getData(),out.getDataLength()-19);bytes.push_back(type==Bullet_Heal?char(-1):char(120));
+        std::string bytes(out.getData(),out.getDataLength()-19-24);bytes.push_back(type==Bullet_Heal?char(-1):char(120));
         game->loadedSavegameVersion=9844;
         IMemoryStream in(bytes.data(),bytes.size());Bullet restored(in);
         require(in.getRemainingLength()==0,"Old projectile layout read outside its record");

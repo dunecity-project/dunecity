@@ -248,6 +248,7 @@ target_sources(dunecity
         players/AIPlayer.cpp
         players/CampaignAIPlayer.cpp
         players/AIDecisionLog.cpp
+        players/DeviationReward.cpp
         players/QuantBot.cpp
         players/QuantBotCampaign.cpp
         players/Mentat.cpp
