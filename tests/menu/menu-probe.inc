@@ -56,7 +56,7 @@ int runLiveMapCatalogueProbe() {
     menuRequire(!browser.loadingMaps && browser.mapEntries.size()>=127,"Live catalogue did not load seeded maps");
     browser.mapModFilter.setSelectedItem(3);browser.mapSizeFilter.setSelectedItem(4);browser.mapPlayersFilter.setSelectedItem(6);browser.rebuildMapList();
     int selected=-1;
-    for(int i=0;i<browser.mapList.getNumEntries();++i)if(browser.mapList.getEntry(i)=="Alkozeltser 4 Cities")selected=i;
+    for(int i=0;i<browser.mapList.getNumEntries();++i)if(browser.mapEntries[browser.visibleMaps[i]].metadata.name=="Alkozeltser 4 Cities")selected=i;
     menuRequire(selected>=0,"DuneCity/256/6-player filters lost Alkozeltser 4 Cities");
     browser.mapList.setSelectedItem(selected);menuCapture(browser,"live-metaserver-maps");
     auto& entry=browser.mapEntries[browser.visibleMaps[selected]];
@@ -515,7 +515,8 @@ int runMenuProbe() {
         legacy.metadata.mod="vanilla";legacy.metadata.width=legacy.metadata.height=64;legacy.metadata.players=2;legacy.metadata.version=1;
         browser.mapEntries={city,legacy};browser.rebuildMapList();
         menuRequire(browser.mapList.getNumEntries()==2,"Metaserver maps were not listed");
-        menuRequire(browser.mapList.getEntry(0)=="Alkozeltser 4 Cities","Map name contains revision suffix");
+        menuRequire(browser.mapList.getEntry(0)=="Alkozeltser 4 Cities v3","Map name is missing its revision suffix");
+        menuRequire(browser.mapList.getEntry(1)=="Small dunes v1","Map name is missing revision one");
         menuRequire(browser.mapPropertyVersion.getText()=="3","Map revision metadata missing");
         browser.mapModFilter.setSelectedItem(3);browser.mapSizeFilter.setSelectedItem(4);browser.mapPlayersFilter.setSelectedItem(6);browser.rebuildMapList();
         menuRequire(browser.mapList.getNumEntries()==1,"Combined map filters dropped a matching map");

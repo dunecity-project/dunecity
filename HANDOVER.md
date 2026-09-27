@@ -10,8 +10,8 @@ Gas rockets use the existing narrow relative-motion aircraft contact check so
 an aircraft cannot pass through a gas rocket before its delayed explosion.
 Contact triggers the ordinary gas conversion roll, never HP damage. Captured
 Carryalls retain passenger ownership and cannot insert hostile cargo into the
-captor's refinery or repair yard. Network protocol is 38; save format and app
-version are unchanged. Reward attribution and Devastator detonation priority
+captor's refinery or repair yard. Network protocol is 38; save format is unchanged.
+The local app version is 1.0.788. Reward attribution and Devastator detonation priority
 remain separate planned work.
 
 Validation: all 43 CTest targets passed (42 in the final full run, then the
@@ -21,8 +21,11 @@ The real-engine projectile probe covers
 exact seeded success/failure decisions and RNG consumption, actual aircraft
 acquisition and conversion, zero HP damage, loaded-cargo preservation, hostile
 repair-yard unloading and timed ownership reversion. Results are compared across
-Vanilla, Dune City and Dune2R. Native app built locally in this worktree; not
-installed or published.
+Vanilla, Dune City and Dune2R. The local 1.0.788 build also includes map revision
+labels from e40bd85f (cherry-picked as fe8bc8ee). Installed to
+/Applications/DuneCity.app; not published. Version metadata, installed bundle
+checksums and signature verified. Unit, map collection and menu navigation
+checks passed again after integration; menu assertions now require revision labels.
 
 ## 2026-09-27 — Fresh guest multiplayer map reception
 
