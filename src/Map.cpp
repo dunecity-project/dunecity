@@ -17,6 +17,7 @@
 
 #include <Map.h>
 #include <DynastyProjectile.h>
+#include <GasDeviationPolicy.h>
 #include <dunecity/CityConstants.h>
 
 #include <globals.h>
@@ -238,9 +239,11 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                         continue;
 
                     if(bulletID == Bullet_DRocket) {
-                        if((pAirUnit->getItemID() != Unit_Carryall) && (pAirUnit->getItemID() != Unit_Sandworm) && (pAirUnit->getItemID() != Unit_Frigate)) {
-                            // try to deviate
-                            if(currentGame->randomGen.randFixPoint() < getDeviateWeakness(static_cast<HOUSETYPE>(pAirUnit->getOriginalHouseID()))) {
+                        // Gas converts crewed aircraft, Ornithopters and Carryalls
+                        // included; it never removes hit points. One synchronized draw
+                        // per eligible target keeps lockstep peers in step.
+                        if(GasDeviationPolicy::eligibleTarget(pAirUnit->getItemID())) {
+                            if(currentGame->randomGen.randFixPoint() < GasDeviationPolicy::conversionChance()) {
                                 pAirUnit->deviate(damagerOwner);
                             }
                         }
@@ -300,9 +303,9 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                         const FixPoint healthBefore = isOrni ? pUnit->getHealth() : 0;
                         
                         if(bulletID == Bullet_DRocket) {
-                            if((pUnit->getItemID() != Unit_Carryall) && (pUnit->getItemID() != Unit_Sandworm) && (pUnit->getItemID() != Unit_Frigate)) {
-                                // try to deviate
-                                if(currentGame->randomGen.randFixPoint() < getDeviateWeakness(static_cast<HOUSETYPE>(pUnit->getOriginalHouseID()))) {
+                            // Same shared eligibility list and chance as the air branch.
+                            if(GasDeviationPolicy::eligibleTarget(pUnit->getItemID())) {
+                                if(currentGame->randomGen.randFixPoint() < GasDeviationPolicy::conversionChance()) {
                                     pUnit->deviate(damagerOwner);
                                 }
                             }

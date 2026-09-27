@@ -416,7 +416,8 @@ void Bullet::updateDynastyProjectile()
                 return;
             }
             const auto* liveTarget = target.getObjPointer();
-            if(bulletID == Bullet_TurretRocket && liveTarget && liveTarget->getHealth() > 0
+            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket)
+               && liveTarget && liveTarget->getHealth() > 0
                && liveTarget->isAFlyingUnit()) {
                 const Coord targetNow = liveTarget->getCenterPoint()*4;
                 // A narrow physical intercept compensates for 20Hz missiles crossing
@@ -435,7 +436,8 @@ void Bullet::updateDynastyProjectile()
                 if(dx*dx+dy*dy <= Sint64(32*1024)*(32*1024)) { // one eighth of a tile
                     realX = FixPoint(previous.x+int((position.x-previous.x)*t/1024))/4;
                     realY = FixPoint(previous.y+int((position.y-previous.y)*t/1024))/4;
-                    currentGame->combatStats.turretRocketsProximityDetonated++;
+                    if(bulletID == Bullet_TurretRocket)
+                        currentGame->combatStats.turretRocketsProximityDetonated++;
                     destroy(liveTarget->getObjectID());
                     return;
                 }
@@ -670,7 +672,7 @@ void Bullet::destroy(Uint32 interceptedAirUnit)
 
     switch(bulletID) {
         case Bullet_DRocket: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, interceptedAirUnit);
             soundPlayer->playSoundAt(Sound_ExplosionGas, position);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Gas,position,houseID));
         } break;

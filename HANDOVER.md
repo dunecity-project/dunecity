@@ -1,3 +1,29 @@
+## 2026-09-27 — Deviator aircraft conversion
+
+Deviators can target and convert hostile Ornithopters and Carryalls (including
+Chemical Carryalls). Gas eligibility and its fixed-point 80% conversion chance
+are shared by target selection and impact, independent of house or game type.
+Frigates, Sandworms, structures and ambient city aircraft remain excluded.
+The old custom-game 100% and campaign house-specific probabilities are removed.
+
+Gas rockets use the existing narrow relative-motion aircraft contact check so
+an aircraft cannot pass through a gas rocket before its delayed explosion.
+Contact triggers the ordinary gas conversion roll, never HP damage. Captured
+Carryalls retain passenger ownership and cannot insert hostile cargo into the
+captor's refinery or repair yard. Network protocol is 38; save format and app
+version are unchanged. Reward attribution and Devastator detonation priority
+remain separate planned work.
+
+Validation: all 43 CTest targets passed (42 in the final full run, then the
+projectile mechanics target after updating its aircraft gas-contact expectation).
+The native build, dependency audit and whitespace checks passed.
+The real-engine projectile probe covers
+exact seeded success/failure decisions and RNG consumption, actual aircraft
+acquisition and conversion, zero HP damage, loaded-cargo preservation, hostile
+repair-yard unloading and timed ownership reversion. Results are compared across
+Vanilla, Dune City and Dune2R. Native app built locally in this worktree; not
+installed or published.
+
 ## 2026-09-27 — Fresh guest multiplayer map reception
 
 Fixed a live 1.0.783 join failure on current main a676d235. The guest's map

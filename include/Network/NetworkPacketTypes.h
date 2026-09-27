@@ -91,7 +91,9 @@
 // Version 35: Space-driven QuantBot colonisation decisions.
 // Version 36: Cramped city placement and Starport colonisation decisions.
 // Version 37: Opening space, prompt MCV colonies and launcher air defence change AI orders.
-#define NETWORK_PROTOCOL_VERSION            37
+// Version 38: Gas deviation targets aircraft at one shared chance for every house
+//             and mode, so target selection and synchronized deviation draws differ.
+#define NETWORK_PROTOCOL_VERSION            38
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

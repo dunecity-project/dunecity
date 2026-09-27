@@ -63,8 +63,6 @@ Uint32          getColorByTerrainType(int terrainType);
 Uint32          getHouseRadarColor(HOUSETYPE house);
 Uint32          getHouseInterfaceColor(HOUSETYPE house, int shadeOffset = 3);
 
-FixPoint        getDeviateWeakness(HOUSETYPE house);
-
 inline int missionNumberToLevelNumber(int missionNumber) {
     if(missionNumber != 22) {
         return ((missionNumber+1)/3)+1;

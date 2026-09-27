@@ -91,5 +91,9 @@ for mod in modes:
         raise RuntimeError('Missing unit speed result: ' + str(logfile))
 if len({(out / (mod + '.csv')).read_bytes() for mod in ('vanilla', 'dunecity', 'Dune2R')}) != 1:
     raise RuntimeError('The three modes produced different unit trajectories')
+if args.projectile_combat:
+    deviator = [out / (mod + '-deviator.csv') for mod in ('vanilla', 'dunecity', 'Dune2R')]
+    if len({path.read_bytes() for path in deviator}) != 1:
+        raise RuntimeError('The three modes produced different gas deviation results')
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 print('Unit scenarios passed for modes ' + ', '.join(modes) + '. Logs: ' + str(out))
