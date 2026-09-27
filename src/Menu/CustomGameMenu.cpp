@@ -525,7 +525,13 @@ void CustomGameMenu::rebuildMapList() {
     for(size_t i=0;i<mapEntries.size();++i)if(mapEntries[i].metadata.matches(mod,mapSizeFilter.getSelectedIndex(),mapPlayersFilter.getSelectedIndex()))visibleMaps.push_back(i);
     std::sort(visibleMaps.begin(),visibleMaps.end(),[this](size_t a,size_t b){return strToLower(mapEntries[a].metadata.name)<strToLower(mapEntries[b].metadata.name);});
     int selected=0;
-    for(size_t i=0;i<visibleMaps.size();++i){const auto& entry=mapEntries[visibleMaps[i]];mapList.addEntry(entry.metadata.name);if(!previous.empty()&&entry.path==previous)selected=static_cast<int>(i);}
+    for(size_t i=0;i<visibleMaps.size();++i) {
+        const auto& entry=mapEntries[visibleMaps[i]];
+        std::string label=entry.metadata.name;
+        if(entry.metadata.version>0)label+=" v"+std::to_string(entry.metadata.version);
+        mapList.addEntry(label);
+        if(!previous.empty()&&entry.path==previous)selected=static_cast<int>(i);
+    }
     nextButton.setEnabled(!visibleMaps.empty());previewMapButton.setEnabled(!visibleMaps.empty());
     mapLibraryStatus.setText(loadingMaps?_("Loading metaserver maps..."):std::to_string(visibleMaps.size())+_(" maps"));
     if(!visibleMaps.empty())mapList.setSelectedItem(selected);

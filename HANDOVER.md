@@ -1,3 +1,96 @@
+## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
+
+Replaces the old instant conversion estimate in the active QuantBot learning
+ledger. A captured hostile unit's damage and unit killing blows now pay the
+controller's Deviator bucket: target price times actual HP removed / maximum HP,
+plus 20% of target price for a unit kill. Hostile damage absorbed while controlled
+also pays the Deviator, without a kill bonus. Refreshing control alone earns zero.
+Friendly, self and environmental damage do not earn absorption credit.
+
+QuantBot arms captured hostile Devastators on its first eligible unit scan,
+before rally, support and campaign orders. The existing 200-cycle fuse remains.
+Completed detonation pays remaining HP value and one 20% Devastator kill bonus;
+hostile blast damage and kills are additional. Self-blast cannot duplicate the
+terminal reward. Allied-origin and human-controlled Devastators are excluded.
+
+Projectiles, persistent flames and armed fuses retain firing/arming attribution
+through source death, reversion, recapture and save/load. Telemetry declares
+`deviation_reward_version: 1` and separates outgoing, absorbed and terminal value.
+Save format is 9849; network protocol is 40. Loading an older save resets the
+whole unit learning ledger and cached learning window, so new measured rewards
+and loss denominators start together. Historical overall match totals and
+structure losses used by build prerequisites are preserved. Already controlled
+units begin measured intervals at load. Old in-flight projectiles/fuses lack
+historical attribution and earn no outgoing reward; their physical damage remains.
+Old matches cannot be retroactively measured from their conversion-proxy logs.
+
+Includes the earlier 80% aircraft conversion, map revision labels and no-repair
+changes. The new real-engine scoring probe passes 38 decisions in Vanilla,
+Dune City and Dune2R, including saved fuses, single terminal credit, hostile
+absorption, killing blows, source death/reversion/recapture and legacy attribution.
+An independent 50-HP reverted Devastator probe now earns exactly 260 credits,
+not the erroneous 520, in all three modes. Native build and dependency audits pass.
+All 44 CTest targets pass: 41 in the full run, followed by the three stats probes
+after updating their synthetic 9840 House records to omit the new counter block.
+The old-projectile fixture similarly omits the new 24-byte attribution block.
+
+The portable app is staged on the MBA at
+~/Downloads/DuneCity-1.0.790-staged/dunecity.app. Signature, bundled runtime,
+hidden rendering, version and executable SHA-256 were verified there. The
+installed /Applications/dunecity.app remains 1.0.788 per the user's stage-only
+instruction. No running game was stopped and nothing was published.
+
+## 2026-09-27 — Deviated units cannot seek repairs (local 1.0.789)
+
+Shared repair eligibility rejects temporarily deviated units for explicit/automatic
+repair orders, yard bookings and Carryall delivery. Conversion cancels inherited
+pickup requests. QuantBot excludes these units from repair reservations and repair
+demand; QuantBot and Mentat use their combat fallback instead of issuing a rejected
+repair order. Ordinary repairs resume after ownership reverts. Protocol is 39;
+save format is unchanged.
+
+Native build and six focused CTest targets passed: unit suite, Carryall repair
+regression, gas combat regression, and QuantBot air-defense/repair reservation
+probes in Vanilla, Dune City and Dune2R. Packaged app passed signature and hidden
+rendering verification on the MacBook Air. Per user request it is staged at
+~/Downloads/DuneCity-1.0.789-staged/dunecity.app on the MBA; /Applications remains
+1.0.788 and the running game was not interrupted. No publication.
+
+MBA match 1790508268440308-0 was analysed from a completed telemetry copy. The
+37-minute 1.0.788 4-corners match began with 22 Deviators per house; Ordos produced
+54 more. Rebels also had production availability but built none. Detailed reward
+comparison and current conversion-proxy limitations are recorded outside this
+repository in ../dunecity-deviator-analysis/mba-1790508268440308/analysis.md.
+
+## 2026-09-27 — Deviator aircraft conversion
+
+Deviators can target and convert hostile Ornithopters and Carryalls (including
+Chemical Carryalls). Gas eligibility and its fixed-point 80% conversion chance
+are shared by target selection and impact, independent of house or game type.
+Frigates, Sandworms, structures and ambient city aircraft remain excluded.
+The old custom-game 100% and campaign house-specific probabilities are removed.
+
+Gas rockets use the existing narrow relative-motion aircraft contact check so
+an aircraft cannot pass through a gas rocket before its delayed explosion.
+Contact triggers the ordinary gas conversion roll, never HP damage. Captured
+Carryalls retain passenger ownership and cannot insert hostile cargo into the
+captor's refinery or repair yard. Network protocol is 38; save format is unchanged.
+The local app version is 1.0.788. Reward attribution and Devastator detonation priority
+remain separate planned work.
+
+Validation: all 43 CTest targets passed (42 in the final full run, then the
+projectile mechanics target after updating its aircraft gas-contact expectation).
+The native build, dependency audit and whitespace checks passed.
+The real-engine projectile probe covers
+exact seeded success/failure decisions and RNG consumption, actual aircraft
+acquisition and conversion, zero HP damage, loaded-cargo preservation, hostile
+repair-yard unloading and timed ownership reversion. Results are compared across
+Vanilla, Dune City and Dune2R. The local 1.0.788 build also includes map revision
+labels from e40bd85f (cherry-picked as fe8bc8ee). Installed to
+/Applications/DuneCity.app; not published. Version metadata, installed bundle
+checksums and signature verified. Unit, map collection and menu navigation
+checks passed again after integration; menu assertions now require revision labels.
+
 ## 2026-09-27 — Fresh guest multiplayer map reception
 
 Fixed a live 1.0.783 join failure on current main a676d235. The guest's map

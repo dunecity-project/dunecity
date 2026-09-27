@@ -243,8 +243,14 @@ void Carryall::deployUnit(Uint32 unitID)
 
         if (currentGameMap->getTile(location)->hasANonInfantryGroundObject()) {
             ObjectBase* object = currentGameMap->getTile(location)->getNonInfantryGroundObject();
-            if (object->getOwner() == getOwner()) {
-                if (object->getItemID() == Structure_RepairYard) {
+            // A deviated Carryall keeps flying its original owner's cargo, so the
+            // temporary owner's repair yard or refinery must not accept it. Cargo
+            // that is still hostile is simply dropped on the ground instead.
+            if (object->getOwner() == getOwner()
+                && object->getOwner()->getTeamID() == pUnit->getOwner()->getTeamID()) {
+                // Deviated cargo is dropped on the ground as well: the captor does not get to
+                // repair a unit it only borrowed, and the bay stays free and unbooked.
+                if (object->getItemID() == Structure_RepairYard && pUnit->isEligibleForRepair()) {
                     if (static_cast<RepairYard*>(object)->isFree()) {
                         pUnit->setTarget(object);   // unit books repair yard again
                         pUnit->setGettingRepaired();

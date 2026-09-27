@@ -19,6 +19,7 @@
 #define HOUSE_H
 
 #include <players/CombatReward.h>
+#include <players/DeviationReward.h>
 namespace AITelemetry { class Record; }
 class ObjectData;
 
@@ -115,6 +116,17 @@ public:
     const CombatReward::Totals& getCombatReward(int itemID) const { return combatRewards[itemID]; }
     void addCombatReward(Uint32 itemID, const CombatReward::Totals& reward);
     AITelemetry::Record combatRewardStats(const ObjectData& objectData) const;
+    /// Measured Deviator contribution totals. Deterministic simulation state, always maintained.
+    const DeviationReward::HouseCounters& getDeviationCounters() const { return deviationCounters; }
+    DeviationReward::HouseCounters& deviationCounters_() { return deviationCounters; }
+    AITelemetry::Record deviationRewardStats() const;
+    /**
+        Clears the unit-mix learning ledger - rewards, raw damage and unit losses - so a
+        pre-9849 save cannot mix the old flat conversion estimate and the old shooter-type
+        attribution with measured contributions. Structure losses and general match
+        statistics are preserved. See DeviationReward::migrateLegacyLedger().
+    */
+    void resetLearningLedgerForMeasuredScoring();
     inline FixPoint getHarvestedSpice() const { return harvestedSpice; }
     inline int getNumVisibleEnemyUnits() const { return numVisibleEnemyUnits; }
     inline int getNumVisibleFriendlyUnits() const { return numVisibleFriendlyUnits; }
@@ -304,6 +316,7 @@ protected:
     int numItemLosses [Num_ItemID]; /// Number of items lost by player
     CombatReward::Totals combatRewards[Num_ItemID];
     Sint32 numItemDamageInflicted[Num_ItemID]; /// Amount of damage inflicted by a specific unit type owned by the player
+    DeviationReward::HouseCounters deviationCounters; ///< measured Deviator contribution (SAVEGAMEVERSION 9849)
 
     int capacity;             ///< Total spice capacity
     int producedPower;        ///< Power prodoced by this player

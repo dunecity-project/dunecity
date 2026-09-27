@@ -846,6 +846,8 @@ void Mentat::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) {
 
 					// don't do manual repairs if it's campaign and easy or medium difficulty
 					&& !(gameMode == GameMode::Campaign && (difficulty == Difficulty::Easy || difficulty == Difficulty::Medium))
+					// A deviated unit cannot be repaired, so reposition it instead.
+					&& pGroundUnit->isEligibleForRepair()
 					) {
 					doRepair(pGroundUnit);
 				}

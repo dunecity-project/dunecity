@@ -157,6 +157,13 @@ House::House(InputStream& stream) : choam(this) {
             if (i < Num_ItemID) { combatRewards[i]=reward; numItemDamageInflicted[i]=damage; numItemLosses[i]=losses; }
         }
     }
+    // Measured Deviator contribution. A save from before the ledger change carries the old
+    // flat conversion estimate instead; dropping it keeps the two accountings from mixing.
+    if (currentGame && currentGame->getLoadedSavegameVersion() >= 9849) {
+        deviationCounters.load(stream);
+    } else {
+        DeviationReward::migrateLegacyLedger(*this);
+    }
     harvestedSpice = stream.readFixPoint();
     producedPower = stream.readSint32();
     powerUsageTimer = stream.readSint32();
@@ -243,6 +250,7 @@ void House::save(OutputStream& stream) const {
         combatRewards[i].save(stream);
         stream.writeSint32(numItemDamageInflicted[i]); stream.writeSint32(numItemLosses[i]);
     }
+    deviationCounters.save(stream);
     stream.writeFixPoint(harvestedSpice);
     stream.writeSint32(producedPower);
     stream.writeSint32(powerUsageTimer);
@@ -899,6 +907,45 @@ AITelemetry::Record House::combatRewardStats(const ObjectData& objectData) const
             .set("lost_value", int64_t(numItemLosses[i])*objectData.data[i][houseID].price));
     }
     return stats;
+}
+
+void House::resetLearningLedgerForMeasuredScoring() {
+    // Both sides of the learning ratio have to start together. Clearing only the old flat
+    // conversion estimate would leave measured rewards from this session divided by a whole
+    // match of accumulated losses, and would keep every captured unit's damage booked under
+    // the type that fired it. Coverage therefore starts at load; the old match is not rescored.
+    for (int i=0; i<Num_ItemID; ++i) {
+        combatRewards[i] = CombatReward::Totals();
+        numItemDamageInflicted[i] = 0;
+        // Structure losses are build-prerequisite evidence ("we owned one and lost it"),
+        // not learning input, so they survive. Unit losses are only the learning denominator.
+        if (!isStructure(i)) numItemLosses[i] = 0;
+    }
+    // General historical statistics - kills, destroyed value, built value, loss value - are
+    // untouched: they describe the match, not the unit-mix learning ratio.
+}
+
+AITelemetry::Record House::deviationRewardStats() const {
+    const auto& counters = deviationCounters;
+    return AITelemetry::Record().set("ledger_version", DeviationReward::kLedgerVersion)
+        .set("outgoing_damage_milli", counters.outgoingDamageMilli)
+        .set("outgoing_kill_bonus_milli", counters.outgoingKillBonusMilli)
+        .set("outgoing_hp_milli", counters.outgoingHpMilli)
+        .set("outgoing_hits", static_cast<int64_t>(counters.outgoingHits))
+        .set("outgoing_kills", static_cast<int64_t>(counters.outgoingKills))
+        .set("absorbed_damage_milli", counters.absorbedDamageMilli)
+        .set("absorbed_hp_milli", counters.absorbedHpMilli)
+        .set("absorbed_hits", static_cast<int64_t>(counters.absorbedHits))
+        .set("terminal_damage_milli", counters.terminalDamageMilli)
+        .set("terminal_kill_bonus_milli", counters.terminalKillBonusMilli)
+        .set("terminal_hp_milli", counters.terminalHpMilli)
+        .set("detonations", static_cast<int64_t>(counters.detonations))
+        .set("captures", static_cast<int64_t>(counters.captures))
+        .set("refreshes", static_cast<int64_t>(counters.refreshes))
+        .set("releases", static_cast<int64_t>(counters.releases))
+        .set("excluded", static_cast<int64_t>(counters.excluded))
+        .set("legacy_ledger_reset", static_cast<int64_t>(counters.legacyLedgerReset))
+        .set("measured_total_milli", counters.totalMilli());
 }
 
 void House::win() {

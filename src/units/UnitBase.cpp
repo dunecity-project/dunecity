@@ -86,6 +86,7 @@ UnitBase::UnitBase(House* newOwner) : ObjectBase(newOwner) {
     secondaryWeaponTimer = INVALID;
 
     deviationTimer = INVALID;
+    deviationEpisode = DeviationReward::Episode();
 }
 
 UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
@@ -134,6 +135,20 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
     secondaryWeaponTimer = stream.readSint32();
 
     deviationTimer = stream.readSint32();
+    if(currentGame->getLoadedSavegameVersion() >= 9849) {
+        deviationEpisode.load(stream);
+    } else if(owner != nullptr && owner->getHouseID() != originalHouseID) {
+        // Older saves record no control interval. The learning ledger is reset on the same
+        // load, so a unit that is already borrowed is bootstrapped into a fresh interval:
+        // measured coverage then starts immediately instead of waiting for a new capture.
+        // The Deviator that took it is not recoverable and is left unknown.
+        deviationEpisode.id = currentGame->allocateDeviationEpisode();
+        deviationEpisode.startCycle = currentGame->getGameCycleCount();
+        deviationEpisode.controllerHouse = owner->getHouseID();
+        deviationEpisode.deviatorObjectID = NONE_ID;
+        deviationEpisode.rewarded =
+            currentGame->getHouse(originalHouseID)->getTeamID() != owner->getTeamID();
+    }
     if(currentGame->getLoadedSavegameVersion() >= 9844) {
         dynastyRouteTick=stream.readUint64();
         dynastyStepStart=stream.readUint64(); dynastyStepEnd=stream.readUint64();
@@ -225,6 +240,7 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(secondaryWeaponTimer);
 
     stream.writeSint32(deviationTimer);
+    deviationEpisode.save(stream);
     stream.writeUint64(dynastyRouteTick);
     stream.writeUint64(dynastyStepStart); stream.writeUint64(dynastyStepEnd);
     stream.writeFixPoint(dynastyStartX); stream.writeFixPoint(dynastyStartY);
@@ -571,6 +587,9 @@ void UnitBase::destroy() {
                 pNewUnit->owner = owner;
                 pNewUnit->graphic = pGFXManager->getObjPic(pNewUnit->graphicID,owner->getHouseID());
                 pNewUnit->deviationTimer = deviationTimer;
+                // The survivor continues the same control interval, so its damage keeps
+                // paying the same house's Deviator instead of starting a second capture.
+                pNewUnit->deviationEpisode = deviationEpisode;
             }
         }
     }
@@ -578,10 +597,11 @@ void UnitBase::destroy() {
     delete this;
 }
 
-void UnitBase::deviate(House* newOwner) {
+void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
 
     if(newOwner->getHouseID() == originalHouseID) {
         quitDeviation();
+        return;
     } else {
         removeFromSelectionLists();
         setTarget(nullptr);
@@ -593,26 +613,32 @@ void UnitBase::deviate(House* newOwner) {
 
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
         deviationTimer = DEVIATIONTIME;
+
+        // The interrupted repair trip does not survive the conversion. setTarget(nullptr) above
+        // already released the repair-yard booking; the carryall booked for the same trip has to
+        // go with it, otherwise the unit waits for a lift its old owner will never send and
+        // GroundUnit::navigate() keeps it parked for the whole deviation.
+        if(isAGroundUnit()) {
+            static_cast<GroundUnit*>(this)->cancelCarryallPickup();
+        }
     }
 
-    // Keep conversion reward in the same credit units as damage value, without
-    // awarding a killing-blow bonus for a unit that was not destroyed.
-    CombatReward::Totals conversionReward;
-    conversionReward.conversionMilli = int64_t(currentGame->objectData.data[getItemID()][newOwner->getHouseID()].price)
-        * ((getItemID() == Unit_Devastator || getItemID() == Unit_Ornithopter) ? 1000 : 100);
-    newOwner->addCombatReward(Unit_Deviator, conversionReward);
-
-    // Adding this in as a surrogate for damage inflicted upon deviation.. Still not sure what the best value
-    // should be... going in with a 25% of the units value unless its a devastator which we can destruct or an ornithoper
-    // which is likely to get killed
-    if(getItemID() == Unit_Devastator || getItemID() == Unit_Ornithopter){
-        newOwner->informHasDamaged(Unit_Deviator, currentGame->objectData.data[getItemID()][newOwner->getHouseID()].price);
-    } else{
-        newOwner->informHasDamaged(Unit_Deviator, currentGame->objectData.data[getItemID()][newOwner->getHouseID()].price / 10);
+    // A capture pays nothing by itself. What this unit then does under the new house is
+    // measured shot by shot and booked to that house's Deviator, so the control interval
+    // only has to record who is credited.
+    const bool refresh = deviationEpisode.active()
+        && deviationEpisode.controllerHouse == newOwner->getHouseID();
+    if(!refresh) {
+        if(deviationEpisode.active()) DeviationReward::recordRelease(*this, deviationEpisode);
+        deviationEpisode.id = currentGame->allocateDeviationEpisode();
+        deviationEpisode.startCycle = currentGame->getGameCycleCount();
+        deviationEpisode.controllerHouse = newOwner->getHouseID();
+        // Borrowing an allied unit earns nothing: only a hostile original owner's asset does.
+        deviationEpisode.rewarded =
+            currentGame->getHouse(originalHouseID)->getTeamID() != newOwner->getTeamID();
     }
-
-
-
+    deviationEpisode.deviatorObjectID = deviatorObjectID;
+    DeviationReward::recordCapture(*this, deviationEpisode, refresh);
 }
 
 void UnitBase::drawSelectionBox() {
@@ -1321,13 +1347,14 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
     }
 }
 
-void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                               const DeviationReward::Provenance& provenance) {
     // shorten deviation time
     if(deviationTimer > 0) {
         deviationTimer = std::max(0,deviationTimer - MILLI2CYCLES(damage*20*1000));
     }
 
-    ObjectBase::handleDamage(damage, damagerID, damagerOwner);
+    ObjectBase::handleDamage(damage, damagerID, damagerOwner, provenance);
 
     ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
 
@@ -1471,6 +1498,12 @@ void UnitBase::setAngle(int newAngle) {
 }
 
 void UnitBase::setGettingRepaired() {
+    if(!isEligibleForRepair()) {
+        // Last line of defence for a deviated unit. Callers keep it on the map: the two that
+        // exist check the same condition first, so nothing is left removed from the map here.
+        return;
+    }
+
     if(target.getObjPointer() != nullptr && (target.getObjPointer()->getItemID() == Structure_RepairYard)) {
         if(selected) {
             removeFromSelectionLists();
@@ -1634,7 +1667,10 @@ void UnitBase::setTarget(const ObjectBase* newTarget) {
     ObjectBase* pNewTarget = target.getObjPointer();
     if(pNewTarget != nullptr
         && (pNewTarget->getOwner() == getOwner())
-        && (pNewTarget->getItemID() == Structure_RepairYard)) {
+        && (pNewTarget->getItemID() == Structure_RepairYard)
+        // An explicit move onto the captor's repair yard must not turn into a repair trip
+        // for a deviated unit: without the booking it never reaches setGettingRepaired().
+        && isEligibleForRepair()) {
         static_cast<RepairYard*>(pNewTarget)->book();
         goingToRepairYard = true;
     }
@@ -2019,6 +2055,11 @@ void UnitBase::quitDeviation() {
         owner = currentGame->getHouse(originalHouseID);
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
         deviationTimer = INVALID;
+    }
+    // Damage from here on is ordinary combat between the original houses again.
+    if(deviationEpisode.active()) {
+        DeviationReward::recordRelease(*this, deviationEpisode);
+        deviationEpisode = DeviationReward::Episode();
     }
 }
 

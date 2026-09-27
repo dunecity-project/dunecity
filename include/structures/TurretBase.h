@@ -57,7 +57,8 @@ public:
         \param damagerID    the shooter who caused the damage
         \param damagerOwner the house of the shooter
     */
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
     void turnLeft();
     void turnRight();

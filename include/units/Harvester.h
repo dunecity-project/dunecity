@@ -39,7 +39,8 @@ public:
     void deploy(const Coord& newLocation) override;
     void destroy() override;
     void drawSelectionBox() override;
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
     void handleReturnClick();
 

@@ -227,6 +227,9 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // so reserving a damaged aircraft removes it from every later order and
     // never heals it. Damaged aircraft remain available for combat.
     if (unit->isAFlyingUnit()) return false;
+    // A deviated unit is refused by our repair yards for as long as we hold it, so reserving it
+    // has the same effect as reserving an aircraft: withdrawn from every order, never healed.
+    if (!unit->isEligibleForRepair()) return false;
     // Easy/Medium campaign troops cannot recover at home without a repair yard.
     // Keep them available for combat instead of withdrawing and excluding them
     // from every later wave. Explicit retreat/manual orders remain protected.

@@ -102,11 +102,12 @@ void SonicTank::destroy() {
     TrackedUnit::destroy();
 }
 
-void SonicTank::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void SonicTank::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                                const DeviationReward::Provenance& provenance) {
     ObjectBase* damager = currentGame->getObjectManager().getObject(damagerID);
 
     if (!damager || (damager->getItemID() != Unit_SonicTank))
-        TrackedUnit::handleDamage(damage, damagerID, damagerOwner);
+        TrackedUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
 }
 
 bool SonicTank::canAttack(const ObjectBase *object) const {

@@ -53,12 +53,14 @@ Explosion::Explosion(Uint32 explosionID, const Coord& position, int house)
         : 0;
 }
 
-Explosion::Explosion(Uint32 explosionID, const Coord& position, int house, Uint32 damagerID, int persistentDamage, int damageRadius)
+Explosion::Explosion(Uint32 explosionID, const Coord& position, int house, Uint32 damagerID, int persistentDamage, int damageRadius,
+                     const DeviationReward::Provenance& provenance)
  : Explosion(explosionID, position, house)
 {
     this->damagerID = damagerID;
     this->persistentDamage = persistentDamage;
     this->damageRadius = damageRadius;
+    this->provenance = provenance;
 }
 
 Explosion::Explosion(InputStream& stream)
@@ -72,10 +74,18 @@ Explosion::Explosion(InputStream& stream)
 
     init();
 
-    // The transient damage payload is intentionally not serialized so old
-    // saves remain readable. Reconstruct a conservative fallback if a game
-    // was saved during the very short flame animation.
-    if(explosionID == Explosion_FlameImpact && house >= 0 && house < NUM_HOUSES) {
+    if(currentGame->getLoadedSavegameVersion() >= 9849) {
+        // A burning flame keeps hurting after a reload, for the same source, damage, radius
+        // and credited house it had before the save.
+        damagerID = stream.readUint32();
+        persistentDamage = stream.readSint32();
+        damageRadius = stream.readSint32();
+        provenance.load(stream);
+    } else if(explosionID == Explosion_FlameImpact && house >= 0 && house < NUM_HOUSES) {
+        // Older saves carry no damage payload at all. Reconstruct a conservative fallback
+        // if a game was saved during the very short flame animation; its source stays
+        // unknown, so continuing damage earns no outgoing reward.
+        provenance.beneficiaryHouse = DeviationReward::Provenance::LegacyUnknownBeneficiary;
         persistentDamage = currentGame->objectData.data[Unit_FlameTank][house].weapondamage / 10;
         if(persistentDamage < 1) {
             persistentDamage = 1;
@@ -171,6 +181,10 @@ void Explosion::save(OutputStream& stream) const
     stream.writeUint32(house);
     stream.writeSint32(frameTimer);
     stream.writeSint32(currentFrame);
+    stream.writeUint32(damagerID);
+    stream.writeSint32(persistentDamage);
+    stream.writeSint32(damageRadius);
+    provenance.save(stream);
 }
 
 void Explosion::blitToScreen() const
@@ -204,7 +218,8 @@ void Explosion::update()
            && (currentFrame - FLAME_IMPACT_FIRST_FRAME) % FLAME_IMPACT_LOOP_FRAMES == 0)
         {
             currentGameMap->damage(damagerID, currentGame->getHouse(house), position,
-                                   Bullet_Flame, persistentDamage, damageRadius, false, false);
+                                   Bullet_Flame, persistentDamage, damageRadius, false, false,
+                                   NONE_ID, provenance);
         }
 
         if(currentFrame >= numFrames) {

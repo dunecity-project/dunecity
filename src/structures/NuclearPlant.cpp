@@ -73,9 +73,10 @@ int NuclearPlant::getProducedPower() const {
     return DuneCity::generatorOutput(nominal, getHealth(), getMaxHealth(), currentGame->isCitySimEnabled());
 }
 
-void NuclearPlant::handleDamage(int damage, Uint32 damagerID, House* damagerOwner) {
+void NuclearPlant::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                                   const DeviationReward::Provenance& provenance) {
     const bool wasAlive = getHealth() > 0;
-    StructureBase::handleDamage(damage, damagerID, damagerOwner);
+    StructureBase::handleDamage(damage, damagerID, damagerOwner, provenance);
     if (wasAlive && getHealth() <= 0) {
         detonationCreditOwner = damagerOwner;
         detonationTrigger = damagerID;

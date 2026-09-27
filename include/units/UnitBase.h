@@ -60,7 +60,12 @@ public:
     void cancelDeployment();
 
     void destroy() override;
-    void deviate(House* newOwner);
+    /**
+        Hands control of this unit to newOwner until the deviation timer runs out.
+        \param  newOwner            the house taking control; the original house ends the deviation
+        \param  deviatorObjectID    the Deviator that fired, kept for diagnostics only
+    */
+    void deviate(House* newOwner, Uint32 deviatorObjectID = NONE_ID);
 
     void drawSelectionBox() override;
     void drawOtherPlayerSelectionBox() override;
@@ -159,7 +164,8 @@ public:
     */
     void doSetAttackMode(ATTACKMODE newAttackMode);
 
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
     void doRepair() override { }
 
@@ -258,6 +264,21 @@ public:
     inline bool isMoving() const { return moving; }
 
     inline bool wasDeviated() const { return (owner->getHouseID() != originalHouseID); }
+
+    /**
+        A temporarily deviated unit is never repaired by the house that converted it: no automatic
+        trip, no explicit order, no repair-yard booking and no carryall docking. The single check
+        lives here so every repair path shares it, and repairs resume by themselves once the
+        deviation timer reverts ownership.
+    */
+    inline bool isEligibleForRepair() const { return !wasDeviated(); }
+
+    /**
+        The control interval this unit is currently part of, used to attribute what it does
+        while borrowed to the Deviator of the house controlling it. Inactive when the unit
+        answers to its own house.
+    */
+    inline const DeviationReward::Episode& getDeviationEpisode() const { return deviationEpisode; }
 
     inline int getAngle() const { return drawnAngle; }
 
@@ -386,6 +407,8 @@ protected:
 
     // deviation
     Sint32          deviationTimer;  ///< When to revert back to the original owner?
+    /// Who is credited for what this unit does while borrowed (SAVEGAMEVERSION 9849).
+    DeviationReward::Episode deviationEpisode;
 
     // drawing information
     int drawnFrame;                  ///< Which row in the picture should be drawn

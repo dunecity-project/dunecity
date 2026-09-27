@@ -67,6 +67,11 @@ public:
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
+    /**
+        Drops the cached unit-mix performance window when the House-side learning ledger is
+        reset for measured Deviator scoring, so the two cannot disagree after a legacy load.
+    */
+    void resetLearningForMeasuredScoring();
 
     /// Observational data for the compact end-of-match metaserver summary.
     /// It is not saved or consulted by simulation decisions.

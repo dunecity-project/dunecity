@@ -474,9 +474,10 @@ void RebelHarvester::drawSelectionBox()
     }
 }
 
-void RebelHarvester::handleDamage(int damage, Uint32 damagerID, House* damagerOwner)
+void RebelHarvester::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                                     const DeviationReward::Provenance& provenance)
 {
-    TrackedUnit::handleDamage(damage, damagerID, damagerOwner);
+    TrackedUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
 
     ObjectBase* damager = currentGame->getObjectManager().getObject(damagerID);
 

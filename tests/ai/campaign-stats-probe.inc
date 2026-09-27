@@ -31,8 +31,13 @@ void runTaxReceiptsProbe(Game& game) {
            || restored.getHarvestedSpice() != 123 || input.readUint32() != 0x74617831)
             throw std::runtime_error("Tax save roundtrip or following fields changed");
     }
-    // A 9840 House has the same fields except the new eight-byte tax slot.
+    // A 9840 House lacks both the tax slot and the measured deviation counters.
     std::vector<char> legacy(bytes.getData(), bytes.getData() + bytes.getDataLength());
+    // The serialized prefix is 92 bytes, followed by 56 bytes per item reward record.
+    OMemoryStream counterBytes; counterBytes.open(); source.getDeviationCounters().save(counterBytes);
+    const size_t counterOffset = 92 + 56 * Num_ItemID;
+    legacy.erase(legacy.begin() + counterOffset,
+                 legacy.begin() + counterOffset + counterBytes.getDataLength());
     legacy.erase(legacy.begin() + 27, legacy.begin() + 35);
     game.loadedSavegameVersion = 9840;
     IMemoryStream oldInput(legacy.data(), legacy.size());

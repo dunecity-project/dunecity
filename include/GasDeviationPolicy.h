@@ -15,24 +15,24 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef VERSION
-    #define VERSION "1.0.790"
-#endif
+#ifndef GAS_DEVIATION_POLICY_H
+#define GAS_DEVIATION_POLICY_H
 
-#ifndef PACKAGE
-    #define PACKAGE "dunecity"
-#endif
+#include <data.h>
+#include <fixmath/FixPoint.h>
 
-#define VERSIONSTRING   PACKAGE VERSION
+// Shared by target selection and gas impact; independent of house and game mode.
+namespace GasDeviationPolicy {
 
-#ifndef DUNELEGACY_DATADIR
-    #define DUNELEGACY_DATADIR "."
-#endif
+inline FixPoint conversionChance() { return 0.80_fix; }
 
-#ifndef CONFIGFILENAME
-    #define CONFIGFILENAME "Dune City.ini"
-#endif
+inline bool eligibleTarget(int itemID) {
+    return isUnit(itemID)
+        && itemID != Unit_Frigate
+        && itemID != Unit_Sandworm
+        && !isAmbientUnit(itemID);
+}
 
-#ifndef LOGFILENAME
-    #define LOGFILENAME "Dune City.log"
-#endif
+} // namespace GasDeviationPolicy
+
+#endif // GAS_DEVIATION_POLICY_H

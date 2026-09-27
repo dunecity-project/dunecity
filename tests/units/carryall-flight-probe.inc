@@ -171,6 +171,87 @@ int runCarryallFlightProbe() {
         require(!carry->hasCargo() && tank->isActive(), "Repaired cargo not returned to ground");
         csv << "repair_return,0,0," << ticks*0.016 << ",0,0\n";
         carry->cancelDeployment(); tank->cancelDeployment();
+
+        // A temporarily deviated unit is not repaired by the house holding it. Every repair path
+        // is driven with real objects: the inherited trip, the automatic trip, an explicit repair
+        // order, an ordered move onto the yard, the arrival gate and a carryall delivery. Ordinary
+        // repairs return by themselves once the deviation ends.
+        auto* captive=game->getHouse(HOUSE_HARKONNEN);
+        require(captive != nullptr, "Deviation fixture is missing its second house");
+        RepairYard* homeYard=nullptr;
+        for(int y=1;y+size.y<currentGameMap->getSizeY()-1 && !homeYard;++y)
+            for(int x=1;x+size.x<currentGameMap->getSizeX()-1 && !homeYard;++x) {
+                // Keep the original owner's yard clear of the tile the fixture unit deploys on.
+                bool clear=blockDistance(Coord(x,y),site).lround()>=6;
+                for(int dy=0;dy<size.y;++dy) for(int dx=0;dx<size.x;++dx)
+                    clear &= !currentGameMap->getTile(x+dx,y+dy)->hasAGroundObject();
+                if(clear) homeYard=static_cast<RepairYard*>(captive->placeStructure(NONE_ID,Structure_RepairYard,x,y,true,true));
+            }
+        require(homeYard != nullptr, "Cannot place the deviation fixture's home repair yard");
+        auto* borrowed=static_cast<GroundUnit*>(captive->createUnit(Unit_Tank,true));
+        require(borrowed != nullptr, "Cannot create the deviation fixture unit");
+        borrowed->deploy(site); borrowed->setHealth(borrowed->getMaxHealth()/3);
+        // Both houses keep a carryall: the original owner's lift is what the inherited repair
+        // trip books, and the holding house's lift makes automatic repair available to it.
+        auto* homeLift=static_cast<Carryall*>(captive->createUnit(Unit_Carryall,true));
+        require(homeLift != nullptr, "Cannot create the original owner's carryall");
+        homeLift->deploy(site - Coord(4,0));
+        auto* lift=aircraft();
+        // Its own house repairs it, and it books a carryall for the trip.
+        borrowed->doRepair();
+        require(borrowed->getTarget()==homeYard && borrowed->goingToRepairYard
+                && homeYard->getNumBookings()==1,
+                "The fixture unit does not request repair from its own house");
+        require(borrowed->isAwaitingPickup() && borrowed->hasBookedCarrier(),
+                "The fixture repair trip booked no carryall, so conversion has nothing to release");
+        // Conversion cancels the inherited trip: no target, no bay booking, no waiting lift.
+        borrowed->deviate(owner);
+        require(borrowed->wasDeviated() && borrowed->getOwner()==owner,
+                "Deviation fixture did not hand the unit to the repair yard's house");
+        require(borrowed->getTarget()==nullptr && !borrowed->goingToRepairYard
+                && homeYard->getNumBookings()==0,
+                "Conversion kept the inherited repair-yard trip or its booking");
+        require(!borrowed->isAwaitingPickup() && !borrowed->hasBookedCarrier(),
+                "Conversion left the unit waiting for a carryall its old owner will never send");
+        // Explicit order, automatic trip and arrival gate all refuse while deviated.
+        borrowed->doRepair();
+        require(borrowed->getTarget()==nullptr && yard->getNumBookings()==0 && yard->isFree(),
+                "An explicit repair order sent a deviated unit to the captor's yard");
+        borrowed->checkPos();
+        require(borrowed->getTarget()==nullptr && !borrowed->goingToRepairYard,
+                "Automatic repair sent a deviated unit to the captor's yard");
+        borrowed->doMove2Object(yard);
+        require(borrowed->getTarget()==yard && !borrowed->goingToRepairYard
+                && yard->getNumBookings()==0,
+                "An ordered move onto the captor's yard booked a repair bay for a deviated unit");
+        borrowed->setGettingRepaired();
+        require(yard->isFree() && yard->getRepairUnit()==nullptr && borrowed->isActive()
+                && borrowed->isVisible() && borrowed->getHealth()<borrowed->getMaxHealth(),
+                "A deviated unit entered the captor's repair yard on arrival");
+        // A carryall of the holding house delivers it to that house's yard: dropped on the
+        // ground beside the bay instead of docked, and the bay stays free and unbooked.
+        borrowed->setTarget(nullptr);
+        lift->giveCargo(borrowed);
+        require(lift->hasCargo(), "Deviated unit was not loaded for the delivery check");
+        lift->setTarget(yard);
+        ticks=0;
+        while(lift->hasCargo() && ticks<4000) { require(lift->update(), "Delivery carryall vanished"); ++ticks; }
+        require(!lift->hasCargo(), "Carryall never delivered its deviated cargo");
+        require(yard->isFree() && yard->getRepairUnit()==nullptr && yard->getNumBookings()==0,
+                "A carryall docked a deviated unit in the captor's repair yard");
+        require(borrowed->isActive() && borrowed->getHealth()<borrowed->getMaxHealth(),
+                "The deviated cargo was not put back on the ground still damaged");
+        csv << "deviated_repair_refused,0,0," << ticks*0.016 << ",0,0\n";
+        // Ownership reverts, and the ordinary repair trip works again.
+        borrowed->quitDeviation();
+        require(!borrowed->wasDeviated() && borrowed->getOwner()==captive,
+                "Deviation did not revert to the original house");
+        borrowed->doRepair();
+        require(borrowed->getTarget()==homeYard && borrowed->goingToRepairYard
+                && homeYard->getNumBookings()==1,
+                "Repairs were not restored after the deviation ended");
+        lift->cancelDeployment(); homeLift->cancelDeployment(); borrowed->cancelDeployment();
+        homeYard->destroy();
     }
     csv.close();
     SDL_Log("CARRYALL_FLIGHT_PROBE_PASS: %s (%s)",mod.c_str(),baseline ? "baseline" : "regression");

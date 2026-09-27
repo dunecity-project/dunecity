@@ -21,7 +21,8 @@ public:
     ObjectInterface* getInterfaceContainer() override;
     bool update() override;
     void destroy() override;
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
     void setHealth(FixPoint newHealth) override;
 
     int getProducedPower() const;

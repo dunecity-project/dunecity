@@ -20,6 +20,7 @@
 #include <globals.h>
 
 #include <FileClasses/GFXManager.h>
+#include <GasDeviationPolicy.h>
 #include <House.h>
 #include <Game.h>
 #include <Map.h>
@@ -119,7 +120,12 @@ void Deviator::destroy() {
 
 bool Deviator::canAttack(const ObjectBase* object) const
 {
-    if ((object != nullptr) && !object->isAStructure() && !object->isAFlyingUnit()
+    // Gas converts crews, so aircraft with a crew are valid targets too:
+    // Ornithopters and Carryalls both convert on impact. The eligibility list is
+    // shared with the gas impact in Map::damage, so the weapon never selects a
+    // target the gas cannot actually convert.
+    if ((object != nullptr) && !object->isAStructure()
+        && GasDeviationPolicy::eligibleTarget(object->getItemID())
         && (object->getOwner()->getTeamID() != owner->getTeamID())
         && object->isVisible(getOwner()->getTeamID()))
         return true;

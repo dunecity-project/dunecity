@@ -370,7 +370,8 @@ Game::~Game() {
             roster.set(std::to_string(h), AITelemetry::Record().set("name", getHouseNameByNumber(static_cast<HOUSETYPE>(h)))
                 .set("team", house[h]->getTeamID()).set("alive", house[h]->isAlive()).set("credits", house[h]->getCredits())
                 .set("actual", actual).set("built", built).set("lost", lost)
-                .set("economy_totals", AITelemetry::log().economyTotals(h)).set("combat_rewards", house[h]->combatRewardStats(objectData)));
+                .set("economy_totals", AITelemetry::log().economyTotals(h)).set("combat_rewards", house[h]->combatRewardStats(objectData))
+                .set("deviation_rewards", house[h]->deviationRewardStats()));
         }
         AITelemetry::log().write(gameCycleCount, -1, -1, "game_summary", AITelemetry::Record()
             .set("local_result", finished ? (won ? "victory" : "defeat") : "ended_without_result")
@@ -645,6 +646,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
         .set("entry_type", static_cast<int>(newGameInitSettings.getGameType()))
         .set("game_type", static_cast<int>(gameType)).set("tech", techLevel)
         .set("city_sim", isCitySimEnabled()).set("cycles_per_30_seconds", MILLI2CYCLES(30000))
+        .set("deviation_reward_version", DeviationReward::kLedgerVersion)
         .set("start_cycle", gameCycleCount)
         .set("options", AITelemetry::Record()
             .set("concrete_required", gameInitSettings.getGameOptions().concreteRequired)
@@ -4366,6 +4368,9 @@ bool Game::loadSaveGame(InputStream& stream) {
     gameType = static_cast<GameType>(stream.readSint8());
     techLevel = stream.readUint8();
     randomGen.setSeed(stream.readUint32());
+    // Deviation control-interval numbering. Older saves restart at 1; their units carry no
+    // episode, so no id can collide with one already in use.
+    nextDeviationEpisodeID = savegameVersion >= 9849 ? stream.readUint32() : 1;
 
     // read in the unit/structure data
     logLoadStage("object data");
@@ -4699,6 +4704,7 @@ void Game::saveGame(OutputStream& fs) {
     fs.writeSint8(static_cast<Sint8>(gameType));
     fs.writeUint8(techLevel);
     fs.writeUint32(randomGen.getSeed());
+    fs.writeUint32(nextDeviationEpisodeID);
 
     // write out the unit/structure data
     objectData.save(fs);

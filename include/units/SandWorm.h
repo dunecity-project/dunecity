@@ -44,7 +44,8 @@ public:
 
     void setTarget(const ObjectBase* newTarget) override;
 
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner) override;
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
     /**
         Updates this sandworm.

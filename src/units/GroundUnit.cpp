@@ -114,7 +114,7 @@ void GroundUnit::checkPos() {
             && owner->hasRepairYard()
             && !pickedUp
             && owner->hasCarryalls()
-            && owner->getHouseID() == originalHouseID // stop deviated units from being repaired
+            && isEligibleForRepair() // stop deviated units from being repaired
             && !isInfantry()
             && !forced ) { // Stefan - Allow units with targets to be picked up for repairs
 
@@ -294,6 +294,13 @@ void GroundUnit::handleSendToRepairClick() {
 }
 
 void GroundUnit::doRepair() {
+    if(!isEligibleForRepair()) {
+        // Central block for every explicit repair order: the sidebar/hotkey command
+        // (CMD_UNIT_SENDTOREPAIR), every bot that asks a damaged unit to withdraw, and the
+        // carryall that repairs badly damaged cargo on pickup all arrive here.
+        return;
+    }
+
     if(getHealth() < getMaxHealth()) {
         //find a repair yard to return to
 

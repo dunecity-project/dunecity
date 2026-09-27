@@ -88,7 +88,9 @@ int runUnitSpeedProbe() {
         }
         if(type==Bullet_TurretRocket && scenario==1)
             require(target->getHealth()==hp,"Wrong-way turret rocket caused remote damage");
-        if(DynastyProjectile::parameters(type).step && type!=Bullet_TurretRocket)
+        // Gas may detonate on physical aircraft contact before its arming counter.
+        const bool contactFuse = type==Bullet_TurretRocket || (type==Bullet_DRocket && targetType!=Unit_Tank);
+        if(DynastyProjectile::parameters(type).step && !contactFuse)
             require(ticks*0.016 >= fuse*0.05-0.016,"Missile exploded before its arming counter");
         csv<<type<<','<<targetType<<','<<scenario<<','<<speed<<','<<fuse<<','<<turn<<','<<ticks*0.016<<','<<(hp-target->getHealth()).toDouble()<<','<<distance<<'\n';
         if(std::find(bulletList.begin(),bulletList.end(),b)!=bulletList.end()) {bulletList.remove(b);delete b;}

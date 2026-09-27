@@ -24,6 +24,7 @@
 #include <misc/OutputStream.h>
 #include <misc/exceptions.h>
 #include <misc/Random.h>
+#include <players/DeviationReward.h>
 
 #include <cstdio>
 #include <utility>
@@ -46,7 +47,12 @@ public:
     void save(OutputStream& stream) const;
 
     void createSandRegions();
-    void damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Uint32 bulletID, FixPoint damage, int damageRadius, bool air, bool affectTerrain = true, Uint32 interceptedAirUnit = NONE_ID);
+    /**
+        \param  provenance  who to credit for everything this impact removes, snapshotted when
+                            the shot was fired. Leave unknown to decide from the live damager.
+    */
+    void damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Uint32 bulletID, FixPoint damage, int damageRadius, bool air, bool affectTerrain = true, Uint32 interceptedAirUnit = NONE_ID,
+                const DeviationReward::Provenance& provenance = DeviationReward::Provenance());
     static Coord getMapPos(int angle, const Coord& source);
     void removeObjectFromMap(Uint32 objectID);
     void spiceRemoved(const Coord& coord);

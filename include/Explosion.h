@@ -19,6 +19,7 @@
 #define EXPLOSION_H
 
 #include <DataTypes.h>
+#include <players/DeviationReward.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 #include <misc/SDL2pp.h>
@@ -28,7 +29,8 @@ class Explosion
 public:
     Explosion();
     Explosion(Uint32 explosionID, const Coord& position, int house = HOUSE_HARKONNEN);
-    Explosion(Uint32 explosionID, const Coord& position, int house, Uint32 damagerID, int persistentDamage, int damageRadius);
+    Explosion(Uint32 explosionID, const Coord& position, int house, Uint32 damagerID, int persistentDamage, int damageRadius,
+              const DeviationReward::Provenance& provenance = DeviationReward::Provenance());
     explicit Explosion(InputStream& stream);
     ~Explosion();
 
@@ -53,6 +55,10 @@ private:
     Uint32 damagerID = NONE_ID;
     int persistentDamage = 0;
     int damageRadius = 0;
+    /// Credit for the lingering flame, taken from the projectile that started it.
+    /// Serialized with the damage payload from SAVEGAMEVERSION 9849 so a flame that is
+    /// still burning across a save keeps both its damage and its beneficiary.
+    DeviationReward::Provenance provenance;
 };
 
 

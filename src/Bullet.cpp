@@ -51,6 +51,8 @@ Bullet::Bullet(Uint32 shooterID, Coord* newRealLocation, Coord* newRealDestinati
     Bullet::init();
 
     const ObjectBase* pShooter = currentGame->getObjectManager().getObject(shooterID);
+    // Attribution is fixed here, at firing time, not at impact.
+    provenance = DeviationReward::liveProvenance(pShooter, owner);
     const bool usesPreciseFlameTrajectory = bulletID == Bullet_Flame
         && pShooter != nullptr
         && (pShooter->getItemID() == Unit_Trooper
@@ -166,6 +168,14 @@ Bullet::Bullet(InputStream& stream)
     angle = stream.readFixPoint();
 
     Bullet::init();
+
+    // A shot already in the air keeps the credit it was fired with. Pre-9849 saves have no
+    // record of it, so those shots cannot earn an attributed outgoing reward.
+    if(currentGame->getLoadedSavegameVersion() >= 9849) {
+        provenance.load(stream);
+    } else {
+        provenance.beneficiaryHouse = DeviationReward::Provenance::LegacyUnknownBeneficiary;
+    }
 
     if(currentGame->getLoadedSavegameVersion() >= 9845) {
         detonationTimer = stream.readSint16();
@@ -327,6 +337,8 @@ void Bullet::save(OutputStream& stream) const
     stream.writeSint8(drawnAngle);
     stream.writeFixPoint(angle);
 
+    provenance.save(stream);
+
     stream.writeSint16(detonationTimer);
     stream.writeUint16(projectileClock);
     stream.writeUint8(projectileHeading);
@@ -416,7 +428,8 @@ void Bullet::updateDynastyProjectile()
                 return;
             }
             const auto* liveTarget = target.getObjPointer();
-            if(bulletID == Bullet_TurretRocket && liveTarget && liveTarget->getHealth() > 0
+            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket)
+               && liveTarget && liveTarget->getHealth() > 0
                && liveTarget->isAFlyingUnit()) {
                 const Coord targetNow = liveTarget->getCenterPoint()*4;
                 // A narrow physical intercept compensates for 20Hz missiles crossing
@@ -435,7 +448,8 @@ void Bullet::updateDynastyProjectile()
                 if(dx*dx+dy*dy <= Sint64(32*1024)*(32*1024)) { // one eighth of a tile
                     realX = FixPoint(previous.x+int((position.x-previous.x)*t/1024))/4;
                     realY = FixPoint(previous.y+int((position.y-previous.y)*t/1024))/4;
-                    currentGame->combatStats.turretRocketsProximityDetonated++;
+                    if(bulletID == Bullet_TurretRocket)
+                        currentGame->combatStats.turretRocketsProximityDetonated++;
                     destroy(liveTarget->getObjectID());
                     return;
                 }
@@ -614,13 +628,13 @@ void Bullet::update()
             FixPoint currentDamage = dist*damageDecrease + startDamage;
 
             Coord realPos = Coord(lround(realX), lround(realY));
-            currentGameMap->damage(shooterID, owner, realPos, bulletID, currentDamage/2, damageRadius, false);
+            currentGameMap->damage(shooterID, owner, realPos, bulletID, currentDamage/2, damageRadius, false, true, NONE_ID, provenance);
 
             realX += xSpeed;  //keep the bullet moving by its current speeds
             realY += ySpeed;
 
             realPos = Coord(lround(realX), lround(realY));
-            currentGameMap->damage(shooterID, owner, realPos, bulletID, currentDamage/2, damageRadius, false);
+            currentGameMap->damage(shooterID, owner, realPos, bulletID, currentDamage/2, damageRadius, false, true, NONE_ID, provenance);
         } else if( explodesAtGroundObjects
                     && currentGameMap->tileExists(location)
                     && currentGameMap->getTile(location)->hasAGroundObject()
@@ -670,7 +684,7 @@ void Bullet::destroy(Uint32 interceptedAirUnit)
 
     switch(bulletID) {
         case Bullet_DRocket: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, interceptedAirUnit, provenance);
             soundPlayer->playSoundAt(Sound_ExplosionGas, position);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Gas,position,houseID));
         } break;
@@ -695,7 +709,7 @@ case Bullet_LargeRocket: {
                 position = Coord(lround(realX)+dx[i], lround(realY)+dy[i]);
                 if(position.x < 0 || position.y < 0 || position.x >= currentGameMap->getSizeX()*TILESIZE
                    || position.y >= currentGameMap->getSizeY()*TILESIZE) continue;
-                currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+                currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
                 const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
                 currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
                 screenborder->shakeScreen(22);
@@ -705,16 +719,16 @@ case Bullet_LargeRocket: {
         case Bullet_Rocket:
         case Bullet_TurretRocket:
         case Bullet_SmallRocket: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, interceptedAirUnit);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, interceptedAirUnit, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Small,position,houseID));
         } break;
 
         case Bullet_Flame: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
             soundPlayer->playSoundAt(Sound_ExplosionSmall, position);
             const int persistentDamage = std::max(1, damage / 10);
             currentGame->getExplosionList().push_back(
-                new Explosion(Explosion_FlameImpact, position, houseID, shooterID, persistentDamage, damageRadius));
+                new Explosion(Explosion_FlameImpact, position, houseID, shooterID, persistentDamage, damageRadius, provenance));
 
             for(int i = 0; i < 2; i++) {
                 Coord flamePos = position;
@@ -725,22 +739,22 @@ case Bullet_LargeRocket: {
         } break;
 
         case Bullet_ShellSmall: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellSmall,position,houseID));
         } break;
 
         case Bullet_ShellMedium: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellMedium,position,houseID));
         } break;
 
         case Bullet_ShellLarge: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellLarge,position,houseID));
         } break;
 
         case Bullet_ShellTurret: {
-            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellMedium,position,houseID));
         } break;
 
