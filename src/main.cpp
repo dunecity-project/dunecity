@@ -1273,6 +1273,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.maximumNumberOfUnitsOverride = myINIFile.getIntValue("Game Options","Maximum Number of Units Override",0);
             settings.gameOptions.maximumNumberOfHarvestersOverride = myINIFile.getIntValue("Game Options","Maximum Number of Harvesters Override",-1);
             settings.gameOptions.maximumNumberOfConstructionYardsOverride = myINIFile.getIntValue("Game Options","Maximum Number of Construction Yards Override",-1);
+            settings.gameOptions.originalUnitDamage = myINIFile.getBoolValue("Game Options", "Original Unit Damage", false);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

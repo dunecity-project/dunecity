@@ -18,6 +18,7 @@
 #include <Map.h>
 #include <DynastyProjectile.h>
 #include <GasDeviationPolicy.h>
+#include <OrdinaryDamagePolicy.h>
 #include <dunecity/CityConstants.h>
 
 #include <globals.h>
@@ -190,6 +191,27 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
         return dynastyBlast ? DynastyProjectile::distance(point*4, realPos*4)/4
                             : lround(distanceFrom(point, realPos));
     };
+    // An ordinary gun, shell or rocket impact scores its ground victims from
+    // OrdinaryDamagePolicy instead. This is a separate question from dynastyBlast, which also
+    // decides whether the air layer is reachable at all: the anti-air behaviour, the target
+    // eligibility and every special path below are left exactly as they were.
+    const bool ordinaryGroundBlast = OrdinaryDamagePolicy::ordinaryBlast(bulletID);
+    // The weapon category follows the shot, not its shooter's present owner. The provenance
+    // snapshot records the natural source type at firing time, so it survives the shooter's
+    // death, its reversion and its recapture. Shots without a snapshot - a save written before
+    // provenance existed, or a direct engine call - fall back to the live damager.
+    const Uint32 ordinarySourceItemID = [&]() -> Uint32 {
+        if(!ordinaryGroundBlast) return NONE_ID;
+        if(provenance.sourceItemID != NONE_ID) return provenance.sourceItemID;
+        if(damagerID == NONE_ID) return NONE_ID;
+        const auto* pDamager = currentGame->getObjectManager().getObject(damagerID);
+        return pDamager ? static_cast<Uint32>(pDamager->getItemID()) : NONE_ID;
+    }();
+    // Match-wide, from the settings the game was started with: every peer holds the same value
+    // and the save carries it, so a shot already in the air lands under the rules it was fired
+    // under. Only ordinary ground damage reads it.
+    const auto ordinaryDamageMode = OrdinaryDamagePolicy::modeOf(
+        currentGame->getGameInitSettings().getGameOptions().originalUnitDamage);
     const auto location = Coord(realPos.x/TILESIZE, realPos.y/TILESIZE);
 
     std::set<Uint32>    affectedAirUnits;
@@ -296,9 +318,16 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                     const auto pUnit = static_cast<UnitBase*>(pObject);
 
                     const auto centerPoint = pUnit->getCenterPoint();
-                    const auto distance = blastDistance(centerPoint);
+                    // Ordinary impacts use the Dynasty blast metric over a full tile whether or
+                    // not the projectile flies a Dynasty trajectory, so a shell splashes as far
+                    // as a rocket does. The special paths keep their own per-bullet radius.
+                    const auto distance = ordinaryGroundBlast ? OrdinaryDamagePolicy::distance(centerPoint, realPos)
+                                                              : blastDistance(centerPoint);
+                    const bool withinBlast = ordinaryGroundBlast
+                        ? OrdinaryDamagePolicy::withinBlast(distance)
+                        : (dynastyBlast ? distance < damageRadius : distance <= damageRadius);
 
-                    if(dynastyBlast ? distance < damageRadius : distance <= damageRadius) {
+                    if(withinBlast) {
                         // MULTIPLAYER-SAFE: Track rocket hits on ornithopters (before damage)
                         const bool isOrni = (pUnit->getItemID() == Unit_Ornithopter);
                         const FixPoint healthBefore = isOrni ? pUnit->getHealth() : 0;
@@ -317,6 +346,10 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                             if(pUnit->isInfantry()) {
                                 scaledDamage = std::max<int>(lround(damage), scaledDamage * 2);
                             }
+                            pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
+                        } else if(ordinaryGroundBlast) {
+                            const auto scaledDamage = OrdinaryDamagePolicy::damageAt(
+                                ordinaryDamageMode, bulletID, ordinarySourceItemID, lround(damage), distance);
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         } else {
                             const auto scaledDamage = lround(damage) >> (distance/(TILESIZE/4) + (dynastyBlast ? 0 : 1));

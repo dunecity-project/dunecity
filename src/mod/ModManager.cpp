@@ -952,6 +952,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Maximum Number of Units Override") result.maximumNumberOfUnitsOverride = std::stoi(value);
             else if (key == "Maximum Number of Harvesters Override") result.maximumNumberOfHarvestersOverride = std::stoi(value);
             else if (key == "Maximum Number of Construction Yards Override") result.maximumNumberOfConstructionYardsOverride = std::stoi(value);
+            else if (key == "Original Unit Damage") result.originalUnitDamage = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
         }

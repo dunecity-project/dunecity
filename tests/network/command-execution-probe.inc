@@ -88,16 +88,16 @@ int runOwnershipProbe() {
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
         std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("5DOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD5 fixture missing");
-        legacy[marker]='4'; legacy.resize(legacy.size()-4);
+        const auto marker = legacy.rfind("6DOM");
+        if(marker == std::string::npos) throw std::runtime_error("MOD6 fixture missing");
+        legacy[marker]='4'; legacy.resize(legacy.size()-5);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);
         if(old.getGameOptions().maximumNumberOfConstructionYardsOverride != -1)
             throw std::runtime_error("Older setup did not default to unlimited yards");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD5 roundtrip and MOD4 default pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD6 roundtrip and MOD4 default pass");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);

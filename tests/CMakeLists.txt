@@ -24,6 +24,7 @@ target_sources(dunelegacy_tests
         RendererSizeTestCase.cpp
         CursorAppearanceTestCase.cpp
         GasDeviationPolicyTestCase.cpp
+        OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
         MatchControlTestCase.cpp

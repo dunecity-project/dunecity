@@ -1,3 +1,39 @@
+## 2026-09-29 — Original Dune II damage option (local 1.0.792)
+
+User resolved the historical choice: checked means original Dune II/Dynasty
+classic ordinary ground damage, not pre-2013 Legacy. Default remains the
+approved hybrid: classic Soldier through Quad and lower City heavy damage.
+See `docs/combat-damage.md` for both complete per-projectile splash tables.
+
+The checkbox is labelled "Original Dune II damage". The custom wrapped hover
+overlay uses Tank 12-to-25 and Launcher 37-to-75 examples and explains splash.
+Building/air damage and special weapons retain their existing behavior.
+Both modes use base Dynasty splash: max-axis plus half-min-axis distance,
+quarter-tile halving, strict one-tile cutoff and whole-number HP truncation.
+
+MOD6 persists the flag through config, saves, multiplayer and campaign setup;
+older settings default it off. Save format remains 9850, protocol is now 42.
+Validation: all 44 CTest targets pass across the focused unit/projectile runs,
+menu run and remaining 41-target regression run. The unit suite has 897 cases
+with zero failures and three optional tests skipped. The real-engine probe
+measures both complete damage tables, off/on/off behavior, source death and a
+saved Ornithopter projectile landing for 38 after settings and bullet reload.
+Native build and dependency audits pass. The 1.0.792 app passes hidden-window
+SDL initialization/rendering. Tooltip layout passes at 640x480, 854x480 and
+1280x720; smallest and largest screenshots were visually checked.
+
+Local development app: `build/bin/dunecity.app` (uses local Homebrew libraries).
+
+Installed on Stefans-MacBook-Air.local at `/Applications/dunecity.app` on
+2026-09-29 at the user's request. Fresh `cmake --install` bundled dependencies
+and applied an ad-hoc signature. Version 1.0.792, deep/strict signature, bundled
+SDL initialization and hidden-window rendering passed after installation.
+Installed executable SHA-256:
+`7ad79f38b65932123485c26f015c4cd8ab2cc8f2a99c0701e4970cfad16e6f86`.
+Previous 1.0.790 retained at `/Applications/.dunecity-backup-before-792/dunecity.app`.
+No game was running, no match was launched and no user profile was changed.
+Package: `../outputs/damage-install-792/DuneCity-1.0.792.zip`. No publication.
+
 ## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
 
 Replaces the old instant conversion estimate in the active QuantBot learning

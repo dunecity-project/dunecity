@@ -280,7 +280,7 @@ public:
            startWithExploredMap(false), instantBuild(false), onlyOnePalace(false), rocketTurretsNeedPower(false),
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
-           immortalHumanPlayer(false), cityEffects(false)  {
+           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false)  {
         }
 
 
@@ -299,7 +299,8 @@ public:
                     && (maximumNumberOfHarvestersOverride == goc.maximumNumberOfHarvestersOverride)
                     && (maximumNumberOfConstructionYardsOverride == goc.maximumNumberOfConstructionYardsOverride)
                     && (immortalHumanPlayer == goc.immortalHumanPlayer)
-                    && (cityEffects == goc.cityEffects);
+                    && (cityEffects == goc.cityEffects)
+                    && (originalUnitDamage == goc.originalUnitDamage);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -327,6 +328,7 @@ public:
             optStr += std::to_string(maximumNumberOfHarvestersOverride);
             optStr += std::to_string(cityEffects);
             optStr += "/yards=" + std::to_string(maximumNumberOfConstructionYardsOverride);
+            optStr += "/originalDamage=" + std::to_string(originalUnitDamage);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -361,6 +363,7 @@ public:
         int         maximumNumberOfConstructionYardsOverride; // -1 or 0: unlimited
         bool        immortalHumanPlayer;
         bool        cityEffects;        ///< DuneCity: enable pollution/land-value/crime/zone-growth pipeline
+        bool        originalUnitDamage; ///< Match-wide original damage and splash rules; off uses City balance.
     } gameOptions;
 };
 

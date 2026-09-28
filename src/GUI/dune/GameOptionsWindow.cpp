@@ -21,6 +21,58 @@
 
 #include <FileClasses/TextManager.h>
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/FontManager.h>
+#include <misc/MenuPalette.h>
+#include <misc/string_util.h>
+
+void DamageRulesCheckbox::setExplanation(const std::string& title, const std::string& text) {
+    explanationTitle = title;
+    tooltipText = text;
+    tooltipTexture.reset();
+    explanationWidth = 0;
+}
+
+void DamageRulesCheckbox::drawOverlay(Point) {
+    explanationBounds = {};
+    if(!isVisible() || !isEnabled() || !bHover || !pFontManager
+       || SDL_GetTicks() - tooltipLastMouseMotion <= 750) return;
+
+    const auto screen = getRendererSize();
+    const int width = std::min(460, screen.w - 16);
+    if(width <= 32) return;
+    if(!tooltipTexture || explanationWidth != width) {
+        const auto lines = greedyWordWrap(tooltipText, width - 24,
+            [](const std::string& text) { return pFontManager->getTextWidth(text, 14); });
+        const int lineHeight = pFontManager->getTextHeight(14) + 3;
+        const int titleHeight = pFontManager->getTextHeight(16);
+        const int height = 30 + titleHeight + static_cast<int>(lines.size()) * lineHeight;
+        auto surface = GUIStyle::getInstance().createBackground(width, height);
+        if(!surface) return;
+        auto title = pFontManager->createSurfaceWithText(explanationTitle, MenuTheme::accent, 16);
+        if(title) {
+            auto dest = calcDrawingRect(title.get(), 12, 10);
+            SDL_BlitSurface(title.get(), nullptr, surface.get(), &dest);
+        }
+        int y = 20 + titleHeight;
+        for(const auto& line : lines) {
+            auto text = pFontManager->createSurfaceWithText(line, MenuTheme::text, 14);
+            if(text) {
+                auto dest = calcDrawingRect(text.get(), 12, y);
+                SDL_BlitSurface(text.get(), nullptr, surface.get(), &dest);
+            }
+            y += lineHeight;
+        }
+        tooltipTexture = convertSurfaceToTexture(std::move(surface));
+        explanationWidth = width;
+    }
+    if(!tooltipTexture) return;
+    auto dest = calcDrawingRect(tooltipTexture.get(), drawnMouseX, drawnMouseY - 8,
+                                HAlign::Left, VAlign::Bottom);
+    dest.x = std::clamp(dest.x, 0, std::max(0, screen.w - dest.w));
+    dest.y = std::clamp(dest.y, 0, std::max(0, screen.h - dest.h));
+    explanationBounds = dest;
+    SDL_RenderCopy(renderer, tooltipTexture.get(), nullptr, &dest);
+}
 
 
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
@@ -143,6 +195,13 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&onlyOnePalaceCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
 
+    originalUnitDamageCheckbox.setText(_("Original Dune II damage"));
+    originalUnitDamageCheckbox.setChecked(gameOptions.originalUnitDamage);
+    originalUnitDamageCheckbox.setExplanation(_("Original Dune II damage and splash"),
+        _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
+    vboxRight.addWidget(&originalUnitDamageCheckbox);
+    vboxRight.addWidget(VSpacer::create(6));
+
     gameSpeedMinus.setTextures(pGFXManager->getUIGraphic(UI_Minus), pGFXManager->getUIGraphic(UI_Minus_Pressed));
     gameSpeedMinus.setOnClick(std::bind(&GameOptionsWindow::onGameSpeedMinus, this));
     gameSpeedHBox.addWidget(HSpacer::create(4));
@@ -189,6 +248,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.startWithExploredMap = startWithExploredMapCheckbox.isChecked();
     gameOptions.instantBuild = instantBuildCheckbox.isChecked();
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
+    gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();

@@ -1,3 +1,24 @@
+# Dune City 1.0.792
+
+Ground combat now uses consistent splash damage: ordinary gun, shell and rocket hits weaken every quarter tile and stop at one tile. The default combines classic light-unit damage with DuneCity's lower heavy-weapon damage.
+
+- Enable **Original Dune II damage** in game options to use classic ordinary damage against ground units. For example, direct Tank hits rise from 12 to 25 HP and Launcher rockets from 37 to 75 HP.
+- Hover over the option for an explanation of damage and splash. The setting is preserved in configuration, saved games and multiplayer match rules.
+- Building damage, aircraft hits and special weapons retain their existing rules.
+
+Existing saves remain loadable, with the new option off for older settings. Multiplayer players must all update because the synchronized combat rules and network protocol have changed. Saves, settings and user mods remain in the user folder.
+
+# Dune City 1.0.790
+
+Deviators can now convert Ornithopters and Carryalls, with an 80% conversion chance for eligible units across houses and game modes.
+
+- QuantBot values Deviators by the damage their controlled units deal and absorb, including the normal 20% unit-kill bonus. Repeated conversions alone no longer inflate their score.
+- QuantBot promptly arms captured enemy Devastators. Completed detonations earn their remaining-health value and one kill bonus, with blast damage counted separately.
+- Deviated units no longer request repairs, book repair yards or enter them through Carryall delivery.
+- Map revision labels appear beside names in the custom-game chooser.
+
+Existing saves remain loadable. Loading an older save starts fresh AI unit-learning counters; historical match totals remain. Multiplayer players must all update to this version because synchronized rules and the network protocol have changed. Saves, settings and user mods remain in the user folder.
+
 # Dune City 1.0.783
 
 This release improves QuantBot expansion and base defence, and aligns building degradation with Dune Dynasty across game modes. Power shortages now cause building damage across modes, making power management more important in existing games too.
