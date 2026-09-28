@@ -1,30 +1,30 @@
-## 2026-09-28 — Ground damage policy and original-damage option draft (local 1.0.791)
+## 2026-09-29 — Original Dune II damage option (local 1.0.792)
 
-Branch `feat/damage-splash-option` implements the accepted default ground table:
-classic light weapons (Soldier through Quad), heavy weapons at City centre
-strength before the September rocket change, and base Dynasty ordinary splash.
-Launcher centre damage is 37; Ornithopter is 22. Splash uses max-axis plus
-half-min-axis distance, quarter-tile halving, integer truncation and a strict
-one-tile cutoff. See `docs/combat-damage.md` for all stock profiles.
-Buildings, air eligibility/damage and special weapons retain their existing paths.
+User resolved the historical choice: checked means original Dune II/Dynasty
+classic ordinary ground damage, not pre-2013 Legacy. Default remains the
+approved hybrid: classic Soldier through Quad and lower City heavy damage.
+See `docs/combat-damage.md` for both complete per-projectile splash tables.
 
-**Incomplete: the checkbox is wired through UI/config/save/network but its
-checked combat behavior and final 2013 explanation are not implemented.** A user
-clarification is pending: original Dune II/Dynasty classic or actual pre-2013
-Legacy. These differ (e.g. Launcher 75 versus 37 at centre, and different splash).
-Do not publish or present this draft checkbox as functional. Default is off.
+The checkbox is labelled "Original Dune II damage". The custom wrapped hover
+overlay uses Tank 12-to-25 and Launcher 37-to-75 examples and explains splash.
+Building/air damage and special weapons retain their existing behavior.
+Both modes use base Dynasty splash: max-axis plus half-min-axis distance,
+quarter-tile halving, strict one-tile cutoff and whole-number HP truncation.
 
-The custom wrapped tooltip stays on screen at 640x480, 854x480 and 1280x720.
-MOD6 persists the flag, older MOD5 settings default it off without consuming
-following save bytes; campaign continuation and network snapshots preserve it.
-Save format is 9850; network protocol is 41. The native build and dependency
-checks pass. Unit suite and menu probe pass. Focused projectile mechanics,
-combat/continuation, reload, deviation reward and combat-sensitive QuantBot
-probes pass. All 44 CTest targets passed across the focused and remaining runs.
-Four network targets initially had no binary in this fresh tree; a full build
-and their targeted rerun passed. There are no remaining test failures.
+MOD6 persists the flag through config, saves, multiplayer and campaign setup;
+older settings default it off. Save format remains 9850, protocol is now 42.
+Validation: all 44 CTest targets pass across the focused unit/projectile runs,
+menu run and remaining 41-target regression run. The unit suite has 897 cases
+with zero failures and three optional tests skipped. The real-engine probe
+measures both complete damage tables, off/on/off behavior, source death and a
+saved Ornithopter projectile landing for 38 after settings and bullet reload.
+Native build and dependency audits pass. The 1.0.792 app passes hidden-window
+SDL initialization/rendering. Tooltip layout passes at 640x480, 854x480 and
+1280x720; smallest and largest screenshots were visually checked.
 
-No publication, push, installation or MBA transfer was performed.
+Local development app: `build/bin/dunecity.app` (uses local Homebrew libraries).
+
+No publication, push, installation or MBA transfer was requested.
 
 ## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
 

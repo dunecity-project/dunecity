@@ -195,10 +195,10 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&onlyOnePalaceCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
 
-    originalUnitDamageCheckbox.setText(_("Original unit damage"));
+    originalUnitDamageCheckbox.setText(_("Original Dune II damage"));
     originalUnitDamageCheckbox.setChecked(gameOptions.originalUnitDamage);
-    originalUnitDamageCheckbox.setExplanation(_("Original damage and splash"),
-        _("Restore the original unit damage and splash rules. Unchecked uses the DuneCity balance rules."));
+    originalUnitDamageCheckbox.setExplanation(_("Original Dune II damage and splash"),
+        _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
     vboxRight.addWidget(&originalUnitDamageCheckbox);
     vboxRight.addWidget(VSpacer::create(6));
 

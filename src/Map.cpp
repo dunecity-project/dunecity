@@ -207,6 +207,11 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
         const auto* pDamager = currentGame->getObjectManager().getObject(damagerID);
         return pDamager ? static_cast<Uint32>(pDamager->getItemID()) : NONE_ID;
     }();
+    // Match-wide, from the settings the game was started with: every peer holds the same value
+    // and the save carries it, so a shot already in the air lands under the rules it was fired
+    // under. Only ordinary ground damage reads it.
+    const auto ordinaryDamageMode = OrdinaryDamagePolicy::modeOf(
+        currentGame->getGameInitSettings().getGameOptions().originalUnitDamage);
     const auto location = Coord(realPos.x/TILESIZE, realPos.y/TILESIZE);
 
     std::set<Uint32>    affectedAirUnits;
@@ -344,7 +349,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         } else if(ordinaryGroundBlast) {
                             const auto scaledDamage = OrdinaryDamagePolicy::damageAt(
-                                bulletID, ordinarySourceItemID, lround(damage), distance);
+                                ordinaryDamageMode, bulletID, ordinarySourceItemID, lround(damage), distance);
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
                         } else {
                             const auto scaledDamage = lround(damage) >> (distance/(TILESIZE/4) + (dynastyBlast ? 0 : 1));

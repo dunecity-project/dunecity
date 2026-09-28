@@ -1,8 +1,10 @@
-// The accepted default splash contract for ordinary gun, shell and rocket impacts against
-// ground victims. These are the parts that need no live Game: the geometry, the quarter-tile
-// bands, the payload category and which projectiles are in scope at all. Actual hit points
-// removed by the production Map::damage, and the untouched building/air/special cases, are
-// measured by tests/units/damage-splash.inc (run from the projectile mechanics probe).
+// The splash contract for ordinary gun, shell and rocket impacts against ground victims, in
+// both rule sets: the shipped City balance and the "original unit damage" option. These are the
+// parts that need no live Game: the geometry, the quarter-tile bands, the payload category and
+// which projectiles are in scope at all. Actual hit points removed by the production
+// Map::damage, the option being read from the match settings, and the untouched
+// building/air/special cases are measured by tests/units/damage-splash.inc (run from the
+// projectile mechanics probe).
 #include <catch2/catch_test_macros.hpp>
 
 #include <OrdinaryDamagePolicy.h>
@@ -35,13 +37,26 @@ constexpr int kQuarter = TILESIZE/4;
 constexpr int kHalf = TILESIZE/2;
 constexpr int kThreeQuarter = (TILESIZE*3)/4;
 
+// Most cases below describe the shipped default, so the shorter calls mean CityBalance and the
+// original-damage cases always name their mode.
+int damageAt(Uint32 bulletID, Uint32 sourceItemID, int nominalDamage, int distance) {
+    return OrdinaryDamagePolicy::damageAt(Mode::CityBalance, bulletID, sourceItemID, nominalDamage, distance);
+}
+int centreDamage(Uint32 bulletID, Uint32 sourceItemID, int nominalDamage) {
+    return OrdinaryDamagePolicy::centreDamage(Mode::CityBalance, bulletID, sourceItemID, nominalDamage);
+}
+
 struct Profile { int centre, quarter, half, threeQuarter; };
 
+Profile profileOf(Mode mode, Uint32 bulletID, Uint32 sourceItemID, int nominalDamage) {
+    return {OrdinaryDamagePolicy::damageAt(mode, bulletID, sourceItemID, nominalDamage, kCentre),
+            OrdinaryDamagePolicy::damageAt(mode, bulletID, sourceItemID, nominalDamage, kQuarter),
+            OrdinaryDamagePolicy::damageAt(mode, bulletID, sourceItemID, nominalDamage, kHalf),
+            OrdinaryDamagePolicy::damageAt(mode, bulletID, sourceItemID, nominalDamage, kThreeQuarter)};
+}
+
 Profile profileOf(Uint32 bulletID, Uint32 sourceItemID, int nominalDamage) {
-    return {damageAt(bulletID, sourceItemID, nominalDamage, kCentre),
-            damageAt(bulletID, sourceItemID, nominalDamage, kQuarter),
-            damageAt(bulletID, sourceItemID, nominalDamage, kHalf),
-            damageAt(bulletID, sourceItemID, nominalDamage, kThreeQuarter)};
+    return profileOf(Mode::CityBalance, bulletID, sourceItemID, nominalDamage);
 }
 
 bool operator==(const Profile& a, const Profile& b) {
@@ -51,7 +66,7 @@ bool operator==(const Profile& a, const Profile& b) {
 
 } // namespace
 
-TEST_CASE("Ordinary ground splash matches the accepted per-weapon table", "[damage][splash]") {
+TEST_CASE("Default ground splash matches the accepted per-weapon table", "[damage][splash]") {
     // Light guns deliver their whole nominal payload at the centre.
     CHECK(profileOf(Bullet_ShellSmall, Unit_Soldier, kSoldier) == Profile{3, 1, 0, 0});
     CHECK(profileOf(Bullet_ShellSmall, Unit_Trooper, kTrooper) == Profile{5, 2, 1, 0});
@@ -228,4 +243,125 @@ TEST_CASE("Special paths are not ordinary blasts", "[damage][splash][specials]")
     for(Uint32 item : {Uint32{Unit_AmbientAirplane}, Uint32{Unit_RocketTrike},
                        Uint32{Unit_EliteLauncher}, Uint32{Unit_RebelHarvester}})
         CHECK_FALSE(ordinaryBlast(item));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The "original unit damage" option: Dune II / Dune Dynasty classic ground damage.
+
+TEST_CASE("Original mode gives the whole payload to the centre of the blast", "[damage][splash][original]") {
+    const auto classic = Mode::Original;
+
+    // Heavy weapons, which the shipped balance halves, keep everything at the centre. The
+    // numbers are Dune Dynasty's own (src/table/unitinfo.c damage fields), and the shipped
+    // ObjectData configures the same payloads.
+    CHECK(profileOf(classic, Bullet_ShellMedium, Unit_Tank, kTank) == Profile{25, 12, 6, 3});
+    CHECK(profileOf(classic, Bullet_ShellLarge, Unit_SiegeTank, kSiege) == Profile{30, 15, 7, 3});
+    CHECK(profileOf(classic, Bullet_ShellLarge, Unit_Devastator, kDevastatorCannon) == Profile{40, 20, 10, 5});
+    CHECK(profileOf(classic, Bullet_Rocket, Unit_Launcher, kLauncher) == Profile{75, 37, 18, 9});
+    CHECK(profileOf(classic, Bullet_ShellTurret, Structure_GunTurret, kGunTurret) == Profile{20, 10, 5, 2});
+    CHECK(profileOf(classic, Bullet_ShellTurret, Structure_RocketTurret, kGunTurret) == Profile{20, 10, 5, 2});
+    CHECK(profileOf(classic, Bullet_TurretRocket, Structure_RocketTurret, kRocketTurretMissile)
+          == Profile{30, 15, 7, 3});
+
+    // The light guns were already delivering everything, so they do not move at all.
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_Soldier, kSoldier) == Profile{3, 1, 0, 0});
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_Trooper, kTrooper) == Profile{5, 2, 1, 0});
+    CHECK(profileOf(classic, Bullet_SmallRocket, Unit_Trooper, kTrooperRanged) == Profile{4, 2, 1, 0});
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_Trike, kTrike) == Profile{5, 2, 1, 0});
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_RaiderTrike, kRaider) == Profile{5, 2, 1, 0});
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_Quad, kQuad) == Profile{7, 3, 1, 0});
+
+    // Weapons the original game never had follow the same rule rather than getting a table of
+    // their own: whatever the content configures arrives whole at the centre.
+    CHECK(profileOf(classic, Bullet_Rocket, Unit_EliteLauncher, kEliteLauncher) == Profile{94, 47, 23, 11});
+    CHECK(profileOf(classic, Bullet_SmallRocket, Unit_RocketTrike, kRocketTrike) == Profile{5, 2, 1, 0});
+    CHECK(profileOf(classic, Bullet_ShellLarge, Unit_EliteSiegeTank, 30) == Profile{30, 15, 7, 3});
+    CHECK(profileOf(classic, Bullet_ShellSmall, Unit_RebelHarvester, 9) == Profile{9, 4, 2, 1});
+}
+
+TEST_CASE("Original mode restores the classic Ornithopter ground payload", "[damage][splash][original]") {
+    // Dune Dynasty gives the Ornithopter damage 50 and fires it as a mini rocket, and every
+    // mini rocket loses a quarter before launch: 50 - 12 = 38 arrives. The shipped ObjectData
+    // configures 45, and the quarter reduction lives in the Trooper branch of the attack code,
+    // so the classic figure is restored by scaling the configured payload 38/45.
+    CHECK(kClassicOrnithopterGroundNumerator == 38);
+    CHECK(kClassicOrnithopterGroundDenominator == 45);
+    CHECK(50 - 50/4 == kClassicOrnithopterGroundNumerator);
+
+    CHECK(profileOf(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, kOrnithopter)
+          == Profile{38, 19, 9, 4});
+    // The shipped balance is unchanged and still reads the configured 45.
+    CHECK(profileOf(Bullet_SmallRocket, Unit_Ornithopter, kOrnithopter) == Profile{22, 11, 5, 2});
+
+    // The correction is a ratio, so a mod that retunes the Ornithopter still moves with it
+    // rather than being pinned to 38.
+    CHECK(centreDamage(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, 2*kOrnithopter) == 76);
+    CHECK(centreDamage(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, 90) == 76);
+    CHECK(centreDamage(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, 9) == 7);   // floor(7.6)
+    CHECK(centreDamage(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, 1) == 0);   // floor(0.84)
+    CHECK(centreDamage(Mode::Original, Bullet_SmallRocket, Unit_Ornithopter, 0) == 0);
+
+    // It is the Ornithopter's own rocket that is corrected, not the projectile type and not
+    // every aircraft, so no other weapon is touched.
+    CHECK(groundPayload(Mode::Original, Bullet_SmallRocket, Unit_Trooper, 45) == 45);
+    CHECK(groundPayload(Mode::Original, Bullet_SmallRocket, Unit_RocketTrike, 45) == 45);
+    CHECK(groundPayload(Mode::Original, Bullet_Rocket, Unit_Ornithopter, 45) == 45);
+    CHECK(groundPayload(Mode::Original, Bullet_SmallRocket, NONE_ID, 45) == 45);
+    // And nothing at all is rescaled in the shipped balance.
+    CHECK(groundPayload(Mode::CityBalance, Bullet_SmallRocket, Unit_Ornithopter, 45) == 45);
+}
+
+TEST_CASE("Both modes share one geometry and one set of specials", "[damage][splash][original]") {
+    // The mode changes how much arrives, never how far it reaches or what is in scope.
+    for(auto mode : {Mode::CityBalance, Mode::Original}) {
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellMedium, Unit_Tank, kTank, TILESIZE-1)
+              == (mode == Mode::Original ? 3 : 1));
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellMedium, Unit_Tank, kTank, TILESIZE) == 0);
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellMedium, Unit_Tank, kTank, 4*TILESIZE) == 0);
+        // Zero tails, no rounding up, and falloff that never increases with distance.
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellSmall, Unit_Soldier, kSoldier, kHalf) == 0);
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellSmall, Unit_Soldier, 1, kQuarter) == 0);
+        CHECK(OrdinaryDamagePolicy::damageAt(mode, Bullet_ShellMedium, Unit_Tank, -5, 0) == 0);
+        int previous = OrdinaryDamagePolicy::centreDamage(mode, Bullet_Rocket, Unit_Launcher, kLauncher);
+        for(int distance = 1; distance <= TILESIZE; ++distance) {
+            const int current = OrdinaryDamagePolicy::damageAt(mode, Bullet_Rocket, Unit_Launcher,
+                                                               kLauncher, distance);
+            CHECK(current <= previous);
+            previous = current;
+        }
+        // Specials stay out of scope in both modes; ordinaryBlast() carries no mode at all.
+        for(Uint32 bullet : {Uint32{Bullet_DRocket}, Uint32{Bullet_Sonic}, Uint32{Bullet_SonicTrike},
+                             Uint32{Bullet_Sandworm}, Uint32{Bullet_Flame}, Uint32{Bullet_Heal},
+                             Uint32{Bullet_LargeRocket}, Uint32{Unit_Devastator}})
+            CHECK_FALSE(ordinaryBlast(bullet));
+    }
+
+    // Original mode is exactly one band shift above the default for every heavy weapon, and
+    // identical for every light one. Stated as shifts, because with a payload that does not
+    // divide evenly the two floors are not simply double one another (200>>3 is 25, 200>>4 is
+    // 12) - and that flooring is the contract, not an accident.
+    CHECK(centreShift(Mode::CityBalance, Bullet_Rocket, Unit_Launcher) == 1);
+    CHECK(centreShift(Mode::Original, Bullet_Rocket, Unit_Launcher) == 0);
+    CHECK(centreShift(Mode::CityBalance, Bullet_ShellSmall, Unit_Quad) == 0);
+    CHECK(centreShift(Mode::Original, Bullet_ShellSmall, Unit_Quad) == 0);
+    CHECK(OrdinaryDamagePolicy::damageAt(Mode::Original, Bullet_Rocket, Unit_Launcher, 200, 48) == 25);
+    CHECK(OrdinaryDamagePolicy::damageAt(Mode::CityBalance, Bullet_Rocket, Unit_Launcher, 200, 48) == 12);
+
+    // With a payload that divides evenly the doubling is exact at every band.
+    for(int distance : {0, 16, 32, 48, 63}) {
+        CHECK(OrdinaryDamagePolicy::damageAt(Mode::Original, Bullet_Rocket, Unit_Launcher, 256, distance)
+              == 2 * OrdinaryDamagePolicy::damageAt(Mode::CityBalance, Bullet_Rocket, Unit_Launcher, 256, distance));
+        CHECK(OrdinaryDamagePolicy::damageAt(Mode::Original, Bullet_ShellSmall, Unit_Quad, kQuad, distance)
+              == OrdinaryDamagePolicy::damageAt(Mode::CityBalance, Bullet_ShellSmall, Unit_Quad, kQuad, distance));
+    }
+}
+
+TEST_CASE("The mode comes from the match option and defaults off", "[damage][splash][original]") {
+    CHECK(modeOf(false) == Mode::CityBalance);
+    CHECK(modeOf(true) == Mode::Original);
+    // A default-constructed settings object is the unchecked box, so a match that never touches
+    // the option runs the shipped balance.
+    CHECK(modeOf(SettingsClass::GameOptionsClass().originalUnitDamage) == Mode::CityBalance);
+    CHECK(centreDamage(modeOf(SettingsClass::GameOptionsClass().originalUnitDamage),
+                       Bullet_ShellMedium, Unit_Tank, kTank) == 12);
 }
