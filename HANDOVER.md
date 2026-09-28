@@ -24,7 +24,15 @@ SDL initialization/rendering. Tooltip layout passes at 640x480, 854x480 and
 
 Local development app: `build/bin/dunecity.app` (uses local Homebrew libraries).
 
-No publication, push, installation or MBA transfer was requested.
+Installed on Stefans-MacBook-Air.local at `/Applications/dunecity.app` on
+2026-09-29 at the user's request. Fresh `cmake --install` bundled dependencies
+and applied an ad-hoc signature. Version 1.0.792, deep/strict signature, bundled
+SDL initialization and hidden-window rendering passed after installation.
+Installed executable SHA-256:
+`7ad79f38b65932123485c26f015c4cd8ab2cc8f2a99c0701e4970cfad16e6f86`.
+Previous 1.0.790 retained at `/Applications/.dunecity-backup-before-792/dunecity.app`.
+No game was running, no match was launched and no user profile was changed.
+Package: `../outputs/damage-install-792/DuneCity-1.0.792.zip`. No publication.
 
 ## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
 
