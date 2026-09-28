@@ -20,6 +20,7 @@
 #include <DynastyProjectile.h>
 #include <structures/RocketTurret.h>
 #include <structures/Palace.h>
+#include "damage-splash.inc"
 
 int runUnitSpeedProbe() {
     const std::string mod = std::getenv("UNIT_SPEED_PROBE_MOD");
@@ -136,7 +137,9 @@ int runUnitSpeedProbe() {
         auto* air=game->getHouse(HOUSE_HARKONNEN)->createUnit(Unit_Ornithopter,true);air->deploy(site+Coord(8,0));
         const auto hp=tank->getHealth();
         currentGameMap->damage(shooter->getObjectID(),owner,tank->getCenterPoint()+Coord(24,0),Bullet_Rocket,8,TILESIZE,aimedAir);
-        require(tank->getHealth()==hp-4 && air->getHealth()==air->getMaxHealth()-4,"Rocket blast incorrectly filtered an air/ground layer");
+        // Both layers are still reached from either aim. The ground share is now half the air
+        // share, because an ordinary rocket delivers half its payload to ground victims.
+        require(tank->getHealth()==hp-2 && air->getHealth()==air->getMaxHealth()-4,"Rocket blast incorrectly filtered an air/ground layer");
         air->cancelDeployment();tank->cancelDeployment();shooter->cancelDeployment();
         csv<<"layers,"<<aimedAir<<",pass\n";
     }
@@ -167,6 +170,8 @@ int runUnitSpeedProbe() {
         require(game->getExplosionList().size()==explosions+17,"Death Hand blast centre count differs from Dynasty");
         palace->destroy();csv<<"palace,pass\n";
     }
+    // Ordinary ground splash, plus the building, air and special cases it must not have moved.
+    runDamageSplashChecks(*game,owner,game->getHouse(HOUSE_HARKONNEN),site,csv);
     csv.close();SDL_Log("UNIT_SPEED_PROBE_PASS: %s projectile audit",mod.c_str());
     game.reset();currentGame=nullptr;return -1;
 }

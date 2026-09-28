@@ -32,10 +32,11 @@ std::unique_ptr<MenuBase> createExtrasMenu(bool workshop);
 void menuRequire(bool value, const char* message) {
     if(!value) { SDL_Log("MENU_PROBE_FAIL: %s", message); throw std::runtime_error(message); }
 }
-void menuCapture(Window& menu, const std::string& name) {
+void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     menu.draw();
+    if(overlay) menu.drawOverlay();
     int w, h;
     SDL_GetRendererOutputSize(renderer, &w, &h);
     auto surface = sdl2::surface_ptr(SDL_CreateRGBSurfaceWithFormat(0,w,h,32,SDL_PIXELFORMAT_ARGB8888));
@@ -1579,12 +1580,41 @@ int runMenuProbe() {
     {
         auto rules=settings.gameOptions;
         GameOptionsWindow menu(rules);
+        menuRequire(!menu.originalUnitDamageCheckbox.isChecked(), "Original damage must default off");
         menu.concreteRequiredCheckbox.setChecked(false);
         menu.maxConstructionYardsOverrideCheckbox.setChecked(true);
         menu.maxConstructionYardsOverrideTextBox.setVisible(true);
         menu.maxConstructionYardsOverrideTextBox.setValue(2);
         menuCapture(menu,"game-rules");
+        menu.originalUnitDamageCheckbox.setChecked(true);
+        menu.originalUnitDamageCheckbox.bHover = true;
+        menu.originalUnitDamageCheckbox.tooltipLastMouseMotion = SDL_GetTicks() - 1000;
+        drawnMouseX = getRendererWidth() - 12;
+        drawnMouseY = getRendererHeight() - 12;
+        menuCapture(menu, "game-rules-damage-tooltip", true);
+        const auto tooltipBounds = menu.originalUnitDamageCheckbox.explanationBounds;
+        menuRequire(tooltipBounds.w > 0 && tooltipBounds.h > 0
+                    && tooltipBounds.x >= 0 && tooltipBounds.y >= 0
+                    && tooltipBounds.x + tooltipBounds.w <= getRendererWidth()
+                    && tooltipBounds.y + tooltipBounds.h <= getRendererHeight(),
+                    "Damage explanation overlay extends outside the viewport");
         menu.onOK();
+        menuRequire(menu.getGameOptions().originalUnitDamage, "Original damage checkbox did not save selection");
+        auto savedRules = menu.getGameOptions();
+        GameOptionsWindow reopened(savedRules);
+        menuRequire(reopened.originalUnitDamageCheckbox.isChecked(), "Original damage selection lost on reopening");
+        INIFile config(false, "Damage rule fixture");
+        for(const auto* section : {"Game Options", "Game Options dunecity", "Game Options dune2r"}) {
+            writeGameOptionsToConfig(config, section, savedRules);
+            SettingsClass::GameOptionsClass loaded;
+            applyGameOptionsFromConfig(config, section, loaded);
+            menuRequire(loaded.originalUnitDamage, "Original damage preference did not round-trip through INI");
+            loaded.originalUnitDamage = false;
+            writeGameOptionsToConfig(config, section, loaded);
+            applyGameOptionsFromConfig(config, section, savedRules);
+            menuRequire(!savedRules.originalUnitDamage, "Original damage preference could not be cleared");
+            savedRules.originalUnitDamage = true;
+        }
         menuRequire(!menu.getGameOptions().concreteRequired,"Concrete checkbox did not disable requirements");
         menuRequire(menu.getGameOptions().maximumNumberOfConstructionYardsOverride == 2, "Yard limit UI did not save selection");
     }

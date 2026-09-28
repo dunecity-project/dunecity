@@ -97,7 +97,8 @@
 // Version 40: Measured Deviator contribution. Captured Devastators are armed at the first
 //             eligible AI scan and the deviation ledger is deterministic simulation state,
 //             so peers on version 39 would diverge in both orders and saved state.
-#define NETWORK_PROTOCOL_VERSION            40
+// 41: Shared ordinary damage/splash policy and the MOD6 original-damage rule.
+#define NETWORK_PROTOCOL_VERSION            41
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -33,6 +33,19 @@
 
 #include <algorithm>
 
+// A wrapped explanation panel for the historical combat rule. The ordinary
+// single-line button tooltip cannot fit this explanation on smaller windows.
+class DamageRulesCheckbox final : public Checkbox {
+public:
+    void setExplanation(const std::string& title, const std::string& text);
+    void drawOverlay(Point position) override;
+
+private:
+    std::string explanationTitle;
+    int explanationWidth = 0;
+    SDL_Rect explanationBounds{};
+};
+
 class GameOptionsWindow : public Window
 {
 public:
@@ -74,6 +87,7 @@ private:
     Checkbox startWithExploredMapCheckbox;          ///< If checked the complete map is unhidden at the beginning of the game
     Checkbox instantBuildCheckbox;                  ///< If checked the building of structures and units does not take any time
     Checkbox onlyOnePalaceCheckbox;                 ///< If checked only one palace can be build per house
+    DamageRulesCheckbox originalUnitDamageCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice

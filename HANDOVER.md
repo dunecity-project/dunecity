@@ -1,3 +1,31 @@
+## 2026-09-28 — Ground damage policy and original-damage option draft (local 1.0.791)
+
+Branch `feat/damage-splash-option` implements the accepted default ground table:
+classic light weapons (Soldier through Quad), heavy weapons at City centre
+strength before the September rocket change, and base Dynasty ordinary splash.
+Launcher centre damage is 37; Ornithopter is 22. Splash uses max-axis plus
+half-min-axis distance, quarter-tile halving, integer truncation and a strict
+one-tile cutoff. See `docs/combat-damage.md` for all stock profiles.
+Buildings, air eligibility/damage and special weapons retain their existing paths.
+
+**Incomplete: the checkbox is wired through UI/config/save/network but its
+checked combat behavior and final 2013 explanation are not implemented.** A user
+clarification is pending: original Dune II/Dynasty classic or actual pre-2013
+Legacy. These differ (e.g. Launcher 75 versus 37 at centre, and different splash).
+Do not publish or present this draft checkbox as functional. Default is off.
+
+The custom wrapped tooltip stays on screen at 640x480, 854x480 and 1280x720.
+MOD6 persists the flag, older MOD5 settings default it off without consuming
+following save bytes; campaign continuation and network snapshots preserve it.
+Save format is 9850; network protocol is 41. The native build and dependency
+checks pass. Unit suite and menu probe pass. Focused projectile mechanics,
+combat/continuation, reload, deviation reward and combat-sensitive QuantBot
+probes pass. All 44 CTest targets passed across the focused and remaining runs.
+Four network targets initially had no binary in this fresh tree; a full build
+and their targeted rerun passed. There are no remaining test failures.
+
+No publication, push, installation or MBA transfer was performed.
+
 ## 2026-09-27 — Measured Deviator rewards (local 1.0.790)
 
 Replaces the old instant conversion estimate in the active QuantBot learning

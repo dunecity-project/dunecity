@@ -32,6 +32,39 @@ static GameInitSettings makeCoop(bool campaign, bool bot) {
     return init;
 }
 
+TEST_CASE("Original damage is a shared rule preserved by setup, saves and campaigns", "[damage][network][save]") {
+    SettingsClass::GameOptionsClass balanced;
+    REQUIRE_FALSE(balanced.originalUnitDamage);
+    auto classic = balanced;
+    classic.originalUnitDamage = true;
+    REQUIRE(classic != balanced);
+    REQUIRE(classic.getHash() != balanced.getHash());
+
+    auto original = makeCoop(true, false);
+    original.setGameOptions(classic);
+    OMemoryStream out; out.open(); original.save(out);
+    IMemoryStream input(out.getData(), out.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions().originalUnitDamage);
+    REQUIRE(restored.getGameOptions().getHash() == classic.getHash());
+    REQUIRE(restored.networkSnapshot("saved simulation").getGameOptions().originalUnitDamage);
+    GameInitSettings next(restored, 11, 0, 0);
+    REQUIRE(next.getGameOptions().originalUnitDamage);
+
+    SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
+        std::string bytes(out.getData(), out.getDataLength());
+        const auto marker = bytes.rfind("6DOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = '5';
+        bytes.pop_back();
+        bytes.append("tail");
+        IMemoryStream oldInput(bytes.data(), bytes.size());
+        GameInitSettings old(oldInput);
+        REQUIRE_FALSE(old.getGameOptions().originalUnitDamage);
+        REQUIRE(oldInput.readUint8() == static_cast<Uint8>('t'));
+    }
+}
+
 TEST_CASE("Co-op settings preserve shared control, scenario identity and seed over the wire", "[coop][network]") {
     const bool campaign = GENERATE(false, true);
     const bool bot = GENERATE(false, true);
@@ -174,15 +207,15 @@ TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[wo
     REQUIRE(next.getModRevisionHash() == original.getModRevisionHash());
 }
 
-TEST_CASE("Legacy MOD3 remains readable and truncated MOD5 fails closed", "[workshop][save]") {
+TEST_CASE("Legacy MOD3 remains readable and truncated MOD6 fails closed", "[workshop][save]") {
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("5DOM");
+    const auto marker = bytes.find("6DOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
-        bytes.resize(bytes.size() - 24); // three strings, two revision integers, yard limit
+        bytes.resize(bytes.size() - 25); // three strings, two revision integers, yard limit, original damage
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
         REQUIRE(restored.getModRevisionHash().empty());

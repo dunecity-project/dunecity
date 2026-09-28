@@ -92,7 +92,8 @@
 //       and the game carries the episode-id counter. Saves written before this version
 //       have the old flat conversion estimate cleared on load
 //       (DeviationReward::migrateLegacyLedger) so the two accountings cannot mix.
-#define SAVEGAMEVERSION     9849
+// 9850: MOD6 game rules persist the original unit damage checkbox.
+#define SAVEGAMEVERSION     9850
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

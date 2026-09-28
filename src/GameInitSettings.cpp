@@ -32,6 +32,7 @@
 namespace {
 constexpr Uint32 GAMEINIT_MOD_MARKER = 0x4D4F4421;   // "MOD!"
 constexpr Uint32 GAMEINIT_MOD2_MARKER = 0x4D4F4432;  // "MOD2"
+constexpr Uint32 GAMEINIT_MOD6_MARKER = 0x4D4F4436; // MOD6: original unit damage option
 constexpr Uint32 GAMEINIT_MOD5_MARKER = 0x4D4F4435; // MOD5: construction yard limit
 constexpr Uint32 GAMEINIT_MOD4_MARKER = 0x4D4F4434;  // "MOD4": immutable Workshop revisions
 constexpr Uint32 GAMEINIT_MOD3_MARKER = 0x4D4F4433;  // "MOD3": graphics-only DuneCity skins
@@ -145,11 +146,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        if (modMarker == GAMEINIT_MOD_MARKER || modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || (modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER)) {
+        if (modMarker == GAMEINIT_MOD_MARKER || modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
             modName = stream.readString();
             modChecksum = stream.readString();
 
-            if(modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || (modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER)) {
+            if(modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
                 Uint32 numHouseColors = stream.readUint32();
                 stream.requireReadableElements(numHouseColors, 4);
                 for(Uint32 i = 0; i < numHouseColors; i++) {
@@ -159,7 +160,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     }
                 }
             }
-            if(modMarker == GAMEINIT_MOD3_MARKER || (modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER)) {
+            if(modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
                 const Uint32 numHouseSkins = stream.readUint32();
                 stream.requireReadableElements(numHouseSkins, 4);
                 for(Uint32 i = 0; i < numHouseSkins; ++i) {
@@ -170,14 +171,16 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 }
                 campaignGraphicsSkin = sanitizeGraphicsSkin(stream.readUint32());
             }
-            if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER) {
+            if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
                 modRevisionHash = stream.readString();
                 modRevisionVersion = stream.readUint32();
                 mapRevisionHash = stream.readString();
                 mapRevisionVersion = stream.readUint32();
                 mapRevisionManifest = stream.readString();
-                if(modMarker == GAMEINIT_MOD5_MARKER)
+                if(modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER)
                     gameOptions.maximumNumberOfConstructionYardsOverride = stream.readSint32();
+                if(modMarker == GAMEINIT_MOD6_MARKER)
+                    gameOptions.originalUnitDamage = stream.readBool();
                 const auto validHash = [](const std::string& hash) {
                     return hash.empty() || (hash.size() == 64 && hash.find_first_not_of("0123456789abcdef") == std::string::npos);
                 };
@@ -186,7 +189,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
         }
     } catch (InputStream::eof&) {
-        if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER) throw;
+        if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) throw;
         // Old format without mod info - use defaults
         modName = "vanilla";
         modChecksum = "";
@@ -290,7 +293,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD5_MARKER);
+    stream.writeUint32(GAMEINIT_MOD6_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -310,6 +313,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeUint32(mapRevisionVersion);
     stream.writeString(mapRevisionManifest);
     stream.writeSint32(gameOptions.maximumNumberOfConstructionYardsOverride);
+    stream.writeBool(gameOptions.originalUnitDamage);
 }
 
 
