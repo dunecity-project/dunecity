@@ -70,6 +70,22 @@ signature verification, all 36 Mach-O dependency audits, and packaged SDL
 initialization/hidden-window rendering; no external non-system loads remain.
 No push or public release. Evidence is in ../outputs/stutter-ai-implementation-794/.
 
+### Installed on the MBA
+
+Installed source commit 13e054bb79f1123f6a87aaf417e3af5301e1f312 as 1.0.794
+at /Applications/dunecity.app on Stefans-MacBook-Air.local. Independent installed
+version/hash/deep-strict signature checks passed, and the installed bundled SDL
+runtime initialized and rendered successfully. Executable SHA-256:
+c3408696f898d8920ab44cdb83992e83199773ee5d0cbe38119f26f4afde7ba9.
+
+The installer checked that no game was running before both staging and swapping.
+No game was stopped or match launched. User config bytes stayed identical.
+Previous 1.0.793 app is preserved at
+/Applications/.dunecity-backup-before-794-20261002/dunecity.app with its verified
+9554509cf2dbc5200c743f0037cf29de7d47d1e2567a6c273facfe258436b317 hash.
+Receipt, portable package and installed-runtime logs:
+../outputs/performance-install-794/. The next normal launch uses this build.
+
 
 ## 2026-10-02 — Performance build installed on the MBA (1.0.793)
 
