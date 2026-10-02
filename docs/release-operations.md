@@ -8,13 +8,29 @@ version numbers and run IDs below are verification examples, not next-version de
 
 | Purpose | Repository / local checkout on Stefan's MacBook Air | Destination |
 | --- | --- | --- |
-| Game and release automation | `ggtothemax/dunecity`; `~/Documents/projects/dunecity` | GitHub Releases; SourceForge Files and dedicated source refs |
+| Game and release automation | `dunecity-project/dunecity`; `~/Documents/projects/dunecity` | GitHub Releases; SourceForge Files and dedicated source refs |
 | Main website | `VR48/dunelegacy.com`; `~/Documents/projects/dunelegacy.com` | https://dunelegacy.com via **Deploy to Droplet** |
 | Historical SourceForge repository | `ssh://svan058@git.code.sf.net/p/dunelegacy/code`; `~/Documents/projects/dunelegacy-code` | `master` holds Legacy history/old website; `dunecity` holds latest released game source |
 
 The legacy website files are `sourceforge_website/` in both game checkouts.
 Main website files are `website/` in the separate website repository. Do not
 confuse pushing website source with publishing it to SourceForge web hosting.
+
+## Organization transfer (2026-09-30)
+
+The game repository now belongs to `dunecity-project`. The website repository
+remains `VR48/dunelegacy.com`. GitHub Pages now uses
+`https://dunecity-project.github.io/dunecity/`.
+
+Keep the old repository locations vacant: recreating `ggtothemax/dunecity` or
+`VR48/dunecity` can destroy redirects used by installed clients and release links.
+The old update-feed and Dune2R catalog URLs were checked after transfer and still
+returned the same content. Preserve the update-signing key for existing clients.
+
+The in-game feedback service needs a token scoped to the new organization-owned
+repository. Its successful responses must retain the old
+`https://github.com/ggtothemax/dunecity/issues/N` prefix for installed clients.
+See the website repository's `docs/game-feedback.md` for that compatibility rule.
 
 ## Signed desktop updates from 1.0.731
 
@@ -38,10 +54,11 @@ use a new version. No update feed is emitted for `latest-dev`.
    Preserve the old app, stage the new bundle, verify its signature, replace it,
    and compare version/binary SHA256 against `build/bin/dunecity.app`. Do not
    interrupt a running game or launch it merely for verification.
-3. Merge through a pull request. As of 2026-09-13, the owner-authorized exception
-   in main ruleset 23003149 is User 325456832 (`ggtothemax`) with `pull_request`
-   bypass mode; it does not permit direct pushes. After checks pass, an authorized
-   release can use `gh pr merge --merge --admin --match-head-commit SHA`.
+3. Merge through a pull request. Since the 2026-09-30 transfer to
+   `dunecity-project/dunecity`, main ruleset 23003149 permits repository admins
+   to bypass with Always allow. `ggtothemax` owns the organization and `VR48`
+   has repository Admin access. After checks pass, an authorized release can use
+   `gh pr merge --merge --admin --match-head-commit SHA`.
    Push the authorized release and its `vX.Y.Z` tag. **Build Dune Legacy** in
    `.github/workflows/build.yml` gates publication on tests and Windows, Linux
    and macOS success. Verify the EXE, portable ZIP, DMG, Mac update ZIP, AppImage, DEB, RPM,
@@ -66,9 +83,9 @@ are separate deliberate changes, such as `dc69c5a`.
 ## Retry without rebuilding
 
 ```sh
-gh workflow run sourceforge.yml --repo ggtothemax/dunecity --ref main -f tag=vX.Y.Z
-gh run list --repo ggtothemax/dunecity --workflow sourceforge.yml --limit 5
-gh run watch RUN_ID --repo ggtothemax/dunecity --exit-status
+gh workflow run sourceforge.yml --repo dunecity-project/dunecity --ref main -f tag=vX.Y.Z
+gh run list --repo dunecity-project/dunecity --workflow sourceforge.yml --limit 5
+gh run watch RUN_ID --repo dunecity-project/dunecity --exit-status
 ```
 
 Dispatch only an existing published stable tag. Historical backfills do not
