@@ -84,8 +84,21 @@ The replay ran alongside validation: its CPU timings are not an FPS benchmark.
 Final staged app: 36 ARM64 Mach-O files, portable library loads, deep/strict
 signature and bundled SDL initialization/hidden rendering passed. Executable SHA:
 bffaf429b8b1aee2165931fccff5bee21040927b98664d86599a212089c92e3a.
-Guarded MBA installation is pending; it checks for a running game before swapping,
-retains the 1.0.794 app and verifies settings stay byte-identical. No public release.
+Guarded MBA installation completed with no running game, followed by independent
+installed-version/hash/signature verification. /Applications/dunecity.app is
+1.0.795 from code commit 20439671150da4652683f2a7cd8f54b9180baa00 with the SHA above.
+Bundled SDL initialization and hidden rendering passed on the MBA. Settings stayed
+byte-identical. Prior 1.0.794 app retained at
+/Applications/.dunecity-backup-before-795-20261002/dunecity.app (SHA
+c3408696f898d8920ab44cdb83992e83199773ee5d0cbe38119f26f4afde7ba9).
+Receipt and independent verification are in ../outputs/repair-install-795/.
+No match was launched, and no public release/push/PR was performed.
+
+For a subsequent controlled large-army performance test, check Maximum Number of
+Units Override and use a positive value or 0. The captured repair save stores -1,
+so its normal military budget remains unless a new fixture/lobby selects an
+override. Compare the same save, mod revision, settings, tick workload and hardware;
+record unit counts and frame-time tails as well as average FPS.
 
 Root proofs: root-final-repair-proof.json and root-final-stress-proof.json.
 Evidence: ../outputs/repair-yard-live-20261002/ and ../outputs/repair-install-795/.
