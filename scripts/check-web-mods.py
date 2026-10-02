@@ -15,6 +15,11 @@ REQUIRED = (
     '/mods/Tornie/CustomHouse.ini', '/mods/Dune2R/mod.ini',
     '/mods/Dune2R/GameOptions.ini', '/mods/Dune2R/asset-catalog.ini',
 )
+CITY_MAPS = (
+    '4P - 128x128 - 4 corners.ini', '4P - 192x192 - DuneCity.ini',
+    '5P - 256x256 - test.ini', '8P - 128x128 - city seige.ini',
+    'Alkozeltser 4 Cities.ini',
+)
 # Emscripten emits JSON properties before optimization and unquoted properties
 # after optimization. Read only its file records; never execute generated JS.
 FILE_RECORD = re.compile(
@@ -70,8 +75,14 @@ def check_payload(javascript, data, skin_payload=None):
         name = '/mods/dunecity/graphics_skins/' + relative
         if files.get(name) != expected:
             raise ValueError('Missing or corrupt DuneCity skin payload: ' + relative)
+    map_root = Path(__file__).resolve().parents[1] / 'data/maps/singleplayer'
+    for relative in CITY_MAPS:
+        name = '/maps/singleplayer/' + relative
+        if files.get(name) != (map_root / relative).read_bytes():
+            raise ValueError('Missing or corrupt DuneCity map payload: ' + relative)
     return {'verified_tornie_files': len(checked),
             'verified_dunecity_skin_files': len(skin_payload),
+            'verified_dunecity_maps': len(CITY_MAPS),
             'dune2r_files': sum(n.startswith('/mods/Dune2R/') for n in files),
             'data_bytes': len(data)}
 

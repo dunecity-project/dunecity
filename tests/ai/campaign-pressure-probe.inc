@@ -18,6 +18,10 @@ void runCampaignPressureProbe(Game& game) {
     require(partner && !partner->isCampaignEnemy(),"Human partner inherited enemy restrictions");
     // The engine ceiling follows controller difficulty, including a human's
     // shared house. Switching back restores the authored limit; workers stay capped.
+    // No explicit unit-count override is selected here, which is what keeps Hard and
+    // Brutal unlimited; explicit override cases have their own registered fixture.
+    const auto savedUnitOverride=game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride;
+    game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=-1;
     for (auto* bot : {partner,enemies[0]}) {
         auto* house=const_cast<House*>(bot->getHouse());
         const auto savedDifficulty=bot->difficulty;
@@ -42,6 +46,7 @@ void runCampaignPressureProbe(Game& game) {
         }
         house->maxUnits=savedLimit;house->numItem[Unit_Harvester]=savedWorkers;bot->difficulty=savedDifficulty;
     }
+    game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=savedUnitOverride;
     // Earliest offensive trigger, excluding earlier home and worker deliveries.
     auto savedTriggers=std::move(game.getTriggerManager().triggers);
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Tank,Drop_Homebase,false,100));

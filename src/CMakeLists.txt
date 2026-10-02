@@ -102,6 +102,7 @@ target_sources(dunecity
     PRIVATE
         # Root sources
         AStarSearch.cpp
+        PathWorkerPool.cpp
         Bullet.cpp
         Choam.cpp
         Command.cpp

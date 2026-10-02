@@ -29,6 +29,7 @@
 #include <units/HarvesterHelpers.h>
 
 #include <players/HumanPlayer.h>
+#include <players/QuantBot.h>
 
 #include <units/Frigate.h>
 
@@ -36,6 +37,39 @@
 #define STARPORT_ARRIVETIME         (MILLI2CYCLES(30*1000))
 
 #define STARPORT_NO_ARRIVAL_AWAITED -1
+
+namespace {
+/**
+    A Brutal controller with an explicitly selected positive unit-count override is allowed
+    to order imports while the house is still below that ceiling, so a shipment can finish
+    after the category filled up. Deployment creates units directly, which is the one place
+    that bypasses the engine's admission check, so the finished order waits here instead:
+    it stays in the queue, paid for and still owned, and is deployed unchanged once the
+    category has room. The override is the player's own setting and House::getMaxUnits()
+    remains the authority, including its shared-house Hard exception. A disabled override
+    (-1), the unlimited setting (0), every other difficulty and non-unit deliveries are
+    unaffected. Nothing new is serialized; the existing deployment retry timer is reused.
+*/
+bool importWaitsForUnitRoom(const House* owner, Uint32 itemID) {
+    if(owner == nullptr || currentGame == nullptr || !isUnit(itemID)) {
+        return false;
+    }
+
+    if(currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride <= 0) {
+        return false;
+    }
+
+    bool explicitOverrideController = false;
+    for(const auto& player : owner->getPlayerList()) {
+        const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+        if(bot != nullptr && bot->overridesMilitaryValueCap()) {
+            explicitOverrideController = true;
+        }
+    }
+
+    return explicitOverrideController && owner->isUnitLimitReached(itemID);
+}
+}
 
 
 
@@ -356,6 +390,12 @@ void StarPort::updateStructureSpecificStuff() {
 
             if(currentProductionQueue.empty() == false) {
                 const Uint32 orderedItemID = currentProductionQueue.front().itemID;
+                if(importWaitsForUnitRoom(getOwner(), orderedItemID)) {
+                    // Hold the shipment: queue, payment and ownership are untouched and the
+                    // ordinary retry interval brings us back once there is room.
+                    deployTimer = MILLI2CYCLES(2000);
+                    return;
+                }
                 deployOrderedItem(orderedItemID);
 
                 auto currentProducedBuildItem = std::find_if(   buildList.begin(),

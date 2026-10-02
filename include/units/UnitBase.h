@@ -244,13 +244,119 @@ public:
     };
     PathRequestStats resolvePendingPathRequest();
 
+    /// Main-thread precheck for a budgeted search. Clears the pending flag, runs
+    /// the HUNT reachability rule and resolves the destination. Returns false when
+    /// there is nothing to search, in which case \a stats is already final.
+    /// Deliberately does not touch recalculatePathTimer: a search that is only
+    /// starting must not leave a countdown that would defer a resumed or
+    /// ordinary-load-requeued job.
+    bool beginPathRequest(PathRequestStats& stats, Coord& destinationCoord);
+    /// Main-thread application of a finished search, including the cooldown the
+    /// whole-search path used to set up front.
+    void applyPathResult(std::list<Coord> path, const Coord& destinationCoord,
+                         Uint32 searchStartRevision, PathRequestStats& stats);
+    /// Shared tail of both forms: stuck detection, carryall requests and the
+    /// give-up rules that run once a search has produced its answer.
+    void finishPathRequest(PathRequestStats& stats);
+
+    /// Everything a running search's result depends on besides terrain: the
+    /// endpoints, the blocking-geometry revision, ownership and the target and
+    /// repair state that canPass() consults. Deliberately excludes other units'
+    /// positions -- those change constantly, movement revalidates passability
+    /// per step, and including them would restart every cross-tick search
+    /// whenever an unrelated unit moved.
+    struct PathInputFingerprint {
+        Coord location = Coord::Invalid();
+        Coord destination = Coord::Invalid();
+        Uint32 pathingRevision = 0;
+        Uint32 targetObjectID = NONE_ID;
+        Sint32 houseID = -1;
+        Sint32 teamID = -1;
+        bool targetFriendly = false;
+        bool goingToRepairYard = false;
+        bool repairYardFree = false;
+        // canPass() lets a unit enter its own target only when that object is
+        // still there, is a structure, is on our team and is visible to us, and
+        // only enters a repair yard while it is free. Retaining the id alone would
+        // miss the target being destroyed, changing hands through deviation, or
+        // becoming occupied, so each fact canPass actually reads is captured.
+        bool targetPresent = false;
+        bool targetIsStructure = false;
+        bool targetVisibleToUs = false;
+        Sint32 targetOwnerTeamID = -1;
+        Uint32 targetItemID = NONE_ID;
+        // Frozen search parameters: turn speed is read once from objectData for
+        // this item and original house, so a change invalidates the plan's costs.
+        Uint32 itemID = NONE_ID;
+        Sint32 originalHouseID = -1;
+
+        enum Difference : Uint32 {
+            StartMoved      = 1u << 0,
+            DestinationMoved= 1u << 1,
+            GeometryChanged = 1u << 2,
+            TargetChanged   = 1u << 3,
+            OwnerChanged    = 1u << 4,
+            RepairChanged   = 1u << 5,
+            ParametersChanged = 1u << 6
+        };
+        /// Inputs that make a running search answer the wrong question, so it has
+        /// to start again. Deliberately excludes GeometryChanged: that counter is
+        /// global, it moves whenever anyone anywhere places or loses blocking
+        /// geometry, and on a busy city map it was measured bumping about every
+        /// 2.4 cycles -- restarting on it meant no cross-tick search ever
+        /// finished. A path built across a geometry change is already handled the
+        /// way every other path is: once the revision has moved,
+        /// isCachedPathStillValid() re-checks canPass over a bounded near-prefix of
+        /// the route (kPathValidationProbeCount tiles) rather than all of it, and
+        /// UnitBase::update revalidates the next step before taking it.
+        static constexpr Uint32 RestartForcingMask =
+            StartMoved | DestinationMoved | TargetChanged | OwnerChanged | RepairChanged | ParametersChanged;
+
+        /// Which inputs differ. Reported in telemetry so a restart storm can be
+        /// attributed to a field instead of guessed at.
+        Uint32 differenceMask(const PathInputFingerprint& o) const {
+            Uint32 mask = 0;
+            if(location != o.location) mask |= StartMoved;
+            if(destination != o.destination) mask |= DestinationMoved;
+            if(pathingRevision != o.pathingRevision) mask |= GeometryChanged;
+            if(targetObjectID != o.targetObjectID || targetFriendly != o.targetFriendly
+               || targetPresent != o.targetPresent || targetIsStructure != o.targetIsStructure
+               || targetVisibleToUs != o.targetVisibleToUs || targetOwnerTeamID != o.targetOwnerTeamID
+               || targetItemID != o.targetItemID) mask |= TargetChanged;
+            if(houseID != o.houseID || teamID != o.teamID) mask |= OwnerChanged;
+            if(goingToRepairYard != o.goingToRepairYard || repairYardFree != o.repairYardFree) mask |= RepairChanged;
+            if(itemID != o.itemID || originalHouseID != o.originalHouseID) mask |= ParametersChanged;
+            return mask;
+        }
+        bool operator==(const PathInputFingerprint& o) const { return differenceMask(o) == 0; }
+        bool operator!=(const PathInputFingerprint& o) const { return !(*this == o); }
+    };
+    /// Resolves the current destination itself, so the scheduler never needs the
+    /// protected target-resolution rules.
+    PathInputFingerprint capturePathInputs() const;
+
+    /// The pending flag spans the whole request, not just its time in the queue:
+    /// it is set when the request is enqueued and cleared only when the request
+    /// completes or is cancelled, which is what stops update() from enqueueing a
+    /// second request for a unit whose search is still suspended.
+    bool hasPendingPathRequest() const { return pathRequestQueued; }
+    void markPathRequestActive() { pathRequestQueued = true; }
+    void markPathRequestFinished() { pathRequestQueued = false; }
+
     inline void clearPath() {
         pathList.clear();
         nextSpotFound = false;
         recalculatePathTimer = 0;
         nextSpotAngle = INVALID;
         noCloserPointCount = 0;
-        pathRequestQueued = false;
+        // pathRequestQueued is deliberately NOT cleared here. Abandoning the route
+        // you are walking says nothing about a request that is still in flight, and
+        // clearing it let a unit enqueue a second request for a search the
+        // scheduler was still running -- update() calls clearPath() on a cache
+        // miss or a blocked step, and setDestination() calls it on every new
+        // order. The scheduler owns this flag end to end: it clears it when the
+        // request completes or is cancelled, and a changed order is picked up
+        // because the in-flight plan's inputs no longer match.
         noProgressCount = 0;
         lastDistanceToDestination = -1;
         cachedPathDestination.invalidate();
@@ -352,6 +458,8 @@ protected:
     bool SearchPathWithAStar(size_t& nodesExpanded, bool& invalidDestination);
     bool isCachedPathStillValid();
     void updateCachedPathMetadata(const Coord& destinationCoord);
+    /// Records an explicit observed revision, for a route planned across updates.
+    void updateCachedPathMetadata(const Coord& destinationCoord, Uint32 revision);
     Coord resolvePathDestination() const;
 
     void drawSmoke(int x, int y) const;

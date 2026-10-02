@@ -1,3 +1,308 @@
+# 1.0.796 full release preparation (2026-10-03)
+
+The authorized production release combines the private 1.0.793–795 performance,
+repair and Brutal unit-override changes with current main's city-art refresh.
+Version metadata is 1.0.796; multiplayer protocol remains 44 and save format 9850.
+
+The five maps requested from the MBA are bundled in `data/maps/singleplayer/`:
+`4P - 128x128 - 4 corners.ini`, `4P - 192x192 - DuneCity.ini`,
+`5P - 256x256 - test.ini`, `8P - 128x128 - city seige.ini` and
+`Alkozeltser 4 Cities.ini`. Four files are newly bundled; Four Corners replaces
+its older bundled contents with the exact MBA revision (additional starting
+Deviators and catalogue v1 metadata). Alkozeltser retains its author, CC-BY-SA
+license, six houses and catalogue v1; its name refers to cities, not player count.
+All five source files are copied byte-for-byte, without installing user-profile
+workshop sidecars or depending on a remote cached mod. Existing category logic
+recognizes their city structures or sparse city starter layout.
+City seige's authored `8P` name includes Neutral; the existing catalogue correctly
+reports seven selectable houses. The initial new test assumed eight from the name
+and failed locally and in Linux CI; its expected count was corrected to seven
+without altering map bytes or the established classifier.
+
+Native builds copy the whole data directory; Windows/Linux installation does
+likewise, and Emscripten preloads it at `/`. The browser payload checker now
+requires all five maps to match the tagged source bytes, with missing/corrupt
+map rejection tests. Catalogue tests verify names, map dimensions, house counts,
+revision labels and DuneCity category/dependency from the actual map INIs.
+
+Validation: rebuilt the native Release app, passed dependency audits before and
+after the build, verified all five bundled-map SHA256s against the MBA capture,
+and passed all eight browser payload-checker tests. The required full CTest
+suite and public release gates are in progress; this entry is preparation,
+not a claim of production publication. Captures, provenance and release evidence
+are under `/Users/stefan/Documents/projects/outputs/release-796/`.
+
+## 2026-10-02 — Repair release and Brutal unit overrides (local 1.0.795)
+
+The MBA repair-stuck save at cycle 46155 contained 47 occupied yards across six
+houses, including 12 Harkonnen yards. Every occupant had fractional health less
+than one HP below maximum and no booked carryall. All 47 retained identical
+health and occupancy after 1000 ticks in both 1.0.794 and the retained pre-performance
+1.0.792 engine. ObjectBase::addHealth tried health+1; setHealth rejected the
+overshoot, so repair never reached its release branch. INIMapLoader can create
+fractional unit health from the map's health/256 ratio.
+
+The healing step now clamps at maximum, preserving setter validation, fixed-point
+arithmetic, normal healing cadence and the per-tick cost. The final combined replay
+released all 47 original occupants alive at exact maximum health with unchanged
+ownership within 758 ticks. One and four path workers
+matched all 11 checkpoints and complete saved bytes over 1000 ticks. Those are
+bounded checks with this save and available funds/access/transport, not universal
+handoff guarantees.
+
+The user also requested a performance stress setting: Brutal with an explicit
+max-units override bypasses its configured military-value ceiling. Positive
+values use the existing engine unit-count policy; zero is unlimited for that
+policy. The existing per-category formula remains (including the air allowance
+computed from the selected ground limit); this is not a new global total. A Hard
+controller sharing a house retains its existing house-level count exemption.
+Disabled override and other difficulties retain their previous behavior.
+Military production remains subject to funds, reserves, catalogue/prerequisites
+and engine admission. Review removed an arbitrary INT_MAX/4 budget ceiling and
+widened allocation sums; only the int representation boundary saturates. Free
+police reinforcement is outside this funded-production change. The effective planning budget is derived at runtime; the serialized
+militaryValueLimit and save9850 field order remain. Protocol44 separates peers
+with these changed repair and production rules; observer runtime remains v6.
+
+### Property and evidence matrix
+
+Verification follows /Users/stefan/.codex/skills/verify-system-invariants/SKILL.md.
+These are source reviews and executable tests, not formal proofs.
+
+| Property | Enforcement/source | Evidence/result | Assumptions or limits |
+| --- | --- | --- | --- |
+| A funded fractional repair reaches exact maximum without overshoot | ObjectBase::addHealth; RepairYard::updateStructureSpecificStuff | Old-code regression failed; fixed regression passed Vanilla/DuneCity/Dune2R; 47/47 captured jobs released | Yard receives updates and can pay the existing per-tick charge |
+| Release clears one repair booking and retains ownership; one final healing tick costs UNIT_REPAIRCOST | RepairYardJob::finish; RepairYard::deployRepairUnit; House::payCredits | Existing cleanup/ownership coverage and final exact cost/ownership assertions passed in all three modes | Ground-release fixture has a valid nearby deploy spot and funded owner |
+| Brutal bypasses the configured value cap only for explicit override | QuantBot::overridesMilitaryValueCap; planningMilitaryBudget; funded production sites | Helper boundaries and real-engine -1/0/positive/other-difficulty matrix passed in Vanilla/DuneCity/Dune2R | -1 means disabled; positive/0 are explicit; no new serialized policy |
+| Positive overrides are enforced by the engine; zero is unlimited for unit policy | QuantBot::ignoresUnitCountLimit; House::getMaxUnits; BuilderBase progress; StarPort delivery guard | Heavy/air/import below/at-cap and zero checks passed; direct builder progress blocked at cap; paid imports hold and resume exactly once | Existing per-category formulas remain; a shared Hard controller retains its house-level exemption |
+| Spending, prerequisites and queued military accounting remain independent | FundedArmyTarget/allocation helpers; QuantBot build and Starport guards | Source guards retained; final real-engine aircraft/Starport tests passed; nominal queued value counted and discounted imports not reserved twice | No promise of production with insufficient money, prerequisites or capacity |
+| Worker completion order does not change fixed replay state | Deterministic path scheduler; simulation ticks | Final source: 11 checkpoints and raw full save equal with 1/4 workers; override0 stress also matched gameplay bytes (local camera field excluded) | Fixed initial save, settings and tick count; override intentionally changes army growth |
+| Earlier simulation peers cannot join protocol44 | NetworkPacketPolicy; NetworkManagerTestCase | Full final CTest 46/46 passed, including unit/lobby/network/relay gates | Every multiplayer peer needs the updated rules |
+
+Paid Starport units under a Brutal explicit-positive override now wait at the
+execution layer if their category filled while the shipment was in transit. The
+existing two-second deployment timer retries the front entry without popping it,
+spawning, charging or refunding. A single available slot releases exactly one unit
+and then blocks the next. Disabled/zero/other-difficulty/non-unit paths retain
+prior behavior; the existing shared-Hard house exemption remains. No new save
+state or unbounded delivery deadline was added.
+
+The retained unregistered campaign-pressure diagnostic reached its controller
+count checks but failed a separate Easy/Medium power-deficit setup with the trial
+level9/vanilla/harvester-limit7 invocation. It is not used as passing evidence;
+the registered override fixture covers the per-difficulty count matrix in three
+mods. Its existing classic-count block explicitly disables the override now.
+
+Transport booking/cancellation/timeout logic was not changed. A surviving
+carryall whose assignment is stale can still cause an unrelated wait; this was
+not the captured defect, whose 47 occupants had no booked carrier. No unbounded
+transport liveness claim or unrelated carryall refactor is made.
+
+Final native Release build and dependency audits passed. Full CTest: 46/46 passed
+in 567.21s. Registered override tests cover heavy, aircraft, imports, paid queue
+accounting, exactly one available delivery slot, fixed-point funds, independent
+builder enforcement and unchanged difficulty/default semantics in three mods.
+
+A private override0 replay of the same immutable save advanced 1000 cycles. The
+actual QuantBot policy value grew from 98980 to 236620 for Harkonnen (100000
+configured target), with unit count 527 to 778; four houses exceeded the target.
+Those policy figures are recomputed at current catalogue prices, not the House
+lifetime production accumulator. One/four workers matched all 11 checkpoints and
+every saved gameplay byte. An initial strict full-file comparison found a local
+camera-center difference from screen shake; serialized object/bullet/explosion
+sections locate those four presentation bytes exactly, and same-worker repetition
+also varied there. Only that local view field and release label are excluded in
+the stress comparison. The unchanged-options repair replay matched raw bytes.
+The replay ran alongside validation: its CPU timings are not an FPS benchmark.
+
+Final staged app: 36 ARM64 Mach-O files, portable library loads, deep/strict
+signature and bundled SDL initialization/hidden rendering passed. Executable SHA:
+bffaf429b8b1aee2165931fccff5bee21040927b98664d86599a212089c92e3a.
+Guarded MBA installation completed with no running game, followed by independent
+installed-version/hash/signature verification. /Applications/dunecity.app is
+1.0.795 from code commit 20439671150da4652683f2a7cd8f54b9180baa00 with the SHA above.
+Bundled SDL initialization and hidden rendering passed on the MBA. Settings stayed
+byte-identical. Prior 1.0.794 app retained at
+/Applications/.dunecity-backup-before-795-20261002/dunecity.app (SHA
+c3408696f898d8920ab44cdb83992e83199773ee5d0cbe38119f26f4afde7ba9).
+Receipt and independent verification are in ../outputs/repair-install-795/.
+No match was launched, and no public release/push/PR was performed.
+
+For a subsequent controlled large-army performance test, check Maximum Number of
+Units Override and use a positive value or 0. The captured repair save stores -1,
+so its normal military budget remains unless a new fixture/lobby selects an
+override. Compare the same save, mod revision, settings, tick workload and hardware;
+record unit counts and frame-time tails as well as average FPS.
+
+Root proofs: root-final-repair-proof.json and root-final-stress-proof.json.
+Evidence: ../outputs/repair-yard-live-20261002/ and ../outputs/repair-install-795/.
+
+## 2026-10-02 — AI work phasing and stutter fixes (local 1.0.794)
+
+The live MBA capture showed AI and city simulation causing long frames while
+pathfinding averaged only 1.49ms/frame. Low FPS also reduced the single-player
+path budget to 5000 tokens, increasing queued paths and movement pauses.
+
+### Final implementation
+
+- Custom single-player QuantBot unit management and building planning run on
+  separate fixed simulation phases, 25 cycles apart, each retaining its original
+  50-cycle cadence. House phases are distributed over the interval: houses 0 and
+  4 are now 16 cycles apart instead of 4. The entire build timer action moves to
+  the building phase, including decrement and reset; military value is evaluated
+  from the live world. No frame clock, worker completion, pending cursor or new
+  serialized state determines this schedule.
+- Phasing is excluded for network launches, including loading a CustomGame save
+  into LoadMultiplayer. Campaign, skirmish and multiplayer retain the original
+  AI timing. Custom single-player decisions now occur at different cycles and
+  can change the match trajectory; this is an intentional timing change.
+- Building searches skip candidates outside the exact construction range using
+  a summed-area ownership field. One lazily built field serves a build invocation
+  and is invalidated before placement/demolition, including their callbacks.
+  An RAII guard clears it on every exit. Reservations and builder changes still
+  participate in the original checks; full-map scoring and tie order remain.
+- Harvester crowding uses the exact integer falloff stamped into a spatial field.
+  An ordered spice list is shared only within one unit-management invocation.
+  Passability, danger, unsafe-field memory and other harvesters' reservations are
+  checked live. MCV handling invalidates spice membership conservatively.
+- Expansion cover gathers the main-yard and living turret facts once. Both
+  defence gates around the rock survey remain. The survey uses the same exact
+  ownership field instead of repeated neighborhood scans.
+- Hostile land-value penalties use a spatial index with the original visibility,
+  team and distance checks. Off-map units are retained in edge buckets. Strongest
+  penalty accumulation remains a maximum, with no changed city outcome.
+- Single-player FPS-driven path-budget reductions require pathfinding itself to
+  average at least 4ms/frame. This prevents unrelated stalls starving movement.
+  The existing path worker pool and multiplayer budget negotiation remain.
+- Diagnostic scopes/work counts distinguish candidate searches, field builds,
+  unit/build phases and city effect subphases. Future ownership or spice mutations
+  added inside these AI invocations must invalidate their scoped caches.
+
+### Validation and measurements
+
+Same immutable interesting.dls, 5000 engine cycles on the local native build:
+
+| Build | Total CPU time | 99th-percentile cycle | Maximum cycle |
+|---|---:|---:|---:|
+| Installed 1.0.793 baseline | 43.25s | 159.60ms | 3094.73ms |
+| 1.0.794 pure optimizations | 34.63s | 88.96ms | 942.06ms |
+| 1.0.794 with SP phasing (root final source) | 32.37s | 74.68ms | 664.54ms |
+
+These are headless replay CPU timings, not MBA FPS or a guarantee of hitch-free
+rendering. Phasing changes the trajectory, so its throughput delta also reflects
+different gameplay. Warm per-house peaks remain (183ms unit work, 127ms building
+work in the sampled replay); city effects reached 45.5ms. Cold unit planning
+still reached 703ms immediately after load. No win-rate balance study was run.
+
+Before adding phasing, all 51 checkpoints matched 1.0.793 and the complete save
+differed only in its version byte at offset26. After phasing, one versus four path
+workers matched all 51 new checkpoints and the complete same-version save.
+The existing 9850 save loads; save9850, protocol43 and observerv6 remain.
+Scheduler tests cover cadence, real production timer resets, frame chunking and
+all network launch markers. Spatial field tests compare the production helpers
+against brute-force references, including off-map sources and map edges.
+
+Root final dependency audit and native build passed. Full CTest passed 45/45
+(543.50s). The final-source 5000-cycle replay matched all phased-reference
+checkpoints and saved state. The ARM64 1.0.794 portable app passed deep/strict
+signature verification, all 36 Mach-O dependency audits, and packaged SDL
+initialization/hidden-window rendering; no external non-system loads remain.
+No push or public release. Evidence is in ../outputs/stutter-ai-implementation-794/.
+
+### Installed on the MBA
+
+Installed source commit 13e054bb79f1123f6a87aaf417e3af5301e1f312 as 1.0.794
+at /Applications/dunecity.app on Stefans-MacBook-Air.local. Independent installed
+version/hash/deep-strict signature checks passed, and the installed bundled SDL
+runtime initialized and rendered successfully. Executable SHA-256:
+c3408696f898d8920ab44cdb83992e83199773ee5d0cbe38119f26f4afde7ba9.
+
+The installer checked that no game was running before both staging and swapping.
+No game was stopped or match launched. User config bytes stayed identical.
+Previous 1.0.793 app is preserved at
+/Applications/.dunecity-backup-before-794-20261002/dunecity.app with its verified
+9554509cf2dbc5200c743f0037cf29de7d47d1e2567a6c273facfe258436b317 hash.
+Receipt, portable package and installed-runtime logs:
+../outputs/performance-install-794/. The next normal launch uses this build.
+
+
+## 2026-10-02 — Performance build installed on the MBA (1.0.793)
+
+At the user's request, installed the tested e8fab5ec performance build at
+/Applications/dunecity.app on Stefans-MacBook-Air.local. Native pathfinding
+uses up to four workers by default. Fresh cmake --install bundled the runtime
+dependencies; all 36 Mach-O files have no Homebrew/workspace load references.
+Deep/strict signatures and bundled SDL initialization/hidden rendering passed
+both before the swap and from the installed app. Installed executable SHA-256:
+9554509cf2dbc5200c743f0037cf29de7d47d1e2567a6c273facfe258436b317.
+
+Previous 1.0.792 app is retained at
+/Applications/.dunecity-backup-before-793-20261002/dunecity.app with its original
+7ad79f38b65932123485c26f015c4cd8ab2cc8f2a99c0701e4970cfad16e6f86
+executable hash. No game was running or stopped; no match was launched and
+user saves/config were untouched. The packaging check exits before opening a
+profile. Receipt, portable local package and logs:
+../outputs/performance-install-793/. Nothing was pushed or publicly released.
+
+## 2026-10-02 — Bounded pathfinding and worker pool (local 1.0.793)
+
+Implements the live MBA performance review's recommendations 2–4, followed by
+parallel pathfinding. Active corpse tiles avoid full-map timer scans; generation
+stamps avoid full A* scratch resets; build-range checks short-circuit; QuantBot
+reuses four distance fields keyed by their actual contributors and avoids
+unnecessary small set allocations.
+
+A* searches now retain their frontiers across cycles. Fixed batches of four,
+fixed node quotas and fixed result application order enforce the effective
+per-cycle budget. Changed orders/targets/control cancel and fairly requeue a
+search. Unrelated geometry changes retain the frontier to avoid starvation;
+passability refreshes per slice, cached routes validate a near prefix, and
+movement checks every committed step against the live world. Thus paths can
+reflect earlier geometry observations, while current movement stays checked.
+
+Only frontier advancement runs on persistent workers, after main-thread input
+validation and before a mandatory batch barrier. Native default is up to four
+workers, bounded by reported hardware concurrency; startup failure and browser
+builds without pthreads use the same algorithm inline. Developer overrides:
+DUNECITY_PATH_WORKERS=1/2/4 and DUNECITY_PATH_WORKER_DELAY_US. Worker timing never
+selects quotas or gameplay decisions. Ordinary save format remains 9850;
+observer continuation is v6 and network protocol is 43 (peers must match).
+
+Validation: final native Release dependency audits and all 45 CTest targets pass.
+The nine-phase real-engine budget probe passes 3,572,392 assertions, including
+bounded work, changing inputs, geometry churn, parser rejection, save/load,
+teardown and observer continuation. A real serial-host spectator snapshot with
+a dead active unit restores into four workers and matches 60 state and complete
+continuation checks plus the complete gameplay save after documented local-view
+metadata normalization. Real PHP/WebRTC late join transfers four suspended
+searches byte-for-byte and stays in sync through 1,800 cycles. One/two/four-worker
+and delayed runs match 21 checkpoints and complete raw saved bytes over 2,000
+cycles. Standalone ThreadSanitizer covers the actual pool's lifecycle/barriers
+and exception handling; the full engine was not sanitizer-instrumented.
+
+On the MBA, fixed 2,000-cycle simulation cost fell from 21.094 s on 1.0.792 to
+13.223–13.299 s with four workers (about 37% less); the optimized one-worker
+version took 16.113–16.788 s, so threading adds about 19% less cost. These are
+simulation CPU timings, not measured live FPS. A roughly two-second cold AI
+spike remains. The non-pthread web branch compiles in isolation; a full Wasm
+build remains unverified because the local Emscripten toolchain lacks Binaryen.
+
+Final 1.0.793 MBA check: the default worker setting took 13.746 s on repeat,
+versus 16.403 s with one worker (about 16% less), and the explicit four-worker
+repeat took 14.601 s. All 21 checkpoints and complete raw saves match across
+these final controls; compared with the earlier build, the save differs only
+in its recorded version byte (offset 26, 792 to 793). The first candidate run
+was a slower 25.889 s outlier, so timings under live desktop load vary; the
+repeat default is about 35% below the original 21.094 s baseline.
+
+Build: build/bin/dunecity.app, private development bundle using Homebrew
+libraries. MBA private test copy: /tmp/dune-performance-test-20261002/candidate-1.0.793,
+with an isolated profile and Launch DuneCity Test.command. The installed
+/Applications/dunecity.app stays at 1.0.792; no user profile was changed and
+nothing was pushed or published. Full evidence is outside the checkout at
+../outputs/dune-performance-implementation/; final-report.md supersedes the
+worker's earlier phase2-results.md checkpoint blockers.
+
 ## 2026-09-29 — Original Dune II damage option (local 1.0.792)
 
 User resolved the historical choice: checked means original Dune II/Dynasty

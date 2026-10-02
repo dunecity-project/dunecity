@@ -8,6 +8,7 @@
 
 #include <GUI/ObjectInterfaces/CityStatText.h>
 #include <INIMap/MapCatalogue.h>
+#include <INIMap/MapMetadata.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -54,6 +55,33 @@ std::string differentTerrain(const std::string& map) {
 }
 
 } // namespace
+
+TEST_CASE("Released city maps retain their playable catalogue identities", "[maps][chooser]") {
+    struct Expected { const char* file; const char* name; int size; int players; int revision; };
+    for(const auto& expected : std::vector<Expected>{
+        {"4P - 128x128 - 4 corners", "4P - 128x128 - 4 corners", 128, 4, 1},
+        {"4P - 192x192 - DuneCity", "4P - 192x192 - DuneCity", 192, 4, 0},
+        {"5P - 256x256 - test", "5P - 256x256 - test", 256, 5, 0},
+        // Neutral is authored as the eighth house; it is not a selectable catalogue player.
+        {"8P - 128x128 - city seige", "8P - 128x128 - city seige", 128, 7, 0},
+        {"Alkozeltser 4 Cities", "Alkozeltser 4 Cities", 256, 6, 1},
+    }) {
+        CAPTURE(expected.file);
+        const auto path = std::filesystem::path(sourceDir()) / "data/maps/singleplayer"
+                        / (std::string(expected.file) + ".ini");
+        REQUIRE(std::filesystem::is_regular_file(path));
+        INIFile ini(path.string());
+        const auto metadata = MapMetadata::read(ini, expected.file);
+        REQUIRE(metadata.name == expected.name);
+        REQUIRE(metadata.width == expected.size);
+        REQUIRE(metadata.height == expected.size);
+        REQUIRE(metadata.players == expected.players);
+        REQUIRE(metadata.version == expected.revision);
+        REQUIRE(metadata.mod == MapMetadata::ModDuneCity);
+        REQUIRE(metadata.dependency == MapMetadata::ModDuneCity);
+        REQUIRE(metadata.matches(MapMetadata::ModDuneCity, 0, 0));
+    }
+}
 
 TEST_CASE("Equivalent copies of a real map share one content key", "[maps][chooser]") {
     const std::string bundled = readBundledMap();

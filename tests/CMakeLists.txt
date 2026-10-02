@@ -27,10 +27,13 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
+        QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
         QuantBotCityCampaignPolicyTestCase.cpp
         AIDecisionLogTestCase.cpp
         CityPlacementPolicyTestCase.cpp
+        PathWorkerPoolTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/PathWorkerPool.cpp
         GroundAccessPolicyTestCase.cpp
         NuclearBlastPolicyTestCase.cpp
         RepairYardJobTestCase.cpp
@@ -412,6 +415,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
         set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Brutal only plans past its configured military value cap when the lobby
+        # selected an explicit unit-count override; the engine count limit stays
+        # the authority, and other difficulties keep the configured cap.
+        add_test(NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-brutal-unit-override-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/brutal-unit-override-probe)
+        set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        add_test(NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
+        set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)

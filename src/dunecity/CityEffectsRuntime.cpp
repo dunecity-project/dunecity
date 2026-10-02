@@ -253,6 +253,10 @@ void CitySimulation::runEffectsScans() {
     // Per-block "developed" flag — tile has a road or any ground object.
     std::vector<uint8_t> developed(blocksW * blocksH, 0);
 
+    // Sub-phase timings inside terrain_value. Diagnostic only: they measure the
+    // existing work, in the existing order, and feed no decision.
+    {
+    AITelemetry::PerformanceScope tv("city.effects.tv_tilescan",currentGame->getGameCycleCount());
     for (int wy = 0; wy < mapHeight_; ++wy) {
         for (int wx = 0; wx < mapWidth_; ++wx) {
             const Tile* t = map.getTile(wx, wy);
@@ -273,6 +277,7 @@ void CitySimulation::runEffectsScans() {
                 developed[idx] = 1;
             }
         }
+    }
     }
 
     // Two box-smooth passes (SC runs three smoothTerrain passes; two is
@@ -413,6 +418,8 @@ void CitySimulation::runEffectsScans() {
     // is on one or two sides. Stamps accumulate per source tile, so a
     // solid sand band produces a stronger lift than an isolated tile —
     // matching SC's "shore property is premium" intent.
+    {
+    AITelemetry::PerformanceScope tv("city.effects.tv_sandstamp",currentGame->getGameCycleCount());
     for (int wy = 0; wy < mapHeight_; ++wy) {
         for (int wx = 0; wx < mapWidth_; ++wx) {
             const Tile* t = map.getTile(wx, wy);
@@ -424,17 +431,58 @@ void CitySimulation::runEffectsScans() {
             }
         }
     }
+    }
 
     // Hostile combat nearby reduces the value of the affected owner's property.
     // Use the strongest nearby threat, not an unlimited sum over an army blob.
     hostileLandValuePenaltyMap_.init(mapWidth_, mapHeight_, bs);
+    {
+    AITelemetry::PerformanceScope tv("city.effects.tv_hostile",currentGame->getGameCycleCount());
+    // hostileLandValuePenalty() is zero beyond a squared separation of 16, so
+    // only units within kHostilePenaltyReach tiles of the footprint can ever
+    // contribute. Bucket the attack-capable units once and visit just the cells
+    // that reach each building, instead of the full structure x unit cross
+    // product. Every surviving pair still runs the original owner, visibility
+    // and exact-distance tests, and the map accumulates with max(), so the
+    // result does not depend on which pairs were skipped or in what order.
+    constexpr int kHostilePenaltyReach = 4;   // floor(sqrt(16))
+    constexpr int kHostileCell = 8;
+    const int gridW = std::max(1, (mapWidth_  + kHostileCell - 1) / kHostileCell);
+    const int gridH = std::max(1, (mapHeight_ + kHostileCell - 1) / kHostileCell);
+    std::vector<std::vector<const UnitBase*>> hostileCells(
+        static_cast<size_t>(gridW) * static_cast<size_t>(gridH));
+    for (const UnitBase* unit : unitList) {
+        if (!unit->isActive() || !unit->canAttack()) continue;
+        const Coord p = unit->getLocation();
+        // A unit off the map edge still penalised a near-edge building in the
+        // original loop, which had no bounds test at all: a unit at (-1,0) is
+        // one tile from a footprint at (0,0). Such units are therefore clamped
+        // into the nearest edge cell, never dropped. Clamping only widens the
+        // candidate set for edge cells; the exact dx/dy test below still
+        // decides, so a distant off-map unit scores zero exactly as before.
+        const int cellX = std::min(gridW - 1, std::max(0, p.x) / kHostileCell);
+        const int cellY = std::min(gridH - 1, std::max(0, p.y) / kHostileCell);
+        hostileCells[static_cast<size_t>(cellY) * gridW + cellX].push_back(unit);
+    }
+    std::vector<const UnitBase*> nearby;
     for (const StructureBase* building : structureList) {
         if (!building->isActive()) continue;
         const Coord origin = building->getLocation(), size = building->getStructureSize();
         const int team = building->getOwner()->getTeamID();
-        for (const UnitBase* unit : unitList) {
-            if (!unit->isActive() || !unit->canAttack() || unit->getOwner()->getTeamID() == team
-                || !unit->isVisible(team)) continue;
+        const int cellX0 = std::max(0, origin.x - kHostilePenaltyReach) / kHostileCell;
+        const int cellY0 = std::max(0, origin.y - kHostilePenaltyReach) / kHostileCell;
+        const int cellX1 = std::min(gridW - 1,
+            std::max(0, origin.x + size.x - 1 + kHostilePenaltyReach) / kHostileCell);
+        const int cellY1 = std::min(gridH - 1,
+            std::max(0, origin.y + size.y - 1 + kHostilePenaltyReach) / kHostileCell);
+        nearby.clear();
+        for (int cy = cellY0; cy <= cellY1; ++cy)
+            for (int cx = cellX0; cx <= cellX1; ++cx) {
+                const auto& bucket = hostileCells[static_cast<size_t>(cy) * gridW + cx];
+                nearby.insert(nearby.end(), bucket.begin(), bucket.end());
+            }
+        for (const UnitBase* unit : nearby) {
+            if (unit->getOwner()->getTeamID() == team || !unit->isVisible(team)) continue;
             const Coord p = unit->getLocation();
             const int dx = std::max({origin.x-p.x, 0, p.x-(origin.x+size.x-1)});
             const int dy = std::max({origin.y-p.y, 0, p.y-(origin.y+size.y-1)});
@@ -446,6 +494,7 @@ void CitySimulation::runEffectsScans() {
                     hostileLandValuePenaltyMap_.set(bx,by,std::max<int>(hostileLandValuePenaltyMap_.get(bx,by),penalty));
                 }
         }
+    }
     }
     for (int by=0; by<blocksH; ++by) for (int bx=0; bx<blocksW; ++bx) {
         const int value = landValueMap_.get(bx,by);

@@ -11,13 +11,19 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import prepare_profile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--save', type=Path, required=True)
 parser.add_argument('--reference-ref', default='12f5d46616d6736866668a73a7414d99119da220')
+parser.add_argument('--profile-from', type=Path,
+                    help='Copy settings and installed mods from this profile. A save made with a '
+                         'workshop mod revision will not load against the bundled copy alone.')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=False)
@@ -70,11 +76,13 @@ with (out/'build.log').open('w') as log:
         subprocess.run(compile_source(template, source, obj), cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 profile = out/'profile'
-profile.mkdir()
-(profile/'Dune City.ini').write_text('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\nFullscreen = false\n[General]\nPlay Intro = false\n')
+active = prepare_profile(profile, args.profile_from)
+if active: print('PATH_PROBE_PROFILE: active_mod='+active)
 env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', PATH_PROBE_SAVE=str(args.save.resolve()))
 with (out/'run.log').open('w') as log:
-    subprocess.run([str(binary),'--window','--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=300)
+    # Every ground unit contributes seven queries and each is run twice per round:
+    # three correct rounds over the 1712-unit city fixture measured ~103 seconds.
+    subprocess.run([str(binary),'--window','--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=600)
 results = [line for line in (out/'run.log').read_text().splitlines() if 'PATH_PROBE_' in line]
 if not any('PATH_PROBE_PASS:' in line for line in results): raise RuntimeError('Missing probe result')
 print('\n'.join(results))

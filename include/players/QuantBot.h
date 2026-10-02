@@ -20,6 +20,7 @@
 
 #include <players/Player.h>
 #include <players/CityPlanningPolicy.h>
+#include <players/CityDistanceField.h>
 #include <players/CityServiceInvestmentPolicy.h>
 #include <players/CombatReward.h>
 #include <players/GroundAccessPolicy.h>
@@ -30,6 +31,7 @@ class Harvester;
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
 #include <players/AIDecisionLog.h>
+#include <dunecity/SpatialFields.h>
 
 #include <DataTypes.h>
 #include <limits>
@@ -78,7 +80,19 @@ public:
     const std::array<int, 8>& getLastUnitMixBps() const { return lastUnitMixBps; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
-    bool ignoresUnitCountLimit() const { return difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal; }
+    /// True when the lobby selected an explicit "Maximum Number of Units Override"
+    /// (0 = unlimited, positive = that many). -1 leaves the map/ObjectData default.
+    bool hasExplicitUnitCountOverride() const;
+    /// Hard keeps its authored behaviour. Brutal only ignores the count ceiling while
+    /// no explicit override exists; with one it honours the engine limit, which an
+    /// override of 0 reports as unlimited anyway.
+    bool ignoresUnitCountLimit() const;
+    /// Brutal plus an explicit override plans against rolling headroom instead of the
+    /// configured military value cap. Nothing else about the difficulty changes.
+    bool overridesMilitaryValueCap() const;
+    /// Effective planning budget for this build pass. Equals militaryValueLimit unless
+    /// overridesMilitaryValueCap(), which never mutates the serialized field.
+    int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     int getCityPopulationLimit(int mapArea) const override;
@@ -379,10 +393,72 @@ private:
     bool reactorClearance(Uint32 item, Coord pos) const;
     int rearScore(Coord pos, Coord base) const;
     int recentFactoryLossCount() const;
-    bool manageHarvesterSafety(const Harvester* harvester);
+    struct SpiceFieldCache;
+    bool manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache* spice = nullptr);
 
     std::vector<RecentStructureLoss> recentStructureLosses;
     bool nearRecentStructureLoss(int x, int y, int width, int height) const;
+    /// Total price of this house's military units: every unit type except
+    /// carryalls, harvesters, MCVs and sandworms. Computed live at each use.
+    int militaryUnitValue() const;
+    /// Builds this house's owned-tile indicator so Map::isWithinBuildRange()
+    /// can be answered in O(1) instead of a 5x5 probe per tile. Rebuilt per
+    /// use; holds no state across decisions.
+    void buildAnchorField(DuneCity::BoxAnyField& field) const;
+
+    /// Owned-tile field shared by the placement searches of ONE build() call.
+    ///
+    /// The field depends only on tile ownership. It therefore survives changes
+    /// to reservations or planningBuilder — those do not move a single owned
+    /// tile — and is invalidated only where this house actually mutates the
+    /// world inside build(): a zone demolition and a structure placement. No
+    /// simulation tick runs inside build(), so no other actor can change
+    /// ownership while the cache is live.
+    ///
+    /// Lifetime is bounded by BuildAnchorScope below: `active` is only ever
+    /// true inside one build() invocation and the guard clears the field on
+    /// every exit path, including exceptions. Nothing here is serialised or
+    /// read across cycles.
+    struct BuildAnchorCache {
+        bool active = false;
+        bool valid = false;
+        DuneCity::BoxAnyField field;
+        uint64_t builds = 0, hits = 0, invalidations = 0;
+    };
+    BuildAnchorCache buildAnchors;
+
+    /// RAII activation of buildAnchors for exactly one build() invocation.
+    class BuildAnchorScope {
+    public:
+        explicit BuildAnchorScope(QuantBot& bot) : bot_(bot) {
+            bot_.buildAnchors.active = true;
+            bot_.buildAnchors.valid = false;
+        }
+        ~BuildAnchorScope() {
+            bot_.buildAnchors.active = false;
+            bot_.buildAnchors.valid = false;
+            bot_.buildAnchors.field = DuneCity::BoxAnyField();
+        }
+        BuildAnchorScope(const BuildAnchorScope&) = delete;
+        BuildAnchorScope& operator=(const BuildAnchorScope&) = delete;
+    private:
+        QuantBot& bot_;
+    };
+    /// Called where this house actually changes tile ownership inside build().
+    void invalidateAnchorField();
+
+    /// Ordered spice-tile membership shared by the harvester candidate sweeps of
+    /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership only, in
+    /// the original y-then-x order. Everything that can change as earlier
+    /// harvesters are ordered — peers, plannedDestination reservations,
+    /// unsafeFields memory, danger, passability and routes — is still evaluated
+    /// per candidate, per harvester. Lives in a checkAllUnits() local and is
+    /// passed down by pointer; other callers pass nothing and get a fresh scan.
+    struct SpiceFieldCache {
+        bool valid = false;
+        std::vector<Coord> tiles;
+        uint64_t builds = 0, hits = 0, invalidations = 0;
+    };
     /// The house's oldest surviving construction yard: the main base anchor.
     Uint32 mainConstructionYardID() const;
     /// \a needsLocalSpace waives the core prerequisite (heavy factory, high
@@ -391,6 +467,19 @@ private:
     /// home. Defence cover, threat and recent-loss checks are unaffected.
     bool expansionDefenceReady(bool needsLocalSpace = false) const;
     int expansionTurretsMissing(const StructureBase* yard, bool planned = true) const;
+    /// The owner-invariant inputs of an expansion cover test: the main base
+    /// anchor and the house's living rocket turrets, in structure-list order.
+    /// Collected once so a reduction over every yard does not rewalk the
+    /// structure list per candidate. Purely a hoist: the facts are exactly
+    /// what expansionTurretsMissing() would have recomputed per call.
+    struct ExpansionCoverFacts {
+        Uint32 mainYardID = NONE_ID;
+        int    turretRadius = 1;
+        std::vector<Coord> turrets;
+    };
+    ExpansionCoverFacts collectExpansionCoverFacts() const;
+    int expansionTurretsMissing(const StructureBase* yard, bool planned,
+                               const ExpansionCoverFacts& facts) const;
     /// Is this construction yard (or planned yard, NONE_ID) an expansion
     /// outside the main base rather than the base's own anchor?
     static bool isExpansionYard(Uint32 item, Uint32 objectID, Uint32 mainYardID);
@@ -405,6 +494,47 @@ private:
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
+
+    /// The four map-sized placement distance fields, reused across searches.
+    /// The key is the contribution list itself -- every live owned structure and
+    /// every reservation that is not the planning builder's, in the order
+    /// findPlaceLocation visits them -- so reuse is exact rather than inferred
+    /// from builder identity, which cannot see a structure dying or a
+    /// reservation changing mid-pass. The pollution field additionally depends
+    /// on the planned item's own sensitive/polluter roles; the three nearest-
+    /// origin fields do not depend on the planned item at all. Derived state:
+    /// never serialised, unlike placementCache.
+    struct PlacementDistanceCache {
+        struct Contribution {
+            Uint32 item = 0;
+            Sint32 x = 0, y = 0, w = 0, h = 0;
+            bool operator==(const Contribution& o) const {
+                return item == o.item && x == o.x && y == o.y && w == o.w && h == o.h;
+            }
+        };
+        std::vector<Contribution> key;
+        Sint32 width = 0, height = 0;
+        bool originFieldsValid = false;
+        bool pollutionValid = false;
+        bool sensitive = false, polluter = false;
+        /// How many times each group of fields was actually rebuilt. Diagnostic
+        /// only -- never serialised and never read by a decision -- but it is the
+        /// one observable that distinguishes a reuse from a silent rebuild, so
+        /// the cache tests assert on it rather than re-deriving the key.
+        Uint32 originBuilds = 0, pollutionBuilds = 0;
+        CityDistanceField nearestResidential{0,0}, nearestCommercial{0,0},
+            nearestIndustrial{0,0}, pollutionSeparation{0,0};
+        void invalidate() {
+            originFieldsValid = false; pollutionValid = false;
+            key.clear(); key.shrink_to_fit();
+            width = 0; height = 0;
+            // Release the map-sized cells too, so a finished build pass does not
+            // keep four of them per bot alive until the next one.
+            nearestResidential = CityDistanceField(0,0); nearestCommercial = CityDistanceField(0,0);
+            nearestIndustrial = CityDistanceField(0,0); pollutionSeparation = CityDistanceField(0,0);
+        }
+    };
+    PlacementDistanceCache placementDistances;
 
     struct CityServiceSite {
         Coord site = Coord::Invalid();

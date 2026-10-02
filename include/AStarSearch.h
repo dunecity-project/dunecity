@@ -22,15 +22,27 @@
 #include <fixmath/FixPoint.h>
 
 #include <list>
+#include <memory>
 #include <vector>
 #include <array>
 
 class UnitBase;
 class Map;
+class InputStream;
+class OutputStream;
 
 class AStarSearch {
 public:
+    /// Runs the whole search immediately. Every direct caller keeps this form.
     AStarSearch(Map* pMap, UnitBase* pUnit, Coord start, Coord destination);
+
+    /// Prepares a search without expanding anything; the caller drives step().
+    /// Slicing never changes the outcome: the loop carries no state that is not
+    /// a member, so a sliced search closes the same nodes in the same order and
+    /// returns the same route and node count as the whole search above.
+    struct Resumable {};
+    AStarSearch(Map* pMap, UnitBase* pUnit, Coord start, Coord destination, Resumable);
+
     ~AStarSearch();
 
     AStarSearch(const AStarSearch &) = delete;
@@ -45,22 +57,49 @@ public:
             return path;
         }
 
+        // A route cannot revisit a tile, so the tile count bounds the walk. That
+        // also means a malformed restored parent chain cannot spin here: it is
+        // abandoned instead, and the caller sees no path rather than hanging.
+        const size_t limit = static_cast<size_t>(sizeX) * static_cast<size_t>(sizeY);
         Coord currentCoord = bestCoord;
-        while(true) {
+        for(size_t steps = 0; steps <= limit; ++steps) {
             Coord nextCoord = getMapData(currentCoord).parentCoord;
 
             if(nextCoord.isInvalid()) {
-                break;
+                return path;
             }
 
             path.push_front(currentCoord);
             currentCoord = nextCoord;
         }
 
+        path.clear();
         return path;
     };
 
     int getNodesChecked() const { return numNodesChecked; }
+
+    enum class Status { Running, Completed };
+
+    /// Closes at most \a nodeQuota nodes and returns whether the search finished.
+    /// \a iterationLimit bounds the slice when the frontier is being drained
+    /// without closing anything, so a slice cannot run long on zero charge.
+    /// The live map and unit are passed in rather than held: a suspended search
+    /// must never own a pointer that can dangle between cycles.
+    Status step(Map* pMap, UnitBase* pUnit, size_t nodeQuota, size_t iterationLimit);
+    Status getStatus() const { return completed ? Status::Completed : Status::Running; }
+    /// Nodes closed by the most recent step(), i.e. what that slice must be charged.
+    size_t getNodesClosedLastStep() const { return nodesClosedLastStep; }
+
+    Coord getStart() const { return start; }
+    Coord getDestination() const { return destination; }
+    size_t frontierSize() const { return openList.size(); }
+
+    /// Complete continuation state, for the observer runtime stream: frontier
+    /// order, every touched tile entry including its cached passability, the best
+    /// coordinate, heuristic and depth counters, and the search parameters.
+    void save(OutputStream& stream) const;
+    static std::unique_ptr<AStarSearch> load(InputStream& stream);
 
     struct PoolUsageStats {
         size_t reuseHits = 0;
@@ -81,13 +120,33 @@ private:
         FixPoint f;
         bool     bInOpenList;
         bool     bClosed;
-        // Valid only for this synchronous search: unit and map cannot change
-        // while A* runs. Zero = unchecked, one = blocked, two = passable.
+        // Zero = unchecked, one = blocked, two = passable. Cached per slice, not
+        // for the life of the search: a resumable search spans world updates, so
+        // an entry whose epoch is not the current slice's is re-evaluated on first
+        // touch. That refreshes moving occupants without ever clearing the buffer,
+        // and with a static world it returns the same answer, which is what keeps
+        // a sliced search exactly equal to the whole search.
         unsigned char passability;
+        Uint32   passabilityEpoch;
+        // Which search last wrote this entry. Anything else is logically a
+        // freshly zeroed entry, so a reused buffer no longer has to be cleared.
+        Uint32   generation;
     };
 
 
-    inline TileData& getMapData(const Coord& coord) const { return mapData[coord.y * sizeX + coord.x]; };
+    // Every read and write of the scratch buffer goes through here, which is
+    // what lets the clear be deferred to first touch without changing any
+    // value a search can observe.
+    inline TileData& getMapData(const Coord& coord) const {
+        TileData& entry = mapData[coord.y * sizeX + coord.x];
+
+        if(entry.generation != generation) {
+            entry = TileData{};
+            entry.generation = generation;
+        }
+
+        return entry;
+    };
 
     void trickleUp(size_t openListIndex) {
         Coord bottom = openList[openListIndex];
@@ -197,12 +256,35 @@ private:
         return ret;
     };
 
-    int sizeX;
-    int sizeY;
-    int numNodesChecked;
-    Coord bestCoord;
-    TileData* mapData;
+    // Initialised here as well as in prepare(): load() builds an empty search
+    // first and may throw on a malformed stream before the scratch is acquired,
+    // and the destructor releases mapData unconditionally.
+    int sizeX = 0;
+    int sizeY = 0;
+    int numNodesChecked = 0;
+    Coord bestCoord = Coord::Invalid();
+    TileData* mapData = nullptr;
+    Uint32 generation = 0;
     std::vector<Coord> openList;
+
+    // Loop state that used to be local to the constructor. All of it has to
+    // survive a slice boundary for a resumed search to behave like a whole one.
+    Coord start{};
+    Coord destination{};
+    FixPoint rotationSpeed{};
+    FixPoint smallestHeuristic{};
+    std::vector<short> depthCheckCount;
+    bool completed = false;
+    size_t nodesClosedLastStep = 0;
+    /// Bumped once per slice, so cached passability is at most one slice old.
+    Uint32 passabilityEpoch = 0;
+
+    AStarSearch() = default;  // for load()
+    void prepare(Map* pMap, UnitBase* pUnit, Coord searchStart, Coord searchDestination);
+    void acquireScratch(size_t tileCount);
+    /// Writes a restored entry under the current generation, bypassing the lazy
+    /// materialisation in getMapData().
+    void restoreMapData(size_t index, const TileData& entry);
 
     static constexpr size_t TilePoolSize = 8;
 
@@ -210,11 +292,21 @@ private:
         TileData* buffer = nullptr;
         size_t capacity = 0;
         bool inUse = false;
+        // Bumped on every acquisition. A calloc'd buffer starts with all
+        // entries at zero, so the first acquisition stamps 1 and every
+        // untouched entry reads as stale.
+        Uint32 generation = 0;
     };
 
     static std::array<TilePoolEntry, TilePoolSize> tilePool;
 
-    static TileData* acquireTileBuffer(size_t requiredCount);
+    struct AcquiredBuffer {
+        TileData* buffer;
+        Uint32 generation;
+    };
+
+    static AcquiredBuffer acquireTileBuffer(size_t requiredCount);
+    static Uint32 nextGeneration(TilePoolEntry& entry);
     static void releaseTileBuffer(TileData* buffer);
 };
 

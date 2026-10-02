@@ -14,6 +14,7 @@
 #include <players/CityEconomyInvestmentPolicy.h>
 #include <players/QuantBotSpendingPolicy.h>
 #include <players/QuantBotColonisationPolicy.h>
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -738,6 +739,54 @@ TEST_CASE("All factory classes fill the same funded live plus queued army plan",
     REQUIRE_FALSE(militaryItem(Unit_Harvester));
     REQUIRE_FALSE(militaryItem(Unit_MCV));
     REQUIRE(militaryItem(Unit_Ornithopter));
+}
+TEST_CASE("An explicit unit-count override replaces the value cap with rolling headroom",
+          "[quantbot][production][unitlimit]") {
+    using QuantBotSpendingPolicy::militaryScore;
+    using QuantBotSpendingPolicy::readiness;
+    // Headroom is the largest of the configured target, the spendable cash, the dearest
+    // military unit and one, added to what is already committed. It therefore always
+    // leaves room for one more order and advances as the army grows.
+    REQUIRE(rollingMilitaryBudget(0,20000,0,450)==20000);
+    REQUIRE(rollingMilitaryBudget(80000,20000,0,450)==100000);
+    REQUIRE(rollingMilitaryBudget(80000,20000,250000,450)==330000);
+    // Cheap armies with little cash still clear the dearest unit, so a Starport bargain
+    // is reachable when credits are below its nominal value.
+    REQUIRE(rollingMilitaryBudget(1000,0,100,1500)==2500);
+    REQUIRE(rollingMilitaryBudget(0,0,0,0)==1);          // never a zero budget
+    REQUIRE(rollingMilitaryBudget(-5,0,0,0)==1);         // negative committed value is ignored
+    // No artificial stop: every step of a growing army and every unit price keeps a
+    // strictly positive remaining allowance.
+    int committed=0;
+    for (int order=0; order<64; ++order) {
+        const int budget=rollingMilitaryBudget(committed,20000,5000,450);
+        REQUIRE(budget-committed>=450);
+        REQUIRE(militaryScore(450,450,committed,budget,false)>0);
+        const std::array<AllocationCandidate,2> candidates={{{450,committed,5000,true},{300,0,5000,true}}};
+        REQUIRE(capacityFill(candidates,committed,999999,budget)>=0);
+        committed+=450;
+    }
+    // Budgets keep advancing beyond the former quarter-int boundary. Only the int
+    // representation boundary saturates; helper sums must not wrap there.
+    constexpr int largeArmy = std::numeric_limits<int>::max()/4 + 20000;
+    REQUIRE(rollingMilitaryBudget(largeArmy,20000,5000,450)==largeArmy+20000);
+    constexpr int maximum = std::numeric_limits<int>::max();
+    const std::array<AllocationCandidate,2> edgeCandidates={{{450,maximum-500,5000,true},{600,0,5000,true}}};
+    REQUIRE(fundedArmyTarget(maximum-500,maximum,2000)==maximum);
+    REQUIRE(fundedDeficit(edgeCandidates,maximum-500,2000,maximum,maximum)==-1);
+    REQUIRE(capacityFill(edgeCandidates,maximum-500,2000,maximum)==0);
+    REQUIRE(allocationHorizon(edgeCandidates,maximum-500,2000,maximum)==maximum-50);
+    REQUIRE(largestAffordableDeficit(edgeCandidates,maximum-500,2000,maximum)==-1);
+    REQUIRE(expansionAllocationHorizon(maximum-500,maximum)==maximum);
+    REQUIRE(militaryScore(600,600,maximum-500,maximum,true)==0);
+    REQUIRE(militaryScore(450,450,maximum-500,maximum,true)>0);
+    const int saturated=rollingMilitaryBudget(std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max(),std::numeric_limits<int>::max(),std::numeric_limits<int>::max());
+    REQUIRE(saturated==militaryBudgetSaturation());
+    REQUIRE(saturated>0);
+    REQUIRE(int64_t(saturated)*10000<std::numeric_limits<int64_t>::max()/4);
+    REQUIRE(fundedArmyTarget(1000,saturated,2000)==3000); // finite target for the helpers
+    REQUIRE(readiness(1000,saturated)>0);
 }
 TEST_CASE("Exploration fades independently for each unit's evidence", "[quantbot][allocation]") {
     using namespace UnitMixPolicy;

@@ -228,16 +228,10 @@ public:
     void save(OutputStream& stream) const;
 
     void assignAirUnit(Uint32 newObjectID);
-    void assignDeadUnit(Uint8 type, Uint8 house, const Coord& position) {
-        DEADUNITTYPE newDeadUnit;
-        newDeadUnit.type = type;
-        newDeadUnit.house = house;
-        newDeadUnit.onSand = isSand() || isDunes();
-        newDeadUnit.realPos = position;
-        newDeadUnit.timer = 2000;
-
-        deadUnits.push_back(newDeadUnit);
-    }
+    /// Out of line because it enrols this tile in the map's active-corpse
+    /// registry, which is what keeps the per-cycle sweep proportional to the
+    /// tiles that actually hold a timer instead of the whole map.
+    void assignDeadUnit(Uint8 type, Uint8 house, const Coord& position);
 
     void assignNonInfantryGroundObject(Uint32 newObjectID);
     int assignInfantry(Uint32 newObjectID, Sint8 currentPosition = INVALID_POS);
@@ -306,6 +300,14 @@ public:
 
         update_impl();
     }
+
+    bool hasDeadUnits() const noexcept { return !deadUnits.empty(); }
+
+    /// Registry bookkeeping for Map's active-corpse list. "Registered" only
+    /// promises the tile is in that list; a registered tile may already be
+    /// empty again and is dropped by the next sweep.
+    bool isDeadUnitRegistered() const noexcept { return deadUnitRegistered; }
+    void setDeadUnitRegistered(bool registered) noexcept { deadUnitRegistered = registered; }
 
     void clearTerrain();
 
@@ -528,6 +530,8 @@ private:
     uint16_t            cityTileId_ = 0;        ///< Micropolis-style tile character
     bool                cityPowered_ = false;   ///< connected to power grid (legacy; power flows globally now)
     bool                isRoad_ = false;        ///< a player-placed Road structure occupies this tile
+
+    bool                deadUnitRegistered = false; ///< in Map's active-corpse list; derived, never saved
 
     void update_impl();
 

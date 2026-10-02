@@ -38,8 +38,11 @@
 #include <Network/GameStateDigest.h>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityOverlay.h>
+#include <AStarSearch.h>
+#include <units/UnitBase.h>
 
 #include <DataTypes.h>
+#include <memory>
 
 #include <stdarg.h>
 #include <string>
@@ -988,6 +991,47 @@ private:
     std::deque<PathRequest> pathRequestQueue;
     std::unordered_set<Uint32> pendingPathRequestIds;
 
+    /// A search that has started but not finished. The vector order is the batch,
+    /// quota, stepping and application order, and is simulation state: it is
+    /// serialised into the observer runtime so a spectator continues from the
+    /// same point rather than re-running work the host already charged.
+    struct PathJob {
+        Uint32 objectId = NONE_ID;
+        std::unique_ptr<AStarSearch> search;
+        UnitBase::PathInputFingerprint inputs;
+        Coord destinationCoord = Coord::Invalid();
+        size_t chargedNodes = 0;   ///< Includes nodes spent on abandoned attempts.
+        Uint32 restarts = 0;
+        Uint32 restartReasons = 0; ///< Union of PathInputFingerprint::Difference bits. Diagnostic.
+        /// Set when the request this plan answers has changed: the plan is thrown
+        /// away and the request goes back to the queue instead of being applied.
+        bool requeue = false;
+    };
+    std::vector<PathJob> activePathJobs;
+
+    /// Request-lifecycle conservation counters. Diagnostic only, never
+    /// serialised, but they make the invariant checkable at runtime:
+    /// started == applied + cancelled + requeued + still active.
+    size_t pathRequestsStarted = 0;
+    size_t pathResultsApplied = 0;
+    size_t pathRequestsCancelled = 0;
+    size_t pathRequestsRequeued = 0;
+
+    // Batch size bounds the live A* scratch buffers (the pool holds
+    // TilePoolSize), and is fixed so that a future worker count cannot change
+    // which requests are selected or what quota each one gets.
+    static constexpr size_t kPathBatchSize = 4;
+    // Deterministic ceilings so a cycle whose requests consume no nodes still
+    // terminates: invalid or immediately-finished entries cannot spin.
+    static constexpr size_t kMaxPathRoundsPerCycle = 8;
+    static constexpr size_t kMaxPathStartsPerCycle = 32;
+    // Bounds a slice that is draining the frontier without closing nodes.
+    static constexpr size_t kPathIterationSlack = 4096;
+
+    void collectPathBatch(size_t& startsThisCycle);
+    enum class PathJobOutcome { Applied, Requeued, Cancelled };
+    void finishPathJob(PathJob& job, UnitBase* unit, PathJobOutcome outcome);
+
     // MULTIPLAYER FIX (Issue #1, #2): Removed time-based budgets
     // Now using only deterministic budgets:
     static constexpr std::size_t kPathNodeBudget = 2048;
@@ -1003,6 +1047,11 @@ private:
     static constexpr size_t kDebtCap = 2000;      // Max carry-over tokens — reduced from 10k to limit burst spikes on large maps
     
     static constexpr int kBudgetCheckInterval = 375;  // Check every 375 cycles (~7.5s at 50Hz)
+
+    /// Single-player reductions require pathfinding itself to cost this much
+    /// per frame, so AI/city stalls cannot steal tokens from unit movement.
+    /// Multiplayer retains its existing host-negotiated policy.
+    static constexpr double kPathReductionFloorMs = 4.0;
     
     // Track last budget action to prevent oscillation (deterministic, synced state)
     enum class BudgetAction { NONE, INCREASED, DECREASED };

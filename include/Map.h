@@ -47,6 +47,17 @@ public:
     void save(OutputStream& stream) const;
 
     void createSandRegions();
+
+    /// Dead-unit timers are the only per-cycle tile work, and they exist on a
+    /// handful of tiles at a time. These three keep a deterministic list of
+    /// those tiles so the cycle no longer walks all sizeX*sizeY of them.
+    /// The list holds tile indices, not pointers: load() reallocates `tiles`.
+    /// It is derived state and is never serialised.
+    void registerDeadUnitTile(Tile& tile);
+    void updateActiveDeadUnitTiles();
+    void rebuildActiveDeadUnitTiles();
+    size_t getActiveDeadUnitTileCount() const noexcept { return activeDeadUnitTiles.size(); }
+
     /**
         \param  provenance  who to credit for everything this impact removes, snapshotted when
                             the shot was fired. Leave unknown to decide from the live damager.
@@ -204,6 +215,7 @@ private:
     Uint32 pathingRevision = 0;             ///< Bumps when long-lived blocking geometry changes to invalidate cached paths
     mutable std::vector<int> vehicleTerrainRegions; // Derived; never serialized.
     mutable unsigned terrainConnectivityBuilds = 0;
+    std::vector<Uint32> activeDeadUnitTiles;        // Tile indices with running dead-unit timers. Derived; never serialized.
     void ensureTerrainConnectivity() const;
 
     void init_tile_location();

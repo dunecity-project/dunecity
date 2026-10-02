@@ -252,6 +252,60 @@ int runCarryallFlightProbe() {
                 "Repairs were not restored after the deviation ended");
         lift->cancelDeployment(); homeLift->cancelDeployment(); borrowed->cancelDeployment();
         homeYard->destroy();
+
+        // A saved occupant can carry a fractional health residual: the stalled 1.0.794 game held
+        // 47 bays at values such as 199.875 of 200, unchanged over 1000 cycles with no booked
+        // carrier. The final healing step must land exactly on the maximum and release the bay.
+        // Ground release only, so no option or flight is involved: the guard point is a legal tile
+        // beside the bay, inside MIN_CARRYALL_LIFT_DISTANCE. Deliberately emits no CSV row, so the
+        // three per-mod trajectory files stay byte-identical to the measurements above.
+        require(yard->isFree() && yard->getNumBookings()==0,
+                "The fractional repair scenario needs the fixture bay free and unbooked");
+        for(const FixPoint residual : {0.5_fix, 1_fix}) {
+            auto* patient=static_cast<GroundUnit*>(owner->createUnit(Unit_Tank,true));
+            require(patient != nullptr, "Cannot create the fractional repair fixture unit");
+            const Coord bay=yard->getLocation();
+            const Coord spot=currentGameMap->findDeploySpot(patient,bay,currentGame->randomGen,
+                                                            Coord::Invalid(),yard->getStructureSize());
+            require(spot.isValid(), "No legal tile beside the fractional repair fixture bay");
+            patient->deploy(spot);
+            require(patient->getGuardPoint().isValid()
+                    && blockDistance(bay,patient->getGuardPoint())<MIN_CARRYALL_LIFT_DISTANCE,
+                    "The fractional repair fixture needs a valid guard point beside its bay");
+            const FixPoint maximum=FixPoint(patient->getMaxHealth());
+            patient->setHealth(maximum-residual);
+            require(patient->getHealth()==maximum-residual,
+                    "Fractional starting health was rejected by the health setter");
+            patient->setTarget(yard);
+            require(yard->getNumBookings()==1 && patient->goingToRepairYard,
+                    "The fractional repair fixture did not book its bay");
+            patient->setGettingRepaired();
+            require(yard->getRepairUnit()==patient && !yard->isFree(),
+                    "The fractional repair fixture did not enter its bay");
+            require(!patient->hasBookedCarrier() && !patient->isAwaitingPickup(),
+                    "The fractional repair fixture must not be waiting for a carryall");
+            owner->addCredits(1000,false);
+            require(owner->getCredits()>=1, "The fractional repair fixture bay cannot pay for healing");
+            const House* originalOwner=patient->getOwner();
+            const FixPoint creditsBefore=owner->storedCredits+owner->startingCredits+owner->cityCredits;
+            ticks=0;
+            // One update heals the last step, the next releases: a stall shows up immediately.
+            while(!yard->isFree() && ticks<16) { yard->update(); ++ticks; }
+            require(yard->isFree(),
+                    "Repair yard never released a fractionally damaged occupant");
+            require(patient->getHealth()==maximum,
+                    "The released occupant did not reach exactly full health");
+            require(creditsBefore-(owner->storedCredits+owner->startingCredits+owner->cityCredits)==UNIT_REPAIRCOST,
+                    "The final healing step did not charge exactly one repair tick");
+            require(patient->getOwner()==originalOwner,
+                    "Repair release changed the occupant ownership");
+            require(yard->getNumBookings()==0 && yard->getRepairUnit()==nullptr,
+                    "Releasing the bay did not clear its job and booking");
+            require(patient->isActive() && patient->isVisible()
+                    && currentGameMap->tileExists(patient->getLocation()),
+                    "The released occupant was not put back on the map");
+            patient->cancelDeployment();
+        }
     }
     csv.close();
     SDL_Log("CARRYALL_FLIGHT_PROBE_PASS: %s (%s)",mod.c_str(),baseline ? "baseline" : "regression");
