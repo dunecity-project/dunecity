@@ -1,3 +1,49 @@
+# 2026-10-03 — Police unit capacity fix (local 1.0.797)
+
+The user requested that police must not claim "Unit limit reached" below the game's
+max-units limit. PoliceStation had a separate 250-raw-military-unit ceiling, counting
+individual infantry one-for-one rather than the engine's thirds, and combined that
+ceiling with Brutal's army-value gate for both deployment and the sidebar label.
+
+The separate 250 ceiling is removed. The station now queries House's existing Trike
+and Trooper admission policies; a partial patrol remains available while either
+category has room. Every deployed member is checked again against House capacity.
+Effective default, zero/unlimited, positive override and shared-Hard count policies
+remain owned by House. The Brutal army-value gate remains independent and the actual
+sidebar identifies it as "Army target reached" instead of claiming a unit limit.
+Cooldown, disabled catalogue items, deployment space, police funding and charges
+retain their prior rules. No save fields changed; format remains 9850.
+
+Protocol 45 separates peers whose automatic/commanded police patrols can differ.
+Source metadata and the rebuilt native app are 1.0.797. This is a local development
+build: production remains 1.0.796 and the MBA installation was not replaced.
+
+Validation uses the real-engine `police_reinforcement_limit` CTest fixture, including
+actual PoliceStationInterface widgets (not source-string matching). Restoring the
+old 250 predicate reproduced a false unit-limit result below the selected cap;
+restoring the fix passed. Boundary checks cover 300+ individual troopers, default
+and explicit-positive limits, exact-cap blocking, zero/unlimited, one remaining
+vehicle slot, two remaining infantry slots, the separate Brutal target label,
+cooldowns, disabled catalogue and blocked deployment space. A blocked patrol
+retains its ready cooldown. Synthetic fixture counts are restored before exit.
+An initial blocked-space fixture shared half-full infantry tiles with earlier
+patrols; an independent clear pocket plus structure-blocked rings corrected the
+fixture without changing movement rules.
+
+The delegated worker's 15 affected/adjacent CTest targets passed (unit, lobby,
+network wire, commands, Brutal override, police placement/budget/reinforcement,
+city growth, MCV/custom attack, Starport, degradation, credit storage and stats).
+After review replaced two source-contract assertions with actual sidebar checks
+and added partial-patrol boundaries, the full unit target and police reinforcement
+target passed again. Native Release build, version agreement, Ninja dependency
+audits and diff whitespace checks passed. This is targeted verification, not a
+claim that all 47 registered CTest targets were rerun for this patch.
+
+Standing subscription delegation was honoured with Claude Max session
+7f57c13b-366d-420c-a470-db54d27ce608; Codex reviewed/integrated the patch, actual UI
+checks, partial-patrol checks and protocol/version metadata. Evidence is in
+`/Users/stefan/Documents/projects/outputs/police-unit-limit-797/`.
+
 # 1.0.796 full release preparation (2026-10-03)
 
 The authorized production release combines the private 1.0.793–795 performance,

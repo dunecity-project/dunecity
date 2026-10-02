@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 44;
+static constexpr int kWireProtocolVersion = 45;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -38,7 +38,7 @@ TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network
     REQUIRE(NETWORKPACKET_COOP_MISSION == kWireCoopMission);
 }
 
-TEST_CASE("NetworkManager: Fractional repair completion requires protocol 44", "[network][protocol]") {
+TEST_CASE("NetworkManager: Police patrol capacity rules require protocol 45", "[network][protocol]") {
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

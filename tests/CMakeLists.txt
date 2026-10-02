@@ -486,6 +486,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-budget-probe)
         set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Police reinforcement admission: the unit limit the lobby selected is the only
+        # authority for the sidebar status and for deployment, and the station's own
+        # garrison restrictions stay independent of it.
+        add_test(NAME police_reinforcement_limit COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-reinforcement-probe --repeatable
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/police-reinforcement-probe)
+        set_tests_properties(police_reinforcement_limit PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         # MCVs must turn into yards on the rock the base already stands on,
         # even while the advanced core and its turret cover are unfinished.
         # The reported match ran this map and mod; the fixture asserts that
