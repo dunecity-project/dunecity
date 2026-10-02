@@ -78,6 +78,8 @@
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityEffects.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/SpatialFields.h>
+#include <players/QuantBotSchedulePolicy.h>
 #include <dunecity/TrafficSimulation.h>
 #include <Command.h>
 #include <CommandManager.h>
@@ -829,24 +831,53 @@ void QuantBot::update() {
 			(gameMode == GameMode::Campaign) ? "Campaign" : "Custom", static_cast<int>(difficulty));
 	}
 
-	if ((getGameCycleCount() + getHouse()->getHouseID()) % AIUPDATEINTERVAL != 0) {
+    // Custom single-player splits the heavy pass into two stateless phases at the
+    // same 50-cycle cadence: unit management on one cycle, base building half an
+    // interval later, with houses spread evenly instead of bunched one cycle
+    // apart. The phases are pure functions of (cycle, houseID) — no clock, frame
+    // rate, thread completion or stored cursor — so a reloaded save recomputes
+    // them from the cycle counter alone and the serialised buildTimer still
+    // carries production continuation. Every other game type keeps the original
+    // predicate and the original single-cycle ordering exactly.
+    //
+    // This is an intentional decision-timing change for custom single-player: a
+    // house now evaluates the world at a different cycle than it used to, so its
+    // choices and the match trajectory can differ from 1.0.793. Cadence,
+    // ordering within a phase and every gameplay option are preserved.
+    const bool phased = QuantBotSchedulePolicy::phasedSchedule(
+        currentGame->gameType, getGameInitSettings().getGameType());
+    const int scheduleHouse = getHouse()->getHouseID();
+    const Uint32 scheduleCycle = getGameCycleCount();
+    if (phased) {
+        const bool unitDue = QuantBotSchedulePolicy::unitPhaseDue(
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+        const bool buildDue = QuantBotSchedulePolicy::buildPhaseDue(
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+        if (!unitDue && !buildDue) return;
+        if (buildDue) {
+            // The WHOLE original timer block moves here. Running only build()
+            // on this phase while leaving the decrement on the unit phase would
+            // advance buildTimer twice per interval and double the cadence.
+            AITelemetry::PerformanceScope phaseScope("ai.phase.build",
+                scheduleCycle, scheduleHouse);
+            const int militaryValue = militaryUnitValue();
+            if (buildTimer <= 0) {
+                build(militaryValue);
+            }
+            else {
+                buildTimer -= AIUPDATEINTERVAL;
+            }
+            return;
+        }
+        AITelemetry::log().performance(scheduleCycle,scheduleHouse,"ai.phase.unit",1,-1,false);
+    } else if (!QuantBotSchedulePolicy::legacyDue(scheduleCycle, scheduleHouse, AIUPDATEINTERVAL)) {
 		// we are not updating this AI player this cycle
 		return;
 	}
 
     updateHarvesterStrikeTelemetry();
 	// Calculate the total military value of the player
-	int militaryValue = 0;
-	if (currentGame) {
-		for (Uint32 i = Unit_FirstID; i <= Unit_LastID; i++) {
-			if (i != Unit_Carryall
-				&& i != Unit_Harvester
-				&& i != Unit_MCV
-				&& i != Unit_Sandworm) {
-					militaryValue += getHouse()->getNumItems(i) * currentGame->objectData.data[i][getHouse()->getHouseID()].price;
-			}
-		}
-	}
+	const int militaryValue = militaryUnitValue();
 
 	// Log military stats every 30 seconds (game time)
 	// MULTIPLAYER FIX: Use game cycles instead of SDL_GetTicks() to ensure
@@ -888,11 +919,16 @@ void QuantBot::update() {
     updateCampaignWave();
 	checkAllUnits();
 
-	if (buildTimer <= 0) {
-		build(militaryValue);
-	}
-	else {
-		buildTimer -= AIUPDATEINTERVAL;
+	// Phased custom single-player handled the whole timer block on its own build
+	// phase above and returned; reaching here means this is the unit phase (or a
+	// legacy mode running the original combined pass).
+	if (!phased) {
+		if (buildTimer <= 0) {
+			build(militaryValue);
+		}
+		else {
+			buildTimer -= AIUPDATEINTERVAL;
+		}
 	}
 
 	if (!supportMode) {
@@ -1093,7 +1129,20 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     // has left even while colonisation itself is blocked: that measurement is
     // what tells production the city has nowhere left to build.
     if(!defenceReady && mcv) return Coord::Invalid();
+    AITelemetry::PerformanceScope survey("ai.rock_survey.anchor_field",
+        getGameCycleCount(), getHouse()->getHouseID());
     const int w=getMap().getSizeX(),h=getMap().getSizeY();
+    // Map::isWithinBuildRange() is a box dilation of the owned-tile set, but it
+    // is evaluated pointwise: BUILDRANGE 2 means a 5x5 probe for every rock
+    // tile on the map. One summed-area table over the anchor indicator answers
+    // the same question in four lookups. isConstructionAnchor() is exactly
+    // tileOwner==houseID, and getTile_internal() simply skips off-map probes,
+    // which is the same clipping the box query performs — so the predicate is
+    // unchanged for every input, including map edges.
+    DuneCity::BoxAnyField anchorField;
+    buildAnchorField(anchorField);
+    auto anchorsInRange=[&](int x,int y) { return anchorField.anyWithin(x,y,BUILDRANGE); };
+    survey.next("ai.rock_survey.tilescan");
     std::vector<RockExpansionPolicy::Tile> tiles(w*h);
     std::vector<char> buildable(static_cast<size_t>(w)*h,0);
     std::vector<int> starts,enemies,reserved;
@@ -1112,7 +1161,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
         // chain of replacements.
         out.unsafe=dangerAt(Coord(x,y),Coord(1,1))>0||nearRecentStructureLoss(x,y,1,1)
             ||lostYardsNear(x,y,kRepeatedYardLossRadius)>=kRepeatedYardLossLimit;
-        const bool inBuildRange=out.rock&&getMap().isWithinBuildRange(x,y,getHouse());
+        const bool inBuildRange=out.rock&&anchorsInRange(x,y);
         if(inBuildRange&&out.free) {
             ++freeBase;
             if(!mcv)starts.push_back(y*w+x);
@@ -1124,11 +1173,16 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             &&!overlapsReservedStructure(x,y,1,1);
     }
     if(!mcv) {
+        survey.next("ai.rock_survey.footprints");
         availableBaseRock=freeBase;
         availableBaseFootprints=QuantBotColonisationPolicy::freeFootprints(w,h,buildable,2,2,
             QuantBotColonisationPolicy::kCrampedFootprints);
     }
     // Re-evaluate after measuring this survey, not the previous base layout.
+    // This second gate is deliberate: the survey above has just changed
+    // availableBaseRock/availableBaseFootprints, so baseBuiltOut() must be
+    // reconsidered against the measurement rather than the previous layout.
+    survey.next("ai.rock_survey.defence_gate");
     if(!expansionDefenceReady(needsLocalSpace)) return Coord::Invalid();
     if(mcv && mcv->getLocation().isValid()) starts.push_back(mcv->getY()*w+mcv->getX());
     if(!mcv && starts.empty()) {
@@ -1143,6 +1197,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
                 if(getMap().tileExists(x,y)&&tiles[y*w+x].walkable) starts.push_back(y*w+x);
         }
     }
+    survey.next("ai.rock_survey.enemies");
     auto enemy=[&](const ObjectBase* object) {
         if(object->getOwner() && object->getOwner()->getTeamID()!=getHouse()->getTeamID()
             && object->isVisible(getHouse()->getTeamID())&&object->getLocation().isValid())
@@ -1162,6 +1217,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             && structure->isActive() && structure->getHealth()>0
             && (!mainYard || structure->getObjectID()<mainYard->getObjectID())) mainYard=structure;
     const int mainBase=mainYard ? mainYard->getY()*w+mainYard->getX() : -1;
+    survey.next("ai.rock_survey.choose");
     const auto result=RockExpansionPolicy::choose(w,h,tiles,starts,enemies,reserved,mainBase);
     if(!result.valid())return Coord::Invalid();
     const Coord site(result.x,result.y);
@@ -1807,13 +1863,15 @@ int QuantBot::recentFactoryLossCount() const {
     });
 }
 
-bool QuantBot::manageHarvesterSafety(const Harvester* harvester) {
+bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache* spiceCache) {
     const Uint32 now = getGameCycleCount();
     auto& state = harvesterSafety[harvester->getObjectID()];
     const bool newHarvester = state.lastLocation.isInvalid();
     state.lastLocation = harvester->getLocation();
     if (now < state.nextCheck) return state.controlled;
     state.nextCheck = now + MILLI2CYCLES(2000);
+    AITelemetry::PerformanceScope safetyScope("ai.harvesterSafety",
+        getGameCycleCount(), getHouse()->getHouseID());
     const Coord origin = harvester->getLocation(), destination = harvester->getDestination();
     auto distance = [](Coord a, Coord b) { return std::max(std::abs(a.x-b.x),std::abs(a.y-b.y)); };
     auto danger = [&](Coord p) {
@@ -1895,18 +1953,51 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester) {
             peers.push_back(reserved.isValid() ? reserved
                 : unit->getDestination().isValid() ? unit->getDestination() : unit->getLocation());
         }
-    auto crowdPenalty = [&](Coord candidate) {
-        int result = 0;
-        for (Coord peer : peers) if (distance(candidate,peer)<4) result += (4-distance(candidate,peer))*12;
-        return result;
-    };
+    // crowdPenalty summed over every peer for every safe-spice candidate, and
+    // the candidate sweep below is the whole map. Stamping each peer's 7x7
+    // Chebyshev falloff once makes the query O(1) for the same total: the
+    // addends are the same integers, added in a different order, and integer
+    // addition is commutative, so scores and therefore tie-breaks are
+    // bit-identical. Built here, after peers are gathered, so the reservations
+    // earlier harvesters just wrote into plannedDestination are included
+    // exactly as before; nothing is retained across harvester decisions.
+    DuneCity::ChebyshevWeightField crowdField(3, 12);
+    crowdField.build(peers, getMap().getSizeX(), getMap().getSizeY());
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "harvester.crowd_peers",static_cast<int64_t>(peers.size()),-1,false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "harvester.crowd_cells",static_cast<int64_t>(crowdField.storedCells()),-1,false);
+    auto crowdPenalty = [&](Coord candidate) { return crowdField.at(candidate.x,candidate.y); };
     Coord best = Coord::Invalid();
     int bestScore = std::numeric_limits<int>::max();
     int safeFields = 0, rejectedRoutes = 0;
-    for (int y = 0; y < getMap().getSizeY(); ++y) for (int x = 0; x < getMap().getSizeX(); ++x) {
-        const Coord candidate(x,y);
-        if (!getMap().getTile(x,y)->hasSpice() || danger(candidate)>0
-            || memoryPenalty(candidate)>0 || !harvester->canPass(x,y)) continue;
+    // Spice membership is the only thing shared between the harvesters of one
+    // checkAllUnits() pass; it is a property of the tile, not of a harvester.
+    // Everything that genuinely varies per harvester or changes as earlier
+    // harvesters are ordered — danger, remembered unsafe fields, passability,
+    // routes, peers and their plannedDestination reservations — is still
+    // evaluated per candidate below, in the original order. The list is built in
+    // the same y-then-x order the scan used, and holds exactly the tiles the
+    // scan's hasSpice() test admitted, so the visit order, the remaining
+    // predicate order and the safeFields/rejectedRoutes counts are unchanged.
+    SpiceFieldCache localSpice;
+    SpiceFieldCache& spice = spiceCache ? *spiceCache : localSpice;
+    if (!spice.valid) {
+        AITelemetry::PerformanceScope spiceScope("ai.harvester.spice_list",
+            getGameCycleCount(), getHouse()->getHouseID());
+        spice.tiles.clear();
+        for (int y = 0; y < getMap().getSizeY(); ++y) for (int x = 0; x < getMap().getSizeX(); ++x)
+            if (getMap().getTile(x,y)->hasSpice()) spice.tiles.emplace_back(x,y);
+        spice.valid = true;
+        ++spice.builds;
+    } else {
+        ++spice.hits;
+    }
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "harvester.spice_tiles",static_cast<int64_t>(spice.tiles.size()),-1,false);
+    for (const Coord candidate : spice.tiles) {
+        if (danger(candidate)>0 || memoryPenalty(candidate)>0
+            || !harvester->canPass(candidate.x,candidate.y)) continue;
         ++safeFields;
         const int score = distance(origin,candidate)*3 + crowdPenalty(candidate);
         if (score >= bestScore) continue;
@@ -1994,6 +2085,52 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester) {
     return true;
 }
 
+int QuantBot::militaryUnitValue() const {
+    // The original inline sum, unchanged: every unit type except carryalls,
+    // harvesters, MCVs and sandworms, counted at this house's price. Shared by
+    // the legacy combined pass and the phased build phase so both see the same
+    // figure computed the same way, live, with no cached or latched value.
+    int militaryValue = 0;
+    if (currentGame) {
+        for (Uint32 i = Unit_FirstID; i <= Unit_LastID; i++) {
+            if (i != Unit_Carryall
+                && i != Unit_Harvester
+                && i != Unit_MCV
+                && i != Unit_Sandworm) {
+                    militaryValue += getHouse()->getNumItems(i) * currentGame->objectData.data[i][getHouse()->getHouseID()].price;
+            }
+        }
+    }
+    return militaryValue;
+}
+
+void QuantBot::invalidateAnchorField() {
+    // Called only where this house actually changes tile ownership. The next
+    // placement search inside the same build() rebuilds the field from the live
+    // map, so no search can ever read ownership from before its own mutation.
+    if (!buildAnchors.active) return;
+    if (buildAnchors.valid) ++buildAnchors.invalidations;
+    buildAnchors.valid = false;
+}
+
+void QuantBot::buildAnchorField(DuneCity::BoxAnyField& field) const {
+    // Map::isWithinBuildRange() is a box dilation of this house's owned tiles
+    // evaluated pointwise: BUILDRANGE is 2, so each query scans 5x5 tiles and
+    // stops at the first owned one. The marker here is exactly that scan's
+    // per-tile test, isConstructionAnchor(tile->getOwner(), houseID), and
+    // BoxAnyField clips its queries to the map just as getTile_internal() skips
+    // off-map probes — so anyWithin(x,y,BUILDRANGE) answers the same question
+    // for every coordinate, map edges included. Tile ownership is not mutated
+    // by the callers below, so one field per call is a snapshot of the same
+    // state every individual probe would have read.
+    const int houseID=getHouse()->getHouseID();
+    const Map& map=getMap();
+    field.build(map.getSizeX(),map.getSizeY(),[&](int x,int y) {
+        const auto* tile=map.getTile(x,y);
+        return tile && DuneCity::isConstructionAnchor(tile->getOwner(),houseID);
+    });
+}
+
 Uint32 QuantBot::mainConstructionYardID() const {
     // The oldest surviving yard anchors the main base and already sits inside
     // its defence.
@@ -2006,18 +2143,51 @@ Uint32 QuantBot::mainConstructionYardID() const {
     return mainYard;
 }
 
-int QuantBot::expansionTurretsMissing(const StructureBase* yard, bool planned) const {
-    if (!yard || yard->getOwner()!=getHouse() || yard->getHealth()<=0
-        || !isExpansionYard(yard->getItemID(),yard->getObjectID(),mainConstructionYardID())) return 0;
-    const int radius=std::max(1,currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange-1);
+QuantBot::ExpansionCoverFacts QuantBot::collectExpansionCoverFacts() const {
+    // One pass yields both facts the cover test needs. The main-yard rule is
+    // mainConstructionYardID()'s: the lowest object id among living owned
+    // yards. The turret list keeps structure-list order, so the coverage
+    // count below is the same count the per-call walk produced.
+    ExpansionCoverFacts facts;
+    facts.turretRadius =
+        std::max(1,currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange-1);
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        const auto item = structure->getItemID();
+        if (item == Structure_ConstructionYard
+            && (facts.mainYardID == NONE_ID || structure->getObjectID() < facts.mainYardID))
+            facts.mainYardID = structure->getObjectID();
+        if (item == Structure_RocketTurret) facts.turrets.push_back(structure->getLocation());
+    }
+    return facts;
+}
+
+int QuantBot::expansionTurretsMissing(const StructureBase* yard, bool planned,
+                                      const ExpansionCoverFacts& facts) const {
+    // Reject anything that is not a construction yard before touching the
+    // main-yard anchor: isExpansionYard() already returns false for every
+    // other item, so this returns 0 on exactly the same inputs as before
+    // while skipping the structure-list walk for the whole base.
+    if (!yard || yard->getItemID()!=Structure_ConstructionYard
+        || yard->getOwner()!=getHouse() || yard->getHealth()<=0
+        || !isExpansionYard(yard->getItemID(),yard->getObjectID(),facts.mainYardID)) return 0;
+    const int radius=facts.turretRadius;
     int coverage=0;
-    for (const auto* turret:getStructureList())
-        if (turret->getOwner()==getHouse() && turret->getHealth()>0 && turret->getItemID()==Structure_RocketTurret
-            && RocketTurretPolicy::coversBuilding(turret->getLocation(),yard->getLocation(),yard->getStructureSize(),radius)) ++coverage;
+    for (const auto& turret : facts.turrets)
+        if (RocketTurretPolicy::coversBuilding(turret,yard->getLocation(),yard->getStructureSize(),radius)) ++coverage;
     if (planned) for (const auto& entry:reservedStructures)
         if (entry.second.item==Structure_RocketTurret
             && RocketTurretPolicy::coversBuilding(entry.second.location,yard->getLocation(),yard->getStructureSize(),radius)) ++coverage;
     return std::max(0,3-coverage);
+}
+
+int QuantBot::expansionTurretsMissing(const StructureBase* yard, bool planned) const {
+    // Single-shot callers keep the original signature and behaviour. The
+    // original guard's cheap rejections run first, so an unowned or destroyed
+    // structure still costs nothing and never triggers a structure-list walk.
+    if (!yard || yard->getItemID()!=Structure_ConstructionYard
+        || yard->getOwner()!=getHouse() || yard->getHealth()<=0) return 0;
+    return expansionTurretsMissing(yard,planned,collectExpansionCoverFacts());
 }
 
 bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
@@ -2045,8 +2215,12 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
                 && getHouse()->getNumItems(item) == 0) return false;
     if (!data[Structure_RocketTurret][house].enabled
         || data[Structure_RocketTurret][house].techLevel > currentGame->techLevel) return true;
+    // The anchor and the turret set are the same for every candidate in this
+    // reduction, so they are collected once instead of per structure. The
+    // per-yard predicate and the short-circuit order are unchanged.
+    const ExpansionCoverFacts facts = collectExpansionCoverFacts();
     for (const auto* yard:getStructureList())
-        if (expansionTurretsMissing(yard,false)>0) return false;
+        if (expansionTurretsMissing(yard,false,facts)>0) return false;
     return true;
 }
 
@@ -2364,6 +2538,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     auto prepareCityDistances = [&] {
         if (cityDistancesReady) return;
         cityDistancesReady=true;
+        AITelemetry::PerformanceScope fieldScope("ai.placement.distance_fields",
+            getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
 
         auto& cache=placementDistances;
         std::vector<PlacementDistanceCache::Contribution> key;
@@ -2426,8 +2602,40 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool roadingFallbackItem = currentGame->isCitySimEnabled() && (itemIsBuilder || factoryPlacement);
     bool roadingRelaxed = false;
 
+    // Owned-tile field for the build-range gate. This point is only reached on a
+    // placementCache miss. Inside build() the field is shared across that call's
+    // searches and rebuilt only where this house actually changes ownership;
+    // outside build() each search scans fresh, exactly as before. Reservations
+    // and planningBuilder do not move an owned tile, so they do not invalidate.
+    const bool gateByBuildRange = itemID != Structure_ConstructionYard;
+    DuneCity::BoxAnyField localAnchorField;
+    const DuneCity::BoxAnyField* buildRangeField = nullptr;
+    size_t buildRangeSkipped = 0;
+    if (gateByBuildRange) {
+        if (buildAnchors.active) {
+            if (!buildAnchors.valid) {
+                AITelemetry::PerformanceScope anchorScope("ai.placement.anchor_field",
+                    getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
+                buildAnchorField(buildAnchors.field);
+                buildAnchors.valid = true;
+                ++buildAnchors.builds;
+            } else {
+                ++buildAnchors.hits;
+            }
+            buildRangeField = &buildAnchors.field;
+        } else {
+            AITelemetry::PerformanceScope anchorScope("ai.placement.anchor_field",
+                getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
+            buildAnchorField(localAnchorField);
+            ++buildAnchors.builds;
+            buildRangeField = &localAnchorField;
+        }
+    }
+
     // Keep the fast ordinary search, but never treat its averaged base centre
     // as the limit of a spread-out city's buildable territory.
+    AITelemetry::PerformanceScope candidateScope("ai.placement.candidates",
+        getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
     for (int searchPass=0; searchPass<3; ++searchPass) {
         if (searchPass==1) {
             if (bestLocation.isValid() && itemID != Structure_NuclearPlant) break;
@@ -2442,6 +2650,23 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 		for (int placeLocationY = startY; placeLocationY <= endY; placeLocationY++) {
 			if (!relaxRoading && !CityPlacementPolicy::inPlacementSearchPass(placeLocationX,placeLocationY,
                 baseCenter.x,baseCenter.y,searchRadius,searchPass)) continue;
+            // Both okayToPlaceStructure() overloads finish with
+            // `return withinBuildRange`, an OR over the footprint of
+            // isWithinBuildRange(), which is itself "any owned tile within
+            // BUILDRANGE". So the whole call can only return true when at least
+            // one anchor lies in the footprint expanded by BUILDRANGE. Where no
+            // anchor does, the call is guaranteed false and is skipped here
+            // instead of re-running a 5x5 ownership probe per footprint tile.
+            // The function is const and has no side effects, so skipping is the
+            // same control flow the false return produced — `candidates` is only
+            // incremented inside the body either way. A construction yard passes
+            // pHouse == nullptr, which makes withinBuildRange unconditionally
+            // true, so the gate must not apply to it.
+            if (gateByBuildRange && !buildRangeField->anyNearFootprint(
+                    placeLocationX, placeLocationY, newSizeX, newSizeY, BUILDRANGE)) {
+                ++buildRangeSkipped;
+                continue;
+            }
             // First check if this location is valid for building
 			if (getMap().okayToPlaceStructure(placeLocationX, placeLocationY, newSizeX, newSizeY,
 				false, (itemID == Structure_ConstructionYard) ? nullptr : getHouse(), false, itemID)) {
@@ -2953,7 +3178,18 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         .set("search_pass",searchPassUsed).set("search_center_x",baseCenter.x).set("search_center_y",baseCenter.y)
         .set("production_plot_rejections",productionPlotRejected)
         .set("reserved_rejections",reservedRejected).set("road_rejections",roadRejected).set("neighbour_rejections",neighbourRejected)
-        .set("ground_access_rejections",accessRejected).set("pollution_rejections",pollutionRejected);
+        .set("ground_access_rejections",accessRejected).set("pollution_rejections",pollutionRejected)
+        .set("build_range_skipped",static_cast<int>(buildRangeSkipped));
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.placement.build_range_skipped",static_cast<int64_t>(buildRangeSkipped),
+        static_cast<int>(itemID),false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.anchor.field_builds",static_cast<int64_t>(buildAnchors.builds),-1,false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.anchor.field_hits",static_cast<int64_t>(buildAnchors.hits),-1,false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.anchor.field_invalidations",static_cast<int64_t>(buildAnchors.invalidations),-1,false);
+    buildAnchors.builds = buildAnchors.hits = buildAnchors.invalidations = 0;
     placementScoreDetails[itemID] = bestQuality;
 	return bestLocation;
 }
@@ -3778,6 +4014,9 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
 
 void QuantBot::build(int militaryValue) {
     AITelemetry::PerformanceScope perfScope("ai.build", getGameCycleCount(), getHouse()->getHouseID());
+    // Shares one owned-tile field across this call's placement searches. The
+    // guard clears it on every exit, so it never outlives this invocation.
+    BuildAnchorScope anchorScope(*this);
     AITelemetry::PerformanceScope phaseScope("ai.build.evaluate",getGameCycleCount(),getHouse()->getHouseID());
     refreshTacticalDanger();
     planningBuilder = NONE_ID;
@@ -8705,6 +8944,8 @@ void QuantBot::build(int militaryValue) {
                                 .set("demand",demand).set("land_value",sim->getLandValueMap().worldGet(z.x,z.y))
                                 .set("density",getMap().getTile(z.x,z.y)->getCityZoneDensity()));
                             itemCount[zone->getItemID()]--;
+                            // Invalidate before mutation, including its callbacks.
+                            invalidateAnchorField();
                             zone->demolish();
                         }
                         traceDecision("redevelopment_committed", AITelemetry::Record().set("builder",planningBuilder)
@@ -9077,6 +9318,9 @@ void QuantBot::build(int militaryValue) {
 						if (location.isValid()) {
 							traceDecision("placement_request", AITelemetry::Record().set("builder", pConstYard->getObjectID())
                                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y));
+                            // Invalidate before placement and its callbacks; a
+                            // failed attempt can conservatively rebuild too.
+                            invalidateAnchorField();
                             const bool placed = doPlaceStructure(pConstYard, location.x, location.y);
                             // A road retry keeps its place ahead of the remaining
                             // queue; do not accidentally consume the next plan.
@@ -10645,6 +10889,10 @@ void QuantBot::retreatAllUnits() {
         if (getHouse() == nullptr) {
             return;
         }
+        // Local to this invocation, built lazily by the first harvester that
+        // actually reaches the candidate sweep, so the 22.6k calls that return
+        // early add no work. Dies with this function; nothing persists.
+        SpiceFieldCache spiceCache;
 
         refreshTacticalDanger();
         releaseLegacyGroundSquad();
@@ -10827,12 +11075,17 @@ void QuantBot::retreatAllUnits() {
                     if (!campaignPermitsStructure(Structure_ConstructionYard)) break;
                     const MCV* pMCV = static_cast<const MCV*>(pUnit);
                     if (pMCV != nullptr) manageMcv(pMCV);
+                    // doDeploy() inside manageMcv() places a construction yard
+                    // immediately, which can cover spice. Conservatively drop the
+                    // shared membership list rather than reason about the
+                    // footprint; deploys are rare and the rebuild is one scan.
+                    if (spiceCache.valid) { spiceCache.valid = false; ++spiceCache.invalidations; }
                 } break;
 
                 case Unit_Harvester: {
                     const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
                     if(pHarvester != nullptr && pHarvester->isActive()) {
-                        if (manageHarvesterSafety(pHarvester)) break;
+                        if (manageHarvesterSafety(pHarvester,&spiceCache)) break;
                         // Existing check for early return with half spice
 						if(getHouse()->getNumItems(Structure_Refinery) < 4
 							&& getHouse()->getCredits() < 1000
@@ -10975,6 +11228,12 @@ void QuantBot::retreatAllUnits() {
             }
         }
     }
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.spice_list.builds",static_cast<int64_t>(spiceCache.builds),-1,false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.spice_list.hits",static_cast<int64_t>(spiceCache.hits),-1,false);
+    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
+        "ai.spice_list.invalidations",static_cast<int64_t>(spiceCache.invalidations),-1,false);
 }
 
 Coord QuantBot::findFinishedRoadSite(const BuilderBase* yard) {

@@ -1602,7 +1602,26 @@ void Game::applySinglePlayerBudgetAdjustment(float avgFps) {
     const double fpsDecreaseThresholdModerate = 58.0;
     const double fpsDecreaseThresholdAggressive = 55.0;
     const double fpsDecreaseThresholdSevere = 50.0;
-    
+
+    // Pathfinding's own cost over the interval — the same measure the raise
+    // branch below already uses to block increases. Reductions now consult it
+    // too, so an AI or city-simulation stall cannot shrink the path budget and
+    // starve unit movement. Single-player only; see kPathReductionFloorMs.
+    const double avgPathfindingMs = (frameTiming.frameCount > 0)
+        ? (frameTiming.pathfindingMs / frameTiming.frameCount)
+        : 0.0;
+    if(PathBudgetSync::shouldHoldBudgetDespiteLowFps(
+           avgFps, avgPathfindingMs, fpsDecreaseThresholdModerate, kPathReductionFloorMs)) {
+        SDL_Log("[PathBudget] Cycle %d: FPS=%.1f low but pathfinding only %.1fms/frame "
+                "(floor %.1fms) - holding budget at %zu, cost is elsewhere",
+                gameCycleCount, avgFps, avgPathfindingMs, kPathReductionFloorMs, negotiatedBudget);
+        logPerformance("[PathBudget] Cycle %d: FPS=%.1f low but pathfinding only %.1fms/frame "
+                "(floor %.1fms) - holding budget at %zu, cost is elsewhere",
+                gameCycleCount, avgFps, avgPathfindingMs, kPathReductionFloorMs, negotiatedBudget);
+        lastBudgetAction = BudgetAction::NONE;
+        return;
+    }
+
     // DROP: Three-tier reduction based on severity
     if(avgFps < fpsDecreaseThresholdSevere && negotiatedBudget > kMinBudget) {
         // Severe lag: massive reduction
@@ -1657,13 +1676,11 @@ void Game::applySinglePlayerBudgetAdjustment(float avgFps) {
         }
         
         const size_t queueDepth = pathRequestQueue.size();
-        
-        // Check average pathfinding time per frame over the interval
-        // Use frameTiming.pathfindingMs (cumulative) not pathfindingMsThisFrame (single frame)
-        const double avgPathfindingMs = (frameTiming.frameCount > 0) 
-            ? (frameTiming.pathfindingMs / frameTiming.frameCount) 
-            : 0.0;
-        
+
+        // avgPathfindingMs is computed once above and shared with the reduction
+        // gate; it is still frameTiming.pathfindingMs (cumulative) averaged over
+        // the interval's frames, not a single frame's cost.
+
         // Safety check: don't increase if pathfinding is already eating too much time
         if(avgPathfindingMs > 10.0) {
             SDL_Log("[PathBudget] Cycle %d: FPS=%.1f but pathfinding time too high (%.1fms) - blocking budget increase", 

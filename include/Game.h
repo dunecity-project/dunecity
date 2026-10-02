@@ -1047,6 +1047,11 @@ private:
     static constexpr size_t kDebtCap = 2000;      // Max carry-over tokens — reduced from 10k to limit burst spikes on large maps
     
     static constexpr int kBudgetCheckInterval = 375;  // Check every 375 cycles (~7.5s at 50Hz)
+
+    /// Single-player reductions require pathfinding itself to cost this much
+    /// per frame, so AI/city stalls cannot steal tokens from unit movement.
+    /// Multiplayer retains its existing host-negotiated policy.
+    static constexpr double kPathReductionFloorMs = 4.0;
     
     // Track last budget action to prevent oscillation (deterministic, synced state)
     enum class BudgetAction { NONE, INCREASED, DECREASED };

@@ -27,6 +27,7 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
+        QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
         QuantBotCityCampaignPolicyTestCase.cpp
         AIDecisionLogTestCase.cpp

@@ -154,3 +154,45 @@ TEST_CASE("PathBudget: Apply cycle is next interval boundary", "[pathbudget][tim
     REQUIRE(calculateApplyCycle(750, kBudgetCheckInterval) == 1125);
     REQUIRE(calculateApplyCycle(0, kBudgetCheckInterval) == 375);
 }
+
+// =============================================================================
+// Single-player reduction gate: an unrelated stall must not shrink the budget
+// =============================================================================
+
+// Mirrors Game::applySinglePlayerBudgetAdjustment / Game::kPathReductionFloorMs.
+static constexpr double kLowFpsThreshold   = 58.0;
+static constexpr double kReductionFloorMs  = 4.0;
+
+TEST_CASE("PathBudget: AI stall with cheap pathfinding holds the budget", "[pathbudget][reduction]") {
+    // The measured 1.0.793 stutter episode: 34.5 and 53.9 FPS windows whose cost
+    // was AI (9.0ms/frame) while pathfinding averaged 1.49ms/frame. Every one of
+    // these reduced the budget before the gate existed; none may now.
+    REQUIRE(shouldHoldBudgetDespiteLowFps(34.5, 1.49, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE(shouldHoldBudgetDespiteLowFps(53.9, 1.49, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE(shouldHoldBudgetDespiteLowFps(5.4,  0.80, kLowFpsThreshold, kReductionFloorMs));
+    // A city-effects stall looks identical from the frame rate alone.
+    REQUIRE(shouldHoldBudgetDespiteLowFps(45.0, 0.00, kLowFpsThreshold, kReductionFloorMs));
+}
+
+TEST_CASE("PathBudget: genuine path overload still reduces", "[pathbudget][reduction]") {
+    // Pathfinding itself over the floor: the reduction tiers must still run, at
+    // every severity, so the existing protection against path overload survives.
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(49.0, 12.0, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(54.0,  8.0, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(57.0,  4.0, kLowFpsThreshold, kReductionFloorMs));
+    // Exactly at the floor counts as costly: the gate is a strict "below floor".
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(30.0, kReductionFloorMs,
+                                                kLowFpsThreshold, kReductionFloorMs));
+}
+
+TEST_CASE("PathBudget: recovery and healthy frame rates are unaffected", "[pathbudget][reduction]") {
+    // At or above the reduction threshold the gate never engages, so the raise
+    // branch and its own pathfinding ceiling keep deciding as before.
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(58.0, 0.5, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(60.0, 0.5, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(59.5, 12.0, kLowFpsThreshold, kReductionFloorMs));
+    // Recovery: once an AI stall clears, a still-low frame rate caused by real
+    // path load reduces again rather than staying held.
+    REQUIRE(shouldHoldBudgetDespiteLowFps(50.0, 3.9, kLowFpsThreshold, kReductionFloorMs));
+    REQUIRE_FALSE(shouldHoldBudgetDespiteLowFps(50.0, 4.1, kLowFpsThreshold, kReductionFloorMs));
+}

@@ -17,6 +17,14 @@
 #include <dunecity/CityEffects.h>
 #include <data.h>
 
+#include <dunecity/SpatialFields.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <map>
+#include <utility>
+#include <vector>
+
 using namespace DuneCity;
 
 // --- Roles & max level -------------------------------------------------------
@@ -1515,4 +1523,325 @@ TEST_CASE("Building condition lowers land value and repairs restore it", "[city-
     REQUIRE(conditionLandValue(200,0,100)==1);
     REQUIRE(conditionLandValue(0,50,100)==0);
     REQUIRE(conditionLandValue(200,110,100)==200);
+}
+
+// ============================================================================
+// Hostile land-value penalty: spatial index must equal the old nested loop
+// ============================================================================
+//
+// runEffectsScans() used to compare every active building against every active
+// unit. 1.0.794 buckets attack-capable units into cells and visits only the
+// cells that can reach each footprint. hostileLandValuePenalty() is zero beyond
+// a squared separation of 16, so skipping further pairs cannot change the
+// result — but the bucketing must not lose units, and in particular must not
+// lose units standing off the map edge, which the original loop (having no
+// bounds test at all) did penalise. The two loops below mirror the shipped
+// before/after geometry, including the clamped bucket assignment.
+namespace {
+
+struct RefBuilding { int x, y, w, h, team; };
+struct RefUnit     { int x, y, team; bool active, canAttack, visibleToEnemy; };
+
+constexpr int kRefBlock = 2;    // CityMapLayer default block size
+constexpr int kRefReach = 4;    // floor(sqrt(16)), as in CityEffectsRuntime
+constexpr int kRefCell  = 8;    // bucket size, as in CityEffectsRuntime
+
+bool refVisible(const RefUnit& unit, int team) {
+    return unit.team == team ? true : unit.visibleToEnemy;
+}
+
+int refPenaltyFor(const RefBuilding& b, const RefUnit& u) {
+    const int dx = std::max({b.x - u.x, 0, u.x - (b.x + b.w - 1)});
+    const int dy = std::max({b.y - u.y, 0, u.y - (b.y + b.h - 1)});
+    return hostileLandValuePenalty(dx*dx + dy*dy);
+}
+
+void stamp(std::map<std::pair<int,int>,int>& out, const RefBuilding& b,
+           int penalty, int mapW, int mapH) {
+    for (int y = b.y; y < b.y + b.h; ++y)
+        for (int x = b.x; x < b.x + b.w; ++x) {
+            if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
+            const auto key = std::make_pair(x / kRefBlock, y / kRefBlock);
+            out[key] = std::max(out[key], penalty);
+        }
+}
+
+// The pre-1.0.794 algorithm: full cross product, max() per covered block.
+std::map<std::pair<int,int>,int> referenceLoop(
+        int mapW, int mapH,
+        const std::vector<RefBuilding>& buildings, const std::vector<RefUnit>& units) {
+    std::map<std::pair<int,int>,int> out;
+    for (const auto& b : buildings)
+        for (const auto& u : units) {
+            if (!u.active || !u.canAttack || u.team == b.team || !refVisible(u, b.team)) continue;
+            const int penalty = refPenaltyFor(b, u);
+            if (penalty) stamp(out, b, penalty, mapW, mapH);
+        }
+    return out;
+}
+
+// The 1.0.794 algorithm: clamped buckets plus reaching-cell queries.
+std::map<std::pair<int,int>,int> indexedLoop(
+        int mapW, int mapH,
+        const std::vector<RefBuilding>& buildings, const std::vector<RefUnit>& units) {
+    const int gridW = std::max(1, (mapW + kRefCell - 1) / kRefCell);
+    const int gridH = std::max(1, (mapH + kRefCell - 1) / kRefCell);
+    std::vector<std::vector<const RefUnit*>> cells(static_cast<size_t>(gridW) * gridH);
+    for (const auto& u : units) {
+        if (!u.active || !u.canAttack) continue;
+        const int cx = std::min(gridW - 1, std::max(0, u.x) / kRefCell);
+        const int cy = std::min(gridH - 1, std::max(0, u.y) / kRefCell);
+        cells[static_cast<size_t>(cy) * gridW + cx].push_back(&u);
+    }
+    std::map<std::pair<int,int>,int> out;
+    for (const auto& b : buildings) {
+        const int cellX0 = std::max(0, b.x - kRefReach) / kRefCell;
+        const int cellY0 = std::max(0, b.y - kRefReach) / kRefCell;
+        const int cellX1 = std::min(gridW - 1, std::max(0, b.x + b.w - 1 + kRefReach) / kRefCell);
+        const int cellY1 = std::min(gridH - 1, std::max(0, b.y + b.h - 1 + kRefReach) / kRefCell);
+        std::vector<const RefUnit*> nearby;
+        for (int cy = cellY0; cy <= cellY1; ++cy)
+            for (int cx = cellX0; cx <= cellX1; ++cx) {
+                const auto& bucket = cells[static_cast<size_t>(cy) * gridW + cx];
+                nearby.insert(nearby.end(), bucket.begin(), bucket.end());
+            }
+        for (const RefUnit* u : nearby) {
+            if (u->team == b.team || !refVisible(*u, b.team)) continue;
+            const int penalty = refPenaltyFor(b, *u);
+            if (penalty) stamp(out, b, penalty, mapW, mapH);
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("Hostile penalty: radius boundary matches the distance formula", "[city-effects][hostile]") {
+    REQUIRE(hostileLandValuePenalty(0)  == 80);
+    REQUIRE(hostileLandValuePenalty(16) == 16);
+    REQUIRE(hostileLandValuePenalty(17) == 0);
+    REQUIRE(hostileLandValuePenalty(32) == 0);
+    // A unit exactly kRefReach tiles away on one axis still contributes, which
+    // is why the query box is widened by kRefReach and not by less.
+    const RefBuilding b{10,10,2,2,0};
+    REQUIRE(refPenaltyFor(b, RefUnit{10 - kRefReach,10,1,true,true,true}) > 0);
+    REQUIRE(refPenaltyFor(b, RefUnit{10 - kRefReach - 1,10,1,true,true,true}) == 0);
+}
+
+TEST_CASE("Hostile penalty: off-map and edge units are retained", "[city-effects][hostile]") {
+    const int mapW = 24, mapH = 24;
+    const std::vector<RefBuilding> buildings{
+        {0,0,2,2,0},            // top-left corner
+        {mapW-2,mapH-2,2,2,0},  // bottom-right corner
+        {12,12,2,2,0},          // interior, must stay unaffected by off-map units
+    };
+    const std::vector<RefUnit> units{
+        {-1,0,1,true,true,true},              // off-map left, one tile from (0,0)
+        {0,-1,1,true,true,true},              // off-map top
+        {-1,-1,1,true,true,true},             // off-map diagonal
+        {-4,-4,1,true,true,true},             // off-map, out of reach
+        {mapW,mapH-1,1,true,true,true},       // off-map right of the far corner
+        {mapW+3,mapH+3,1,true,true,true},     // far off-map, out of reach
+        {-50,-50,1,true,true,true},           // very far off-map, must score zero
+    };
+    const auto reference = referenceLoop(mapW,mapH,buildings,units);
+    REQUIRE_FALSE(reference.empty());          // the corner really is penalised
+    REQUIRE(indexedLoop(mapW,mapH,buildings,units) == reference);
+}
+
+TEST_CASE("Hostile penalty: team and visibility filters are unchanged", "[city-effects][hostile]") {
+    const int mapW = 24, mapH = 24;
+    const std::vector<RefBuilding> buildings{{10,10,2,2,0},{14,10,2,2,1}};
+    const std::vector<RefUnit> units{
+        {11,11,0,true,true,true},    // same team as building 0: never penalises it
+        {11,11,1,true,true,true},    // hostile and visible
+        {12,11,1,true,true,false},   // hostile but invisible to team 0
+        {12,12,1,false,true,true},   // inactive
+        {12,12,1,true,false,true},   // cannot attack
+    };
+    const auto reference = referenceLoop(mapW,mapH,buildings,units);
+    REQUIRE(indexedLoop(mapW,mapH,buildings,units) == reference);
+}
+
+// ============================================================================
+// SpatialFields: the production helpers, against the loops they replace
+// ============================================================================
+//
+// These exercise include/dunecity/SpatialFields.h — the same code the engine
+// runs — rather than a copy of the algorithm, so a divergence here is a real
+// divergence in the game.
+namespace {
+
+struct PlainCoord { int x, y; };
+
+// The loop ChebyshevWeightField replaces, verbatim from manageHarvesterSafety:
+//   for (peer : peers) if (cheb(c,peer) < 4) sum += (4 - cheb(c,peer)) * 12;
+int bruteCrowdPenalty(const std::vector<PlainCoord>& peers, int x, int y,
+                      int radius, int weight) {
+    int sum = 0;
+    for (const auto& peer : peers) {
+        const int d = std::max(std::abs(x - peer.x), std::abs(y - peer.y));
+        if (d < radius + 1) sum += (radius + 1 - d) * weight;
+    }
+    return sum;
+}
+
+// The probe BoxAnyField replaces, verbatim from Map::isWithinBuildRange():
+// any marked tile in the (2R+1)^2 square, off-map probes simply skipped.
+bool bruteAnyWithin(const std::vector<std::vector<bool>>& marked,
+                    int x, int y, int radius) {
+    const int h = static_cast<int>(marked.size());
+    const int w = h ? static_cast<int>(marked[0].size()) : 0;
+    for (int i = x - radius; i <= x + radius; ++i)
+        for (int j = y - radius; j <= y + radius; ++j) {
+            if (i < 0 || j < 0 || i >= w || j >= h) continue;   // getTile_internal == nullptr
+            if (marked[j][i]) return true;
+        }
+    return false;
+}
+
+// The footprint OR that okayToPlaceStructure() performs over its tiles.
+bool bruteAnyNearFootprint(const std::vector<std::vector<bool>>& marked,
+                           int x, int y, int fw, int fh, int radius) {
+    for (int i = x; i < x + fw; ++i)
+        for (int j = y; j < y + fh; ++j)
+            if (bruteAnyWithin(marked, i, j, radius)) return true;
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("ChebyshevWeightField equals the peer loop it replaces", "[spatial-fields][crowd]") {
+    constexpr int radius = 3, weight = 12;   // manageHarvesterSafety's constants
+
+    SECTION("no peers scores zero everywhere") {
+        DuneCity::ChebyshevWeightField field(radius, weight);
+        field.build(std::vector<PlainCoord>{}, 16, 16);
+        for (int y = 0; y < 16; ++y)
+            for (int x = 0; x < 16; ++x) REQUIRE(field.at(x,y) == 0);
+    }
+
+    SECTION("boundary at distance 3 and 4") {
+        const std::vector<PlainCoord> peers{{8,8}};
+        DuneCity::ChebyshevWeightField field(radius, weight);
+        field.build(peers, 20, 20);
+        REQUIRE(field.at(8,8) == 48);     // distance 0 -> (4-0)*12
+        REQUIRE(field.at(11,8) == 12);    // distance 3 -> (4-3)*12, still counted
+        REQUIRE(field.at(12,8) == 0);     // distance 4 -> excluded
+        REQUIRE(field.at(11,11) == 12);   // diagonal distance 3
+        REQUIRE(field.at(12,12) == 0);
+    }
+
+    SECTION("duplicate peers accumulate, as the loop does") {
+        const std::vector<PlainCoord> peers{{5,5},{5,5},{5,5}};
+        DuneCity::ChebyshevWeightField field(radius, weight);
+        field.build(peers, 16, 16);
+        REQUIRE(field.at(5,5) == 3*48);
+        REQUIRE(field.at(5,5) == bruteCrowdPenalty(peers,5,5,radius,weight));
+    }
+
+    SECTION("off-map peers still reach in-map cells near the edge") {
+        const std::vector<PlainCoord> peers{{-1,0},{0,-2},{-3,-3},{17,17}};
+        const int w = 16, h = 16;
+        DuneCity::ChebyshevWeightField field(radius, weight);
+        field.build(peers, w, h);
+        REQUIRE(field.at(0,0) > 0);     // the (-1,0) peer must not be dropped
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+                REQUIRE(field.at(x,y) == bruteCrowdPenalty(peers,x,y,radius,weight));
+    }
+
+    SECTION("random maps and peer sets agree cell for cell") {
+        uint32_t seed = 0xc0ffeeu;
+        auto next = [&](int lo, int hi) {
+            seed = seed*1664525u + 1013904223u;
+            return lo + static_cast<int>((seed >> 16) % static_cast<uint32_t>(hi - lo + 1));
+        };
+        for (int trial = 0; trial < 120; ++trial) {
+            const int w = next(1,23), h = next(1,19);   // includes non-square and 1xN
+            std::vector<PlainCoord> peers;
+            for (int i = 0, n = next(0,12); i < n; ++i)
+                peers.push_back({next(-5,w+5), next(-5,h+5)});
+            DuneCity::ChebyshevWeightField field(radius, weight);
+            field.build(peers, w, h);
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                    REQUIRE(field.at(x,y) == bruteCrowdPenalty(peers,x,y,radius,weight));
+        }
+    }
+}
+
+TEST_CASE("BoxAnyField equals the build-range probe it replaces", "[spatial-fields][buildrange]") {
+    SECTION("single owned tile, radius boundary") {
+        std::vector<std::vector<bool>> marked(12, std::vector<bool>(12,false));
+        marked[6][6] = true;
+        DuneCity::BoxAnyField field;
+        field.build(12,12,[&](int x,int y){ return marked[y][x]; });
+        for (int r = 0; r <= 4; ++r)
+            for (int y = 0; y < 12; ++y)
+                for (int x = 0; x < 12; ++x)
+                    REQUIRE(field.anyWithin(x,y,r) == bruteAnyWithin(marked,x,y,r));
+    }
+
+    SECTION("no owned tiles is always false") {
+        DuneCity::BoxAnyField field;
+        field.build(9,7,[](int,int){ return false; });
+        REQUIRE_FALSE(field.anyWithin(4,3,2));
+        REQUIRE_FALSE(field.anyNearFootprint(0,0,2,2,2));
+    }
+
+    SECTION("every owner, edges, radii and non-square maps") {
+        uint32_t seed = 0x1234abcdu;
+        auto next = [&](int lo, int hi) {
+            seed = seed*1664525u + 1013904223u;
+            return lo + static_cast<int>((seed >> 16) % static_cast<uint32_t>(hi - lo + 1));
+        };
+        for (int trial = 0; trial < 90; ++trial) {
+            const int w = next(1,21), h = next(1,13);
+            const int owners = next(1,4);
+            const int houseID = next(0,owners-1);
+            // Per-tile owner, mirroring isConstructionAnchor(tileOwner, houseID).
+            std::vector<std::vector<bool>> marked(h, std::vector<bool>(w,false));
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                    marked[y][x] = (next(0,owners) % (owners+1)) == houseID;
+            DuneCity::BoxAnyField field;
+            field.build(w,h,[&](int x,int y){ return marked[y][x]; });
+            const int radius = next(0,3);
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                    REQUIRE(field.anyWithin(x,y,radius) == bruteAnyWithin(marked,x,y,radius));
+            // Footprints, including ones hanging off the right/bottom edges.
+            for (int fh = 1; fh <= 3; ++fh)
+                for (int fw = 1; fw <= 3; ++fw)
+                    for (int y = -1; y <= h; ++y)
+                        for (int x = -1; x <= w; ++x)
+                            REQUIRE(field.anyNearFootprint(x,y,fw,fh,radius)
+                                    == bruteAnyNearFootprint(marked,x,y,fw,fh,radius));
+        }
+    }
+}
+
+TEST_CASE("Hostile penalty: dense adversarial sweep matches the old loop", "[city-effects][hostile]") {
+    // Deterministic sweep straddling every edge, with coordinates outside the
+    // map on all four sides and map dimensions that are not cell multiples.
+    const int mapW = 33, mapH = 17;
+    uint32_t seed = 0x5eed1234u;
+    auto next = [&](int lo, int hi) {
+        seed = seed * 1664525u + 1013904223u;
+        return lo + static_cast<int>((seed >> 16) % static_cast<uint32_t>(hi - lo + 1));
+    };
+    for (int trial = 0; trial < 200; ++trial) {
+        std::vector<RefBuilding> buildings;
+        for (int i = 0, n = next(1,6); i < n; ++i) {
+            const int w = next(1,3), h = next(1,3);
+            buildings.push_back({next(0,mapW-w), next(0,mapH-h), w, h, next(0,1)});
+        }
+        std::vector<RefUnit> units;
+        for (int i = 0, n = next(1,20); i < n; ++i)
+            units.push_back({next(-6,mapW+6), next(-6,mapH+6), next(0,1),
+                             next(0,9) > 0, next(0,9) > 0, next(0,3) > 0});
+        REQUIRE(indexedLoop(mapW,mapH,buildings,units)
+                == referenceLoop(mapW,mapH,buildings,units));
+    }
 }

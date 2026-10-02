@@ -1,3 +1,76 @@
+## 2026-10-02 — AI work phasing and stutter fixes (local 1.0.794)
+
+The live MBA capture showed AI and city simulation causing long frames while
+pathfinding averaged only 1.49ms/frame. Low FPS also reduced the single-player
+path budget to 5000 tokens, increasing queued paths and movement pauses.
+
+### Final implementation
+
+- Custom single-player QuantBot unit management and building planning run on
+  separate fixed simulation phases, 25 cycles apart, each retaining its original
+  50-cycle cadence. House phases are distributed over the interval: houses 0 and
+  4 are now 16 cycles apart instead of 4. The entire build timer action moves to
+  the building phase, including decrement and reset; military value is evaluated
+  from the live world. No frame clock, worker completion, pending cursor or new
+  serialized state determines this schedule.
+- Phasing is excluded for network launches, including loading a CustomGame save
+  into LoadMultiplayer. Campaign, skirmish and multiplayer retain the original
+  AI timing. Custom single-player decisions now occur at different cycles and
+  can change the match trajectory; this is an intentional timing change.
+- Building searches skip candidates outside the exact construction range using
+  a summed-area ownership field. One lazily built field serves a build invocation
+  and is invalidated before placement/demolition, including their callbacks.
+  An RAII guard clears it on every exit. Reservations and builder changes still
+  participate in the original checks; full-map scoring and tie order remain.
+- Harvester crowding uses the exact integer falloff stamped into a spatial field.
+  An ordered spice list is shared only within one unit-management invocation.
+  Passability, danger, unsafe-field memory and other harvesters' reservations are
+  checked live. MCV handling invalidates spice membership conservatively.
+- Expansion cover gathers the main-yard and living turret facts once. Both
+  defence gates around the rock survey remain. The survey uses the same exact
+  ownership field instead of repeated neighborhood scans.
+- Hostile land-value penalties use a spatial index with the original visibility,
+  team and distance checks. Off-map units are retained in edge buckets. Strongest
+  penalty accumulation remains a maximum, with no changed city outcome.
+- Single-player FPS-driven path-budget reductions require pathfinding itself to
+  average at least 4ms/frame. This prevents unrelated stalls starving movement.
+  The existing path worker pool and multiplayer budget negotiation remain.
+- Diagnostic scopes/work counts distinguish candidate searches, field builds,
+  unit/build phases and city effect subphases. Future ownership or spice mutations
+  added inside these AI invocations must invalidate their scoped caches.
+
+### Validation and measurements
+
+Same immutable interesting.dls, 5000 engine cycles on the local native build:
+
+| Build | Total CPU time | 99th-percentile cycle | Maximum cycle |
+|---|---:|---:|---:|
+| Installed 1.0.793 baseline | 43.25s | 159.60ms | 3094.73ms |
+| 1.0.794 pure optimizations | 34.63s | 88.96ms | 942.06ms |
+| 1.0.794 with SP phasing (root final source) | 32.37s | 74.68ms | 664.54ms |
+
+These are headless replay CPU timings, not MBA FPS or a guarantee of hitch-free
+rendering. Phasing changes the trajectory, so its throughput delta also reflects
+different gameplay. Warm per-house peaks remain (183ms unit work, 127ms building
+work in the sampled replay); city effects reached 45.5ms. Cold unit planning
+still reached 703ms immediately after load. No win-rate balance study was run.
+
+Before adding phasing, all 51 checkpoints matched 1.0.793 and the complete save
+differed only in its version byte at offset26. After phasing, one versus four path
+workers matched all 51 new checkpoints and the complete same-version save.
+The existing 9850 save loads; save9850, protocol43 and observerv6 remain.
+Scheduler tests cover cadence, real production timer resets, frame chunking and
+all network launch markers. Spatial field tests compare the production helpers
+against brute-force references, including off-map sources and map edges.
+
+Root final dependency audit and native build passed. Full CTest passed 45/45
+(543.50s). The final-source 5000-cycle replay matched all phased-reference
+checkpoints and saved state. The ARM64 1.0.794 portable app passed deep/strict
+signature verification, all 36 Mach-O dependency audits, and packaged SDL
+initialization/hidden-window rendering; no external non-system loads remain.
+No push or public release. Evidence is in ../outputs/stutter-ai-implementation-794/.
+
+
 ## 2026-10-02 — Performance build installed on the MBA (1.0.793)
 
 At the user's request, installed the tested e8fab5ec performance build at

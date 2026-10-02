@@ -177,7 +177,26 @@ inline bool isAcceptableBudgetOrder(
     return applyCycle <= currentCycle + headroom;
 }
 
+/// Should a single-player FPS-driven budget reduction be suppressed?
+///
+/// Low FPS caused by AI or city simulation must not starve unit movement.
+/// Require pathfinding's own average cost to reach \a reductionFloorMs before
+/// reducing its budget. Called only by the single-player adjustment path;
+/// multiplayer continues to use the existing host negotiation.
+inline bool shouldHoldBudgetDespiteLowFps(
+    double avgFps,
+    double avgPathfindingMs,
+    double lowFpsThreshold,
+    double reductionFloorMs
+) {
+    // Only a frame rate the reduction tiers would actually have acted on is
+    // held; anything at or above the threshold was never a reduction candidate.
+    if(avgFps >= lowFpsThreshold) {
+        return false;
+    }
+    return avgPathfindingMs < reductionFloorMs;
+}
+
 } // namespace PathBudgetSync
 
 #endif // PATHBUDGETSYNC_H
-
