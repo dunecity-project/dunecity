@@ -99,7 +99,12 @@
 //             so peers on version 39 would diverge in both orders and saved state.
 // 41: Shared ordinary damage/splash policy and the MOD6 original-damage rule.
 // Version 42: Original Dune II ordinary ground damage option is active.
-#define NETWORK_PROTOCOL_VERSION            42
+// Version 43: Pathfinding is sliced against a strict per-cycle node budget. The
+//             nodes a cycle spends, the order routes are delivered in and the
+//             suspended-search scheduler are all simulation state, so a peer on
+//             version 42 would hand paths back on different cycles and diverge.
+//             The observer runtime stream is version 6 for the same reason.
+#define NETWORK_PROTOCOL_VERSION            43
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

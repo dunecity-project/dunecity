@@ -2112,6 +2112,22 @@ bool prerequisiteBlocksBuild(const BuilderBase* builder, Uint32 goal, Uint32 pre
     }
     return true;
 }
+
+// Distinct-building counter for one side of a candidate footprint. Placement
+// scoring only asks whether a side touches more than one building, which is
+// exactly "a second, different id arrived"; repeats of one id never count.
+struct SideBuildings {
+    Uint32 first = 0;
+    bool present = false;
+    bool multiple = false;
+
+    void insert(Uint32 buildingID) {
+        if (!present) { first = buildingID; present = true; }
+        else if (buildingID != first) { multiple = true; }
+    }
+
+    bool touchesMultiple() const { return multiple; }
+};
 }
 
 void QuantBot::clearPlacementCache(bool geometryChanged, bool reuseForBuilder) {
@@ -2120,8 +2136,13 @@ void QuantBot::clearPlacementCache(bool geometryChanged, bool reuseForBuilder) {
     // A yard with its own reservation excludes that reservation, so its key
     // differs. All order/geometry changes keep the original invalidation.
     const Uint32 excluded=reservedStructures.count(planningBuilder) ? planningBuilder : NONE_ID;
-    if (geometryChanged || !reuseForBuilder || placementCacheExcludedBuilder!=excluded)
+    if (geometryChanged || !reuseForBuilder || placementCacheExcludedBuilder!=excluded) {
         placementCache.clear();
+        // Correctness does not depend on this: the distance fields re-verify
+        // their inputs on every use. Released here so a finished build pass
+        // does not hold four map-sized fields.
+        placementDistances.invalidate();
+    }
     placementCacheExcludedBuilder=excluded;
     if (geometryChanged) {
         cityServiceSearch.invalidate();
@@ -2318,30 +2339,65 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool newPolluter = DuneCity::getPollutionEmission(itemID, DuneCity::getStructureMaxLevel(itemID)) > 0;
     const bool needCityDistances = citySim && (newSensitive || newPolluter);
     bool cityDistancesReady=false;
-    CityDistanceField nearestResidential(0,0),nearestCommercial(0,0),
-        nearestIndustrial(0,0),pollutionSeparation(0,0);
-    auto addNeighbour = [&](Uint32 item, Coord location, Coord size) {
+    auto& nearestResidential=placementDistances.nearestResidential;
+    auto& nearestCommercial=placementDistances.nearestCommercial;
+    auto& nearestIndustrial=placementDistances.nearestIndustrial;
+    auto& pollutionSeparation=placementDistances.pollutionSeparation;
+    auto addNeighbour = [&](Uint32 item, Coord location, Coord size, bool origins, bool pollution) {
         const auto role = DuneCity::getStructureCityRole(item);
-        if (role == DuneCity::CityRole::Residential) nearestResidential.add(location.x,location.y);
-        if (role == DuneCity::CityRole::Commercial) nearestCommercial.add(location.x,location.y);
-        if (role == DuneCity::CityRole::Industrial) nearestIndustrial.add(location.x,location.y);
+        if (origins) {
+            if (role == DuneCity::CityRole::Residential) nearestResidential.add(location.x,location.y);
+            if (role == DuneCity::CityRole::Commercial) nearestCommercial.add(location.x,location.y);
+            if (role == DuneCity::CityRole::Industrial) nearestIndustrial.add(location.x,location.y);
+        }
+        if (!pollution) return;
         const bool pollutes=DuneCity::getPollutionEmission(item,DuneCity::getStructureMaxLevel(item))>0;
         const bool sensitive=role==DuneCity::CityRole::Residential || role==DuneCity::CityRole::Commercial;
         if ((newSensitive && pollutes) || (newPolluter && sensitive))
             pollutionSeparation.add(location.x,location.y,size.x,size.y);
     };
+    // Collecting the contributions is a walk over a few thousand entries; the
+    // four chamfer builds it feeds are map-sized. So always collect, compare the
+    // list element by element against the cached one, and rebuild only the
+    // fields whose inputs actually moved. The nearest-origin fields are
+    // independent of the planned item, so they survive across itemIDs.
     auto prepareCityDistances = [&] {
         if (cityDistancesReady) return;
         cityDistancesReady=true;
-        nearestResidential=CityDistanceField(mapW,mapH); nearestCommercial=CityDistanceField(mapW,mapH);
-        nearestIndustrial=CityDistanceField(mapW,mapH); pollutionSeparation=CityDistanceField(mapW,mapH);
+
+        auto& cache=placementDistances;
+        std::vector<PlacementDistanceCache::Contribution> key;
         for (const auto* structure : getStructureList())
-            if (structure->getOwner() == getHouse() && structure->getHealth() > 0)
-                addNeighbour(structure->getItemID(), structure->getLocation(), structure->getStructureSize());
+            if (structure->getOwner() == getHouse() && structure->getHealth() > 0) {
+                const auto location=structure->getLocation(), size=structure->getStructureSize();
+                key.push_back({static_cast<Uint32>(structure->getItemID()),location.x,location.y,size.x,size.y});
+            }
         for (const auto& entry : reservedStructures)
-            if (entry.first != planningBuilder)
-                addNeighbour(entry.second.item, entry.second.location, getStructureSize(entry.second.item));
-        nearestResidential.build(); nearestCommercial.build(); nearestIndustrial.build(); pollutionSeparation.build();
+            if (entry.first != planningBuilder) {
+                const auto location=entry.second.location, size=getStructureSize(entry.second.item);
+                key.push_back({static_cast<Uint32>(entry.second.item),location.x,location.y,size.x,size.y});
+            }
+
+        const bool sameInputs = cache.width==mapW && cache.height==mapH && cache.key==key;
+        const bool reuseOrigins = sameInputs && cache.originFieldsValid;
+        const bool reusePollution = sameInputs && cache.pollutionValid
+            && cache.sensitive==newSensitive && cache.polluter==newPolluter;
+        if (reuseOrigins && reusePollution) return;
+
+        if (!reuseOrigins) {
+            nearestResidential=CityDistanceField(mapW,mapH); nearestCommercial=CityDistanceField(mapW,mapH);
+            nearestIndustrial=CityDistanceField(mapW,mapH);
+        }
+        if (!reusePollution) pollutionSeparation=CityDistanceField(mapW,mapH);
+        for (const auto& contribution : key)
+            addNeighbour(contribution.item,Coord(contribution.x,contribution.y),
+                Coord(contribution.w,contribution.h),!reuseOrigins,!reusePollution);
+        if (!reuseOrigins) { nearestResidential.build(); nearestCommercial.build(); nearestIndustrial.build(); ++cache.originBuilds; }
+        if (!reusePollution) { pollutionSeparation.build(); ++cache.pollutionBuilds; }
+
+        cache.key=std::move(key); cache.width=mapW; cache.height=mapH;
+        cache.originFieldsValid=true; cache.pollutionValid=true;
+        cache.sensitive=newSensitive; cache.polluter=newPolluter;
     };
 
 	// Pre-collect spice tile positions for refinery placement (avoids O(N^2) inner loop)
@@ -2438,10 +2494,13 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			// Count adjacent friendly structures and track unique buildings per side
 			int adjacentFriendlyStructureTiles = 0;
 			int oneTileGapFriendlyStructureTiles = 0;
-			std::set<Uint32> northSideBuildings;  // Buildings touching north side
-			std::set<Uint32> southSideBuildings;  // Buildings touching south side
-			std::set<Uint32> eastSideBuildings;   // Buildings touching east side
-			std::set<Uint32> westSideBuildings;   // Buildings touching west side
+			// Only "does this side touch more than one distinct building" is
+			// ever read, so a first id plus a duplicate flag answers it exactly
+			// and keeps four allocations out of the hottest AI loop.
+			SideBuildings northSideBuildings;  // Buildings touching north side
+			SideBuildings southSideBuildings;  // Buildings touching south side
+			SideBuildings eastSideBuildings;   // Buildings touching east side
+			SideBuildings westSideBuildings;   // Buildings touching west side
 
 			// Evaluate surrounding tiles
 			for (int i = placeLocationX - 1; i <= placeLocationEndX; i++) {
@@ -2515,10 +2574,10 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 
 	// Penalty if any single side is touching multiple different buildings (gap-filling)
 	int sidesWithMultipleBuildings = 0;
-	if (northSideBuildings.size() > 1) sidesWithMultipleBuildings++;
-	if (southSideBuildings.size() > 1) sidesWithMultipleBuildings++;
-	if (eastSideBuildings.size() > 1) sidesWithMultipleBuildings++;
-	if (westSideBuildings.size() > 1) sidesWithMultipleBuildings++;
+	if (northSideBuildings.touchesMultiple()) sidesWithMultipleBuildings++;
+	if (southSideBuildings.touchesMultiple()) sidesWithMultipleBuildings++;
+	if (eastSideBuildings.touchesMultiple()) sidesWithMultipleBuildings++;
+	if (westSideBuildings.touchesMultiple()) sidesWithMultipleBuildings++;
 
 	if (sidesWithMultipleBuildings > 0) {
 		// BAD: At least one side is touching multiple buildings (gap-filling)

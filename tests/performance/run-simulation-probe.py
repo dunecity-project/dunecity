@@ -16,12 +16,17 @@ import configparser
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from probe_profile import prepare_profile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--save', type=Path, required=True)
+parser.add_argument('--path-workers', default='', help='DUNECITY_PATH_WORKERS override (1=inline, 2/4/6=pool)')
+parser.add_argument('--worker-delay-us', default='', help='Deterministic per-task worker delay, to reorder completions')
 parser.add_argument('--cycles', type=int, default=2000)
 parser.add_argument('--diagnostics', choices=('on','off'), help='Override the diagnostic logging setting in the private profile')
 parser.add_argument('--render-seconds', type=int, default=0, help='Run the ordinary graphical game loop for this many seconds')
@@ -34,7 +39,13 @@ out.mkdir(parents=True, exist_ok=False)
 subprocess.run(['python3', str(root/'scripts/check-build-deps.py'), str(build)], check=True)
 target = 'bin/dunecity.app/Contents/MacOS/dunecity'
 pending = subprocess.check_output(['ninja','-C',str(build),'-n',target], text=True)
-if 'no work to do' not in pending: raise RuntimeError('Build the native game before probing; objects are stale')
+# CMake's CONFIGURE_DEPENDS glob verification is an always-dirty node, so a dry run
+# always replans the glob check and the regeneration edge and can never report
+# "no work to do". Ninja still plans every other dirty edge in the same run, so
+# ignoring those two lines keeps the guard strict about stale objects.
+regeneration = ('Entering directory', 'Re-checking globbed directories', 'Re-running CMake', 'no work to do')
+stale = [line for line in pending.splitlines() if line.strip() and not any(text in line for text in regeneration)]
+if stale: raise RuntimeError('Build the native game before probing; objects are stale: '+stale[0])
 commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target], text=True).splitlines()
 main = (root/'src/main.cpp').read_text()
 needle = 'int menuResult = MainMenu().showMenu();'
@@ -72,20 +83,16 @@ with (out/'build.log').open('w') as log:
     subprocess.run(compile_source('main.cpp', out/'probe-main.cpp', out/'probe-main.o'), cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 profile = out/'profile'
-profile.mkdir()
-(profile/'Dune City.ini').write_text('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\nFullscreen = false\n[General]\nPlay Intro = false\n')
-if args.profile_from:
-    shutil.copyfile(args.profile_from/'Dune City.ini',profile/'Dune City.ini')
-    for mod in ('dunecity','vanilla'):
-        shutil.copytree(args.profile_from/'mods'/mod,profile/'mods'/mod)
-    (profile/'mods/active_mod.txt').write_text('dunecity')
+active = prepare_profile(profile, args.profile_from)
+if active: print('SIM_PROBE_PROFILE: active_mod='+active)
 if args.diagnostics:
     config=configparser.ConfigParser(interpolation=None,strict=False)
     config.read(profile/'Dune City.ini')
     if not config.has_section('General'): config.add_section('General')
     config.set('General','Diagnostic Logs','true' if args.diagnostics=='on' else 'false')
     with (profile/'Dune City.ini').open('w') as handle: config.write(handle)
-env = dict(os.environ, DUNECITY_USERDIR=str(profile), SIM_PROBE_SAVE=str(args.save.resolve()), SIM_PROBE_CYCLES=str(args.cycles), SIM_PROBE_OUTPUT=str(out/'final.dls'))
+env = dict(os.environ, DUNECITY_USERDIR=str(profile), SIM_PROBE_SAVE=str(args.save.resolve()), SIM_PROBE_CYCLES=str(args.cycles), SIM_PROBE_OUTPUT=str(out/'final.dls'),
+           DUNECITY_PATH_WORKERS=args.path_workers, DUNECITY_PATH_WORKER_DELAY_US=args.worker_delay_us)
 if args.render_seconds:
     env['SIM_PROBE_RENDER_SECONDS']=str(args.render_seconds)
 else:

@@ -1,3 +1,62 @@
+## 2026-10-02 — Bounded pathfinding and worker pool (local 1.0.793)
+
+Implements the live MBA performance review's recommendations 2–4, followed by
+parallel pathfinding. Active corpse tiles avoid full-map timer scans; generation
+stamps avoid full A* scratch resets; build-range checks short-circuit; QuantBot
+reuses four distance fields keyed by their actual contributors and avoids
+unnecessary small set allocations.
+
+A* searches now retain their frontiers across cycles. Fixed batches of four,
+fixed node quotas and fixed result application order enforce the effective
+per-cycle budget. Changed orders/targets/control cancel and fairly requeue a
+search. Unrelated geometry changes retain the frontier to avoid starvation;
+passability refreshes per slice, cached routes validate a near prefix, and
+movement checks every committed step against the live world. Thus paths can
+reflect earlier geometry observations, while current movement stays checked.
+
+Only frontier advancement runs on persistent workers, after main-thread input
+validation and before a mandatory batch barrier. Native default is up to four
+workers, bounded by reported hardware concurrency; startup failure and browser
+builds without pthreads use the same algorithm inline. Developer overrides:
+DUNECITY_PATH_WORKERS=1/2/4 and DUNECITY_PATH_WORKER_DELAY_US. Worker timing never
+selects quotas or gameplay decisions. Ordinary save format remains 9850;
+observer continuation is v6 and network protocol is 43 (peers must match).
+
+Validation: final native Release dependency audits and all 45 CTest targets pass.
+The nine-phase real-engine budget probe passes 3,572,392 assertions, including
+bounded work, changing inputs, geometry churn, parser rejection, save/load,
+teardown and observer continuation. A real serial-host spectator snapshot with
+a dead active unit restores into four workers and matches 60 state and complete
+continuation checks plus the complete gameplay save after documented local-view
+metadata normalization. Real PHP/WebRTC late join transfers four suspended
+searches byte-for-byte and stays in sync through 1,800 cycles. One/two/four-worker
+and delayed runs match 21 checkpoints and complete raw saved bytes over 2,000
+cycles. Standalone ThreadSanitizer covers the actual pool's lifecycle/barriers
+and exception handling; the full engine was not sanitizer-instrumented.
+
+On the MBA, fixed 2,000-cycle simulation cost fell from 21.094 s on 1.0.792 to
+13.223–13.299 s with four workers (about 37% less); the optimized one-worker
+version took 16.113–16.788 s, so threading adds about 19% less cost. These are
+simulation CPU timings, not measured live FPS. A roughly two-second cold AI
+spike remains. The non-pthread web branch compiles in isolation; a full Wasm
+build remains unverified because the local Emscripten toolchain lacks Binaryen.
+
+Final 1.0.793 MBA check: the default worker setting took 13.746 s on repeat,
+versus 16.403 s with one worker (about 16% less), and the explicit four-worker
+repeat took 14.601 s. All 21 checkpoints and complete raw saves match across
+these final controls; compared with the earlier build, the save differs only
+in its recorded version byte (offset 26, 792 to 793). The first candidate run
+was a slower 25.889 s outlier, so timings under live desktop load vary; the
+repeat default is about 35% below the original 21.094 s baseline.
+
+Build: build/bin/dunecity.app, private development bundle using Homebrew
+libraries. MBA private test copy: /tmp/dune-performance-test-20261002/candidate-1.0.793,
+with an isolated profile and Launch DuneCity Test.command. The installed
+/Applications/dunecity.app stays at 1.0.792; no user profile was changed and
+nothing was pushed or published. Full evidence is outside the checkout at
+../outputs/dune-performance-implementation/; final-report.md supersedes the
+worker's earlier phase2-results.md checkpoint blockers.
+
 ## 2026-09-29 — Original Dune II damage option (local 1.0.792)
 
 User resolved the historical choice: checked means original Dune II/Dynasty

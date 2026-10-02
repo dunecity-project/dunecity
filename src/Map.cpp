@@ -70,6 +70,47 @@ void Map::load(InputStream& stream) {
         tile.load(stream);
 
     init_tile_location();
+    rebuildActiveDeadUnitTiles();
+}
+
+void Map::registerDeadUnitTile(Tile& tile) {
+    if (tile.isDeadUnitRegistered()) return;
+
+    tile.setDeadUnitRegistered(true);
+    activeDeadUnitTiles.push_back(static_cast<Uint32>(tile_index(tile.location.x, tile.location.y)));
+}
+
+void Map::updateActiveDeadUnitTiles() {
+    // Tile::update() only ages this tile's own timers, so the order of the
+    // list cannot affect the result; it is kept stable anyway. Tiles emptied
+    // by clearTerrain()/setRoad() are simply dropped on the pass that sees them.
+    size_t kept = 0;
+    for (size_t i = 0; i < activeDeadUnitTiles.size(); ++i) {
+        const Uint32 index = activeDeadUnitTiles[i];
+        Tile& tile = tiles[index];
+
+        tile.update();
+
+        if (tile.hasDeadUnits()) {
+            activeDeadUnitTiles[kept++] = index;
+        } else {
+            tile.setDeadUnitRegistered(false);
+        }
+    }
+
+    activeDeadUnitTiles.resize(kept);
+}
+
+void Map::rebuildActiveDeadUnitTiles() {
+    activeDeadUnitTiles.clear();
+
+    for (size_t index = 0; index < tiles.size(); ++index) {
+        tiles[index].setDeadUnitRegistered(false);
+        if (tiles[index].hasDeadUnits()) {
+            tiles[index].setDeadUnitRegistered(true);
+            activeDeadUnitTiles.push_back(static_cast<Uint32>(index));
+        }
+    }
 }
 
 void Map::save(OutputStream& stream) const {
@@ -473,7 +514,10 @@ bool Map::okayToPlaceStructure(int x, int y, int buildingSizeX, int buildingSize
                 return false;
             }
 
-            if((pHouse == nullptr) || isWithinBuildRange(i, j, pHouse)) {
+            // isWithinBuildRange is a pure predicate and the flag is an OR over
+            // the footprint, so once it is set the remaining probes cannot
+            // change the answer. Every per-tile validity check above still runs.
+            if(!withinBuildRange && ((pHouse == nullptr) || isWithinBuildRange(i, j, pHouse))) {
                 withinBuildRange = true;
             }
         }
@@ -516,7 +560,9 @@ bool Map::okayToPlaceStructure(int x, int y, int buildingSizeX, int buildingSize
                 anchoredTiles++;
             }
 
-            if((pHouse == nullptr) || isWithinBuildRange(i, j, pHouse)) {
+            // Same short-circuit as the ordinary overload: the terrain gate and
+            // the anchor count above still run for every footprint tile.
+            if(!withinBuildRange && ((pHouse == nullptr) || isWithinBuildRange(i, j, pHouse))) {
                 withinBuildRange = true;
             }
         }

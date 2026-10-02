@@ -20,6 +20,7 @@
 
 #include <players/Player.h>
 #include <players/CityPlanningPolicy.h>
+#include <players/CityDistanceField.h>
 #include <players/CityServiceInvestmentPolicy.h>
 #include <players/CombatReward.h>
 #include <players/GroundAccessPolicy.h>
@@ -405,6 +406,47 @@ private:
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
+
+    /// The four map-sized placement distance fields, reused across searches.
+    /// The key is the contribution list itself -- every live owned structure and
+    /// every reservation that is not the planning builder's, in the order
+    /// findPlaceLocation visits them -- so reuse is exact rather than inferred
+    /// from builder identity, which cannot see a structure dying or a
+    /// reservation changing mid-pass. The pollution field additionally depends
+    /// on the planned item's own sensitive/polluter roles; the three nearest-
+    /// origin fields do not depend on the planned item at all. Derived state:
+    /// never serialised, unlike placementCache.
+    struct PlacementDistanceCache {
+        struct Contribution {
+            Uint32 item = 0;
+            Sint32 x = 0, y = 0, w = 0, h = 0;
+            bool operator==(const Contribution& o) const {
+                return item == o.item && x == o.x && y == o.y && w == o.w && h == o.h;
+            }
+        };
+        std::vector<Contribution> key;
+        Sint32 width = 0, height = 0;
+        bool originFieldsValid = false;
+        bool pollutionValid = false;
+        bool sensitive = false, polluter = false;
+        /// How many times each group of fields was actually rebuilt. Diagnostic
+        /// only -- never serialised and never read by a decision -- but it is the
+        /// one observable that distinguishes a reuse from a silent rebuild, so
+        /// the cache tests assert on it rather than re-deriving the key.
+        Uint32 originBuilds = 0, pollutionBuilds = 0;
+        CityDistanceField nearestResidential{0,0}, nearestCommercial{0,0},
+            nearestIndustrial{0,0}, pollutionSeparation{0,0};
+        void invalidate() {
+            originFieldsValid = false; pollutionValid = false;
+            key.clear(); key.shrink_to_fit();
+            width = 0; height = 0;
+            // Release the map-sized cells too, so a finished build pass does not
+            // keep four of them per bot alive until the next one.
+            nearestResidential = CityDistanceField(0,0); nearestCommercial = CityDistanceField(0,0);
+            nearestIndustrial = CityDistanceField(0,0); pollutionSeparation = CityDistanceField(0,0);
+        }
+    };
+    PlacementDistanceCache placementDistances;
 
     struct CityServiceSite {
         Coord site = Coord::Invalid();

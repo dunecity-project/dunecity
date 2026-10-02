@@ -763,6 +763,23 @@ void Tile::blitSelectionRects(int xPos, int yPos) const {
                     blitObjectSelectionRect);
 }
 
+void Tile::assignDeadUnit(Uint8 type, Uint8 house, const Coord& position)
+{
+    DEADUNITTYPE newDeadUnit;
+    newDeadUnit.type = type;
+    newDeadUnit.house = house;
+    newDeadUnit.onSand = isSand() || isDunes();
+    newDeadUnit.realPos = position;
+    newDeadUnit.timer = 2000;
+
+    deadUnits.push_back(newDeadUnit);
+
+    // Tests build tiles without a map; the registry is rebuilt on load anyway.
+    if(!deadUnitRegistered && currentGameMap != nullptr) {
+        currentGameMap->registerDeadUnitTile(*this);
+    }
+}
+
 void Tile::update_impl()
 {
     deadUnits.erase(

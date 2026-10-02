@@ -69,6 +69,7 @@ std::mutex Game::performanceLogMutex;
 #include <Network/NetworkManager.h>
 #include <Network/MetaServerClient.h>
 #include <Network/PathBudgetSync.h>
+#include <PathWorkerPool.h>
 #include <mod/ModManager.h>
 #include <Network/WorkshopGameContent.h>
 #include <Network/MapCollection.h>
@@ -356,6 +357,11 @@ void Game::queuePathRequest(Uint32 objectId) {
     The destructor frees up all the used memory.
 */
 Game::~Game() {
+    // No path task can be outstanding here -- runBatch joins before returning --
+    // but the threads themselves must not outlive the match, so they are stopped
+    // and joined rather than left idle across a new game.
+    activePathJobs.clear();
+    PathWorkerPool::instance().shutdown();
     finishMatchAnalytics();
     if (AITelemetry::log().enabled()) {
         AITelemetry::Record roster;
@@ -558,6 +564,11 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
     pendingTargetRequestIds.clear();
     pathRequestQueue.clear();
     pendingPathRequestIds.clear();
+    // Suspended searches hold scratch buffers and a unit id; neither may outlive
+    // the match they belong to. Dropping them is a cancellation, and counting it
+    // keeps the request-lifecycle conservation check honest across a load.
+    pathRequestsCancelled += activePathJobs.size();
+    activePathJobs.clear();
 
     // Initialize performance logging
     initPerformanceLog();
@@ -946,11 +957,9 @@ void Game::processObjects()
 
     {
         AITelemetry::PerformanceScope perfScope("objects.tiles",gameCycleCount);
-        for(int y = 0; y < currentGameMap->getSizeY(); y++) {
-            for(int x = 0; x < currentGameMap->getSizeX(); x++) {
-                currentGameMap->getTile(x,y)->update();
-            }
-        }
+        // Only tiles holding a dead-unit timer have anything to do; the rest of
+        // Tile::update() was an early-out. Same per-tile work, same results.
+        currentGameMap->updateActiveDeadUnitTiles();
     }
 
     // Time structure updates
@@ -1137,11 +1146,87 @@ void Game::logPathInstrumentationIfNeeded() {
     }
 }
 
+void Game::finishPathJob(PathJob& job, UnitBase* unit, PathJobOutcome outcome) {
+    // One place closes a request, so the invariant "a pending id is either queued
+    // or active, never both and never neither" cannot drift.
+    job.search.reset();
+    if(outcome == PathJobOutcome::Applied) {
+        ++pathResultsApplied;
+    }
+    if(outcome == PathJobOutcome::Requeued) {
+        ++pathRequestsRequeued;
+        // The id stays pending and the unit's flag stays set: this is the same
+        // request continuing, now at the back of the queue. Going through the
+        // queue rather than restarting in place is what bounds the work a unit
+        // with changing orders can take from everyone else.
+        pathRequestQueue.push_back({job.objectId});
+        return;
+    }
+    if(outcome == PathJobOutcome::Cancelled) ++pathRequestsCancelled;
+    pendingPathRequestIds.erase(job.objectId);
+    if(unit != nullptr) {
+        unit->markPathRequestFinished();
+    }
+}
+
+void Game::collectPathBatch(size_t& startsThisCycle) {
+    // Suspended jobs keep their slots and their order, so a long search cannot be
+    // starved by a stream of new requests, and new requests enter in queue order.
+    while(activePathJobs.size() < kPathBatchSize
+          && startsThisCycle < kMaxPathStartsPerCycle
+          && !pathRequestQueue.empty()) {
+        const PathRequest request = pathRequestQueue.front();
+        pathRequestQueue.pop_front();
+        ++startsThisCycle;
+
+        // The id stays in pendingPathRequestIds for as long as the request is
+        // active. queuePathRequest() keys off that set and UnitBase::update() keys
+        // off pathRequestQueued, so neither can add a second request for a unit
+        // that already has one in flight.
+        auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(request.objectId));
+        if(unit == nullptr) {
+            pendingPathRequestIds.erase(request.objectId);
+            continue;
+        }
+
+        // Main-thread precheck: destination resolution, the HUNT reachability rule
+        // and the lazy terrain-connectivity cache it consults all stay here.
+        UnitBase::PathRequestStats stats;
+        Coord destinationCoord;
+        if(!unit->beginPathRequest(stats, destinationCoord)) {
+            auto& perf = AITelemetry::log();
+            const int owner = unit->getOwner() ? unit->getOwner()->getHouseID() : -1;
+            perf.performance(gameCycleCount,owner,
+                stats.invalidDestination ? "path.invalid_nodes" : "path.failed_nodes",0,unit->getItemID(),false);
+            frameTiming.pathsProcessedThisCycle++;
+            frameTiming.totalPathsProcessedThisFrame++;
+            frameTiming.totalPathsProcessed++;
+            pendingPathRequestIds.erase(request.objectId);
+            unit->markPathRequestFinished();
+            continue;  // No nodes charged, and the request is finished.
+        }
+
+        PathJob job;
+        job.objectId = request.objectId;
+        job.destinationCoord = destinationCoord;
+        job.inputs = unit->capturePathInputs();
+        job.search.reset(new AStarSearch(currentGameMap, unit, unit->getLocation(),
+                                         destinationCoord, AStarSearch::Resumable{}));
+        // Asserted rather than assumed: for as long as this job is active the unit
+        // holds its pending flag, so neither update() nor queuePathRequest() can
+        // add a second request for it. Anything that cleared the flag earlier in
+        // the unit's own update cannot reopen that window.
+        unit->markPathRequestActive();
+        ++pathRequestsStarted;
+        activePathJobs.push_back(std::move(job));
+    }
+}
+
 void Game::processPathRequests() {
     frameTiming.pathsProcessedThisCycle = 0;
     frameTiming.pathfindingMsThisCycle = 0.0;
     frameTiming.pathTokensThisCycle = 0;
-    if(pathRequestQueue.empty()) {
+    if(pathRequestQueue.empty() && activePathJobs.empty()) {
         frameTiming.pathsPerCycleStats.add(0.0);
         frameTiming.pathTokensPerCycleStats.add(0.0);
         logPathInstrumentationIfNeeded();
@@ -1176,65 +1261,181 @@ void Game::processPathRequests() {
     size_t tokensRemaining = budget;
     size_t tokensUsedThisCycle = 0;
     
-    // Process paths until token budget exhausted (deterministic stopping condition)
-    while(!pathRequestQueue.empty() && tokensRemaining > 0) {
-        PathRequest request = pathRequestQueue.front();
-        pathRequestQueue.pop_front();
-        pendingPathRequestIds.erase(request.objectId);
+    // STRICT NODE BUDGET (recommendation 4)
+    // A whole search can close far more nodes than one cycle's budget: the
+    // MAX_NODES_CHECKED threshold only stops neighbour expansion, after which the
+    // frontier still has to be drained. So searches are sliced instead of run to
+    // completion, and no slice is ever allowed to exceed what is left.
+    //
+    // The schedule is simulation state, not a scheduling convenience: a fixed
+    // batch is collected in queue order, each member is given its quota before
+    // any work starts, and results are applied in that same order. A worker count
+    // can therefore only change wall time, never which nodes get spent or in what
+    // order paths are handed back.
+    size_t startsThisCycle = 0;
+    for(size_t round = 0; round < kMaxPathRoundsPerCycle && tokensRemaining > 0; ++round) {
+        collectPathBatch(startsThisCycle);
+        if(activePathJobs.empty()) {
+            break;
+        }
 
-        auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(request.objectId));
-        if(unit != nullptr) {
-            const Uint64 requestStart = SDL_GetPerformanceCounter();
-            UnitBase::PathRequestStats stats = unit->resolvePendingPathRequest();
-            auto& perf = AITelemetry::log();
+        // Deterministic quotas: an even split of what is left, with the remainder
+        // going to the earliest jobs. The sum is exactly tokensRemaining, so the
+        // batch cannot overshoot even if every job uses all of its quota.
+        const size_t batch = activePathJobs.size();
+        std::vector<size_t> quotas(batch, tokensRemaining / batch);
+        for(size_t i = 0; i < tokensRemaining % batch; ++i) {
+            quotas[i] += 1;
+        }
+
+        std::vector<AStarSearch::Status> status(batch, AStarSearch::Status::Completed);
+        std::vector<size_t> closed(batch, 0);
+        std::vector<Uint64> elapsed(batch, 0);
+        std::vector<UnitBase*> units(batch, nullptr);
+
+        // PASS 1 (main thread, every slot): resolve and validate inputs.
+        //
+        // This has to happen for all slots before any step runs, because it is the
+        // part that is not read-only: resolvePathDestination() reaches through
+        // ObjectPointer::getObjPointer(), which clears its own cached id when the
+        // target has gone, and the lazy terrain-connectivity cache behind the HUNT
+        // rule is built here too. After this pass a slot either holds a search that
+        // can be advanced against a read-only world, or is marked for collection.
+        for(size_t i = 0; i < batch; ++i) {
+            PathJob& job = activePathJobs[i];
+            auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(job.objectId));
+            units[i] = unit;
+            if(unit == nullptr || job.search == nullptr) {
+                continue;  // Collected below as a cancellation.
+            }
+
+            // Cross-tick input validation.
+            //
+            // A global geometry bump or an unrelated unit moving does NOT discard
+            // the frontier. That counter moves whenever anyone anywhere builds or
+            // loses blocking geometry -- measured at roughly every 2.4 cycles on a
+            // busy city map -- and restarting on it meant no cross-tick search
+            // ever finished: 170 restarts and 450k wasted nodes per slot, zero
+            // late completions, ~950 requests queued. Costs in a retained frontier
+            // may reflect slightly older observations of the map, which is the
+            // normal approximation for a plan that spans world updates; the route
+            // is probed before the unit commits to it and revalidated per step
+            // while it walks, and cached passability is refreshed per slice.
+            //
+            // What does invalidate the plan is the request itself changing. Then
+            // the answer being computed is to a question nobody asked any more, so
+            // it is discarded and the unit's current request goes to the BACK of
+            // the queue. Requeueing rather than restarting in place means a unit
+            // whose orders keep changing cannot hold a slot or spend the budget on
+            // abandoned frontiers, and a stale order can never be applied.
+            const UnitBase::PathInputFingerprint current = unit->capturePathInputs();
+            const Uint32 difference = current.differenceMask(job.inputs);
+            job.restartReasons |= difference;
+            if((difference & UnitBase::PathInputFingerprint::RestartForcingMask) != 0) {
+                job.search.reset();
+                job.requeue = true;
+                continue;  // Collected below; nothing more is charged to it.
+            }
+
+        }
+
+        // PASS 2 (dispatchable): advance the owned frontiers. Each task touches
+        // only its own search's scratch and reads the world; quotas and order were
+        // fixed above, so a worker count or a completion order cannot change any
+        // outcome. The whole batch is joined before anything mutates the world.
+        std::vector<std::function<void()>> slices;
+        slices.reserve(batch);
+        std::vector<size_t> sliceSlots;
+        sliceSlots.reserve(batch);
+        for(size_t i = 0; i < batch; ++i) {
+            if(units[i] == nullptr || activePathJobs[i].search == nullptr) continue;
+            sliceSlots.push_back(i);
+        }
+        for(const size_t slot : sliceSlots) {
+            slices.push_back([this, slot, &status, &closed, &elapsed, &units, &quotas] {
+                PathJob& job = activePathJobs[slot];
+                const Uint64 sliceStart = SDL_GetPerformanceCounter();
+                status[slot] = job.search->step(currentGameMap, units[slot],
+                                                quotas[slot], quotas[slot] + kPathIterationSlack);
+                // Measured only for telemetry; never read by a decision.
+                elapsed[slot] = SDL_GetPerformanceCounter() - sliceStart;
+                closed[slot] = job.search->getNodesClosedLastStep();
+            });
+        }
+        PathWorkerPool::instance().runBatch(slices);
+        for(const size_t slot : sliceSlots) {
+            activePathJobs[slot].chargedNodes += closed[slot];
+        }
+
+        // Collect in the same fixed order: charge every node actually spent, then
+        // apply finished searches. Unused quota is only redistributed by the next
+        // round, after the whole batch has been collected.
+        auto& perf = AITelemetry::log();
+        size_t usedThisRound = 0;
+        for(size_t i = 0; i < batch; ++i) {
+            PathJob& job = activePathJobs[i];
+            UnitBase* unit = units[i];
+            usedThisRound += closed[i];
+
+            frameTiming.pathTokensThisCycle += closed[i];
+            frameTiming.pathTokensThisFrame += closed[i];
+            frameTiming.totalPathTokens += closed[i];
+            tokensUsedThisCycle += closed[i];
+
+            if(unit == nullptr || job.search == nullptr) {
+                finishPathJob(job, unit, job.requeue ? PathJobOutcome::Requeued : PathJobOutcome::Cancelled);
+                continue;
+            }
+            if(status[i] == AStarSearch::Status::Running) {
+                continue;  // Keeps its slot and its place in the order.
+            }
+
+            UnitBase::PathRequestStats stats;
+            stats.nodesExpanded = job.chargedNodes;
+            unit->applyPathResult(job.search->getFoundPath(), job.destinationCoord,
+                                  job.inputs.pathingRevision, stats);
+            job.search.reset();
+            finishPathJob(job, unit, PathJobOutcome::Applied);
+
             const int owner = unit->getOwner() ? unit->getOwner()->getHouseID() : -1;
-            perf.performance(gameCycleCount,owner,"path.search",static_cast<int64_t>(getElapsedMs(requestStart,SDL_GetPerformanceCounter())*1000),unit->getItemID());
+            perf.performance(gameCycleCount,owner,"path.search",static_cast<int64_t>(getElapsedMs(0,elapsed[i])*1000),unit->getItemID());
             perf.performance(gameCycleCount,owner,stats.invalidDestination ? "path.invalid_nodes" : stats.pathFound ? "path.found_nodes" : "path.failed_nodes",stats.nodesExpanded,unit->getItemID(),false);
-            
+            if(job.restarts > 0) {
+                perf.performance(gameCycleCount,owner,"path.restarts",job.restarts,unit->getItemID(),false);
+            }
+
             frameTiming.pathsProcessedThisCycle++;
             frameTiming.totalPathsProcessedThisFrame++;
             frameTiming.totalPathsProcessed++;
-            
-            // Track tokens (nodes expanded)
-            const size_t tokens = stats.nodesExpanded;
-            frameTiming.pathTokensThisCycle += tokens;
-            frameTiming.pathTokensThisFrame += tokens;
-            frameTiming.totalPathTokens += tokens;
-            tokensUsedThisCycle += tokens;
-            
-            // Deduct from token budget
-            if (tokens < tokensRemaining) {
-                tokensRemaining -= tokens;
-            } else {
-                tokensRemaining = 0;
-            }
-            
-            // Track min/max tokens per cycle
-            if(frameTiming.pathTokensThisCycle > frameTiming.maxPathTokensPerCycle) {
-                frameTiming.maxPathTokensPerCycle = frameTiming.pathTokensThisCycle;
-            }
-            
-            // Record token distribution histogram
-            recordPathTokens(tokens);
-            
-            // Track completed vs failed paths
+            recordPathTokens(stats.nodesExpanded);
             if(!stats.invalidDestination) {
                 if(stats.pathFound) {
-                    recordCompletedPathTokens(tokens);
+                    recordCompletedPathTokens(stats.nodesExpanded);
                 } else {
                     frameTiming.pathsFailedThisFrame++;
                     frameTiming.totalPathsFailed++;
-                    recordFailedPathTokens(tokens);
+                    recordFailedPathTokens(stats.nodesExpanded);
                 }
             }
         }
+
+        if(frameTiming.pathTokensThisCycle > frameTiming.maxPathTokensPerCycle) {
+            frameTiming.maxPathTokensPerCycle = frameTiming.pathTokensThisCycle;
+        }
+
+        // Drop finished and cancelled jobs, preserving the order of the rest.
+        activePathJobs.erase(std::remove_if(activePathJobs.begin(), activePathJobs.end(),
+            [](const PathJob& job) { return job.search == nullptr; }), activePathJobs.end());
+
+        tokensRemaining -= std::min(usedThisRound, tokensRemaining);
     }
-    
+
     auto& perf = AITelemetry::log();
     perf.performance(gameCycleCount,-1,"path.nodes",tokensUsedThisCycle,-1,false);
     perf.performance(gameCycleCount,-1,"path.effective_budget",budget,-1,false);
     perf.performance(gameCycleCount,-1,"path.budget_overshoot",tokensUsedThisCycle > budget ? tokensUsedThisCycle-budget : 0,-1,false);
     perf.performance(gameCycleCount,-1,"path.queue",pathRequestQueue.size(),-1,false);
+    perf.performance(gameCycleCount,-1,"path.suspended",activePathJobs.size(),-1,false);
 
     // PHASE 1.2: BANK UNUSED TOKENS FOR NEXT CYCLE
     // MULTIPLAYER FIX: Disable carry-over in multiplayer to prevent desync
@@ -4225,6 +4426,11 @@ bool Game::loadSaveGame(InputStream& stream) {
     pendingTargetRequestIds.clear();
     pathRequestQueue.clear();
     pendingPathRequestIds.clear();
+    // Suspended searches hold scratch buffers and a unit id; neither may outlive
+    // the match they belong to. Dropping them is a cancellation, and counting it
+    // keeps the request-lifecycle conservation check honest across a load.
+    pathRequestsCancelled += activePathJobs.size();
+    activePathJobs.clear();
 
     const char* loadStage = "header";
     auto logLoadStage = [&stream, &loadStage](const char* stage) {
@@ -6814,14 +7020,43 @@ void Game::prepareObserverStreams() {
 
 std::string Game::saveObserverRuntime() const {
     OMemoryStream out; out.open();
-    // Version 5 includes QuantBot colonisation-space measurements.
-    out.writeUint32(5); out.writeUint32(gameCycleCount);
+    // Version 6 adds suspended pathfinding continuations. A spectator must resume
+    // the searches the host has already partly paid for: flushing them on the host
+    // instead would be a mutation no peer performs, so the stream carries the whole
+    // continuation state rather than a restart hint.
+    out.writeUint32(6); out.writeUint32(gameCycleCount);
     out.writeUint32(negotiatedBudget); out.writeUint32(cmdManager.getNetworkCycleBuffer());
     out.writeUint32(currentGameMap->getPathingRevision());
+    out.writeUint32(carryOverTokens);
     out.writeUint32(targetRequestQueue.size());
     for(const auto& request : targetRequestQueue) out.writeUint32(request.objectId);
     out.writeUint32(pathRequestQueue.size());
     for(const auto& request : pathRequestQueue) out.writeUint32(request.objectId);
+    // Scheduler order is part of the state: it is the batch, quota and
+    // application order.
+    out.writeUint32(activePathJobs.size());
+    for(const auto& job : activePathJobs) {
+        out.writeUint32(job.objectId);
+        out.writeSint32(job.destinationCoord.x); out.writeSint32(job.destinationCoord.y);
+        out.writeUint32(job.chargedNodes);
+        out.writeUint32(job.restarts);
+        // Every field the validation compares, or a restored job would see a
+        // difference the live one does not and requeue a search that should have
+        // continued.
+        out.writeSint32(job.inputs.location.x); out.writeSint32(job.inputs.location.y);
+        out.writeSint32(job.inputs.destination.x); out.writeSint32(job.inputs.destination.y);
+        out.writeUint32(job.inputs.pathingRevision);
+        out.writeUint32(job.inputs.targetObjectID);
+        out.writeSint32(job.inputs.houseID); out.writeSint32(job.inputs.teamID);
+        out.writeBools(job.inputs.targetFriendly, job.inputs.goingToRepairYard, job.inputs.repairYardFree);
+        out.writeBools(job.inputs.targetPresent, job.inputs.targetIsStructure, job.inputs.targetVisibleToUs);
+        out.writeSint32(job.inputs.targetOwnerTeamID);
+        out.writeUint32(job.inputs.targetItemID);
+        out.writeUint32(job.inputs.itemID);
+        out.writeSint32(job.inputs.originalHouseID);
+        out.writeBool(job.search != nullptr);
+        if(job.search != nullptr) job.search->save(out);
+    }
     out.writeUint32(unitList.size());
     for(const auto* unit : unitList) { out.writeUint32(unit->getObjectID()); unit->saveObserverRuntime(out); }
     std::vector<const QuantBot*> bots;
@@ -6845,16 +7080,60 @@ std::string Game::saveObserverRuntime() const {
 void Game::loadObserverRuntime(const std::string& bytes) {
     IMemoryStream in(bytes.data(),bytes.size());
     const auto runtimeVersion=in.readUint32();
-    if((runtimeVersion!=5) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    if((runtimeVersion!=6) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
     negotiatedBudget=in.readUint32(); const auto buffer=in.readUint32();
     if(negotiatedBudget<kMinBudget || negotiatedBudget>kMaxBudget || buffer>1000) throw std::runtime_error("Invalid spectator checkpoint budget");
     cmdManager.setNetworkCycleBuffer(buffer);
     currentGameMap->restoreObserverPathingRevision(in.readUint32());
+    carryOverTokens=in.readUint32();
+    if(carryOverTokens>kDebtCap) throw std::runtime_error("Invalid spectator checkpoint carry-over");
     targetRequestQueue.clear(); pendingTargetRequestIds.clear(); pathRequestQueue.clear(); pendingPathRequestIds.clear();
+    // Whatever this instance was running is replaced by the checkpoint's schedule;
+    // those requests end here, which the lifecycle conservation count must see.
+    pathRequestsCancelled+=activePathJobs.size();
+    activePathJobs.clear();
     const auto targets=in.readUint32(); if(targets>unitList.size()) throw std::runtime_error("Invalid spectator targets");
     for(Uint32 i=0;i<targets;++i) queueTargetRequest(in.readUint32());
     const auto paths=in.readUint32(); if(paths>unitList.size()) throw std::runtime_error("Invalid spectator paths");
     for(Uint32 i=0;i<paths;++i) queuePathRequest(in.readUint32());
+    const auto suspended=in.readUint32();
+    if(suspended>kPathBatchSize) throw std::runtime_error("Invalid spectator suspended search count");
+    for(Uint32 i=0;i<suspended;++i) {
+        PathJob job;
+        job.objectId=in.readUint32();
+        job.destinationCoord.x=in.readSint32(); job.destinationCoord.y=in.readSint32();
+        job.chargedNodes=in.readUint32();
+        job.restarts=in.readUint32();
+        job.inputs.location.x=in.readSint32(); job.inputs.location.y=in.readSint32();
+        job.inputs.destination.x=in.readSint32(); job.inputs.destination.y=in.readSint32();
+        job.inputs.pathingRevision=in.readUint32();
+        job.inputs.targetObjectID=in.readUint32();
+        job.inputs.houseID=in.readSint32(); job.inputs.teamID=in.readSint32();
+        in.readBools(&job.inputs.targetFriendly,&job.inputs.goingToRepairYard,&job.inputs.repairYardFree);
+        in.readBools(&job.inputs.targetPresent,&job.inputs.targetIsStructure,&job.inputs.targetVisibleToUs);
+        job.inputs.targetOwnerTeamID=in.readSint32();
+        job.inputs.targetItemID=in.readUint32();
+        job.inputs.itemID=in.readUint32();
+        job.inputs.originalHouseID=in.readSint32();
+        if(in.readBool()) job.search=AStarSearch::load(in);
+        if(!pendingPathRequestIds.insert(job.objectId).second)
+            throw std::runtime_error("Duplicate spectator pending path request");
+        // A slot whose unit is absent is a legitimate checkpoint boundary, not bad
+        // input: a unit can be destroyed later in the same cycle, after the path
+        // phase, and its job survives until the next one. The slot, its frontier
+        // and its pending id are preserved so that next phase cancels it in the
+        // same fixed order, with the same stats and budget effect, as the
+        // uninterrupted run would have. Skipping it only on restore would make the
+        // spectator diverge. The unit flag is only set when there is a unit.
+        auto* unit=dynamic_cast<UnitBase*>(objectManager.getObject(job.objectId));
+        if(unit!=nullptr) unit->markPathRequestActive();
+        // These requests were started by the simulation this checkpoint came from,
+        // so they count as started here too; otherwise the lifecycle conservation
+        // "started == applied + cancelled + requeued + active" would not hold in
+        // the restoring instance.
+        ++pathRequestsStarted;
+        activePathJobs.push_back(std::move(job));
+    }
     const auto units=in.readUint32(); if(units!=unitList.size()) throw std::runtime_error("Invalid spectator units");
     std::set<Uint32> seen;
     for(Uint32 i=0;i<units;++i) {

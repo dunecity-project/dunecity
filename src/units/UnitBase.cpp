@@ -1864,20 +1864,21 @@ void UnitBase::resolvePendingTargetRequest() {
     }
 }
 
-UnitBase::PathRequestStats UnitBase::resolvePendingPathRequest() {
-    PathRequestStats stats;
-    pathRequestQueued = false;
-
+bool UnitBase::beginPathRequest(PathRequestStats& stats, Coord& destinationCoord) {
+    // pathRequestQueued deliberately stays true here. The request is not finished
+    // when its search starts, and clearing the flag at that point let update()
+    // enqueue a second request for a unit that already had one in flight. The
+    // scheduler clears it on completion or cancellation instead.
     if(currentGame == nullptr) {
         recalculatePathTimer = 0;
         stats.invalidDestination = true;
-        return stats;
+        return false;
     }
 
     if(location.isInvalid() || destination.isInvalid()) {
         recalculatePathTimer = 0;
         stats.invalidDestination = true;
-        return stats;
+        return false;
     }
 
     if (target && attackMode==HUNT && !forced) {
@@ -1886,12 +1887,53 @@ UnitBase::PathRequestStats UnitBase::resolvePendingPathRequest() {
             setGuardPoint(location);
             releaseTarget();
             clearPath();
-            return stats; // No A* budget spent on a missing or disconnected target.
+            return false; // No A* budget spent on a missing or disconnected target.
         }
     }
 
+    destinationCoord = resolvePathDestination();
+    return true;
+}
+
+void UnitBase::applyPathResult(std::list<Coord> path, const Coord& destinationCoord,
+                               Uint32 searchStartRevision, PathRequestStats& stats) {
+    pathRequestQueued = false;   // The request is finished here, not when it started.
     // Jitter the cooldown by objectID to stagger re-requests across units,
     // preventing multiple units from hitting the pathfinder on the same cycle.
+    // Applied on completion, not when the search starts: a suspended search must
+    // leave no countdown that would defer its own resumption or a requeue after
+    // an ordinary load.
+    recalculatePathTimer = 500 + static_cast<int>(getObjectID() % 100);
+
+    pathList = std::move(path);
+    if(pathList.empty()) {
+        cachedPathDestination.invalidate();
+        cachedPathRevision = 0;
+        nextSpotFound = false;
+        stats.pathFound = false;
+    } else {
+        // Stamp the geometry revision the search actually observed, not the
+        // current one. A plan that spanned world updates must not be recorded as
+        // already validated against the latest geometry: leaving the revision
+        // behind is what makes isCachedPathStillValid() probe the route before the
+        // unit commits to it. That probe checks a bounded near-prefix of the route
+        // (kPathValidationProbeCount tiles), not the whole route; the rest is
+        // covered by the canPass check update() performs before every single step.
+        updateCachedPathMetadata(destinationCoord, searchStartRevision);
+        stats.pathFound = true;
+    }
+
+    finishPathRequest(stats);
+}
+
+UnitBase::PathRequestStats UnitBase::resolvePendingPathRequest() {
+    PathRequestStats stats;
+    Coord destinationCoord;
+
+    if(!beginPathRequest(stats, destinationCoord)) {
+        return stats;
+    }
+
     recalculatePathTimer = 500 + static_cast<int>(getObjectID() % 100);
 
     std::size_t nodesExpanded = 0;
@@ -1906,7 +1948,14 @@ UnitBase::PathRequestStats UnitBase::resolvePendingPathRequest() {
     if(invalidDestination) {
         return stats;
     }
-    
+
+    finishPathRequest(stats);
+    return stats;
+}
+
+void UnitBase::finishPathRequest(PathRequestStats& stats) {
+    const bool pathFound = stats.pathFound;
+
     // Simple stuck detection: track if we're making progress toward destination
     const FixPoint currentDistance = blockDistance(location, destination);
     
@@ -1969,8 +2018,6 @@ UnitBase::PathRequestStats UnitBase::resolvePendingPathRequest() {
             }
         }
     }
-
-    return stats;
 }
 
 bool UnitBase::turnDynastyBody(int wantedAngle) {
@@ -2233,6 +2280,32 @@ bool UnitBase::canPass(int xPos, int yPos) const {
     return true;
 }
 
+UnitBase::PathInputFingerprint UnitBase::capturePathInputs() const {
+    PathInputFingerprint inputs;
+    inputs.location = location;
+    inputs.destination = resolvePathDestination();
+    inputs.pathingRevision = (currentGameMap != nullptr) ? currentGameMap->getPathingRevision() : 0;
+    inputs.targetObjectID = target.getObjectID();
+    inputs.houseID = (owner != nullptr) ? owner->getHouseID() : -1;
+    inputs.teamID = (owner != nullptr) ? owner->getTeamID() : -1;
+    inputs.targetFriendly = targetFriendly;
+    inputs.goingToRepairYard = goingToRepairYard;
+    inputs.itemID = itemID;
+    inputs.originalHouseID = originalHouseID;
+    const ObjectBase* targetObject = target.getObjPointer();
+    if(targetObject != nullptr) {
+        inputs.targetPresent = true;
+        inputs.targetIsStructure = targetObject->isAStructure();
+        inputs.targetItemID = targetObject->getItemID();
+        if(targetObject->getOwner() != nullptr) inputs.targetOwnerTeamID = targetObject->getOwner()->getTeamID();
+        if(owner != nullptr) inputs.targetVisibleToUs = targetObject->isVisible(owner->getTeamID());
+        if(targetObject->getItemID() == Structure_RepairYard) {
+            inputs.repairYardFree = static_cast<const RepairYard*>(targetObject)->isFree();
+        }
+    }
+    return inputs;
+}
+
 Coord UnitBase::resolvePathDestination() const {
     if(target && target.getObjPointer() != nullptr) {
         const ObjectBase* pTargetObject = target.getObjPointer();
@@ -2251,8 +2324,13 @@ Coord UnitBase::resolvePathDestination() const {
 }
 
 void UnitBase::updateCachedPathMetadata(const Coord& destinationCoord) {
+    updateCachedPathMetadata(destinationCoord,
+        (currentGameMap != nullptr) ? currentGameMap->getPathingRevision() : 0);
+}
+
+void UnitBase::updateCachedPathMetadata(const Coord& destinationCoord, Uint32 revision) {
     cachedPathDestination = destinationCoord;
-    cachedPathRevision = (currentGameMap != nullptr) ? currentGameMap->getPathingRevision() : 0;
+    cachedPathRevision = revision;
 }
 
 bool UnitBase::isCachedPathStillValid() {
