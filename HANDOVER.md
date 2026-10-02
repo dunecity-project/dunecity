@@ -1,3 +1,21 @@
+## 2026-10-02 — Performance build installed on the MBA (1.0.793)
+
+At the user's request, installed the tested e8fab5ec performance build at
+/Applications/dunecity.app on Stefans-MacBook-Air.local. Native pathfinding
+uses up to four workers by default. Fresh cmake --install bundled the runtime
+dependencies; all 36 Mach-O files have no Homebrew/workspace load references.
+Deep/strict signatures and bundled SDL initialization/hidden rendering passed
+both before the swap and from the installed app. Installed executable SHA-256:
+9554509cf2dbc5200c743f0037cf29de7d47d1e2567a6c273facfe258436b317.
+
+Previous 1.0.792 app is retained at
+/Applications/.dunecity-backup-before-793-20261002/dunecity.app with its original
+7ad79f38b65932123485c26f015c4cd8ab2cc8f2a99c0701e4970cfad16e6f86
+executable hash. No game was running or stopped; no match was launched and
+user saves/config were untouched. The packaging check exits before opening a
+profile. Receipt, portable local package and logs:
+../outputs/performance-install-793/. Nothing was pushed or publicly released.
+
 ## 2026-10-02 — Bounded pathfinding and worker pool (local 1.0.793)
 
 Implements the live MBA performance review's recommendations 2–4, followed by
