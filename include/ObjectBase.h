@@ -140,7 +140,19 @@ public:
     const ObjectBase* findClosestTarget() const;
     virtual const ObjectBase* findTarget() const;
 
-    inline void addHealth() { if (health < getMaxHealth()) setHealth(health + 1); }
+    /**
+        One repair-yard healing step. setHealth() rejects any value above the maximum, so a saved
+        occupant with a fractional residual (the stalled game held bays at 199.875 of 200) would
+        make every further step a silent no-op and never leave its bay. Clamp the healed value
+        here instead of relying on the setter; whole-point healing and its cost are unchanged.
+    */
+    inline void addHealth() {
+        const FixPoint maximum = FixPoint(getMaxHealth());
+        if (health < maximum) {
+            const FixPoint healed = health + 1;
+            setHealth(healed > maximum ? maximum : healed);
+        }
+    }
     inline void setActive(bool status) { active = status; }
     inline void setForced(bool status) { forced = status; }
     inline void setRespondable(bool status) { respondable = status; }

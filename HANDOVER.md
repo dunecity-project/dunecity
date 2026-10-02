@@ -1,3 +1,95 @@
+## 2026-10-02 — Repair release and Brutal unit overrides (local 1.0.795)
+
+The MBA repair-stuck save at cycle 46155 contained 47 occupied yards across six
+houses, including 12 Harkonnen yards. Every occupant had fractional health less
+than one HP below maximum and no booked carryall. All 47 retained identical
+health and occupancy after 1000 ticks in both 1.0.794 and the retained pre-performance
+1.0.792 engine. ObjectBase::addHealth tried health+1; setHealth rejected the
+overshoot, so repair never reached its release branch. INIMapLoader can create
+fractional unit health from the map's health/256 ratio.
+
+The healing step now clamps at maximum, preserving setter validation, fixed-point
+arithmetic, normal healing cadence and the per-tick cost. The final combined replay
+released all 47 original occupants alive at exact maximum health with unchanged
+ownership within 758 ticks. One and four path workers
+matched all 11 checkpoints and complete saved bytes over 1000 ticks. Those are
+bounded checks with this save and available funds/access/transport, not universal
+handoff guarantees.
+
+The user also requested a performance stress setting: Brutal with an explicit
+max-units override bypasses its configured military-value ceiling. Positive
+values use the existing engine unit-count policy; zero is unlimited for that
+policy. The existing per-category formula remains (including the air allowance
+computed from the selected ground limit); this is not a new global total. A Hard
+controller sharing a house retains its existing house-level count exemption.
+Disabled override and other difficulties retain their previous behavior.
+Military production remains subject to funds, reserves, catalogue/prerequisites
+and engine admission. Review removed an arbitrary INT_MAX/4 budget ceiling and
+widened allocation sums; only the int representation boundary saturates. Free
+police reinforcement is outside this funded-production change. The effective planning budget is derived at runtime; the serialized
+militaryValueLimit and save9850 field order remain. Protocol44 separates peers
+with these changed repair and production rules; observer runtime remains v6.
+
+### Property and evidence matrix
+
+Verification follows /Users/stefan/.codex/skills/verify-system-invariants/SKILL.md.
+These are source reviews and executable tests, not formal proofs.
+
+| Property | Enforcement/source | Evidence/result | Assumptions or limits |
+| --- | --- | --- | --- |
+| A funded fractional repair reaches exact maximum without overshoot | ObjectBase::addHealth; RepairYard::updateStructureSpecificStuff | Old-code regression failed; fixed regression passed Vanilla/DuneCity/Dune2R; 47/47 captured jobs released | Yard receives updates and can pay the existing per-tick charge |
+| Release clears one repair booking and retains ownership; one final healing tick costs UNIT_REPAIRCOST | RepairYardJob::finish; RepairYard::deployRepairUnit; House::payCredits | Existing cleanup/ownership coverage and final exact cost/ownership assertions passed in all three modes | Ground-release fixture has a valid nearby deploy spot and funded owner |
+| Brutal bypasses the configured value cap only for explicit override | QuantBot::overridesMilitaryValueCap; planningMilitaryBudget; funded production sites | Helper boundaries and real-engine -1/0/positive/other-difficulty matrix passed in Vanilla/DuneCity/Dune2R | -1 means disabled; positive/0 are explicit; no new serialized policy |
+| Positive overrides are enforced by the engine; zero is unlimited for unit policy | QuantBot::ignoresUnitCountLimit; House::getMaxUnits; BuilderBase progress; StarPort delivery guard | Heavy/air/import below/at-cap and zero checks passed; direct builder progress blocked at cap; paid imports hold and resume exactly once | Existing per-category formulas remain; a shared Hard controller retains its house-level exemption |
+| Spending, prerequisites and queued military accounting remain independent | FundedArmyTarget/allocation helpers; QuantBot build and Starport guards | Source guards retained; final real-engine aircraft/Starport tests passed; nominal queued value counted and discounted imports not reserved twice | No promise of production with insufficient money, prerequisites or capacity |
+| Worker completion order does not change fixed replay state | Deterministic path scheduler; simulation ticks | Final source: 11 checkpoints and raw full save equal with 1/4 workers; override0 stress also matched gameplay bytes (local camera field excluded) | Fixed initial save, settings and tick count; override intentionally changes army growth |
+| Earlier simulation peers cannot join protocol44 | NetworkPacketPolicy; NetworkManagerTestCase | Full final CTest 46/46 passed, including unit/lobby/network/relay gates | Every multiplayer peer needs the updated rules |
+
+Paid Starport units under a Brutal explicit-positive override now wait at the
+execution layer if their category filled while the shipment was in transit. The
+existing two-second deployment timer retries the front entry without popping it,
+spawning, charging or refunding. A single available slot releases exactly one unit
+and then blocks the next. Disabled/zero/other-difficulty/non-unit paths retain
+prior behavior; the existing shared-Hard house exemption remains. No new save
+state or unbounded delivery deadline was added.
+
+The retained unregistered campaign-pressure diagnostic reached its controller
+count checks but failed a separate Easy/Medium power-deficit setup with the trial
+level9/vanilla/harvester-limit7 invocation. It is not used as passing evidence;
+the registered override fixture covers the per-difficulty count matrix in three
+mods. Its existing classic-count block explicitly disables the override now.
+
+Transport booking/cancellation/timeout logic was not changed. A surviving
+carryall whose assignment is stale can still cause an unrelated wait; this was
+not the captured defect, whose 47 occupants had no booked carrier. No unbounded
+transport liveness claim or unrelated carryall refactor is made.
+
+Final native Release build and dependency audits passed. Full CTest: 46/46 passed
+in 567.21s. Registered override tests cover heavy, aircraft, imports, paid queue
+accounting, exactly one available delivery slot, fixed-point funds, independent
+builder enforcement and unchanged difficulty/default semantics in three mods.
+
+A private override0 replay of the same immutable save advanced 1000 cycles. The
+actual QuantBot policy value grew from 98980 to 236620 for Harkonnen (100000
+configured target), with unit count 527 to 778; four houses exceeded the target.
+Those policy figures are recomputed at current catalogue prices, not the House
+lifetime production accumulator. One/four workers matched all 11 checkpoints and
+every saved gameplay byte. An initial strict full-file comparison found a local
+camera-center difference from screen shake; serialized object/bullet/explosion
+sections locate those four presentation bytes exactly, and same-worker repetition
+also varied there. Only that local view field and release label are excluded in
+the stress comparison. The unchanged-options repair replay matched raw bytes.
+The replay ran alongside validation: its CPU timings are not an FPS benchmark.
+
+Final staged app: 36 ARM64 Mach-O files, portable library loads, deep/strict
+signature and bundled SDL initialization/hidden rendering passed. Executable SHA:
+bffaf429b8b1aee2165931fccff5bee21040927b98664d86599a212089c92e3a.
+Guarded MBA installation is pending; it checks for a running game before swapping,
+retains the 1.0.794 app and verifies settings stay byte-identical. No public release.
+
+Root proofs: root-final-repair-proof.json and root-final-stress-proof.json.
+Evidence: ../outputs/repair-yard-live-20261002/ and ../outputs/repair-install-795/.
+
 ## 2026-10-02 — AI work phasing and stutter fixes (local 1.0.794)
 
 The live MBA capture showed AI and city simulation causing long frames while

@@ -39,7 +39,24 @@ inline bool militaryItem(Uint32 item) {
         && item != Unit_MCV && item != Unit_Sandworm;
 }
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
-    return std::min(limit, committed + std::max(0, spendable));
+    return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
+}
+// Only reached when the player asked for an explicit unit-count override on Brutal.
+// The configured value cap is replaced by rolling headroom above what is already
+// committed, so the planning target advances with the army instead of stopping at a
+// fixed number, and the engine's ground/infantry/air count limits remain the only
+// ceiling. The headroom is at least the configured target, the cash that can
+// actually be spent, and one of the most expensive military units, so a Starport
+// bargain stays affordable even when credits are below its nominal value.
+// Saturate only at the integer representation boundary, with widened arithmetic in
+// the allocation helpers. No smaller fixed army-value ceiling replaces the override.
+inline constexpr int militaryBudgetSaturation() { return std::numeric_limits<int>::max(); }
+inline int rollingMilitaryBudget(int committedValue, int configuredTarget,
+                                 int productionCash, int largestUnitValue) {
+    const int64_t headroom = std::max<int64_t>({int64_t(configuredTarget), int64_t(productionCash),
+                                                int64_t(largestUnitValue), int64_t(1)});
+    const int64_t budget = int64_t(std::max(0, committedValue)) + headroom;
+    return int(std::min<int64_t>(budget, militaryBudgetSaturation()));
 }
 template<size_t N>
 int fundedDeficit(const std::array<AllocationCandidate,N>& candidates, int committed,
@@ -48,7 +65,7 @@ int fundedDeficit(const std::array<AllocationCandidate,N>& candidates, int commi
     int64_t best = 0;
     for (size_t i=0;i<N;++i) {
         const auto& c=candidates[i];
-        if (!c.available || c.price<=0 || c.price>money || committed+c.price>limit) continue;
+        if (!c.available || c.price<=0 || c.price>money || int64_t(committed)+c.price>limit) continue;
         const int64_t deficit=int64_t(target)*c.targetBps-int64_t(c.committedValue)*10000;
         if (deficit>best) { best=deficit; selected=static_cast<int>(i); }
     }
@@ -63,9 +80,9 @@ int capacityFill(const std::array<AllocationCandidate,N>& candidates, int commit
     int selected=-1;
     for (size_t i=0;i<N;++i) {
         const auto& c=candidates[i];
-        if (!c.available || c.targetBps<=0 || c.price<=0 || c.price>money || committed+c.price>limit) continue;
-        if (selected<0 || int64_t(c.committedValue+c.price)*candidates[selected].targetBps
-                < int64_t(candidates[selected].committedValue+candidates[selected].price)*c.targetBps)
+        if (!c.available || c.targetBps<=0 || c.price<=0 || c.price>money || int64_t(committed)+c.price>limit) continue;
+        if (selected<0 || (int64_t(c.committedValue)+c.price)*candidates[selected].targetBps
+                < (int64_t(candidates[selected].committedValue)+candidates[selected].price)*c.targetBps)
             selected=static_cast<int>(i);
     }
     return selected;
@@ -77,9 +94,9 @@ int allocationHorizon(const std::array<AllocationCandidate, N>& candidates,
     // Plan one funded unit ahead, allowing an empty army to start growing.
     int increment = 0;
     for (const auto& c : candidates)
-        if (c.available && c.price > 0 && c.price <= money && armyValue + c.price <= armyLimit)
+        if (c.available && c.price > 0 && c.price <= money && int64_t(armyValue) + c.price <= armyLimit)
             increment = std::max(increment, c.price);
-    return std::min(armyLimit, armyValue + increment);
+    return int(std::min<int64_t>(armyLimit, int64_t(armyValue) + increment));
 }
 template<size_t N>
 int largestAffordableDeficit(const std::array<AllocationCandidate, N>& candidates,
@@ -90,7 +107,7 @@ int largestAffordableDeficit(const std::array<AllocationCandidate, N>& candidate
     int64_t best = 0;
     for (size_t i = 0; i < N; ++i) {
         const auto& c = candidates[i];
-        if (!c.available || c.price <= 0 || c.price > money || armyValue + c.price > armyLimit) continue;
+        if (!c.available || c.price <= 0 || c.price > money || int64_t(armyValue) + c.price > armyLimit) continue;
         const int64_t deficit = int64_t(horizon) * c.targetBps - int64_t(c.committedValue) * 10000;
         if (deficit > best) { best = deficit; selected = static_cast<int>(i); }
     }
@@ -101,7 +118,8 @@ int largestAffordableDeficit(const std::array<AllocationCandidate, N>& candidate
 // has no deficit and leaves every factory idle.  Grow the target in measured
 // stages instead of treating a proportionally balanced 8k army as an 80k army.
 inline int expansionAllocationHorizon(int armyValue, int armyLimit) {
-    return std::min(std::max(0, armyLimit), std::max(armyValue + 1, armyValue * 2));
+    return int(std::min<int64_t>(std::max(0, armyLimit),
+        std::max(int64_t(armyValue) + 1, int64_t(armyValue) * 2)));
 }
 
 

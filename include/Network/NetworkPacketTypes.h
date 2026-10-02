@@ -104,7 +104,10 @@
 //             suspended-search scheduler are all simulation state, so a peer on
 //             version 42 would hand paths back on different cycles and diverge.
 //             The observer runtime stream is version 6 for the same reason.
-#define NETWORK_PROTOCOL_VERSION            43
+// Version 44: Fractional repairs finish at maximum HP. Explicit unit overrides
+//             also change Brutal military production and count admission. Older
+//             peers would compute different repair releases and AI orders.
+#define NETWORK_PROTOCOL_VERSION            44
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

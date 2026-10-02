@@ -80,7 +80,19 @@ public:
     const std::array<int, 8>& getLastUnitMixBps() const { return lastUnitMixBps; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
-    bool ignoresUnitCountLimit() const { return difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal; }
+    /// True when the lobby selected an explicit "Maximum Number of Units Override"
+    /// (0 = unlimited, positive = that many). -1 leaves the map/ObjectData default.
+    bool hasExplicitUnitCountOverride() const;
+    /// Hard keeps its authored behaviour. Brutal only ignores the count ceiling while
+    /// no explicit override exists; with one it honours the engine limit, which an
+    /// override of 0 reports as unlimited anyway.
+    bool ignoresUnitCountLimit() const;
+    /// Brutal plus an explicit override plans against rolling headroom instead of the
+    /// configured military value cap. Nothing else about the difficulty changes.
+    bool overridesMilitaryValueCap() const;
+    /// Effective planning budget for this build pass. Equals militaryValueLimit unless
+    /// overridesMilitaryValueCap(), which never mutates the serialized field.
+    int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     int getCityPopulationLimit(int mapArea) const override;

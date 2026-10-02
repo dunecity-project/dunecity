@@ -45,7 +45,7 @@ inline int readiness(int army, int target) {
     return target > 0 ? int(int64_t(std::max(0,target-army))*1000/target) : 0;
 }
 inline int militaryScore(int price, int value, int army, int target, bool defending) {
-    if (price <= 0 || value <= 0 || army+value > target) return 0;
+    if (price <= 0 || value <= 0 || int64_t(army)+value > target) return 0;
     return int(int64_t(value)*(readiness(army,target)+(defending ? 4000 : 0))/price);
 }
 // Production buildings earn their priority from units that can actually be
