@@ -1,3 +1,37 @@
+# 1.0.796 full release preparation (2026-10-03)
+
+The authorized production release combines the private 1.0.793–795 performance,
+repair and Brutal unit-override changes with current main's city-art refresh.
+Version metadata is 1.0.796; multiplayer protocol remains 44 and save format 9850.
+
+The five maps requested from the MBA are bundled in `data/maps/singleplayer/`:
+`4P - 128x128 - 4 corners.ini`, `4P - 192x192 - DuneCity.ini`,
+`5P - 256x256 - test.ini`, `8P - 128x128 - city seige.ini` and
+`Alkozeltser 4 Cities.ini`. Four files are newly bundled; Four Corners replaces
+its older bundled contents with the exact MBA revision (additional starting
+Deviators and catalogue v1 metadata). Alkozeltser retains its author, CC-BY-SA
+license, six houses and catalogue v1; its name refers to cities, not player count.
+All five source files are copied byte-for-byte, without installing user-profile
+workshop sidecars or depending on a remote cached mod. Existing category logic
+recognizes their city structures or sparse city starter layout.
+City seige's authored `8P` name includes Neutral; the existing catalogue correctly
+reports seven selectable houses. The initial new test assumed eight from the name
+and failed locally and in Linux CI; its expected count was corrected to seven
+without altering map bytes or the established classifier.
+
+Native builds copy the whole data directory; Windows/Linux installation does
+likewise, and Emscripten preloads it at `/`. The browser payload checker now
+requires all five maps to match the tagged source bytes, with missing/corrupt
+map rejection tests. Catalogue tests verify names, map dimensions, house counts,
+revision labels and DuneCity category/dependency from the actual map INIs.
+
+Validation: rebuilt the native Release app, passed dependency audits before and
+after the build, verified all five bundled-map SHA256s against the MBA capture,
+and passed all eight browser payload-checker tests. The required full CTest
+suite and public release gates are in progress; this entry is preparation,
+not a claim of production publication. Captures, provenance and release evidence
+are under `/Users/stefan/Documents/projects/outputs/release-796/`.
+
 ## 2026-10-02 — Repair release and Brutal unit overrides (local 1.0.795)
 
 The MBA repair-stuck save at cycle 46155 contained 47 occupied yards across six

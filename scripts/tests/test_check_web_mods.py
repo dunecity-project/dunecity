@@ -23,6 +23,9 @@ class WebModPayloadTests(unittest.TestCase):
                       'Dune2/zones/fixture/atlas.png': b'fixture image'}
         self.files.update({'/mods/dunecity/graphics_skins/' + name: data
                            for name, data in self.skins.items()})
+        map_root = Path(__file__).resolve().parents[2] / 'data/maps/singleplayer'
+        self.files.update({'/maps/singleplayer/' + name: (map_root / name).read_bytes()
+                           for name in checker.CITY_MAPS})
 
     def check(self, javascript, data):
         return checker.check_payload(javascript, data, skin_payload=self.skins)
@@ -44,6 +47,7 @@ class WebModPayloadTests(unittest.TestCase):
             result = self.check(*self.package(minified))
             self.assertEqual(result['verified_tornie_files'], 6)
             self.assertEqual(result['verified_dunecity_skin_files'], 2)
+            self.assertEqual(result['verified_dunecity_maps'], 5)
 
     def test_checks_minified_scientific_notation_offsets(self):
         js, data = self.package(True)
@@ -80,6 +84,17 @@ class WebModPayloadTests(unittest.TestCase):
         self.files[name] = b'wrong image'
         with self.assertRaisesRegex(ValueError, 'Missing or corrupt DuneCity skin'):
             self.check(*self.package())
+
+    def test_rejects_missing_or_corrupt_city_maps(self):
+        for name in checker.CITY_MAPS:
+            path = '/maps/singleplayer/' + name
+            original = self.files.pop(path)
+            with self.assertRaisesRegex(ValueError, 'Missing or corrupt DuneCity map'):
+                self.check(*self.package())
+            self.files[path] = original + b'changed'
+            with self.assertRaisesRegex(ValueError, 'Missing or corrupt DuneCity map'):
+                self.check(*self.package())
+            self.files[path] = original
 
 
 if __name__ == '__main__':
