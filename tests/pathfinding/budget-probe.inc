@@ -342,6 +342,8 @@ void checkOrdinaryMidSuspensionLoad() {
             if(unit == nullptr) continue;
             require(!unit->pathRequestQueued, "An ordinary load reset the pending flag");
             require(unit->recalculatePathTimer == 0, "An ordinary load carries no stale cooldown");
+            require(unit->stallAnchor.isInvalid() && unit->getStalledCycleCount() == 0,
+                "An ordinary load gives a fresh carryall rescue grace period");
         }
         int requeueCycle = -1;
         for(int i = 0; i < 25 && requeueCycle < 0; ++i) {

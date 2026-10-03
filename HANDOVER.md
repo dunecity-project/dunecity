@@ -1,3 +1,69 @@
+# 2026-10-03 — Long-stall carryall rescue and DuneCity default (1.0.799)
+
+Eligible active ground units with an outstanding movement intent now request an
+owned free carryall after 30 seconds / 1875 simulation cycles on the same tile.
+The clock survives clearPath, queued searches and identical AI route reissues.
+A changed tile or job resets it; accepted explicit human movement/attack orders
+reset it through synchronized Command execution even when coordinates repeat.
+Stopped, parked, inactive, carried and physically moving units are excluded.
+Short blocked trips qualify too. Existing pickup, nearby legal landing and
+repair-yard priority rules remain authoritative; destination arrival still needs
+an available aircraft and a legal landing area.
+
+The first automatic attempt and retries use deterministic per-unit phases.
+Unavailable transport leaves the original mode/navigation/combat intact and
+retries after roughly five seconds plus jitter. Explicit carryall orders keep
+transport-wait intent and bypass an earlier automatic cooldown. Candidate lookup
+scans a derived carrier-ID index in unitList order, validates ownership/activity/
+health/booking and excludes temporary delivery flights. Creation/removal and
+checkpoint restoration invalidate the index, including equal-count replacements.
+Stop or a new player movement/attack order releases both sides of a pickup
+immediately, preventing a cancelled assignment from surviving same-cycle rebooking.
+
+DuneCity's bundled Manual Carryall Drops default is true. Explicit per-mod off
+choices and saved match rules remain effective. Saving mod options now writes
+only that mod's section; it no longer exports the mod's effective rules into the
+Vanilla global defaults. Vanilla, Tornie and Dune2R defaults are unchanged.
+Ordinary save format remains 9850 with a fresh rescue grace period on load.
+Observer runtime 7 serializes the rescue timer/intent; protocol 47 separates
+these simulation decisions from older peers. All three source version files are 799.
+
+Codex delegated the bounded source investigation and implementation to local
+subscription-authenticated Claude Code, then reviewed and integrated command
+validation, reciprocal cancellation, lifecycle invalidation and first-attempt
+spreading. Focused real-engine checks pass in Vanilla and DuneCity (802 checks
+per mode), including queued/cleared paths, moving-target destination churn,
+invalid/unauthorized orders, a two-tile stall, unavailable/busy/enemy/delivery
+carriers, same-cycle replacement/rebooking, complete pickup/drop and repair
+priority. Disabling only the new fallback in a private negative-control binary
+fails the expected eligible-stalled-unit booking assertion. No production object
+was replaced for the negative control. Existing flight tests cover all three modes.
+
+The captured MBA save/mod was replayed for 4000 ticks with fixed 5000-node budget:
+
+| Measurement | 1.0.798 | 1.0.799 |
+| --- | ---: | ---: |
+| Initially ordered local cohort changing tiles / 900 | 511 | 528 |
+| Distinct units observed as carryall cargo | 737 | 828 |
+| Final queued paths | 2642 | 2616 |
+| Mean time inside simulation updates (ms) | 7.637 | 8.008 |
+| p99 update time (ms) | 37.565 | 38.101 |
+
+Cargo counts include 118 units already carried at load and all existing transport,
+not only new rescues. Tile changes include transport and do not prove arrival.
+Timings are steady-clock durations on claw.local including worker waits/internal
+logging, excluding loading/compiling/extra observations; they are not MBA FPS or
+process CPU. Later workloads differ with gameplay. This adds recovery rather than
+a measured FPS gain and does not clear every large-army stall.
+
+One versus four workers produced all 41 identical digests, identical gameplay
+save bytes and identical final observer runtime bytes. The path budget/traffic/
+inputs/control/observer/parser/ordinary-load/cleanup probe passes; restored
+120-tick tails have identical states and saved bytes. Dependency audits and native
+Release builds pass, with source version agreement. Full regression and guarded
+MBA installation are being completed; no push or public release.
+Evidence: ../outputs/stuck-carryall-799/ and ../outputs/carryall-install-799/.
+
 # 2026-10-03 — 1.0.798 installed on the MBA
 
 At the user's request, installed the tested code commit

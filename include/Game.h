@@ -56,6 +56,8 @@
 #include <mutex>
 #include <cmath>
 #include <array>
+#include <limits>
+#include <vector>
 
 // forward declarations
 class ObjectBase;
@@ -277,6 +279,27 @@ public:
     void queueTargetRequest(Uint32 objectId);
     void queuePathRequest(Uint32 objectId);
     inline size_t getPathRequestQueueSize() const { return pathRequestQueue.size(); }
+
+    /**
+        The object ids of every carryall currently in unitList, in unitList order.
+
+        A derived index, not a ledger: creation/removal invalidates it; it is also rebuilt when
+        the simulation cycle or unit count changes. Every reader validates each id against the object
+        manager anyway. Nothing about a carryall's booking, ownership, health or activity is
+        cached here, so no event can leave it describing a carryall that no longer matches
+        reality - the worst a stale entry can do is cost one failed lookup.
+
+        It exists so that asking "is any of my carryalls free" costs a scan of the carriers
+        instead of a scan of every unit in the game. Preserving unitList order preserves the
+        existing deterministic first-free selection exactly.
+
+        Never serialised, and holds ids rather than pointers, so it cannot dangle.
+    */
+    const std::vector<Uint32>& getCarryallCandidateIds();
+
+    /// Forces the next getCarryallCandidateIds() to rebuild. Used where a cycle can both create
+    /// and remove carriers, and after an observer checkpoint replaces the unit set.
+    void invalidateCarryallCandidateIds();
     inline bool isPathQueueStressed() const { return pathRequestQueue.size() > 300; }
     SpatialGrid* getSpatialGrid() const { return spatialGrid.get(); }
     void initializeSpatialGrid(int mapWidth, int mapHeight);
@@ -985,6 +1008,11 @@ private:
     struct PathRequest {
         Uint32 objectId;
     };
+
+    /// Derived carrier index; lifecycle invalidation handles same-cycle replacements.
+    std::vector<Uint32> carryallCandidateIds;
+    Uint32 carryallCandidateCycle = std::numeric_limits<Uint32>::max();
+    size_t carryallCandidateUnitCount = std::numeric_limits<size_t>::max();
 
     std::deque<TargetRequest> targetRequestQueue;
     std::unordered_set<Uint32> pendingTargetRequestIds;

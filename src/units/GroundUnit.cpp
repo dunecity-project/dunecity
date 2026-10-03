@@ -153,7 +153,13 @@ void GroundUnit::checkPos() {
     // If we are awaiting a pickup try book a carryall if we have one
     if(!pickedUp && attackMode == CARRYALLREQUESTED && bookedCarrier == NONE_ID) {
         if(getOwner()->hasCarryalls() && (target || (destination != location))) {
-            requestCarryall();
+            // Throttled: this runs on every cycle, and an unthrottled retry here meant every unit
+            // waiting on a fully booked fleet rescanned for a free carrier once per cycle. The
+            // transport intent itself is unchanged - the unit stays in CARRYALLREQUESTED and keeps
+            // asking - only the scan rate is bounded.
+            if(carryallRequestCooldown <= 0) {
+                requestCarryall();
+            }
         } else {
             if(isHarvesterLikeUnit(getItemID())) {
                 doSetAttackMode(HARVEST);
@@ -186,9 +192,12 @@ void GroundUnit::doRequestCarryallDrop(int xPos, int yPos) {
 
 void GroundUnit::cancelCarryallPickup() {
     if(awaitingPickup || bookedCarrier != NONE_ID) {
-        // bookCarrier(nullptr) clears bookedCarrier and awaitingPickup, and
-        // Carryall::engageTarget() will release us on its next tick because
-        // isAwaitingPickup() now returns false.
+        // Release both sides immediately. Otherwise cancelling and rebooking in the same
+        // cycle leaves the first aircraft targeting a passenger promised to another aircraft.
+        auto* carryall = dynamic_cast<Carryall*>(currentGame->getObjectManager().getObject(bookedCarrier));
+        if(carryall != nullptr && carryall->getTarget() == this) {
+            carryall->setTarget(nullptr);
+        }
         bookCarrier(nullptr);
     }
 
@@ -214,30 +223,104 @@ void GroundUnit::doMove2Object(const ObjectBase* pTargetObject) {
     UnitBase::doMove2Object(pTargetObject);
 }
 
-bool GroundUnit::requestCarryall() {
-    if (getOwner()->hasCarryalls() && !awaitingPickup)  {
-        Carryall* carryall = nullptr;
+Carryall* GroundUnit::findFreeCarrier() const {
+    if(currentGame == nullptr) {
+        return nullptr;
+    }
 
+    // Carriers only, in unitList order, so a fully booked fleet costs a scan of the fleet instead
+    // of a scan of every unit in the match. The index is derived and may be a tick stale, which is
+    // why every candidate is revalidated here.
+    for(const Uint32 carrierId : currentGame->getCarryallCandidateIds()) {
+        auto* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(carrierId));
+        if(unit == nullptr || !isCarryallUnit(unit->getItemID())) {
+            continue;  // Gone, or the id was reused by something else.
+        }
+        if(unit->getOwner() != owner || !unit->isActive() || unit->getHealth() <= 0) {
+            continue;
+        }
+        if(currentGameMap == nullptr || !currentGameMap->tileExists(unit->getLocation())) {
+            continue;  // Already leaving the map.
+        }
+
+        auto* carryall = static_cast<Carryall*>(unit);
+        if(carryall->isBooked()) {
+            continue;
+        }
+        if(carryall->isDropOfferer() || !carryall->isOwnedCarrier()) {
+            continue;  // A delivery flight that removes itself; booking it strands the unit.
+        }
+        return carryall;
+    }
+
+    return nullptr;
+}
+
+void GroundUnit::armCarryallRequestThrottle() {
+    carryallRequestCooldown = carryallRescueCooldownCycles
+        + static_cast<Sint32>(getObjectID() % carryallRescueJitterCycles);
+}
+
+bool GroundUnit::requestCarryall() {
+    // A repeat of a request this unit is already waiting on is throttled, wherever it comes from:
+    // checkPos() and both harvester classes call this every cycle while a lift is wanted, and
+    // without this each of those calls was a fresh fleet scan. A genuinely new explicit order is
+    // never affected, because every one of them (the player's drop order, doRepair, a forced move
+    // to a different refinery) cancels the outstanding pickup first, which leaves CARRYALLREQUESTED
+    // before arriving here.
+    if(attackMode == CARRYALLREQUESTED && !awaitingPickup && carryallRequestCooldown > 0) {
+        return false;
+    }
+
+    if (getOwner()->hasCarryalls() && !awaitingPickup)  {
         // This allows a unit to keep requesting a carryall even if one isn't available right now
         doSetAttackMode(CARRYALLREQUESTED);
 
-        for(UnitBase* pUnit : unitList) {
-            if ((pUnit->getOwner() == owner) && isCarryallUnit(pUnit->getItemID())) {
-                if(!static_cast<Carryall*>(pUnit)->isBooked()) {
-                    carryall = static_cast<Carryall*>(pUnit);
-                    carryall->setTarget(this);
-                    carryall->clearPath();
-                    bookCarrier(carryall);
+        // A fleet scan happened, so the throttle is armed either way. Explicit requests never
+        // *consult* it - a player order or a repair trip is honoured immediately - but arming it
+        // here is what stops checkPos() rescanning the fleet on every cycle for a unit sitting in
+        // CARRYALLREQUESTED with nothing free to collect it.
+        armCarryallRequestThrottle();
 
-                    //setDestination(&location);    //stop moving, and wait for carryall to arrive
+        if(Carryall* carryall = findFreeCarrier()) {
+            carryall->setTarget(this);
+            carryall->clearPath();
+            bookCarrier(carryall);
 
-                    return true;
-                }
-            }
+            //setDestination(&location);    //stop moving, and wait for carryall to arrive
+
+            return true;
         }
     }
 
     return false;
+}
+
+bool GroundUnit::requestCarryallRescue() {
+    if(carryallRequestCooldown > 0 || awaitingPickup || hasBookedCarrier() || !getOwner()->hasCarryalls()) {
+        return false;
+    }
+
+    // Armed before the result is known: a failed rescue costs one fleet scan and then waits out
+    // the cooldown. It deliberately does not restart the thirty-second stall clock, so the unit
+    // stays a candidate and retries once per cooldown rather than once per thirty seconds.
+    armCarryallRequestThrottle();
+
+    Carryall* carryall = findFreeCarrier();
+    if(carryall == nullptr) {
+        // Nothing free. The unit keeps its own attack mode and keeps navigating and fighting; it is
+        // deliberately not moved into CARRYALLREQUESTED, which would freeze it waiting for a flight
+        // nobody has promised.
+        return false;
+    }
+
+    carryall->setTarget(this);
+    carryall->clearPath();
+    bookCarrier(carryall);
+    // Only now that a carrier is actually on its way does this become a transport wait, which is
+    // the state Carryall::pickupTarget() and checkPos() already understand.
+    doSetAttackMode(CARRYALLREQUESTED);
+    return true;
 }
 
 void GroundUnit::setPickedUp(UnitBase* newCarrier) {

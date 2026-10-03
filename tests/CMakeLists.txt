@@ -415,6 +415,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
         set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # A ground unit walled in on a real map really does stop moving, so the thirty-second
+        # long-stall rescue can be measured against the engine instead of being simulated:
+        # the clock survives a queued path request and a route cleared every cycle, and the
+        # rescue books exactly one free owned carrier and delivers to the unit's own goal.
+        add_test(NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
+        set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Brutal only plans past its configured military value cap when the lobby
         # selected an explicit unit-count override; the engine count limit stays
         # the authority, and other difficulties keep the configured cap.

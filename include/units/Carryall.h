@@ -62,6 +62,21 @@ public:
 
     inline bool isBooked() const { return (target || hasCargo()); }
 
+    /**
+        Is this a one-way delivery flight that vanishes once its cargo is down?
+
+        Reinforcement and starting-harvester drops are created with setDropOfferer(true) and
+        remove themselves as soon as they are empty and off the map (see Carryall::update). Between
+        dropping their cargo and leaving they are unbooked and would otherwise look like an idle
+        carrier, so the automatic rescue has to be able to tell them apart from the player's own
+        fleet. Read-only; nothing here changes behaviour on its own.
+    */
+    inline bool isDropOfferer() const { return aDropOfferer; }
+
+    /// False for a carryall that only exists to deliver something and is not part of the owner's
+    /// fleet (House::createUnit callers set this alongside setDropOfferer).
+    inline bool isOwnedCarrier() const { return owned; }
+
 protected:
     void releaseTarget() override;
     void engageTarget() override;

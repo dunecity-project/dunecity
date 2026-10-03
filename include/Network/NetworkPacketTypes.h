@@ -110,7 +110,14 @@
 // Version 45: Police patrol admission uses the effective game unit-category limits
 //             instead of a separate 250-unit ceiling. Older peers can spawn different
 //             patrols from the same command or AI tick.
-#define NETWORK_PROTOCOL_VERSION            46
+// Version 47: A ground unit that has been on the same tile for thirty seconds of simulation
+//             time while still wanting to move asks for a carryall, retrying on a throttle
+//             rather than once per completed path search, and Stop now releases an outstanding
+//             pickup booking. Which units are lifted, and on which cycle, is simulation state:
+//             a peer on version 46 would keep driving a unit this build flies, and would hold a
+//             booking this build cancels. The observer runtime stream is version 7 for the same
+//             reason.
+#define NETWORK_PROTOCOL_VERSION            47
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

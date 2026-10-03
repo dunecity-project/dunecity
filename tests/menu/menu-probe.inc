@@ -698,6 +698,99 @@ int runMenuProbe() {
         }
         settings.general.customGameMod = rememberedBefore;
     }
+    {
+        // Carryall drops are a Dune City default, and only a Dune City default. Everything here
+        // reads the real resolution chain: the mod's own GameOptions.ini, the player's per-mod
+        // overrides in the configuration file, and the global section vanilla uses.
+        ModManager& mods = ModManager::instance();
+        const auto savedBase = settings.gameOptions;
+        const auto savedEffective = effectiveGameOptions;
+        const auto savedRules = setup.rules;
+        const std::string activeBefore = mods.getActiveModName();
+
+        auto rulesFor = [&](const char* mod) {
+            menuRequire(mods.setActiveMod(mod), "Cannot activate the carryall-default fixture mod");
+            effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+            return effectiveGameOptions;
+        };
+
+        // A fresh profile has no per-mod overrides, so each mod's own file decides.
+        menuRequire(rulesFor("dunecity").manualCarryallDrops,
+                    "A fresh Dune City game does not enable carryall drops");
+        menuRequire(!rulesFor("vanilla").manualCarryallDrops,
+                    "Vanilla inherited the Dune City carryall default");
+        if(mods.getModInfo("Dune2R").name == "Dune2R") {
+            menuRequire(!rulesFor("Dune2R").manualCarryallDrops,
+                        "Dune2R inherited the Dune City carryall default");
+        }
+        menuRequire(!settings.gameOptions.manualCarryallDrops,
+                    "Reading the effective rules changed the global defaults");
+
+        // An explicit choice for this mod sits on top of the mod's file and is never reseeded away.
+        {
+            menuRequire(mods.setActiveMod("dunecity"), "Cannot activate Dune City");
+            INIFile config(getConfigFilepath());
+            config.setBoolValue(userGameOptionsSection(), "Manual Carryall Drops", false);
+            menuRequire(config.saveChangesTo(getConfigFilepath()), "Could not store an explicit choice");
+            effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+            menuRequire(!effectiveGameOptions.manualCarryallDrops,
+                        "An explicit Dune City 'off' was overridden by the mod default");
+        }
+
+        // Saving defaults while a mod is active must not export that mod's rules to vanilla.
+        {
+            menuRequire(mods.setActiveMod("dunecity"), "Cannot activate Dune City");
+            effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+            auto chosen = effectiveGameOptions;
+            chosen.manualCarryallDrops = true;
+            chosen.sandwormsRespawn = !chosen.sandwormsRespawn;  // A second, unrelated change.
+            saveGameOptionsAsDefaults(chosen);
+            menuRequire(effectiveGameOptions.manualCarryallDrops
+                        && effectiveGameOptions.sandwormsRespawn == chosen.sandwormsRespawn,
+                        "Saving Dune City defaults did not take effect for Dune City");
+            menuRequire(!settings.gameOptions.manualCarryallDrops,
+                        "Saving Dune City defaults rewrote the global game options in memory");
+            INIFile config(getConfigFilepath());
+            menuRequire(!config.getBoolValue("Game Options", "Manual Carryall Drops", false),
+                        "Saving Dune City defaults wrote the carryall default into the global section");
+            menuRequire(config.getBoolValue(userGameOptionsSection(), "Manual Carryall Drops", false),
+                        "The Dune City choice was not stored in its own section");
+            menuRequire(!rulesFor("vanilla").manualCarryallDrops,
+                        "A Dune City options save leaked into Vanilla play");
+        }
+
+        // Vanilla still owns the global section.
+        {
+            menuRequire(mods.setActiveMod("vanilla"), "Cannot activate vanilla");
+            menuRequire(userGameOptionsSection().empty(), "Vanilla gained a per-mod section");
+            auto chosen = mods.loadEffectiveGameOptions(settings.gameOptions);
+            chosen.manualCarryallDrops = true;
+            saveGameOptionsAsDefaults(chosen);
+            menuRequire(settings.gameOptions.manualCarryallDrops,
+                        "A Vanilla options save no longer updates the global defaults");
+            INIFile config(getConfigFilepath());
+            menuRequire(config.getBoolValue("Game Options", "Manual Carryall Drops", false),
+                        "A Vanilla options save no longer writes the global section");
+        }
+
+        // Nothing above touched an existing setup's match rules.
+        menuRequire(setup.rules == savedRules, "Option default checks rewrote the saved match rules");
+        SDL_Log("MENU_PROBE_CARRYALL_DEFAULTS: dunecity=1 vanilla=0 explicit_off=1 no_leak=1");
+
+        // Put the profile back the way the rest of the probe expects it: the global section and
+        // the in-memory defaults restored, and the Dune City section left agreeing with the mod.
+        menuRequire(mods.setActiveMod("vanilla"), "Cannot activate vanilla");
+        saveGameOptionsAsDefaults(savedBase);
+        {
+            INIFile config(getConfigFilepath());
+            config.setBoolValue("Game Options dunecity", "Manual Carryall Drops", true);
+            menuRequire(config.saveChangesTo(getConfigFilepath()), "Could not restore the profile");
+        }
+        settings.gameOptions = savedBase;
+        menuRequire(mods.setActiveMod(activeBefore), "Cannot restore the probe's active mod");
+        effectiveGameOptions = savedEffective;
+        setup.rules = savedRules;
+    }
     const auto map = setup.maps.front();
     GameInitSettings init(getBasename(map,true),readCompleteFile(map),false,setup.rules);
     {

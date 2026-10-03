@@ -353,6 +353,29 @@ void Game::queuePathRequest(Uint32 objectId) {
     }
 }
 
+void Game::invalidateCarryallCandidateIds() {
+    carryallCandidateCycle = std::numeric_limits<Uint32>::max();
+    carryallCandidateUnitCount = std::numeric_limits<size_t>::max();
+    carryallCandidateIds.clear();
+}
+
+const std::vector<Uint32>& Game::getCarryallCandidateIds() {
+    // Unit creation/removal invalidates this index, including equal-count replacements within
+    // one cycle. The count check also catches bulk lifecycle changes. Existence, owner, activity,
+    // health and booking are revalidated by the caller on every lookup.
+    if(carryallCandidateCycle != gameCycleCount || carryallCandidateUnitCount != unitList.size()) {
+        carryallCandidateIds.clear();
+        for(const UnitBase* unit : unitList) {
+            if(unit != nullptr && isCarryallUnit(unit->getItemID())) {
+                carryallCandidateIds.push_back(unit->getObjectID());
+            }
+        }
+        carryallCandidateCycle = gameCycleCount;
+        carryallCandidateUnitCount = unitList.size();
+    }
+    return carryallCandidateIds;
+}
+
 /**
     The destructor frees up all the used memory.
 */
@@ -569,6 +592,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
     // keeps the request-lifecycle conservation check honest across a load.
     pathRequestsCancelled += activePathJobs.size();
     activePathJobs.clear();
+    invalidateCarryallCandidateIds();
 
     // Initialize performance logging
     initPerformanceLog();
@@ -4448,6 +4472,7 @@ bool Game::loadSaveGame(InputStream& stream) {
     // keeps the request-lifecycle conservation check honest across a load.
     pathRequestsCancelled += activePathJobs.size();
     activePathJobs.clear();
+    invalidateCarryallCandidateIds();
 
     const char* loadStage = "header";
     auto logLoadStage = [&stream, &loadStage](const char* stage) {
@@ -7046,7 +7071,12 @@ std::string Game::saveObserverRuntime() const {
     // the searches the host has already partly paid for: flushing them on the host
     // instead would be a mutation no peer performs, so the stream carries the whole
     // continuation state rather than a restart hint.
-    out.writeUint32(6); out.writeUint32(gameCycleCount);
+    //
+    // Version 7 adds each unit's long-stall rescue clock (UnitBase::saveObserverRuntime).
+    // That clock is thirty seconds of simulation time long, so restarting it on the spectator
+    // would hand every already-stalled unit a grace period the host is not giving it and the two
+    // would then book transport on different cycles.
+    out.writeUint32(7); out.writeUint32(gameCycleCount);
     out.writeUint32(negotiatedBudget); out.writeUint32(cmdManager.getNetworkCycleBuffer());
     out.writeUint32(currentGameMap->getPathingRevision());
     out.writeUint32(carryOverTokens);
@@ -7102,7 +7132,10 @@ std::string Game::saveObserverRuntime() const {
 void Game::loadObserverRuntime(const std::string& bytes) {
     IMemoryStream in(bytes.data(),bytes.size());
     const auto runtimeVersion=in.readUint32();
-    if((runtimeVersion!=6) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    if((runtimeVersion!=7) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    // The checkpoint replaces this instance's unit set, so the derived carrier index describes
+    // units that may no longer exist. Rebuilt on first use after this.
+    invalidateCarryallCandidateIds();
     negotiatedBudget=in.readUint32(); const auto buffer=in.readUint32();
     if(negotiatedBudget<kMinBudget || negotiatedBudget>kMaxBudget || buffer>1000) throw std::runtime_error("Invalid spectator checkpoint budget");
     cmdManager.setNetworkCycleBuffer(buffer);
