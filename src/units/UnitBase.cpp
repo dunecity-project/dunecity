@@ -2406,6 +2406,9 @@ bool UnitBase::isCachedPathStillValid() {
         }
 
         if(++nodesChecked >= kPathValidationProbeCount) {
+            // Record this validation for long routes too. The unchecked tail is
+            // still protected by the live collision check before each step.
+            cachedPathRevision = currentRevision;
             registerHit();
             return true;
         }

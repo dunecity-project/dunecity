@@ -4752,6 +4752,11 @@ bool Game::loadSaveGame(InputStream& stream) {
                 }
             }
         }
+        if(detachedTiles > 0) {
+            // Units loaded earlier may hold routes through a detached footprint.
+            // Tile assignment no longer invalidates routes for ordinary traffic.
+            currentGameMap->incrementPathingRevision();
+        }
         if(detachedTiles > 0 || overlappingTiles > 0) {
             SDL_Log("Loaded game: re-attached %d zone tiles, %d zone tiles overlap another object",
                     detachedTiles, overlappingTiles);

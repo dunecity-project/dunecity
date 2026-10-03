@@ -1,3 +1,82 @@
+# 2026-10-03 — Large-army path backlog (local 1.0.798)
+
+The MBA's installed 1.0.796 match was captured as `path-stuck.dls` at cycle 75937,
+with exact pinned DuneCity mod revision `c8d6d3bed38f1cd8`. Live logs showed about
+5880 units, 3320–3440 queued paths and saturation of the 5000-node budget. The save
+SHA256 is `cdfe1a141a228d50cbba1779f8a9297c7a580b64ad353fd00c62fb2da1ce3cb8`.
+This patch is local; the MBA installation and production release were not replaced.
+
+Ground-unit tile assignment/removal no longer changes the global pathing revision.
+Structure placement/destruction, mountain transitions and repaired zone footprints
+still invalidate it. Long-route prefix validation now records its revision. Every
+actual step still checks live collision rules. AStar accepts an adjacent approach
+when its original goal cannot be entered, retaining the original goal and cache /
+fingerprint identity; free booked refinery and repair-yard entries remain exact.
+Both harvester classes exclude pending searches from blocked-refinery failures.
+No shared flow fields, formations, local-detour system or adaptive-budget changes
+are included. The remaining congestion needs shared strategic navigation with
+local collision handling and nearby arrival positions, rather than a dependency
+on a single squad leader.
+
+Protocol 46 separates the changed navigation/patrol rules from older peers.
+Ordinary save format 9850 and observer runtime 6 are unchanged; no fields were added.
+The native Release build and source metadata are 1.0.798.
+
+Private replay: same save/mod, 2000 ticks, four workers, fixed 5000 nodes/tick.
+The reference was local 1.0.797 (same pathfinder as public 796, with its police fix).
+
+| Measurement | Reference | 1.0.798 |
+| --- | ---: | ---: |
+| Applied search results (including empty routes) | 3817 | 8648 |
+| Final queued paths | 3375 | 2618 |
+| Initial local cohort that changed tiles / 900 | 383 | 472 |
+| Time inside simulation updates (seconds) | 22.803 | 15.323 |
+
+These are steady-clock update durations on claw.local, including worker waits and
+internal logging, excluding compilation/loading and extra observer scans. They are
+not MBA FPS or aggregate process CPU time. Different movement produces different
+later gameplay workloads. Cohort movement means at least one tile change, including
+possible transport, not destination arrival. Tripling the original budget alone
+moved 476/900 and took 26.416 seconds; the implemented fixes achieve similar cohort
+progress with the original budget. The remaining queue means this is a measured
+first improvement, not a claim that all large-army stalls are eliminated.
+
+Validation: 46 CTest targets passed in the full run; the unit target passed after
+its independently pinned protocol expectation was intentionally updated 45→46.
+Three optional live-download/GPU unit cases stayed skipped. Native build, source
+version agreement, Ninja dependency audits and whitespace checks passed.
+The real-engine path probe passed strict budget, lifecycle, cancellation, terrain
+churn, ordinary mid-search load, observer continuation/control and cleanup checks
+(480 static slice/whole comparisons; 7,456,537 diagnostic assertions overall).
+Controlled production vehicles retained routes through future traffic, rejected
+an occupied immediate step, invalidated routes for actual walls/mountains, and
+reached free refinery/repair-yard entry tiles. The pending-harvester counter was
+exercised in the captured DuneCity mode; the parallel RebelHarvester check runs
+only for a Tornie save, so its new guard was source-reviewed here.
+
+One and four workers, including deliberately delayed four-worker completion,
+matched all 21 checkpoints and final gameplay-save bytes over 2000 ticks. The
+comparator excludes only the release-label field. Saved-state SHA256:
+`2b3ddbd8b3e47b87181ae62f9c25cb9ae4bfa2827980a8ec689ca0ba1bce912e`.
+Reference AStar checks sampled eight units per type: 728 queries, 15 types, three
+rounds. Enterable goals kept exact routes/node counts; blocked goals saved 292960
+nodes in the first round. Unchanged unreachable fallback routes remain permitted.
+Restoring the previous Tile, AStar or Harvester implementation individually in a
+private binary reproduced its corresponding new traffic/cost/pending-counter
+failure; the final traffic fixture passed all 244 checks.
+
+The first traffic fixture allowed unrelated combat/transport to change its subject.
+It was replaced with controlled production vehicles, and fixture relocation now
+releases prior tile occupancy before assigning the new position. The initial goal
+cost bound also passed baseline; the final bound requires no more expansions than
+the otherwise identical free goal (119 versus 132; baseline blocked goal 245).
+
+Subscription delegation used Claude session `5fd94ace-d1a6-4eaf-bd46-28822b35b48e`
+for source investigation/implementation. Its narrow shell permissions blocked
+preparatory commands, so it claimed no runtime checks. Codex reviewed/integrated,
+corrected the fixtures and ran all validation. Captures, scripts, raw measurements
+and the diagnosis are in `/Users/stefan/Documents/projects/outputs/path-stall-20261003/`.
+
 # 2026-10-03 — Police unit capacity fix (local 1.0.797)
 
 The user requested that police must not claim "Unit limit reached" below the game's

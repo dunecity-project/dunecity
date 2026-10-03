@@ -353,15 +353,11 @@ void Tile::assignAirUnit(Uint32 newObjectID) {
 }
 
 void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
-    // Only increment revision if tile transitions from passable to blocked
-    bool wasPassable = assignedNonInfantryGroundObjectList.empty();
-    
+    // Traffic must not invalidate every vehicle's cached route. Movement still
+    // checks the next tile, and searches refresh occupancy each slice. Structures
+    // bump the revision on placement/destruction, mountain changes in setType(),
+    // and repaired zone footprints in Game::loadSaveGame().
     assignedNonInfantryGroundObjectList.push_back(newObjectID);
-    
-    if(currentGameMap != nullptr && wasPassable) {
-        // Tile just became blocked (0 -> 1 unit) - invalidate paths
-        currentGameMap->incrementPathingRevision();
-    }
 }
 
 int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
@@ -828,15 +824,8 @@ void Tile::unassignAirUnit(Uint32 objectID) {
 }
 
 void Tile::unassignNonInfantryGroundObject(Uint32 objectID) {
+    // Structure destruction invalidates routes explicitly in ~StructureBase.
     assignedNonInfantryGroundObjectList.remove(objectID);
-    
-    // Only increment revision if tile transitions from blocked to passable
-    bool isNowPassable = assignedNonInfantryGroundObjectList.empty();
-    
-    if(currentGameMap != nullptr && isNowPassable) {
-        // Tile just became passable (1 -> 0 units) - invalidate paths
-        currentGameMap->incrementPathingRevision();
-    }
 }
 
 void Tile::unassignUndergroundUnit(Uint32 objectID) {

@@ -110,7 +110,7 @@
 // Version 45: Police patrol admission uses the effective game unit-category limits
 //             instead of a separate 250-unit ceiling. Older peers can spawn different
 //             patrols from the same command or AI tick.
-#define NETWORK_PROTOCOL_VERSION            45
+#define NETWORK_PROTOCOL_VERSION            46
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

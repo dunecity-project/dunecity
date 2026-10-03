@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
-project(DuneCity VERSION 1.0.797 LANGUAGES C CXX)
+project(DuneCity VERSION 1.0.798 LANGUAGES C CXX)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
