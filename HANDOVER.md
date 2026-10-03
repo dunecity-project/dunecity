@@ -1,3 +1,27 @@
+# 2026-10-03 — 1.0.799 installed on the MBA
+
+Installed code commit `887d305900ce3a6bac32afa058d263d74950921b` at
+`/Applications/dunecity.app` on `Stefans-MacBook-Air.local`, continuing the
+requested MBA installation with the carryall rescue and DuneCity default change.
+All 48 CTest targets passed before replacement. The guard verified the previous
+1.0.798 executable and checked for a running game before staging and again before
+replacement; no game was stopped or match launched.
+
+The portable package's 36 ARM64 Mach-O files, deep/strict signatures and bundled
+SDL initialization/hidden-window rendering passed locally and on the MBA.
+Independent installed-app checks confirmed version 1.0.799 and executable SHA256
+`da1b7525506f52d38e9b13991ef1e6a7f3d000c65a84a22ddfc2ef0bb9d9572b`.
+All 1855 current profile save/INI files remained byte-identical. The 1.0.798
+rollback app is retained at
+`/Applications/.dunecity-backup-before-799-20261003/dunecity.app`, executable SHA256
+`b8c1ee655f50c8843f2879eab94b88880cc2cbe8cc418625518e8ef41d88075c`.
+The earlier 1.0.796 rollback copy is also retained.
+
+Receipts, independent verification, package and audit are in
+`/Users/stefan/Documents/projects/outputs/carryall-install-799/`.
+This is a private MBA installation. No push or public release was performed;
+multiplayer peers require the new protocol 47 build too.
+
 # 2026-10-03 — Long-stall carryall rescue and DuneCity default (1.0.799)
 
 Eligible active ground units with an outstanding movement intent now request an
@@ -60,8 +84,8 @@ One versus four workers produced all 41 identical digests, identical gameplay
 save bytes and identical final observer runtime bytes. The path budget/traffic/
 inputs/control/observer/parser/ordinary-load/cleanup probe passes; restored
 120-tick tails have identical states and saved bytes. Dependency audits and native
-Release builds pass, with source version agreement. Full regression and guarded
-MBA installation are being completed; no push or public release.
+Release builds pass, with source version agreement. All 48 configured CTest targets pass (full-ctest.log). The guarded MBA
+installation and independent verification below pass; no push or public release.
 Evidence: ../outputs/stuck-carryall-799/ and ../outputs/carryall-install-799/.
 
 # 2026-10-03 — 1.0.798 installed on the MBA
