@@ -1,3 +1,27 @@
+# 2026-10-03 — 1.0.798 installed on the MBA
+
+At the user's request, installed the tested code commit
+`eaa25981990f0d3084c68106d308e23e490b80d4` at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`. The installer checked that no game was running before
+staging and again before replacing the app; no game was stopped or match launched.
+The package includes the 1.0.797 police capacity fix and 1.0.798 pathfinding changes
+described below. Shared navigation remains unimplemented.
+
+Fresh `cmake --install` bundled all runtime dependencies. The package's 36 ARM64
+Mach-O files have portable library references. Deep/strict signatures and bundled
+SDL initialization/hidden-window rendering passed locally, during the guarded
+installation and independently from the installed app. Installed version and
+executable SHA-256 were independently verified:
+`b8c1ee655f50c8843f2879eab94b88880cc2cbe8cc418625518e8ef41d88075c`.
+
+All 1776 profile save/INI files remained byte-identical. The previous verified
+1.0.796 app is retained at
+`/Applications/.dunecity-backup-before-798-20261003/dunecity.app` (executable SHA-256
+`1bb8574583e286df42eb68cc2df92a5e507d60a0de41b929ffe53ef9b4979db5`).
+Receipts, portable package and independent verification are in
+`/Users/stefan/Documents/projects/outputs/path-install-798/`.
+This was a private MBA installation; nothing was pushed or publicly released.
+
 # 2026-10-03 — Large-army path backlog (local 1.0.798)
 
 The MBA's installed 1.0.796 match was captured as `path-stuck.dls` at cycle 75937,
