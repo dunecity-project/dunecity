@@ -1,3 +1,83 @@
+# 2026-10-04 — Engine Hunt, exterior assembly and colony defence (1.0.804)
+
+Custom Hard/Brutal ground attackers now use engine Hunt. Shared forced objectives
+were removed; ordinary scans and damage callbacks no longer kite, assign prey or
+regroup a hunting attacker. Repair and emergency base defence keep their roles.
+Wave tracking supports commitment accounting and withdrawal. Idle units that
+have stopped attacking release their commitment instead of blocking later waves.
+
+Captured MBA 1.0.803 telemetry showed both houses repeatedly withdrawing after
+small raids on already damaged core assets, despite much stronger local defence.
+Core emergencies now require material hostile power and a disadvantage at the
+specific attacked asset; a half-damaged building doubles threat for this test,
+without bypassing it. A local defeat also requires material tracked power
+actually present near the engagement, at least 20% of tracked wave power. A raid
+at an empty centroid between dispersed attackers cannot recall the whole army.
+Attrition recovery and the 1.5x ground-front gate with its 80% fixed-limit bypass
+remain active.
+
+Reserves gather outside a real colony footprint, on safe ground off its roads;
+withdrawal uses the sheltered rally. Both the centre and actual scatter/arrival
+slots use the exterior rule. A blocked exterior search falls back to shelter.
+The footprint is bounded by the colony neighbourhood, without clipping away
+outer streets. Formation scoring favours the near edge of the exterior band.
+A substantial locally assembled cohort can leave while remote colonies produce
+reinforcements. Its commitment share retains local reserves and counts existing
+hunters, stays below the global share, and cannot stack on a repeated unchanged
+pass. New batches must meet the existing viable-wave minimum after scaling value
+by the commitment percentage, including cheap infantry.
+
+A single threatened or observed forward colony can receive at most four reserve
+units from a house with more than twelve healthy ground troops. This shares the
+existing recall order budget, protects newly dispatched hunters, repair runs,
+human orders and emergency defenders at execution, and never claims the active
+wave. It is a small post, rather than comprehensive defence of every colony.
+Campaign, helper and Easy/Medium army behaviour retain their existing scope.
+
+Independent saved-game checks load `army-stuck-803.dls` with its exact immutable
+map/mod revisions: 2P 128x128 Sihaya-Ferryman, seed 332779187, Atreides/Mercenary
+Brutal, DuneCity city simulation. From cycle 159040 through 183040 (384 simulation
+seconds), 1.0.803 ended with zero Hunt ground units in either house, despite eight
+logged small dispatches. 1.0.804 dispatches four actual Hunt batches per house:
+Atreides 58/56/34/54 units and Mercenary 89/44/61/46. Mercenary finishes with 114
+hunters and 101 targeting ground troops. Atreides withdraws at 181429 after
+21,940 credits of mobile losses versus 5,060 confirmed hostile kills in its fully
+sampled window, with worsening readiness; neither a core raid nor local defeat
+caused that withdrawal.
+
+One/four actual path-worker runs match all twelve state checkpoints and final
+serialized gameplay bytes (release label excluded), SHA-256
+`7feaaa5ce0a16eb0fb3407e9d783c49d1c0feb2ea1c7d3965000319988150238`.
+A separate four-worker run with a 400-microsecond deterministic task delay also
+matches. Headless update mean/p99 is 0.954/4.625 ms with one worker and
+0.830/4.601 ms with four, versus baseline 0.610/3.804 ms. The new run does more
+active fighting; these are Mac-mini simulation measurements, not MBA rendered
+FPS or evidence that combat throughput is cheaper than idle simulation.
+
+Focused real-engine recovery checks pass, including attack-mode retention on
+damage and ordinary scans, remote-reserve readiness, empty-centroid raids,
+exterior destinations, colony authority changes between choice/execution,
+79.9/80.0/80.1% boundaries, bounded recall of over 900 units and observer/save
+continuation. All 54 CTest target outcomes pass. The full run took 771.75 seconds and
+found one obsolete protocol-pin assertion; after updating it to 52, the native
+target rerun passed in 1.42 seconds. The remaining 53 targets passed in the full
+run. The native target retains three optional asset/network skips.
+
+No serialized fields added: save 9852 and observer runtime 7 remain unchanged.
+Network protocol 52 separates peers with different AI decisions. Telemetry is
+17, policy `engine-hunt-and-colony-assembly-v87`. The observer city-accounting
+limitation documented under 1.0.802 remains: passing this army-scoped continuation
+is not certification of all observer accounting. Ordinary saved-match worker
+parity above compares the complete save.
+
+Portable ARM64 1.0.804 is staged and passes all 36 Mach-O dependency/architecture
+checks, deep/strict ad-hoc signature verification and packaged SDL initialization
+plus hidden-window rendering. Packaged executable SHA-256:
+`9bf9228779f881faafc4b5475c0554066b7182d33ceb3ceb506269ea74153394`.
+Version consistency and pre/post-build Ninja dependency audits pass. Evidence and
+portable bundle: ../outputs/army-assembly-804-20261004/. It has not been installed
+on the MBA or publicly published; the last verified MBA installation is 1.0.803.
+
 # 2026-10-04 — Verified 1.0.803 installation on the MBA
 
 Installed the portable ARM64 app at `/Applications/dunecity.app` on

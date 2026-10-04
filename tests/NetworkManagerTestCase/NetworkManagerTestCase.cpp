@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 51;
+static constexpr int kWireProtocolVersion = 52;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -45,10 +45,12 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 50 adds the QuantBot army posture: a Custom Hard/Brutal house withdraws, assembles at a
     // protected rally and gates offensive dispatch, so a 49 peer issues different AI orders
     // from the same cycle. 51 allows city batteries to replace enemy-facing R/I/C zones.
+    // 52 restores engine Hunt for Custom Hard/Brutal attacks and changes colony
+    // assembly, dispatch readiness and local recovery decisions.
     // Each of those is a simulation difference, so each one separates
     // rather than tolerates older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 51);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 52);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

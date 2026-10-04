@@ -397,7 +397,7 @@ private:
     // preferHunting=false returns the body at home instead of the attack
     // centroid, for troops that must not be dragged towards the front.
     Coord findSquadCenter(int houseID, bool preferHunting = true);
-    Coord findBaseCentre(int houseID);
+    Coord findBaseCentre(int houseID) const;
     Coord findBestDeathHandTarget(int enemyHouseID);
     const UnitBase* findLightRaiderTarget(const UnitBase* raider) const;
     const UnitBase* findThreateningTank(const UnitBase* raider) const;
@@ -671,7 +671,7 @@ private:
     /// A sustained local withdrawal holds until the squad is actually home or
     /// the house is ready again. Without this the recall stopped the moment the
     /// enemy drifted out of the measuring radius and the same units resumed the
-    /// forced shared objective they were being pulled off.
+    /// attack they were being pulled off.
     Uint32 localWithdrawSince = std::numeric_limits<Uint32>::max();
     /// Cycle of the most recent material mobile-combat loss, for the quiet test
     /// that gates every resume path.
@@ -696,6 +696,9 @@ private:
         /// Friendly strength near the squad, including allies and the static
         /// cover that actually reaches it, on the same radius as squadHostile.
         CombatPowerPolicy::Force squadSupport;
+        /// Wave members actually present in the local engagement. A dispersed
+        /// wave's empty centroid cannot establish that its main force is losing.
+        int64_t localWavePower = 0;
         /// Healthy deployable military value in credits, over the SAME combat
         /// population the configured militaryValueLimit covers: every armed
         /// unit including aircraft, excluding support, inactive cargo/bay
@@ -718,9 +721,13 @@ private:
         /// Local holding strength around the attacked core asset, and the
         /// hostile power actually attacking it. A minor raid that the local
         /// defenders and turret cover outweigh is not a house emergency.
+        /// Measured per attacked asset, and reported for the one that actually
+        /// decided: a house-wide total lets a strong colony's garrison answer
+        /// for a raid on an undefended one, and describes no real place.
         int64_t coreThreatPower = 0;
         int64_t coreHoldingPower = 0;
         bool coreSeriouslyDamaged = false;
+        Coord coreAt = Coord::Invalid();
     };
     ArmySurvey surveyArmy(const ObjectBase* plannedFront = nullptr);
     /// Posture evaluation, once per AI pass this house actually takes.
@@ -756,16 +763,79 @@ private:
     std::vector<Coord> assemblySlots(Coord anchor, int radius) const;
     /// Is this unit ours to order right now?
     bool orderableCombatUnit(const UnitBase* unit) const;
+    /// Custom Hard/Brutal attacks use engine Hunt without tactical overrides.
+    bool engineHuntAttack(const UnitBase* unit) const;
+    /// One of this house's colonies: a core building, the core buildings
+    /// clustered with it and the living emplacements that actually reach it.
+    /// Derived once per search from the structure list, so "colony" means a real
+    /// group of this house's own buildings rather than a map region.
+    struct ColonyCluster {
+        Coord at = Coord::Invalid();
+        Uint32 id = 0;
+        int cores = 0;     ///< Own core buildings in the cluster.
+        int cover = 0;     ///< Living emplacements whose range reaches it.
+        int64_t score = 0; ///< The established shelter score.
+    };
+    std::vector<ColonyCluster> colonyClusters() const;
     /// The production/repair cluster this house would actually shelter at: the
     /// strongest accessible group of its own core buildings, not the arithmetic
     /// mean of every structure it owns. On a two-colony map the mean sits in open
     /// sand between them, which is the worst possible place to gather.
     Coord shelterAnchor();
+    /// The colony an offensive should form up at: the most enemy-facing colony
+    /// that has real local defence, otherwise the shelter cluster. A forward
+    /// colony with no cover is never chosen, because massing the army on exposed
+    /// ground is worse than walking a little further.
+    Coord stagingAnchor() const;
+    /// How far this colony's own buildings actually extend from \a anchor, so a
+    /// staging point can be placed outside the built-up area instead of in the
+    /// gaps between its buildings.
+    int colonyFootprintRadius(Coord anchor) const;
     /// Protected assembly point with hysteresis and a bounded search.
     Coord findProtectedRallyLocation();
-    /// Where this house currently assembles: the protected rally while
-    /// recovering, otherwise the established squad rally.
+    /// Offensive form-up point: a safe, standable, bounded, deterministic slot
+    /// just OUTSIDE the staging colony's own footprint, preferring the enemy
+    /// facing side and leaving roads and exits clear. An army gathering inside
+    /// its own base cannot deploy out of it; the shelter is a separate place and
+    /// stays inside. Falls back to the shelter when there is no usable exterior
+    /// ground at all, so this is never worse than the previous behaviour.
+    Coord offensiveStagingLocation() const;
+    /// Actual reserve slots must be exterior too, not just their centre.
+    bool offensiveAssemblySlot(Coord at) const;
+    /// How far outside the colony footprint the form-up search may look. Fixed
+    /// and narrow: it bounds the scan, and "a little outside" is the intent.
+    static constexpr int kStagingBand = 8;
+    /// Where this house currently gathers: the exterior staging point while
+    /// offensive, the protected shelter while withdrawing or recovering, and the
+    /// established squad rally outside Custom Hard/Brutal.
     Coord assemblyPoint();
+    /// The anchor the assembly measurements and the arrival tests use. Same
+    /// posture split as assemblyPoint(), as a const helper for the survey.
+    Coord armyAssemblyAnchor() const;
+    /// Bounded local protection for a threatened or observed forward colony.
+    /// Finite: at most a few units, and never
+    /// the troops already committed to an offensive, so a quiet colony cannot
+    /// drain the army and a raided one is not simply ignored.
+    void assignColonyGuards(int& orderBudget);
+    /// Which units this house currently wants holding which colony, derived
+    /// fresh from observed world state and cached for the current cycle only.
+    /// Derived rather than remembered on purpose: a remembered assignment would
+    /// differ between a live host and a reloaded peer on the first pass after a
+    /// load, and the posture state that must survive a save is already saved.
+    const std::map<Uint32,Coord>& colonyGuardPosts() const;
+    mutable std::map<Uint32,Coord> colonyGuardSet;
+    mutable Uint32 colonyGuardCycle = std::numeric_limits<Uint32>::max();
+    /// Finite reserve. A raided colony gets real help; it can never become a
+    /// second army that starves the offensive.
+    static constexpr int kColonyGuardMax = 4;
+    /// Runtime-only exterior staging cache. Recomputed whenever the cycle
+    /// changes, exactly like lastSurvey, so it is never carried across a save
+    /// and a reload reproduces it from live state rather than restoring it.
+    mutable Coord offensiveStaging = Coord::Invalid();
+    mutable Uint32 offensiveStagingCycle = std::numeric_limits<Uint32>::max();
+    mutable Coord offensiveColonyAnchor = Coord::Invalid();
+    mutable int offensiveColonyFootprint = 0;
+    mutable bool exteriorStagingAvailable = false;
     /// Tracked-wave bookkeeping: drop the dead, expire a stalled sortie, keep the
     /// shared objective. Mirrors the campaign wave rules for Custom Hard/Brutal.
     void updateCustomWave();

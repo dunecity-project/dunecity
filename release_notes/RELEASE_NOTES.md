@@ -1,3 +1,14 @@
+# Dune City 1.0.804
+
+Custom Hard and Brutal armies attack using engine Hunt. The bot leaves their
+movement and target selection to Hunt, including when an attacker takes damage.
+
+- Reserves assemble outside their colony, leaving streets clear; withdrawing armies use a sheltered rally.
+- A ready local force can attack while reinforcements at other colonies catch up, keeping its configured reserve.
+- Small raids on damaged, well-defended buildings and enemies between scattered troops no longer repeatedly recall the whole army.
+- Threatened and forward colonies can receive a small defensive post without taking troops already attacking.
+- Existing saves remain compatible. Multiplayer peers must all update: the network protocol is now 52.
+
 # Dune City 1.0.796
 
 Five DuneCity maps now ship with the full release: 4 corners v1, DuneCity (192x192), test (256x256), city seige and Alkozeltser 4 Cities v1. They are available on clean desktop and browser installations through the DuneCity map selection.

@@ -132,8 +132,11 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
     const auto checkpoint=runTail(*observer);
     if(live.armyStates!=checkpoint.armyStates) {
         for(size_t i=0;i<live.states.size();++i) if(live.armyStates[i]!=checkpoint.armyStates[i]) {
+            // Print the strings that actually differ - the army-scoped ones -
+            // rather than the full digests, which can still match when the
+            // difference is in one of the appended own-house fields.
             SDL_Log("ARMY_RECOVERY_CONTINUATION_DIAG: frame=%zu live=%s observer=%s",
-                i,live.states[i].c_str(),checkpoint.states[i].c_str());
+                i,live.armyStates[i].c_str(),checkpoint.armyStates[i].c_str());
             SDL_Log("ARMY_RECOVERY_CONTINUATION_HOUSES: live=%s observer=%s",
                 live.houses[i].c_str(),checkpoint.houses[i].c_str()); break;
         }

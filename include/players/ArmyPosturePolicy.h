@@ -215,6 +215,31 @@ struct Decision {
     const char* reason = "hold";
 };
 
+/// Is a raid on a production/economy core asset a house emergency?
+///
+/// Two conditions, never one of them alone:
+///
+///  * The raid is material. Below the loss floor it is a local defence problem,
+///    whatever it happens to be shooting at.
+///  * It beats what is actually holding that asset. A core asset already below
+///    half health halves the bar, because the next hits finish it - but it does
+///    NOT remove the bar. A single raider nibbling a well covered, permanently
+///    half-destroyed refinery used to recall the whole house, and because the
+///    damage never healed it did so again on the next evaluation, which is how a
+///    mature Brutal house stopped attacking altogether.
+///
+/// \a materialFloorPower and both power arguments are in CombatPowerPolicy
+/// power units, so the caller scales the credit floor once.
+inline bool coreEmergency(int64_t threatPower, int64_t holdingPower,
+                          bool seriouslyDamaged, int64_t materialFloorPower) {
+    if (threatPower <= 0) return false;
+    if (threatPower < std::max<int64_t>(1, materialFloorPower)) return false;
+    // Doubling the threat rather than halving the defence keeps the comparison
+    // integral and cannot round a real defence away to zero.
+    const int64_t effective = seriouslyDamaged ? threatPower * 2 : threatPower;
+    return effective > holdingPower;
+}
+
 /// Material attrition test. All four conditions, never any of them alone.
 inline bool materialAttrition(const Situation& s, const Thresholds& t) {
     if (!s.windowCovered) return false;

@@ -207,17 +207,99 @@ void runArmyRecoveryProbe(Game& game) {
                 unit->getGuardPoint().x,unit->getGuardPoint().y,
                 bot->protectedRally.x,bot->protectedRally.y,huntCentre.x,huntCentre.y,
                 bot->assemblyPoint().x,bot->assemblyPoint().y);
-            require(blockDistance(unit->getGuardPoint(),bot->protectedRally).lround()
+            // "Home" is the house's own assembly point, which while offensive
+            // is the exterior staging slot rather than the retreat shelter. The
+            // thing a reinforcement must never do is follow the attacking
+            // army's centroid out to the front on its own.
+            require(blockDistance(unit->getGuardPoint(),bot->assemblyPoint()).lround()
                     < blockDistance(unit->getGuardPoint(),huntCentre).lround(),
                 "A reinforcement followed the hunt centroid instead of assembling at home");
         }
-        // A wave member is not dragged backwards by the same rule.
+        // A wave member is not dragged backwards by the same rule, whether it
+        // is hunting or has momentarily lost its target: a committed attacker
+        // belongs to the attack until the posture recalls it.
         {
             auto* member=waveUnits.front();
             const Coord before=member->getGuardPoint();
             bot->moveToOptimalSquadPosition(member,2);
             require(member->getAttackMode()==HUNT && member->getGuardPoint()==before,
                 "Home assembly stole an active wave member");
+            bot->doSetAttackMode(member,AREAGUARD);
+            member->setForced(false);
+            bot->doMove2Pos(member,member->getX(),member->getY(),false);
+            member->setForced(false);
+            const Coord idleGuard=member->getGuardPoint();
+            bot->moveToOptimalSquadPosition(member,2);
+            require(member->getGuardPoint()==idleGuard && !member->wasForced(),
+                "Home assembly reclaimed a committed attacker that was between targets");
+            bot->doSetAttackMode(member,HUNT);
+        }
+        // Offensive form-up is outside the colony's own buildings; the retreat
+        // shelter stays inside it. Two different places for two different jobs.
+        {
+            const Coord staging=bot->offensiveStagingLocation();
+            const Coord anchor=bot->stagingAnchor();
+            require(staging.isValid() && anchor.isValid(),
+                "The house has no staging ground at all");
+            const int footprint=bot->colonyFootprintRadius(anchor);
+            SDL_Log("ARMY_RECOVERY_DIAG: staging=%d,%d anchor=%d,%d footprint=%d shelter=%d,%d",
+                staging.x,staging.y,anchor.x,anchor.y,footprint,
+                bot->protectedRally.x,bot->protectedRally.y);
+            require(blockDistance(staging,anchor).lround()>footprint,
+                "Offensive staging is inside the colony footprint");
+            require(currentGameMap->tileExists(staging)
+                && !currentGameMap->getTile(staging)->isMountain()
+                && !currentGameMap->getTile(staging)->hasAStructure()
+                && !currentGameMap->getTile(staging)->isRoad()
+                && bot->dangerAt(staging)==0,
+                "Offensive staging is not safe, standable, road-free ground");
+            // And it is a form-up point, not a march: still beside its colony.
+            require(blockDistance(staging,anchor).lround()<=footprint+1+QuantBot::kStagingBand,
+                "Offensive staging left the colony behind");
+            // The posture decides which of the two the house is using.
+            const auto posture=bot->armyPosture;
+            bot->armyPosture=ArmyPosturePolicy::Posture::Recovering;
+            require(bot->assemblyPoint()==bot->protectedRally,
+                "Recovery did not assemble at the protected shelter");
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            require(bot->assemblyPoint()==staging,
+                "An offensive house did not form up at its exterior staging point");
+            int exteriorOrders=0;
+            for(auto* unit:homeUnits) {
+                bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                unit->setForced(false);
+                bot->moveToOptimalSquadPosition(unit,bot->armyAssemblyRadius());
+                if(unit->getDestination()==unit->getLocation()) continue;
+                ++exteriorOrders;
+                require(!currentGameMap->getTile(unit->getDestination())->isRoad()
+                    && blockDistance(unit->getDestination(),anchor).lround()>footprint,
+                    "The staging centre is exterior but a reserve destination is inside the base or on a road");
+            }
+            require(exteriorOrders>0,"No interior reserve was ordered onto exterior ground");
+            bot->armyPosture=posture;
+        }
+
+        // Hunt owns tactical decisions both on damage and on ordinary scans.
+        {
+            std::vector<UnitBase*> attackers;
+            for(const auto item:{Unit_Launcher,Unit_Trike}) {
+                auto* unit=spawn(owner,item,Coord(35,20+int(attackers.size())));
+                attackers.push_back(unit);roster.push_back(unit);
+                bot->doSetAttackMode(unit,HUNT);
+            }
+            publish();
+            for(auto* unit:attackers) {
+                const Coord destination=unit->getDestination();
+                bot->onDamage(unit,1,hostileTank->getObjectID());
+                require(unit->getAttackMode()==HUNT && !unit->wasForced()
+                    && unit->getDestination()==destination,
+                    "A damage callback replaced engine Hunt with tactical micro");
+            }
+            bot->checkAllUnits();
+            for(auto* unit:attackers)
+                require(unit->getAttackMode()==HUNT && !unit->wasForced(),
+                    "An ordinary AI scan replaced an attacker's engine Hunt");
+            for(auto* unit:attackers) retire(unit);
         }
 
         // Local members are support once, not once locally plus once globally.
@@ -248,6 +330,43 @@ void runArmyRecoveryProbe(Game& game) {
             bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
             bot->dangerUpdated=std::numeric_limits<Uint32>::max();
             bot->refreshTacticalDanger();
+        }
+
+        // Enemies at an empty centroid of a dispersed wave are not a defeat of
+        // the main army. Use real units on both sides of that empty space.
+        {
+            const auto oldLedger=bot->attrition;
+            const auto oldPosture=bot->armyPosture;
+            const auto oldSince=bot->postureSince;
+            const auto oldPressure=bot->localPressureSince;
+            const auto oldWithdraw=bot->localWithdrawSince;
+            std::vector<Coord> positions;
+            for(size_t i=0;i<waveUnits.size();++i) {
+                positions.push_back(waveUnits[i]->getLocation());
+                waveUnits[i]->setLocation(origin+Coord(i%2 ? 39 : 0,26));
+            }
+            std::vector<UnitBase*> raid;
+            for(int i=0;i<6;++i) {
+                auto* unit=spawn(enemy,Unit_SiegeTank,Coord(18+i,24));
+                raid.push_back(unit);roster.push_back(unit);
+            }
+            publish();
+            bot->attrition.reset();
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            bot->localPressureSince=bot->localWithdrawSince=std::numeric_limits<Uint32>::max();
+            bot->localSquadWithdraw=false;
+            bot->updateArmyPosture();
+            require(bot->lastSurvey.squadHostile.offensive()>0 && bot->lastSurvey.localWavePower==0,
+                "The empty-centroid fixture did not observe a raid between the dispersed attackers");
+            require(bot->armyPosture==ArmyPosturePolicy::Posture::Offensive && !bot->localSquadWithdraw,
+                "A raid at an empty wave centroid recalled the main army");
+            for(size_t i=0;i<waveUnits.size();++i) waveUnits[i]->setLocation(positions[i]);
+            for(auto* unit:raid) retire(unit);
+            bot->attrition=oldLedger;bot->armyPosture=oldPosture;bot->postureSince=oldSince;
+            bot->localPressureSince=oldPressure;bot->localWithdrawSince=oldWithdraw;
+            bot->localSquadWithdraw=false;
+            bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+            bot->dangerUpdated=std::numeric_limits<Uint32>::max();bot->refreshTacticalDanger();
         }
 
         // Confirmed hostile fatalities, rather than legacy friendly-fire kills.
@@ -596,12 +715,20 @@ void runArmyRecoveryProbe(Game& game) {
                 }
                 bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
             };
-            // Put the cheap army at the rally so the readiness/assembly gate is
-            // satisfied and the outnumbered veto is the only thing deciding.
+            // Put the cheap army at the form-up point so the readiness/assembly
+            // gate is satisfied and the outnumbered veto is the only thing
+            // deciding. The offensive form-up point is the exterior staging
+            // slot, so the fixture holds both anchors on the block centre: this
+            // section is about the value gate, not about where troops gather.
             bot->protectedRallyCycle=std::numeric_limits<Uint32>::max();
             bot->protectedRally=origin+Coord(4,17);   // Centre of the cheap block.
             bot->squadRallyLocation=bot->protectedRally;
+            bot->offensiveStaging=bot->protectedRally;
+            bot->offensiveStagingCycle=currentGame->getGameCycleCount();
+            bot->exteriorStagingAvailable=false; // Isolate the value gate from geometry.
             require(currentGameMap->tileExists(bot->protectedRally),"Fixture rally is off-map");
+            require(bot->assemblyPoint()==bot->protectedRally,
+                "Fixture could not hold the gate army at one form-up point");
 
             const int64_t value=survey.deployableValue;
             // Configured limits that put the army at 79.9%, 80% and 80.1% of it.
@@ -733,9 +860,20 @@ void runArmyRecoveryProbe(Game& game) {
             bot->protectedRallyCycle=std::numeric_limits<Uint32>::max();
             bot->protectedRally=origin+Coord(4,21);
             bot->squadRallyLocation=bot->protectedRally;
+            // Sections below are about cohesion, dispatch bookkeeping and the
+            // battery, not about where an army forms up, so both anchors are
+            // held on the rebuilt fixture army.
+            bot->offensiveStaging=bot->protectedRally;
+            bot->offensiveStagingCycle=currentGame->getGameCycleCount();
+            bot->exteriorStagingAvailable=false; // Isolate commitment accounting.
         }
 
-        // ---- 8. Shared wave coherence --------------------------------------
+        // ---- 8. Dispatched attackers hunt, and stay hunting ----------------
+        //
+        // The approved behaviour: a dispatched Custom Hard/Brutal attacker uses
+        // the engine's own Hunt. This controller does not micro an attack - no
+        // per-unit objective, no per-unit movement while offensive - and the
+        // ordinary assembly pass must not reclaim a committed attacker.
         {
             bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
             bot->customWave.members.clear();
@@ -749,27 +887,60 @@ void runArmyRecoveryProbe(Game& game) {
             bot->militaryValueLimit=1;      // Readiness is satisfied by the fixture army.
             bot->launchGroundHunt();
             require(!bot->customWave.members.empty(),"A ready Brutal wave was not tracked");
-            // The chosen objective is whichever observed enemy building the
-            // chooser prefers on this real map; what matters is that there is
-            // one, that it is a legitimate observed enemy structure, and that
-            // the whole wave is pointed at it rather than hunting individually.
-            require(bot->customWave.front!=NONE_ID,
-                "The tracked wave adopted no shared objective at all");
-            const auto* shared=bot->getObject(bot->customWave.front);
-            require(shared && shared->isAStructure() && shared->getOwner()
-                && shared->getOwner()->getTeamID()!=owner->getTeamID()
-                && shared->isVisible(owner->getTeamID()),
-                "The shared objective is not an observed enemy structure");
-            int onObjective=0;
+            int hunting=0;
             for(const auto id:bot->customWave.members) {
                 const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(id));
                 require(unit,"Tracked wave member vanished");
-                require(unit->getAttackMode()!=HUNT,
-                    "A coordinated wave member was left on an independent hunt");
-                if(unit->getTarget()==shared)++onObjective;
+                if(!unit->isAGroundUnit()) continue;
+                require(unit->getAttackMode()==HUNT,
+                    "A dispatched attacker was not left on the engine hunt");
+                require(!unit->wasForced(),
+                    "A dispatched attacker was given a forced order by the controller");
+                ++hunting;
             }
-            require(onObjective==int(bot->customWave.members.size()),
-                "Wave members hunted independently instead of converging on the objective");
+            require(hunting>0,"No ground attacker was dispatched at all");
+            // The observed objective is recorded as the front anchor the
+            // strength comparison uses. It is intelligence, not an order: no
+            // member is pointed at it.
+            if(bot->customWave.front!=NONE_ID) {
+                const auto* anchor=bot->getObject(bot->customWave.front);
+                require(anchor && anchor->isAStructure() && anchor->getOwner()
+                    && anchor->getOwner()->getTeamID()!=owner->getTeamID()
+                    && anchor->isVisible(owner->getTeamID()),
+                    "The recorded front anchor is not an observed enemy structure");
+                for(const auto id:bot->customWave.members) {
+                    const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(id));
+                    if(!unit || !unit->isAGroundUnit()) continue;
+                    require(unit->getTarget()!=anchor || !unit->wasForced(),
+                        "A dispatched attacker was forced onto a controller-chosen target");
+                }
+            }
+            // Ordinary assembly runs every pass. It must leave the attackers be.
+            {
+                std::vector<std::pair<Uint32,ATTACKMODE>> before;
+                for(const auto id:bot->customWave.members) {
+                    const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(id));
+                    if(unit) before.push_back({id,unit->getAttackMode()});
+                }
+                for(int pass=0;pass<3;++pass) {
+                    int budget=12;
+                    bot->applyArmyPosture(budget);
+                    bot->assignColonyGuards(budget);
+                    for(const auto& entry:before) {
+                        const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(entry.first));
+                        if(!unit) continue;
+                        bot->moveToOptimalSquadPosition(unit,3);
+                    }
+                }
+                for(const auto& entry:before) {
+                    const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(entry.first));
+                    require(unit,"An attacker disappeared during ordinary updates");
+                    require(unit->getAttackMode()==entry.second,
+                        "Ordinary updates reset a dispatched attacker's attack mode");
+                }
+                require(!bot->customWave.members.empty(),
+                    "Ordinary updates released the committed attackers");
+            }
             // A repeated pass must not stack a second wave on top of the first.
             const size_t first=bot->customWave.members.size();
             bot->launchGroundHunt();
@@ -797,8 +968,10 @@ void runArmyRecoveryProbe(Game& game) {
             // Select only assembled candidates: distant troops may not be
             // re-tagged as individual attackers to fill the budget.
             std::vector<UnitBase*> remote;
-            for(int i=0;i<4;++i) {
-                auto* unit=spawn(owner,Unit_Tank,Coord(24+i,11));
+            // Enough remote value that the old house-wide gather target exceeds
+            // the complete local cohort, without exhausting the stress map.
+            for(int i=0;i<16;++i) {
+                auto* unit=spawn(owner,Unit_Tank,Coord(24+i%8,2+i/8));
                 remote.push_back(unit); roster.push_back(unit);
             }
             publish();
@@ -929,6 +1102,126 @@ void runArmyRecoveryProbe(Game& game) {
                 require(room<2 || destinations.size()>1,
                     "Every recalled unit was sent to the same tile although the area had room");
                 bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                bot->customWave.members.clear();
+
+                // Colony-aware offensive staging. Whichever colony is chosen,
+                // it has to be a real core building of this house, and it has
+                // to be one that can hold ground: either the strongest cluster
+                // or one with its own living cover. An uncovered outpost is
+                // never where the army is told to mass.
+                bot->offensiveStagingCycle=std::numeric_limits<Uint32>::max();
+                const Coord stageAt=bot->stagingAnchor();
+                const Coord stage=bot->offensiveStagingLocation();
+                const int turretReach=std::max(1,currentGame->objectData.data
+                    [Structure_RocketTurret][owner->getHouseID()].weaponrange-1);
+                bool stageOnCore=false, stageCovered=false;
+                for(const auto* s:structureList) {
+                    if(s->getOwner()!=owner || s->getHealth()<=0) continue;
+                    if(s->getLocation()==stageAt && RocketTurretPolicy::coreAsset(s->getItemID()))
+                        stageOnCore=true;
+                    if((s->getItemID()==Structure_RocketTurret || s->getItemID()==Structure_GunTurret)
+                        && blockDistance(s->getLocation(),stageAt).lround()<=turretReach)
+                        stageCovered=true;
+                }
+                SDL_Log("ARMY_RECOVERY_DIAG: staging colony anchor=%d,%d shelter_anchor=%d,%d "
+                    "slot=%d,%d on_core=%d covered=%d",
+                    stageAt.x,stageAt.y,anchor.x,anchor.y,stage.x,stage.y,
+                    stageOnCore?1:0,stageCovered?1:0);
+                require(stageOnCore,"The staging colony is not one of this house's core buildings");
+                require(stageCovered || stageAt==anchor,
+                    "An uncovered colony was chosen to mass the army at");
+                require(stage.isValid()
+                        && blockDistance(stage,stageAt).lround()>bot->colonyFootprintRadius(stageAt),
+                    "Two-colony staging is inside the chosen colony's footprint");
+
+                // Bounded local protection for the colony that is NOT the one
+                // the army is forming up at.
+                const Coord northColony=Coord(origin.x+4,origin.y+4);
+                const Coord southColony=Coord(origin.x+4,far);
+                const Coord assembly=bot->armyAssemblyAnchor();
+                const Coord threatened=
+                    blockDistance(assembly,northColony).lround()>blockDistance(assembly,southColony).lround()
+                    ? northColony : southColony;
+                std::vector<UnitBase*> colonyRaid;
+                for(int i=0;i<8;++i) {
+                    auto* unit=enemy->createUnit(Unit_SiegeTank);
+                    require(unit,"Colony-guard fixture unit creation failed");
+                    unit->deploy(threatened+Coord(2+i%4,3+i/4));
+                    unit->setVisible(owner->getTeamID(),true);
+                    colonyRaid.push_back(unit); roster.push_back(unit);
+                }
+                publish();
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
+                bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+                // A small army is never taxed for a garrison: the reserve only
+                // comes out of a house that can clearly spare it.
+                require(bot->colonyGuardPosts().empty(),
+                    "A twelve-unit house was taxed for a colony garrison");
+                // Spare troops, deliberately out of defence range of the raided
+                // colony: they are the reserve the garrison may draw on, not
+                // local cover that would make the colony look already held.
+                std::vector<UnitBase*> spare;
+                for(int i=0;i<8;++i) {
+                    auto* unit=spawn(owner,Unit_Tank,Coord(16+i,26));
+                    spare.push_back(unit); roster.push_back(unit);
+                }
+                publish();
+                bot->customWave.members.clear();
+                for(auto* unit:waveUnits) bot->customWave.members.insert(unit->getObjectID());
+                bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+                const auto posts=bot->colonyGuardPosts();
+                SDL_Log("ARMY_RECOVERY_DIAG: colony guard threatened=%d,%d assembly=%d,%d posts=%zu",
+                    threatened.x,threatened.y,assembly.x,assembly.y,posts.size());
+                require(!posts.empty(),"A raided colony received no local protection at all");
+                require(int(posts.size())<=QuantBot::kColonyGuardMax,
+                    "The colony garrison exceeded its finite reserve");
+                for(const auto& entry:posts) {
+                    require(blockDistance(entry.second,threatened).lround()
+                            <=2*turretReach+8,
+                        "A colony guard was posted away from the raided colony");
+                    require(!bot->customWave.members.count(entry.first),
+                        "A colony garrison took a unit already committed to an offensive");
+                }
+                // Selection and execution share a cycle, but a later command
+                // can still claim a cached pick. Execution must respect that.
+                auto picked=posts.begin();
+                const auto* dispatched=dynamic_cast<const UnitBase*>(bot->getObject(picked->first));
+                require(dispatched,"Cached colony pick disappeared");
+                bot->doSetAttackMode(dispatched,HUNT);
+                ++picked;
+                const auto* defender=dynamic_cast<const UnitBase*>(bot->getObject(picked->first));
+                require(defender,"Second cached colony pick disappeared");
+                const Coord defenceDestination=defender->getDestination();
+                bot->defenceAssignments[defender->getObjectID()]=colonyRaid.front()->getObjectID();
+                {
+                    int budget=4;
+                    bot->assignColonyGuards(budget);
+                    require(budget>=4-int(posts.size()),
+                        "Colony guard orders exceeded their share of the order budget");
+                }
+                require(dispatched->getAttackMode()==HUNT,
+                    "Cached colony execution stole a newly dispatched hunter");
+                require(defender->getDestination()==defenceDestination,
+                    "Cached colony execution stole an emergency defender");
+                bot->defenceAssignments.erase(defender->getObjectID());
+                bot->doSetAttackMode(dispatched,GUARD);
+                for(auto* unit:colonyRaid) retire(unit);
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
+                bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+                const auto quietPosts=bot->colonyGuardPosts();
+                require(!quietPosts.empty() && quietPosts.size()<=size_t(QuantBot::kColonyGuardMax),
+                    "A quiet forward colony lost its bounded defensive post");
+                for(const auto& entry:quietPosts) {
+                    require(!bot->customWave.members.count(entry.first),
+                        "A quiet colony took a committed attacker");
+                    require(blockDistance(entry.second,assembly).lround()>turretReach*2,
+                        "A quiet colony duplicated the army's existing assembly garrison");
+                }
+                for(auto* unit:spare) retire(unit);
+                bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+                bot->offensiveStagingCycle=std::numeric_limits<Uint32>::max();
                 bot->customWave.members.clear();
             }
             for(auto* s:southColony) if(s) s->setHealth(0);
@@ -1292,14 +1585,124 @@ void runArmyRecoveryProbe(Game& game) {
                 "Heavy-raid fixture did not out-weigh the local defence");
             require(heavy.coreUnderAttack,
                 "A raid that overwhelms the local defence was not an emergency");
-            // And a half-destroyed core asset is an emergency on its own.
+            // A half-destroyed core asset lowers the bar; it does not remove it.
+            // The live 1.0.803 regression was exactly this: damage never heals
+            // on its own, so "wounded and shot at" re-declared a house
+            // emergency on every evaluation and both Brutal houses stopped
+            // attacking with 63-80M of deployable power in hand.
             for(auto* unit:assault) retire(unit);
             core->setHealth(core->getMaxHealth()/4);
             bot->dangerUpdated=std::numeric_limits<Uint32>::max();
             bot->refreshTacticalDanger();
             const auto wounded=bot->surveyArmy();
-            require(wounded.coreSeriouslyDamaged && wounded.coreUnderAttack,
-                "A half-destroyed core asset under attack was not an emergency");
+            SDL_Log("ARMY_RECOVERY_DIAG: wounded core threat=%lld holding=%lld damaged=%d emergency=%d",
+                (long long)wounded.coreThreatPower,(long long)wounded.coreHoldingPower,
+                wounded.coreSeriouslyDamaged?1:0,wounded.coreUnderAttack?1:0);
+            require(wounded.coreSeriouslyDamaged,
+                "The wounded-core fixture asset is not actually half destroyed");
+            require(wounded.coreThreatPower<wounded.coreHoldingPower,
+                "The wounded-core fixture is not actually well defended");
+            require(!wounded.coreUnderAttack,
+                "One raider on a well defended, already damaged asset recalled the whole house");
+            // The halved bar itself. A raid worth more than half the local
+            // defence is an emergency once the asset is wounded and is not one
+            // while it is whole; an immaterial raid is never one either way.
+            {
+                const int64_t floor=std::max<int64_t>(1,bot->postureThresholds().lossFloor)
+                    *CombatPowerPolicy::kPowerScale;
+                require(!ArmyPosturePolicy::coreEmergency(floor*3,floor*4,false,floor),
+                    "A raid smaller than the local defence panicked a whole asset");
+                require(ArmyPosturePolicy::coreEmergency(floor*3,floor*4,true,floor),
+                    "A half destroyed asset did not lower the bar for the same raid");
+                require(!ArmyPosturePolicy::coreEmergency(floor-1,0,true,floor),
+                    "An immaterial raid was an emergency because the asset was wounded");
+            }
+            core->setHealth(core->getMaxHealth());
+            bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+            bot->refreshTacticalDanger();
+
+            // ---- 14d. The emergency is measured per colony ------------------
+            //
+            // Two of this house's own core buildings, far enough apart to be
+            // separate colonies: the construction yard at the covered base, and
+            // the refinery out at (12,20). Both are raided. The question is
+            // whether the defence of one is allowed to answer for the other.
+            //
+            // Substituted unit lists only - no new building is placed, because a
+            // fixture structure that is later destroyed leaves rubble behind and
+            // changes the world the continuation checkpoint runs in.
+            {
+                auto block=[&](std::vector<UnitBase*>& into,House* house,Uint32 item,
+                               Coord at,int count,int stride) {
+                    for(int i=0;i<count;++i) {
+                        const Coord spot=origin+at+Coord(i%stride,i/stride);
+                        if(!currentGameMap->tileExists(spot)
+                            || currentGameMap->getTile(spot)->hasAGroundObject()
+                            || currentGameMap->getTile(spot)->isMountain()) continue;
+                        auto* unit=spawn(house,item,spot-origin);
+                        into.push_back(unit); roster.push_back(unit);
+                    }
+                };
+                // Our defence, massed at the covered base and nowhere near the
+                // refinery. Kept deliberately small: every fixture unit that
+                // later dies leaves damage on the map, and the continuation
+                // checkpoint runs in whatever world this probe leaves behind.
+                std::vector<UnitBase*> baseGarrison;
+                block(baseGarrison,owner,Unit_Tank,Coord(0,0),7,7);
+                // A nuisance on the base, and a real assault on the refinery.
+                std::vector<UnitBase*> baseRaid, refineryRaid;
+                block(baseRaid,enemy,Unit_Trike,Coord(2,3),1,1);
+                block(refineryRaid,enemy,Unit_SiegeTank,Coord(16,22),3,2);
+                SDL_Log("ARMY_RECOVERY_DIAG: two-colony fixture base=%zu base_raid=%zu "
+                    "refinery_raid=%zu",
+                    baseGarrison.size(),baseRaid.size(),refineryRaid.size());
+                require(baseGarrison.size()>=6 && !baseRaid.empty() && refineryRaid.size()>=3,
+                    "Two-colony fixture could not field both sides");
+                publish();
+                for(auto* unit:baseRaid) unit->doAttackObject(yard,true);
+                for(auto* unit:refineryRaid) unit->doAttackObject(core,true);
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
+                const auto savedRoster=unitList;
+                auto survey=[&](const std::vector<UnitBase*>& defence) {
+                    unitList.clear();
+                    for(auto* unit:defence) unitList.push_back(unit);
+                    for(auto* unit:baseRaid) unitList.push_back(unit);
+                    for(auto* unit:refineryRaid) unitList.push_back(unit);
+                    unitList.push_back(raider);
+                    const auto result=bot->surveyArmy();
+                    unitList=savedRoster;
+                    bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+                    return result;
+                };
+                // The house's own troops already standing at the refinery are
+                // the on-site comparison, so no second garrison is spawned.
+                std::vector<UnitBase*> refineryGarrison;
+                for(auto* unit:waveUnits) refineryGarrison.push_back(unit);
+                for(auto* unit:homeUnits) refineryGarrison.push_back(unit);
+                const auto elsewhere=survey(baseGarrison);
+                const auto onSite=survey(refineryGarrison);
+                SDL_Log("ARMY_RECOVERY_DIAG: colony scope elsewhere threat=%lld holding=%lld "
+                    "emergency=%d | on_site threat=%lld holding=%lld emergency=%d",
+                    (long long)elsewhere.coreThreatPower,(long long)elsewhere.coreHoldingPower,
+                    elsewhere.coreUnderAttack?1:0,
+                    (long long)onSite.coreThreatPower,(long long)onSite.coreHoldingPower,
+                    onSite.coreUnderAttack?1:0);
+                // The assault is the same in both surveys, and so is the amount
+                // of defence the house owns. Only its location differs.
+                require(elsewhere.coreUnderAttack,
+                    "A raid on an undefended colony was answered for by another colony's garrison");
+                require(elsewhere.coreHoldingPower==0 && elsewhere.coreThreatPower>0,
+                    "The reported deciding asset is not the undefended one");
+                require(!onSite.coreUnderAttack,
+                    "The same raid stayed a house emergency with the defence actually on site");
+                require(onSite.coreHoldingPower>onSite.coreThreatPower,
+                    "The on-site fixture did not actually out-hold the raid");
+                for(auto* unit:refineryRaid) retire(unit);
+                for(auto* unit:baseRaid) retire(unit);
+                for(auto* unit:baseGarrison) retire(unit);
+                bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+            }
             retire(raider);
             core->setHealth(0);
             bot->dangerUpdated=std::numeric_limits<Uint32>::max();
