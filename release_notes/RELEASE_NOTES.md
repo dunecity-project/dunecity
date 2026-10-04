@@ -1,3 +1,11 @@
+# Dune City 1.0.805
+
+Custom Hard and Brutal attacks send the whole available ground army to engine Hunt in one dispatch, including remote reserves and troops left in old Area Guard orders. The percentage reserve and local staging-cohort selection are removed. Existing hunters keep their orders; new recruits gather until the next viable launch.
+
+- Attacks on owned buildings and harvesters pull a larger nearby defense, including hunters busy elsewhere. Ordinary scans now recheck harvester attacks as well as building attacks.
+- Human orders, repair and transport roles, and ongoing emergency defense retain their units. Aircraft keep their existing strike planner.
+- Existing saves remain compatible. Multiplayer peers must all update: network protocol 53 separates the new AI decisions.
+
 # Dune City 1.0.804
 
 Custom Hard and Brutal armies attack using engine Hunt. The bot leaves their

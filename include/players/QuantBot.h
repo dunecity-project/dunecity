@@ -254,6 +254,12 @@ private:
     /// many answer one aircraft. Both bound the work this pass can create.
     static constexpr int kAirRescueRadius = 40;
     static constexpr int kAirRescueDefenders = 3;
+    /// How far an attack on one of our own buildings or workers pulls troops
+    /// from. Scaled by the observed local threat between these bounds, so a
+    /// raid stays a district response and a real assault reaches the army.
+    static constexpr int kEmergencyBandMin = 12;
+    static constexpr int kEmergencyBandMax = 40;
+    static int emergencyResponseRadius(int threatValue);
 
 
     Coord findMcvPlaceLocation(const MCV* pMCV);
@@ -763,6 +769,10 @@ private:
     std::vector<Coord> assemblySlots(Coord anchor, int radius) const;
     /// Is this unit ours to order right now?
     bool orderableCombatUnit(const UnitBase* unit) const;
+    /// Is this unit still answering a live emergency contact? Stale entries are
+    /// dropped by checkAllUnits(), so a true answer means an actual defence or
+    /// anti-air rescue in progress, not a reserve being held back.
+    bool activeDefenceAssignment(const UnitBase* unit) const;
     /// Custom Hard/Brutal attacks use engine Hunt without tactical overrides.
     bool engineHuntAttack(const UnitBase* unit) const;
     /// One of this house's colonies: a core building, the core buildings

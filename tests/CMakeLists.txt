@@ -595,6 +595,19 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/army-recovery-probe)
         set_tests_properties(quantbot_army_recovery PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal whole-army dispatch: one attack sends every
+        # available combat troop to engine Hunt - idle, targeting, moving,
+        # tracked from an older wave, posted as a colony guard or produced at a
+        # remote colony - while human orders, repair runs, transports, workers,
+        # MCVs and the air planner's aircraft keep theirs. An attack on a
+        # building we own then pulls an adequate local response in one event,
+        # including hunting troops, and Easy/Medium keep their shared waves.
+        add_test(NAME quantbot_whole_army_dispatch COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --whole-army-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/whole-army-dispatch-probe)
+        set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         add_test(NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --battery-clearance-probe --repeatable
             --level 9 --mod dunecity

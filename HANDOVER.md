@@ -1,3 +1,72 @@
+# 2026-10-04 — Whole-army Hunt and asset emergency response (1.0.805)
+
+The user's latest MBA 1.0.804 session `1791113712003073-0` confirms small
+staging-cohort dispatches despite a large reserve: at cycle 229300 Harkonnen
+sent 43 troops / 20,250 accounted credits with 222,150 available. At cycle 232989
+Ordos dispatched one defender against a local threat valued at 10,138. Those
+records show insufficient orders, not proof that additional healthy responders
+were available at every losing contact.
+
+Custom Hard/Brutal now dispatches every available ground combat unit to engine
+Hunt in one pass. Removed percentage reserve, local staging-cohort selection,
+colony holdback and exclusions for ordinary targets, movement and old tracked
+Area Guard orders. Existing hunters keep their orders and join the same tracked
+army. Unready recruits wait for the next viable launch. This behavior also works
+when the optional recovery policy is disabled. Aircraft retain their existing
+strike planner; Easy/Medium, campaign and helper dispatch scope is unchanged.
+Human control, cargo/repair ownership and an actual ongoing emergency outrank
+fresh offense. Ending defense contacts use the same lifetime check as the scan.
+The configured attrition recovery and 80% fixed-limit outnumbered bypass remain.
+
+Asset emergencies pull nearby eligible combat troops, including hunters engaged
+elsewhere, in one event. The local response band grows from 12 to 40 tiles with
+observed unsupported threat, while proportional reinforcements can come from
+farther away. The ordinary scan now rechecks ground attacks on harvesters and
+rebel harvesters as well as buildings; this missing recheck was exposed by the
+new regression fixture. Aircraft rescue keeps its existing reachable firing
+positions and capability/authority guards. No new serialized fields: save 9852
+and observer runtime 7 remain; protocol 53 separates changed lockstep decisions.
+Telemetry 17 / policy `whole-army-hunt-and-emergency-defence-v88`.
+
+Independent real-engine runs load the captured `drip-feed.dls` at cycle 145638
+with its exact immutable map/mod revisions: Custom DuneCity city simulation,
+128x128 Sihaya-Ferryman, seed 1637816920, Harkonnen/Ordos Brutal. Over 24,000 cycles
+(384 simulation seconds), 804 dispatches 57/79/24/18-unit subsets and finishes
+Harkonnen with 148 Hunt / 235 Area Guard ground troops. Final 805 dispatches
+232/101/113 new hunters alongside surviving hunters. Immediately after the
+first launch all 279 available ground troops are Hunt; the next launch gives
+all 332 Hunt, and the third all 371. The final state has 362 Hunt of 382 active
+ground combat units, with repair, defense and new recruits accounting for other
+roles. Ordos is recovering and therefore launches no fresh offensive army.
+Actual emergencies dispatch up to 105 troops. These are command and bounded
+simulation results, not a guarantee of simultaneous physical arrivals or game
+balance.
+
+One-worker versus four-worker (400-microsecond per-task delay stress) matches all
+12 checkpoints and complete serialized gameplay bytes, release label excluded:
+`25a0a33f82aba6ceb6ba0e17381e780c3b0838ea9b3770a14057f5532cd566b1`. Inline headless update mean/p99 is
+1.502/5.269 ms versus 804's 1.134/4.849 ms; the fixed run performs substantially
+more fighting. Artificially delayed workers are a determinism stress check, not
+production throughput. These are Mac-mini timings, not MBA rendered FPS.
+
+All 55 CTest target outcomes pass across the full 814.53-second run and final
+affected-target reruns. The full run initially failed the new harvester-scan
+case; after fixing that production path, the whole-army test passed. Final
+native/custom-attack/recovery/whole-army targets pass (49.44 s), and all three
+Vanilla/DuneCity/Dune2R air-defense probes pass (36.14 s). The mixed-state probe
+checks both Hard/Brutal, remote reserves, tracked guards, busy targets/movement,
+human/repair/transport exclusions, recovery-disabled operation, ended contacts,
+Hunt retention, single-recruit readiness and base/worker response. Existing
+observer city-accounting limitations remain documented under 802; these ordinary
+saved-match runs compare the complete save independently.
+
+Pre/post-build dependency audits, version consistency and diff whitespace checks
+pass. Evidence: ../outputs/drip-feed-805-20261004/. Local Claude subscription
+worker session ca0ac6cc-c173-4b0d-a781-97f1808df155 produced the bounded patch and
+full/focused evidence; Codex ended the run after review and owns final contact,
+configuration, saved-match and packaging checks. Private installation follows
+below only when independently verified; nothing was pushed or published.
+
 # 2026-10-04 — Verified 1.0.804 MBA installation
 
 Installed the tested portable ARM64 app at `/Applications/dunecity.app` on

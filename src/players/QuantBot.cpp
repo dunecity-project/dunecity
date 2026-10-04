@@ -10369,6 +10369,14 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         defendStructuresFromAircraft();
         return;
     }
+    // One of our own buildings or workers is being shot at. This is the event
+    // the player sees as "nobody came to help": the proportional reinforcement
+    // budget below answers a 10,000-credit assault with the nearest handful of
+    // troops and silently skips everything that happens to be shooting at
+    // something else. For an attack on an asset we own, the nearby troops all
+    // respond in this one event instead.
+    const bool assetEmergency = !clearingSpice
+        && (isProtectedAsset(protectedAsset) || isProtectedAsset(victim));
     auto value = [&](const ObjectBase* object) {
         const int price = currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
@@ -10411,16 +10419,27 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         // not need a fresh command on every hit. Do not pull units out of another fight.
         if (hostileTarget && target->isAFlyingUnit()==intruder->isAFlyingUnit()
             && blockDistance(contact,target->getLocation())<=8) { committed+=value(unit); continue; }
-        if (hostileTarget && blockDistance(unit->getLocation(),target->getLocation())<=unit->getWeaponRange()) continue;
+        // Being busy elsewhere is a reason not to interrupt an ordinary
+        // skirmish, but not a reason to leave our own base or worker to die.
+        // Hunt troops reach here with no target of their own most of the time;
+        // this is what lets the emergency recall them as well.
+        if (!assetEmergency && hostileTarget
+            && blockDistance(unit->getLocation(),target->getLocation())<=unit->getWeaponRange()) continue;
         candidates.push_back({unit->getObjectID(),value(unit),blockDistance(contact,unit->getLocation()).lround()});
     }
     auto response=clearingSpice
         ? SimpleArmyPolicy::clearingForce(threatValue,committed,candidates,clearingRadius)
         : SimpleArmyPolicy::reinforcements(threatValue,committed,candidates);
     // Troops already beside an attacked base must fight, even if distant
-    // responders satisfy the proportional reinforcement budget.
-    if (baseAttack) for (const auto& candidate : candidates)
-        if (candidate.distance <= 12 && std::find(response.begin(),response.end(),candidate.id)==response.end())
+    // responders satisfy the proportional reinforcement budget. An attack on
+    // anything we own widens that to a band that grows with the local threat,
+    // so an overwhelming assault is met by everything that can realistically
+    // get there rather than by three units. Still bounded, still one event, and
+    // still nearest-first: nothing here is a new squad or a standing order.
+    const int emergencyBand = assetEmergency ? emergencyResponseRadius(threatValue-committed) : 12;
+    if (baseAttack || assetEmergency) for (const auto& candidate : candidates)
+        if (candidate.distance <= emergencyBand
+            && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
     for (const auto id:response) {
@@ -10440,7 +10459,20 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
         .set("already_committed_value",committed).set("required_value",SimpleArmyPolicy::responseValue(threatValue))
         .set("reason",clearingSpice ? "clear_spice_launcher" : "under_attack")
+        .set("asset_emergency",assetEmergency)
+        .set("response_band",emergencyBand)
+        .set("candidates",int(candidates.size()))
         .set("dispatched",dispatched));
+}
+
+int QuantBot::emergencyResponseRadius(int threatValue) {
+    // How far troops are pulled from to answer an attack on something we own.
+    // A trike shooting a harvester pulls the district; a siege column at a
+    // refinery pulls the army. Deterministic arithmetic on the observed local
+    // threat value, clamped at both ends so it is always a bounded local
+    // response rather than a map-wide recall.
+    return std::clamp(kEmergencyBandMin + std::max(0,threatValue)/500,
+                      kEmergencyBandMin, kEmergencyBandMax);
 }
 
 bool QuantBot::availableAirDefender(const UnitBase* unit, const UnitBase* aircraft) const {
@@ -10998,6 +11030,15 @@ void QuantBot::launchGroundHunt() {
     // Ground pressure is tracked on its own: ornithopters and other non-ground
     // troops must not inflate a budget that can only ever buy ground units.
     int groundArmyValue=0, groundCommittedUnits=0, groundCommittedValue=0;
+    // Custom Hard/Brutal dispatch is a single whole-army launch, by decision of
+    // the project owner. No share of the standing army, no local assembly
+    // cohort, no colony holdback and no per-unit exclusion for merely having a
+    // target or a move order may hold a troop back. Hunters already in the
+    // field are not reset; they are tracked with the army that joins them.
+    const bool wholeArmy=!limited && !supportMode && gameMode==GameMode::Custom
+        && !isCampaignGameType(currentGame->gameType)
+        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+    std::vector<Uint32> existingHunters;
     std::vector<SimpleArmyPolicy::Responder> candidates;
     for (const auto* unit : getUnitList()) {
         if (unit->getOwner()!=getHouse() || unit->getHealth()<=0 || !unit->isActive() || !unit->isRespondable()
@@ -11010,6 +11051,25 @@ void QuantBot::launchGroundHunt() {
         if (unit->getAttackMode()==HUNT) committedValue+=price;
         const bool ground=unit->isAGroundUnit();
         if (ground) groundArmyValue+=price;
+        if (wholeArmy) {
+            if (ground && (unit->getAttackMode()==HUNT
+                || customWave.members.count(unit->getObjectID())>0)) {
+                ++groundCommittedUnits; groundCommittedValue+=price;
+            }
+            // Aircraft keep their own planner, workers and transports cannot
+            // attack, repair runs keep their unit, and a troop answering a live
+            // emergency on one of our own assets - including an anti-air rescue
+            // - stays on that job. Everything else is available.
+            if (!ground || reserveDamagedUnitForRepair(unit)) continue;
+            if (activeDefenceAssignment(unit)) continue;
+            if (unit->getAttackMode()==HUNT) {
+                existingHunters.push_back(unit->getObjectID());
+                continue;
+            }
+            candidates.push_back({unit->getObjectID(),price,0});
+            availableValue+=price;
+            continue;
+        }
         const bool free=!reserveDamagedUnitForRepair(unit) && unit->getAttackMode()!=RETREAT
             && !unit->hasATarget() && !defenceAssignments.count(unit->getObjectID())
             && (!recoveryActive() || !colonyGuardPosts().count(unit->getObjectID()));
@@ -11076,11 +11136,14 @@ void QuantBot::launchGroundHunt() {
         // Shared-house helpers retain a modest home reserve, without enemy caps.
         selected=SimpleArmyPolicy::limitedAttack(armyValue,committedValue,100-profile.reservePercent,candidates);
     } else {
-        // Custom Hard/Brutal: the same readiness rule campaign enemies already
-        // use. A fresh wave has to be assembled and healthy before it leaves, so
-        // repeated passes cannot drip the reserve forward one tank at a time.
+        // Custom Hard/Brutal: one whole-army launch. The only pre-dispatch
+        // condition is that what is available is itself a main wave rather than
+        // a patrol - the house readiness value plus the established six-unit,
+        // three-thousand-credit minimum. That is also what stops the drip feed
+        // while an army is out: whatever is produced next accumulates at home
+        // until it is a full wave again, instead of trickling forward.
         // Easy and Medium keep their established small-wave behaviour exactly.
-        if (recoveryActive()) {
+        if (wholeArmy) {
             const auto& settings=getQuantBotConfig().getSettings(static_cast<int>(difficulty));
             const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
             requiredReady=(militaryValueLimit*threshold).lround();
@@ -11089,66 +11152,25 @@ void QuantBot::launchGroundHunt() {
             // A viable main wave, not a patrol: the established minimum is six
             // units and three thousand credits of value.
             const bool viable=QuantBotBuildPolicy::viableMainWave(availableUnits,availableValue);
-            // Readiness belongs to the assembled cohort. A remote colony's
-            // production cannot continuously move its required size upwards.
-            const Coord home=assemblyPoint();
-            int assembledValue=0, assembledUnits=0;
-            std::vector<SimpleArmyPolicy::Responder> assembled;
-            if (home.isValid()) {
-                const int radius=armyAssemblyRadius();
-                for (const auto& candidate : candidates) {
-                    const auto* unit=dynamic_cast<const UnitBase*>(getObject(candidate.id));
-                    if (!unit || !unit->isAGroundUnit()) continue;
-                    if (blockDistance(unit->getLocation(),home).lround()>radius) continue;
-                    if (!offensiveAssemblySlot(unit->getLocation())) continue;
-                    assembledValue+=candidate.value; ++assembledUnits;
-                    assembled.push_back(candidate);
-                }
-            }
-            // Apply the commitment share to this cohort plus existing hunters,
-            // then subtract those hunters. This retains a local reserve and
-            // makes a repeated pass over the same force idempotent, while the
-            // house-wide share remains a strict upper bound.
-            const int localBudget=SimpleArmyPolicy::attackBudget(assembledValue+groundCommittedValue,percent);
-            const int waveBudget=std::max(0,std::min(customBudget,localBudget)-groundCommittedValue);
-            const bool gathered=home.isValid() && assembledValue>=requiredReady
-                && QuantBotBuildPolicy::viableMainWave(assembledUnits,assembledValue);
-            if (availableValue<requiredReady || !viable || !gathered) {
+            if (availableValue<requiredReady || !viable) {
                 traceDecision("attack_deferred",AITelemetry::Record().set("reason","wave_readiness")
                     .set("available_value",availableValue).set("available_units",availableUnits)
                     .set("required_military",requiredReady).set("viable_main_wave",viable)
-                    .set("assembled_value",assembledValue).set("assembled_units",assembledUnits)
-                    .set("assembled_required_value",requiredReady)
-                    .set("dispatch_budget",waveBudget)
-                    .set("gathered",gathered)
-                    .set("home_x",home.x).set("home_y",home.y)
                     .set("committed_value",groundCommittedValue)
+                    .set("committed_units",groundCommittedUnits)
                     .set("posture",ArmyPosturePolicy::postureName(armyPosture)));
                 return;
             }
-            selected=SimpleArmyPolicy::customAttack(waveBudget,0,100,std::move(assembled));
-            int selectedValue=0;
-            for (const auto id:selected) {
-                const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
-                if (unit) selectedValue+=std::max(100,currentGame->objectData.data
-                    [unit->getItemID()][unit->getOriginalHouseID()].price);
-            }
-            // The viable cohort minimum is measured before applying its
-            // commitment share. Its dispatched share must still contain six
-            // units; cheap infantry must not require a larger cohort merely
-            // because the same percentage buys fewer credits of them.
-            const int cohortValue=percent>0 ? int(int64_t(selectedValue)*100/percent) : 0;
-            if (!QuantBotBuildPolicy::viableMainWave(int(selected.size()),cohortValue)) {
-                traceDecision("attack_deferred",AITelemetry::Record().set("reason","wave_commitment")
-                    .set("dispatch_budget",waveBudget).set("selected_units",int(selected.size()))
-                    .set("selected_value",selectedValue).set("committed_value",groundCommittedValue));
-                return;
-            }
+            // Everything available, wherever it stands. Candidate order is the
+            // id order the stable sort above produced, so every peer builds the
+            // identical dispatch list.
+            selected.reserve(candidates.size());
+            for (const auto& candidate : candidates) selected.push_back(candidate.id);
         }
         // A custom wave commits the configured share of the ground army, minus
         // everything already out there. Survivors keep their place in the share,
         // so repeated passes reinforce a wave instead of stacking new ones.
-        if (!recoveryActive()) selected=SimpleArmyPolicy::customAttack(groundArmyValue,groundCommittedValue,
+        if (!wholeArmy) selected=SimpleArmyPolicy::customAttack(groundArmyValue,groundCommittedValue,
             percent,candidates);
     }
     int count=0,value=0;
@@ -11164,9 +11186,9 @@ void QuantBot::launchGroundHunt() {
     // house is offensive. The engine's own target acquisition is what an
     // attacking Dune army uses, and overriding it per unit was both micro and
     // the thing that walked a dispatched wave back into its own base.
-    const bool trackedCustomWave=recoveryActive() && !limited && !selected.empty();
+    const bool trackedCustomWave=(wholeArmy || recoveryActive()) && !limited && !selected.empty();
     if (trackedCustomWave) {
-        if (ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
+        if (recoveryActive() && ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
         // The objective is used as an OBSERVATION anchor for the front strength
         // comparison below, and is recorded for telemetry and the same anchor
         // after a load. It is never turned into a per-unit attack order.
@@ -11178,7 +11200,7 @@ void QuantBot::launchGroundHunt() {
         const ObjectBase* observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
-        if (gate.defer) {
+        if (recoveryActive() && gate.defer) {
             attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
             traceDecision("attack_deferred",AITelemetry::Record().set("reason","outnumbered_planned_front")
                 .set("own_effective_power",planned.allied.offensive())
@@ -11192,6 +11214,11 @@ void QuantBot::launchGroundHunt() {
         customWave.launched=getGameCycleCount();
         customWave.lastActive=getGameCycleCount();
         customWave.members.insert(selected.begin(),selected.end());
+        // Troops already hunting join the same tracked army. They keep their
+        // engine Hunt - nothing resets a unit that is already fighting - but a
+        // withdrawal, the commitment accounting and the sortie clock now see
+        // one army rather than a dispatched wave plus untracked stragglers.
+        customWave.members.insert(existingHunters.begin(),existingHunters.end());
         customWave.front=observedFront ? observedFront->getObjectID() : NONE_ID;
     }
     const ObjectBase* front=nullptr;
@@ -11242,7 +11269,12 @@ void QuantBot::launchGroundHunt() {
         .set("attack_unit_cap",-1)
         .set("attack_value_cap",-1)
         .set("available_value",availableValue).set("required_ready",requiredReady)
-        .set("attack_percent",percent).set("attack_budget",limited ? SimpleArmyPolicy::attackBudget(availableValue,percent) : (custom ? customBudget : SimpleArmyPolicy::attackBudget(armyValue,100-profile.reservePercent)))
+        // A whole-army dispatch has no budget at all: the sentinel says so
+        // rather than reporting a share that nothing consults.
+        .set("whole_army",wholeArmy)
+        .set("existing_hunters",int(existingHunters.size()))
+        .set("attack_percent",wholeArmy ? 100 : percent)
+        .set("attack_budget",wholeArmy ? -1 : (limited ? SimpleArmyPolicy::attackBudget(availableValue,percent) : (custom ? customBudget : SimpleArmyPolicy::attackBudget(armyValue,100-profile.reservePercent))))
         .set("active_units",limited ? campaignPressure().units : count)
         .set("active_value",limited ? campaignPressure().value : value)
         .set("alliance_units",pressure.units).set("alliance_value",pressure.value)
@@ -11287,6 +11319,19 @@ ArmyPosturePolicy::Thresholds QuantBot::postureThresholds() const {
     t.outnumberedBps = settings.outnumberedBps;
     t.dispatchBypassBps = settings.dispatchBypassBps;
     return t;
+}
+
+bool QuantBot::activeDefenceAssignment(const UnitBase* unit) const {
+    if (!unit) return false;
+    const auto assignment=defenceAssignments.find(unit->getObjectID());
+    if (assignment==defenceAssignments.end()) return false;
+    const auto* target=getObject(assignment->second);
+    if (!target || target->getHealth()<=0 || !target->isActive() || !target->getOwner()
+        || target->getOwner()->getTeamID()==getHouse()->getTeamID()) return false;
+    // Use the same contact lifetime as the defence scan, including ended air
+    // attacks and ground contacts that have left their anchored district.
+    return target->isAFlyingUnit() ? airAttackContinues(unit,target)
+        : campaignDefensiveContact(unit,target);
 }
 
 bool QuantBot::orderableCombatUnit(const UnitBase* unit) const {
@@ -13390,8 +13435,16 @@ void QuantBot::retreatAllUnits() {
             // wait for them to close to weapon range first.
             if (intruder->isAFlyingUnit()) continue;
             const auto* victim=intruder->getTarget();
-            if (victim && victim->isAStructure() && victim->getOwner()==getHouse()
-                && intruder->isInWeaponRange(victim)) scrambleUnitsAndDefend(intruder);
+            // Workers count as well as buildings. A harvester being shot at
+            // only reaches the damage callback while it is actually being hit;
+            // this recheck answers an attacker that is still standing over it.
+            const bool ownAsset=victim && victim->getOwner()==getHouse()
+                && (victim->isAStructure() || victim->getItemID()==Unit_Harvester
+                    || victim->getItemID()==Unit_RebelHarvester);
+            // The contact's own target is what scrambleUnitsAndDefend reads, so
+            // this stays the same call it has always been: no extra protected
+            // asset, and therefore no change to the air-strike planner.
+            if (ownAsset && intruder->isInWeaponRange(victim)) scrambleUnitsAndDefend(intruder);
         }
         // Aircraft on any building we own, main base or outlying colony, on the
         // same cadence and before regrouping can claim the launchers again.

@@ -964,12 +964,9 @@ void runArmyRecoveryProbe(Game& game) {
             for(auto* unit:homeUnits) if(unit->getAttackMode()==HUNT) ++hunters;
             require(hunters==0,"An unready house dripped hunters out anyway");
             bot->militaryValueLimit=1;
-            // A complete home wave can leave while remote reserves catch up.
-            // Select only assembled candidates: distant troops may not be
-            // re-tagged as individual attackers to fill the budget.
+            // One whole-army launch: remote, unassembled reserves leave with
+            // the rest rather than waiting for a staging cohort to form.
             std::vector<UnitBase*> remote;
-            // Enough remote value that the old house-wide gather target exceeds
-            // the complete local cohort, without exhausting the stress map.
             for(int i=0;i<16;++i) {
                 auto* unit=spawn(owner,Unit_Tank,Coord(24+i%8,2+i/8));
                 remote.push_back(unit); roster.push_back(unit);
@@ -978,9 +975,14 @@ void runArmyRecoveryProbe(Game& game) {
             for(auto* unit:waveUnits){bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);unit->setForced(false);}
             for(auto* unit:homeUnits){bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);unit->setForced(false);}
             bot->launchGroundHunt();
-            require(!bot->customWave.members.empty(),"Remote reserves held a complete home wave indefinitely");
-            for(auto* unit:remote) require(!bot->customWave.members.count(unit->getObjectID()),
-                "A wave dispatched an unassembled remote reserve");
+            require(!bot->customWave.members.empty(),"A ready Brutal house did not launch at all");
+            for(auto* unit:remote) require(bot->customWave.members.count(unit->getObjectID())
+                && unit->getAttackMode()==HUNT,
+                "A whole-army dispatch left a remote reserve at home");
+            for(auto* unit:waveUnits) require(unit->getAttackMode()==HUNT,
+                "A whole-army dispatch left a home unit behind");
+            for(auto* unit:homeUnits) require(unit->getAttackMode()==HUNT,
+                "A whole-army dispatch left a home unit behind");
             for(auto* unit:remote) retire(unit);
             bot->customWave.members.clear();
         }

@@ -26,6 +26,7 @@
 #include "army-movement-probe.inc"
 #include "army-recovery-probe.inc"
 #include "army-recovery-continuation-probe.inc"
+#include "whole-army-dispatch-probe.inc"
 #include "air-defense-probe.inc"
 #include "custom-attack-probe.inc"
 #include "custom-city-cap-probe.inc"
@@ -206,6 +207,10 @@ int runCampaignBalanceProbe() {
         runArmyRecoveryProbe(*game);
         if (!std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) runArmyRecoveryContinuationProbe(game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_WHOLE_ARMY_PROBE")) {
+        runWholeArmyDispatchProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CUSTOM_ATTACK_PROBE")) {
