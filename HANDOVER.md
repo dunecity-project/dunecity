@@ -1,3 +1,28 @@
+# 2026-10-04 — Verified 1.0.803 installation on the MBA
+
+Installed the portable ARM64 app at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from source commit
+`594a7b1132a8c138052b6a27a42134ae2acd2bf3`. Independent inspection confirms
+version 1.0.803, deep/strict signature verification and bundled SDL initialization
+and hidden-window rendering. All 36 packaged Mach-O files passed the local
+dependency/architecture audit. Installed executable SHA-256:
+`39f63436b506efadcf42a698097f15de222cf1b3ae2d253cdb0787115e8a8610`.
+
+All 1,895 checked save and INI files are byte-identical to the pre-install
+baseline. The usual Desktop shortcut resolves to the installed app. The prior
+1.0.799 app is retained at
+`/Applications/.dunecity-backup-before-803-20261004/dunecity.app`; its executable
+SHA-256 is `da1b7525506f52d38e9b13991ef1e6a7f3d000c65a84a22ddfc2ef0bb9d9572b`.
+The running-game guard initially deferred installation; the retry proceeded
+after the game exited. No match was launched or stopped by the installer.
+
+The latest captured MBA match ran 1.0.799, which lacks the 1.0.802/803 front
+battery logic. This explains why that match did not demonstrate the new build-out;
+live 1.0.803 match behavior has not yet been observed. Installation receipts,
+independent verification and package evidence: ../outputs/battery-install-803/.
+Captured prior session: ../outputs/rocket-battery-live-20261004/.
+This was a private installation; nothing was pushed or publicly published.
+
 # 2026-10-04 — Enemy-facing battery lot clearance (1.0.803 development)
 
 Custom Hard/Brutal DuneCity QuantBot can reclaim one owned R/I/C lot when a
@@ -54,7 +79,8 @@ search exceeds 33 ms. These are fixture aggregate mean/max values, not live MBA
 FPS or a full-match benchmark. Native app version/signature, version consistency,
 Python syntax, diff checks and pre/post-build Ninja dependency audits pass.
 Evidence: ../outputs/rocket-battery-clearance-20261004/. Native 1.0.803 is built
-locally; this task does not install, push or publish it.
+locally; that development task did not install, push or publish it. Subsequent
+MBA installation is recorded above.
 
 # 2026-10-04 — QuantBot army recovery, dispatch and batteries (1.0.802 development)
 
