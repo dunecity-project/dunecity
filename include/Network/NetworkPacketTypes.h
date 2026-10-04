@@ -117,7 +117,10 @@
 //             a peer on version 46 would keep driving a unit this build flies, and would hold a
 //             booking this build cancels. The observer runtime stream is version 7 for the same
 //             reason.
-#define NETWORK_PROTOCOL_VERSION            47
+// 48: per-house spice income multipliers. The lobby gained a change-event type and
+//     GameInitSettings gained the MOD7 block, so a 47 peer cannot decode either; the factor
+//     also feeds the state digest, so an older peer would compute a different house hash.
+#define NETWORK_PROTOCOL_VERSION            48
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

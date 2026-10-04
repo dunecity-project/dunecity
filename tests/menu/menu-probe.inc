@@ -23,6 +23,8 @@
 #include <Menu/PlaySetup.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
+#include <misc/OMemoryStream.h>
+#include <SpiceIncome.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <players/PlayerFactory.h>
 
@@ -922,13 +924,13 @@ int runMenuProbe() {
         menuRequire(ModManager::instance().setActiveMod("Tornie"),"Bonus-color fixture mod unavailable");
         GameInitSettings modInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
         CustomGamePlayers menu(modInit,true);
-        menuRequire(menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x,"Bonus color controls exceed menu width");
+        menuRequire(menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x,"Tornie controls exceed menu width");
         auto& row=menu.houseInfo[0];
-        menuRequire(row.bonusColorCheckbox.isVisible() && row.bonusColorCheckbox.isEnabled(),"Classic bonus color selector is unavailable");
-        row.bonusColorCheckbox.setChecked(true);
-        menu.onBonusColorCheckbox(0);
-        menuRequire(row.colorDropDown.getNumEntries()>1,"Bonus palette has no colors");
-        menuCapture(menu,"custom-bonus-colors");
+        menuRequire(!row.bonusColorCheckbox.isVisible() && !row.colorDropDown.isVisible(),
+            "Removed colour controls are still visible in Tornie");
+        menuRequire(row.colorDropDown.getSelectedEntryIntData()==HOUSE_INVALID,
+            "Fresh games do not default to house colours");
+        menuCapture(menu,"custom-house-colours");
         ModManager::instance().setActiveMod("vanilla");
     }
     for(const auto& mod : {std::string("vanilla"),std::string("dunecity")}) {
@@ -947,6 +949,311 @@ int runMenuProbe() {
         menuCapture(menu,"city-status-"+mod);
     }
     ModManager::instance().setActiveMod("vanilla");
+    // ---- Per-house spice income selector -------------------------------------------------
+    //
+    // Geometry first, because this is the row that decides whether the feature can ship at
+    // 640x480 at all: every control is a fixed-width column of one HBox, the map preview and
+    // its gap claim 188px of the window, and the window itself is 48px narrower than the
+    // renderer. DuneCity also includes a graphics skin selector. Colour overrides have no
+    // menu column, although their saved setup data is retained.
+    {
+        const int rowBudget = getRendererWidth() - 48 - 8 - 180;
+        // Whether the lobby's rows fit vertically is decided by how many rows the map has, not
+        // by this column: the selector lives in the existing house row and is no taller than
+        // the drop-down beside it, which the "adds no height" check below holds it to. Nine
+        // rows of two lines each do not fit 480px of window and did not before either, so the
+        // vertical fit is asserted for the row counts shipped maps actually produce.
+        const auto checkRows = [&](CustomGamePlayers& menu, const std::string& what,
+                                   bool expectVerticalFit = true) {
+            menuRequire(menu.mainVBox.getMinimumSize().x <= menu.mainVBox.getSize().x,
+                ("Spice income controls exceed the menu width: " + what).c_str());
+            SDL_Log("MENU_PROBE: spice row fit %s rows=%d rowMin=%d budget=%d minY=%d sizeY=%d",
+                    what.c_str(), menu.numHouses, menu.houseInfo[0].houseHBox.getMinimumSize().x,
+                    rowBudget, menu.mainVBox.getMinimumSize().y, menu.mainVBox.getSize().y);
+            if(expectVerticalFit) {
+                menuRequire(menu.mainVBox.getMinimumSize().y <= menu.mainVBox.getSize().y,
+                    ("Spice income controls exceed the menu height: " + what).c_str());
+            }
+            menuRequire(menu.mainHBox.getMinimumSize().x <= menu.mainHBox.getSize().x,
+                ("The house rows crowd out the map preview: " + what).c_str());
+            menuRequire(menu.buttonHBox.getMinimumSize().x <= menu.buttonHBox.getSize().x,
+                ("The bottom button row does not fit: " + what).c_str());
+            menuRequire(menu.rightVBox.getSize().x >= 180,
+                ("The map preview column was squeezed: " + what).c_str());
+            for(int slot = 0; slot < menu.numHouses; ++slot) {
+                auto& row = menu.houseInfo[slot];
+                menuRequire(!row.colorDropDown.isVisible() && !row.bonusColorCheckbox.isVisible(),
+                    ("Removed colour controls are still visible: " + what).c_str());
+                menuRequire(row.colorDropDown.getParent() == nullptr
+                            && row.bonusColorCheckbox.getParent() == nullptr,
+                    ("Removed colour controls still occupy a row column: " + what).c_str());
+                menuRequire(row.houseHBox.getMinimumSize().x <= rowBudget,
+                    ("A house row is wider than the space beside the map preview: " + what).c_str());
+                menuRequire(row.playerHBox.getMinimumSize().x <= rowBudget,
+                    ("A player row is wider than the space beside the map preview: " + what).c_str());
+                // The selector is never hidden to make room, whatever had to give way.
+                menuRequire(row.spiceIncomeDropDown.isVisible(),
+                    ("The spice income selector is not visible: " + what).c_str());
+                menuRequire(row.spiceIncomeDropDown.getParent() == &row.houseHBox,
+                    ("The spice income selector is not in the house row: " + what).c_str());
+                menuRequire(row.spiceIncomeDropDown.getNumEntries()
+                                == static_cast<int>(SpiceIncome::kChoiceCount),
+                    ("The spice income selector does not offer every factor: " + what).c_str());
+                menuRequire(!row.spiceIncomeDropDown.getTooltipText().empty(),
+                    ("The spice income selector does not say what it multiplies: " + what).c_str());
+                menuRequire(row.spiceIncomeDropDown.getSelectedEntryIntData()
+                                == static_cast<int>(SpiceIncome::kDefault),
+                    ("A fresh lobby row does not default to 1x: " + what).c_str());
+                // The column costs no vertical space: it is no taller than the drop-down it
+                // sits next to, so the number of rows that fit on screen is unchanged.
+                menuRequire(row.spiceIncomeDropDown.getMinimumSize().y
+                                <= row.teamDropDown.getMinimumSize().y,
+                    ("The spice income selector is taller than the team selector: " + what).c_str());
+            }
+        };
+
+        // A nine-row lobby: the widest shipped map has six house sections, so three numbered
+        // Player sections are appended to it to reach MAX_CUSTOM_GAME_PLAYERS.
+        const auto nineRowMap = std::string(std::getenv("MENU_PROBE_OUT")) + "/nine-row-map.ini";
+        {
+            const auto sixRowMap = dir + "6P - 128x128 - Enclaves.ini";
+            std::string text = readCompleteFile(sixRowMap);
+            text += "\n[Player1]\nBrain=Team7\n[Player2]\nBrain=Team8\n[Player3]\nBrain=Team9\n";
+            auto out = sdl2::RWops_ptr{SDL_RWFromFile(nineRowMap.c_str(), "wb")};
+            menuRequire(out != nullptr, "Cannot write the nine-row fixture map");
+            SDL_RWwrite(out.get(), text.data(), 1, text.size());
+        }
+
+        for(const auto& mod : {std::string("vanilla"), std::string("dunecity"), std::string("Tornie")}) {
+            menuRequire(ModManager::instance().setActiveMod(mod), "Spice income fixture mod unavailable");
+            for(const bool shared : {false, true}) {
+                auto spiceSetup = setup;
+                spiceSetup.sharedHouse = shared;
+                spiceSetup.players = ChangeEventList{};
+                GameInitSettings spiceInit(getBasename(map,true),readCompleteFile(map),shared,setup.rules);
+                CustomGamePlayers menu(spiceInit,true,false,&spiceSetup);
+                checkRows(menu, mod + (shared ? " shared controllers" : " single controller"));
+                menu.update();
+                if(!shared) menuCapture(menu,"custom-spice-income-"+mod);
+            }
+            // Nine rows, the most the lobby can ever show.
+            {
+                auto nineSetup = setup;
+                nineSetup.players = ChangeEventList{};
+                GameInitSettings nineInit(getBasename(nineRowMap,true),
+                                          readCompleteFile(nineRowMap),false,setup.rules);
+                CustomGamePlayers menu(nineInit,true,false,&nineSetup);
+                menuRequire(menu.numHouses == MAX_CUSTOM_GAME_PLAYERS,
+                    "The nine-row fixture map did not produce nine rows");
+                checkRows(menu, mod + " nine rows", getRendererHeight() > 480);
+                menu.update();
+                if(mod=="dunecity") menuCapture(menu,"custom-spice-income-nine-rows");
+            }
+        }
+        ModManager::instance().setActiveMod("vanilla");
+
+        // The host picks a factor per row; what Start carries is what was picked, per row.
+        ChangeEventList picked;
+        {
+            auto spiceSetup = setup;
+            // An offline fixture: the lobby fills its open seats with bots, so every row is
+            // actually played and Start keeps it. An online lobby would leave them open and
+            // drop them, which says nothing about the factor.
+            spiceSetup.online = false;
+            spiceSetup.players = ChangeEventList{};
+            GameInitSettings spiceInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
+            CustomGamePlayers menu(spiceInit,true,false,&spiceSetup);
+            menuRequire(menu.numHouses >= 2, "The spice fixture needs two rows");
+            for(int slot = 0; slot < menu.numHouses; ++slot) {
+                menuRequire(menu.houseInfo[slot].spiceIncomeDropDown.isEnabled(),
+                    "The host cannot choose a spice income factor");
+            }
+            menu.houseInfo[0].spiceIncomeDropDown.setSelectedItem(2);   // 3x
+            menu.onChangeSpiceIncomeDropDownBoxes(true, 0);
+            menu.houseInfo[1].spiceIncomeDropDown.setSelectedItem(static_cast<int>(SpiceIncome::kChoiceCount) - 1);
+            menu.onChangeSpiceIncomeDropDownBoxes(true, 1);
+            menuCapture(menu,"custom-spice-income-chosen");
+            menu.houseInfo[0].spiceIncomeDropDown.setActive(true);
+            menuCapture(menu,"custom-spice-income-open",true);
+            menu.houseInfo[0].spiceIncomeDropDown.setActive(false);
+
+            menu.addAllPlayersToGameInitSettings();
+            const auto& rows = menu.gameInitSettings.getHouseInfoList();
+            menuRequire(rows.size() >= 2, "Start dropped the configured rows");
+            menuRequire(rows[0].spiceIncomeMultiplier == 3,
+                "The first row's spice income choice did not reach the game settings");
+            menuRequire(rows[1].spiceIncomeMultiplier == SpiceIncome::kMax,
+                "The second row's spice income choice did not reach the game settings");
+            // Rows that were not touched keep 1x rather than inheriting a neighbour's rate.
+            for(std::size_t row = 2; row < rows.size(); ++row) {
+                menuRequire(rows[row].spiceIncomeMultiplier == SpiceIncome::kDefault,
+                    "An untouched row picked up another row's spice income factor");
+            }
+            picked = menu.getChangeEventList();
+            int spiceEvents = 0;
+            for(const auto& event : picked.changeEventList) {
+                if(event.eventType == ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome) {
+                    spiceEvents++;
+                    menuRequire(SpiceIncome::isValid(event.newValue),
+                        "The lobby broadcast a factor it would not accept back");
+                }
+            }
+            menuRequire(spiceEvents == menu.numHouses,
+                "The lobby refresh does not carry one spice income factor per row");
+            menu.onCancel();
+            menuRequire(spiceSetup.players.changeEventList.size() == picked.changeEventList.size(),
+                "Back through the map browser lost the roster");
+        }
+
+        // Back and Next rebuild the lobby from that list, so the factors have to come back.
+        {
+            auto restoredSetup = setup;
+            restoredSetup.players = picked;
+            GameInitSettings spiceInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
+            CustomGamePlayers menu(spiceInit,true,false,&restoredSetup);
+            menuRequire(menu.houseInfo[0].spiceIncomeDropDown.getSelectedEntryIntData() == 3,
+                "A restored lobby lost the first row's spice income factor");
+            menuRequire(menu.houseInfo[1].spiceIncomeDropDown.getSelectedEntryIntData()
+                            == static_cast<int>(SpiceIncome::kMax),
+                "A restored lobby lost the second row's spice income factor");
+            menu.addAllPlayersToGameInitSettings();
+            menuRequire(menu.gameInitSettings.getHouseInfoList()[0].spiceIncomeMultiplier == 3,
+                "A restored lobby does not start at the restored factor");
+            // A round trip out through the map browser and back keeps it too.
+            auto roundTrip = restoredSetup;
+            CustomGameMenu browser(false, false, &roundTrip);
+            browser.onNext();
+            menuRequire(roundTrip.players.changeEventList.size() == picked.changeEventList.size(),
+                "The map browser dropped the spice income events");
+        }
+
+        // A client sees the host's choice but cannot change it, not even for its own row.
+        {
+            auto clientSetup = setup;
+            clientSetup.players = ChangeEventList{};
+            GameInitSettings clientInit(getBasename(map,true),readCompleteFile(map),false,setup.rules);
+            CustomGamePlayers menu(clientInit,false,false,&clientSetup);
+            ChangeEventList fromHost;
+            fromHost.changeEventList.emplace_back(
+                ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome, 0u, 4u);
+            menu.onReceiveChangeEventList(fromHost);
+            menuRequire(menu.houseInfo[0].spiceIncomeDropDown.getSelectedEntryIntData() == 4,
+                "A client does not follow the host's spice income choice");
+            menuRequire(!menu.houseInfo[0].spiceIncomeDropDown.isEnabled(),
+                "A client can edit the spice income factor");
+            // An unusable factor from a modified host is dropped, not rounded into range.
+            ChangeEventList hostile;
+            hostile.changeEventList.emplace_back(
+                ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome, 0u, 99u);
+            menu.onReceiveChangeEventList(hostile);
+            menuRequire(menu.houseInfo[0].spiceIncomeDropDown.getSelectedEntryIntData() == 4,
+                "A client accepted a spice income factor outside the accepted range");
+            menuCapture(menu,"custom-spice-income-client");
+        }
+
+        // A load-game lobby shows what the saved match was played at, read-only. The payload is
+        // the setup metadata of a savegame, which is where a resolved row's factor lives.
+        for(const auto& mod : {std::string("vanilla"), std::string("dunecity"), std::string("Tornie")}) {
+            menuRequire(ModManager::instance().setActiveMod(mod), "Saved spice fixture mod unavailable");
+            GameInitSettings saved(getBasename(map,true),readCompleteFile(map),false,setup.rules);
+            GameInitSettings::HouseInfoList rows;
+            GameInitSettings::HouseInfo first(HOUSE_ATREIDES, 1);
+            first.spiceIncomeMultiplier = 5;
+            first.colorOfHouse = getDefaultHouseColorSlot(HOUSE_ORDOS);
+            first.addPlayerInfo({settings.general.playerName, HUMANPLAYERCLASS});
+            rows.push_back(first);
+            GameInitSettings::HouseInfo second(HOUSE_HARKONNEN, 2);
+            second.spiceIncomeMultiplier = 2;
+            second.addPlayerInfo({"Opponent", HUMANPLAYERCLASS});
+            rows.push_back(second);
+            for(const auto& row : rows) saved.addHouseInfo(row);
+
+            OMemoryStream out; out.open();
+            out.writeUint32(SAVEMAGIC); out.writeUint32(SAVEGAMEVERSION); out.writeString("probe");
+            out.writeString(mod); out.writeString(saved.getModChecksum());
+            saved.save(out);
+            out.writeUint32(rows.size());
+            for(const auto& row : rows) row.save(out);
+            out.writeUint32(0x53434F4C); out.writeUint32(rows.size());
+            for(const auto& row : rows) out.writeSint32(row.colorOfHouse);
+            out.writeUint32(SpiceIncome::kSetupMarker); out.writeUint32(rows.size());
+            for(const auto& row : rows) out.writeUint32(row.spiceIncomeMultiplier);
+
+            GameInitSettings loadLobby("probe.dls",
+                std::string(reinterpret_cast<const char*>(out.getData()), out.getDataLength()),
+                "Saved match");
+            CustomGamePlayers menu(loadLobby,true,false,nullptr);
+            menuRequire(menu.numHouses == 2, "The load-game fixture did not produce two rows");
+            // Not checkRows(): a saved row deliberately does not read 1x.
+            menuRequire(menu.mainVBox.getMinimumSize().x <= menu.mainVBox.getSize().x,
+                "A load-game lobby's spice income column exceeds the menu width");
+            menuRequire(menu.houseInfo[0].spiceIncomeDropDown.getSelectedEntryIntData() == 5,
+                "A load-game lobby does not show the saved spice income factor");
+            menuRequire(menu.houseInfo[1].spiceIncomeDropDown.getSelectedEntryIntData() == 2,
+                "A load-game lobby lost the second row's saved factor");
+            menuRequire(!menu.houseInfo[0].spiceIncomeDropDown.isEnabled(),
+                "A load-game lobby lets the saved spice income factor be changed");
+            for(int slot = 0; slot < menu.numHouses; ++slot) {
+                menuRequire(!menu.houseInfo[slot].colorDropDown.isVisible()
+                            && !menu.houseInfo[slot].bonusColorCheckbox.isVisible(),
+                    "A load-game lobby shows removed colour controls");
+            }
+            menuRequire(menu.houseInfo[0].colorDropDown.getSelectedEntryIntData()
+                            == getDefaultHouseColorSlot(HOUSE_ORDOS),
+                "Removing the colour selector changed a saved match's colour override");
+            if(mod == "dunecity") {
+                menuRequire(menu.duneCitySkinControls
+                    && menu.houseInfo[0].graphicsSkinDropDown.isVisible()
+                    && !menu.houseInfo[0].colorDropDown.isVisible()
+                    && !menu.houseInfo[0].bonusColorCheckbox.isVisible(),
+                    "Loaded city fixture lost the skin selector or shows removed colour controls");
+            }
+            menu.update();
+            menuCapture(menu,"custom-spice-income-loaded-"+mod);
+            menu.addAllPlayersToGameInitSettings();
+            menuRequire(menu.gameInitSettings.getHouseInfoList().front().colorOfHouse
+                            == getDefaultHouseColorSlot(HOUSE_ORDOS),
+                "Rebuilding a saved lobby lost its hidden colour override");
+        }
+        {
+            GameInitSettings saved(HOUSE_ATREIDES, setup.rules, 1);
+            GameInitSettings::HouseInfo shared(HOUSE_ATREIDES, 1);
+            shared.spiceIncomeMultiplier = 4;
+            shared.addPlayerInfo({settings.general.playerName, HUMANPLAYERCLASS});
+            shared.addPlayerInfo({"Partner", HUMANPLAYERCLASS});
+            GameInitSettings::HouseInfo enemy(HOUSE_HARKONNEN, 2);
+            enemy.spiceIncomeMultiplier = 2;
+            enemy.addPlayerInfo({"Enemy", "qBotHard"});
+            const GameInitSettings::HouseInfoList rows{shared, enemy};
+            for(const auto& row : rows) saved.addHouseInfo(row);
+            OMemoryStream header; header.open();
+            header.writeUint32(SAVEMAGIC); header.writeUint32(SAVEGAMEVERSION);
+            header.writeString("probe");
+            header.writeString(saved.getModName()); header.writeString(saved.getModChecksum());
+            saved.save(header);
+            header.writeUint32(rows.size());
+            for(const auto& row : rows) row.save(header);
+            header.writeUint32(0x53434F4C); header.writeUint32(rows.size());
+            for(const auto& row : rows) header.writeSint32(row.houseID);
+            header.writeUint32(SpiceIncome::kSetupMarker); header.writeUint32(rows.size());
+            for(const auto& row : rows) header.writeUint32(row.spiceIncomeMultiplier);
+            GameInitSettings load("coop.dls",
+                std::string(header.getData(), header.getDataLength()), "Saved co-op");
+            load.configureCoopSave(saved, rows);
+            load.enableCoop(true, "Saved co-op");
+            CustomGamePlayers menu(load, true, true);
+            menuRequire(menu.houseInfo[0].spiceIncomeDropDown.getSelectedEntryIntData() == 4,
+                "Loaded co-op does not show the shared house's saved spice rate");
+            menuRequire(!menu.houseInfo[0].spiceIncomeDropDown.isEnabled(),
+                "Loaded co-op lets the saved spice rate change");
+            menu.addAllPlayersToGameInitSettings();
+            for(const auto& row : menu.gameInitSettings.getHouseInfoList())
+                menuRequire(row.spiceIncomeMultiplier == (row.houseID == HOUSE_ATREIDES ? 4u : 2u),
+                    "Rebuilding loaded co-op controllers changed a saved spice rate");
+            menuCapture(menu, "custom-spice-income-loaded-coop");
+        }
+        ModManager::instance().setActiveMod("vanilla");
+    }
     setup.players=original;
     {
         CrossplayMenu menu;

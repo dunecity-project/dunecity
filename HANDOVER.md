@@ -1,3 +1,77 @@
+# 2026-10-04 — Custom Game spice income and simplified rows (1.0.800)
+
+Custom Game now offers a spice income factor of 1x, 2x, 3x, 4x or 5x per
+house row, for human players and bots. Default 1x preserves the original rate;
+a 700-spice delivery pays 1400 at 2x. Controllers sharing a house share its
+factor. Fresh offline setup and online hosts can choose the rate; clients see
+the host's choice and cannot change it. Loaded matches show their saved rate
+read-only. Campaign and skirmish new-game defaults remain 1x.
+
+The rightmost "Original" house-colour selector and its bonus-palette checkbox
+have been removed from every Custom Game row at the user's request. Fresh
+matches use their house colours. Saved colour overrides and existing colour
+serialization remain intact, including through a loaded lobby rebuild. The
+DuneCity SimCity/Dune2 graphics skin selector remains available. Row widths
+omit redundant captions at narrow resolutions without hiding the spice or skin
+controls.
+
+The multiplier is applied exactly once when Refinery or Tornie's Worfinery
+accepts actual spice from a worker. It does not change cargo capacity, map
+spice, extraction speed, starting credits, city taxes, refunds or other income.
+Existing silo storage and the 999999 credit ceiling still apply; gross refined
+income statistics follow the multiplied payout as the existing accounting path
+does. Integer multiplication preserves fractional and interrupted deliveries.
+
+Persistence and network gates: save format 9851 adds a House field and an SMUL
+array for resolved setup rows, while MOD7 appends per-row factors to
+GameInitSettings. Standalone HouseInfo serialization remains frozen. Random
+rows attach their rate during INIMapLoader resolution, and SMUL is written
+from live houses so resumed Random choices retain the actual rate. Old saves
+without these fields default to 1x. Invalid factors and mismatched MOD7 counts
+are refused. Protocol 48 separates the new lobby event, setup format and state
+digest from older peers; multiplayer peers need matching builds. Observer
+runtime remains version 7, using the ordinary House save block. Join and
+spectator descriptors copy each live rate, and state digests include it before
+any delivery occurs.
+
+Codex delegated source exploration and implementation to one local,
+subscription-authenticated Claude Code worker, then independently reviewed and
+integrated strict count validation, loaded co-op rate retention, colour control
+removal, fixture conversion and migration checks. The bounded worker reached
+its turn cap after completing the patch; one focused read-only continuation
+returned its acceptance report. No API billing or model override was enabled.
+
+All 51 configured CTest targets pass across the full run and four focused
+reruns. The initial full run passed 47 targets; the remaining menu fixture had
+an incomplete synthesized co-op save prefix, and three statistics probes had
+synthesized legacy 9840 House bytes using offsets from before the new four-byte
+field. After correcting those fixtures, all four reruns passed (menu navigation
+227.48 seconds, all three native sizes; statistics in Vanilla, DuneCity and
+Dune2R). Production income checks passed in Vanilla, DuneCity and
+Tornie, including factors 1..5, fractional/partial/interrupted loads, damaged
+refineries, storage/credit limits, independent houses, Random resolution,
+ordinary save/reload and snapshot metadata. A private negative control that
+removed the production Refinery multiplier failed the expected 2x payout check;
+the multiplier was restored and the income checks passed afterward.
+
+An independent native probe loaded the captured 1.0.796 MBA match (save version
+9850, original file unchanged), checked six houses default to 1x, changed live
+rates without changing original initialization metadata, and verified new
+ordinary save/reload, resolved SMUL setup, spectator descriptor, observer
+restore and rate-sensitive digest. This passed without advancing the match.
+No two-process live peer match was exercised for this new economic rule.
+
+Rendered menu checks cover 640x480, 854x480 and 1280x720, shared-controller and
+saved lobbies. Nine rows fit horizontally at all three sizes and vertically
+at 720 pixels; their pre-existing vertical overflow at 480 pixels remains.
+The new selector adds no row height. Build and dependency audits pass, and all
+three source version files agree on 1.0.800. Final source, build and diff checks
+passed; the complete implementation and its tests are captured in git.
+
+Development app: build/bin/dunecity.app. Evidence:
+../outputs/spice-multiplier-800/. This task does not publish or install 1.0.800;
+the previous private MBA installation remains 1.0.799.
+
 # 2026-10-03 — 1.0.799 installed on the MBA
 
 Installed code commit `887d305900ce3a6bac32afa058d263d74950921b` at

@@ -93,7 +93,11 @@
 //       have the old flat conversion estimate cleared on load
 //       (DeviationReward::migrateLegacyLedger) so the two accountings cannot mix.
 // 9850: MOD6 game rules persist the original unit damage checkbox.
-#define SAVEGAMEVERSION     9850
+// 9851: per-house spice income multiplier. Three places carry it, because no single one of
+//       them can: MOD7 in GameInitSettings carries the *chosen* lobby rows (which may still
+//       say Random), the SMUL block after the setup colours carries the *resolved* rows of a
+//       saved match, and House carries the live factor the simulation actually pays out with.
+#define SAVEGAMEVERSION     9851
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

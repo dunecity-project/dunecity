@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 47;
+static constexpr int kWireProtocolVersion = 48;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -38,7 +38,10 @@ TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network
     REQUIRE(NETWORKPACKET_COOP_MISSION == kWireCoopMission);
 }
 
-TEST_CASE("NetworkManager: stalled-unit carryall rescue requires protocol 47", "[network][protocol]") {
+TEST_CASE("NetworkManager: per-house spice income requires protocol 48", "[network][protocol]") {
+    // 48 added the ChangeSpiceIncome lobby event and the MOD7 game-init block, and mixed the
+    // factor into the state digest. A 47 peer can decode none of those and would hash houses
+    // differently, so it has to be separated rather than tolerated.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

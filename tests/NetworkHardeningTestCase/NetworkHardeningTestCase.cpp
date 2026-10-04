@@ -1415,6 +1415,27 @@ TEST_CASE("Lobby authorization: house settings are restricted to the sender's ow
         REQUIRE(judge(lobby, "stefan", houseChange(EventType::ChangeHouse, 0xFFFFFFFFu, 0))
                 == LobbyDecision::RejectSlotOutOfRange);
     }
+
+    SECTION("the spice income factor is host-only, including for the sender's own house") {
+        // Unlike house/team/colour/skin, this is not a seat preference: it decides how much a
+        // house earns. A client's selector is disabled, so no client UI can produce it - and
+        // the refusal does not depend on which row is named, nor on the factor being sensible.
+        REQUIRE(judge(lobby, "stefan", houseChange(EventType::ChangeSpiceIncome, 1, 2))
+                == LobbyDecision::RejectHostOnly);
+        REQUIRE(judge(lobby, "quix", houseChange(EventType::ChangeSpiceIncome, 1, 1))
+                == LobbyDecision::RejectHostOnly);
+        REQUIRE(judge(lobby, "stefan", houseChange(EventType::ChangeSpiceIncome, 0, 5))
+                == LobbyDecision::RejectHostOnly);
+        REQUIRE(judge(lobby, "stefan", houseChange(EventType::ChangeSpiceIncome, 4, 3))
+                == LobbyDecision::RejectHostOnly);
+        REQUIRE(judge(lobby, "stefan", houseChange(EventType::ChangeSpiceIncome, 0xFFFFFFFFu, 3))
+                == LobbyDecision::RejectHostOnly);
+        // Host-only is decided before seating is even consulted, so a sender that holds no
+        // seat is refused for that reason rather than for being a stranger. Either way it
+        // changes nothing; the distinction only shows up in the log line.
+        REQUIRE(judge(lobby, "intruder", houseChange(EventType::ChangeSpiceIncome, 1, 2))
+                == LobbyDecision::RejectHostOnly);
+    }
 }
 
 TEST_CASE("Lobby authorization: a transaction is judged as a whole",
@@ -1473,6 +1494,146 @@ TEST_CASE("Lobby authorization: a transaction is judged as a whole",
         events.push_back(seatClaim(0, "stefan"));
         REQUIRE(LobbyAuthorization::authorizeClientTransaction(empty, "stefan", events, refused)
                 == LobbyDecision::RejectUnknownSender);
+    }
+
+    SECTION("a spice income event poisons an otherwise legal transaction") {
+        // Mixing it with changes the sender really is allowed to make must not smuggle it
+        // through: the whole list is judged first, so nothing at all is applied.
+        std::list<ChangeEventList::ChangeEvent> events;
+        events.push_back(houseChange(EventType::ChangeHouse, 1, HOUSE_ORDOS));
+        events.push_back(houseChange(EventType::ChangeSpiceIncome, 1, 5));
+        events.push_back(houseChange(EventType::ChangeColor, 1, HOUSE_INVALID));
+        REQUIRE(LobbyAuthorization::authorizeClientTransaction(lobby, "stefan", events, refused)
+                == LobbyDecision::RejectHostOnly);
+        REQUIRE(refused == 1);
+    }
+
+    SECTION("the host's maximal lobby snapshot is still smaller than the event bound") {
+        // getChangeEventList() sends seven events per row - house, team, colour, skin, spice
+        // income and the two seats - for up to MAX_CUSTOM_GAME_PLAYERS rows. That list has to
+        // fit through the decoder, and it is a client's lobby refresh that carries it.
+        PacketBuilder builder;
+        const Uint32 rows = static_cast<Uint32>(MAX_CUSTOM_GAME_PLAYERS);
+        const Uint32 eventsPerRow = 7;
+        REQUIRE(rows * eventsPerRow <= CHANGEEVENTLIST_MAX_EVENTS);
+        builder.u32(rows * eventsPerRow);
+        for(Uint32 houseRow = 0; houseRow < rows; houseRow++) {
+            builder.u32(static_cast<Uint32>(EventType::ChangeHouse)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeTeam)).u32(houseRow).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangeColor)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeGraphicsSkin)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeSpiceIncome)).u32(houseRow).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangePlayer)).u32(houseRow * 2).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangePlayer)).u32(houseRow * 2 + 1).u32(1);
+        }
+        ENetPacketIStream istream(builder.build());
+        ChangeEventList decoded(istream);
+        REQUIRE(decoded.changeEventList.size() == rows * eventsPerRow);
+        REQUIRE(decoded.changeEventList.size() == 63);
+        // getChangeEventListForNewPlayer appends the joining player's seat claim to exactly
+        // that list, which is the largest list the lobby ever produces. It has to decode.
+        REQUIRE(rows * eventsPerRow + 1 == CHANGEEVENTLIST_MAX_EVENTS);
+    }
+
+    SECTION("a full refresh plus the joining player's seat claim still decodes") {
+        PacketBuilder builder;
+        const Uint32 rows = static_cast<Uint32>(MAX_CUSTOM_GAME_PLAYERS);
+        builder.u32(rows * 7 + 1);
+        for(Uint32 houseRow = 0; houseRow < rows; houseRow++) {
+            builder.u32(static_cast<Uint32>(EventType::ChangeHouse)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeTeam)).u32(houseRow).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangeColor)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeGraphicsSkin)).u32(houseRow).u32(0);
+            builder.u32(static_cast<Uint32>(EventType::ChangeSpiceIncome)).u32(houseRow).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangePlayer)).u32(houseRow * 2).u32(1);
+            builder.u32(static_cast<Uint32>(EventType::ChangePlayer)).u32(houseRow * 2 + 1).u32(1);
+        }
+        builder.u32(static_cast<Uint32>(EventType::SetHumanPlayer)).u32(0).str("stefan");
+        ENetPacketIStream istream(builder.build());
+        ChangeEventList decoded(istream);
+        REQUIRE(decoded.changeEventList.size() == CHANGEEVENTLIST_MAX_EVENTS);
+        REQUIRE(decoded.changeEventList.back().newStringValue == "stefan");
+    }
+
+    SECTION("one event more than the maximal refresh is refused") {
+        PacketBuilder builder;
+        builder.u32(CHANGEEVENTLIST_MAX_EVENTS + 1);
+        for(int i = 0; i <= CHANGEEVENTLIST_MAX_EVENTS; i++) builder.u32(0).u32(0).u32(0);
+        ENetPacketIStream istream(builder.build());
+        REQUIRE_THROWS_AS(ChangeEventList(istream), InputStream::exception);
+    }
+}
+
+TEST_CASE_METHOD(ENetRuntime, "Lobby: spice income changes round-trip",
+                 "[network][security][lobby][spiceincome]") {
+    ChangeEventList original;
+    original.changeEventList.emplace_back(
+        ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome, 2u, SpiceIncome::kMax);
+    ENetPacketOStream out(ENET_PACKET_FLAG_RELIABLE);
+    original.save(out);
+    ENetPacketIStream in(out.getPacket());
+    ChangeEventList decoded(in);
+    REQUIRE(decoded.changeEventList.size() == 1);
+    const auto& event = decoded.changeEventList.front();
+    REQUIRE(event.eventType == ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome);
+    REQUIRE(event.slot == 2);
+    REQUIRE(event.newValue == SpiceIncome::kMax);
+
+    SECTION("the appended type did not renumber the existing ones") {
+        // These numbers are on the wire; a peer decodes by value, so they are frozen.
+        using EventType = ChangeEventList::ChangeEvent::EventType;
+        REQUIRE(static_cast<Uint32>(EventType::ChangeHouse) == 0);
+        REQUIRE(static_cast<Uint32>(EventType::ChangeTeam) == 1);
+        REQUIRE(static_cast<Uint32>(EventType::ChangeColor) == 2);
+        REQUIRE(static_cast<Uint32>(EventType::ChangePlayer) == 3);
+        REQUIRE(static_cast<Uint32>(EventType::SetHumanPlayer) == 4);
+        REQUIRE(static_cast<Uint32>(EventType::ChangeGraphicsSkin) == 5);
+        REQUIRE(static_cast<Uint32>(EventType::ChangeSpiceIncome) == 6);
+    }
+
+    SECTION("the type after the last known one is still refused") {
+        PacketBuilder builder;
+        builder.u32(1)
+               .u32(static_cast<Uint32>(ChangeEventList::ChangeEvent::lastEventType) + 1)
+               .u32(0).u32(0);
+        ENetPacketIStream istream(builder.build());
+        REQUIRE_THROWS_AS(ChangeEventList(istream), InputStream::exception);
+    }
+}
+
+TEST_CASE("Received game settings bound the spice income factor of every row",
+          "[network][security][spiceincome]") {
+    const auto buildSettings = [](Uint32 firstFactor, Uint32 closedFactor) {
+        GameInitSettings settings("map.ini", "[MAP]\nSizeX=64\nSizeY=64\n", "Host", false,
+                                  SettingsClass::GameOptionsClass{});
+        GameInitSettings::HouseInfo playing(HOUSE_ATREIDES, 1);
+        playing.spiceIncomeMultiplier = firstFactor;
+        playing.addPlayerInfo({"Host", HUMANPLAYERCLASS});
+        settings.addHouseInfo(playing);
+        // An explicitly closed row. The lobby can reopen it, so it is bounded too.
+        GameInitSettings::HouseInfo closed(HOUSE_UNUSED, 2);
+        closed.spiceIncomeMultiplier = closedFactor;
+        settings.addHouseInfo(closed);
+        return settings;
+    };
+
+    std::string reason;
+    REQUIRE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(
+        buildSettings(SpiceIncome::kMin, SpiceIncome::kMax), reason));
+    REQUIRE(reason.empty());
+
+    SECTION("an occupied row out of range is refused") {
+        const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
+        REQUIRE_FALSE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(
+            buildSettings(bad, SpiceIncome::kMin), reason));
+        REQUIRE(reason == "spice income factor out of range");
+    }
+
+    SECTION("a closed row out of range is refused too") {
+        const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
+        REQUIRE_FALSE(GameInitSettingsPolicy::isAcceptableReceivedGameInitSettings(
+            buildSettings(SpiceIncome::kMin, bad), reason));
+        REQUIRE(reason == "spice income factor out of range");
     }
 }
 

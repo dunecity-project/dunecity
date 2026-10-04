@@ -569,6 +569,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --custom-attack-probe --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/custom-attack-probe)
         set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Spice income: the lobby's per-house delivery factor reaches the live house, a real
+        # refinery unloading a real harvester pays exactly the delivered cargo times that
+        # factor at every accepted step, and the factor survives a save and load. All three
+        # mods are measured: DuneCity adds city taxes, which must not earn at the factor, and
+        # Tornie adds the Worfinery/Harvestank pair, which must.
+        foreach(spice_mod IN ITEMS vanilla dunecity Tornie)
+            add_test(NAME house_spice_income_${spice_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --spice-income-probe --repeatable
+                --mod ${spice_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/spice-income-${spice_mod}-probe)
+            set_tests_properties(house_spice_income_${spice_mod} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        endforeach()
         # Credit storage: refined spice and city taxes share the refinery/silo
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
         # City tax only exists with the dunecity mod, so both mods are measured.

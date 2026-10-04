@@ -42,6 +42,7 @@
 #include "refund-provenance-probe.inc"
 #include "campaign-city-economy-probe.inc"
 #include "degradation-probe.inc"
+#include "spice-income-probe.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -99,10 +100,17 @@ int runCampaignBalanceProbe() {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
+    int rosterRow = 0;
     for (const auto& [h,team] : roster) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), team);
         if (h==humanHouse) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
         info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
+        // Give every row a different delivery income factor, as a host would in the lobby, so
+        // the probe can check which house ended up with which - including that no row picked
+        // up a neighbour's rate. Matches SpiceIncomeProbe::assignedFactors.
+        if(std::getenv("BALANCE_SPICE_INCOME_PROBE"))
+            info.spiceIncomeMultiplier = SpiceIncome::kMin + (rosterRow % SpiceIncome::kChoiceCount);
+        ++rosterRow;
         init.addHouseInfo(info);
     }
     auto game = std::make_unique<Game>();
@@ -135,6 +143,13 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_CITY_CAMPAIGN_PROBE")) {
         runCampaignCityEconomyProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_SPICE_INCOME_PROBE")) {
+        // Takes the owning pointer: it saves the match, replaces the Game with a reload and
+        // measures the resumed delivery on the loaded one.
+        runSpiceIncomeProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CREDIT_STORAGE_PROBE")) {

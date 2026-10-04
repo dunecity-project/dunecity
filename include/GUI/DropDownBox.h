@@ -128,6 +128,22 @@ public:
     void resize(Uint32 width, Uint32 height) override;
 
     /**
+        Sets a tooltip shown when the mouse rests on the open button. Useful where the entries
+        alone cannot say what the selection means.
+        \param  text    the tooltip text, empty to remove it
+    */
+    void setTooltipText(const std::string& text) {
+        openListBoxButton.setTooltipText(text);
+    }
+
+    /**
+        \return the current tooltip text, empty when there is none
+    */
+    const std::string& getTooltipText() const {
+        return openListBoxButton.getTooltipText();
+    }
+
+    /**
         Returns the minimum size of this scroll bar. The scroll bar should not
         resized to a size smaller than this.
         \return the minimum size of this scroll bar

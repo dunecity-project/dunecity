@@ -15,6 +15,7 @@
 #include <Definitions.h>
 #include <misc/SaveCompat.h>
 #include <mod/ModInfo.h>
+#include <SpiceIncome.h>
 
 // ---------- constant checks ----------
 
@@ -36,8 +37,17 @@ TEST_CASE("Save compat: current Num_ItemID >= legacy",
 
 TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
           "[save-compat][regression]") {
-    REQUIRE(SAVEGAMEVERSION == 9850);
+    REQUIRE(SAVEGAMEVERSION == 9851);
     REQUIRE(SAVEGAMEVERSION >= 9818);
+}
+
+TEST_CASE("Save compat: the spice income format version is the current one",
+          "[save-compat][regression][spiceincome]") {
+    // The SMUL setup block and the House field appear together, at this version. If a later
+    // change bumps SAVEGAMEVERSION, this stays put: 9851 is when the field started existing,
+    // and the gates that read it compare against that, not against "current".
+    REQUIRE(SpiceIncome::kFirstSavegameVersion == 9851);
+    REQUIRE(SAVEGAMEVERSION >= static_cast<int>(SpiceIncome::kFirstSavegameVersion));
 }
 
 TEST_CASE("Save compat: extended houses preserve legacy IDs",

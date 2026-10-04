@@ -88,16 +88,25 @@ int runOwnershipProbe() {
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
         std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("6DOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD6 fixture missing");
-        legacy[marker]='4'; legacy.resize(legacy.size()-5);
+        const auto marker = legacy.rfind("7DOM");
+        if(marker == std::string::npos) throw std::runtime_error("MOD7 fixture missing");
+        // Everything after MOD4's payload: the yard limit, the original-damage byte, and
+        // MOD7's factor count plus one factor per house.
+        const auto afterMod4 = 4 + 1
+            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size();
+        legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);
         if(old.getGameOptions().maximumNumberOfConstructionYardsOverride != -1)
             throw std::runtime_error("Older setup did not default to unlimited yards");
+        for(const auto& houseInfo : old.getHouseInfoList())
+            if(houseInfo.spiceIncomeMultiplier != SpiceIncome::kDefault)
+                throw std::runtime_error("Older setup did not default to 1x spice income");
+        if(copy.getHouseInfoList().size() != game->gameInitSettings.getHouseInfoList().size())
+            throw std::runtime_error("Yard cap roundtrip lost a house row");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD6 roundtrip and MOD4 default pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD7 roundtrip and MOD4 defaults pass");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);

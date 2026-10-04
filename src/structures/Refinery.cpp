@@ -181,7 +181,14 @@ void Refinery::updateStructureSpecificStuff() {
             }
 
             extractionSpeed = (extractionSpeed * scale) / 5;
-            owner->addCredits(harvesterExtractSpice(pHarvester, extractionSpeed), true);
+            // The one place a delivery becomes income. The extraction speed above, and so the
+            // cargo actually taken off the harvester this tick, is untouched: only what the
+            // house is paid for it scales. An integer multiply of the fixed-point amount is
+            // exact, so a load unloaded over many ticks - or interrupted part way - still pays
+            // exactly the delivered cargo times the factor.
+            FixPoint delivered = harvesterExtractSpice(pHarvester, extractionSpeed);
+            delivered *= static_cast<int>(owner->getSpiceIncomeMultiplier());
+            owner->addCredits(delivered, true);
         } else {
             GroundUnit* pGroundHarvester = static_cast<GroundUnit*>(pHarvester);
             if((pGroundHarvester->isAwaitingPickup() == false) && (pHarvester->getGuardPoint().isValid())) {

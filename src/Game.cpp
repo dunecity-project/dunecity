@@ -4582,6 +4582,30 @@ bool Game::loadSaveGame(InputStream& stream) {
         }
     }
 
+    // The resolved delivery income factors. Read positionally from SMUL and never from the
+    // identity match above, which cannot speak for a row that was played as Random. The House
+    // objects get their own copy from their own save block; this is the setup metadata the
+    // load-game lobby displays.
+    if(savegameVersion >= SpiceIncome::kFirstSavegameVersion) {
+        if(stream.readUint32() != SpiceIncome::kSetupMarker) {
+            SDL_Log("Game::loadSaveGame(): spice income marker missing");
+            return false;
+        }
+        const Uint32 numSpiceFactors = stream.readUint32();
+        if(numSpiceFactors != houseInfoListSetup.size()) {
+            SDL_Log("Game::loadSaveGame(): spice income count disagrees with the setup rows");
+            return false;
+        }
+        for(GameInitSettings::HouseInfo& setupHouseInfo : houseInfoListSetup) {
+            const Uint32 factor = stream.readUint32();
+            if(!SpiceIncome::isValid(factor)) {
+                SDL_Log("Game::loadSaveGame(): invalid saved spice income factor %u", factor);
+                return false;
+            }
+            setupHouseInfo.spiceIncomeMultiplier = factor;
+        }
+    }
+
     resetHouseVisualHouseMapping();
     for(const GameInitSettings::HouseInfo& setupHouseInfo : houseInfoListSetup) {
         int colorOfHouse = setupHouseInfo.colorOfHouse;
@@ -4944,6 +4968,24 @@ void Game::saveGame(OutputStream& fs) {
             visualHouse = houseInfo.houseID;
         }
         fs.writeSint32(visualHouse);
+    }
+
+    // The resolved per-row delivery income factors (SAVEGAMEVERSION 9851+).
+    //
+    // This cannot be recovered from gameInitSettings when the game is reloaded: a row the
+    // player left on Random still reads HOUSE_INVALID there, so looking the factor up by house
+    // identity would hand every Random row the default instead of what it played with. The
+    // live House knows, because INIMapLoader seeded it from the resolved row, so that is what
+    // is written here - one factor per saved setup row, in row order.
+    fs.writeUint32(SpiceIncome::kSetupMarker);
+    fs.writeUint32(houseInfoListSetup.size());
+    for(const GameInitSettings::HouseInfo& houseInfo : houseInfoListSetup) {
+        const House* pHouse = (houseInfo.houseID >= 0 && houseInfo.houseID < NUM_HOUSES)
+            ? house[houseInfo.houseID].get() : nullptr;
+        // A row whose house no longer exists (eliminated and cleaned up) keeps the factor the
+        // setup row itself carries. Both are already validated, so neither needs clamping.
+        fs.writeUint32(pHouse != nullptr ? pHouse->getSpiceIncomeMultiplier()
+                                         : houseInfo.spiceIncomeMultiplier);
     }
 
     //write the map size
@@ -6758,6 +6800,10 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         houses.mixInt32(pHouse->getCredits());
         houses.mixInt32(pHouse->getNumStructures());
         houses.mixInt32(pHouse->getNumUnits());
+        // Mixed in its own right, not just through the credits it produces: two peers that
+        // disagree about a house's delivery rate must be told so at the next digest, rather
+        // than at whatever later cycle the difference first reaches a refinery.
+        houses.mixUint32(pHouse->getSpiceIncomeMultiplier());
     }
     digest.houseHash = houses.value();
 
@@ -7024,6 +7070,10 @@ bool Game::acceptJoinRequest(const std::string& request, const std::string& name
             const auto* target=house[h].get(); if(!target || target->getPlayerList().empty()) continue;
             GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h),target->getTeamID());
             info.colorOfHouse=getHouseVisualHouse(h);
+            // Rebuilt from the live house, so the factor has to come from there too: these
+            // rows are resolved houses, and the joining peer must see the rate this match is
+            // actually being paid at.
+            info.spiceIncomeMultiplier=target->getSpiceIncomeMultiplier();
             int index=0;
             for(const auto& p : target->getPlayerList()) {
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(!spectator && h==slot.house && index==slot.controller ? name : p->getPlayername(),
@@ -7045,6 +7095,9 @@ GameInitSettings Game::spectatorSnapshot() {
         const auto* target=house[h].get(); if(!target || target->getPlayerList().empty()) continue;
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h),target->getTeamID());
         info.colorOfHouse=getHouseVisualHouse(h);
+        // As in acceptJoinRequest: a spectator reconstructs houses from this snapshot and has
+        // to pay out at the same rate as the players it is watching.
+        info.spiceIncomeMultiplier=target->getSpiceIncomeMultiplier();
         for(const auto& player : target->getPlayerList()) info.addPlayerInfo({player->getPlayername(),player->getPlayerclass()});
         snapshot.addHouseInfo(info);
     }

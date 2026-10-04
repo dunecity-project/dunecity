@@ -612,6 +612,11 @@ void INIMapLoader::loadHouses()
         pGame->house[houseID] = std::make_unique<House>(houseID, startingCredits, maxUnits, maxHarvesters, resolvedHouseInfo.team, quota);
         House* pNewHouse = pGame->house[houseID].get();
 
+        // The lobby chose this per row, and a Random row only learns which house it is here.
+        // resolvedHouseInfo is the row that was actually bound, so the factor follows the row
+        // rather than the house identity.
+        pNewHouse->setSpiceIncomeMultiplier(resolvedHouseInfo.spiceIncomeMultiplier);
+
         // add players
         for(const GameInitSettings::PlayerInfo& playerInfo : resolvedHouseInfo.playerInfoList) {
             const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByPlayerClass(playerInfo.playerClass);
@@ -1102,6 +1107,11 @@ House* INIMapLoader::getOrCreateHouse(int houseID) {
 
         for(const GameInitSettings::HouseInfo& houseInfo : houseInfoList) {
             if(houseInfo.houseID == houseID) {
+                // loadHouses skipped this row - the map had neither a section of its own nor a
+                // spare Player slot for it - but the row still described this house, so its
+                // delivery income factor applies here exactly as it would have there. A row
+                // that is still on Random matches no house id and is correctly left alone.
+                pNewHouse->setSpiceIncomeMultiplier(houseInfo.spiceIncomeMultiplier);
                 for(const GameInitSettings::PlayerInfo& playerInfo : houseInfo.playerInfoList) {
                     const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByPlayerClass(playerInfo.playerClass);
                     if(pPlayerData == nullptr) {

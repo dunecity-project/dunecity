@@ -31,6 +31,7 @@
       - the game cycle,
       - the shared random generator's seed,
       - for every house slot: whether it exists, its credits, its structure count, its unit count,
+        its spice income multiplier,
       - the number of live objects,
       - for every object in ascending object id: id, item id, original house, owner house,
         raw fixed-point health, tile x, tile y.
