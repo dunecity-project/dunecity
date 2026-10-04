@@ -1,3 +1,16 @@
+# 2026-10-04 — Portable 1.0.805 verified; MBA transfer pending
+
+Portable ARM64 bundle from source `0b45765d0d312cb0196e5f48b583d06d419125ad` passes
+all 36 Mach-O architecture/dependency checks, deep/strict ad-hoc signature
+verification and bundled SDL initialization plus hidden-window rendering.
+Executable SHA-256: `67b9f0e9ab0e1a1a809a59b3dfe7c1db851c588eeb38f2a55d7bddca18e3e490`.
+Bundle, install script and immutable source metadata are in
+../outputs/drip-feed-805-20261004/. Installation was blocked when
+Stefans-MacBook-Air.local stopped answering SSH during transfer. No app swap
+occurred; 1.0.804 remains installed. Final installation must retain its rollback
+and confirm save/INI bytes and the Desktop shortcut independently. No public
+publication or push occurred.
+
 # 2026-10-04 — Whole-army Hunt and asset emergency response (1.0.805)
 
 The user's latest MBA 1.0.804 session `1791113712003073-0` confirms small
