@@ -1,3 +1,18 @@
+# 2026-10-05 — Verified 1.0.805 installed on the MBA
+
+Installed the tested portable ARM64 bundle at `/Applications/dunecity.app` on
+Stefans-MacBook-Air.local after SSH connectivity returned. Independent fresh
+verification confirms version 1.0.805, source commit
+`0b45765d0d312cb0196e5f48b583d06d419125ad`, executable SHA-256
+`67b9f0e9ab0e1a1a809a59b3dfe7c1db851c588eeb38f2a55d7bddca18e3e490`, deep/strict signature and bundled
+SDL initialization/hidden rendering. The usual Desktop shortcut resolves to
+this app. All 1,977 checked save/INI files are unchanged.
+No running match was stopped or launched. The verified 1.0.804 rollback remains
+at `/Applications/.dunecity-backup-before-805-20261004/dunecity.app`.
+Receipts and independent verification: ../outputs/drip-feed-805-20261004/.
+Nothing was pushed or publicly published. The earlier transfer-pending entry
+below is superseded by this completed installation.
+
 # 2026-10-04 — Portable 1.0.805 verified; MBA transfer pending
 
 Portable ARM64 bundle from source `0b45765d0d312cb0196e5f48b583d06d419125ad` passes
