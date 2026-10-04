@@ -26,6 +26,10 @@ target_sources(dunelegacy_tests
         GasDeviationPolicyTestCase.cpp
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
+        ArmyPosturePolicyTestCase.cpp
+        # The army-recovery test asserts that every new behavioural config field
+        # reaches the multiplayer hash, so it drives the real QuantBotConfig.
+        ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
         QuantBotCityPolicyTestCase.cpp
         QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
@@ -579,6 +583,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --custom-attack-probe --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/custom-attack-probe)
         set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal army recovery: reinforcements assemble at home, a
+        # badly traded main-force collapse withdraws while an ordinary raid does
+        # not, the withdrawal really moves units home and still defends on
+        # arrival, the outnumbered dispatch gate holds its 80%-of-configured
+        # boundary, the enemy-facing battery is legal and corridor-preserving,
+        # the special allocator learns, and a large wave is recalled fairly.
+        add_test(NAME quantbot_army_recovery COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --recovery-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/army-recovery-probe)
+        set_tests_properties(quantbot_army_recovery PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three

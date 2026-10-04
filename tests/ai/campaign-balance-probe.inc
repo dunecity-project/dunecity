@@ -24,6 +24,8 @@
 #include "mcv-deployment-probe.inc"
 #include "opening-economy-probe.inc"
 #include "army-movement-probe.inc"
+#include "army-recovery-probe.inc"
+#include "army-recovery-continuation-probe.inc"
 #include "air-defense-probe.inc"
 #include "custom-attack-probe.inc"
 #include "custom-city-cap-probe.inc"
@@ -198,6 +200,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_ARMY_PROBE")) {
         runArmyMovementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_RECOVERY_PROBE")) {
+        runArmyRecoveryProbe(*game);runArmyRecoveryContinuationProbe(game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CUSTOM_ATTACK_PROBE")) {

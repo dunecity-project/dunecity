@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 49;
+static constexpr int kWireProtocolVersion = 50;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -38,11 +38,16 @@ TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network
     REQUIRE(NETWORKPACKET_COOP_MISSION == kWireCoopMission);
 }
 
-TEST_CASE("NetworkManager: per-house spice income requires protocol 48", "[network][protocol]") {
+TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
+          "[network][protocol]") {
     // 48 added the ChangeSpiceIncome lobby event and the MOD7 game-init block, and mixed the
-    // factor into the state digest. A 47 peer can decode none of those and would hash houses
-    // differently, so it has to be separated rather than tolerated.
+    // factor into the state digest. 49 changed carryall pickup and containment recovery.
+    // 50 adds the QuantBot army posture: a Custom Hard/Brutal house withdraws, assembles at a
+    // protected rally and gates offensive dispatch, so a 49 peer issues different AI orders
+    // from the same cycle. Each of those is a simulation difference, so each one separates
+    // rather than tolerates older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 50);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

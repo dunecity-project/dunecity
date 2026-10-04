@@ -123,7 +123,13 @@
 // 49: carryall pickup keeps the actual passenger and releases replacement bookings;
 //     deterministic containment recovery restores orphaned passengers from older matches.
 //     Older peers would hide different units and disagree about house survival.
-#define NETWORK_PROTOCOL_VERSION            49
+// 50: QuantBot army posture. A Custom Hard/Brutal house withdraws, assembles at
+//     a protected rally and gates its offensive dispatch on an outnumbered front
+//     and a share of its configured military value. Which units move, when a
+//     wave leaves and where emplacements are built are all simulation state, so
+//     a peer on 49 would issue different AI orders from the same cycle and the
+//     two would diverge. The save layout is 9852 for the same reason.
+#define NETWORK_PROTOCOL_VERSION            50
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -225,10 +225,78 @@ QuantBotConfig::QuantBotConfig() {
     registerUnitPriority(Unit_Infantry, "Infantry", 20, 20);
     registerUnitPriority(Unit_Troopers, "Troopers", 50, 50);
     
+    // === ARMY RECOVERY AND FRONT BATTERIES (Custom Hard/Brutal) ===
+    // All PROVISIONAL and untuned. Milliseconds of game time, or basis points.
+    recovery.enabled = true;
+    recovery.attritionWindowMs = 90000;         // 90 s material attrition window
+    recovery.lossShareBps = 2000;               // 20% of the deployed force cost
+    recovery.tradeShareBps = 6500;              // Confirmed kills < 65% of our losses
+    recovery.lossFloorCredits = 1500;           // Below this, an ordinary raid
+    recovery.localWithdrawBps = 13000;          // 1.3x local enemy power
+    recovery.localSevereBps = 20000;            // 2.0x is severe
+    recovery.localPersistMs = 9000;             // Must hold for 9 s
+    recovery.resumeAssembledBps = 8000;         // 80% of the designated wave
+    recovery.resumeAdvantageBps = 12000;        // 1.2x front advantage
+    recovery.stabiliseMs = 25000;               // 25 s stabilisation
+    recovery.minWithdrawMs = 15000;
+    recovery.maxWithdrawMs = 75000;             // Bounded fallback
+    recovery.maxRecoverMs = 180000;             // Bounded fallback
+    recovery.outnumberedBps = 15000;            // 1.5x hostile front power
+    recovery.dispatchBypassBps = 8000;          // 80% of the CONFIGURED limit
+    recovery.recallOrdersPerPass = 12;
+    recovery.frontBatteriesEnabled = true;
+
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
+}
+
+// Recovery/battery settings are integers, so the INI round-trip cannot change a
+// value the way a float can; load clamps nothing silently beyond refusing a
+// negative window, which the policy itself would otherwise treat as "no window".
+static void saveRecoverySettings(INIFile& iniFile, const std::string& section,
+                                 const QuantBotConfig::RecoverySettings& settings) {
+    iniFile.setBoolValue(section, "Enabled", settings.enabled);
+    iniFile.setIntValue(section, "AttritionWindowMs", settings.attritionWindowMs);
+    iniFile.setIntValue(section, "LossShareBps", settings.lossShareBps);
+    iniFile.setIntValue(section, "TradeShareBps", settings.tradeShareBps);
+    iniFile.setIntValue(section, "LossFloorCredits", settings.lossFloorCredits);
+    iniFile.setIntValue(section, "LocalWithdrawBps", settings.localWithdrawBps);
+    iniFile.setIntValue(section, "LocalSevereBps", settings.localSevereBps);
+    iniFile.setIntValue(section, "LocalPersistMs", settings.localPersistMs);
+    iniFile.setIntValue(section, "ResumeAssembledBps", settings.resumeAssembledBps);
+    iniFile.setIntValue(section, "ResumeAdvantageBps", settings.resumeAdvantageBps);
+    iniFile.setIntValue(section, "StabiliseMs", settings.stabiliseMs);
+    iniFile.setIntValue(section, "MinWithdrawMs", settings.minWithdrawMs);
+    iniFile.setIntValue(section, "MaxWithdrawMs", settings.maxWithdrawMs);
+    iniFile.setIntValue(section, "MaxRecoverMs", settings.maxRecoverMs);
+    iniFile.setIntValue(section, "OutnumberedBps", settings.outnumberedBps);
+    iniFile.setIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
+    iniFile.setIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
+    iniFile.setBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
+}
+
+static void loadRecoverySettings(const INIFile& iniFile, const std::string& section,
+                                 QuantBotConfig::RecoverySettings& settings) {
+    settings.enabled = iniFile.getBoolValue(section, "Enabled", settings.enabled);
+    settings.attritionWindowMs = iniFile.getIntValue(section, "AttritionWindowMs", settings.attritionWindowMs);
+    settings.lossShareBps = iniFile.getIntValue(section, "LossShareBps", settings.lossShareBps);
+    settings.tradeShareBps = iniFile.getIntValue(section, "TradeShareBps", settings.tradeShareBps);
+    settings.lossFloorCredits = iniFile.getIntValue(section, "LossFloorCredits", settings.lossFloorCredits);
+    settings.localWithdrawBps = iniFile.getIntValue(section, "LocalWithdrawBps", settings.localWithdrawBps);
+    settings.localSevereBps = iniFile.getIntValue(section, "LocalSevereBps", settings.localSevereBps);
+    settings.localPersistMs = iniFile.getIntValue(section, "LocalPersistMs", settings.localPersistMs);
+    settings.resumeAssembledBps = iniFile.getIntValue(section, "ResumeAssembledBps", settings.resumeAssembledBps);
+    settings.resumeAdvantageBps = iniFile.getIntValue(section, "ResumeAdvantageBps", settings.resumeAdvantageBps);
+    settings.stabiliseMs = iniFile.getIntValue(section, "StabiliseMs", settings.stabiliseMs);
+    settings.minWithdrawMs = iniFile.getIntValue(section, "MinWithdrawMs", settings.minWithdrawMs);
+    settings.maxWithdrawMs = iniFile.getIntValue(section, "MaxWithdrawMs", settings.maxWithdrawMs);
+    settings.maxRecoverMs = iniFile.getIntValue(section, "MaxRecoverMs", settings.maxRecoverMs);
+    settings.outnumberedBps = iniFile.getIntValue(section, "OutnumberedBps", settings.outnumberedBps);
+    settings.dispatchBypassBps = iniFile.getIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
+    settings.recallOrdersPerPass = iniFile.getIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
+    settings.frontBatteriesEnabled = iniFile.getBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
 }
 
 // Helper function to save difficulty settings to INI
@@ -407,6 +475,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         saveUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
         saveUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
         
+        // === ARMY RECOVERY AND FRONT BATTERIES ===
+        saveRecoverySettings(iniFile, "Army Recovery", recovery);
+
         // === GENERAL BEHAVIOR ===
         iniFile.setIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
         iniFile.setDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent);
@@ -457,6 +528,9 @@ bool QuantBotConfig::load(const std::string& filepath) {
         loadUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
         loadUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
         
+        // === LOAD ARMY RECOVERY AND FRONT BATTERIES ===
+        loadRecoverySettings(iniFile, "Army Recovery", recovery);
+
         // === LOAD GENERAL BEHAVIOR ===
         attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
         attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
@@ -714,6 +788,20 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("MinMoneyForProduction: %d", minMoneyForProduction);
     SDL_Log("%s", "");
 
+    SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
+    SDL_Log("Enabled=%d Batteries=%d WindowMs=%d LossShareBps=%d TradeShareBps=%d LossFloor=%d",
+        recovery.enabled, recovery.frontBatteriesEnabled, recovery.attritionWindowMs,
+        recovery.lossShareBps, recovery.tradeShareBps, recovery.lossFloorCredits);
+    SDL_Log("LocalWithdrawBps=%d LocalSevereBps=%d LocalPersistMs=%d RecallOrdersPerPass=%d",
+        recovery.localWithdrawBps, recovery.localSevereBps, recovery.localPersistMs,
+        recovery.recallOrdersPerPass);
+    SDL_Log("ResumeAssembledBps=%d ResumeAdvantageBps=%d StabiliseMs=%d MinWithdrawMs=%d MaxWithdrawMs=%d MaxRecoverMs=%d",
+        recovery.resumeAssembledBps, recovery.resumeAdvantageBps, recovery.stabiliseMs,
+        recovery.minWithdrawMs, recovery.maxWithdrawMs, recovery.maxRecoverMs);
+    SDL_Log("OutnumberedBps=%d DispatchBypassBps=%d",
+        recovery.outnumberedBps, recovery.dispatchBypassBps);
+    SDL_Log("%s", "");
+
     SDL_Log("=== STRUCTURE PRIORITIES ===");
     for (const auto& entry : structurePriorities) {
         SDL_Log("%s: build=%d target=%d", entry.first.c_str(), entry.second.build, entry.second.target);
@@ -756,6 +844,13 @@ std::string QuantBotConfig::getConfigHash() const {
     auto addDiffSettings = [&](const char* name, const DifficultySettings& s) {
         configStr += name;
         configStr += std::to_string(s.attackEnabled);
+        // The per-difficulty attack threshold and force ratio decide when a house
+        // attacks and how much of its army it commits. They were absent from this
+        // hash, so two peers could run different offensive tuning and diverge
+        // without the lobby noticing. They are part of it now.
+        configStr += std::to_string(s.attackThresholdPercent);
+        configStr += std::to_string(s.attackForceMilitaryValueRatio);
+        configStr += std::to_string(s.refineryMinimum);
         configStr += std::to_string(s.ornithopterAttackEnabled);
         configStr += std::to_string(s.ornithopterAttackThreshold);
         configStr += std::to_string(s.militaryValueMultiplier);
@@ -813,7 +908,39 @@ std::string QuantBotConfig::getConfigHash() const {
     configStr += std::to_string(attackTimerMs);
     configStr += std::to_string(attackThresholdPercent);
     configStr += std::to_string(minMoneyForProduction);
-    
+
+    // Army recovery, cohesion, outnumbered dispatch gate and front batteries.
+    // Every one of these changes an AI order, so every one of them is hashed.
+    //
+    // Named and delimited, unlike the older blocks above: bare concatenation of
+    // adjacent integers aliases distinct configurations - "12" followed by "34"
+    // and "123" followed by "4" produce the same bytes - so two peers with
+    // genuinely different recovery tuning could agree on the hash.
+    auto addNamed = [&](const char* name, long long value) {
+        configStr += '|'; configStr += name; configStr += '='; configStr += std::to_string(value);
+    };
+    configStr += "|REC";
+    addNamed("enabled", recovery.enabled);
+    addNamed("windowMs", recovery.attritionWindowMs);
+    addNamed("lossShareBps", recovery.lossShareBps);
+    addNamed("tradeShareBps", recovery.tradeShareBps);
+    addNamed("lossFloor", recovery.lossFloorCredits);
+    addNamed("localWithdrawBps", recovery.localWithdrawBps);
+    addNamed("localSevereBps", recovery.localSevereBps);
+    addNamed("localPersistMs", recovery.localPersistMs);
+    addNamed("resumeAssembledBps", recovery.resumeAssembledBps);
+    addNamed("resumeAdvantageBps", recovery.resumeAdvantageBps);
+    addNamed("stabiliseMs", recovery.stabiliseMs);
+    addNamed("minWithdrawMs", recovery.minWithdrawMs);
+    addNamed("maxWithdrawMs", recovery.maxWithdrawMs);
+    addNamed("maxRecoverMs", recovery.maxRecoverMs);
+    addNamed("outnumberedBps", recovery.outnumberedBps);
+    addNamed("dispatchBypassBps", recovery.dispatchBypassBps);
+    addNamed("recallOrdersPerPass", recovery.recallOrdersPerPass);
+    addNamed("frontBatteries", recovery.frontBatteriesEnabled);
+    configStr += "|/REC|";
+
+
     // Use FNV-1a hash (consistent across platforms and compilers)
     uint64_t hash = 14695981039346656037ULL; // FNV offset basis
     const uint64_t prime = 1099511628211ULL;  // FNV prime

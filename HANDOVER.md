@@ -1,3 +1,80 @@
+# 2026-10-04 — QuantBot army recovery, dispatch and batteries (1.0.802 development)
+
+Custom Hard/Brutal bots now track Offensive, Withdrawing and Recovering postures.
+A fully sampled 90-second window requires material mobile losses (1500 credits,
+20% of starting deployable value), poor confirmed hostile return (<65%) and
+corroborating readiness/front deterioration. A sustained local disadvantage
+pulls the tracked wave back; a material severe defeat or serious core attack can
+withdraw immediately. Tiny raids, friendly fire and neutral worms do not cause
+house panic. Friendly local wave members count once, within the same radius as
+the enemy comparison. Enemy observations respect teams and visibility.
+
+New ground attacks wait when observed hostile ground power is at least 1.5x
+friendly deployable ground power, unless healthy deployable military value is at
+least **80% of the fixed configured militaryValueLimit**. Armed aircraft count in
+that percentage, while the ground comparison stays separate. Actual positive
+purchase prices are used, including sixty-credit Soldiers. An 80000-credit limit
+bypasses at 64000. This is not the rolling Brutal override production budget;
+zero stays unlimited and positive selected unit overrides keep their meaning.
+Recovery/base emergencies and a complete gathered dispatch budget still gate an
+attack. Only assembled candidates leave: distant reserves cannot hold a complete
+wave hostage or become individual forward trickles. Existing commitment is
+subtracted, and a wave shares a reachable observed objective.
+
+A protected rally belongs to a real defended production colony, with bounded
+search and immediate invalidation when unsafe, built over or impassable. Its
+assembly area expands for force size and actual safe terrain capacity. Recall
+uses dispersed, reserved destinations, danger priority and a saved fair cursor.
+Each call issues at most 12 orders; above 150 queued requests it permits pending
+work replacement and at most two fresh requests, rather than starving recall.
+Forced Area Guard suppresses chasing while walking home and permits defence on
+arrival. Repairs, human orders and urgent defenders keep priority.
+
+After two refineries, a heavy factory and a repair yard, demand-scaled rocket
+batteries grow towards the observed approach. Siting respects colony-local front
+quotas, overlapping cover, spacing, corridors, factory access and city rules.
+Critical/remote first cover, reserves, power and economic growth retain priority.
+Within the special group, Devastator/Sonic/Deviator selection uses recorded
+return/loss with exploration and least-owned ties; the outer group budget remains.
+
+Verified production-object probes cover modes, real hostile/friendly kills,
+79.9/80.0/80.1% dispatch, visible armies with hidden bases, ordinary/minor raids,
+readiness, cohesive dispatch, distant reserves, recovery/resumption, old-hunter
+adoption, large saved waves, legal battery sites and special selection. The final
+966-unit recall receives bounded orders over 83 passes at the actual 50-cycle
+cadence. All 857 survivors move closer; 686 (80%) reach shelter by cycle 17750,
+after about 284 seconds of simulation travel. The path queue peaks at 36 and
+drains to zero. One/four path workers have identical stress outputs and a
+100-frame ordinary continuation history hash of 7282608833290629464.
+
+Save format is 9852; posture, clocks, ledger, wave and recall cursor are saved.
+Protocol is 50 and new config fields enter the multiplayer hash. Observer
+runtime remains 7: the derived survey is recomputed before BOTH unit and build
+phases, and no supplemental layout was added. A checkpoint taken between phases
+matches this bot's saved bytes/exact balances, all unit orders, object/RNG digests
+for 100 frames; repeated ordinary loads match full house-inclusive digests.
+**This is scoped AI continuation evidence, not general spectator certification:**
+a one-credit difference in another house's city checkpoint accounting was also
+observed. Full serialized object bytes include existing visual/load-normalised
+fields and are not claimed identical. No change was made to that separate issue.
+
+Two paired fresh 40-minute headless simulations use the prior match's recorded
+map, seeds 1394458362/3, both Brutal, unlimited units, concrete on, turret power
+off and bundled DuneCity data, against the frozen 1.0.801 binary. New wave counts
+are 6/18 versus 24/23; both houses survive all four runs. Recorded mobile loss
+counts are lower, but combat exposure and trajectories differ; this does not
+establish win-rate or per-unit balance improvements. New posture calls average
+56–63 microseconds; the largest recorded call is 4.432 ms. No recorded selected
+AI scope exceeds 33 ms. These are aggregate mean/max values, not percentiles or
+live MBA FPS. Evidence: `../outputs/ai-recovery-implementation-20261004/`.
+
+Full CTest: **53/53 targets passed** (732.09 seconds), including the native
+policy/config/protocol tests, army recovery, transport, movement, command/network,
+menu, all registered AI mode probes, degradation, spice income and credit storage.
+Ninja dependency audits and native signature verification passed. Native 1.0.802
+is built locally. Nothing has been installed, pushed or published in this task.
+See [army recovery reference](docs/quantbot-army-recovery.md) for policy limits.
+
 # 2026-10-04 — Carryall passenger loss and match elimination (1.0.801 development)
 
 A damaged unit's pickup called `doRepair()`, which could cancel the collecting

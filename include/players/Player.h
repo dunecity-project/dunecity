@@ -84,6 +84,9 @@ public:
         \param  itemID      the enemy unit that was destroyed
     */
     virtual void onIncrementUnitKills(int itemID) { }
+    // Simulation hook, independent of telemetry and legacy kill statistics.
+    // Called once for a confirmed hostile unit death, using shot provenance.
+    virtual void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) { }
     /**
         An object was hit by something or damaged somehow else.
         \param  pObject     the object that was damaged

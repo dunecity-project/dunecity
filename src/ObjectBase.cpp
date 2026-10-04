@@ -332,6 +332,12 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
             // natural type must not be credited a second time for the same hit.
             beneficiary->addCombatReward(credit.rewardItemID, reward);
             DeviationReward::recordOutgoing(credit, *beneficiary, reward, this);
+            // Recovery decisions need actual hostile fatalities, irrespective
+            // of whether telemetry is enabled. Legacy kill counters also count
+            // friendly fire, whereas hit() excludes it and repeated dead hits.
+            if (reward.kills > 0)
+                for (const auto& player : beneficiary->getPlayerList())
+                    player->onHostileUnitKilled(itemID, originalHouseID);
             if (AITelemetry::log().enabled() && reward.hits > 0)
                 for (const auto& player : beneficiary->getPlayerList())
                     player->onCombatReward(damagerID, objectID, reward);

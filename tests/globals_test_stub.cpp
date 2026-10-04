@@ -7,9 +7,17 @@
  */
 
 #include <globals.h>
+#include <mod/ModManager.h>
 
 #include <string>
 #include <memory>
+
+// QuantBotConfig's two path helpers ask the mod manager where the active mod
+// keeps its files. The army-recovery test drives the real config object for its
+// multiplayer hash, but never its file paths, so the mod lookup is stubbed here
+// rather than linking the whole mod subsystem into the unit test target.
+std::string ModManager::getActiveObjectDataPath() const { return {}; }
+std::string ModManager::getActiveQuantBotConfigPath() const { return {}; }
 
 // Forward-declared minimal stubs for manager classes (satisfy header method signatures)
 class SoundPlayer {};

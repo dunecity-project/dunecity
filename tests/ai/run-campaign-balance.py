@@ -58,6 +58,13 @@ parser.add_argument('--degradation-probe', action='store_true',
                     help='Verify Dynasty-aligned power damage, foundation decay and their save state')
 parser.add_argument('--radar-probe', action='store_true')
 parser.add_argument('--army-probe', action='store_true')
+parser.add_argument('--path-workers', type=int, default=0,
+                    help='Pin the pathfinding worker count (0 leaves the engine default). '
+                         'Used to show that a probe reaches the same result under one and '
+                         'four workers.')
+parser.add_argument('--recovery-probe', action='store_true',
+                    help='Verify Custom Hard/Brutal army recovery, wave cohesion, the outnumbered '
+                         'dispatch gate, enemy-facing batteries and the special-unit allocator')
 parser.add_argument('--air-defense-probe', action='store_true')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
@@ -201,6 +208,8 @@ if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'
 if args.radar_probe: env['BALANCE_RADAR_PROBE'] = '1'
 if args.army_probe: env['BALANCE_ARMY_PROBE'] = '1'
+if args.recovery_probe: env['BALANCE_RECOVERY_PROBE'] = '1'
+if args.path_workers > 0: env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
 if args.air_defense_probe: env['BALANCE_AIR_DEFENSE_PROBE'] = '1'
 if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'
 if args.police_budget_probe: env['BALANCE_POLICE_BUDGET_PROBE'] = '1'

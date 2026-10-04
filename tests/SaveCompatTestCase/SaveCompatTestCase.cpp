@@ -37,7 +37,9 @@ TEST_CASE("Save compat: current Num_ItemID >= legacy",
 
 TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
           "[save-compat][regression]") {
-    REQUIRE(SAVEGAMEVERSION == 9851);
+    // 9852 adds the QuantBot army posture block (posture, entry cycle, attrition
+    // ledger, tracked Custom wave, protected rally, recall cursor).
+    REQUIRE(SAVEGAMEVERSION == 9852);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

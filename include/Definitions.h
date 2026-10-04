@@ -97,7 +97,15 @@
 //       them can: MOD7 in GameInitSettings carries the *chosen* lobby rows (which may still
 //       say Random), the SMUL block after the setup colours carries the *resolved* rows of a
 //       saved match, and House carries the live factor the simulation actually pays out with.
-#define SAVEGAMEVERSION     9851
+// 9852: QuantBot army posture. A Custom Hard/Brutal house carries its posture
+//       (offensive, withdrawing, recovering) and the cycle it entered it, the
+//       cumulative mobile-combat attrition ledger with its baseline ring, the
+//       tracked Custom wave and its shared objective, the protected assembly
+//       point and the fair recall cursor. None of it can be recomputed after a
+//       load: the ledger is cumulative, and the posture decides whether a unit
+//       is marching home or marching out, so a save or network checkpoint taken
+//       mid-withdrawal has to carry it.
+#define SAVEGAMEVERSION     9852
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
