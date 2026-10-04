@@ -68,6 +68,40 @@ and a mature base can exceed 24. First cover for critical buildings, remote
 colonies, economy reserves, power rules, construction exits, and movement
 corridors retain priority. Battery construction is spread across passes.
 
+In DuneCity Custom Hard/Brutal games, a battery that has no usable free site can
+replace an owned residential, commercial or industrial lot on the observed
+enemy side of its construction colony. Free ground wins, including ground that
+opens while construction is underway. Lower displacement cost wins among lots:
+less development, lower land value and weaker demand are preferred.
+
+Clearance leaves at least three lots of the displaced type and six total lots
+within two rocket-turret weapon ranges of the yard. A distant colony cannot
+supply this floor. Hospitals and churches are protected. Modest lots (density
+at most one, with at most eight residents) remain eligible during construction;
+more developed lots must account for at most 20% of the local population or jobs
+of their type. Roads, factory exits, neighbouring zone frontage, movement
+corridors, turret spacing and the front quota are checked on the map after the
+proposed clearance. Human/shared houses, essential infrastructure and foreign
+lots cannot be cleared by this fallback.
+
+Queue acceptance leaves the lot intact. Immediately before deletion the yard
+must be active, owned, holding finished material and still have a legal,
+needed battery project. With concrete off, deletion and placement of the
+finished turret occur in the same build call. With concrete required, deletion
+occurs when the completed one-tile foundation is placed, with the turret still
+queued and all queued costs funded. Cash shortfalls retain the lot and ready
+material; invalid projects cancel without deleting the lot. After foundation
+placement, destruction of the yard or cancellation can still prevent the
+turret from completing. This construction-time exposure is not an atomic
+guarantee of a completed turret under attack.
+
+Execution clears at most one lot per build pass across every yard, regardless
+of how many earlier reservations are ready. Clearance and free-site caches are
+invalidated by geometry and planning-builder changes. The local economic census
+runs once per search, rather than once per candidate tile. No additional state
+is serialized: save format remains 9852; protocol 51 separates peers whose AI
+would preserve the lots.
+
 Devastators, Sonic Tanks, and Deviators retain their shared outer production
 budget. Selection within that group uses per-type recorded return/loss evidence
 and an exploration prior, so candidate ordering alone does not favour the first
@@ -82,6 +116,18 @@ include the 80% boundary, minor raids, recovery/resumption, old-save migration,
 ordinary save and scoped observer AI continuation, legal battery sites, and actual
 movement of a large recalled army. Changes to saved state and multiplayer
 behaviour require explicit format/protocol gates.
+
+`quantbot_battery_clearance` uses real production and engine frames with concrete
+on and off. It checks completed turrets, intact lots before material is ready,
+cancellation, destroyed yards, changed occupancy, free-site retargeting, two
+colonies, shared-human authority, local economic floors, all R/C/I types, and
+the one-clearance limit across two yards holding real finished turrets. The
+funding check includes a one-credit shortfall and exact funding after queued
+costs have been withheld. Ready material also refuses changed occupancy, shared
+human ownership and lost power. One/four actual path workers produce the same
+clearance sites, timings in simulation frames, placements and zone counts. Bot-stream reload checks derived site selection;
+this is not a new full-world save/observer certification. The progress fixture
+supplies stable cash, power and an observed enemy approach without interference.
 
 Purchase price and health provide a cheap, deterministic strength proxy. They
 do not model every counter, splash hit, terrain bottleneck, or human manoeuvre.

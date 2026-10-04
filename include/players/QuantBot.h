@@ -43,6 +43,9 @@ class Harvester;
 #include <map>
 #include <unordered_map>
 #include <array>
+#include <optional>
+#include <vector>
+#include <list>
 
 class QuantBot : public Player
 {
@@ -301,7 +304,11 @@ private:
     static constexpr int kMcvLocalRadius = 20;
     static constexpr int kMcvDeployRoom = 12;
     Coord findPlaceLocation(Uint32 itemID);
-    bool preservesGroundAccess(Uint32 item, Coord pos);
+    /// `clearedZones` are object ids this placement is about to demolish; their
+    /// tiles count as passable, because by the time the building stands they
+    /// are. Pass nothing for an ordinary placement.
+    bool preservesGroundAccess(Uint32 item, Coord pos,
+                               const std::vector<Uint32>* clearedZones = nullptr);
     void clearPlacementCache(bool geometryChanged = true, bool reuseForBuilder = false);
     Coord findRedevelopmentSite(Uint32 itemID);
     bool redevelopmentZones(Uint32 itemID, Coord pos, std::vector<Uint32>& zones) const;
@@ -319,6 +326,67 @@ private:
     /// rocket-turret decision; see the definition for why the battery needs its
     /// own search rather than reusing a coverage score that has no front.
     Coord findFrontBatteryPlaceLocation();
+    /// Last resort for an established city with no free legal ground left on
+    /// the side the enemy comes from: a tile of an eligible own R/C/I lot,
+    /// preferring lower displacement cost. Invalid - and no lot is
+    /// ever touched - whenever findFrontBatteryPlaceLocation() has an answer,
+    /// whenever the battery rule's own gates are shut, and outside Custom
+    /// Hard/Brutal city mode. Choosing this site commits nothing: the lot is
+    /// still standing when the order is accepted and is displaced only by
+    /// commitBatteryClearance(), at the moment finished material is placed on
+    /// it.
+    ///
+    /// With a valid `requiredSite` the same search becomes a re-validation of
+    /// that one tile and returns it only if every rule still holds; this is
+    /// how the commit re-applies the whole decision to the live map instead of
+    /// keeping a second copy of its conditions.
+    Coord findBatteryClearanceSite(Coord requiredSite = Coord::Invalid());
+    /// The single own R/C/I lot an emplacement at `pos` would displace, or false
+    /// if that tile is not a legal clearance candidate. Revalidates ownership,
+    /// type, services, growth, occupancy, reservations and the local
+    /// economic floor around `anchor`, so it is also the check made again
+    /// immediately before the lot is demolished.
+    /// Local R/C/I lot counts followed by their population/job totals.
+    std::array<int,6> batteryZoneCounts(Coord anchor) const;
+    bool batteryClearanceZones(Coord pos, std::vector<Uint32>& zones, Coord anchor,
+                               const std::array<int,6>* localCounts = nullptr) const;
+    /// Displace the lot under a reserved battery emplacement, at the moment the
+    /// finished material that will stand on it is about to be placed. Returns
+    /// true when a lot was demolished in this call; the caller then places the
+    /// finished item on the ground it freed, in the same synchronous build
+    /// call. Returns false - and touches nothing - in every other case,
+    /// including when free ground has opened in the meantime, in which case the
+    /// reservation is retargeted onto that free ground instead.
+    bool commitBatteryClearance(const BuilderBase* builder, Uint32 itemToBePlaced,
+                                std::list<Coord>& placeLocations, int spendable,
+                                int economyReserve, int commitmentShortfall = 0,
+                                bool* defer = nullptr);
+    /// Lots displaced so far in this construction pass, across every yard.
+    /// Reset by build(); bounds the work a single pass may do regardless of
+    /// how many yards hold a clearance reservation. Derived, never serialised.
+    int batteryClearancesThisPass = 0;
+    /// Anchor a battery belongs to: the colony of the yard planning it, then the
+    /// shelter cluster, then the house centre. Shared by the free-ground search
+    /// and the clearance fallback so both face the same way.
+    Coord batteryAnchor();
+    /// Geometry a battery search needs once per pass rather than per candidate.
+    struct BatteryGeometry {
+        Coord anchor = Coord::Invalid();
+        Coord forward = Coord(0, 0);
+        std::vector<Coord> turrets;   ///< Standing and already reserved emplacements.
+        int frontTurrets = 0;         ///< Of those, how many are on the enemy side.
+        int localTurrets = 0;         ///< Of those, how many belong to this colony.
+        int coverRadius = 1, clusterRadius = 2, frontAllowance = 0;
+    };
+    BatteryGeometry batteryGeometry(Coord anchor, Coord forward);
+    /// Clearance site already chosen for this anchor in this build pass.
+    /// Derived exactly like turretSiteCache: retired by clearPlacementCache()
+    /// on any geometry change or planning-builder change, never serialised.
+    std::optional<Coord> batteryClearanceCache;
+    /// Planning builder the two caches below were filled for. Both are anchored
+    /// on that yard's colony, so an unreserved yard must not inherit another
+    /// unreserved yard's answer. Derived, never serialised.
+    Uint32 turretSearchBuilder = NONE_ID;
     /// Non-city emplacement sites already chosen in this build pass, keyed by
     /// item. findTurretPlaceLocation is called as a validity probe by several
     /// rules and then once more for the real site, and the world does not change

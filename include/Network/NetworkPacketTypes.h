@@ -129,7 +129,9 @@
 //     wave leaves and where emplacements are built are all simulation state, so
 //     a peer on 49 would issue different AI orders from the same cycle and the
 //     two would diverge. The save layout is 9852 for the same reason.
-#define NETWORK_PROTOCOL_VERSION            50
+// 51: Custom Hard/Brutal city batteries may replace eligible enemy-facing R/I/C
+//     lots. Peers on 50 would preserve those lots and issue different orders.
+#define NETWORK_PROTOCOL_VERSION            51
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

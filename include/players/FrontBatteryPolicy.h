@@ -114,6 +114,71 @@ inline bool mayOrderThisPass(int orderedThisPass, int limit = kOrdersPerPass) {
     return orderedThisPass < limit;
 }
 
+/*
+    Clearance fallback.
+
+    An established city eventually has no free legal ground left on the side
+    the enemy comes from, and the battery then simply stops growing where it is
+    needed most. The fallback is to displace one of this house's own R/C/I lots
+    - the same thing the established redevelopment rule already does for a
+    factory, a reactor or a windtrap - and put the emplacement on the ground it
+    frees.
+
+    It is a last resort, not a preference: the ordinary free-site search runs
+    first and the fallback is only consulted when that search finds nothing. An
+    emplacement is one tile, so at most one 2x2 lot is ever displaced per order,
+    and the one-order-per-pass rule above already bounds how often that happens.
+
+    Displacement cost prefers empty, less developed and less valuable lots.
+    Modest growth does not invalidate a funded project; mature lots require a
+    bounded local population/job share. Local zone floors protect the colony.
+    Civic overlays (hospital, church) are never displaced.
+*/
+
+/// Modest first-stage development can still give way to a needed battery.
+/// Requiring a lot to remain empty throughout construction would cancel the
+/// project whenever ordinary city growth happens first. More developed lots
+/// may be displaced only when they represent at most one fifth of this
+/// colony's residential population or jobs of that type.
+constexpr int kClearanceModestDensity = 1;
+constexpr int kClearanceModestResidents = 8;
+constexpr int kClearanceEconomicShareBps = 2000;
+/// Lots of the displaced type that must remain afterwards *in the colony that
+/// is building the battery*. A house-wide count is not an economic floor at
+/// all: a second colony on the far side of the map would mask the loss of the
+/// last residential lot standing next to this one. The neighbourhood the
+/// caller counts over is the colony geometry the belt itself already uses -
+/// two emplacement weapon ranges from the battery anchor - so "local" means
+/// the same thing in both places.
+constexpr int kClearanceTypeFloor = 3;
+/// Lots of all three types that must remain in that same neighbourhood. A
+/// colony may be legitimately short of one type; it may not be stripped.
+constexpr int kClearanceLocalTotalFloor = 6;
+/// Lots displaced per construction pass, across every yard. One emplacement
+/// covers one tile, so a single order can never reach a second lot, but
+/// several yards can each hold a clearance reservation; the executing side
+/// enforces this bound itself rather than trusting the chooser.
+constexpr int kClearanceLotsPerPass = 1;
+
+/// Services are protected. Prefer low displacement cost in the chooser; the
+/// execution guard preserves a meaningful local population/job share.
+inline bool clearableLot(int density, int residents, bool civicOverlay,
+                         int economicPopulation, int localEconomicPopulation) {
+    if (civicOverlay) return false;
+    if (density <= kClearanceModestDensity && residents <= kClearanceModestResidents) return true;
+    return int64_t(std::max(1,economicPopulation))*10000
+        <= int64_t(std::max(0,localEconomicPopulation))*kClearanceEconomicShareBps;
+}
+
+/// Would displacing one lot leave this colony a working local economy? Both
+/// counts are of lots inside the colony neighbourhood, including the lot about
+/// to go.
+inline bool preservesLocalZoneFloor(int localLotsOfThisType, int localLotsOfAllTypes,
+                                    int typeFloor = kClearanceTypeFloor,
+                                    int totalFloor = kClearanceLocalTotalFloor) {
+    return localLotsOfThisType - 1 >= typeFloor && localLotsOfAllTypes - 1 >= totalFloor;
+}
+
 } // namespace FrontBatteryPolicy
 
 #endif // FRONT_BATTERY_POLICY_H

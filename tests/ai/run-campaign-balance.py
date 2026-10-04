@@ -65,6 +65,8 @@ parser.add_argument('--path-workers', type=int, default=0,
 parser.add_argument('--recovery-probe', action='store_true',
                     help='Verify Custom Hard/Brutal army recovery, wave cohesion, the outnumbered '
                          'dispatch gate, enemy-facing batteries and the special-unit allocator')
+parser.add_argument('--battery-clearance-probe', action='store_true',
+                    help='Verify crowded-city rocket batteries replace eligible R/I/C lots through real production')
 parser.add_argument('--air-defense-probe', action='store_true')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
@@ -209,6 +211,9 @@ if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'
 if args.radar_probe: env['BALANCE_RADAR_PROBE'] = '1'
 if args.army_probe: env['BALANCE_ARMY_PROBE'] = '1'
 if args.recovery_probe: env['BALANCE_RECOVERY_PROBE'] = '1'
+if args.battery_clearance_probe:
+    env['BALANCE_RECOVERY_PROBE'] = '1'
+    env['BALANCE_BATTERY_CLEARANCE_ONLY'] = '1'
 if args.path_workers > 0: env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
 if args.air_defense_probe: env['BALANCE_AIR_DEFENSE_PROBE'] = '1'
 if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'

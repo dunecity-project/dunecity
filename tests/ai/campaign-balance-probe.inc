@@ -203,7 +203,9 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_RECOVERY_PROBE")) {
-        runArmyRecoveryProbe(*game);runArmyRecoveryContinuationProbe(game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        runArmyRecoveryProbe(*game);
+        if (!std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) runArmyRecoveryContinuationProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CUSTOM_ATTACK_PROBE")) {

@@ -3,6 +3,8 @@
 //
 // Everything here drives the production QuantBot entry points against real
 // units, real structures and the real map. No behaviour is simulated.
+#include "battery-clearance-probe.inc"
+
 void runArmyRecoveryProbe(Game& game) {
     // QuantBot's AI pass interval (AIUPDATEINTERVAL in QuantBot.cpp, which is a
     // translation-unit macro). One interval of real frames is serviced between
@@ -33,6 +35,12 @@ void runArmyRecoveryProbe(Game& game) {
     getQuantBotConfig().recovery.enabled=true;
     getQuantBotConfig().recovery.frontBatteriesEnabled=true;
     require(bot->recoveryActive(),"Recovery gate refused Custom Brutal");
+
+    if (std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) {
+        runBatteryClearanceProbe(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=battery_clearance outcome=passed");
+        return;
+    }
 
     // The gate itself: nothing below may leak into other modes.
     {
@@ -1555,6 +1563,7 @@ void runArmyRecoveryProbe(Game& game) {
             // fixture no longer owns it.
             worldListRestored=true;
         }
+
     } catch(...) {
         if(!worldListRestored) unitList=savedUnits;
         cleanupStructures();

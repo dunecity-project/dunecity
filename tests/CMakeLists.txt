@@ -595,6 +595,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/army-recovery-probe)
         set_tests_properties(quantbot_army_recovery PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        add_test(NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --battery-clearance-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
+        set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three

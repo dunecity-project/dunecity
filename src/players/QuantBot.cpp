@@ -1841,20 +1841,37 @@ bool tileKeepsFrontage(const Map& map, int tx, int ty, int x, int y, int w, int 
 
 // Would a lot at (x, y, w, h) take away the last open side of a neighbouring
 // zone? Every lot must keep a side where a road can run.
-bool wouldLandlockNeighbouringZone(const Map& map, int houseID, int x, int y, int w, int h) {
+// `clearedZones`, when given, are lots this placement demolishes: they cannot
+// be landlocked by it and their tiles become open frontage for the lots around
+// them.
+bool wouldLandlockNeighbouringZone(const Map& map, int houseID, int x, int y, int w, int h,
+                                   const std::vector<Uint32>* clearedZones = nullptr) {
 	std::set<Uint32> checked;
+	auto isCleared = [&](Uint32 id) {
+		return clearedZones && std::find(clearedZones->begin(), clearedZones->end(), id) != clearedZones->end();
+	};
+	auto keepsFrontage = [&](int tx, int ty) {
+		if (clearedZones && map.tileExists(tx, ty)) {
+			const ObjectBase* pObject = map.getTile(tx, ty)->getNonInfantryGroundObject();
+			if (pObject != nullptr && isCleared(pObject->getObjectID())
+			    && !(tx >= x && tx < x + w && ty >= y && ty < y + h))
+				return true;
+		}
+		return tileKeepsFrontage(map, tx, ty, x, y, w, h);
+	};
 	auto sealsNeighbour = [&](int nx, int ny) {
 		const StructureBase* pZone = ownZoneAt(map, houseID, nx, ny);
-		if (pZone == nullptr || !checked.insert(pZone->getObjectID()).second) return false;
+		if (pZone == nullptr || isCleared(pZone->getObjectID())
+		    || !checked.insert(pZone->getObjectID()).second) return false;
 		const int zx = pZone->getX(), zy = pZone->getY();
 		const int zw = pZone->getStructureSizeX(), zh = pZone->getStructureSizeY();
 		for (int i = zx; i < zx + zw; i++) {
-			if (tileKeepsFrontage(map, i, zy - 1, x, y, w, h)) return false;
-			if (tileKeepsFrontage(map, i, zy + zh, x, y, w, h)) return false;
+			if (keepsFrontage(i, zy - 1)) return false;
+			if (keepsFrontage(i, zy + zh)) return false;
 		}
 		for (int j = zy; j < zy + zh; j++) {
-			if (tileKeepsFrontage(map, zx - 1, j, x, y, w, h)) return false;
-			if (tileKeepsFrontage(map, zx + zw, j, x, y, w, h)) return false;
+			if (keepsFrontage(zx - 1, j)) return false;
+			if (keepsFrontage(zx + zw, j)) return false;
 		}
 		return true;
 	};
@@ -2456,24 +2473,46 @@ void QuantBot::clearPlacementCache(bool geometryChanged, bool reuseForBuilder) {
         placementDistances.invalidate();
     }
     placementCacheExcludedBuilder=excluded;
+    // The emplacement searches are not keyed by the reservation set alone: an
+    // enemy-facing battery is anchored on the colony of the yard that is
+    // planning it, so two unreserved yards at opposite ends of the map share
+    // placementCacheExcludedBuilder==NONE_ID and would otherwise read each
+    // other's belt. Anything anchored on the planning builder is retired when
+    // that builder changes as well as on any geometry change.
+    const bool anchorChanged = turretSearchBuilder != planningBuilder;
     if (geometryChanged) {
         cityServiceSearch.invalidate();
         cityTurretSearch.invalidate();
+    }
+    if (geometryChanged || anchorChanged) {
         // The non-city emplacement search is keyed by item and reused by the
         // several validity probes in one build pass. A geometry change - a
         // placement or a reservation - retires it exactly like the others.
         turretSiteCache.clear();
+        // The clearance fallback depends on the same geometry, on the same
+        // anchor and on which lots are still standing, so it goes with them.
+        batteryClearanceCache.reset();
     }
+    turretSearchBuilder = planningBuilder;
 }
 
-bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos) {
+bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<Uint32>* clearedZones) {
     if (!blocksGroundAccess(item)) return true;
     if (!pos.isValid()) return false;
     const auto size=getStructureSize(item);
+    // A lot this placement is about to demolish is already gone as far as local
+    // passage is concerned: the building only stands once the ground is clear.
+    // Judging it against the lot still in place would reject exactly the
+    // crowded sites the clearance fallback exists for.
+    auto cleared=[&](const ObjectBase* object) {
+        return clearedZones && object && std::find(clearedZones->begin(),clearedZones->end(),
+            object->getObjectID())!=clearedZones->end();
+    };
     auto passable=[&](int x,int y) {
         if (!getMap().tileExists(x,y)) return false;
         const auto* tile=getMap().getTile(x,y);
-        if (tile->isMountain() || tile->hasAStructure()) return false;
+        if (tile->isMountain()) return false;
+        if (tile->hasAStructure() && !cleared(tile->getNonInfantryGroundObject())) return false;
         for (const auto& entry:reservedStructures) {
             if (entry.first==planningBuilder || !blocksGroundAccess(entry.second.item)) continue;
             const auto p=entry.second.location, extent=getStructureSize(entry.second.item);
@@ -3423,6 +3462,74 @@ Coord QuantBot::findSlabPlaceLocation(Uint32 itemID) {
 	return bestLocation;
 }
 
+// A battery belongs to ONE colony. The average of every structure sits in the
+// sand between two colonies, so the belt would form nowhere useful and its
+// "enemy side" would be meaningless. Anchor it on the yard whose own colony is
+// building this turret - the planning builder - so each base gets its own
+// directional belt, and fall back to the shelter cluster and then the centre.
+Coord QuantBot::batteryAnchor() {
+    Coord anchor = findBaseCentre(getHouse()->getHouseID());
+    Coord colony = Coord::Invalid();
+    if (const auto* owner = dynamic_cast<const BuilderBase*>(
+            currentGame->getObjectManager().getObject(planningBuilder)))
+        if (owner->getOwner() == getHouse() && owner->getHealth() > 0)
+            colony = owner->getLocation();
+    if (colony.isInvalid()) colony = shelterAnchor();
+    if (colony.isValid()) anchor = colony;
+    return anchor;
+}
+
+// Collected once per search, not per candidate, and shared by the free-ground
+// search and the clearance fallback so the two cannot drift apart.
+QuantBot::BatteryGeometry QuantBot::batteryGeometry(Coord anchor, Coord forward) {
+    BatteryGeometry geometry;
+    geometry.anchor = anchor;
+    geometry.forward = forward;
+    const int turretRange = std::max(1,
+        currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange);
+    geometry.coverRadius = std::max(1, turretRange - 1);
+    geometry.clusterRadius = FrontBatteryPolicy::clusterRadius(turretRange);
+    const int colonyRadius = 2 * turretRange;
+    for (const StructureBase* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && (structure->getItemID() == Structure_RocketTurret
+                || structure->getItemID() == Structure_GunTurret))
+            geometry.turrets.push_back(structure->getLocation());
+    for (const auto& entry : reservedStructures) {
+        // A yard's own reservation is the emplacement it is planning, not a
+        // neighbour it has to keep clear of - the same exclusion
+        // overlapsReservedStructure() makes. Without it a yard re-examining
+        // its own reserved site measures a distance of zero to itself and
+        // rejects the plan it already made.
+        if (entry.first == planningBuilder) continue;
+        if (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
+            geometry.turrets.push_back(entry.second.location);
+    }
+    for (const Coord turret : geometry.turrets) {
+        if (blockDistance(turret, anchor).lround() > colonyRadius) continue;
+        ++geometry.localTurrets;
+        if (FrontBatteryPolicy::onFrontSide(turret.x - anchor.x, turret.y - anchor.y,
+                forward.x, forward.y)) ++geometry.frontTurrets;
+    }
+    // Front allowance is recomputed from the live goal rather than stored, so a
+    // destroyed battery immediately frees its share again.
+    geometry.frontAllowance = FrontBatteryPolicy::frontAllowance(frontBatteryGoal(
+        RocketTurretPolicy::coverageTurretCap([&] {
+            int demand = 0;
+            const Uint32 anchorYard = mainConstructionYardID();
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getHealth() > 0)
+                    demand += RocketTurretPolicy::desiredCoverage(structure->getItemID(),
+                        rocketCoverageTier(difficulty),
+                        isExpansionYard(structure->getItemID(), structure->getObjectID(), anchorYard));
+            return demand;
+        }()),
+        getHouse()->getNumItems(Structure_Refinery),
+        getHouse()->getNumItems(Structure_HeavyFactory),
+        getHouse()->getNumItems(Structure_RepairYard), lastSurvey));
+    return geometry;
+}
+
 Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
     AITelemetry::PerformanceScope perfScope("ai.findTurretPlaceLocation", getGameCycleCount(), getHouse()->getHouseID(), itemID);
     // One search per item per build pass. Several rules call this purely to ask
@@ -3447,20 +3554,7 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
     // a front at all.
     const bool battery = recoveryActive() && itemID == Structure_RocketTurret
         && getQuantBotConfig().recovery.frontBatteriesEnabled && baseCenter.isValid();
-    // A battery belongs to ONE colony. The average of every structure sits in
-    // the sand between two colonies, so the belt would form nowhere useful and
-    // its "enemy side" would be meaningless. Anchor it on the yard whose own
-    // colony is building this turret - the planning builder - so each base gets
-    // its own directional belt, and fall back to the shelter cluster.
-    if (battery) {
-        Coord colony = Coord::Invalid();
-        if (const auto* owner = dynamic_cast<const BuilderBase*>(
-                currentGame->getObjectManager().getObject(planningBuilder)))
-            if (owner->getOwner() == getHouse() && owner->getHealth() > 0)
-                colony = owner->getLocation();
-        if (colony.isInvalid()) colony = shelterAnchor();
-        if (colony.isValid()) baseCenter = colony;
-    }
+    if (battery) baseCenter = batteryAnchor();
     Coord forward(0, 0);
     if (battery) forward = observedFrontDirection(baseCenter);
     Coord enemyDirection = Coord::Invalid();
@@ -3484,48 +3578,15 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
     // Battery geometry. Collected once, not per candidate: existing and already
     // reserved emplacements, so the belt overlaps without stacking and without
     // sealing a lane.
-    std::vector<Coord> ownTurrets;
-    int frontTurrets = 0;
-    int localTurrets = 0;
-    const int colonyRadius=2*std::max(1,currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange);
-    if (battery) {
-        for (const StructureBase* structure : getStructureList())
-            if (structure->getOwner() == getHouse() && structure->getHealth() > 0
-                && (structure->getItemID() == Structure_RocketTurret
-                    || structure->getItemID() == Structure_GunTurret))
-                ownTurrets.push_back(structure->getLocation());
-        for (const auto& entry : reservedStructures)
-            if (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
-                ownTurrets.push_back(entry.second.location);
-        for (const Coord turret : ownTurrets) {
-            if (blockDistance(turret,baseCenter).lround()>colonyRadius) continue;
-            ++localTurrets;
-            if (FrontBatteryPolicy::onFrontSide(turret.x - baseCenter.x, turret.y - baseCenter.y,
-                    forward.x, forward.y)) ++frontTurrets;
-        }
-    }
+    const BatteryGeometry geometry = battery ? batteryGeometry(baseCenter, forward) : BatteryGeometry{};
+    const std::vector<Coord>& ownTurrets = geometry.turrets;
+    const int frontTurrets = geometry.frontTurrets;
+    const int localTurrets = geometry.localTurrets;
     const int turretRange = std::max(1,
         currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange);
     const int coverRadius = std::max(1, turretRange - 1);
     const int clusterRadius = FrontBatteryPolicy::clusterRadius(turretRange);
-    // Front allowance is recomputed from the live goal rather than stored, so a
-    // destroyed battery immediately frees its share again.
-    const int frontAllowance = battery
-        ? FrontBatteryPolicy::frontAllowance(frontBatteryGoal(
-            RocketTurretPolicy::coverageTurretCap([&] {
-                int demand = 0;
-                const Uint32 anchorYard = mainConstructionYardID();
-                for (const auto* structure : getStructureList())
-                    if (structure->getOwner() == getHouse() && structure->getHealth() > 0)
-                        demand += RocketTurretPolicy::desiredCoverage(structure->getItemID(),
-                            rocketCoverageTier(difficulty),
-                            isExpansionYard(structure->getItemID(), structure->getObjectID(), anchorYard));
-                return demand;
-            }()),
-            getHouse()->getNumItems(Structure_Refinery),
-            getHouse()->getNumItems(Structure_HeavyFactory),
-            getHouse()->getNumItems(Structure_RepairYard), lastSurvey))
-        : 0;
+    const int frontAllowance = geometry.frontAllowance;
 
 	FixPoint bestScore = -FixPt_MAX;
 	Coord bestLocation = Coord::Invalid();
@@ -4212,6 +4273,385 @@ Coord QuantBot::findFrontBatteryPlaceLocation() {
     return findTurretPlaceLocation(Structure_RocketTurret);
 }
 
+std::array<int,6> QuantBot::batteryZoneCounts(Coord anchor) const {
+    std::array<int,6> counts{};
+    const int radius = 2 * std::max(1,
+        currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange);
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || !DuneCity::isCityZoneStructure(structure->getItemID())
+            || blockDistance(structure->getLocation(), anchor).lround() > radius) continue;
+        const int type = structure->getItemID() - Structure_ZoneResidential;
+        ++counts[type];
+        const auto* tile = getMap().getTile(structure->getLocation());
+        counts[type+3] += std::max(1,DuneCity::getStructurePopulation(structure,
+            tile ? int(tile->getCityZoneDensity()) : 0));
+    }
+    return counts;
+}
+
+bool QuantBot::batteryClearanceZones(Coord pos, std::vector<Uint32>& zones, Coord anchor,
+                                      const std::array<int,6>* localCounts) const {
+    zones.clear();
+    if (!anchor.isValid()) return false;
+    // Scope. The fallback exists for the Custom Hard/Brutal city bot and
+    // nothing else: no campaign, no support role, no Easy/Medium, no human and
+    // no house a human shares, and only while the battery feature is on.
+    if (!currentGame || !currentGame->isCitySimEnabled()) return false;
+    if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return false;
+    if (!getHouse() || !getHouse()->isAI()) return false;
+    const auto* sim = currentGame->getCitySimulation();
+    if (!sim || !sim->isInitialized()) return false;
+    if (!pos.isValid() || !getMap().tileExists(pos.x, pos.y)) return false;
+
+    // Ground. The emplacement needs rock inside this house's build range; a lot
+    // may legally sit on sand, and clearing one would not make the tile
+    // buildable, so that lot is not a candidate.
+    const Tile* tile = getMap().getTile(pos.x, pos.y);
+    if (!tile->isRock() || tile->isMountain()) return false;
+    if (!getMap().isWithinBuildRange(pos.x, pos.y, getHouse())) return false;
+
+    // The occupant must be one of this house's own R/C/I lots. Roads, services,
+    // essential buildings, anything foreign and anything that is not a zone at
+    // all fall out here, because nothing else is a ZoneStructure of ours.
+    const ObjectBase* object = tile->getNonInfantryGroundObject();
+    const auto* zone = dynamic_cast<const ZoneStructure*>(object);
+    if (!zone || zone->getOwner() != getHouse() || zone->getHealth() <= 0) return false;
+    if (!DuneCity::isCityZoneStructure(zone->getItemID())) return false;
+
+    const Coord lot = zone->getLocation();
+    const Coord extent(zone->getStructureSizeX(), zone->getStructureSizeY());
+    if (extent.x <= 0 || extent.y <= 0) return false;
+    // A genuinely local economic floor. The count is over the colony this
+    // battery belongs to, not over the house: a second colony elsewhere on the
+    // map must not be able to mask the loss of the last lots standing next to
+    // the anchor. The neighbourhood is the same colony geometry the belt uses.
+    const int colonyRadius = 2 * std::max(1,
+        currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange);
+    if (blockDistance(lot, anchor).lround() > colonyRadius) return false;
+    const auto counts = localCounts ? *localCounts : batteryZoneCounts(anchor);
+    const int localTotal = counts[0] + counts[1] + counts[2];
+    if (!FrontBatteryPolicy::preservesLocalZoneFloor(
+            counts[zone->getItemID() - Structure_ZoneResidential], localTotal)) return false;
+    const int level = int(getMap().getTile(lot)->getCityZoneDensity());
+    const int economicPopulation = std::max(1,DuneCity::getStructurePopulation(zone,level));
+    if (!FrontBatteryPolicy::clearableLot(level,zone->getResidentialPopulation(),
+            zone->getCivicOverlay()!=ZoneStructure::CivicOverlay::None,economicPopulation,
+            counts[zone->getItemID()-Structure_ZoneResidential+3])) return false;
+
+    // Nothing may be standing on the lot and no yard may have reserved it.
+    for (int y = lot.y; y < lot.y + extent.y; ++y) for (int x = lot.x; x < lot.x + extent.x; ++x) {
+        if (!getMap().tileExists(x, y)) return false;
+        const Tile* lotTile = getMap().getTile(x, y);
+        if (lotTile->hasInfantry()) return false;
+        const ObjectBase* occupant = lotTile->getNonInfantryGroundObject();
+        if (occupant != nullptr && occupant != object) return false;
+    }
+    if (overlapsReservedStructure(lot.x, lot.y, extent.x, extent.y)) return false;
+
+    zones.push_back(zone->getObjectID());
+    return int(zones.size()) <= FrontBatteryPolicy::kClearanceLotsPerPass;
+}
+
+Coord QuantBot::findBatteryClearanceSite(Coord requiredSite) {
+    // Last resort, and only that. Ordinary free ground is searched first and
+    // answered first; this runs only when that search has nothing, which is
+    // what an established city facing a fixed direction eventually looks like.
+    //
+    // This is advice to the chooser and nothing more. It demolishes nothing,
+    // reserves nothing and spends nothing.
+    //
+    // `requiredSite` turns the same search into a re-validation of one tile:
+    // commitBatteryClearance() passes the tile it is about to displace a lot
+    // on, so every scope, economy, front, allowance, spacing, density, mutual
+    // support, corridor, road, access, ownership, floor, occupancy and
+    // reservation rule below is re-applied to the live map at the moment the
+    // lot would actually be lost - rather than being approximated by a second
+    // copy of the same conditions.
+    const bool revalidating = requiredSite.isValid();
+    if (findFrontBatteryPlaceLocation().isValid()) return Coord::Invalid();
+    if (!revalidating && batteryClearanceCache) return *batteryClearanceCache;
+    if (!revalidating) batteryClearanceCache = Coord::Invalid();
+    if (!currentGame || !currentGame->isCitySimEnabled()) return Coord::Invalid();
+    if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return Coord::Invalid();
+    if (!getHouse() || !getHouse()->isAI()) return Coord::Invalid();
+    const auto* sim = currentGame->getCitySimulation();
+    if (!sim || !sim->isInitialized()) return Coord::Invalid();
+    AITelemetry::PerformanceScope perfScope("ai.findBatteryClearanceSite", getGameCycleCount(),
+        getHouse()->getHouseID());
+
+    const Coord anchor = batteryAnchor();
+    if (anchor.isInvalid()) return Coord::Invalid();
+    const Coord forward = observedFrontDirection(anchor);
+    // No observed enemy approach means no enemy-facing side to clear towards,
+    // and an unaimed demolition is exactly what this must not do.
+    if (forward.x == 0 && forward.y == 0) return Coord::Invalid();
+    const BatteryGeometry geometry = batteryGeometry(anchor, forward);
+    // The flank and rear allowance is spent the same way here as on free
+    // ground: once the enemy-facing share of the goal is taken, nothing is
+    // displaced for it.
+    if (geometry.frontAllowance <= 0 || geometry.frontTurrets >= geometry.frontAllowance)
+        return Coord::Invalid();
+
+    const int houseID = getHouse()->getHouseID();
+    const auto& state = sim->getHouseState(houseID);
+    const auto localCounts = batteryZoneCounts(anchor); // One census per search, not per tile.
+    Coord best = Coord::Invalid();
+    int64_t bestScore = std::numeric_limits<int64_t>::min();
+    int considered = 0, cleared = 0;
+
+    for (const StructureBase* structure : getStructureList()) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(structure);
+        if (!zone || zone->getOwner() != getHouse() || zone->getHealth() <= 0) continue;
+        const Coord lot = zone->getLocation();
+        const Coord extent(zone->getStructureSizeX(), zone->getStructureSizeY());
+        if (revalidating && !(requiredSite.x >= lot.x && requiredSite.x < lot.x + extent.x
+                && requiredSite.y >= lot.y && requiredSite.y < lot.y + extent.y)) continue;
+        // The lot itself must be on the observed enemy side of the anchor.
+        if (!FrontBatteryPolicy::onFrontSide(lot.x - anchor.x, lot.y - anchor.y,
+                forward.x, forward.y)) continue;
+        ++considered;
+        // Displacement price of this lot, in the same currency the established
+        // redevelopment rule uses, so an empty or struggling lot is preferred
+        // over a growing one and a cheap district over an expensive one.
+        const bool residential = zone->getItemID() == Structure_ZoneResidential;
+        const int demand = residential ? state.resValve
+            : zone->getItemID() == Structure_ZoneCommercial ? state.comValve : state.indValve;
+        const int displacement = RedevelopmentPolicy::displacementCost(
+            std::max(int(getMap().getTile(lot.x, lot.y)->getCityZoneDensity()),
+                zone->getResidentialPopulation() > 0 ? 1 : 0),
+            sim->getLandValueMap().worldGet(lot.x, lot.y), demand, residential ? 2000 : 1500);
+
+        for (int y = lot.y; y < lot.y + extent.y; ++y) for (int x = lot.x; x < lot.x + extent.x; ++x) {
+            const Coord site(x, y);
+            if (revalidating && site != requiredSite) continue;
+            std::vector<Uint32> lots;
+            // Every ownership, type, service, growth, local floor,
+            // occupancy and reservation rule lives in one place and is asked
+            // here per candidate tile - and asked again immediately before the
+            // lot is actually demolished.
+            if (!batteryClearanceZones(site, lots, anchor, &localCounts)) continue;
+            if (!FrontBatteryPolicy::onFrontSide(x - anchor.x, y - anchor.y, forward.x, forward.y)) continue;
+            // The emplacement itself must be legal once the lot is gone: in
+            // range, on rock, not landlocking a neighbouring lot, keeping the
+            // roads, local ground access and factory exits.
+            if (overlapsReservedStructure(x, y, 1, 1)) continue;
+            if (wouldLandlockNeighbouringZone(getMap(), houseID, x, y, 1, 1, &lots)) continue;
+            if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+            if (!preservesGroundAccess(Structure_RocketTurret, site, &lots)) continue;
+            // Battery geometry, identical to the free-ground search.
+            int nearest = -1, inCluster = 0;
+            bool covered = false;
+            for (const Coord turret : geometry.turrets) {
+                const int d = std::max(std::abs(turret.x - x), std::abs(turret.y - y));
+                if (nearest < 0 || d < nearest) nearest = d;
+                if (d <= geometry.clusterRadius) ++inCluster;
+                if (d <= geometry.coverRadius) covered = true;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)) continue;
+            if (!FrontBatteryPolicy::withinClusterLimit(inCluster)) continue;
+            if (!FrontBatteryPolicy::mutuallySupported(geometry.localTurrets, covered)) continue;
+            int passable = 0;
+            for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                if (!dx && !dy) continue;
+                if (!getMap().tileExists(x + dx, y + dy)) continue;
+                const Tile* neighbour = getMap().getTile(x + dx, y + dy);
+                const bool freed = dx + x >= lot.x && dx + x < lot.x + extent.x
+                    && dy + y >= lot.y && dy + y < lot.y + extent.y;
+                if (!neighbour->isMountain() && (freed || !neighbour->hasAStructure())) ++passable;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+            ++cleared;
+            // Cheapest lot first, then the tile furthest towards the enemy, then
+            // a fixed coordinate order so the choice is reproducible.
+            const int scale = std::max(1, std::max(std::abs(forward.x), std::abs(forward.y)));
+            const int along = (forward.x * (x - anchor.x) + forward.y * (y - anchor.y)) / scale;
+            const int64_t score = -int64_t(displacement) * 1000
+                + int64_t(std::clamp(along, -20, 20)) * 10;
+            if (score > bestScore || (score == bestScore && best.isValid()
+                    && (y < best.y || (y == best.y && x < best.x)))) {
+                bestScore = score;
+                best = site;
+            }
+        }
+    }
+
+    traceDecision(revalidating ? "front_battery_clearance_revalidated" : "front_battery_clearance_site",
+        AITelemetry::Record()
+            .set("x", best.x).set("y", best.y).set("valid", best.isValid())
+            .set("forward_x", forward.x).set("forward_y", forward.y)
+            .set("front_lots_considered", considered).set("legal_tiles", cleared)
+            .set("front_allowance", geometry.frontAllowance)
+            .set("front_turrets", geometry.frontTurrets));
+    if (!revalidating) batteryClearanceCache = best;
+    return best;
+}
+
+bool QuantBot::commitBatteryClearance(const BuilderBase* builder, Uint32 itemToBePlaced,
+                                      std::list<Coord>& placeLocations, int spendable,
+                                      int economyReserve, int commitmentShortfall, bool* defer) {
+    /*
+        The only place a lot is ever displaced for a battery.
+
+        By the time control reaches here the yard is holding *finished
+        material*: `builder->isWaitingToPlace()` is true and `itemToBePlaced`
+        has been produced and paid for. That is the first moment at which
+        demolishing is not a gamble, which is why nothing happens at order
+        acceptance - an accepted order is neither payment nor a placement, and
+        a cancellation, a re-site or the loss of the yard before this point
+        must leave the lot untouched. Each of those simply never reaches here.
+
+        Two shapes of commit:
+
+          * No concrete required, or the lot's ground is already prepared. The
+            finished item IS the emplacement. The lot goes and the turret is
+            placed on the ground it frees, in this same synchronous call.
+
+          * Concrete required. A slab cannot be laid on an occupied tile and
+            the turret cannot stand on bare ground without taking foundation
+            damage, so the legitimate sequence is slab first. The accepted
+            narrow trade-off is to commit at the *completed foundation slab*:
+            real material, really paid for, placed on the freed tile in this
+            same call. It is only taken while the emplacement itself is still
+            in this yard's real production queue under this yard's
+            reservation, and while queued obligations plus the established
+            economy reserve are actually funded.
+
+        Honest statement of the residual: after this point the house has spent
+        a lot and owns concrete, and an attack or a player cancellation can
+        still stop the turret from ever being finished. That window is one
+        building's construction time, it cannot be removed without either
+        demolishing earlier (worse) or inventing an escrow, and it is the same
+        exposure the established redevelopment rule already carries.
+    */
+    if (defer) *defer = false;
+    if (!builder || !currentGame || !currentGame->isCitySimEnabled()) return false;
+    if (builder->getOwner() != getHouse() || builder->getObjectID() != planningBuilder
+        || builder->getItemID() != Structure_ConstructionYard || !builder->isActive()
+        || builder->getHealth() <= 0 || builder->getCurrentProducedItem() != itemToBePlaced) return false;
+    const auto reserved = reservedStructures.find(planningBuilder);
+    if (reserved == reservedStructures.end() || reserved->second.item != Structure_RocketTurret) return false;
+    const Coord site = reserved->second.location;
+    const bool placingTurret = itemToBePlaced == Structure_RocketTurret;
+    const bool placingFoundation = itemToBePlaced == Structure_Slab1 || itemToBePlaced == Structure_Slab4;
+    if (!placingTurret && !placingFoundation) return false;
+    // From here on this really is a reserved emplacement whose finished
+    // material is in hand, so every refusal is worth a reason in the log.
+    auto decline = [&](const char* reason) {
+        traceDecision("front_battery_clearance_declined", AITelemetry::Record()
+            .set("builder", planningBuilder).set("x", site.x).set("y", site.y)
+            .set("reason", reason).set("item", itemToBePlaced));
+        return false;
+    };
+    if (!FrontBatteryPolicy::mayOrderThisPass(batteryClearancesThisPass,
+            FrontBatteryPolicy::kClearanceLotsPerPass)) {
+        if (defer) *defer = true;
+        return decline("pass_budget_spent");
+    }
+    if (!site.isValid() || placeLocations.empty() || placeLocations.front() != site)
+        return decline("material_not_planned_for_this_site");
+
+    const Coord anchor = batteryAnchor();
+    std::vector<Uint32> lots;
+    if (!batteryClearanceZones(site, lots, anchor) || lots.empty())
+        return decline("site_no_longer_a_displaceable_lot");
+
+    // Free ground beats displacing a lot, right up to the last moment. If a
+    // site has opened since the order, the reservation and the finished
+    // material move there and the lot is left standing.
+    const Coord freeSite = findFrontBatteryPlaceLocation();
+    if (freeSite.isValid()) {
+        reserved->second.location = freeSite;
+        placeLocations.clear();
+        placeLocations.push_back(freeSite);
+        if (placingFoundation) placeLocations.push_back(freeSite);
+        traceDecision("front_battery_clearance_retargeted", AITelemetry::Record()
+            .set("builder", planningBuilder).set("from_x", site.x).set("from_y", site.y)
+            .set("to_x", freeSite.x).set("to_y", freeSite.y).set("item", itemToBePlaced));
+        return false;
+    }
+    // And the whole chooser is re-run against this one tile, so the scope,
+    // economy, demand, allowance, front, geometry, corridor, road, access and
+    // reservation rules that justified the plan must all still hold now. A
+    // coverage turret that merely happens to be reserved where a lot has since
+    // appeared is not a battery decision and fails here.
+    if (findBatteryClearanceSite(site) != site) return decline("revalidation_failed");
+    if (!builder->isWaitingToPlace()) return decline("material_not_finished");
+    if (!campaignAvailableToBuild(builder, Structure_RocketTurret)) return decline("rocket_tech_lost");
+    const int requiredPower = std::max(0,
+        currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].power)
+        + std::max({DuneCity::getZonePower(Structure_ZoneResidential,1),
+                    DuneCity::getZonePower(Structure_ZoneCommercial,1),
+                    DuneCity::getZonePower(Structure_ZoneIndustrial,1)});
+    if (getGameInitSettings().getGameOptions().rocketTurretsNeedPower
+        && getHouse()->getProducedPower() - getHouse()->getPowerRequirement() < requiredPower)
+        return decline("power_buffer_lost");
+    // An emplacement needs one tile. A bulk slab's extra tiles must never be
+    // cleared implicitly; the normal foundation planner chooses Slab1 here.
+    if (placingFoundation && (itemToBePlaced != Structure_Slab1
+        || getMap().getTile(site)->isRoad())) return decline("foundation_shape_changed");
+    if (placingTurret && getGameInitSettings().getGameOptions().concreteRequired
+        && !getMap().getTile(site)->hasPreparedFoundation()) return decline("foundation_not_ready");
+
+    if (placingFoundation) {
+        // The emplacement must still be a real, queued obligation of this yard,
+        // and the house must still be able to finish paying for it.
+        bool turretQueued = false;
+        int turretPrice = 0;
+        for (const auto& offer : builder->getBuildList())
+            if (offer.itemID == Structure_RocketTurret) {
+                // BuildItem::num is this yard's live queued count for the item,
+                // decremented when the item finishes and when it is cancelled.
+                turretQueued = offer.num > 0;
+                turretPrice = int(offer.price);
+            }
+        if (!turretQueued) return false;
+        const int paid = builder->getCurrentProducedItem() == Structure_RocketTurret
+            ? builder->getProductionProgress().lround() : 0;
+        const int remaining = std::max(0, turretPrice - paid);
+        // The caller already withheld every queued obligation, including this
+        // turret. Requiring its price again would make a fully funded project
+        // wait for twice its cost. A raw shortfall must not disappear when the
+        // ordinary new-order budget is clamped to zero.
+        if (commitmentShortfall > 0 || spendable < economyReserve) {
+            if (defer) *defer = true;
+            traceDecision("front_battery_clearance_deferred", AITelemetry::Record()
+                .set("builder", planningBuilder).set("reason", "turret_not_funded")
+                .set("spendable", spendable).set("reserve", economyReserve).set("remaining", remaining));
+            return false;
+        }
+    }
+
+    AITelemetry::Record removed;
+    const auto* sim = currentGame->getCitySimulation();
+    int displaced = 0;
+    for (const Uint32 id : lots) {
+        auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(id));
+        if (!zone || zone->getOwner() != getHouse()) continue;
+        const Coord z = zone->getLocation();
+        const auto& state = sim->getHouseState(getHouse()->getHouseID());
+        const int demand = zone->getItemID() == Structure_ZoneResidential ? state.resValve
+            : zone->getItemID() == Structure_ZoneCommercial ? state.comValve : state.indValve;
+        removed.set(std::to_string(id), AITelemetry::Record().set("item", zone->getItemID())
+            .set("demand", demand).set("land_value", sim->getLandValueMap().worldGet(z.x, z.y))
+            .set("density", getMap().getTile(z.x, z.y)->getCityZoneDensity()));
+        // Invalidate before mutation, including its callbacks.
+        invalidateAnchorField();
+        zone->demolish();
+        ++displaced;
+    }
+    if (!displaced) return false;
+    ++batteryClearancesThisPass;
+    // The map changed under every placement search; the reservation itself
+    // stays, because the emplacement is still owed this ground.
+    clearPlacementCache();
+    traceDecision("front_battery_clearance_committed", AITelemetry::Record()
+        .set("builder", planningBuilder).set("x", site.x).set("y", site.y)
+        .set("placing", itemToBePlaced).set("removed_zones", removed)
+        .set("pass_clearances", batteryClearancesThisPass));
+    return true;
+}
+
 Coord QuantBot::findPlaceLocationSimple(Uint32 itemID) {
 	int newSizeX = getStructureSize(itemID).x;
 	int newSizeY = getStructureSize(itemID).y;
@@ -4317,6 +4757,14 @@ void QuantBot::build(int militaryValue) {
     AITelemetry::PerformanceScope phaseScope("ai.build.evaluate",getGameCycleCount(),getHouse()->getHouseID());
     refreshTacticalDanger();
     planningBuilder = NONE_ID;
+    // One lot per construction pass across every yard, enforced on the side
+    // that actually demolishes rather than inferred from how many orders were
+    // accepted: several yards can each be carrying a clearance reservation
+    // from earlier passes and would otherwise all commit in the same call.
+    batteryClearancesThisPass = 0;
+    // Anchored searches belong to one planning builder; a new pass starts with
+    // none, so none of last pass's answers are reused.
+    turretSearchBuilder = NONE_ID;
     recentStructureLosses.erase(std::remove_if(recentStructureLosses.begin(), recentStructureLosses.end(),
         [&](const auto& loss) { return getGameCycleCount() - loss.cycle >= MILLI2CYCLES(900000); }), recentStructureLosses.end());
     cityProductionPlots.clear();planningCityProductionPlots=false;
@@ -4520,6 +4968,7 @@ void QuantBot::build(int militaryValue) {
         && !supportMode && !isCampaignEnemy() && difficulty>=Difficulty::Hard;
     // Buildings pay gradually. Previously the same unspent cash funded more
     // orders every pass even though it was already committed to existing queues.
+    const int clearanceCommitmentShortfall = std::max(0, queuedProductionCost - money);
     money = std::max(0, money - queuedProductionCost);
     const int economyReserve = vanillaEconomy ? std::max(2000,
         data[Structure_Refinery][houseID].price + 2 * data[Unit_Harvester][houseID].price) : 0;
@@ -9071,7 +9520,19 @@ void QuantBot::build(int militaryValue) {
 					&& hasPowerBufferForTurret()
 					&& campaignAvailableToBuild(pBuilder,Structure_RocketTurret)
 					&& money >= economyReserve + data[Structure_RocketTurret][houseID].price
-					&& findFrontBatteryPlaceLocation().isValid()) {
+					// An established city runs out of free legal ground on the side
+					// the enemy comes from long before the goal is met, and the
+					// belt then stops growing exactly where it is needed. The
+					// fallback prefers one of this house's own cheaper eligible
+					// R/C/I lots - and only after the free-ground search has
+					// already answered that there is none. Every gate above still
+					// has to pass first, so a lot is never displaced for an
+					// emplacement this base does not want, cannot power, cannot
+					// reach or cannot pay for. Choosing the site commits nothing:
+					// the lot is still standing when this order is accepted and
+					// goes only when finished material is placed on it.
+					&& (findFrontBatteryPlaceLocation().isValid()
+						|| findBatteryClearanceSite().isValid())) {
 					itemID = Structure_RocketTurret; structureRule = "front_battery";
 					logDebug("FRONT-BATTERY: rocket turret %d/%d (counter-air goal %d)",
 						itemCount[Structure_RocketTurret] + 1, batteryTurrets, counterAirTurrets);
@@ -9264,8 +9725,13 @@ void QuantBot::build(int militaryValue) {
                 } else if (itemID == Structure_RocketTurret
                     && structureRule == std::string("front_battery")) {
                     // The battery rule chose this order, so it also chooses the
-                    // site: the city coverage planner has no front.
+                    // site: the city coverage planner has no front. Free ground
+                    // first; the clearance fallback answers only when there is
+                    // none, and it answers with the tile of the single own lot
+                    // the emplacement will displace.
                     selectedPlaceLocation = findFrontBatteryPlaceLocation();
+                    if (selectedPlaceLocation.isInvalid())
+                        selectedPlaceLocation = findBatteryClearanceSite();
                 } else selectedPlaceLocation = (itemID == Structure_RocketTurret || itemID == Structure_GunTurret)
                     ? findEffectiveTurretPlaceLocation(itemID) : findPlaceLocation(itemID);
 			}
@@ -9322,7 +9788,22 @@ void QuantBot::build(int militaryValue) {
                 // so replacement buildings need newly queued slabs as well.
 				std::vector<Uint32> zonesToRemove;
                 const bool redevelop = redevelopmentZones(itemID, selectedPlaceLocation, zonesToRemove);
-                const auto plan = foundationPlan(pBuilder,itemID,selectedPlaceLocation,zonesToRemove);
+                // The battery clearance fallback deliberately does NOT join the
+                // redevelopment route here. Accepting an order into a yard's
+                // queue is not payment and does not place anything: the order
+                // can still be cancelled, outbid, re-sited or lost with the
+                // yard, and a lot demolished now would be a pure loss. The lot
+                // stays standing; it is displaced by commitBatteryClearance()
+                // at the moment finished material is actually placed on it.
+                // Plan foundations against the ground after clearance, without
+                // changing the live map. The former building consumed its old
+                // foundation, so a new slab is queued where needed.
+                std::vector<Uint32> clearanceLots;
+                const bool batteryClearance = !redevelop && itemID == Structure_RocketTurret
+                    && structureRule == std::string("front_battery")
+                    && batteryClearanceZones(selectedPlaceLocation, clearanceLots, batteryAnchor());
+                const auto plan = foundationPlan(pBuilder,itemID,selectedPlaceLocation,
+                    batteryClearance ? clearanceLots : zonesToRemove);
                 if (!plan.complete) {
                     traceDecision("construction_rejected",AITelemetry::Record()
                         .set("builder",planningBuilder).set("item",itemID).set("rule",structureRule)
@@ -9384,6 +9865,14 @@ void QuantBot::build(int militaryValue) {
                             .set("item",itemID).set("x",selectedPlaceLocation.x).set("y",selectedPlaceLocation.y)
                             .set("removed_zones",removed));
                     }
+                    // A clearance reservation records an intention only. The
+                    // lot named here is still standing and stays standing
+                    // unless and until commitBatteryClearance() displaces it.
+                    if (batteryClearance) traceDecision("front_battery_clearance_reserved",
+                        AITelemetry::Record().set("builder",planningBuilder)
+                            .set("x",selectedPlaceLocation.x).set("y",selectedPlaceLocation.y)
+                            .set("lot",clearanceLots.empty() ? Uint32(NONE_ID) : clearanceLots.front())
+                            .set("foundation_orders",int(foundations.size())));
                     if (itemID==Structure_Refinery && (engineHarvesterLimit==0
                         || itemCount[Unit_Harvester]+itemCount[Unit_RebelHarvester]<engineHarvesterLimit))
                         ++itemCount[Unit_Harvester];
@@ -9491,6 +9980,40 @@ void QuantBot::build(int militaryValue) {
                     // one. Rock only, nothing standing on it, no road erased.
                     const bool placingSlab = itemToBePlaced == Structure_Slab1
                         || itemToBePlaced == Structure_Slab4;
+
+                    // Finished material in hand is the first honest moment to
+                    // displace a lot for an enemy-facing battery, so the
+                    // clearance is committed here and the freed ground is used
+                    // by the very next statements. If it declines - free ground
+                    // opened, the emplacement is no longer queued or funded, a
+                    // guard has changed, or this pass has already displaced its
+                    // one lot - the lot stays standing and the ordinary
+                    // validity checks below simply re-plan or defer.
+                    bool deferClearance = false;
+                    commitBatteryClearance(pBuilder, itemToBePlaced, placeLocations, money,
+                        economyReserve, clearanceCommitmentShortfall, &deferClearance);
+                    // A refused clearance is still occupied by its lot. Never
+                    // feed that finished slab through ordinary foundation
+                    // replanning, which would cancel it as blocked and leave
+                    // the turret behind it without concrete. Temporary cash or
+                    // pass-budget pressure retains the material; a lost site,
+                    // prerequisite or scope releases the project and its cash.
+                    const auto pendingBattery = reservedStructures.find(planningBuilder);
+                    if (pendingBattery != reservedStructures.end()
+                        && pendingBattery->second.item == Structure_RocketTurret
+                        && getMap().tileExists(pendingBattery->second.location.x,
+                                               pendingBattery->second.location.y)
+                        && getMap().getTile(pendingBattery->second.location)->hasCityZone()) {
+                        if (!deferClearance) {
+                            if (placingSlab) doCancelItem(pBuilder,itemToBePlaced);
+                            doCancelItem(pBuilder,Structure_RocketTurret);
+                            reservedStructures.erase(planningBuilder);
+                            placeLocations.clear();
+                            clearPlacementCache();
+                        }
+                        continue;
+                    }
+
                     auto plannedSlabLegal = [&](Uint32 slab, const Coord& site) {
                         const Coord span = getStructureSize(slab);
                         if (!site.isValid()) return false;

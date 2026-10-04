@@ -1,3 +1,61 @@
+# 2026-10-04 — Enemy-facing battery lot clearance (1.0.803 development)
+
+Custom Hard/Brutal DuneCity QuantBot can reclaim one owned R/I/C lot when a
+needed rocket battery has no legal free site. The lot and turret tile must face
+an observed enemy approach and belong to the construction yard's colony.
+Lower displacement cost wins, preserving the preference for less developed,
+less valuable lots. A land-value or small-growth change during construction no
+longer cancels every otherwise valid project.
+
+Clearance preserves at least three local lots of the displaced type and six
+local R/I/C lots overall, within two rocket weapon ranges. Modest lots remain
+eligible; more developed lots must represent at most 20% of their type's local
+population/jobs. Hospital/church overlays, foreign lots, human/shared houses
+and essential buildings are protected. Roads, exits, zone frontage, movement
+corridors, mutual support, spacing, cluster limits and the front quota are
+validated against the map after the proposed clearance.
+
+Queue acceptance does not demolish. Execution revalidates the owned active
+construction yard, site, demand, economy, tech, power and finished material.
+Without concrete, demolition and finished-turret placement share a build call.
+With concrete, the completed Slab1 uses the reclaimed tile immediately while
+the turret remains queued and all queued costs are funded. An attack or later
+cancellation can still prevent that turret completing after foundation commit.
+One-credit funding shortages defer without losing the lot or finished material;
+exact funding does not reserve the turret's price twice. Invalid projects
+cancel with the lot intact. Newly opened free sites retarget the project.
+
+At most one lot is cleared per build pass across all yards, independently of
+prior accepted orders. Derived placement caches invalidate on geometry and
+builder changes; the local zone census runs once per search. No new serialized
+fields: save 9852, observer runtime 7, multiplayer protocol 51. The separate
+1.0.802 observer accounting limitation remains as recorded below.
+
+The dedicated real-engine clearance fixture completes turrets with concrete
+on/off, using ordinary production payments and frames. It checks cancellation,
+destroyed yards, changed sites, free-site retargeting, two-colony economic and
+cache boundaries, shared-human scope, all three types, two ready yards sharing
+one execution limit, unfinished material and exact/one-credit-short funding.
+Bot-stream reload re-derives the same site; this is not general world-save
+certification. Stable treasury, power and observed approach are fixture inputs.
+
+Full CTest: **54/54 targets passed** (750.93 seconds). Extended ready-material
+checks then passed with **one and four actual path workers**, including changed
+occupancy, shared-human authority and lost power. Their clearance outcomes match:
+concrete on completes a turret at frame 1776 (lot removed at 275); concrete off
+completes at frame 1500 (lot removed at 1499). Each removes one of 30 lots. The
+cross-yard case commits one lot; exact funding places concrete while a one-credit
+shortfall preserves the lot. All R/I/C types are eligible. Outcome SHA-256:
+40f9c1b7a209d23c8c509b637f31119651ecc18c5f5dfb9249a74e9fdea220cf.
+
+The two-colony fixture records 25 clearance searches per run, means 28.52/29.12
+microseconds and maxima 82/91 microseconds with one/four workers. No clearance
+search exceeds 33 ms. These are fixture aggregate mean/max values, not live MBA
+FPS or a full-match benchmark. Native app version/signature, version consistency,
+Python syntax, diff checks and pre/post-build Ninja dependency audits pass.
+Evidence: ../outputs/rocket-battery-clearance-20261004/. Native 1.0.803 is built
+locally; this task does not install, push or publish it.
+
 # 2026-10-04 — QuantBot army recovery, dispatch and batteries (1.0.802 development)
 
 Custom Hard/Brutal bots now track Offensive, Withdrawing and Recovering postures.
