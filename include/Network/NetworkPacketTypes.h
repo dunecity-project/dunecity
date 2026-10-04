@@ -120,7 +120,10 @@
 // 48: per-house spice income multipliers. The lobby gained a change-event type and
 //     GameInitSettings gained the MOD7 block, so a 47 peer cannot decode either; the factor
 //     also feeds the state digest, so an older peer would compute a different house hash.
-#define NETWORK_PROTOCOL_VERSION            48
+// 49: carryall pickup keeps the actual passenger and releases replacement bookings;
+//     deterministic containment recovery restores orphaned passengers from older matches.
+//     Older peers would hide different units and disagree about house survival.
+#define NETWORK_PROTOCOL_VERSION            49
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

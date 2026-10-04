@@ -1,3 +1,60 @@
+# 2026-10-04 — Carryall passenger loss and match elimination (1.0.801 development)
+
+A damaged unit's pickup called `doRepair()`, which could cancel the collecting
+carryall's target and book another aircraft. The first aircraft then stored the
+changed target ID (sometimes `NONE_ID`) while hiding the actual unit. These
+invisible, untargetable combat units still counted for house survival, explaining
+the apparent Mercenary survivors and the match that would not end.
+
+Pickup now captures the passenger ID before the callback and releases any
+replacement booking reciprocally before hiding the passenger. Unresolvable cargo
+entries no longer leave an aircraft stuck at the front of its cargo list.
+
+`Game::reconcileTransportContainment()` also repairs existing orphaned ground
+units from older saves. It reads actual carryall cargo and busy refinery/repair
+occupants across all houses. A pending pickup request is never treated as cargo;
+inactive pickup targets are released without displacing a real passenger. A free
+refinery's historical occupant pointer does not suppress recovery. Invalid and
+duplicate cargo entries are pruned while retaining one real carrier claim.
+
+Every 625 simulation cycles, sorted orphan IDs receive up to 32 recovery attempts.
+The ordinary deployment path restores map occupancy, spatial-grid membership,
+visibility and selectable/combat state without changing ownership or unit counts.
+A radius-12 search prefers the last position, then guard/owned-position/centre
+fallbacks; a bounded 1024-tile global window handles blocked local terrain.
+Windows advance per queue round, so a unit attempted only on alternate passes
+still searches consecutive map slices. A 64-unit backlog on a 128x128 map exposed
+and now guards against the previous batch-window starvation. Recovery never
+forces a vehicle onto an occupied tile, deploys onto a bloom, or kills a unit just
+to produce victory. Progress requires a legal tile and a sufficiently stable
+candidate queue; a full map leaves passengers queued and reports that condition.
+
+| Property | Enforcement and verification |
+| --- | --- |
+| Stable pickup and one booking | Real damaged passenger, free yard, second aircraft; correct cargo ID, reciprocal booking release, repair delivery and repaired release |
+| Preserve real containment | Real cargo, busy refinery/repair bay, different-owner cargo, stale earlier pickup request, free-refinery historical pointer |
+| Legal recovery and progress | Null/stale/destroyed carrier, occupied tile, blocked local area, sole far legal tile, invalid anchors, 32+8 batch, stable 64-unit power-of-two-map queue |
+| Normal elimination | Last recovered opponent and its spawned crew destroyed normally; enemy no longer alive and local game `finished && won` |
+| Determinism and persistence | No RNG use; ordinary/repeated load and observer restore have identical per-cycle digests and saved bytes; one vs four path workers share the same profile and produce identical continuations |
+| Regression sensitivity | Private original pickup body fails the correct-passenger assertion; pre-integration stale-request and map-window fixtures fail before their respective fixes |
+
+The native production-object probe passes **1340 checks per mod** in Vanilla,
+DuneCity and Dune2R, and repeats Vanilla under four path workers. The captured MBA
+replay completed all 211555 cycles: Mercenary ended `alive=0`, with zero structures,
+13 remaining units and **zero orphaned passengers across all houses**. Repairing
+pickup changes subsequent combat, so this is mechanism/regression evidence rather
+than reproduction of the original final troop counts. It is not a live FPS test.
+Full CTest: **52/52 targets passed** (673.14 seconds), including the transport
+probe, carryall flight/rescue, core network protocol gate, lobby/relay security,
+movement, AI, menus and income. Ninja dependency audits passed before and after
+building. Private evidence: `../outputs/carryall-ghost-fix-801/`.
+
+Save layout remains 9851 and observer runtime remains 7; recovery has no stored
+chooser cursor. Network protocol is 49 because older peers would simulate a
+different transport outcome. The native 1.0.801 app is built and ad-hoc signature
+verified. Source is local only; the MBA installation remains 1.0.799. Nothing has
+been pushed, published or installed by this repair task.
+
 # 2026-10-04 — Custom Game spice income and simplified rows (1.0.800)
 
 Custom Game now offers a spice income factor of 1x, 2x, 3x, 4x or 5x per

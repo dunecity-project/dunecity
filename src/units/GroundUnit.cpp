@@ -208,6 +208,21 @@ void GroundUnit::cancelCarryallPickup() {
     }
 }
 
+void GroundUnit::releaseReplacementPickup(const UnitBase* keepCarrier) {
+    if(bookedCarrier == NONE_ID) {
+        return;
+    }
+    if(keepCarrier != nullptr && bookedCarrier == keepCarrier->getObjectID()) {
+        return;  // The collecting aircraft is the booked one; nothing was replaced.
+    }
+
+    auto* other = dynamic_cast<Carryall*>(currentGame->getObjectManager().getObject(bookedCarrier));
+    if(other != nullptr && other->getTarget() == this) {
+        other->setTarget(nullptr);
+    }
+    bookCarrier(nullptr);
+}
+
 void GroundUnit::doMove2Pos(int xPos, int yPos, bool bForced) {
     if(UnitMovementPolicy::shouldCancelPickupOnMove(awaitingPickup, attackMode, bForced)) {
         cancelCarryallPickup();

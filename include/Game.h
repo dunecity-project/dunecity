@@ -69,6 +69,7 @@ class House;
 class Explosion;
 class SpatialGrid;
 class UnitBase;
+class Carryall;
 class MetaServerClient;
 
 
@@ -300,6 +301,40 @@ public:
     /// Forces the next getCarryallCandidateIds() to rebuild. Used where a cycle can both create
     /// and remove carriers, and after an observer checkpoint replaces the unit set.
     void invalidateCarryallCandidateIds();
+
+    /**
+        Reconciles units hidden off the map against the containers that actually hold them.
+
+        Containment is read from the carriers' cargo lists and the structures' occupant pointers,
+        across every house, never from a passenger's own target or carrier booking: those are the
+        fields a pickup can rewrite, which is how a unit ended up marked as carried by nothing,
+        invisible and untargetable, while still counting for its house. A hidden unit no container
+        claims is put back on the map at a legal tile near where it was lost, with its stale
+        bookings released on both sides; cargo entries that cannot describe a live passenger any
+        more, and a second carrier's claim on a passenger another carrier already holds, are
+        dropped. A drop-off or repair bay counts only while it is actually busy, because a
+        released refinery keeps pointing at the harvester it let go.
+
+        One pass scans units and structures, sorts hidden candidate ids, and performs a bounded
+        amount of recovery work. It runs on a
+        fixed cycle cadence and reads nothing but simulation state, so a continuous match, an
+        ordinary load, an observer restore and a replay all reconcile at exactly the same cycles.
+        Nothing here is serialised.
+    */
+    void reconcileTransportContainment();
+
+    /// Cycles between containment passes. A hidden unit no container holds is recovered within
+    /// this many cycles of becoming lost, or at a later pass if it has to wait for a tile or for
+    /// its turn in the batch.
+    static constexpr Uint32 transportContainmentIntervalCycles = 625;
+
+    /// Hidden units this match has put back on the map; hidden units the last pass tried and could
+    /// not place anywhere yet; and hidden units still waiting, including those the last pass's
+    /// bounded batch did not reach. Diagnostics only: derived, not saved, and nothing in the
+    /// simulation reads them.
+    Uint32 getRecoveredPassengerCount() const { return recoveredPassengerCount; }
+    Uint32 getUnplaceablePassengerCount() const { return unplaceablePassengerCount; }
+    Uint32 getPendingPassengerCount() const { return pendingPassengerCount; }
     inline bool isPathQueueStressed() const { return pathRequestQueue.size() > 300; }
     SpatialGrid* getSpatialGrid() const { return spatialGrid.get(); }
     void initializeSpatialGrid(int mapWidth, int mapHeight);
@@ -1008,6 +1043,31 @@ private:
     struct PathRequest {
         Uint32 objectId;
     };
+
+    /// Containment reconciliation results. Derived diagnostics; never serialised.
+    Uint32 recoveredPassengerCount = 0;
+    Uint32 unplaceablePassengerCount = 0;
+    Uint32 pendingPassengerCount = 0;
+
+    /// Puts one hidden unit no container holds back on the map, releasing both sides of any stale
+    /// pickup first. \a windowIndex selects this unit's turn in the map-wide fallback search.
+    /// Returns false when no
+    /// legal tile was found anywhere this pass, in which case the unit stays hidden and a later
+    /// pass tries again with the next slice.
+    bool recoverOrphanedPassenger(UnitBase* pUnit, const Coord& anchor, Uint32 windowIndex);
+
+    /// First legal tile for \a pUnit at increasing block distance from \a anchor, searched in a
+    /// fixed order and bounded, so the result depends only on simulation state.
+    Coord findPassengerRecoverySpot(const UnitBase* pUnit, const Coord& anchor) const;
+
+    /// First legal tile in this pass's bounded slice of the whole map, used when nothing near the
+    /// anchor is legal. Consecutive slices cover the map, so a unit lost inside a permanently
+    /// blocked area still comes back. Derived from \a windowIndex and the unit id only.
+    Coord findGlobalRecoverySpot(const UnitBase* pUnit, Uint32 windowIndex) const;
+
+    /// Can \a pUnit occupy \a candidate and survive arriving there? Terrain and occupancy come
+    /// from the unit's own canPass(), plus a free tile for vehicles and no bloom underfoot.
+    bool isLegalRecoveryTile(const UnitBase* pUnit, const Coord& candidate) const;
 
     /// Derived carrier index; lifecycle invalidation handles same-cycle replacements.
     std::vector<Uint32> carryallCandidateIds;

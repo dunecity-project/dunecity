@@ -54,6 +54,37 @@ public:
         return !pickedUpUnitList.empty();
     }
 
+    /**
+        The units this carryall actually carries, in enrolment order.
+
+        This list is the authoritative record of what is inside the aircraft: a passenger's own
+        target or carrier booking can be rewritten by anything that happens during a pickup, the
+        cargo list cannot. Read-only; Game's containment reconciliation uses it to tell a hidden
+        passenger apart from a hidden unit no carrier holds.
+    */
+    const std::list<Uint32>& getCargoIds() const { return pickedUpUnitList; }
+
+    /**
+        Drops a cargo entry without deploying or destroying anything.
+
+        For entries that cannot describe a passenger any more: an id that no longer resolves, or
+        one a second carrier also claims. Ordinary transport never uses this - deployUnit() is
+        what puts a passenger down. Leaves the carrier unbooked and back on patrol if that was
+        its last entry, so phantom cargo cannot keep an aircraft reserved for a flight that can
+        never finish.
+    */
+    void releaseCargoId(Uint32 unitID);
+
+    /**
+        Drops one repeated entry for \a unitID, keeping the first.
+
+        A passenger listed twice would be deployed twice and counted twice. Removing every entry
+        instead would leave the aircraft holding a unit it no longer lists, so the one real
+        ownership claim survives this.
+        \return true if a repeated entry was removed
+    */
+    bool releaseExtraCargoId(Uint32 unitID);
+
     inline void setOwned(bool b) { owned = b; }
 
     inline void setDropOfferer(bool status) {

@@ -214,6 +214,12 @@ public:
 
     virtual void setPickedUp(UnitBase* newCarrier);
 
+    /// Is this unit currently inside a transport or a structure bay rather than on the map?
+    /// True from setPickedUp() until the unit is deployed again. On its own it does not say
+    /// which container holds the unit; Game's containment reconciliation answers that from the
+    /// actual carrier cargo lists and structure occupant pointers.
+    inline bool isPickedUp() const { return pickedUp; }
+
     /**
         Updates this unit.
         \return true if this unit still exists, false if it was destroyed

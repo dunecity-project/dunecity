@@ -46,6 +46,12 @@ public:
     inline const UnitBase* getRepairUnit() const { return repairUnit.getUnitPointer(); }
     inline UnitBase* getRepairUnit() { return repairUnit.getUnitPointer(); }
 
+    /// The occupant only counts while a repair job is actually running: once the job ends the
+    /// stored pointer is historical, and treating it as containment would hide a lost unit.
+    const UnitBase* getContainedRepairUnit() const override {
+        return repairingAUnit ? repairUnit.getUnitPointer() : nullptr;
+    }
+
 protected:
     /**
         Used for updating things that are specific to that particular structure. Is called from

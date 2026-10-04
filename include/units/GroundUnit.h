@@ -70,6 +70,18 @@ public:
     void cancelCarryallPickup() override;
     void setPickedUp(UnitBase* newCarrier) override;
 
+    /**
+        Releases a pickup booking held by any carrier other than \a keepCarrier.
+
+        Called by the aircraft that is actually collecting this unit. A repair order issued during
+        the pickup cancels the original booking and asks for transport again, which can promise
+        this unit to a second aircraft; that booking has to go before the unit becomes cargo and
+        stops being visible to the other aircraft's own release checks. Unlike
+        cancelCarryallPickup() this does not touch the attack mode: the unit is not losing its
+        lift, it is being collected right now.
+    */
+    void releaseReplacementPickup(const UnitBase* keepCarrier);
+
     using UnitBase::doMove2Pos;
     void doMove2Pos(int xPos, int yPos, bool bForced) override;
     void doMove2Object(const ObjectBase* pTargetObject) override;

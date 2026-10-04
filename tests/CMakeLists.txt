@@ -423,6 +423,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
         set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # A unit that is not on the map belongs to one carrier or one busy structure bay: the
+        # pickup of a badly damaged booked passenger enrols that unit even though its own repair
+        # order can promise it to another aircraft, and units already hidden inside nothing are
+        # recovered - including from a walled-off corner, with no anchor at all, and in bounded
+        # batches - without disturbing valid cargo or bay occupants. Runs all three engines and
+        # repeats the scheduled boundary under one and four path workers.
+        add_test(NAME transport_containment_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/transport-containment-probe)
+        set_tests_properties(transport_containment_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Brutal only plans past its configured military value cap when the lobby
         # selected an explicit unit-count override; the engine count limit stays
         # the authority, and other difficulties keep the configured cap.
