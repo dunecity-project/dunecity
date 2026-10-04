@@ -1,3 +1,21 @@
+# 2026-10-04 — Verified 1.0.804 MBA installation
+
+Installed the tested portable ARM64 app at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from source commit
+`fd3988819ec02fdcab5f0e7218355d1c6573ac91`. The game was closed before installation;
+no running match was interrupted or launched. Independent inspection confirms
+version 1.0.804, executable SHA-256
+`9bf9228779f881faafc4b5475c0554066b7182d33ceb3ceb506269ea74153394`, deep/strict
+ad-hoc signature verification and bundled SDL initialization/hidden rendering.
+The usual `~/Desktop/DuneCity.app` shortcut resolves to the installed app.
+
+All 1,936 checked saves and INI files are byte-identical to the pre-install
+manifest. The verified 1.0.803 rollback is retained at
+`/Applications/.dunecity-backup-before-804-20261004/dunecity.app`, executable SHA-256
+`39f63436b506efadcf42a698097f15de222cf1b3ae2d253cdb0787115e8a8610`.
+Receipts and independent verification: ../outputs/army-assembly-804-20261004/.
+This was a private installation; nothing was pushed or publicly published.
+
 # 2026-10-04 — Engine Hunt, exterior assembly and colony defence (1.0.804)
 
 Custom Hard/Brutal ground attackers now use engine Hunt. Shared forced objectives
@@ -75,8 +93,9 @@ checks, deep/strict ad-hoc signature verification and packaged SDL initializatio
 plus hidden-window rendering. Packaged executable SHA-256:
 `9bf9228779f881faafc4b5475c0554066b7182d33ceb3ceb506269ea74153394`.
 Version consistency and pre/post-build Ninja dependency audits pass. Evidence and
-portable bundle: ../outputs/army-assembly-804-20261004/. It has not been installed
-on the MBA or publicly published; the last verified MBA installation is 1.0.803.
+portable bundle: ../outputs/army-assembly-804-20261004/. This development
+verification preceded the MBA installation recorded above; nothing was pushed
+or publicly published.
 
 # 2026-10-04 — Verified 1.0.803 installation on the MBA
 
