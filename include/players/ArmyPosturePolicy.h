@@ -25,8 +25,15 @@
     * Dwell times delay ordinary transitions only. A severe local defeat or an
       attack on the production core is an emergency and bypasses them, because a
       cooldown that blocks an urgent retreat is worse than no posture at all.
-    * Recovering has a bounded fallback: it resumes even with an unknown front,
-      so the house cannot freeze waiting for information it may never get.
+    * Recovering releases the rebuilt army on the house's OWN offensive
+      readiness: the established attack-value threshold and the established
+      outnumbered/80%-of-configured dispatch gate, after the stabilise dwell.
+      Physical assembly at a rally and a zero-loss interval are deliberately not
+      requirements. Both were reachable only by a house that was neither growing
+      nor being shot at, and replayed 1.0.805 saves show the result: a house with
+      a full, healthy army that never leaves Recovering and never hunts at all.
+      A real ongoing core emergency or severe local defeat still outranks the
+      release, and a fresh battle's attrition still sends the army home again.
 */
 
 #include <algorithm>
@@ -75,6 +82,14 @@ struct AttritionLedger {
     std::array<AttritionSample, kAttritionSamples> samples{};
 
     void reset() { *this = AttritionLedger(); }
+
+    /// Drop the sampled baselines while keeping the cumulative loss and kill
+    /// totals. A rebuilt army released from Recovering measures a fresh window,
+    /// so the battle it already paid for cannot immediately send it home again,
+    /// while the house's lifetime ledger - which other decisions read - is
+    /// untouched. Serialisation stays well defined: a count of zero writes no
+    /// samples and reloads identically.
+    void resetBaselines() { count = 0; next = 0; samples = {}; }
 
     const AttritionSample& at(uint32_t index) const {
         // Index 0 is the oldest retained sample.
@@ -193,15 +208,15 @@ struct Situation {
     int64_t frontFriendly = 0;
     int64_t frontHostile = 0;
     bool frontObserved = false;     ///< We have actually seen the front.
-    /// How long it has actually been quiet: cycles since the last material
-    /// mobile-combat loss. Resume is measured against this, not against how long
-    /// the posture happens to have been set, so a house that is still bleeding
-    /// cannot be called stable merely because its state is old.
+    /// Cycles since the last material mobile-combat loss, for telemetry.
     uint32_t quietCycles = 0;
-    /// A material loss landed inside the quiet window. Blocks every resume path,
-    /// including the bounded fallbacks, so a timeout cannot walk an army back
-    /// into the fire it is still taking.
+    /// Recent material losses are reported, without vetoing a rebuilt army's release.
     bool recentSeriousLoss = false;
+    /// Transient: is this house ready to attack at all? Computed by the caller
+    /// from the same survey, as the established offensive value threshold plus
+    /// the established outnumbered/80%-of-configured dispatch gate. Nothing here
+    /// is stored or saved; it is recomputed every evaluation.
+    bool readyForOffensive = false;
     /// Whether this force can answer hostile aircraft at all. Reported for
     /// telemetry and for the air composition distinction; never used to pretend
     /// hostile aircraft are harmless.
@@ -297,20 +312,13 @@ inline Decision evaluate(Posture current, uint32_t since, const Situation& s, co
                 return {Posture::Recovering, false, true,
                         s.severeLocalDefeat ? "severe_local_defeat" : "core_under_attack"};
             }
-            // Fresh material losses are the one thing no resume path may
-            // ignore. Without this, a long-set posture plus a timeout would
-            // march the rebuilt army straight back into fire it is still
-            // taking, which is the behaviour this whole posture exists to stop.
-            if (s.recentSeriousLoss) break;
-            // Stability is measured from the last material loss as well as from
-            // the posture change, so "quiet" means actually quiet.
-            const bool stable = age >= t.stabiliseCycles && s.quietCycles >= t.stabiliseCycles;
-            if (stable && assembled(s, t) && frontFavourable(s, t))
-                return {Posture::Offensive, true, false, "recovered_with_front_advantage"};
-            if (t.maxRecoverCycles > 0 && age >= t.maxRecoverCycles && assembled(s, t))
-                return {Posture::Offensive, true, false, "recovery_timeout_assembled"};
-            if (t.maxRecoverCycles > 0 && age >= 2 * t.maxRecoverCycles)
-                return {Posture::Offensive, true, false, "recovery_timeout_bounded"};
+            // Serve the stabilise dwell, then release on readiness alone. The
+            // caller's readyForOffensive carries the offensive value threshold
+            // and the outnumbered/80%-of-configured dispatch gate, so a house
+            // that is genuinely too weak or genuinely outnumbered keeps waiting
+            // without any separate rally-fraction or quiet-interval test.
+            if (age >= t.stabiliseCycles && s.readyForOffensive)
+                return {Posture::Offensive, true, false, "recovered_ready_for_offensive"};
         } break;
     }
     return decision;

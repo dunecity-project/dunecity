@@ -1202,6 +1202,14 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
                 manageHarvesterSafety(pHarvester);
 			}
 		}
+		else if (autonomousAttack && (pGroundUnit->getItemID() == Unit_Launcher
+			|| pGroundUnit->getItemID() == Unit_EliteLauncher)) {
+			// A hit identifies the attacker even if targeting changed between AI
+			// passes, but distance still decides: only an enemy that is already
+			// too close makes a hunting launcher break contact, and it keeps
+			// Hunt and its place in the tracked army while it does.
+			escapeCloseThreatWhileHunting(pGroundUnit, pDamager);
+		}
 		else if ((pGroundUnit->getItemID() == Unit_Launcher
 			|| pGroundUnit->getItemID() == Unit_Deviator)
 			&& !supportMode && !autonomousAttack) {
@@ -11012,6 +11020,96 @@ bool QuantBot::engineHuntAttack(const UnitBase* unit) const {
         && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }
 
+bool QuantBot::huntingLauncher(const UnitBase* unit) const {
+    // The true launchers only. Deviators keep their established non-Hunt
+    // spacing, and no other hunting attacker is pulled out of contact here.
+    return engineHuntAttack(unit)
+        && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher);
+}
+
+int QuantBot::launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const {
+    if (!launcher || !threat || !currentGame || !threat->isAUnit()) return 0;
+    const auto* hostile = static_cast<const UnitBase*>(threat);
+    if (!hostile->isActive() || hostile->getHealth()<=0 || hostile->isAFlyingUnit()) return 0;
+    if (!hostile->getOwner() || !launcher->getOwner()
+        || hostile->getOwner()->getTeamID()==launcher->getOwner()->getTeamID()) return 0;
+    // Observation only: an enemy this house cannot see does not move its units.
+    if (!hostile->isVisible(launcher->getOwner()->getTeamID())) return 0;
+    // Only an enemy that can actually shoot this launcher is a reason to stop
+    // firing and move. A worker or a carryall closing on it is not.
+    if (!hostile->canAttack(launcher)) return 0;
+    const int weaponRange = currentGame->objectData.data[launcher->getItemID()]
+        [getHouse()->getHouseID()].weaponrange;
+    if (weaponRange <= 2) return 0;                 // Nothing to kite with.
+    const int reach = std::max(1, hostile->getWeaponRange());
+    // "Too close" needs both: inside the enemy's own reach and inside the inner
+    // part of the launcher's band. A distant enemy therefore never pulls an
+    // attacker backwards, including one that has just landed a hit.
+    const int closeBand = std::min(reach + 1, weaponRange/2 + 1);
+    if (blockDistance(launcher->getLocation(),hostile->getLocation()).lround() > closeBand) return 0;
+    // Stand off just outside the enemy's reach and never beyond the launcher's
+    // own firing range, so the gap it opens is a gap it can shoot across.
+    return std::clamp(reach + 2, closeBand + 1, weaponRange);
+}
+
+bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat) {
+    if (!huntingLauncher(launcher) || !launcher->isActive() || !launcher->isRespondable()) return false;
+    // Everything that outranks fresh offence keeps outranking it: a human order,
+    // a repair run, a carryall pickup and a live defence contact stay with their
+    // owner rather than being turned into a dodge.
+    if (humanControls(launcher) || reserveDamagedUnitForRepair(launcher)
+        || activeDefenceAssignment(launcher)) return false;
+    if (static_cast<const GroundUnit*>(launcher)->isAwaitingPickup()) return false;
+    const ObjectBase* threat = nullptr;
+    int desiredRange = 0;
+    if (knownThreat) {
+        // A hit is authoritative about who is shooting, but not about distance.
+        desiredRange = launcherEscapeRange(launcher,knownThreat);
+        if (desiredRange) threat = knownThreat;
+    } else {
+        FixPoint nearest = FixPt_MAX;
+        auto consider = [&](const ObjectBase* candidate) {
+            const int range = launcherEscapeRange(launcher,candidate);
+            if (!range) return;
+            const FixPoint distance = blockDistance(launcher->getLocation(),candidate->getLocation());
+            if (!threat || distance < nearest
+                || (distance == nearest && candidate->getObjectID() < threat->getObjectID())) {
+                nearest = distance; threat = candidate; desiredRange = range;
+            }
+        };
+        // Nobody outside this radius can qualify: the close band is at most half
+        // the launcher's own range plus one. Searching the engine's tile grid
+        // over that small box keeps the work per launcher constant, instead of
+        // walking the whole unit list once per launcher - which in a match with
+        // hundreds of units would make an ordinary pass quadratic.
+        const int weaponRange = currentGame->objectData.data[launcher->getItemID()]
+            [getHouse()->getHouseID()].weaponrange;
+        const int radius = std::max(1, weaponRange/2 + 1);
+        const Coord at = launcher->getLocation();
+        if (currentGameMap) {
+            // Fixed ascending tile order, so every peer examines the same
+            // candidates and the distance/id tie-break alone decides.
+            for (int y = at.y - radius; y <= at.y + radius; ++y)
+                for (int x = at.x - radius; x <= at.x + radius; ++x) {
+                    if (!currentGameMap->tileExists(x,y)) continue;
+                    const Tile* tile = currentGameMap->getTile(x,y);
+                    if (!tile || !tile->hasAGroundObject()) continue;
+                    for (const Uint32 id : tile->getNonInfantryGroundObjectList()) consider(getObject(id));
+                    for (const Uint32 id : tile->getInfantryList()) consider(getObject(id));
+                }
+        } else {
+            // No grid to search yet: the ordinary list, same tie-break.
+            for (const UnitBase* candidate : getUnitList()) consider(candidate);
+        }
+    }
+    if (!threat) return false;
+    // The established spacing helper, which issues one forced step and restores
+    // Hunt after it. No Area Guard, no new target, no change to the tracked
+    // army: this stays a hunter that is opening a firing gap.
+    kiteAwayFromThreat(launcher,threat,desiredRange);
+    return true;
+}
+
 void QuantBot::launchGroundHunt() {
     if (supportMode) return;
     const bool limited = isCampaignEnemy();
@@ -11670,6 +11768,22 @@ void QuantBot::updateArmyPosture() {
     situation.frontFriendly = survey.allied.offensive();
     situation.frontHostile = hostileFront;
     situation.frontObserved = survey.frontObserved;
+    // Release readiness for a rebuilt army, recomputed here every evaluation and
+    // never stored: the house's own offensive value threshold - the same
+    // militaryValueLimit share launchGroundHunt() requires, with the established
+    // main-wave credit floor underneath it - plus the established
+    // outnumbered/80%-of-configured dispatch gate. A legitimately outnumbered
+    // house below that 80% therefore keeps waiting rather than being pushed out.
+    const auto& releaseSettings = getQuantBotConfig().getSettings(static_cast<int>(difficulty));
+    const FixPoint releasePercent =
+        FixPoint(static_cast<int>(releaseSettings.attackThresholdPercent * 100)) / 100;
+    const int64_t attackThresholdValue = (militaryValueLimit * releasePercent).lround();
+    // 3000 credits is the established viable-main-wave value floor
+    // (QuantBotBuildPolicy::viableMainWave), so a configured limit of zero or a
+    // tiny threshold cannot release a patrol as if it were an army.
+    const int64_t releaseFloor = std::max<int64_t>(3000, attackThresholdValue);
+    const auto releaseGate = offensiveDispatchGate(survey);
+    situation.readyForOffensive = survey.deployableGroundValue >= releaseFloor && !releaseGate.defer;
 
     // Local squad verdict. Friendly strength is what is actually beside the
     // squad - its own members, our nearby troops, nearby allies and the static
@@ -11717,9 +11831,23 @@ void QuantBot::updateArmyPosture() {
     const auto previous = armyPosture;
     const auto decision = ArmyPosturePolicy::evaluate(armyPosture, postureSince, situation, thresholds);
     if (decision.changed) {
+        const bool released = previous == ArmyPosturePolicy::Posture::Recovering
+            && decision.posture == ArmyPosturePolicy::Posture::Offensive;
         armyPosture = decision.posture;
         postureSince = now;
         recallCursor = 0;
+        if (released) {
+            // The army that paid for the last battle is gone; this is a rebuilt
+            // one. Start its attrition window and its local pressure clocks from
+            // here, or the losses that caused the withdrawal would still be
+            // inside the window and would send the fresh army straight home.
+            // Cumulative loss and kill totals are deliberately kept, so the
+            // house ledger and every future window still work normally.
+            attrition.resetBaselines();
+            localPressureSince = std::numeric_limits<Uint32>::max();
+            localWithdrawSince = std::numeric_limits<Uint32>::max();
+            localSquadWithdraw = false;
+        }
     }
     lastSurvey = survey;
     lastSurveyCycle = now;
@@ -11754,6 +11882,9 @@ void QuantBot::updateArmyPosture() {
                 .set("can_answer_air", situation.canAnswerAir)
                 .set("quiet_cycles", int64_t(situation.quietCycles))
                 .set("recent_serious_loss", situation.recentSeriousLoss)
+                .set("ready_for_offensive", situation.readyForOffensive)
+                .set("release_floor_value", releaseFloor)
+                .set("release_gate_reason", releaseGate.reason)
                 .set("local_withdraw", localSquadWithdraw)
                 .set("core_threat_power", survey.coreThreatPower)
                 .set("core_holding_power", survey.coreHoldingPower)
@@ -13556,6 +13687,11 @@ void QuantBot::retreatAllUnits() {
                 }
                 continue;
             }
+            // One exception for a hunting launcher: an enemy that is already
+            // too close is backed away from, by one short step, so the launcher
+            // fights at its own range again. Hunt, tracked membership and engine
+            // target acquisition are all kept.
+            if (escapeCloseThreatWhileHunting(pUnit)) continue;
             // Dispatched Custom attackers belong to engine Hunt. Ordinary
             // scans cannot kite them, assign prey, crush targets or regroup them.
             // Repair and emergency defence were handled before this point.

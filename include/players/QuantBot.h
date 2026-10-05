@@ -775,6 +775,22 @@ private:
     bool activeDefenceAssignment(const UnitBase* unit) const;
     /// Custom Hard/Brutal attacks use engine Hunt without tactical overrides.
     bool engineHuntAttack(const UnitBase* unit) const;
+    /// A true launcher — rocket artillery, not a Deviator — attacking under
+    /// engine Hunt. Only these keep their close-range spacing while hunting.
+    bool huntingLauncher(const UnitBase* unit) const;
+    /// How far a hunting launcher should stand off \a threat, or 0 when that
+    /// enemy is not close enough to be worth breaking contact for. Proximity is
+    /// measured against the enemy's own reach and the inner part of the
+    /// launcher's band, never its whole range: an outranged enemy at the edge of
+    /// that range is a target, not a threat.
+    int launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const;
+    /// Short close-range escape for a hunting launcher. \a knownThreat is the
+    /// authoritative damager of a damage callback; without one the nearest
+    /// qualifying closing enemy is used. Hunt and tracked army membership are
+    /// kept, so the launcher resumes firing across the gap it opens. Returns
+    /// true when this pass belongs to the escape.
+    bool escapeCloseThreatWhileHunting(const UnitBase* launcher,
+                                       const ObjectBase* knownThreat = nullptr);
     /// One of this house's colonies: a core building, the core buildings
     /// clustered with it and the living emplacements that actually reach it.
     /// Derived once per search from the structure list, so "colony" means a real

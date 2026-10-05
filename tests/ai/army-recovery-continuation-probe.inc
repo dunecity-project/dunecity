@@ -20,9 +20,36 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
         for(const unsigned char c:bytes) h.mixUint8(c);
         return h.value();
     };
-    // The preceding probe injected and retired scenario objects. Start this
-    // continuation fixture from a canonical ordinary load, just as a resumed
-    // match does; this also applies the engine's existing load normalisation.
+    // This checkpoint is independent of the preceding destructive fixtures.
+    // Their temporary rosters and retired city assets must not become the
+    // starting world for a save/observer comparison.
+    const GameInitSettings initial = game->getGameInitSettings();
+    game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
+    game=std::make_unique<Game>(); currentGame=game.get();
+    game->bReplay=true; game->initGame(initial); game->bReplay=false;
+    game->initializeGameLoop(); game->bPause=false;
+    auto* freshBot=botFor(*game);
+    require(freshBot,"Fresh continuation fixture missing bot");
+    freshBot->difficulty=QuantBot::Difficulty::Brutal;
+    freshBot->gameMode=QuantBot::GameMode::Custom;
+    freshBot->supportMode=false;
+    freshBot->militaryValueLimit=80000;
+    // A real, living cohort near its production base, with ordinary occupancy.
+    const Coord base=freshBot->findBaseCentre(HOUSE_HARKONNEN);
+    int added=0;
+    for(int y=0;y<currentGameMap->getSizeY() && added<24;++y)
+        for(int x=0;x<currentGameMap->getSizeX() && added<24;++x) {
+            const Coord at(x,y);
+            const auto* tile=currentGameMap->getTile(at);
+            if(blockDistance(at,base).lround()>12 || tile->hasAGroundObject()
+                || tile->isMountain()) continue;
+            auto* unit=game->getHouse(HOUSE_HARKONNEN)->createUnit(Unit_Tank);
+            require(unit,"Fresh continuation unit creation failed");
+            unit->deploy(at); ++added;
+        }
+    require(added==24,"Fresh continuation fixture needs room for its cohort");
+    // Canonical ordinary loading applies the same normalisation as a resumed
+    // match before the host/checkpoint split.
     tick(*game);
     require(game->saveGame("army-recovery-fixture.sav"),"Could not save continuation fixture");
     game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;

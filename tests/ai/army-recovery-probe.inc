@@ -111,6 +111,15 @@ void runArmyRecoveryProbe(Game& game) {
         roster.erase(std::remove(roster.begin(),roster.end(),unit),roster.end());
         publish();
     };
+    // Retire and also give the ground back. A retired fixture unit is a wreck
+    // that still holds its tiles, because the substituted unit list means the
+    // engine never processes its death; sections further down place real units
+    // on the same ground and the large stress fixture needs the whole block.
+    auto release=[&](UnitBase* unit) {
+        const Uint32 id=unit->getObjectID();
+        retire(unit);
+        currentGameMap->removeObjectFromMap(id);
+    };
     auto place=[&](House* house,Uint32 item,Coord offset) {
         auto* structure=house->placeStructure(NONE_ID,item,origin.x+offset.x,origin.y+offset.y,true,true);
         if(structure) {
@@ -280,10 +289,14 @@ void runArmyRecoveryProbe(Game& game) {
         }
 
         // Hunt owns tactical decisions both on damage and on ordinary scans.
+        // Measured against a distant attacker, which is where no hunting troop
+        // of any kind may be moved: taking a hit is not a reason to walk back.
+        // A launcher with an enemy already too close does break contact, and
+        // quantbot_launcher_kiting owns that boundary end to end.
         {
             std::vector<UnitBase*> attackers;
             for(const auto item:{Unit_Launcher,Unit_Trike}) {
-                auto* unit=spawn(owner,item,Coord(35,20+int(attackers.size())));
+                auto* unit=spawn(owner,item,Coord(35,26-int(attackers.size())));
                 attackers.push_back(unit);roster.push_back(unit);
                 bot->doSetAttackMode(unit,HUNT);
             }
@@ -840,6 +853,209 @@ void runArmyRecoveryProbe(Game& game) {
                 require(withAir.deployable.offensive()==survey.deployable.offensive(),
                     "An aircraft leaked into the ground offensive power");
                 retire(orni);
+            }
+            // ---- 7b. Recovery releases a rebuilt army on readiness ---------
+            //
+            // The authorized contract, after the 1.0.805 saves were replayed:
+            // the stabilise dwell plus this house's OWN offensive readiness -
+            // the attack value threshold and the outnumbered/80%-of-configured
+            // dispatch gate. A rebuilt army spread around its base, with recent
+            // losses behind it, is released and hunts. A force below the
+            // threshold, or legitimately outnumbered below that 80%, keeps
+            // waiting. A real ongoing core emergency outranks the release.
+            {
+                for(auto* unit:cheap) retire(unit);
+                cheap.clear();
+                // The existing horde stays alive and is simply hidden while the
+                // house is meant not to be outnumbered: spawning a second one
+                // would leave another two dozen fixture wrecks on the map that
+                // the sections below, and the continuation checkpoint, inherit.
+                auto hordeSeen=[&](bool seen) {
+                    for(auto* unit:horde) unit->setVisible(owner->getTeamID(),seen);
+                    bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                    bot->refreshTacticalDanger();
+                    bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+                };
+                hordeSeen(false);
+                const Uint32 savedCycle=game.gameCycleCount;
+                // Room behind the present cycle for a full attrition window and
+                // a served dwell, rather than inventing negative time.
+                game.gameCycleCount=std::max<Uint32>(savedCycle,
+                    4*(thresholdsNow.windowCycles+thresholdsNow.stabiliseCycles)+1000);
+                const Uint32 now=game.gameCycleCount;
+
+                // A healthy rebuilt force, deliberately scattered around the
+                // base at every distance, so nothing about it is "assembled".
+                std::vector<UnitBase*> rebuilt;
+                for(int i=0;i<16 && rebuilt.size()<16;++i) {
+                    const Coord at=origin+Coord(2+(i*2)%34,12+(i*5)%14);
+                    if(!currentGameMap->tileExists(at)
+                        || currentGameMap->getTile(at)->hasAGroundObject()
+                        || currentGameMap->getTile(at)->isMountain()) continue;
+                    auto* unit=spawn(owner,Unit_Tank,at-origin);
+                    rebuilt.push_back(unit); roster.push_back(unit);
+                }
+                require(rebuilt.size()>=10,"Release fixture could not field a rebuilt army");
+                publish();
+                hordeSeen(false);   // Front observed through the enemy base only.
+                const int64_t groundValue=bot->surveyArmy().deployableGroundValue;
+                require(groundValue>=3000,
+                    "Release fixture army is below the established main-wave value floor");
+                // Limits that put this army at exactly 80% and at 79.9% of the
+                // configured value, which is where the dispatch gate decides.
+                const int limitReady=int((groundValue*10000+thresholdsNow.dispatchBypassBps-1)
+                    /thresholdsNow.dispatchBypassBps);
+                const int limitStarved=int(groundValue*10000/7990);
+
+                // Recovering, dwell served, with genuinely recent attrition: the
+                // window is covered, the losses are material and the last one
+                // landed this cycle.
+                auto recovering=[&](int limit) {
+                    for(auto* unit:rebuilt) {
+                        bot->doSetAttackMode(unit,AREAGUARD); unit->setForced(false);
+                        bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                        unit->setForced(false);
+                    }
+                    bot->customWave.members.clear(); bot->customWave.front=NONE_ID;
+                    bot->defenceAssignments.clear();
+                    bot->defenceResponseCycles.clear();
+                    bot->armyPosture=ArmyPosturePolicy::Posture::Recovering;
+                    bot->postureSince=now-thresholdsNow.stabiliseCycles-1;
+                    bot->attrition.reset();
+                    bot->attrition.sample(now-thresholdsNow.windowCycles-10,groundValue*3,1);
+                    bot->attrition.lostCost=groundValue*2;
+                    bot->attrition.killCost=0;
+                    bot->lastMaterialLossCycle=now;
+                    bot->localPressureSince=std::numeric_limits<Uint32>::max();
+                    bot->localWithdrawSince=std::numeric_limits<Uint32>::max();
+                    bot->localSquadWithdraw=false;
+                    bot->militaryValueLimit=limit;
+                    bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+                };
+
+                // 1. Released, and the whole available army then hunts.
+                recovering(1);
+                const int64_t keptLost=bot->attrition.lostCost;
+                const int64_t keptKill=bot->attrition.killCost;
+                bot->updateArmyPosture();
+                SDL_Log("ARMY_RECOVERY_DIAG: release ground_value=%lld assembled=%lld designated=%lld "
+                    "posture=%s samples=%u",
+                    (long long)groundValue,(long long)bot->lastSurvey.assembledPower,
+                    (long long)bot->lastSurvey.designatedPower,
+                    ArmyPosturePolicy::postureName(bot->armyPosture),bot->attrition.count);
+                require(bot->lastSurvey.assembledPower*2<bot->lastSurvey.designatedPower,
+                    "Release fixture army is gathered, so the assembly fraction is not being tested");
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Offensive,
+                    "A healthy rebuilt army was not released from recovery after the dwell");
+                // The baselines are discarded so the battle already paid for
+                // cannot send the fresh army straight home; the house totals stay.
+                require(bot->attrition.count==0 && bot->attrition.lostCost==keptLost
+                    && bot->attrition.killCost==keptKill,
+                    "The release did not reset the attrition window while keeping the totals");
+                require(!bot->localSquadWithdraw
+                    && bot->localWithdrawSince==std::numeric_limits<Uint32>::max()
+                    && bot->localPressureSince==std::numeric_limits<Uint32>::max(),
+                    "The release left the old local withdrawal clocks running");
+                bot->updateArmyPosture();
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Offensive,
+                    "The released army was sent home again by the losses it was released with");
+                bot->attackTimer=0;
+                bot->attack(bot->militaryUnitValue());
+                const int released=huntersAmong(rebuilt);
+                SDL_Log("ARMY_RECOVERY_DIAG: release hunters=%d of %zu members=%zu",
+                    released,rebuilt.size(),bot->customWave.members.size());
+                require(released==int(rebuilt.size()),
+                    "The released army did not send every available troop to Hunt");
+
+                // 2. Below the house's own offensive threshold: keep waiting.
+                //    No horde here, so the value threshold is the only test.
+                recovering(int(groundValue*10));
+                bot->updateArmyPosture();
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Recovering,
+                    "An army below the offensive value threshold was released anyway");
+
+                // 3. Legitimately outnumbered below that 80%: keep waiting.
+                hordeSeen(true);
+                recovering(limitStarved);
+                bot->updateArmyPosture();
+                {
+                    const auto gate=bot->offensiveDispatchGate(bot->lastSurvey);
+                    SDL_Log("ARMY_RECOVERY_DIAG: release starved limit=%d gate=%s posture=%s",
+                        limitStarved,gate.reason,ArmyPosturePolicy::postureName(bot->armyPosture));
+                    require(gate.outnumbered && gate.defer,
+                        "Fixture is not actually outnumbered below the value threshold");
+                }
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Recovering,
+                    "An outnumbered army below 80% of its configured value was pushed out anyway");
+
+                // 4. At that 80%, readiness is allowed even while outnumbered.
+                recovering(limitReady);
+                bot->updateArmyPosture();
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Offensive,
+                    "Reaching 80% of the configured value did not allow readiness");
+
+                // 5. Unless a real core emergency is actually in progress.
+                std::vector<UnitBase*> siege;
+                {
+                    StructureBase* core=yard;
+                    require(core && core->getHealth()>0,"Release fixture lost its core asset");
+                    // Open ground beside the yard, clear of our own buildings
+                    // and of the tiles the sections below use.
+                    for(int i=0;i<8;++i) {
+                        auto* unit=spawn(enemy,Unit_SiegeTank,Coord(1+i%2,6+i/2));
+                        siege.push_back(unit); roster.push_back(unit);
+                    }
+                    publish();
+                    for(auto* unit:siege) unit->doAttackObject(core,true);
+                    bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                    bot->refreshTacticalDanger();
+                    recovering(limitReady);
+                    bot->updateArmyPosture();
+                    SDL_Log("ARMY_RECOVERY_DIAG: release emergency core=%d threat=%lld holding=%lld posture=%s",
+                        int(bot->lastSurvey.coreUnderAttack),(long long)bot->lastSurvey.coreThreatPower,
+                        (long long)bot->lastSurvey.coreHoldingPower,
+                        ArmyPosturePolicy::postureName(bot->armyPosture));
+                    require(bot->lastSurvey.coreUnderAttack,
+                        "The core emergency fixture is not actually an emergency");
+                    require(bot->armyPosture==ArmyPosturePolicy::Posture::Recovering,
+                        "A real ongoing core emergency did not outrank the release");
+                    for(auto* unit:siege) release(unit);
+                    siege.clear();
+                    bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                    bot->refreshTacticalDanger();
+                }
+
+                // 6. And a fresh battle still sends the released army home.
+                recovering(limitReady);
+                bot->updateArmyPosture();
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Offensive,
+                    "The release stopped working after the emergency cleared");
+                bot->attrition.reset();
+                bot->attrition.sample(now-thresholdsNow.windowCycles-10,groundValue*4,1);
+                bot->attrition.lostCost=groundValue*3;   // A bad new trade.
+                bot->attrition.killCost=0;
+                bot->lastMaterialLossCycle=now;
+                bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+                bot->updateArmyPosture();
+                SDL_Log("ARMY_RECOVERY_DIAG: release fresh_battle posture=%s",
+                    ArmyPosturePolicy::postureName(bot->armyPosture));
+                require(bot->armyPosture==ArmyPosturePolicy::Posture::Withdrawing,
+                    "A fresh losing battle did not send the released army home");
+
+                hordeSeen(true);
+                for(auto* unit:rebuilt) release(unit);
+                game.gameCycleCount=savedCycle;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                bot->postureSince=0;
+                bot->customWave.members.clear(); bot->customWave.front=NONE_ID;
+                bot->attrition.reset();
+                bot->lastMaterialLossCycle=std::numeric_limits<Uint32>::max();
+                bot->localPressureSince=std::numeric_limits<Uint32>::max();
+                bot->localWithdrawSince=std::numeric_limits<Uint32>::max();
+                bot->localSquadWithdraw=false;
+                bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
             }
             for(auto* unit:horde) retire(unit);
             for(auto* unit:cheap) retire(unit);

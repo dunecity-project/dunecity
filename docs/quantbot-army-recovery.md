@@ -50,14 +50,28 @@ path-queue backpressure prevent repeated path submissions. Each call issues at
 most 12 recall orders; above 150 queued requests it permits replacements of
 pending work and at most two fresh requests, preserving progress under contention.
 
-Recovery requires assembly and a quiet period before ordinary resumption.
-Bounded reassessment avoids waiting indefinitely for perfect intelligence.
-Fresh attacks require a complete dispatch budget assembled at home, with a
-shared reachable objective when an observed target exists. Only gathered units
-are selected; remote reserves can catch up without holding a ready wave back.
-The existing commitment percentage still subtracts troops already deployed.
-Recovery's assembly share and the 80% military-limit dispatch exception are
-separate checks.
+Recovery releases a rebuilt army after the 25-second dwell when healthy ground
+value meets the existing attack threshold (with the 3,000-credit main-wave
+floor) and the outnumbered dispatch gate allows it. A true core emergency or
+severe local defeat still holds it back. Assembly percentage and a period
+without losses no longer block release: scattered reserves and ongoing raids
+must not keep a rebuilt army at home indefinitely. Release starts a new
+attrition observation window, preserving lifetime loss/kill totals. New losses
+can still trigger a later withdrawal.
+
+Custom Hard/Brutal launches every available ground combat unit on Hunt in one
+pass, wherever it stands. Existing hunters retain their orders. Human control,
+repair/transit and ongoing asset defence retain priority. Fresh recruits gather
+for the next viable wave instead of being sent individually. Ordinary scans do
+not move hunters back into a formation or replace their target selection.
+
+Hunting standard and elite launchers retain close-range spacing: a visible
+ground enemy that can attack them, inside the shorter of its reach plus one and
+half the launcher range plus one, triggers a short escape. The launcher keeps
+Hunt and its wave membership and can resume firing afterward. Damage from a
+distant enemy does not trigger retreat. The scan uses nearby tile occupants;
+workers, aircraft, human orders, repair and live defence contacts retain their
+existing handling.
 
 ## Batteries and special units
 

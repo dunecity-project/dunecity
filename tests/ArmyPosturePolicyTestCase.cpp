@@ -178,48 +178,94 @@ TEST_CASE("Army posture: withdrawal ends on assembly or on its bounded fallback"
     }
 }
 
-TEST_CASE("Army posture: recovery resumes only when stable, assembled and favourable",
+TEST_CASE("Army posture: recovery releases a ready army after the dwell",
           "[ai][posture]") {
+    // The authorized contract: the dwell plus the caller's readiness, which
+    // carries the offensive value threshold and the outnumbered/80% dispatch
+    // gate. Deliberately NOT conditions any more: a rally-assembly fraction, an
+    // observed front advantage, and a zero-loss interval. A growing house that
+    // is being shot at never satisfied those three at once, which is why
+    // replayed 1.0.805 houses sat in Recovering with a full army and never hunted.
     const auto t = defaults();
     ArmyPosturePolicy::Situation s;
     s.cycle = 100000;
+    s.readyForOffensive = true;
+    // Spread out, front unseen, and still taking losses: none of this blocks a
+    // ready army any more.
     s.designatedPower = 10000;
-    s.assembledPower = 9000;
-    s.frontObserved = true;
-    s.frontFriendly = 15000;
-    s.frontHostile = 10000; // 1.5x advantage, above the 1.2x requirement
-    // Genuinely quiet: no material loss inside the stabilisation window.
-    s.quietCycles = t.stabiliseCycles * 2;
-    SECTION("stable, assembled and ahead resumes") {
+    s.assembledPower = 0;
+    s.frontObserved = false;
+    s.quietCycles = 1;
+    s.recentSeriousLoss = true;
+    s.windowCovered = true;
+    SECTION("a ready army is released once the dwell is served") {
         const auto decision = ArmyPosturePolicy::evaluate(Posture::Recovering,
             s.cycle - t.stabiliseCycles, s, t);
+        REQUIRE(decision.changed);
         REQUIRE(decision.posture == Posture::Offensive);
-        REQUIRE(std::string(decision.reason) == "recovered_with_front_advantage");
+        REQUIRE(std::string(decision.reason) == "recovered_ready_for_offensive");
     }
-    SECTION("not yet stabilised holds") {
+    SECTION("the dwell is still served first") {
         REQUIRE_FALSE(ArmyPosturePolicy::evaluate(Posture::Recovering, s.cycle - 10, s, t).changed);
     }
-    SECTION("not assembled holds") {
-        auto partial = s; partial.assembledPower = 1000;
-        REQUIRE_FALSE(ArmyPosturePolicy::evaluate(Posture::Recovering,
-            s.cycle - t.stabiliseCycles, partial, t).changed);
+    SECTION("an army that is not ready keeps waiting, however long it waits") {
+        auto unready = s; unready.readyForOffensive = false;
+        for (const uint32_t age : {t.stabiliseCycles, t.maxRecoverCycles,
+                                   2 * t.maxRecoverCycles, 20 * t.maxRecoverCycles}) {
+            const auto decision = ArmyPosturePolicy::evaluate(Posture::Recovering,
+                s.cycle - age, unready, t);
+            REQUIRE_FALSE(decision.changed);
+            REQUIRE(decision.posture == Posture::Recovering);
+        }
     }
-    SECTION("an unknown front needs scouting, but does not freeze the house") {
-        auto blind = s; blind.frontObserved = false;
-        REQUIRE_FALSE(ArmyPosturePolicy::evaluate(Posture::Recovering,
-            s.cycle - t.stabiliseCycles, blind, t).changed);
-        const auto fallback = ArmyPosturePolicy::evaluate(Posture::Recovering,
-            s.cycle - t.maxRecoverCycles, blind, t);
-        REQUIRE(fallback.posture == Posture::Offensive);
-        REQUIRE(std::string(fallback.reason) == "recovery_timeout_assembled");
+    SECTION("a real ongoing emergency outranks the release") {
+        for (const bool core : {true, false}) {
+            auto emergency = s;
+            emergency.coreUnderAttack = core;
+            emergency.severeLocalDefeat = !core;
+            const auto decision = ArmyPosturePolicy::evaluate(Posture::Recovering,
+                s.cycle - 10 * t.maxRecoverCycles, emergency, t);
+            REQUIRE(decision.posture == Posture::Recovering);
+            REQUIRE(decision.emergency);
+            REQUIRE_FALSE(decision.changed);
+        }
     }
-    SECTION("an unassembled remnant still resumes on the outer bound") {
-        auto stuck = s; stuck.frontObserved = false; stuck.assembledPower = 0;
-        const auto fallback = ArmyPosturePolicy::evaluate(Posture::Recovering,
-            s.cycle - 2 * t.maxRecoverCycles, stuck, t);
-        REQUIRE(fallback.posture == Posture::Offensive);
-        REQUIRE(std::string(fallback.reason) == "recovery_timeout_bounded");
+    SECTION("a released army can be sent home again by a fresh battle") {
+        // The ledger reset belongs to the caller; the policy still reacts to
+        // whatever window it is given once the army is offensive again.
+        REQUIRE(ArmyPosturePolicy::evaluate(Posture::Offensive, s.cycle - 10,
+            collapsing(), t).posture == Posture::Withdrawing);
     }
+}
+
+TEST_CASE("Army posture: the attrition baselines reset without losing the totals",
+          "[ai][posture]") {
+    ArmyPosturePolicy::AttritionLedger ledger;
+    ledger.lostCost = 12000;
+    ledger.killCost = 4000;
+    REQUIRE(ledger.sample(1000, 50000, 100));
+    REQUIRE(ledger.sample(2000, 48000, 100));
+    REQUIRE(ledger.count == 2);
+    REQUIRE(ledger.windowStart(3000, 500) != nullptr);
+    ledger.resetBaselines();
+    // No window to measure against: a fresh army starts a fresh window.
+    REQUIRE(ledger.count == 0);
+    REQUIRE(ledger.windowStart(3000, 500) == nullptr);
+    REQUIRE(ledger.newest() == nullptr);
+    // The cumulative house totals survive, and sampling works again at once.
+    REQUIRE(ledger.lostCost == 12000);
+    REQUIRE(ledger.killCost == 4000);
+    REQUIRE(ledger.sample(3000, 60000, 100));
+    REQUIRE(ledger.count == 1);
+    REQUIRE(ledger.newest()->lostCost == 12000);
+    // And the reset ledger serialises and reloads identically.
+    Out out; ledger.save(out);
+    In in{out.bytes};
+    ArmyPosturePolicy::AttritionLedger loaded;
+    loaded.load(in, [] { FAIL("valid ledger rejected"); });
+    REQUIRE(loaded.count == 1);
+    REQUIRE(loaded.lostCost == 12000);
+    REQUIRE(loaded.killCost == 4000);
 }
 
 TEST_CASE("Army posture: local verdict needs persistence unless it is severe",
@@ -428,41 +474,26 @@ TEST_CASE("Combat power: hit-point weighting, floors and class separation",
     REQUIRE(friendly.holding() == 1500 + 9999);
 }
 
-TEST_CASE("Army posture: a resume needs genuine quiet, not merely an old state",
+TEST_CASE("Army posture: the attrition trigger still owns the loss reaction",
           "[ai][posture]") {
+    // The quiet interval and the rally fraction no longer hold a rebuilt army
+    // at home. What replaces them is this: once the released army is offensive,
+    // a fresh bad battle inside the window sends it back. Withdrawing keeps its
+    // own assembly-based end and its bounded fallback.
     const auto t = defaults();
-    ArmyPosturePolicy::Situation s;
-    s.cycle = 500000;
-    s.designatedPower = 10000;
-    s.assembledPower = 10000;
-    s.frontObserved = true;
-    s.frontFriendly = 20000;
-    s.frontHostile = 1000;
-    s.quietCycles = t.stabiliseCycles * 4;
-    // Stable, assembled, ahead and quiet: resumes.
+    REQUIRE(ArmyPosturePolicy::materialAttrition(collapsing(), t));
+    ArmyPosturePolicy::Situation fresh;
+    fresh.cycle = 500000;
+    fresh.readyForOffensive = true;
+    fresh.recentSeriousLoss = true;
+    fresh.quietCycles = 1;
+    // A still-bleeding but ready house is released - deliberately, because a
+    // house that is producing and fighting never reaches zero recent losses.
     REQUIRE(ArmyPosturePolicy::evaluate(Posture::Recovering,
-        s.cycle - t.maxRecoverCycles * 3, s, t).posture == Posture::Offensive);
-    SECTION("a fresh material loss blocks every resume path") {
-        auto bleeding = s;
-        bleeding.recentSeriousLoss = true;
-        bleeding.quietCycles = 10;
-        // Not the normal path, not the assembled timeout, not the outer bound.
-        for (const uint32_t age : {t.stabiliseCycles, t.maxRecoverCycles,
-                                   2 * t.maxRecoverCycles, 10 * t.maxRecoverCycles}) {
-            const auto decision = ArmyPosturePolicy::evaluate(Posture::Recovering,
-                bleeding.cycle - age, bleeding, t);
-            REQUIRE_FALSE(decision.changed);
-            REQUIRE(decision.posture == Posture::Recovering);
-        }
-    }
-    SECTION("an old posture that is still not quiet does not count as stable") {
-        auto noisy = s;
-        noisy.quietCycles = t.stabiliseCycles / 2;
-        const auto decision = ArmyPosturePolicy::evaluate(Posture::Recovering,
-            noisy.cycle - t.stabiliseCycles * 2, noisy, t);
-        // The ordinary path is refused; only the bounded fallback may fire.
-        REQUIRE(std::string(decision.reason) != "recovered_with_front_advantage");
-    }
+        fresh.cycle - t.stabiliseCycles, fresh, t).posture == Posture::Offensive);
+    // But with no covered window yet, nothing sends it home on that alone.
+    REQUIRE_FALSE(ArmyPosturePolicy::evaluate(Posture::Offensive,
+        fresh.cycle - t.stabiliseCycles, fresh, t).changed);
 }
 
 TEST_CASE("Army posture: the withdrawal dwell is actually applied", "[ai][posture]") {

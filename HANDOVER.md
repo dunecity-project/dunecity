@@ -1,3 +1,62 @@
+# 2026-10-05 — Hunt launcher spacing and strength-based recovery (1.0.806)
+
+Captured the MBA 805 red-stuck-in-base and blue-stuck-in-base saves, exact immutable
+map/mod revisions, and live telemetry. Both baseline replays remain Recovering
+through 24,000 cycles, with zero Hunt orders. Blue starts with 220 ground combat
+troops, 82,080 military value against an 80,000 limit, and 169 available troops;
+it ends with four. Physical assembly and a quiet period blocked recovery release;
+even its timeouts were vetoed by continuing losses.
+
+Recovery now serves the existing 25-second dwell and releases on healthy ground
+attack readiness plus the existing outnumbered/80%-fixed-limit gate. Real core
+emergencies and severe defeat retain priority. Release discards old attrition
+baselines and local pressure clocks, preserving lifetime kills/losses; fresh
+battle losses can still trigger withdrawal. Whole available armies retain engine
+Hunt, with human control, repair/cargo and ongoing asset defence preserved.
+Hunting standard/elite launchers escape close visible dangerous ground enemies
+in short steps, stay Hunt and resume firing. Nearby tile occupants replace a
+per-launcher global scan; distant damage does not cause escape.
+
+Real saved replays: red sends 133 troops at cycle 120950 and ends with 274 ground,
+252 Hunt and 71,360 military value. Blue sends 150 at 85304; its already invaded
+position still loses. Both release without assembly or a quiet interval. One/four
+path workers match all 12 checkpoints and complete gameplay save bytes:
+red `4eee846e790d0831a2e3d7fed4287f0136cdcab96445c4b840a18c02b7ddc0c5`,
+blue `9520c38c2605c5d0bb4c31da6c0b5f653756cbea75440d85796e2a46d822ba2f`.
+Timings are headless Mac-mini simulation, not rendered MBA FPS.
+
+Fresh All against Atreides uses seed 1547732733, tech 8, DuneCity/city simulation,
+Atreides Brutal QuantBot versus four Hard AIPlayer houses, unlimited units and
+harvesters, concrete on, no fog, explored map, worm respawn/spice on, turret power
+off, drops off, and 1x spice. At 40 minutes, 805 has no buildings and about 15,600
+military value; 806 has an intact economy and 199,410. The fixed build wins at
+cycle 160466 (42m47.456s). This is one reproducible configuration, not a general
+win-rate claim. An earlier run with different explored/worm settings is retained
+separately and excluded from this controlled comparison.
+
+Claude's subscription worker implemented bounded launcher/recovery changes and
+real-engine probes. Root reviewed, replayed both saves, tested the full scenario
+and path workers, and made observer continuation independent of preceding
+destructive stress fixtures. All existing exact continuation assertions remain:
+bot bytes, physical state/RNG, every unit order, own credits and 100 frames across
+unit/build phases. The artificial post-stress world exposed the documented
+fractional city-credit checkpoint mismatch; this patch does not certify general
+spectator city accounting or fix that independent issue.
+
+All 56 CTest targets pass (825.81 seconds), including native policy/protocol,
+launcher, whole-army, recovery, battery, air defence and all affected modes.
+Recovery covers a 922-unit recall, release boundaries/emergencies and a fresh
+losing battle. Launchers increase actual distance from one to six tiles and deal
+subsequent damage. Pre/post build dependency audits and diff checks pass.
+Protocol 54 / policy `hunt-and-strength-recovery-v89`; save 9852 / runtime 7.
+Portable 36-Mach-O ARM64 bundle passes load-path checks, deep/strict ad-hoc
+signature and bundled SDL hidden rendering. Native/portable code and string
+sections match; whole-file hashes differ from portable fixups/signing.
+Executable SHA-256: `5fb3c80c137e20668d3744eba3a0d2385cbc24a4ee1120f7ca73984262709c10`.
+MBA installation awaits reachability and app close; last verified installed app
+is 805. No running game was stopped. Nothing pushed or publicly published.
+Evidence: ../outputs/launcher-kiting-806-20261005/.
+
 # 2026-10-05 — Verified 1.0.805 installed on the MBA
 
 Installed the tested portable ARM64 bundle at `/Applications/dunecity.app` on
