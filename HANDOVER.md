@@ -1,3 +1,30 @@
+# 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
+
+An Escape menu open when an observer requires a fresh checkpoint was left on
+screen even though the paused input path only accepts JoinProgressWindow events.
+The network update now replaces that menu with progress controls and closes it
+before replacing the Game, while its houses and callbacks remain alive.
+
+The native probe now perturbs a digest-bearing credits field by spending credits;
+its former addCityCredits injection could be clamped to zero room and fail to
+exercise resync. JOIN_DESYNC_ONCE=1 JOIN_MENU_DURING_RESYNC=1 fails on archived
+809 with the stuck-modal assertion and passes with this patch, one real resync,
+no retained modal and matching three-peer state at cycle1800. The promotion
+fixture distinguishes pending approval from the legitimate completed-join notice.
+All56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
+checks pass. Protocol56, save9852, observer runtime7 and AI policyv90 are unchanged.
+
+Public release remains held: original809 browser promotion on Four Corners has
+intermittently trapped in free during Map/Tile teardown. This menu fix is a
+separate verified defect and is not proof that the heap trap is repaired. The
+recent original-stack and larger-stack passing trials used Ergsun-Odenkirk, so
+neither clears the FourCorners failure. A FourCorners replay has byte-identical
+GameInitSettings (seed315473198) to the named failing run. ASAN O3 could not keep
+up with the diagnostic25Hz host and expired its observer stream; no heap error
+was reported before disconnect, and it did not reach promotion. No speculative
+Asyncify capacity or malformed-map fix was committed. Diagnostic artifacts are
+in ../outputs/release-809/. Latest public stable at this checkpoint remains796.
+
 # 2026-10-06 — Faster game-speed settings (1.0.809)
 
 The speed bars and keyboard controls now reach 3 ms and 2 ms per simulation

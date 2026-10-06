@@ -6932,10 +6932,20 @@ bool Game::handleNetworkUpdates() {
     if(!pNetworkManager->lateJoinStatus().empty() && lastJoinStatus!=pNetworkManager->lateJoinStatus()) {
         lastJoinStatus=pNetworkManager->lateJoinStatus(); addToNewsTicker(lastJoinStatus);
     }
-    if(pNetworkManager->lateJoinReady()) { bQuitGame=true; return true; }
+    if(pNetworkManager->lateJoinReady()) {
+        // Close menus before the checkpoint replaces this Game, while callbacks can
+        // still access the live game and its houses.
+        if(pInGameMenu) { pInGameMenu.reset(); bMenu=false; }
+        bQuitGame=true; return true;
+    }
     if(pNetworkManager->lateJoinPaused()) {
         startWaitingForOtherPlayersTime=0; pWaitingForOtherPlayers.reset();
-        if(!pInGameMenu) { pInGameMenu=std::make_unique<JoinProgressWindow>(); bMenu=true; }
+        // During a checkpoint transfer, doInput() only accepts progress-window events.
+        // Replace any open menu so the visible controls remain usable.
+        if(!dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())) {
+            pInGameMenu.reset();
+            pInGameMenu=std::make_unique<JoinProgressWindow>(); bMenu=true;
+        }
         if(auto* progress=dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())) progress->refresh();
         return true;
     }

@@ -1,6 +1,8 @@
 // Integration-only main: real service, WebRTC, saved game and simulation in three processes.
 #include <Game.h>
 #include <GUI/dune/JoinRequestsWindow.h>
+#include <GUI/dune/JoinProgressWindow.h>
+#include <GUI/dune/InGameMenu.h>
 #include <House.h>
 #include <GameInitSettings.h>
 #include <Network/NetworkManager.h>
@@ -54,6 +56,19 @@ static void joinCheckpointTrace(Game& game, const std::string& role, const std::
         joinWrite(dir+"/object-"+std::to_string(id),std::string(bytes.getData(),bytes.getDataLength()));
     });
 }
+// Perturb only this viewer's loaded copy, in a field computeStateDigest() mixes, so the
+// host's next fingerprint diverges and one real resync runs. Credits are the cheapest such
+// field. Spending down is never clamped; addCityCredits() was, because acceptEarnedCredits()
+// caps on getEarnedCreditRoom(), which is zero at a mid-match checkpoint with full storage.
+static void joinInjectDivergence(Game& game) {
+    for(const auto& h : game.house) {
+        if(!h || h->getCredits() < 1) continue;
+        const auto before=h->getCredits();
+        h->takeCredits(100);
+        if(h->getCredits()!=before) return;
+    }
+    throw std::runtime_error("probe could not perturb any house's credits for the desync");
+}
 int runLateJoinProbe() {
     const std::string role=std::getenv("JOIN_ROLE"), out=std::getenv("JOIN_OUT"), endpoint=std::getenv("JOIN_ENDPOINT");
     const std::string mode=std::getenv("JOIN_MODE") ? std::getenv("JOIN_MODE") : "replace";
@@ -66,6 +81,12 @@ int runLateJoinProbe() {
     Uint32 verifyCycle=observer ? 1800 : 150;
     if(std::getenv("JOIN_VERIFY_CYCLE")) verifyCycle=std::stoul(std::getenv("JOIN_VERIFY_CYCLE"));
     const bool browserPromotion=promotion && std::getenv("JOIN_BROWSER");
+    if(std::getenv("JOIN_MENU_DURING_RESYNC")) {
+        if(!std::getenv("JOIN_DESYNC_ONCE") && !std::getenv("JOIN_DESYNC_ALWAYS"))
+            throw std::runtime_error("JOIN_MENU_DURING_RESYNC needs JOIN_DESYNC_ONCE to force a real resync");
+        if(!observer || promotion || std::getenv("JOIN_BROWSER") || std::getenv("JOIN_MATCH_CONTROLS"))
+            throw std::runtime_error("JOIN_MENU_DURING_RESYNC requires a native --mode spectate run without match controls");
+    }
     bool promotionCommitted=false;
     settings.general.playerName=role;
     settings.network.metaServer="http://127.0.0.1:1/";
@@ -180,10 +201,20 @@ int runLateJoinProbe() {
     if(newcomer) {
         joinCheckpointTrace(*game,role,out);
         joinWrite(out+"/Newcomer-loaded","yes");
-        if(std::getenv("JOIN_DESYNC_ONCE") || std::getenv("JOIN_DESYNC_ALWAYS")) game->getHouse(HOUSE_ATREIDES)->addCityCredits(100);
+        if(std::getenv("JOIN_DESYNC_ONCE") || std::getenv("JOIN_DESYNC_ALWAYS")) joinInjectDivergence(*game);
+        if(std::getenv("JOIN_MENU_DURING_RESYNC")) {
+            // Open the menu through the shipping entry point before the injected mismatch
+            // forces the resync, so the fresh checkpoint arrives with a player-owned modal
+            // already up. onOptions() does not pause a network match for a non-host.
+            game->onOptions();
+            if(!dynamic_cast<InGameMenu*>(game->pInGameMenu.get()))
+                throw std::runtime_error("probe could not open the in-game menu before the resync");
+        }
     }
     bool requested=false, resumed=newcomer || observer, rejected=false, playRequested=false, retried=false;
     std::string declinedRequest;
+    const bool menuDuringResync=newcomer && std::getenv("JOIN_MENU_DURING_RESYNC");
+    bool menuReplaced=false;
     Uint32 lastProgress=0;
     Uint32 lastOrdersCycle=~Uint32(0);
     bool targetOrderChecked=false;
@@ -248,6 +279,15 @@ int runLateJoinProbe() {
         }
         const Uint32 target=std::getenv("JOIN_BROWSER") ? 30000 : (checkDeparture && !newcomer && std::filesystem::exists(out+"/Newcomer-left") ? verifyCycle+100 : verifyCycle);
         const bool waiting=game->handleNetworkUpdates();
+        // Only the transfer stages: Ready is also lateJoinPaused(), and closes the modal
+        // again before the rebuild. doInput() refuses events for anything but join progress
+        // while a transfer runs, so any other modal here would be stuck and then destroyed
+        // mid-rebuild.
+        if(menuDuringResync && network.lateJoinPaused() && !network.lateJoinReady()) {
+            if(!dynamic_cast<JoinProgressWindow*>(game->pInGameMenu.get()))
+                throw std::runtime_error("observer resync left a modal that is not join progress");
+            menuReplaced=true;
+        }
         const bool controlsHold=probeMatchControls(*game,role,out);
         if(!network.observerTransfers.empty()) warmupReleased=true;
         if(host) for(const auto& transfer : network.observerTransfers)
@@ -374,10 +414,25 @@ int runLateJoinProbe() {
             if(promotion && (!game->getPlayerByName("Newcomer") || (newcomer && network.isSpectating()))) throw std::runtime_error("spectator was not promoted");
             if(promotion) {
                 if(!game->getPlayerByName("Enemy AI")) throw std::runtime_error("shared promotion removed AI");
+                // This probe never runs GameInterface::draw, so the button is only refreshed
+                // by this explicit call. Visibility alone is not the contract: once no request
+                // is pending, updateJoinRequestButton() legitimately falls back to
+                // recentJoinNotice() (GameInterface.cpp) to confirm the completed join. Assert
+                // that no approval is still outstanding instead.
                 game->getGameInterface().updateJoinRequestButton();
-                if(game->getGameInterface().joinRequestButton.isVisible()) throw std::runtime_error("approval notice remains after promotion");
+                const auto& promotedNotice=game->getGameInterface().joinRequestButton;
+                const auto promotedText=promotedNotice.isVisible() ? promotedNotice.getText() : std::string();
+                if(promotedText.find("wants to play")!=std::string::npos
+                   || promotedText.find("waiting for host approval")!=std::string::npos)
+                    throw std::runtime_error("approval request still pending after promotion: "+promotedText);
             }
             if(mode=="abort" && (!network.getRelayClient()->isJoined() || !game->getPlayerByName("Enemy AI") || game->getPlayerByName("Newcomer"))) throw std::runtime_error("abort changed the original match");
+            if(menuDuringResync) {
+                // Reaching verifyCycle with a matching digest already proves the rebuild
+                // survived; these add that the modal was taken over and handed back.
+                if(!menuReplaced) throw std::runtime_error("no observer resync happened while the in-game menu was open");
+                if(game->pInGameMenu) throw std::runtime_error("a modal still owns input after the checkpoint rebuild");
+            }
             if(!std::filesystem::exists(out+"/"+role+"-digest")) joinWrite(out+"/"+role+"-digest",GameStateDigest::describe(game->computeStateDigest()));
             if(checkDeparture && newcomer && std::filesystem::exists(out+"/Host-digest") && (solo || std::filesystem::exists(out+"/Partner-digest"))) {
                 if(std::getenv("JOIN_DESYNC_ONCE") && network.observerResyncAttempts!=1)
