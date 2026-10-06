@@ -2440,8 +2440,8 @@ void Game::applyPendingBudgetChanges() {
 
 void Game::drawScreen()
 {
-    const int presentationScale = dune2rPresentationScale(
-        ModManager::instance().getActiveModName(), pGFXManager->isDune2RVisualsEnabled());
+    const int presentationScale = ModManager::instance().usesDune2RRemasterPresentation()
+        && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
     screenborder->setPresentationScale(presentationScale);
     Dune2RWorldDrawingScope worldDrawing(presentationScale);
     Coord TopLeftTile = screenborder->getTopLeftTile();
@@ -4514,12 +4514,12 @@ void Game::cycleDune2RZoom() {
 
 void Game::toggleDune2RVisuals() {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getActiveModName() != "Dune2R") {
+       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
         return;
     }
     pGFXManager->toggleDune2RVisuals();
-    screenborder->setPresentationScale(dune2rPresentationScale(
-        ModManager::instance().getActiveModName(), pGFXManager->isDune2RVisualsEnabled()));
+    screenborder->setPresentationScale(ModManager::instance().usesDune2RRemasterPresentation()
+        && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1);
     addToNewsTicker(pGFXManager->isDune2RVisualsEnabled()
         ? "Dune2R visuals enabled"
         : "Classic visuals enabled");

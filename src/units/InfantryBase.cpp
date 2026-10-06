@@ -137,7 +137,7 @@ void InfantryBase::blitToScreen() {
     const bool enhancedInfantry = getItemID() == Unit_Soldier
         && owner->getHouseID() == HOUSE_HARKONNEN
         && ModManager::instance().isInitialized()
-        && ModManager::instance().getActiveModName() == "Dune2R";
+        && ModManager::instance().usesDune2RRemasterPresentation();
     const Uint8 blend = enhancedInfantry ? pGFXManager->getDune2RVisualBlend() : 0;
     const bool classicAlreadyDrawn = blend > 0 && blend < SDL_ALPHA_OPAQUE;
     if(classicAlreadyDrawn) {

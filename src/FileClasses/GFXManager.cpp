@@ -6878,7 +6878,7 @@ void GFXManager::loadDune2RVisualPreference() {
 
 Uint8 GFXManager::getDune2RVisualBlend() {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getActiveModName() != "Dune2R") {
+       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
         return 0;
     }
     loadDune2RVisualPreference();
@@ -6909,7 +6909,7 @@ bool GFXManager::isDune2RVisualsEnabled() {
 
 void GFXManager::setDune2RVisualsEnabled(bool enabled) {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getActiveModName() != "Dune2R") {
+       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
         return;
     }
     const Uint8 currentBlend = getDune2RVisualBlend();
@@ -6950,7 +6950,7 @@ void GFXManager::loadEnhancedUnitManifests() {
     }
 
     const std::string activeMod = ModManager::instance().getActiveModName();
-    if(activeMod != "Dune2R") {
+    if(!ModManager::instance().usesDune2RRemasterPresentation()) {
         return;
     }
 
@@ -7414,13 +7414,16 @@ void GFXManager::loadEnhancedRenderModes() {
 
     loadEnhancedUnitManifests();
     try {
-        INIFile config(ModManager::instance().getModPath(ModManager::instance().getActiveModName()) + "/workshop-render.ini");
+        const auto activeMod = ModManager::instance().getActiveModName();
+        INIFile config(dune2rRenderPreferencesPath(activeMod,
+            ModManager::instance().getModPath(activeMod), getConfigFilepath()));
+        const auto section = dune2rRenderPreferencesSection(activeMod);
         for(const auto& definition : enhancedUnitDefinitions) {
             for(int stateIndex = 0; stateIndex < static_cast<int>(kEnhancedStateNames.size()); ++stateIndex) {
                 const auto state = static_cast<EnhancedUnitState>(stateIndex);
                 for(int direction = 0; direction < kEnhancedDirectionCount; ++direction) {
                     const std::string value = config.getStringValue(
-                        "Dune2R EditoR",
+                        section,
                         enhancedRenderModeConfigKey(definition.itemID, definition.houseID,
                                                     state, direction),
                         "full");
@@ -7523,7 +7526,10 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
     }
 
     try {
-        const std::string path = ModManager::instance().getModPath(ModManager::instance().getActiveModName()) + "/workshop-render.ini";
+        const auto activeMod = ModManager::instance().getActiveModName();
+        const std::string path = dune2rRenderPreferencesPath(activeMod,
+            ModManager::instance().getModPath(activeMod), getConfigFilepath());
+        const auto section = dune2rRenderPreferencesSection(activeMod);
         // MSVC 19.38 rejects a conditional prvalue of the non-copyable INIFile.
         auto configFile = std::filesystem::exists(path)
             ? std::make_unique<INIFile>(path)
@@ -7532,12 +7538,12 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
         const std::string configKey = enhancedRenderModeConfigKey(
             itemID, house, state, direction);
         if(mode == EnhancedRenderMode::FullAnimation) {
-            config.removeKey("Dune2R EditoR", configKey);
+            config.removeKey(section, configKey);
         } else {
-            config.setStringValue("Dune2R EditoR", configKey,
+            config.setStringValue(section, configKey,
                                   enhancedRenderModeName(mode), false);
         }
-        const auto temporary=std::filesystem::path(path).parent_path()/".workshop-render.tmp";
+        const auto temporary = std::filesystem::path(path + ".workshop-render.tmp");
         if(!config.saveChangesTo(temporary.string())) {
             SDL_Log("GFXManager: Could not save Dune2R EditoR preferences to %s",
                     path.c_str());
@@ -8024,7 +8030,7 @@ Uint32 GFXManager::recordEnhancedInfantryFall(int itemID, int house,
                                              int direction, Uint32 nowMs) {
     if(itemID != Unit_Soldier || house != HOUSE_HARKONNEN
        || !ModManager::instance().isInitialized()
-       || ModManager::instance().getActiveModName() != "Dune2R") {
+       || !ModManager::instance().usesDune2RRemasterPresentation()) {
         return 0;
     }
     // No loading, RNG or gameplay work here: destroy() still removes the unit now.
@@ -8034,7 +8040,7 @@ Uint32 GFXManager::recordEnhancedInfantryFall(int itemID, int house,
 bool GFXManager::drawEnhancedInfantryFall(Uint32 token, int house,
                                            Uint32 nowMs, int x, int y) {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getActiveModName() != "Dune2R"
+       || !ModManager::instance().usesDune2RRemasterPresentation()
        || getDune2RVisualBlend() == 0) {
         return false;
     }

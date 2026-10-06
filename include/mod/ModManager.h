@@ -72,6 +72,11 @@ public:
      */
     std::string getActiveModName() const;
     std::string getContentBase(const std::string& name) const;
+    // Cached presentation capability: builtin Dune2R or its canonical immutable snapshot.
+    // Derived mods retain their existing scale, including when saved to Workshop.
+    bool usesDune2RRemasterPresentation() const {
+        return initialized && activeDune2RRemasterPresentation;
+    }
     bool isTornieContentActive() const {
         return getContentBase(getActiveModName()) == "Tornie";
     }
@@ -308,6 +313,11 @@ private:
      * Read mod.ini metadata for a mod.
      */
     ModInfo readModIni(const std::string& modPath) const;
+
+    // Resolve identity without the active cache and optionally return the
+    // checksummed Workshop metadata root from the same verification pass.
+    std::string resolveContentBase(const std::string& name,
+                                   std::string* verifiedModPath = nullptr) const;
     
     /**
      * Get path to install config defaults directory.
@@ -349,6 +359,7 @@ private:
     std::string modsBasePath;        ///< Base path for mods directory
     std::string activeMod;
     std::string activeContentBase; // Capability identity, refreshed on activation; no per-tile filesystem reads.
+    bool activeDune2RRemasterPresentation = false;
     CustomHouseInfo activeCustomHouse;           ///< Active mod's campaign custom house
     CustomHouseInfo activeGuestCustomHouse;      ///< Tornie guest custom house for custom games
     std::vector<ModMentatInfo> activeMentats;     ///< Mentat overrides owned by the active mod

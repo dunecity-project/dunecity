@@ -2,8 +2,21 @@
 
 ## Isolation contract
 
-The additional world presentation factor is **3**, enabled only when the active
-mod name is exactly `Dune2R` and its existing Enhanced Visuals switch is enabled.
+The additional world presentation factor is **3**, enabled only for the built-in
+`Dune2R` mod or its verified immutable Workshop snapshots, when the existing
+Enhanced Visuals switch is enabled. Online sessions use `ws-<64 lowercase hex>`
+names: their content base is resolved through `ModManager`'s verified revision
+store, not an untrusted metadata file. A snapshot of another mod and an arbitrary
+Dune2R-derived mod (including a snapshot of one) do not acquire this new
+presentation factor. Canonical snapshots have no `Base Mod` in their verified
+`mod.ini`; descendants do. This capability is cached at mod activation, restored
+on activation failure and cleared when switching mods. Existing derived
+mods' graphics-toggle policy is preserved separately.
+
+Snapshot EditoR render preferences are saved in the user's main configuration,
+under a separate section keyed by immutable snapshot identity. They never write
+`workshop-render.ini` into an immutable payload. Built-in Dune2R keeps its existing
+per-mod preference file. No download or preference change mutates a snapshot.
 Classic Dune2R, DuneLegacy, DuneCity, Tornie's Mod and other mods keep factor 1.
 This is separate from the existing three zoom levels: switching graphics does not
 change `currentZoomlevel`.
@@ -49,7 +62,8 @@ artwork. The Dune2R EditoR preview remains independently sized.
 
 The approved package binds `ItemID=32` (`Unit_Soldier`), `HouseID=0` (Harkonnen),
 `BaseWidth=40`, `BaseHeight=40`, `Scale=1`. Only basic Harkonnen soldiers in the
-exact Dune2R mod enter this new infantry rendering hook. Other houses, Troopers,
+Dune2R mod or its verified Workshop snapshots enter this new infantry rendering
+hook. Other houses, Troopers,
 Saboteurs and legacy squad assets retain their existing render path and fallback.
 
 All eight directions have these sections:
@@ -98,7 +112,8 @@ back to the original corpse, with its existing sand decay and lifetime.
 
 ## Verification
 
-`Dune2RPresentationTestCase.cpp` covers the strict mod gate, Classic isolation,
+`Dune2RPresentationTestCase.cpp` covers the strict built-in/verified snapshot gate,
+rejection of other bases and malformed snapshot identities, Classic isolation,
 camera/pointer inversion at all zoom levels, small-map margins, unchanged atlas
 source cells, world/UI scope restoration, HQ sizing without double multiplication,
 variable frame durations, bounded corpse identity/lifetime and source/save-byte

@@ -7,6 +7,8 @@
 #include <misc/EnhancedBuildingGeometry.h>
 #include <misc/EnhancedUnitGeometry.h>
 #include <misc/OMemoryStream.h>
+#include <mod/Workshop.h>
+#include <FileClasses/INIFile.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -66,15 +68,117 @@ std::string legacyCorpseBytes(const DEADUNITTYPE& corpse) {
 }
 }
 
-TEST_CASE("World presentation belongs only to the exact Dune2R enhanced switch", "[dune2r][presentation]") {
+TEST_CASE("World presentation belongs only to Dune2R and verified Dune2R snapshots", "[dune2r][presentation]") {
     CHECK(dune2rPresentationScale("Dune2R", true) == 3);
     CHECK(dune2rPresentationScale("Dune2R", false) == 1);
     for(const std::string mod : {"", "DuneLegacy", "dunecity", "DuneCity", "Tornie", "Dune2R-derived"}) {
         CHECK(dune2rPresentationScale(mod, true) == 1);
         CHECK(dune2rPresentationScale(mod, false) == 1);
+        CHECK(dune2rPresentationScale(mod, true, "Dune2R") == 1);
+    }
+    const std::string snapshot = "ws-" + std::string(64, 'a');
+    CHECK(dune2rPresentationScale(snapshot, true, "Dune2R", true) == 3);
+    CHECK(dune2rPresentationScale(snapshot, false, "Dune2R", true) == 1);
+    CHECK(dune2rPresentationScale(snapshot, true, "Dune2R", false) == 1);
+    CHECK(dune2rPresentationScale(snapshot, true) == 1);
+    for(const std::string base : {"DuneLegacy", "dunecity", "Tornie", "Dune2R-derived"}) {
+        CHECK(dune2rPresentationScale(snapshot, true, base, true) == 1);
+    }
+    for(const std::string invalid : {"ws-" + std::string(63, 'a'),
+                                    "ws-" + std::string(65, 'a'),
+                                    "ws-" + std::string(64, 'G'),
+                                    "ws-" + std::string(64, '/'),
+                                    "other-" + std::string(64, 'a')}) {
+        CHECK_FALSE(dune2rUsesRemasterPresentation(invalid, "Dune2R", true));
     }
     CHECK(TILESIZE == 64);
     CHECK(D2_TILESIZE == 16);
+}
+
+TEST_CASE("Verified Workshop metadata distinguishes canonical Dune2R from descendants", "[dune2r][presentation][workshop]") {
+    const auto root = std::filesystem::temp_directory_path() / ("dune2r-snapshot-" + Workshop::newID());
+    struct Cleanup {
+        std::filesystem::path root;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(root, error); }
+    } cleanup{root};
+    const auto draft = root / "draft";
+    std::filesystem::create_directories(draft);
+    Workshop::Store store(root / "store");
+    auto writeMetadata = [&](const std::string& extra) {
+        std::ofstream output(draft / "mod.ini");
+        output << "[Mod]\nDisplay Name = Dune2R\n" << extra;
+    };
+    writeMetadata("");
+    const auto canonical = store.capture("mod", std::string(32, 'a'), "Dune2R", "Dune2R", "", draft);
+    auto capability = [&](const Workshop::Revision& revision) {
+        const auto verified = store.get(revision.hash);
+        INIFile metadata((std::filesystem::path(verified.directory) / "mod.ini").string());
+        return dune2rUsesRemasterPresentation("ws-" + verified.hash, verified.base,
+            metadata.getStringValue("Mod", "Base Mod", "").empty());
+    };
+    REQUIRE(capability(canonical));
+    writeMetadata("Base Mod = Dune2R\n");
+    const auto derived = store.capture("mod", std::string(32, 'b'), "Derived", "Dune2R", "", draft);
+    CHECK_FALSE(capability(derived));
+
+    writeMetadata("");
+    const auto other = store.capture("mod", std::string(32, 'c'), "Other", "vanilla", "", draft);
+    { // Excluded locator metadata cannot override the verified manifest's base.
+        std::ofstream forged(std::filesystem::path(other.directory) / "workshop-revision.ini");
+        forged << "[Workshop]\nBase = Dune2R\nImmutable = true\nHash = " << other.hash << '\n';
+    }
+    CHECK_FALSE(capability(other));
+    { std::ofstream tampered(std::filesystem::path(canonical.directory) / "mod.ini"); tampered << "tampered"; }
+    CHECK_THROWS(store.get(canonical.hash));
+    CHECK_THROWS(store.get(std::string(64, '0')));
+
+    const auto mod = readSource("src/mod/ModManager.cpp");
+    for(const std::string signature : {"void ModManager::initialize()", "bool ModManager::setActiveMod("}) {
+        const auto activation = body(mod, signature);
+        CHECK(activation.find("verifiedInfo.baseMod.empty()") != std::string::npos);
+        CHECK(activation.find("resolveContentBase(activeMod, &verifiedModPath)") != std::string::npos);
+        CHECK(activation.find("activeDune2RRemasterPresentation = false") != std::string::npos);
+    }
+    CHECK(body(mod, "bool ModManager::setActiveMod(").find(
+        "activeDune2RRemasterPresentation = previousDune2RRemasterPresentation") != std::string::npos);
+}
+
+TEST_CASE("Snapshot EditoR preferences leave the immutable payload unchanged", "[dune2r][presentation][workshop]") {
+    const auto root = std::filesystem::temp_directory_path() / ("dune2r-preferences-" + Workshop::newID());
+    struct Cleanup {
+        std::filesystem::path root;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(root, error); }
+    } cleanup{root};
+    const auto draft = root / "draft";
+    std::filesystem::create_directories(draft);
+    { std::ofstream metadata(draft / "mod.ini"); metadata << "[Mod]\nDisplay Name = Dune2R\n"; }
+    Workshop::Store store(root / "store");
+    const auto revision = store.capture("mod", std::string(32, 'a'), "Dune2R", "Dune2R", "", draft);
+    const auto activeMod = "ws-" + revision.hash;
+    const auto userConfig = (root / "user.ini").string();
+    const auto path = dune2rRenderPreferencesPath(activeMod, revision.directory, userConfig);
+    CHECK(path == userConfig);
+    const auto section = dune2rRenderPreferencesSection(activeMod);
+    CHECK(section != dune2rRenderPreferencesSection("ws-" + std::string(64, 'b')));
+    INIFile config(false, std::string("User settings"));
+    config.setStringValue("General", "Player Name", "Retained");
+    config.setStringValue(section, "32.0.0.0", "layered");
+    REQUIRE(config.saveChangesTo(path));
+    INIFile reloaded(path);
+    CHECK(reloaded.getStringValue("General", "Player Name", "") == "Retained");
+    CHECK(reloaded.getStringValue(section, "32.0.0.0", "") == "layered");
+    REQUIRE_NOTHROW(store.verifyDirectory(revision, revision.directory));
+    CHECK(store.get(revision.hash).hash == revision.hash);
+    CHECK_FALSE(std::filesystem::exists(std::filesystem::path(revision.directory) / "workshop-render.ini"));
+    CHECK(dune2rRenderPreferencesPath("Dune2R", draft.string(), userConfig) == draft.string() + "/workshop-render.ini");
+    CHECK(dune2rRenderPreferencesSection("Dune2R") == "Dune2R EditoR");
+
+    const auto gfx = readSource("src/FileClasses/GFXManager.cpp");
+    for(const std::string signature : {"void GFXManager::loadEnhancedRenderModes()", "bool GFXManager::setEnhancedUnitRenderMode("}) {
+        const auto preferences = body(gfx, signature);
+        CHECK(preferences.find("dune2rRenderPreferencesPath") != std::string::npos);
+        CHECK(preferences.find("dune2rRenderPreferencesSection") != std::string::npos);
+    }
 }
 
 TEST_CASE("Dune2R presentation preserves world camera and click coordinates independently of zoom", "[dune2r][presentation][camera]") {
@@ -244,7 +348,7 @@ TEST_CASE("Cosmetic death token does not enter save bytes, state digests, RNG or
     const auto record = body(gfx, "Uint32 GFXManager::recordEnhancedInfantryFall(");
     CHECK(record.find("itemID != Unit_Soldier") != std::string::npos);
     CHECK(record.find("house != HOUSE_HARKONNEN") != std::string::npos);
-    CHECK(record.find("getActiveModName() != \"Dune2R\"") != std::string::npos);
+    CHECK(record.find("usesDune2RRemasterPresentation") != std::string::npos);
     CHECK(record.find("randomGen") == std::string::npos);
     CHECK(record.find("sendCommand") == std::string::npos);
     CHECK(body(gfx, "void GFXManager::invalidateAllSpriteTextures()").find("enhancedInfantryOverlay.clear()") != std::string::npos);

@@ -1,4 +1,4 @@
-# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.811 candidate)
+# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.812 candidate)
 
 Candidate branch `release-1.0.811-dune2r-assets` starts at PR #88's exact head,
 `e5797cd3ef3e14ad95d7ebff96a2dd0978936364` (1.0.810). The user requested that
@@ -24,7 +24,8 @@ repository. Legacy immutable URLs remain trusted without accepting arbitrary
 repositories. Base platform packages exclude these optional downloadable files.
 See [Infantry pack](docs/dune2r-infantry-pack-811.md).
 
-Enhanced presentation belongs only to the exact `Dune2R` mod: ordinary tiles
+Enhanced presentation belongs only to the built-in `Dune2R` mod and verified
+immutable Dune2R Workshop snapshots: ordinary tiles
 occupy 48px, classic fallback art and building footprints grow coherently, and
 authored HQ unit sizes are not multiplied twice. Existing zoom, sidebar/menu
 sizes, simulation grid, collision, timing, RNG, network protocol and save bytes
@@ -34,6 +35,17 @@ without delaying simulation death or entering saves/digests. Classic, DuneCity,
 Tornie and other mods retain their prior presentation. Mixed-graphics live
 multiplayer and visual play tests remain required; unit/source invariants are
 not proof of those tests. See [presentation contract](docs/dune2r-world-presentation.md).
+
+The 1.0.812 follow-up recognizes online `ws-<64 lowercase hex>` identities only
+when ModManager resolves a verified canonical revision with content base Dune2R
+and no descendant Base Mod. The capability is cached/restored at activation. The unit
+manifest loader and new Infantry hooks use that same gate. Arbitrary derived
+mods and snapshots of other bases remain at their prior scale. Preexisting
+content-base graphics-toggle behavior is retained. Snapshot EditoR preferences
+use a snapshot-specific section in the user's config rather than writing into
+the immutable mod. Real revision-store fixtures cover canonical versus derived
+identity, forged sidecars, tampered/missing revisions and unchanged payloads
+after local preference edits. No multiplayer checksum or protocol fields are added.
 
 Windows MSVC 19.38 rejected conditional construction of noncopyable INIFile in
 three existing paths. Unique ownership preserves the same read/write behavior
@@ -48,10 +60,10 @@ download opt-in skip. Eight Infantry packager, eight DuneCity packaging, eight b
 mod, one immutable-catalog and five browser-shell checks also passed; the ordered
 pixel comparison verified all 386 runtime poses against the approved sources.
 
-Android metadata is 0.2.27 / 1000547 with game payload 1.0.811. The DuneCity skin
+Android metadata is 0.2.28 / 1000548 with game payload 1.0.812. The DuneCity skin
 content fingerprint is `D7CAF796B1349228`. Windows compilation and initial Android
-native/APK builds succeeded; the Android native source is being incrementally
-rebuilt against the final portability/isolation edits before final APK packaging.
+native/APK builds succeeded for 811. The final Windows and Android source is being
+rebuilt with the 812 verified-snapshot gate before final APK packaging.
 No phone was attached at the last ADB check. No stable release, website deployment,
 main merge or on-device play-test is implied by these local build results.
 
