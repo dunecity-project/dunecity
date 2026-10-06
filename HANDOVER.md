@@ -54,9 +54,14 @@ initialization/hidden rendering. Native and portable executable code/string
 sections match. Portable executable SHA-256:
 `bf7f3a7b318ac5680e7e210a47278588f760d7de60f248b885f50938a23996e9`.
 Protocol 55 / policy `whole-army-base-scramble-v90`; save 9852 / runtime 7.
-MBA installation is pending the final app swap; the app is closed and installed
-baseline 805 is verified. No running match was stopped. Nothing
-pushed or publicly published. Evidence: ../outputs/base-scramble-807-20261006/.
+Installed on Stefans-MacBook-Air.local at `/Applications/dunecity.app` from
+source commit `abdf71e70697a01cae2ba27ed86aa9bfc2103e97`. A separate fresh check
+confirms version/hash, deep/strict signature, bundled SDL hidden rendering,
+Desktop shortcut and all 2,061 save/INI files unchanged. The verified 805
+rollback is `/Applications/.dunecity-backup-before-807-20261006/dunecity.app`.
+No running match was stopped or launched. The temporary idle-sleep hold used
+for transfer was removed. Nothing pushed or publicly published.
+Evidence and receipts: ../outputs/base-scramble-807-20261006/.
 
 # 2026-10-05 — Hunt launcher spacing and strength-based recovery (1.0.806)
 
