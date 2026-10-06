@@ -261,6 +261,32 @@ private:
     static constexpr int kEmergencyBandMax = 40;
     static int emergencyResponseRadius(int threatValue);
 
+    /// Does this house answer a real attack on a building it owns with its whole
+    /// ground army? Scoped exactly like the whole-army dispatch and the hunting
+    /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
+    /// deliberately independent of the optional recovery policy.
+    bool wholeArmyBaseDefence() const;
+    /// Is \a contact right now shooting at a building we own? A live hostile
+    /// attacker, our structure as its target, and inside weapon range of it. A dead,
+    /// stopped, friendly or merely nearby enemy is not.
+    bool attackingOwnedBuilding(const ObjectBase* contact) const;
+    /// Is this unit's defence contact such an attack? Those contacts are hunted
+    /// rather than guarded, so the troop keeps the engine's attacking behaviour.
+    bool baseDefenceAssignment(const UnitBase* unit) const;
+    /// Every available ground combat troop, wherever on the map it stands, onto
+    /// one attack on a building we own: the main base or an outlying colony,
+    /// including an R/C/I zone. No response radius, no proportional quota and no
+    /// posture, strength or assembly condition - those bound fresh offence, not
+    /// a house being attacked at home. Human orders, repair runs, booked
+    /// carryall pickups, workers, builders, transports and the air planner's
+    /// aircraft keep their units, and a hunting launcher stays a hunter so its
+    /// close-range escape keeps working.
+    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const Coord& contact);
+    /// How close to the contact a troop's own fight already counts as this
+    /// battle. Those troops keep their orders, so repeated scans never restart
+    /// an order or a path that is already taking a unit into the same fight.
+    static constexpr int kBaseScrambleContactTiles = 8;
+
 
     Coord findMcvPlaceLocation(const MCV* pMCV);
     /// \a needsLocalSpace states that this MCV has already failed to find a

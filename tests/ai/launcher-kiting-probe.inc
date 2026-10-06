@@ -288,6 +288,99 @@ void runLauncherKitingProbe(Game& game) {
                 "The escape stopped working after the authority checks");
         }
 
+        // ---- Emergency base defence keeps the spacing AND the firing --------
+        //
+        // A real attack on a building this house owns sends the whole army to
+        // Hunt the invasion, and a launcher is part of that army. Being a
+        // defender is not a reason to die at point-blank range inside its own
+        // base: it still backs off an enemy that is already on top of it, stays
+        // in Hunt, keeps its contact, and gets its shots away across the gap.
+        // Everything below is measured over real cycles, and the launcher is the
+        // only unit of ours on the map, so the damage can only be its own.
+        {
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->defenceAssignments.clear();
+            bot->defenceResponseCycles.clear();
+            bot->customWave.members.clear();
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            auto* yard=dynamic_cast<StructureBase*>(currentGame->getObjectManager()
+                .getObject(fixtureStructureIds.front()));
+            require(yard && yard->getItemID()==Structure_ConstructionYard && yard->getHealth()>0,
+                "Emergency fixture lost its construction yard");
+            closer->setLocation(origin+Coord(5,5));
+            closer->setHealth(closer->getMaxHealth());
+            closer->doSetAttackMode(AREAGUARD);
+            closer->doAttackObject(yard,true);
+            require(closer->getTarget()==yard && closer->isInWeaponRange(yard),
+                "Emergency fixture invader is not actually attacking the yard");
+            hunt(launcher,origin+Coord(6,5));
+            require(gap(launcher,closer)<=band,
+                "Emergency fixture invader does not start inside the launcher's close band");
+            bot->onDamage(yard,40,closer->getObjectID());
+            require(launcher->getAttackMode()==HUNT,
+                "The base emergency took its launcher out of engine Hunt");
+            require(bot->defenceAssignments.count(launcher->getObjectID()),
+                "The base emergency did not commit the launcher to the invasion");
+            require(bot->escapeCloseThreatWhileHunting(launcher),
+                "An emergency Hunt defender was refused its close-range spacing");
+
+            const Coord escape=launcher->getDestination();
+            require(launcher->wasForced() && !launcher->hasATarget(),
+                "Emergency launcher fixture did not enter a real escape move");
+            auto* worker=spawn(owner,Unit_Harvester,Coord(10,8));
+            auto* workerRaider=spawn(enemy,Unit_Tank,Coord(9,8));
+            workerRaider->doAttackObject(worker,true);
+            publish();
+            require(workerRaider->isInWeaponRange(worker),
+                "Worker raid fixture is not actually in range");
+            bot->defenceResponseCycles.clear();
+            bot->scrambleUnitsAndDefend(workerRaider,false,worker);
+            require(launcher->getAttackMode()==HUNT && launcher->wasForced()
+                && launcher->getDestination()==escape && !launcher->hasATarget(),
+                "A worker raid interrupted a base defender's launcher escape");
+            // Keep the extra actors alive off-stage; removing them from the
+            // published fixture list would strand their spatial-grid entries.
+            workerRaider->setLocation(origin+Coord(35,28));
+            workerRaider->doSetAttackMode(STOP);
+            workerRaider->setTarget(nullptr);
+            worker->setLocation(origin+Coord(38,28));
+            worker->doSetAttackMode(STOP);
+
+            const FixPoint invaderHealth=closer->getHealth();
+            int opened=gap(launcher,closer), ticks=0;
+            while(ticks<900 && (opened<=reach || closer->getHealth()>=invaderHealth)) {
+                bot->checkAllUnits();      // repeated ordinary scans, every pass
+                tick(30);
+                ticks+=30;
+                opened=std::max(opened,gap(launcher,closer));
+            }
+            SDL_Log("LAUNCHER_KITE_DIAG: emergency opened=%d reach=%d ticks=%d health=%d->%d "
+                "mode=%d assigned=%d",
+                opened,reach,ticks,invaderHealth.lround(),closer->getHealth().lround(),
+                int(launcher->getAttackMode()),
+                int(bot->defenceAssignments.count(launcher->getObjectID())));
+            require(opened>reach,
+                "An emergency Hunt defender never got outside the invader's own reach");
+            require(closer->getHealth()<invaderHealth,
+                "An emergency Hunt defender never actually fired on the invasion");
+            require(launcher->getAttackMode()==HUNT,
+                "The emergency defender lost engine Hunt while defending");
+            require(!bot->reserveDamagedUnitForRepair(launcher),
+                "Emergency fixture launcher ended up reserved for repair, which proves nothing");
+
+            // The invasion stops: the contact is released and nothing is left
+            // forced at the place the invader used to stand.
+            closer->setTarget(nullptr);
+            closer->doSetAttackMode(STOP);
+            closer->setLocation(origin+Coord(30,25));
+            bot->checkAllUnits();
+            require(!bot->defenceAssignments.count(launcher->getObjectID()),
+                "The defence contact outlived the attack on the building");
+            closer->setHealth(closer->getMaxHealth());
+            launcher->setHealth(launcher->getMaxHealth());
+            bot->defenceAssignments.clear();
+        }
+
         // ---- Everything else keeps the 805 behaviour -----------------------
         {
             bot->difficulty=QuantBot::Difficulty::Brutal;

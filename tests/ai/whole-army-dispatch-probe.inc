@@ -1,3 +1,5 @@
+#include <structures/TurretBase.h>
+
 // Real-engine Custom Hard/Brutal whole-army dispatch and asset emergency
 // defence. Included only by run-campaign-balance.py; never linked into the game.
 //
@@ -7,8 +9,8 @@
 // The two behaviours under test:
 //   1. One attack dispatch sends the WHOLE available combat army to engine
 //      Hunt, wherever it stands and whatever it was previously doing.
-//   2. An attack on a building or worker we own pulls an adequate local
-//      response in a single event, including troops that were hunting.
+//   2. A building attack sends the whole ground army to Hunt; worker raids
+//      retain a bounded local response.
 void runWholeArmyDispatchProbe(Game& game) {
     auto require=[](bool ok,const char* why){
         if(!ok){SDL_Log("WHOLE_ARMY_FAIL: %s",why);throw std::runtime_error(why);}
@@ -81,6 +83,10 @@ void runWholeArmyDispatchProbe(Game& game) {
         for(const Uint32 id:fixtureStructureIds)
             if(auto* s=dynamic_cast<StructureBase*>(currentGame->getObjectManager().getObject(id)))
                 if(s->getHealth()>0) s->setHealth(0);
+    };
+    auto tick=[&](int cycles){ for(int i=0;i<cycles;++i){game.processObjects();++game.gameCycleCount;} };
+    auto range=[&](const ObjectBase* a,const ObjectBase* b){
+        return blockDistance(a->getLocation(),b->getLocation()).lround();
     };
 
     try {
@@ -295,22 +301,26 @@ void runWholeArmyDispatchProbe(Game& game) {
             bot->refreshTacticalDanger();
             bot->scrambleUnitsAndDefend(assault.front(),false,asset);
 
-            int responders=0, huntersPulled=0;
+            int responders=0, hunting=0;
             for(auto* unit:eligible)
                 if(bot->defenceAssignments.count(unit->getObjectID())) {
                     ++responders;
-                    if(unit->getAttackMode()==AREAGUARD) ++huntersPulled;
+                    if(unit->getAttackMode()==HUNT) ++hunting;
                 }
             const int threat=14*currentGame->objectData.data[Unit_SiegeTank]
                 [enemy->getHouseID()].price;
-            SDL_Log("WHOLE_ARMY_DIAG: emergency responders=%d of %zu hunters_pulled=%d "
+            SDL_Log("WHOLE_ARMY_DIAG: emergency responders=%d of %zu hunting=%d "
                 "threat=%d band=%d",
-                responders,eligible.size(),huntersPulled,threat,
+                responders,eligible.size(),hunting,threat,
                 QuantBot::emergencyResponseRadius(threat));
             // Adequate, not token: the old proportional answer to this raid was
             // a handful of the nearest troops.
             require(responders>=8,"An overwhelming attack on our own building got a token response");
-            require(huntersPulled>0,"The emergency could not recall any hunting troop");
+            // And every one of them answers it the way the owner requires: by
+            // hunting the invasion, not by parking in Area Guard. The recall of
+            // troops that were hunting elsewhere is asserted below.
+            require(hunting==responders,
+                "A troop answering an attack on our own building was not sent to Hunt");
             require(bot->defenceAssignments.count(engaged->getObjectID()),
                 "A hunter busy elsewhere was left out of a base emergency");
             // Human orders, workers, transports and the air planner keep theirs.
@@ -367,6 +377,401 @@ void runWholeArmyDispatchProbe(Game& game) {
                 retire(poacher);
                 bot->defenceAssignments.clear();
             }
+        }
+
+        // ---- A real attack on a building we own scrambles the WHOLE army ----
+        //
+        // The requirement the bounded local response above cannot meet: when a
+        // building this house owns is actually under attack, EVERY eligible
+        // ground combat troop on the map hunts that invasion. Local or well
+        // outside the bounded response band, idle, guarding, retreating or
+        // already hunting somewhere else, in every posture, and with no
+        // readiness, quota, strength or assembly condition in the way. Movement
+        // and damage are measured over real game cycles, so "it answered" means
+        // it travelled and fought rather than that an order was accepted.
+        {
+            bot->colonyGuardSet.clear();
+            bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+            bot->localSquadWithdraw=false;
+            // No offensive dispatch can explain anything below: no wave is ever
+            // ready at this limit, and the attack timer never expires.
+            bot->militaryValueLimit=100000000;
+            bot->attackTimer=std::numeric_limits<Sint32>::max();
+            getQuantBotConfig().recovery.enabled=true;
+
+            auto* farTank=spawn(owner,Unit_Tank,Coord(45,25));
+            auto* farQuad=spawn(owner,Unit_Quad,Coord(44,25));
+            auto* farLauncher=spawn(owner,Unit_Launcher,Coord(45,23));
+            std::vector<UnitBase*> army=eligible;
+            for(auto* unit:{farTank,farQuad,farLauncher}) army.push_back(unit);
+            publish();
+
+            auto* yard=dynamic_cast<StructureBase*>(currentGame->getObjectManager()
+                .getObject(fixtureStructureIds.front()));
+            require(yard && yard->getItemID()==Structure_ConstructionYard && yard->getHealth()>0,
+                "Base-scramble fixture lost its construction yard");
+            UnitBase* raider=spawn(enemy,Unit_Trike,Coord(7,3));
+            publish();
+
+            // Where every responder starts from. The last three are the distant
+            // reserve, parked in whichever corner is furthest from the building
+            // under attack so "outside the bounded band" is a measured fact.
+            std::vector<Coord> origins;
+            for(auto* unit:eligible) origins.push_back(unit->getLocation());
+            std::vector<Coord> farSlots{origin+Coord(45,25),origin+Coord(44,25),origin+Coord(45,23)};
+            auto reset=[&](bool mixed) {
+                bot->defenceAssignments.clear();
+                bot->defenceResponseCycles.clear();
+                bot->customWave.members.clear();
+                for(size_t i=0;i<army.size();++i) {
+                    const Coord at=i<origins.size() ? origins[i] : farSlots[i-origins.size()];
+                    army[i]->setHealth(army[i]->getMaxHealth());
+                    army[i]->setLocation(at);
+                    bot->doMove2Pos(army[i],army[i]->getX(),army[i]->getY(),false);
+                    bot->doSetAttackMode(army[i],GUARD);
+                    army[i]->setForced(false);
+                }
+                if(mixed) {
+                    // Retreating, posted on Area Guard with prey of its own, and
+                    // already hunting: none of these may hold a troop at home.
+                    bot->doSetAttackMode(retreating,RETREAT);
+                    bot->doSetAttackMode(targeting,AREAGUARD);
+                    bot->doAttackObject(targeting,prey,false);
+                    for(auto* unit:remote) bot->doSetAttackMode(unit,HUNT);
+                    bot->colonyGuardSet.clear();
+                    bot->colonyGuardSet[colonyGuard->getObjectID()]=origin+Coord(40,2);
+                    bot->colonyGuardCycle=currentGame->getGameCycleCount();
+                }
+                bot->manualUnitOrders.clear();
+                bot->onHumanUnitOrder(commanded->getObjectID());
+                wreck->setHealth(wreck->getMaxHealth()/10);
+                require(bot->reserveDamagedUnitForRepair(wreck),
+                    "Base-scramble fixture repair-bound unit is not actually reserved");
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
+                publish();
+            };
+            auto invade=[&](StructureBase* building,Coord at) {
+                raider->setLocation(at);
+                raider->setHealth(raider->getMaxHealth());
+                raider->doSetAttackMode(AREAGUARD);
+                raider->doAttackObject(building,true);
+                publish();
+                require(raider->getTarget()==building && raider->isInWeaponRange(building),
+                    "Base-scramble fixture raider is not actually attacking the building");
+            };
+            auto everyoneHunts=[&](const char* why) {
+                for(auto* unit:army) {
+                    if(unit->getAttackMode()==HUNT
+                        && bot->defenceAssignments.count(unit->getObjectID())
+                        && bot->defenceAssignments[unit->getObjectID()]==raider->getObjectID()) continue;
+                    SDL_Log("WHOLE_ARMY_DIAG: base scramble left id=%u item=%u at=%d,%d dist=%d "
+                        "mode=%d assigned=%d",
+                        unit->getObjectID(),unit->getItemID(),unit->getLocation().x,
+                        unit->getLocation().y,range(unit,raider),int(unit->getAttackMode()),
+                        int(bot->defenceAssignments.count(unit->getObjectID())));
+                    require(false,why);
+                }
+            };
+            auto protectedUnitsKept=[&](const char* why) {
+                for(auto* unit:excluded)
+                    require(!bot->defenceAssignments.count(unit->getObjectID()),why);
+                for(auto* unit:{commanded,wreck,worker,builder})
+                    require(unit->getAttackMode()!=HUNT,why);
+            };
+            auto farthest=[&]{
+                int worst=0;
+                for(auto* unit:army) worst=std::max(worst,range(unit,raider));
+                return worst;
+            };
+
+            // 1. The damage callback, in every difficulty and every posture the
+            //    army machine can be in - including the ones that suppress all
+            //    offensive dispatch - and from a mixed set of unit states.
+            for(const auto difficulty:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal})
+                for(const auto posture:{ArmyPosturePolicy::Posture::Offensive,
+                                        ArmyPosturePolicy::Posture::Withdrawing,
+                                        ArmyPosturePolicy::Posture::Recovering}) {
+                    bot->difficulty=difficulty;
+                    bot->armyPosture=posture;
+                    bot->postureSince=currentGame->getGameCycleCount();
+                    reset(true);
+                    invade(yard,origin+Coord(7,3));
+                    const int far=farthest();
+                    require(far>QuantBot::kEmergencyBandMax,
+                        "Base-scramble fixture has no responder outside the bounded response band");
+                    bot->onDamage(yard,40,raider->getObjectID());
+                    SDL_Log("WHOLE_ARMY_DIAG: base scramble difficulty=%d posture=%s army=%zu "
+                        "farthest=%d band_max=%d",
+                        int(difficulty),ArmyPosturePolicy::postureName(posture),army.size(),
+                        far,QuantBot::kEmergencyBandMax);
+                    everyoneHunts("A real attack on our own building did not send the whole army to Hunt");
+                    protectedUnitsKept("The base scramble commandeered a protected unit");
+                }
+
+            // Separate live attacks must not send a travelling army back and
+            // forth between colonies. Keep the invasion it is already hunting.
+            {
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                reset(false);
+                invade(yard,origin+Coord(7,3));
+                bot->onDamage(yard,40,raider->getObjectID());
+                everyoneHunts("The first invasion did not mobilise the army");
+                const Coord transit=farTank->getDestination();
+                auto* otherColony=place(owner,Structure_ZoneResidential,Coord(42,20));
+                require(otherColony,"Second invasion fixture could not place its colony");
+                auto* other=spawn(enemy,Unit_SiegeTank,Coord(40,22));
+                other->doAttackObject(otherColony,true);
+                publish();
+                require(other->isInWeaponRange(otherColony),
+                    "Second invasion fixture is outside its weapon range");
+                bot->defenceResponseCycles.clear();
+                bot->scrambleUnitsAndDefend(other,false,otherColony);
+                require(farTank->getTarget()==raider && farTank->getDestination()==transit,
+                    "A second base attack restarted a travelling defender's order");
+                everyoneHunts("A second invasion stole an ongoing whole-army defence");
+                retire(other);
+                publish();
+
+                // Ending the attack releases its ownership even if the living
+                // enemy remains beside the base. Hunt can still fight it normally.
+                raider->setTarget(nullptr);
+                raider->doSetAttackMode(STOP);
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(!bot->defenceAssignments.count(unit->getObjectID()),
+                        "A stopped attacker beside the base retained emergency ownership");
+
+                // The same ordinary scan must notice real turret fire, and
+                // release it when that target is removed without a death.
+                auto* gun=dynamic_cast<TurretBase*>(place(enemy,Structure_RocketTurret,Coord(36,20)));
+                require(gun,"Turret invasion fixture could not place its attacker");
+                gun->doAttackObject(otherColony);
+                require(gun->getTarget()==otherColony && gun->targetInWeaponRange(),
+                    "Turret invasion fixture is not attacking the colony in range");
+                bot->defenceResponseCycles.clear();
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(unit->getAttackMode()==HUNT
+                        && bot->defenceAssignments.count(unit->getObjectID())
+                        && bot->defenceAssignments[unit->getObjectID()]==gun->getObjectID(),
+                        "Turret fire at a colony did not mobilise the whole army");
+                gun->setTarget(nullptr);
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(!bot->defenceAssignments.count(unit->getObjectID()),
+                        "Ended turret fire retained whole-army ownership");
+                gun->setHealth(0);
+                otherColony->setHealth(0);
+                publish();
+            }
+
+            // 2. The ordinary scan, with no damage callback at all, against an
+            //    outlying colony lot of each R/C/I kind rather than the base.
+            //    The reserve moves to the opposite corner for these, so it is
+            //    again genuinely far from the building that is being attacked.
+            {
+                farSlots={origin+Coord(0,25),origin+Coord(1,25),origin+Coord(0,23)};
+                int lotRow=8;
+                for(const Uint32 lot:{Structure_ZoneResidential,Structure_ZoneCommercial,
+                                      Structure_ZoneIndustrial}) {
+                    bot->difficulty=QuantBot::Difficulty::Hard;
+                    bot->armyPosture=ArmyPosturePolicy::Posture::Recovering;
+                    auto* colony=place(owner,lot,Coord(42,lotRow));
+                    require(colony,"Base-scramble fixture could not place a remote colony lot");
+                    reset(true);
+                    invade(colony,origin+Coord(41,lotRow+2));
+                    require(farthest()>QuantBot::kEmergencyBandMax,
+                        "Base-scramble colony fixture has no responder outside the response band");
+                    bot->checkAllUnits();
+                    SDL_Log("WHOLE_ARMY_DIAG: colony scramble lot=%u row=%d farthest=%d",
+                        lot,lotRow,farthest());
+                    everyoneHunts("An ordinary scan did not send the whole army to a colony under attack");
+                    protectedUnitsKept("The colony scramble commandeered a protected unit");
+                    colony->setHealth(0);
+                    lotRow+=4;
+                }
+                farSlots={origin+Coord(45,25),origin+Coord(44,25),origin+Coord(45,23)};
+            }
+
+            // 3. Real cycles: the recall cannot claim a committed defender, the
+            //    distant reserve really closes on the invasion, repeated scans
+            //    do not restart what is already under way, and the troops that
+            //    reach the raider really damage it.
+            {
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Withdrawing;
+                bot->postureSince=currentGame->getGameCycleCount();
+                reset(false);
+                invade(yard,origin+Coord(7,3));
+                // The whole army is a tracked wave that the withdrawal would
+                // otherwise be pulling home, with a valid shelter to pull it to.
+                for(auto* unit:army) bot->customWave.members.insert(unit->getObjectID());
+                bot->protectedRally=origin+Coord(5,11);
+                bot->protectedRallyCycle=std::numeric_limits<Uint32>::max();
+                bot->checkAllUnits();
+                everyoneHunts("A withdrawal reclaimed the defenders of a building under attack");
+                require(farTank->getTarget()==raider,
+                    "The distant reserve was not pointed at the invasion itself");
+
+                const int start=range(farTank,raider);
+                int closed=start, ticks=0;
+                // The invader stays alive through this phase so the contact
+                // cannot end before the measurement does. Several tiles of real
+                // ground, not one, so a single step cannot pass for travelling.
+                while(ticks<1500 && closed>start-3) {
+                    bot->checkAllUnits();
+                    tick(60);
+                    ticks+=60;
+                    raider->setHealth(raider->getMaxHealth());
+                    yard->setHealth(yard->getMaxHealth());
+                    closed=std::min(closed,range(farTank,raider));
+                }
+                SDL_Log("WHOLE_ARMY_DIAG: base scramble travel start=%d closed=%d ticks=%d mode=%d",
+                    start,closed,ticks,int(farTank->getAttackMode()));
+                require(start>QuantBot::kEmergencyBandMax,
+                    "The travelling reserve did not start outside the response band");
+                require(closed<=start-3,
+                    "A scrambled distant reserve never moved towards the invasion");
+                require(farTank->getAttackMode()==HUNT,
+                    "The travelling reserve lost engine Hunt on the way");
+                require(bot->defenceAssignments.count(farTank->getObjectID()),
+                    "The travelling reserve lost its contact on the way");
+
+                // Now let it die: real combat damage, not an accepted order.
+                const FixPoint invaderHealth=raider->getHealth();
+                int combat=0;
+                while(combat<900 && raider->getHealth()>=invaderHealth) {
+                    bot->checkAllUnits();
+                    tick(30);
+                    combat+=30;
+                }
+                SDL_Log("WHOLE_ARMY_DIAG: base scramble combat ticks=%d health=%d->%d",
+                    combat,invaderHealth.lround(),raider->getHealth().lround());
+                require(raider->getHealth()<invaderHealth,
+                    "The scrambled army never actually damaged the invader");
+
+                // The threat dies: every contact is released. What the house
+                // does next - here, resume the withdrawal it was interrupted
+                // from - is its own decision again.
+                retire(raider);
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(!bot->defenceAssignments.count(unit->getObjectID()),
+                        "A defender kept its contact after the invasion died");
+                raider=spawn(enemy,Unit_Trike,Coord(7,3));
+                publish();
+            }
+
+            // 3b. The same release with nothing else competing for the troops,
+            //     so the forced transit the emergency created is observed being
+            //     dropped rather than replaced by a recall or a rally order.
+            {
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                reset(false);
+                invade(yard,origin+Coord(7,3));
+                bot->checkAllUnits();
+                everyoneHunts("A quiet-posture base attack did not scramble the whole army");
+                require(farTank->wasForced(),
+                    "The distant reserve was not actually committed to travel");
+                retire(raider);
+                bot->checkAllUnits();
+                for(auto* unit:army) {
+                    if(!bot->defenceAssignments.count(unit->getObjectID()) && !unit->wasForced())
+                        continue;
+                    SDL_Log("WHOLE_ARMY_DIAG: not released id=%u item=%u mode=%d assigned=%d "
+                        "forced=%d dest=%d,%d",
+                        unit->getObjectID(),unit->getItemID(),int(unit->getAttackMode()),
+                        int(bot->defenceAssignments.count(unit->getObjectID())),
+                        int(unit->wasForced()),unit->getDestination().x,unit->getDestination().y);
+                    require(false,"A defender was not released when the invasion died");
+                }
+                raider=spawn(enemy,Unit_Trike,Coord(7,3));
+                publish();
+            }
+
+            // 4. What must NOT scramble a house: an enemy that is merely
+            //    standing somewhere, one that has stopped attacking, and a dead
+            //    contact. The attack has to be real and current.
+            {
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                reset(false);
+                auto* loiterer=spawn(enemy,Unit_Tank,Coord(36,20));
+                publish();
+                loiterer->doSetAttackMode(STOP);
+                loiterer->setTarget(nullptr);
+                bot->scrambleUnitsAndDefend(loiterer);
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(unit->getAttackMode()!=HUNT,
+                        "An idle distant enemy scrambled the whole house");
+
+                // Standing on the base but no longer shooting it.
+                reset(false);
+                invade(yard,origin+Coord(7,3));
+                raider->setTarget(nullptr);
+                raider->doSetAttackMode(STOP);
+                bot->defenceAssignments.clear();
+                bot->defenceResponseCycles.clear();
+                bot->checkAllUnits();
+                for(auto* unit:army)
+                    require(unit->getAttackMode()!=HUNT,
+                        "An attacker that had stopped shooting scrambled the whole house");
+
+                // A dead contact, handed in through the damage callback.
+                reset(false);
+                invade(yard,origin+Coord(7,3));
+                raider->setHealth(0);
+                bot->defenceAssignments.clear();
+                bot->defenceResponseCycles.clear();
+                bot->scrambleUnitsAndDefend(raider,false,yard);
+                for(auto* unit:army)
+                    require(unit->getAttackMode()!=HUNT,"A dead contact scrambled the whole house");
+                retire(loiterer);
+            }
+
+            // 5. A harvester under fire keeps the established bounded district
+            //    response: it answers, and it does not mobilise the map.
+            {
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+                reset(false);
+                retire(raider);     // Nothing is attacking a building any more.
+                auto* poacher=spawn(enemy,Unit_Tank,Coord(7,13));
+                publish();
+                poacher->doSetAttackMode(AREAGUARD);
+                poacher->doAttackObject(worker,true);
+                require(poacher->getTarget()==worker && poacher->isInWeaponRange(worker),
+                    "Harvester fixture attacker is not actually shooting the harvester");
+                bot->defenceAssignments.clear();
+                bot->defenceResponseCycles.clear();
+                bot->checkAllUnits();
+                int answered=0;
+                for(auto* unit:army)
+                    if(bot->defenceAssignments.count(unit->getObjectID())) ++answered;
+                SDL_Log("WHOLE_ARMY_DIAG: harvester response answered=%d of %zu far=%d band=%d",
+                    answered,army.size(),range(farTank,poacher),
+                    QuantBot::emergencyResponseRadius(
+                        currentGame->objectData.data[Unit_Tank][enemy->getHouseID()].price));
+                require(answered>0,"A harvester under fire got no answer at all");
+                require(range(farTank,poacher)>QuantBot::kEmergencyBandMax
+                    && !bot->defenceAssignments.count(farTank->getObjectID())
+                    && farTank->getAttackMode()!=HUNT,
+                    "A harvester raid mobilised a reserve on the far side of the map");
+                require(!bot->defenceAssignments.count(worker->getObjectID()),
+                    "The harvester was sent to defend itself");
+                retire(poacher);
+            }
+
+            for(auto* unit:{farTank,farQuad,farLauncher}) retire(unit);
+            bot->defenceAssignments.clear();
+            bot->customWave.members.clear();
+            bot->colonyGuardSet.clear();
+            bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+            bot->localSquadWithdraw=false;
         }
 
         // ---- Easy, Medium and campaign behaviour are untouched --------------

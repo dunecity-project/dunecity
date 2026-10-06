@@ -10377,6 +10377,30 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         defendStructuresFromAircraft();
         return;
     }
+    // A building we own - the main base or an outlying colony, including an
+    // R/C/I zone - is actually being attacked. That contact is answered by the
+    // whole army and by nothing else: the proportional budget and the bounded
+    // response band below are a district answer to a raid, and a house whose
+    // base is being taken apart has no reserve worth holding anywhere on the
+    // map. Everything available hunts the invasion, so this branch replaces the
+    // local response rather than adding to it. Workers and ordinary contacts
+    // keep that established local path unchanged.
+    //
+    // "Actually" is the damage event itself, or an attacker standing in weapon
+    // range of the building it has targeted. An idle enemy across the map, an
+    // attacker that has stopped, a dead contact and a worker raid are none of
+    // those, and none of them scrambles the house.
+    const ObjectBase* attackedBuilding = nullptr;
+    if (!clearingSpice && intruder->getItemID()!=Unit_Sandworm) {
+        if (protectedAsset && protectedAsset->isAStructure()
+            && protectedAsset->getOwner()==getHouse() && protectedAsset->getHealth()>0)
+            attackedBuilding = protectedAsset;
+        else if (attackingOwnedBuilding(intruder)) attackedBuilding = intruder->getTarget();
+    }
+    if (attackedBuilding && wholeArmyBaseDefence()) {
+        scrambleWholeArmyToDefend(intruder,contact);
+        return;
+    }
     // One of our own buildings or workers is being shot at. This is the event
     // the player sees as "nobody came to help": the proportional reinforcement
     // budget below answers a 10,000-credit assault with the nearest handful of
@@ -10408,6 +10432,8 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             || !unit->canAttack(intruder) || reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT
             || unit->getItemID()==Unit_Saboteur || unit->getItemID()==Unit_Harvester
             || unit->getItemID()==Unit_Ornithopter) continue; // Air planner prioritizes active base/worker attackers.
+        // A worker raid cannot cancel an ongoing whole-army base response.
+        if (baseDefenceAssignment(unit)) continue;
         if (clearingSpice && blockDistance(contact,unit->getLocation())>clearingRadius) continue;
         const auto* target=unit->getTarget();
         const auto assignment=defenceAssignments.find(unit->getObjectID());
@@ -10471,6 +10497,122 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         .set("response_band",emergencyBand)
         .set("candidates",int(candidates.size()))
         .set("dispatched",dispatched));
+}
+
+bool QuantBot::wholeArmyBaseDefence() const {
+    return !supportMode && currentGame!=nullptr && gameMode==GameMode::Custom
+        && !isCampaignGameType(currentGame->gameType)
+        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+}
+
+bool QuantBot::attackingOwnedBuilding(const ObjectBase* contact) const {
+    // Is this contact, right now, shooting at a building we own? One live
+    // hostile attacker, one target that is our structure, and close enough to
+    // actually be hitting it. An attacker that died, that stopped, that has
+    // moved on to something else or that never had a target is not an attack on
+    // our base, and must never scramble the house.
+    if (!contact || contact->getHealth()<=0 || !contact->isActive() || !contact->canAttack()) return false;
+    if (!contact->getOwner() || contact->getOwner()->getTeamID()==getHouse()->getTeamID()) return false;
+    if (contact->getItemID()==Unit_Sandworm) return false;
+    const auto* victim=contact->getTarget();
+    return victim && victim->isAStructure() && victim->getOwner()==getHouse()
+        && victim->getHealth()>0 && (contact->isAUnit()
+            ? static_cast<const UnitBase*>(contact)->isInWeaponRange(victim)
+            : blockDistance(contact->getLocation(),victim->getClosestPoint(contact->getLocation()))
+                <= contact->getWeaponRange());
+}
+
+bool QuantBot::baseDefenceAssignment(const UnitBase* unit) const {
+    // Is this unit's defence contact a real, ongoing attack on a building we
+    // own? Such a contact is answered by hunting it, so the troop keeps the
+    // engine's own attacking behaviour - including a launcher's spacing step -
+    // rather than being owned by an anchored local response.
+    if (!unit || !wholeArmyBaseDefence() || unit->getAttackMode()!=HUNT
+        || unit->getGuardPoint().isValid()) return false;
+    const auto assignment=defenceAssignments.find(unit->getObjectID());
+    return assignment!=defenceAssignments.end()
+        && attackingOwnedBuilding(getObject(assignment->second));
+}
+
+void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Coord& contact) {
+    AITelemetry::PerformanceScope perfScope("ai.scrambleWholeArmyToDefend",
+        getGameCycleCount(), getHouse()->getHouseID());
+    if (!intruder || intruder->getHealth()<=0 || !intruder->getOwner()
+        || intruder->getOwner()->getTeamID()==getHouse()->getTeamID()) return;
+    int sent=0, held=0, already=0, retuned=0;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner()!=getHouse() || !unit->isActive() || !unit->isRespondable()) continue;
+        // Ground combat troops only. Workers, builders, transports, saboteurs,
+        // worms and ambient traffic are not an army, and the aircraft answering
+        // this house's air threats belong to the strike/rescue planner.
+        if (!unit->isAGroundUnit() || !mobileCombatItem(unit->getItemID())
+            || !unit->canAttack() || !unit->canAttack(intruder)) continue;
+        // The authority that already outranks fresh offence keeps outranking a
+        // scramble: a human order, a trip to the repair yard and a booked
+        // carryall pickup stay with their owner. Damage on its own does not -
+        // a wounded tank that is not actually reserved for repair still fights.
+        if (humanControls(unit) || reserveDamagedUnitForRepair(unit)
+            || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()) { ++held; continue; }
+        // An anti-air rescue in progress is the air planner's contact.
+        const auto assignment=defenceAssignments.find(unit->getObjectID());
+        if (assignment!=defenceAssignments.end()) {
+            const auto* assigned=getObject(assignment->second);
+            if (assigned && assigned->isAFlyingUnit() && airAttackContinues(unit,assigned)) {
+                ++held; continue;
+            }
+            // Several colonies can be attacked in the same scan. Do not turn
+            // an army already hunting one live invasion back towards each new
+            // contact; it must finish its transit and its launcher escape.
+            if (unit->getAttackMode()==HUNT && unit->getGuardPoint().isInvalid()
+                && assigned && !assigned->isAFlyingUnit() && attackingOwnedBuilding(assigned)) {
+                groundSquad.erase(unit->getObjectID());
+                ++already; continue;
+            }
+        }
+        defenceAssignments[unit->getObjectID()]=intruder->getObjectID();
+        groundSquad.erase(unit->getObjectID());
+        // Hunt owns no posted guard position. This existing saved order field
+        // distinguishes a mobile base response from an ordinary district post.
+        const_cast<UnitBase*>(unit)->setGuardPoint(Coord::Invalid());
+        // A launcher in the middle of its close-range spacing step has a forced
+        // move and no target of its own. Re-issuing an attack order on top of
+        // that is exactly what would cancel the escape and walk it back into
+        // point-blank range, so this pass leaves it to finish.
+        if (huntingLauncher(unit) && unit->wasForced() && !unit->hasATarget()) {
+            ++already; continue;
+        }
+        // Already in this battle: either on the invader itself, or fighting
+        // something else of theirs at the contact. Repeated scans must not
+        // re-issue a target on top of those - that is what would restart a path
+        // mid-journey and overwrite a hunting launcher's spacing step. Only the
+        // mission is corrected, and only when it is not already Hunt.
+        const auto* target=unit->getTarget();
+        const bool atContact=target && target->getHealth()>0 && target->getOwner()
+            && target->getOwner()->getTeamID()!=getHouse()->getTeamID()
+            && !target->isAFlyingUnit()
+            && blockDistance(contact,target->getLocation()).lround()<=kBaseScrambleContactTiles;
+        if (target==intruder || atContact) {
+            if (unit->getAttackMode()!=HUNT) { doSetAttackMode(unit,HUNT); ++retuned; }
+            ++already;
+            continue;
+        }
+        // One ordinary Hunt order, directed at the invasion itself so a remote
+        // reserve travels to the base instead of hunting off towards the enemy.
+        // Forced only while it is too far away to shoot: inside its own weapon
+        // range the engine owns target selection, retargeting and - for a
+        // launcher - the close-range spacing step again. doAttackObject does not
+        // downgrade Hunt, so the mission is set once, after the order.
+        doAttackObject(unit,intruder,!unit->isInWeaponRange(intruder));
+        doSetAttackMode(unit,HUNT);
+        ++sent;
+    }
+    if (sent || already) traceDecision("base_scramble",AITelemetry::Record()
+        .set("target",intruder->getObjectID())
+        .set("x",contact.x).set("y",contact.y)
+        .set("sent",sent).set("already_in_battle",already)
+        .set("mission_corrected",retuned).set("held",held)
+        .set("posture",ArmyPosturePolicy::postureName(armyPosture))
+        .set("configured_limit",militaryValueLimit));
 }
 
 int QuantBot::emergencyResponseRadius(int threatValue) {
@@ -11056,9 +11198,12 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     if (!huntingLauncher(launcher) || !launcher->isActive() || !launcher->isRespondable()) return false;
     // Everything that outranks fresh offence keeps outranking it: a human order,
     // a repair run, a carryall pickup and a live defence contact stay with their
-    // owner rather than being turned into a dodge.
+    // owner rather than being turned into a dodge. The one exception is a
+    // launcher hunting an attack on a building we own: that contact is answered
+    // by hunting it, so the launcher keeps its spacing step and resumes firing
+    // across the gap instead of dying at point-blank range in its own base.
     if (humanControls(launcher) || reserveDamagedUnitForRepair(launcher)
-        || activeDefenceAssignment(launcher)) return false;
+        || (activeDefenceAssignment(launcher) && !baseDefenceAssignment(launcher))) return false;
     if (static_cast<const GroundUnit*>(launcher)->isAwaitingPickup()) return false;
     const ObjectBase* threat = nullptr;
     int desiredRange = 0;
@@ -11106,7 +11251,10 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     // The established spacing helper, which issues one forced step and restores
     // Hunt after it. No Area Guard, no new target, no change to the tracked
     // army: this stays a hunter that is opening a firing gap.
+    const bool baseHunter=baseDefenceAssignment(launcher);
     kiteAwayFromThreat(launcher,threat,desiredRange);
+    // The spacing move sets a guard point; the base hunter still has no post.
+    if (baseHunter) const_cast<UnitBase*>(launcher)->setGuardPoint(Coord::Invalid());
     return true;
 }
 
@@ -11426,6 +11574,13 @@ bool QuantBot::activeDefenceAssignment(const UnitBase* unit) const {
     const auto* target=getObject(assignment->second);
     if (!target || target->getHealth()<=0 || !target->isActive() || !target->getOwner()
         || target->getOwner()->getTeamID()==getHouse()->getTeamID()) return false;
+    // An attack on a building we own is live for as long as it is happening,
+    // however far from it this defender still is. The anchored district test
+    // below would end the contact for a reserve that has not arrived yet, and
+    // the recall and the ordinary rally would then claim it mid-journey.
+    if (wholeArmyBaseDefence() && unit->getAttackMode()==HUNT
+        && unit->getGuardPoint().isInvalid() && !target->isAFlyingUnit())
+        return attackingOwnedBuilding(target);
     // Use the same contact lifetime as the defence scan, including ended air
     // attacks and ground contacts that have left their anchored district.
     return target->isAFlyingUnit() ? airAttackContinues(unit,target)
@@ -13577,6 +13732,11 @@ void QuantBot::retreatAllUnits() {
             // asset, and therefore no change to the air-strike planner.
             if (ownAsset && intruder->isInWeaponRange(victim)) scrambleUnitsAndDefend(intruder);
         }
+        // A forward building can also be shelled by an enemy turret. Recheck
+        // those real targets on the same cadence as mobile attackers.
+        if (wholeArmyBaseDefence()) for (const auto* intruder:getStructureList())
+            if (intruder->isVisible(getHouse()->getTeamID()) && attackingOwnedBuilding(intruder))
+                scrambleUnitsAndDefend(intruder);
         // Aircraft on any building we own, main base or outlying colony, on the
         // same cadence and before regrouping can claim the launchers again.
         defendStructuresFromAircraft();
@@ -13590,6 +13750,9 @@ void QuantBot::retreatAllUnits() {
             // the forced-transit handling below would only park the defender.
             const bool airborne=unit && target && !unit->isAFlyingUnit()
                 && target->isAUnit() && target->isAFlyingUnit();
+            const bool huntingBaseDefence=unit && !airborne
+                && unit->getAttackMode()==HUNT && unit->getGuardPoint().isInvalid()
+                && wholeArmyBaseDefence();
             if (unit && unit->getItemID()==Unit_Saboteur) {
                 it=defenceAssignments.erase(it);
                 continue;
@@ -13599,12 +13762,21 @@ void QuantBot::retreatAllUnits() {
                 || !target || target->getHealth()<=0 || !target->isActive()
                 || target->getOwner()->getTeamID()==getHouse()->getTeamID()
                 || reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT
-                || (airborne ? !airAttackContinues(unit,target) : !campaignDefensiveContact(unit,target))) {
+                || (airborne ? !airAttackContinues(unit,target)
+                    : huntingBaseDefence ? !attackingOwnedBuilding(target)
+                    : !campaignDefensiveContact(unit,target))) {
                 if (unit && unit->getOwner()==getHouse() && !humanControls(unit)
-                    && unit->getAttackMode()==AREAGUARD) {
-                    if (airborne && !reserveDamagedUnitForRepair(unit))
+                    && (unit->getAttackMode()==AREAGUARD || huntingBaseDefence)) {
+                    if (airborne && !reserveDamagedUnitForRepair(unit)
+                        && unit->getAttackMode()==AREAGUARD)
                         doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                    // The emergency is over. Dropping the forced order hands
+                    // target selection back to the engine, so a Hunt defender
+                    // stops travelling to a contact that has died or stopped
+                    // instead of walking to where it used to stand.
                     else const_cast<UnitBase*>(unit)->setForced(false);
+                    if (huntingBaseDefence)
+                        const_cast<UnitBase*>(unit)->setGuardPoint(unit->getLocation());
                 }
                 it=defenceAssignments.erase(it);
             } else if (airborne) {
@@ -13612,6 +13784,25 @@ void QuantBot::retreatAllUnits() {
                 // otherwise leave the approach chosen for this rescue running.
                 if (unit->isInWeaponRange(target) && unit->getTarget()!=target)
                     doAttackObject(unit,target,true);
+                ++it;
+            } else if (huntingBaseDefence) {
+                // A Hunt defender answering an attack on a building we own is an
+                // attacker, not a posted guard. Keep it pointed at the invasion
+                // while it is still too far away to shoot, and hand the fight
+                // back to the engine once it is in range - that is what lets a
+                // launcher take its spacing step and resume firing. Nothing is
+                // re-issued while the order already stands, so a repeated scan
+                // never restarts a path in progress or overwrites an escape.
+                const bool spacing=huntingLauncher(unit) && unit->wasForced()
+                    && !unit->hasATarget();
+                if (!spacing) {
+                    if (unit->isInWeaponRange(target)) {
+                        if (unit->wasForced()) const_cast<UnitBase*>(unit)->setForced(false);
+                    } else if (unit->getTarget()!=target || !unit->wasForced()) {
+                        doAttackObject(unit,target,true);
+                        doSetAttackMode(unit,HUNT);
+                    }
+                }
                 ++it;
             } else {
                 // Keep the original contact during travel. On arrival restore

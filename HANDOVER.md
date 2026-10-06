@@ -1,3 +1,63 @@
+# 2026-10-06 — Whole-army base Hunt response (1.0.807)
+
+The latest MBA 805 telemetry still showed small local Area Guard responses to
+building attacks. Custom Hard/Brutal now sends every available ground combat
+troop to Hunt the actual invader at any owned building, including a remote
+R/C/I colony. Damage callbacks and normal scans recognise the attack; hostile
+turret fire is included. No posture, strength, assembly, response-radius or
+proportional quota gate holds this emergency response back. Human control, the
+existing repair policy, carryall pickup reservations, non-combat units and
+specialised aircraft/air rescue keep their authority. Harvester raids retain
+bounded local response.
+
+Repeated scans retain a live base contact so simultaneous district attacks do
+not reverse the army's travel each pass. A worker raid cannot reclaim those
+defenders. Launcher spacing remains Hunt, preserves the base assignment during
+the escape and resumes firing. Assignments and forced travel expire when the
+attacker dies or stops targeting the building. An invalid guard point in the
+existing saved unit order distinguishes these mobile Hunt defenders from
+ordinary posted defenders; there is no additional serialized state.
+
+A bounded Claude subscription worker implemented the base response and focused
+probes. Root corrected simultaneous-contact retargeting, turret recognition,
+ordinary posted-defence authority and worker-raid priority. Negative checks on
+806 fail the new whole-army Hunt assertions; the two-contact fixture also failed
+before the root correction. Final focused checks verify Hard/Brutal in all three
+postures, remote R/C/I, two simultaneous attacks, turret fire, 47-tile reserves,
+actual movement/damage, launcher escape and subsequent fire, and contact expiry.
+Human, repair, transport, aircraft and bounded-worker boundaries are retained.
+
+Exact captured saves run for 24,000 cycles. Red's first base response sends 134
+and retains five already in battle; final army has 249 ground troops, 243 Hunt.
+Blue's first response sends 201 and corrects eight already fighting, yielding
+209 Hunt defenders; ten repair-policy reservations are held. Responses continue
+while Withdrawing/Recovering. Blue's already invaded position still loses.
+One/four actual path workers match all 12 state checkpoints and complete gameplay
+save bytes for each match (excluding the release label):
+red `d4b494e10f9ef1a44dcc113f37d52a1a70168517218ce3239dbfc4a6b3f7ea75`,
+blue `49f6b8bd8f75bf532275b8b514da70a6a582bb0e8621a8e5429256bfa0fa51d2`.
+These are headless Mac-mini simulations, not rendered MBA FPS measurements.
+
+Fresh All against Atreides, using the exact preceding controlled configuration
+(seed 1547732733, tech 8, city simulation, Atreides Brutal QuantBot versus four
+Hard AIPlayer houses, unlimited units/harvesters, concrete on, explored/no fog,
+worm respawn/spice on, turret power off, drops off, spice 1x), wins at cycle
+143964 (38m23.424s). One reproducible scenario does not establish a win rate.
+
+All 56 CTest targets pass: the full run passed 55, and the native suite passed
+after correcting its release-protocol pin from 54 to 55. Full-run time was
+866.90 seconds; the final native rerun was 2.94 seconds. No production code
+changed after these gameplay checks. Pre/post dependency audits and diff checks
+pass. Portable ARM64 bundle passes all 36 Mach-O
+architecture/load-path checks, deep/strict ad-hoc signature and bundled SDL
+initialization/hidden rendering. Native and portable executable code/string
+sections match. Portable executable SHA-256:
+`bf7f3a7b318ac5680e7e210a47278588f760d7de60f248b885f50938a23996e9`.
+Protocol 55 / policy `whole-army-base-scramble-v90`; save 9852 / runtime 7.
+MBA installation is pending the final app swap; the app is closed and installed
+baseline 805 is verified. No running match was stopped. Nothing
+pushed or publicly published. Evidence: ../outputs/base-scramble-807-20261006/.
+
 # 2026-10-05 — Hunt launcher spacing and strength-based recovery (1.0.806)
 
 Captured the MBA 805 red-stuck-in-base and blue-stuck-in-base saves, exact immutable

@@ -70,8 +70,34 @@ ground enemy that can attack them, inside the shorter of its reach plus one and
 half the launcher range plus one, triggers a short escape. The launcher keeps
 Hunt and its wave membership and can resume firing afterward. Damage from a
 distant enemy does not trigger retreat. The scan uses nearby tile occupants;
-workers, aircraft, human orders, repair and live defence contacts retain their
-existing handling.
+workers, aircraft, human orders, repair and ordinary posted defence contacts
+retain their existing handling.
+
+## Whole-army base defence
+
+In Custom Hard/Brutal games, a real attack on any owned building, including a
+remote R/C/I colony, sends every available ground combat unit to Hunt the
+invasion. Damage callbacks and ordinary scans both recognise building attacks;
+the scan also handles hostile turrets firing at a forward building. Recovery,
+assembly, military strength, the local response radius and proportional quotas
+do not withhold the ground army during this emergency. Human commands, the
+existing repair reservation policy, carryall pickups, workers, builders,
+transports and aircraft retain their authority. Air rescue keeps its existing
+specialised response; ordinary harvester raids keep their bounded local response.
+
+Remote defenders travel towards the actual attacker, then let engine Hunt own
+combat inside weapon range. Repeated scans retain an existing live base contact,
+including when several districts are attacked, instead of restarting travel
+orders. A worker raid cannot redirect troops away from that live base response.
+Hunting launchers retain their short escape and resume firing afterward. When
+the original attacker dies or stops attacking the building, its defence
+assignment and forced travel expire on the normal scan.
+
+These mobile Hunt defenders use an invalid guard point in the existing saved
+order fields; ordinary posted defenders keep their valid guard point. This
+distinction preserves local defence authority without adding serialized state.
+Protocol 55 separates peers with different emergency AI behaviour; save format
+9852 and observer runtime 7 remain unchanged.
 
 ## Batteries and special units
 
@@ -130,6 +156,15 @@ include the 80% boundary, minor raids, recovery/resumption, old-save migration,
 ordinary save and scoped observer AI continuation, legal battery sites, and actual
 movement of a large recalled army. Changes to saved state and multiplayer
 behaviour require explicit format/protocol gates.
+
+`quantbot_whole_army_dispatch` checks whole-army building defence for both Hard
+and Brutal in all three postures, including a reserve 47 tiles away, remote
+colonies, two simultaneous attacks, hostile turret fire, actual movement and
+damage, repeated scans and contact expiry. It retains human, repair, transport,
+worker and aircraft boundaries and the existing bounded harvester response.
+`quantbot_launcher_kiting` checks actual spacing and subsequent damage during
+the base Hunt response, including a simultaneous worker raid, while retaining
+ordinary local defence authority.
 
 `quantbot_battery_clearance` uses real production and engine frames with concrete
 on and off. It checks completed turrets, intact lots before material is ready,

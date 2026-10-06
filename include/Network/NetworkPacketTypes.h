@@ -133,7 +133,10 @@
 //     lots. Peers on 50 would preserve those lots and issue different orders.
 // 54: Hunt launchers retain close-range spacing; rebuilt armies leave recovery
 //     by strength. Older peers would issue different movement and attack orders.
-#define NETWORK_PROTOCOL_VERSION            54
+// 55: Custom Hard/Brutal base attacks mobilise the whole ground army on Hunt,
+//     retaining live invasion orders across repeated contacts. Older peers
+//     send different troops and use different movement and attack orders.
+#define NETWORK_PROTOCOL_VERSION            55
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
