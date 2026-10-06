@@ -256,6 +256,8 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         mainVBox.addWidget(&setupModeRow, 28);
     }
     readinessLabel.setTextFontSize(12);
+    if(!isCoopGameType(gameInitSettings.getGameType()))
+        readinessLabel.setText(_("Spice income: multiplies credits from harvester deliveries. 2x = double."));
     mainVBox.addWidget(&readinessLabel, 22);
 
     mainVBox.addWidget(Spacer::create(), 0.04);
@@ -424,6 +426,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         int skinLabel = 30, skinBox = 72;
         int gap = 10, subGap = 6;
     } row;
+    row.spiceLabel = GUIStyle::getInstance().getMinimumLabelSize(_("Spice"), 12).x;
 
     const auto rowWidth = [&] {
         int total = row.houseLabel + row.houseBox + row.gap + row.teamBox
@@ -521,6 +524,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             }
             curHouseInfo.spiceIncomeLabel.setText(_("Spice"));
             curHouseInfo.spiceIncomeLabel.setTextFontSize(12);
+            curHouseInfo.spiceIncomeLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter));
             for(Uint32 factor = SpiceIncome::kMin; factor <= SpiceIncome::kMax; ++factor) {
                 curHouseInfo.spiceIncomeDropDown.addEntry(
                     std::to_string(factor) + "x", static_cast<int>(factor));
@@ -1001,9 +1005,8 @@ void CustomGamePlayers::update() {
             ? _("Players must join this lobby before you start. Hot joining is unavailable for new mods.")
             : solo ? _("Start now. Others can watch or ask to join while you play.") : _("Your co-op partner is ready."));
     } else if(!bServer && startGameTime == 0) readinessLabel.setText(_("Waiting for the host to start."));
-    else if(setup) readinessLabel.setText(setup->online
-        ? _("Create Lobby when ready. Friends can replace an AI; hot join also allows spectators.")
-        : _("Choose your map and opponents, then Start Game."));
+    else if(setup) readinessLabel.setText(
+        _("Spice income: multiplies credits from harvester deliveries. 2x = double."));
 
     if(startGameTime > 0) {
         // Check if config mismatch was detected - abort game start

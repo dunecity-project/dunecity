@@ -1,3 +1,21 @@
+# 2026-10-06 — Custom-game spice label and explanation (1.0.808)
+
+The Spice caption now reserves the GUI style's measured width and is vertically
+centred beside its multiplier dropdown. The existing line above the roster
+explains that the factor multiplies credits from harvester deliveries and that
+2x means double. Reusing that line preserves the six-house layout at 640x480;
+campaign co-op readiness and the joining-client status remain intact.
+
+Pre/post Ninja dependency audits, the native CTest target and the existing menu
+navigation probe pass. Rendered menus were inspected at 640x480, 854x480 and
+1280x720; the smallest layout retains its existing compact caption policy and
+shows the explanation above the rows. Menu probe elapsed time: 220.85 seconds.
+This is a menu-only change over 807: AI policy, protocol 55, save 9852 and observer
+runtime 7 are unchanged. No new cosmetic mirror tests or AI tuning were added.
+Evidence: ../outputs/quantbot-map-evaluation-807-20261006/menu-screenshots/ and
+menu-808-final.log. Installation verification is recorded separately below when
+complete; no public release has been made.
+
 # 2026-10-06 — Whole-army base Hunt response (1.0.807)
 
 The latest MBA 805 telemetry still showed small local Area Guard responses to
