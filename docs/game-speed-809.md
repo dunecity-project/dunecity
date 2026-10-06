@@ -73,10 +73,14 @@ signature, all 36 ARM64 Mach-O architecture/load-path checks, and bundled SDL
 initialization/hidden rendering. Native/portable code and string sections match.
 Executable SHA-256: `40e8f36f1531d8521d4e57fcf3dc7fb98094336887a04f1e65ad0b9dbb3ad76f`.
 
-MBA installation remains pending: its last verified app was 1.0.808, but SSH
-became unreachable before upload. The existing app has not been replaced.
-The complete archive, hashes and installation/rollback verifier are retained.
-Only claim installation after fresh version/hash/signature/profile checks.
+Installed on Stefans-MacBook-Air.local at `/Applications/dunecity.app` from
+clean source commit `4c3c10b100e27fa7bc689b8a85101ce17873080a` after SSH
+became available again. A separate fresh check confirms the exact 809 version
+and executable hash, deep/strict signature, bundled SDL initialization/hidden
+rendering and the Desktop shortcut. All 2,066 save/INI files are unchanged.
+The verified 808 rollback remains at
+`/Applications/.dunecity-backup-before-809-20261006/dunecity.app`.
+No match was stopped or launched; nothing pushed or publicly published.
 
 Evidence: `../outputs/game-speed-809-20261006/` (worker output, build/audits,
 rendered-speed-results.json, network-controls.log, full-ctest.log, bundle-audit.json,

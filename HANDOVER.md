@@ -26,11 +26,14 @@ portable load paths, deep/strict signature and bundled SDL hidden rendering.
 Native/portable executable code and string sections match. Executable SHA-256:
 `40e8f36f1531d8521d4e57fcf3dc7fb98094336887a04f1e65ad0b9dbb3ad76f`.
 
-MBA installation is pending because SSH became unreachable before transfer.
-The last fresh check found idle 808 with hash
-`22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`;
-no app replacement occurred. The user has been asked to keep the MBA awake.
-The verified 64.5 MB archive and rollback/profile verifiers are ready in
+Installed on Stefans-MacBook-Air.local from clean source commit
+`4c3c10b100e27fa7bc689b8a85101ce17873080a` after the connection recovered.
+A separate fresh check confirms 809 version/hash, deep/strict signature,
+bundled SDL initialization/hidden rendering, Desktop shortcut and all 2,066
+save/INI files unchanged. Verified 808 remains at
+`/Applications/.dunecity-backup-before-809-20261006/dunecity.app` with hash
+`22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`.
+No match was stopped or launched. Receipts and the verified archive are in
 `../outputs/game-speed-809-20261006/`. Nothing pushed or publicly published.
 Detailed evidence and limits: [docs/game-speed-809.md](docs/game-speed-809.md).
 
