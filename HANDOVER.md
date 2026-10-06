@@ -13,8 +13,30 @@ shows the explanation above the rows. Menu probe elapsed time: 220.85 seconds.
 This is a menu-only change over 807: AI policy, protocol 55, save 9852 and observer
 runtime 7 are unchanged. No new cosmetic mirror tests or AI tuning were added.
 Evidence: ../outputs/quantbot-map-evaluation-807-20261006/menu-screenshots/ and
-menu-808-final.log. Installation verification is recorded separately below when
-complete; no public release has been made.
+menu-808-final.log.
+
+Installed on Stefans-MacBook-Air.local from clean source commit
+`08f5a0d3ae1e24d80ee88757ce18379a0bf326ff`. A fresh independent check confirms
+808 version/hash, deep/strict signature, bundled SDL initialization/hidden
+rendering, Desktop shortcut and all 2,066 save/INI files unchanged. Executable
+SHA-256: `22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`.
+All 36 bundled ARM64 Mach-O files have portable load paths; native/portable code
+and string sections match. 807 remains at
+`/Applications/.dunecity-backup-before-808-20261006/dunecity.app`. No match was
+stopped or launched; nothing pushed or publicly published.
+
+The frozen 807 gameplay engine now wins All against Atreides in all 10 tested
+seeds against the four allied Hard original AIPlayer houses (38:23–52:04).
+Sihaya-Ferryman: three seeds, both roster orders, six completed Brutal QuantBot
+versus Brutal QuantBot games; Harkonnen wins four, Atreides two. Three unfinished
+60-minute runs were repeated with a 120-minute cap and all finished by 89:01;
+their pre-60-minute event records match exactly. Configuration, outcomes and
+neutral worm-house gates pass. The observer-side control retains the same
+winner and initial Hunt cycles, but is not byte-identical. These are controlled
+headless Mac-mini samples, not MBA FPS or a general win-rate certification.
+Large-army path waits and storage losses remain concrete investigation leads;
+no AI tuning was made without a failed requested matchup. Full results and
+per-unit/per-house ledgers: [docs/quantbot-map-evaluation-807.md](docs/quantbot-map-evaluation-807.md).
 
 # 2026-10-06 — Whole-army base Hunt response (1.0.807)
 
