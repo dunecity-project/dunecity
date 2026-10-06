@@ -17,6 +17,10 @@ Snapshot EditoR render preferences are saved in the user's main configuration,
 under a separate section keyed by immutable snapshot identity. They never write
 `workshop-render.ini` into an immutable payload. Built-in Dune2R keeps its existing
 per-mod preference file. No download or preference change mutates a snapshot.
+Asset pack Download and Refresh are disabled for immutable online snapshots;
+their underlying calls also refuse before network activity or writes. Installed
+packs remain inspectable. Download any additional artwork in the working Dune2R
+mod before creating/hosting the next immutable revision.
 Classic Dune2R, DuneLegacy, DuneCity, Tornie's Mod and other mods keep factor 1.
 This is separate from the existing three zoom levels: switching graphics does not
 change `currentZoomlevel`.

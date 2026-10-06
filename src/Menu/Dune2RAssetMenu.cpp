@@ -94,9 +94,13 @@ Dune2RAssetMenu::Dune2RAssetMenu() {
     }
 
     const bool ready = assetManager != nullptr && !assetManager->getPacks().empty();
+    const bool writable = assetManager != nullptr && !assetManager->isReadOnly();
     packDropDown.setEnabled(ready);
-    downloadButton.setEnabled(ready);
-    refreshButton.setEnabled(assetManager != nullptr);
+    downloadButton.setEnabled(ready && writable);
+    refreshButton.setEnabled(writable);
+    if(assetManager != nullptr && assetManager->isReadOnly()) {
+        introLabel.setText(_("Online snapshot: installed packs can be inspected."));
+    }
     if(ready) {
         refreshSelectionStatus();
     }
@@ -114,7 +118,7 @@ void Dune2RAssetMenu::populatePacks() {
 }
 
 void Dune2RAssetMenu::onRefreshCatalog() {
-    if(assetManager == nullptr || downloading) return;
+    if(assetManager == nullptr || assetManager->isReadOnly() || downloading) return;
     downloading = true;
     refreshingCatalog = true;
     packDropDown.setEnabled(false);
@@ -173,13 +177,15 @@ void Dune2RAssetMenu::refreshSelectionStatus() {
     statusLabel.setText(
         std::to_string(ids.size()) + _(" pack(s), ") + formatSize(bytes)
         + "\n" + std::to_string(installed) + _(" installed and checksum-verified.")
-        + "\n" + _("Interrupted downloads resume from their partial files."));
+        + "\n" + (assetManager->isReadOnly()
+            ? _("Switch to the Dune2R working mod to download assets.")
+            : _("Interrupted downloads resume from their partial files.")));
     progressBar.setProgress(ids.empty() ? 0.0 : 100.0 * installed / ids.size());
     progressBar.setText(installed == static_cast<int>(ids.size()) ? _("Verified") : _("Ready"));
 }
 
 void Dune2RAssetMenu::onDownload() {
-    if(assetManager == nullptr || downloading) {
+    if(assetManager == nullptr || assetManager->isReadOnly() || downloading) {
         return;
     }
     const auto ids = selectedPackIDs();
@@ -223,8 +229,8 @@ void Dune2RAssetMenu::update() {
         if(result.success) populatePacks();
         const bool ready = !assetManager->getPacks().empty();
         packDropDown.setEnabled(ready);
-        downloadButton.setEnabled(ready);
-        refreshButton.setEnabled(true);
+        downloadButton.setEnabled(ready && !assetManager->isReadOnly());
+        refreshButton.setEnabled(!assetManager->isReadOnly());
         backButton.setEnabled(true);
         disableQuiting(false);
         statusLabel.setText(result.message);
@@ -248,9 +254,10 @@ void Dune2RAssetMenu::update() {
 
     const Dune2RAssetInstallResult result = installTask.get();
     downloading = false;
-    packDropDown.setEnabled(true);
-    downloadButton.setEnabled(true);
-    refreshButton.setEnabled(true);
+    const bool ready = !assetManager->getPacks().empty();
+    packDropDown.setEnabled(ready);
+    downloadButton.setEnabled(ready && !assetManager->isReadOnly());
+    refreshButton.setEnabled(!assetManager->isReadOnly());
     backButton.setEnabled(true);
     disableQuiting(false);
     statusLabel.setText((result.success ? std::string(_("OK: ")) : std::string(_("ERROR: ")))

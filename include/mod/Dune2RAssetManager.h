@@ -52,6 +52,7 @@ public:
 
     const std::vector<Dune2RAssetPack>& getPacks() const noexcept;
     const std::string& getRevision() const noexcept;
+    bool isReadOnly() const noexcept;
     bool isPackInstalled(const Dune2RAssetPack& pack) const;
     Dune2RAssetInstallResult refreshCatalog();
     Dune2RAssetInstallResult applyCatalog(const std::string& contents);
@@ -69,6 +70,7 @@ private:
     void parseCatalog(const std::string& contents);
 
     std::string modPath;
+    bool readOnly = false;
     std::string baseURL;
     std::string revision;
     std::vector<Dune2RAssetPack> packs;

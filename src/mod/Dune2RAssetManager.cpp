@@ -30,6 +30,9 @@
 
 namespace {
 
+constexpr const char* kImmutableSnapshotMessage =
+    "Switch to the Dune2R working mod to download assets; online snapshots are immutable.";
+
 constexpr std::array<uint32_t, 64> kSha256Constants = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
     0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
@@ -171,6 +174,14 @@ uint64_t Dune2RAssetPack::totalBytes() const {
 
 Dune2RAssetManager::Dune2RAssetManager(const std::string& dune2rModPath)
     : modPath(dune2rModPath) {
+    auto folder = std::filesystem::path(modPath).lexically_normal();
+    if(!folder.has_filename()) folder = folder.parent_path();
+    readOnly = folder.filename().string().rfind("ws-", 0) == 0;
+    const auto sidecar = std::filesystem::path(modPath) / "workshop-revision.ini";
+    if(!readOnly && std::filesystem::is_regular_file(sidecar)) {
+        INIFile metadata(sidecar.string());
+        readOnly = metadata.getBoolValue("Workshop", "Immutable", false);
+    }
     loadCatalog();
 }
 
@@ -180,6 +191,10 @@ const std::vector<Dune2RAssetPack>& Dune2RAssetManager::getPacks() const noexcep
 
 const std::string& Dune2RAssetManager::getRevision() const noexcept {
     return revision;
+}
+
+bool Dune2RAssetManager::isReadOnly() const noexcept {
+    return readOnly;
 }
 
 bool Dune2RAssetManager::isSafeRelativeAssetPath(const std::string& path) {
@@ -326,6 +341,7 @@ void Dune2RAssetManager::parseCatalog(const std::string& contents) {
 }
 
 Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& contents) {
+    if(readOnly) return {false, false, kImmutableSnapshotMessage};
     Dune2RAssetInstallResult result;
     const auto destination = std::filesystem::path(modPath) / "asset-catalog-online.ini";
     const auto staged = std::filesystem::path(modPath) / ".asset-catalog.pending";
@@ -364,6 +380,7 @@ Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& con
 }
 
 Dune2RAssetInstallResult Dune2RAssetManager::refreshCatalog() {
+    if(readOnly) return {false, false, kImmutableSnapshotMessage};
     try {
         return applyCatalog(loadFromHttp(
             "https://raw.githubusercontent.com/dunecity-project/dunecity/main/mods/Dune2R/asset-catalog.ini"));
@@ -389,6 +406,7 @@ bool Dune2RAssetManager::isPackInstalled(const Dune2RAssetPack& pack) const {
 
 Dune2RAssetInstallResult Dune2RAssetManager::install(
     const std::vector<std::string>& packIDs, const ProgressCallback& progress) const {
+    if(readOnly) return {false, false, kImmutableSnapshotMessage};
     Dune2RAssetInstallResult result;
     if(packIDs.empty()) {
         result.message = "No Dune2R asset pack was selected.";

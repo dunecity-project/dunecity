@@ -8,6 +8,7 @@
 #include <fstream>
 #include <algorithm>
 #include <chrono>
+#include <map>
 
 namespace {
 struct CatalogFixture {
@@ -27,6 +28,113 @@ struct CatalogFixture {
         std::filesystem::remove_all(root, ignored);
     }
 };
+
+void writeOfflinePack(const std::filesystem::path& root) {
+    std::filesystem::create_directories(root / "graphics_hd" / "units" / "offlineunit");
+    const std::string bytes = "abc";
+    {
+        std::ofstream payload(root / "graphics_hd" / "units" / "offlineunit" / "unit.ini", std::ios::binary);
+        payload << bytes;
+    }
+    std::ofstream catalog(root / "asset-catalog.ini");
+    const std::string revision(40, 'b');
+    catalog << "[Catalog]\nSchema=1\nRevision=" << revision << '\n'
+            << "BaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
+            << revision << "/mods/Dune2R/graphics_hd/units\nPackCount=1\n"
+            << "[Pack.0]\nID=offline\nDisplayName=Offline fixture\nVariant=remastered\n"
+            << "Unit=offlineunit\nFileCount=1\nFile.0=unit.ini|" << bytes.size() << '|'
+            << Dune2RAssetManager::sha256Bytes(bytes) << '\n';
+}
+
+std::map<std::string, std::string> directoryFingerprint(const std::filesystem::path& root) {
+    std::map<std::string, std::string> result;
+    for(const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+        result[entry.path().lexically_relative(root).generic_string()] = entry.is_directory()
+            ? "directory" : Dune2RAssetManager::sha256File(entry.path().string());
+    }
+    return result;
+}
+}
+
+TEST_CASE("Dune2R snapshot downloads and catalog writes are refused before side effects", "[Dune2RAssets][workshop]") {
+    CatalogFixture fixture;
+    const std::string message =
+        "Switch to the Dune2R working mod to download assets; online snapshots are immutable.";
+    for(const auto& folder : {"ws-" + std::string(64, 'a'), std::string("ws-incomplete")}) {
+        const auto snapshot = fixture.root / folder;
+        writeOfflinePack(snapshot);
+        const auto before = directoryFingerprint(snapshot);
+        // A trailing directory separator must not bypass the immutable folder guard.
+        Dune2RAssetManager manager(snapshot.string() + "/");
+        REQUIRE(manager.isReadOnly());
+        REQUIRE(manager.getPacks().size() == 1);
+        CHECK(manager.isPackInstalled(manager.getPacks().front()));
+        const auto revision = manager.getRevision();
+        bool progressCalled = false;
+        for(const auto& selection : {std::vector<std::string>{},
+                                     std::vector<std::string>{"missing"},
+                                     std::vector<std::string>{"offline"}}) {
+            const auto result = manager.install(selection, [&](const Dune2RAssetProgress&) {
+                progressCalled = true;
+                return false;
+            });
+            CHECK_FALSE(result.success);
+            CHECK_FALSE(result.changed);
+            CHECK(result.message == message);
+        }
+        for(const auto& contents : {std::string(), fixture.contents}) {
+            const auto result = manager.applyCatalog(contents);
+            CHECK_FALSE(result.success);
+            CHECK_FALSE(result.changed);
+            CHECK(result.message == message);
+        }
+        const auto refresh = manager.refreshCatalog();
+        CHECK_FALSE(refresh.success);
+        CHECK_FALSE(refresh.changed);
+        CHECK(refresh.message == message);
+        CHECK_FALSE(progressCalled);
+        CHECK(manager.getRevision() == revision);
+        CHECK(directoryFingerprint(snapshot) == before);
+    }
+}
+
+TEST_CASE("Dune2R immutable sidecars protect snapshots under a non-Workshop folder name", "[Dune2RAssets][workshop]") {
+    CatalogFixture fixture;
+    const auto snapshot = fixture.root / "renamed-snapshot";
+    writeOfflinePack(snapshot);
+    {
+        std::ofstream metadata(snapshot / "workshop-revision.ini");
+        metadata << "[Workshop]\nImmutable = true\n";
+    }
+    const auto before = directoryFingerprint(snapshot);
+    Dune2RAssetManager manager(snapshot.string());
+    REQUIRE(manager.isReadOnly());
+    CHECK(manager.isPackInstalled(manager.getPacks().front()));
+    CHECK_FALSE(manager.applyCatalog(fixture.contents).success);
+    CHECK_FALSE(manager.refreshCatalog().success);
+    CHECK_FALSE(manager.install({"offline"}).success);
+    CHECK(directoryFingerprint(snapshot) == before);
+}
+
+TEST_CASE("Dune2R mutable working mods retain catalog refresh and verified offline installation", "[Dune2RAssets][workshop]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    {
+        std::ofstream metadata(working / "workshop-revision.ini");
+        metadata << "[Workshop]\nImmutable = false\n";
+    }
+    Dune2RAssetManager manager(working.string());
+    REQUIRE_FALSE(manager.isReadOnly());
+    const auto installed = manager.install({"offline"});
+    CHECK(installed.success);
+    CHECK_FALSE(installed.changed);
+    CHECK(manager.isPackInstalled(manager.getPacks().front()));
+    CHECK(manager.install({}).message == "No Dune2R asset pack was selected.");
+    CHECK(manager.install({"missing"}).message == "Unknown Dune2R asset pack: missing");
+    const auto refreshed = manager.applyCatalog(fixture.contents);
+    CHECK(refreshed.success);
+    CHECK(std::filesystem::is_regular_file(working / "asset-catalog-online.ini"));
 }
 
 TEST_CASE("Dune2R refreshed catalogs persist independently of bundled catalogs", "[Dune2RAssets]") {

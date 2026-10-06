@@ -1,4 +1,4 @@
-# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.812 candidate)
+# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.813 candidate)
 
 Candidate branch `release-1.0.811-dune2r-assets` starts at PR #88's exact head,
 `e5797cd3ef3e14ad95d7ebff96a2dd0978936364` (1.0.810). The user requested that
@@ -47,6 +47,14 @@ the immutable mod. Real revision-store fixtures cover canonical versus derived
 identity, forged sidecars, tampered/missing revisions and unchanged payloads
 after local preference edits. No multiplayer checksum or protocol fields are added.
 
+The 1.0.813 safety follow-up also makes asset downloads/catalog refresh read-only
+for immutable online snapshots, including renamed copies with an immutable
+sidecar. The UI remains inspectable and explains that downloads belong in the
+working Dune2R mod before hosting. Guards run before network calls or file writes;
+three additional offline tests cover unchanged snapshot bytes, empty/missing
+selections and normal mutable-mod behavior. Candidate 812 passed all four remote
+platform build jobs plus native/relay/signaling checks before this final guard.
+
 Windows MSVC 19.38 rejected conditional construction of noncopyable INIFile in
 three existing paths. Unique ownership preserves the same read/write behavior
 without changing INIFile ownership semantics. Windows test fixtures now use the
@@ -60,10 +68,11 @@ download opt-in skip. Eight Infantry packager, eight DuneCity packaging, eight b
 mod, one immutable-catalog and five browser-shell checks also passed; the ordered
 pixel comparison verified all 386 runtime poses against the approved sources.
 
-Android metadata is 0.2.28 / 1000548 with game payload 1.0.812. The DuneCity skin
+Android metadata is 0.2.29 / 1000549 with game payload 1.0.813. The DuneCity skin
 content fingerprint is `D7CAF796B1349228`. Windows compilation and initial Android
 native/APK builds succeeded for 811. The final Windows and Android source is being
-rebuilt with the 812 verified-snapshot gate before final APK packaging.
+rebuilt with the final verified-snapshot and immutable-download gates before APK
+packaging. Final candidate build results are tracked in draft PR #89 and its CI.
 No phone was attached at the last ADB check. No stable release, website deployment,
 main merge or on-device play-test is implied by these local build results.
 
