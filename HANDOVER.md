@@ -1,3 +1,60 @@
+# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.811 candidate)
+
+Candidate branch `release-1.0.811-dune2r-assets` starts at PR #88's exact head,
+`e5797cd3ef3e14ad95d7ebff96a2dd0978936364` (1.0.810). The user requested that
+upstream work be included after verification. Main/stable publication remains
+held by the Four Corners browser observer-promotion heap trap documented below;
+this candidate does not claim to repair it. Do not merge, tag stable, or advance
+website/download/browser feeds merely because candidate build checks pass.
+
+The asset-only commit `e4285d2d1e8f4e633b724a9f1040705a25313c5a` adds 60 DuneCity
+files (30 accepted special buildings) and 49 optional Dune2R Infantry files.
+All 789 previously published DuneCity skin files remain byte-identical. The
+complete DuneCity pack contains 65 packages, 784 PNGs, 384 ordered Industrial
+smoke frames and 33 approved 182x110 portraits. Unauthored slots retain fallback.
+See [accepted DuneCity pack](docs/dunecity-accepted-asset-pack-811.md).
+
+The separate Harkonnen Infantry pack registers Soldier 32 / Harkonnen 0, the
+basic Infantry squad's descendant. It contains 48 directional/state sets and
+386 approved poses: Idle, Movement, Combat, Combat Return, prone/fallen and
+Aftermath. All source canvases were uniformly reduced 1024->512 without fitting
+or recentering individual poses; exact per-pose timing and a common 256,451 anchor
+are retained. The catalog pins the asset-only commit at the transferred public
+repository. Legacy immutable URLs remain trusted without accepting arbitrary
+repositories. Base platform packages exclude these optional downloadable files.
+See [Infantry pack](docs/dune2r-infantry-pack-811.md).
+
+Enhanced presentation belongs only to the exact `Dune2R` mod: ordinary tiles
+occupy 48px, classic fallback art and building footprints grow coherently, and
+authored HQ unit sizes are not multiplied twice. Existing zoom, sidebar/menu
+sizes, simulation grid, collision, timing, RNG, network protocol and save bytes
+stay unchanged. ScreenBorder inversely projects clicks and preserves the camera
+across toggles. A bounded local corpse token displays the approved fallen art
+without delaying simulation death or entering saves/digests. Classic, DuneCity,
+Tornie and other mods retain their prior presentation. Mixed-graphics live
+multiplayer and visual play tests remain required; unit/source invariants are
+not proof of those tests. See [presentation contract](docs/dune2r-world-presentation.md).
+
+Windows MSVC 19.38 rejected conditional construction of noncopyable INIFile in
+three existing paths. Unique ownership preserves the same read/write behavior
+without changing INIFile ownership semantics. Windows test fixtures now use the
+native environment setter and close readers before removing temporary logs.
+The symlink security test is independent and reports a skip only for Windows
+ERROR_PRIVILEGE_NOT_HELD, without weakening the other security checks or changing
+OS policy. All nine local Windows CTest targets passed: the primary native suite
+has 953 passed cases, four explicit capability/opt-in skips and 10,217,667 passed
+assertions; the focused presentation/catalog target has 15 passes and one live-
+download opt-in skip. Eight Infantry packager, eight DuneCity packaging, eight browser
+mod, one immutable-catalog and five browser-shell checks also passed; the ordered
+pixel comparison verified all 386 runtime poses against the approved sources.
+
+Android metadata is 0.2.27 / 1000547 with game payload 1.0.811. The DuneCity skin
+content fingerprint is `D7CAF796B1349228`. Windows compilation and initial Android
+native/APK builds succeeded; the Android native source is being incrementally
+rebuilt against the final portability/isolation edits before final APK packaging.
+No phone was attached at the last ADB check. No stable release, website deployment,
+main merge or on-device play-test is implied by these local build results.
+
 # 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
 
 An Escape menu open when an observer requires a fresh checkpoint was left on

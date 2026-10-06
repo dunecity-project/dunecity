@@ -26,7 +26,7 @@ namespace {
 
 constexpr std::array<const char*, static_cast<size_t>(GFXManager::EnhancedUnitState::Count)> kStateLabels = {
     "Idle", "Movement", "Combat", "Smoking", "Damaged",
-    "Exploded", "Aftermath", "Dissipation"
+    "Exploded", "Aftermath", "Dissipation", "Return to Idle"
 };
 
 constexpr std::array<const char*, 8> kDirectionLabels = {

@@ -45,6 +45,8 @@ class AssetCatalogTests(unittest.TestCase):
                     result.read_string(catalog.build_catalog(repo, revision))
                     self.assertEqual(result["Catalog"]["Revision"], revision)
                     self.assertIn("/" + revision + "/", result["Catalog"]["BaseURL"])
+                    self.assertTrue(result["Catalog"]["BaseURL"].startswith(
+                        "https://raw.githubusercontent.com/dunecity-project/dunecity/"))
                     self.assertEqual(result["Catalog"]["PackCount"], "1")
                     self.assertEqual(result["Pack.0"]["FileCount"], "2")
                     self.assertEqual(result["Pack.0"]["File.0"],

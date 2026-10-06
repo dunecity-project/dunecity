@@ -83,6 +83,8 @@ target_sources(dunelegacy_tests
         Dune2RAssetManagerTestCase/Dune2RAssetManagerTestCase.cpp
         EnhancedAtlasCacheTestCase/EnhancedAtlasCacheTestCase.cpp
         EnhancedBuildingGeometryTestCase/EnhancedBuildingGeometryTestCase.cpp
+        Dune2RPresentationTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/ScreenBorder.cpp
         MenuLayoutTestCase/MenuLayoutTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/mmath.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/EnhancedAtlasCache.cpp
@@ -178,6 +180,7 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
 
 # Standalone network wire harness.
 #
@@ -372,7 +375,7 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # Set test properties
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests dune2r_presentation_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 

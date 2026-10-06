@@ -14,6 +14,7 @@ DISPLAY_NAMES = {
     "sand": "Sand Terrain Remastered",
     "harkonnendevastator": "Harkonnen Devastator Remastered",
     "ordostank": "Ordos Tank Remastered",
+    "harkonneninfantry": "Harkonnen Infantry Remastered",
     "refinery": "Atreides Refinery Remastered",
 }
 
@@ -48,7 +49,7 @@ def build_catalog(repo: Path, revision: str) -> str:
         "[Catalog]",
         "Schema=1",
         f"Revision={revision}",
-        "BaseURL=https://raw.githubusercontent.com/VR48/dunecity/"
+        "BaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
         f"{revision}/mods/Dune2R/graphics_hd/units",
         f"PackCount={len(units)}",
         "",

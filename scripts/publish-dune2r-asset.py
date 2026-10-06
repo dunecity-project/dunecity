@@ -60,6 +60,7 @@ def publish(repo: Path, pack: Path, *, remote="origin", branch="main", dry_run=T
     # The production command is deliberately tied to this game's repository.
     url = subprocess.check_output(["git", "remote", "get-url", remote], cwd=repo, text=True).strip()
     if url.rstrip("/").removesuffix(".git").lower() not in {
+            "https://github.com/dunecity-project/dunecity", "git@github.com:dunecity-project/dunecity",
             "https://github.com/vr48/dunecity", "git@github.com:vr48/dunecity"}:
         raise ValueError("Publishing remote is not the official Dune2R game repository")
     if branch != "main":

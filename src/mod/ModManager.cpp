@@ -45,6 +45,7 @@
 #include <climits>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 
 // File names
@@ -2217,7 +2218,10 @@ bool ModManager::writeModInfo(const std::string& modPath, const ModInfo& info) c
     const auto path = std::filesystem::path(modPath) / MOD_INI_FILE;
     const auto temp = (path.parent_path() / ".mod-metadata-writing").string();
     try {
-        INIFile ini = std::filesystem::exists(path) ? INIFile(path.string()) : INIFile(false, std::string("Mod metadata"));
+        auto metadataFile = std::filesystem::exists(path)
+            ? std::make_unique<INIFile>(path.string())
+            : std::make_unique<INIFile>(false, std::string("Mod metadata"));
+        INIFile& ini = *metadataFile;
         ini.setStringValue("Mod", "Display Name", info.displayName);
         ini.setStringValue("Mod", "Author", info.author);
         ini.setStringValue("Mod", "Description", info.description);

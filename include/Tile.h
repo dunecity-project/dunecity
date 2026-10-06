@@ -57,13 +57,14 @@ typedef struct
     Coord realPos;
 } DAMAGETYPE;
 
-typedef struct
+typedef struct DEADUNITTYPE
 {
     Coord   realPos;
     Sint16  timer;
     Uint8   type;
     Uint8   house;
     bool    onSand;
+    Uint32  dune2rVisualToken = 0; // Local cosmetic identity; intentionally not saved.
 } DEADUNITTYPE;
 
 enum destroyedStructureEnum {
@@ -231,7 +232,8 @@ public:
     /// Out of line because it enrols this tile in the map's active-corpse
     /// registry, which is what keeps the per-cycle sweep proportional to the
     /// tiles that actually hold a timer instead of the whole map.
-    void assignDeadUnit(Uint8 type, Uint8 house, const Coord& position);
+    void assignDeadUnit(Uint8 type, Uint8 house, const Coord& position,
+                        Uint32 dune2rVisualToken = 0);
 
     void assignNonInfantryGroundObject(Uint32 newObjectID);
     int assignInfantry(Uint32 newObjectID, Sint8 currentPosition = INVALID_POS);

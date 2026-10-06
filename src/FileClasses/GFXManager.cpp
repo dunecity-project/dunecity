@@ -43,6 +43,9 @@
 
 #include <misc/draw_util.h>
 #include <misc/EnhancedBuildingGeometry.h>
+#include <misc/EnhancedAnimationTimeline.h>
+#include <misc/EnhancedUnitGeometry.h>
+#include <misc/Dune2RPresentation.h>
 #include <misc/Scaler.h>
 #include <misc/exceptions.h>
 
@@ -53,6 +56,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 namespace {
 
@@ -71,7 +75,7 @@ const std::array<const char*, kEnhancedDirectionCount> kEnhancedDirectionNames =
 
 const std::array<const char*, static_cast<size_t>(GFXManager::EnhancedUnitState::Count)> kEnhancedStateNames = {
     "Idle", "Movement", "Combat", "DamageSmoking", "DamageDamaged",
-    "DamageExploded", "DamageAftermath", "DamageDissipation"
+    "DamageExploded", "DamageAftermath", "DamageDissipation", "CombatReturn"
 };
 
 const std::array<const char*, static_cast<size_t>(GFXManager::EnhancedBuildingState::Count)>
@@ -4653,6 +4657,7 @@ static sdl2::surface_ptr createCustomMapEditorStar(SDL_Surface* source) {
 // Clears objPicTex + objPic (NOT uiGraphic - preserves
 // mentat background and editor sidebar icons).
 void GFXManager::invalidateAllSpriteTextures() {
+    enhancedInfantryOverlay.clear();
     SDL_Log("GFXManager::invalidateAllSpriteTextures(): clearing textures and derived house sprite caches");
     const auto keepAllHouseSurfaces = [](int id) {
         return id == ObjPic_ZoneResidential || id == ObjPic_ZoneCommercial
@@ -6829,6 +6834,8 @@ bool GFXManager::drawHDObjPic(unsigned int id, int house, unsigned int z,
             destW = frameW;
             destH = frameH;
         }
+        destW = dune2rWorldExtent(destW);
+        destH = dune2rWorldExtent(destH);
     }
 
     destW = std::max(1, static_cast<int>(lround(destW * hd.scale)));
@@ -6871,7 +6878,7 @@ void GFXManager::loadDune2RVisualPreference() {
 
 Uint8 GFXManager::getDune2RVisualBlend() {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
+       || ModManager::instance().getActiveModName() != "Dune2R") {
         return 0;
     }
     loadDune2RVisualPreference();
@@ -6902,7 +6909,7 @@ bool GFXManager::isDune2RVisualsEnabled() {
 
 void GFXManager::setDune2RVisualsEnabled(bool enabled) {
     if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
+       || ModManager::instance().getActiveModName() != "Dune2R") {
         return;
     }
     const Uint8 currentBlend = getDune2RVisualBlend();
@@ -7009,11 +7016,14 @@ void GFXManager::loadEnhancedUnitManifests() {
                     unitAnimation.rows = std::max(1, manifest.getIntValue(section, "Rows", 1));
                     unitAnimation.frameCount = std::max(1, manifest.getIntValue(section, "Frames", 1));
                     unitAnimation.frameMs = std::max(1, manifest.getIntValue(section, "FrameMs", 100));
+                    unitAnimation.durationsMs = parseEnhancedFrameDurations(
+                        manifest.getStringValue(section, "DurationsMs", ""), unitAnimation.frameCount);
                     unitAnimation.anchorX = manifest.getIntValue(section, "AnchorX", -1);
                     unitAnimation.anchorY = manifest.getIntValue(section, "AnchorY", -1);
                     unitAnimation.loop = manifest.getBoolValue(
                         section, "Loop",
                         state != EnhancedUnitState::Combat
+                        && state != EnhancedUnitState::CombatReturn
                         && state != EnhancedUnitState::DamageExploded
                         && state != EnhancedUnitState::DamageDissipation);
 
@@ -7514,7 +7524,11 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
 
     try {
         const std::string path = ModManager::instance().getModPath(ModManager::instance().getActiveModName()) + "/workshop-render.ini";
-        INIFile config = std::filesystem::exists(path) ? INIFile(path) : INIFile(false, std::string("Mod sprite rendering"));
+        // MSVC 19.38 rejects a conditional prvalue of the non-copyable INIFile.
+        auto configFile = std::filesystem::exists(path)
+            ? std::make_unique<INIFile>(path)
+            : std::make_unique<INIFile>(false, std::string("Mod sprite rendering"));
+        INIFile& config = *configFile;
         const std::string configKey = enhancedRenderModeConfigKey(
             itemID, house, state, direction);
         if(mode == EnhancedRenderMode::FullAnimation) {
@@ -7564,6 +7578,7 @@ void GFXManager::invalidateEnhancedUnitMountsIfChanged(bool force) {
         return;
     }
     enhancedUnitMountRevision = revision;
+    enhancedInfantryOverlay.clear();
     if(enhancedBuildingAtlasCache) {
         enhancedBuildingAtlasCache->clear();
     }
@@ -7600,8 +7615,8 @@ Uint32 GFXManager::getEnhancedUnitAnimationDuration(int itemID, int house,
             }
             const auto animationIt = definition.animations.find(key);
             if(animationIt != definition.animations.end()) {
-                return static_cast<Uint32>(animationIt->second.frameCount)
-                       * static_cast<Uint32>(animationIt->second.frameMs);
+                return enhancedAnimationDuration(animationIt->second.frameCount,
+                    animationIt->second.frameMs, animationIt->second.durationsMs);
             }
         }
     }
@@ -7763,7 +7778,7 @@ bool GFXManager::drawEnhancedBuilding(int itemID, int house, unsigned int z,
     }
     const SDL_Rect destination = calcEnhancedBuildingDrawingRect(
         selectedDefinition->footprintWidth, z, {frameWidth, frameHeight},
-        {imageAnchorX, imageAnchorY}, {anchorX, anchorY});
+        {imageAnchorX, imageAnchorY}, {anchorX, anchorY}, dune2rWorldDrawingScale);
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(texture, blend);
     SDL_RenderCopy(renderer, texture, &source, &destination);
@@ -7981,12 +7996,9 @@ bool GFXManager::drawEnhancedUnit(int itemID, int house, unsigned int z,
         return false;
     }
 
-    Uint32 frame = elapsedMs / static_cast<Uint32>(selectedAnimation->frameMs);
-    if(selectedAnimation->loop) {
-        frame %= static_cast<Uint32>(selectedAnimation->frameCount);
-    } else {
-        frame = std::min(frame, static_cast<Uint32>(selectedAnimation->frameCount - 1));
-    }
+    const Uint32 frame = enhancedAnimationFrame(elapsedMs,
+        selectedAnimation->frameCount, selectedAnimation->frameMs,
+        selectedAnimation->loop, selectedAnimation->durationsMs);
 
     SDL_Rect source = {
         static_cast<int>(frame % selectedAnimation->columns) * frameW,
@@ -7995,24 +8007,52 @@ bool GFXManager::drawEnhancedUnit(int itemID, int house, unsigned int z,
         frameH
     };
 
-    const int destW = std::max(1, static_cast<int>(lround(
-        selectedDefinition->baseWidth * static_cast<int>(z + 1) * selectedDefinition->scale)));
-    const int destH = std::max(1, static_cast<int>(lround(
-        selectedDefinition->baseHeight * static_cast<int>(z + 1) * selectedDefinition->scale)));
     const int anchorX = selectedAnimation->anchorX >= 0 ? selectedAnimation->anchorX : frameW / 2;
     const int anchorY = selectedAnimation->anchorY >= 0 ? selectedAnimation->anchorY : frameH / 2;
 
-    SDL_Rect dest = {
-        x - static_cast<int>(lround(anchorX * (static_cast<double>(destW) / frameW))),
-        y - static_cast<int>(lround(anchorY * (static_cast<double>(destH) / frameH))),
-        destW,
-        destH
-    };
+    const SDL_Rect dest = calcEnhancedUnitDrawingRect(
+        {selectedDefinition->baseWidth, selectedDefinition->baseHeight}, z,
+        selectedDefinition->scale, {frameW, frameH}, {anchorX, anchorY}, {x, y});
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(texture, blend);
     SDL_RenderCopy(renderer, texture, &source, &dest);
     SDL_SetTextureAlphaMod(texture, SDL_ALPHA_OPAQUE);
     return true;
+}
+
+Uint32 GFXManager::recordEnhancedInfantryFall(int itemID, int house,
+                                             int direction, Uint32 nowMs) {
+    if(itemID != Unit_Soldier || house != HOUSE_HARKONNEN
+       || !ModManager::instance().isInitialized()
+       || ModManager::instance().getActiveModName() != "Dune2R") {
+        return 0;
+    }
+    // No loading, RNG or gameplay work here: destroy() still removes the unit now.
+    return enhancedInfantryOverlay.record(nowMs, direction, house);
+}
+
+bool GFXManager::drawEnhancedInfantryFall(Uint32 token, int house,
+                                           Uint32 nowMs, int x, int y) {
+    if(!ModManager::instance().isInitialized()
+       || ModManager::instance().getActiveModName() != "Dune2R"
+       || getDune2RVisualBlend() == 0) {
+        return false;
+    }
+    // Loading may invalidate the mount cache and clear this presentation history.
+    loadEnhancedUnitManifests();
+    const auto* event = enhancedInfantryOverlay.find(token, nowMs, house);
+    if(!event) {
+        return false;
+    }
+    const Uint32 elapsed = nowMs - event->startMs;
+    const int direction = event->direction;
+    const Uint32 fallingDuration = getEnhancedUnitAnimationDuration(
+        Unit_Soldier, house, EnhancedUnitState::DamageExploded, direction);
+    const auto state = fallingDuration > 0 && elapsed < fallingDuration
+        ? EnhancedUnitState::DamageExploded : EnhancedUnitState::DamageAftermath;
+    return drawEnhancedUnit(Unit_Soldier, house, currentZoomlevel, state, direction,
+        state == EnhancedUnitState::DamageExploded ? elapsed : elapsed - fallingDuration,
+        x, y);
 }
 
 sdl2::surface_ptr GFXManager::generateDoubledObjPic(unsigned int id, int h) const {

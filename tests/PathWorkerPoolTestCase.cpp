@@ -12,11 +12,15 @@
 namespace {
 
 void setWorkers(const char* count) {
+#ifdef _WIN32
+    _putenv_s("DUNECITY_PATH_WORKERS", count == nullptr ? "" : count);
+#else
     if(count == nullptr) {
         unsetenv("DUNECITY_PATH_WORKERS");
     } else {
         setenv("DUNECITY_PATH_WORKERS", count, 1);
     }
+#endif
 }
 
 std::vector<std::function<void()>> countingBatch(std::atomic<int>& ran, size_t size) {

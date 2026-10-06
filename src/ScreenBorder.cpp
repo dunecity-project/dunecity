@@ -110,6 +110,19 @@ void ScreenBorder::adjustScreenBorderToMapsize(int newMapSizeX, int newMapSizeY)
     int worldSizeX = mapSizeX * TILESIZE;
     int worldSizeY = mapSizeY * TILESIZE;
 
+    if(presentationScale != 1) {
+        const int viewWidth = std::max(1, zoomedWorld2world(gameBoardRect.w) / presentationScale);
+        const int viewHeight = std::max(1, zoomedWorld2world(gameBoardRect.h) / presentationScale);
+        topLeftCorner = Coord(0, 0);
+        bottomRightCorner = Coord(std::min(worldSizeX, viewWidth), std::min(worldSizeY, viewHeight));
+        const int pixelWidth = std::min(gameBoardRect.w, world2zoomedWorld(worldSizeX) * presentationScale);
+        const int pixelHeight = std::min(gameBoardRect.h, world2zoomedWorld(worldSizeY) * presentationScale);
+        presentationRect = {gameBoardRect.x + (gameBoardRect.w - pixelWidth) / 2,
+                            gameBoardRect.y + (gameBoardRect.h - pixelHeight) / 2,
+                            pixelWidth, pixelHeight};
+        return;
+    }
+
     if(worldSizeX >= zoomedWorld2world(gameBoardRect.w)) {
         topLeftCorner.x = 0;
         bottomRightCorner.x = zoomedWorld2world(gameBoardRect.w);
@@ -133,4 +146,13 @@ void ScreenBorder::adjustScreenBorderToMapsize(int newMapSizeX, int newMapSizeY)
         topLeftCornerOnScreen.y = zoomedWorld2world(gameBoardRect.y) + (zoomedWorld2world(gameBoardRect.h) - worldSizeY) / 2;
         bottomRightCornerOnScreen.y = zoomedWorld2world(gameBoardRect.y) + (zoomedWorld2world(gameBoardRect.h) - worldSizeY) / 2 + worldSizeY;
     }
+}
+
+void ScreenBorder::setPresentationScale(int scale) {
+    scale = scale == 3 ? 3 : 1;
+    if(presentationScale == scale) return;
+    const Coord centre = getCurrentCenter() - shakingOffset;
+    presentationScale = scale;
+    adjustScreenBorderToMapsize(mapSizeX, mapSizeY);
+    setNewScreenCenter(centre);
 }

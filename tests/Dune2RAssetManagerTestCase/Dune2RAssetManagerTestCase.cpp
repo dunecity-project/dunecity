@@ -69,6 +69,29 @@ TEST_CASE("Dune2R rejects untrusted catalog updates without losing the installed
     CHECK_FALSE(std::filesystem::exists(fixture.root / "asset-catalog-online.ini"));
 }
 
+TEST_CASE("Dune2R catalog supports the transferred repository without widening trust", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    Dune2RAssetManager manager(fixture.root.string());
+    const std::string suffix = manager.getRevision() + "/mods/Dune2R/graphics_hd/units";
+    const std::string legacy = "https://raw.githubusercontent.com/VR48/dunecity/";
+    const std::string organization = "https://raw.githubusercontent.com/dunecity-project/dunecity/";
+    for(const auto& trusted : {legacy, organization}) {
+        auto candidate = fixture.contents;
+        const auto start = candidate.find("BaseURL=") + 8;
+        candidate.replace(start, candidate.find_first_of("\r\n", start) - start, trusted + suffix);
+        REQUIRE(manager.applyCatalog(candidate).success);
+    }
+    for(const auto& untrusted : {
+            std::string("https://raw.githubusercontent.com/dunecity-project/other/"),
+            std::string("https://raw.githubusercontent.com/other/dunecity/"),
+            std::string("http://raw.githubusercontent.com/dunecity-project/dunecity/")}) {
+        auto candidate = fixture.contents;
+        const auto start = candidate.find("BaseURL=") + 8;
+        candidate.replace(start, candidate.find_first_of("\r\n", start) - start, untrusted + suffix);
+        CHECK_FALSE(manager.applyCatalog(candidate).success);
+    }
+}
+
 TEST_CASE("Dune2R falls back to its bundled catalog when its online cache is corrupt", "[Dune2RAssets]") {
     CatalogFixture fixture;
     const auto expected = Dune2RAssetManager(fixture.root.string()).getPacks().size();
@@ -107,12 +130,16 @@ TEST_CASE("Dune2R source catalog loads immutable packs", "[Dune2RAssets]") {
     Dune2RAssetManager manager(modPath.string());
     REQUIRE(manager.getRevision().size() == 40);
     REQUIRE(manager.getRevision().find_first_not_of("0123456789abcdef") == std::string::npos);
-    for(const auto* id : {"gravel", "sand", "refinery", "harkonnendevastator", "ordostank"}) {
+    for(const auto* id : {"gravel", "sand", "refinery", "harkonnendevastator", "ordostank", "harkonneninfantry"}) {
         const auto& packs = manager.getPacks();
         const auto found = std::find_if(packs.begin(), packs.end(), [&](const auto& pack) { return pack.id == id; });
         REQUIRE(found != packs.end());
         CHECK(found->variant == "remastered");
         CHECK(found->totalBytes() > 0);
+        if(found->id == "harkonneninfantry") {
+            CHECK(found->files.size() == 49);
+            CHECK(found->displayName == "Harkonnen Infantry Remastered");
+        }
         if(found->id == "refinery") {
             CHECK(found->displayName == "Atreides Refinery Remastered");
         }

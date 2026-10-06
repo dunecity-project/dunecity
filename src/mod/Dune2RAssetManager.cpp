@@ -258,10 +258,14 @@ void Dune2RAssetManager::parseCatalog(const std::string& contents) {
     revision = catalog.getStringValue("Catalog", "Revision", "");
     baseURL = catalog.getStringValue("Catalog", "BaseURL", "");
     const int packCount = catalog.getIntValue("Catalog", "PackCount", 0);
-    const std::string expectedBase = "https://raw.githubusercontent.com/VR48/dunecity/"
+    const std::string expectedBase = "https://raw.githubusercontent.com/dunecity-project/dunecity/"
                                     + revision + "/mods/Dune2R/graphics_hd/units";
+    // Existing installed catalogs remain valid after the organization transfer.
+    // Keep a fixed repository allowlist; never accept arbitrary GitHub paths.
+    const std::string legacyBase = "https://raw.githubusercontent.com/VR48/dunecity/"
+                                  + revision + "/mods/Dune2R/graphics_hd/units";
     if(revision.size() != 40 || revision.find_first_not_of("0123456789abcdef") != std::string::npos
-       || baseURL != expectedBase || packCount < 0 || packCount > 256) {
+       || (baseURL != expectedBase && baseURL != legacyBase) || packCount < 0 || packCount > 256) {
         THROW(std::runtime_error, "Invalid Dune2R asset catalog header");
     }
     while(!baseURL.empty() && baseURL.back() == '/') {
@@ -362,7 +366,7 @@ Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& con
 Dune2RAssetInstallResult Dune2RAssetManager::refreshCatalog() {
     try {
         return applyCatalog(loadFromHttp(
-            "https://raw.githubusercontent.com/VR48/dunecity/main/mods/Dune2R/asset-catalog.ini"));
+            "https://raw.githubusercontent.com/dunecity-project/dunecity/main/mods/Dune2R/asset-catalog.ini"));
     } catch(const std::exception& error) {
         return {false, false, std::string("Offline; keeping the existing catalog. ") + error.what()};
     }

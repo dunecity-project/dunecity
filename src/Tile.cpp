@@ -416,7 +416,8 @@ void Tile::blitGround(int xPos, int yPos) {
     }
 
     const auto zoomed_tilesize = world2zoomedWorld(TILESIZE);
-    SDL_Rect drawLocation = { xPos, yPos, zoomed_tilesize, zoomed_tilesize };
+    const int drawnTilesize = dune2rWorldExtent(zoomed_tilesize);
+    SDL_Rect drawLocation = { xPos, yPos, drawnTilesize, drawnTilesize };
 
     SDL_Rect source;
     {
@@ -500,10 +501,10 @@ void Tile::blitGround(int xPos, int yPos) {
     // damage
     for (const auto& damageItem : damage) {
         source.x = damageItem.tile*zoomed_tilesize;
-        SDL_Rect dest = { screenborder->world2screenX(damageItem.realPos.x) - zoomed_tilesize / 2,
-            screenborder->world2screenY(damageItem.realPos.y) - zoomed_tilesize / 2,
-            zoomed_tilesize,
-            zoomed_tilesize };
+        SDL_Rect dest = { screenborder->world2screenX(damageItem.realPos.x) - drawnTilesize / 2,
+            screenborder->world2screenY(damageItem.realPos.y) - drawnTilesize / 2,
+            drawnTilesize,
+            drawnTilesize };
 
         if (damageItem.damageType == Terrain_RockDamage) {
             SDL_RenderCopy(renderer, pGFXManager->getZoomedObjPic(ObjPic_RockDamage, currentZoomlevel), &source, &dest);
@@ -612,8 +613,16 @@ void Tile::blitDeadUnits(int xPos, int yPos) {
         return;
 
     const auto zoomed_tile = world2zoomedWorld(TILESIZE);
+    const int drawnTile = dune2rWorldExtent(zoomed_tile);
 
     for (const auto& deadUnit : deadUnits) {
+        if(deadUnit.type == DeadUnit_Infantry && deadUnit.dune2rVisualToken != 0
+           && pGFXManager->drawEnhancedInfantryFall(
+               deadUnit.dune2rVisualToken, deadUnit.house, currentGame->getGameTime(),
+               screenborder->world2screenX(deadUnit.realPos.x),
+               screenborder->world2screenY(deadUnit.realPos.y))) {
+            continue;
+        }
         SDL_Rect source = { 0, 0, zoomed_tile, zoomed_tile };
         SDL_Texture* pTexture = nullptr;
         switch (deadUnit.type) {
@@ -657,10 +666,10 @@ void Tile::blitDeadUnits(int xPos, int yPos) {
         }
 
         if (pTexture != nullptr) {
-            SDL_Rect dest = { screenborder->world2screenX(deadUnit.realPos.x) - zoomed_tile / 2,
-                screenborder->world2screenY(deadUnit.realPos.y) - zoomed_tile / 2,
-                zoomed_tile,
-                zoomed_tile };
+            SDL_Rect dest = { screenborder->world2screenX(deadUnit.realPos.x) - drawnTile / 2,
+                screenborder->world2screenY(deadUnit.realPos.y) - drawnTile / 2,
+                drawnTile,
+                drawnTile };
             SDL_RenderCopy(renderer, pTexture, &source, &dest);
         }
     }
@@ -759,7 +768,8 @@ void Tile::blitSelectionRects(int xPos, int yPos) const {
                     blitObjectSelectionRect);
 }
 
-void Tile::assignDeadUnit(Uint8 type, Uint8 house, const Coord& position)
+void Tile::assignDeadUnit(Uint8 type, Uint8 house, const Coord& position,
+                          Uint32 dune2rVisualToken)
 {
     DEADUNITTYPE newDeadUnit;
     newDeadUnit.type = type;
@@ -767,6 +777,7 @@ void Tile::assignDeadUnit(Uint8 type, Uint8 house, const Coord& position)
     newDeadUnit.onSand = isSand() || isDunes();
     newDeadUnit.realPos = position;
     newDeadUnit.timer = 2000;
+    newDeadUnit.dune2rVisualToken = dune2rVisualToken;
 
     deadUnits.push_back(newDeadUnit);
 

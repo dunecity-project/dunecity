@@ -24,6 +24,7 @@
 #include <DataTypes.h>
 
 #include <misc/SDL2pp.h>
+#include <misc/Dune2RInfantryOverlay.h>
 
 #include <string>
 #include <array>
@@ -616,6 +617,7 @@ public:
         DamageExploded,
         DamageAftermath,
         DamageDissipation,
+        CombatReturn,
         Count
     };
 
@@ -669,6 +671,10 @@ public:
     bool             drawEnhancedUnit(int itemID, int house, unsigned int z,
                                       EnhancedUnitState state, int direction,
                                       Uint32 elapsedMs, int x, int y);
+    Uint32           recordEnhancedInfantryFall(int itemID, int house,
+                                                 int direction, Uint32 nowMs);
+    bool             drawEnhancedInfantryFall(Uint32 token, int house,
+                                               Uint32 nowMs, int x, int y);
     bool             drawEnhancedTerrain(int terrainType, int variant,
                                          const SDL_Rect& destination);
     bool             drawEnhancedBuilding(int itemID, int house, unsigned int z,
@@ -785,6 +791,7 @@ private:
         int rows = 1;
         int frameCount = 1;
         int frameMs = 100;
+        std::vector<Uint32> durationsMs;
         int anchorX = -1;
         int anchorY = -1;
         bool loop = true;
@@ -935,6 +942,7 @@ private:
     std::array<std::array<std::array<sdl2::texture_ptr, NUM_ZOOMLEVEL>, NUM_HOUSE_COLOR_SLOTS>, NUM_OBJPICS> objPicTex;
     std::array<HDObjPicOverride, NUM_OBJPICS> hdObjPicOverrides;
     std::vector<EnhancedUnitDefinition> enhancedUnitDefinitions;
+    Dune2RInfantryOverlay enhancedInfantryOverlay;
     std::vector<EnhancedBuildingDefinition> enhancedBuildingDefinitions;
     std::vector<DuneCityZoneDefinition> duneCityZoneDefinitions;
     std::vector<DuneCityBuildingDefinition> duneCityBuildingDefinitions;
