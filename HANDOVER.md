@@ -61,20 +61,32 @@ without changing INIFile ownership semantics. Windows test fixtures now use the
 native environment setter and close readers before removing temporary logs.
 The symlink security test is independent and reports a skip only for Windows
 ERROR_PRIVILEGE_NOT_HELD, without weakening the other security checks or changing
-OS policy. All nine local Windows CTest targets passed: the primary native suite
-has 953 passed cases, four explicit capability/opt-in skips and 10,217,667 passed
-assertions; the focused presentation/catalog target has 15 passes and one live-
-download opt-in skip. Eight Infantry packager, eight DuneCity packaging, eight browser
+OS policy. All nine local Windows CTest targets passed on final source 1.0.813:
+the primary native suite has 960 passed cases, two explicit capability/opt-in
+skips and 10,219,271 passed assertions. The focused presentation/catalog target
+subsequently passed all 21 cases / 370 assertions with its live download test
+enabled. Real Direct3D Refinery playback drew 234/240 frames including initial
+decode warm-up, with zero second-loop misses. Eight Infantry packager, eight DuneCity packaging, eight browser
 mod, one immutable-catalog and five browser-shell checks also passed; the ordered
 pixel comparison verified all 386 runtime poses against the approved sources.
 
 Android metadata is 0.2.29 / 1000549 with game payload 1.0.813. The DuneCity skin
-content fingerprint is `D7CAF796B1349228`. Windows compilation and initial Android
-native/APK builds succeeded for 811. The final Windows and Android source is being
-rebuilt with the final verified-snapshot and immutable-download gates before APK
-packaging. Final candidate build results are tracked in draft PR #89 and its CI.
-No phone was attached at the last ADB check. No stable release, website deployment,
-main merge or on-device play-test is implied by these local build results.
+content fingerprint is `D7CAF796B1349228`. Final code commit
+`6ec781f3d9cde2887487b2057f2308818a1c01f9` passed both candidate CI runs
+37518651928 and 37518659527: Windows, Linux, macOS, Emscripten and configured
+native/relay/signaling checks. The macOS candidate is unsigned/not notarized;
+stable signing and all publication jobs were deliberately skipped.
+
+The final arm64 Android native build, dependency audit and APK packaging passed.
+Its debug signature verifies; packaged native libraries match the stripped staged
+libraries. All 849 Android skin files match source bytes. Windows includes all
+784 PNGs byte-identically and all 65 manifests with only checkout line-ending
+differences. The browser payload verifies all 849 skins, five required City maps,
+769 Tornie files and the six-pack Dune2R catalog. All three inspected base payloads
+exclude optional Dune2R media. See [final candidate evidence](docs/candidate-1.0.813-verification.md)
+and draft PR #89 for artifact hashes and the remaining release gate.
+No phone was attached at the final ADB check. No stable release, website deployment,
+main merge, on-device play-test or successful live mixed-graphics match is implied.
 
 # 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
 
