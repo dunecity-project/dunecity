@@ -29,6 +29,8 @@
 #include <Network/NetworkPacketTypes.h>
 #include <Network/PathBudgetSync.h>
 #include <Network/ObserverStreamPolicy.h>
+#include <misc/IMemoryStream.h>
+#include <misc/OMemoryStream.h>
 #include <mod/ModTransferValidation.h>
 
 #include <enet/enet.h>
@@ -1722,6 +1724,13 @@ TEST_CASE("Received game info: impossible snapshots are refused before anything 
 
         settings.setGameSpeed(GAMESPEED_MIN - 1);
         REQUIRE_FALSE(accepts(settings, reason));
+        REQUIRE(reason == "game speed out of range");
+
+        // Nothing below the fastest setting is a duration a match could be paced by.
+        settings.setGameSpeed(0);
+        REQUIRE_FALSE(accepts(settings, reason));
+        settings.setGameSpeed(-1);
+        REQUIRE_FALSE(accepts(settings, reason));
     }
 
     SECTION("a team number outside the lobby") {
@@ -1730,6 +1739,53 @@ TEST_CASE("Received game info: impossible snapshots are refused before anything 
         settings.addHouseInfo(GameInitSettings::HouseInfo(HOUSE_ATREIDES, 9999));
         REQUIRE_FALSE(accepts(settings, reason));
         REQUIRE(reason == "team out of range");
+    }
+}
+
+TEST_CASE("Received game info: the host's shared pacing may be any settable speed",
+          "[network][security][gameinfo][gamespeed]") {
+    std::string reason;
+
+    // Every millisecond from the fastest to the slowest setting is a state the host can
+    // legitimately broadcast, so a client has to admit all of them - including the two new
+    // fast ones, which is what a peer on protocol 55 refuses and why the version moved.
+    for(int speed = GAMESPEED_MIN; speed <= GAMESPEED_MAX; speed++) {
+        GameInitSettings settings = plausibleReceivedSettings();
+        settings.setGameSpeed(speed);
+        INFO("game speed " << speed << " ms per cycle");
+        REQUIRE(accepts(settings, reason));
+    }
+
+    // The fastest setting is twice the previous one and the default is unchanged, so an
+    // existing profile and an existing saved match keep the pacing they were written with.
+    REQUIRE(GAMESPEED_MIN == 2);
+    REQUIRE(GAMESPEED_DEFAULT == 16);
+    REQUIRE(SettingsClass::GameOptionsClass().gameSpeed == GAMESPEED_DEFAULT);
+    REQUIRE(plausibleReceivedSettings().getGameOptions().gameSpeed == GAMESPEED_DEFAULT);
+
+    // Shared settings distinguish the selected speed so peers agree on the host's pacing.
+    SettingsClass::GameOptionsClass fastest;
+    fastest.gameSpeed = GAMESPEED_MIN;
+    SettingsClass::GameOptionsClass standard;
+    REQUIRE(fastest != standard);
+    REQUIRE(fastest.getHash() != standard.getHash());
+
+    // The same bytes carry a lobby snapshot and a saved match. The speed has always been a
+    // whole uint32 field, so the new values need no layout change and a 4ms match written by
+    // an older build still reads back as 4ms.
+    for(const int speed : { GAMESPEED_MIN, GAMESPEED_MIN + 1, 4, GAMESPEED_DEFAULT }) {
+        GameInitSettings original = plausibleReceivedSettings();
+        original.setGameSpeed(speed);
+        OMemoryStream out;
+        out.open();
+        original.save(out);
+        IMemoryStream in(out.getData(), out.getDataLength());
+        GameInitSettings restored(in);
+        INFO("round-tripped game speed " << speed);
+        REQUIRE(restored.getGameOptions().gameSpeed == speed);
+        REQUIRE(restored.getGameOptions().getHash() == original.getGameOptions().getHash());
+        REQUIRE(accepts(restored, reason));
+        REQUIRE(restored.networkSnapshot("saved simulation").getGameOptions().gameSpeed == speed);
     }
 }
 

@@ -1,4 +1,5 @@
 #include <Network/GamePayloadRouter.h>
+#include <Definitions.h>
 // Linked to the production payload decoder by the real-engine probe.
 static void probeMatchControlWire() {
     struct Peer final : GamePayloadPeer {
@@ -16,9 +17,9 @@ static void probeMatchControlWire() {
         std::string& modRevisionHash() override {return value;}
         void disconnectWithCause(int) override {++refusals;}
     } peer;
-    int controls=0,requests=0;
+    int controls=0,requests=0;Uint32 expectedSpeed=GAMESPEED_DEFAULT;
     const std::function<void(Uint32,Uint32,Uint32,Uint32)> control=[&](Uint32 rev,Uint32 speed,Uint32 pause,Uint32 resumed){
-        if(rev!=1 || speed!=16 || pause!=111 || resumed!=111) throw std::runtime_error("control fields corrupted");
+        if(rev!=1 || speed!=expectedSpeed || pause!=111 || resumed!=111) throw std::runtime_error("control fields corrupted");
         ++controls;
     };
     const std::function<void(const std::string&,Uint32)> request=[&](const std::string& name,Uint32 pause){
@@ -40,7 +41,13 @@ static void probeMatchControlWire() {
     send(NETWORKPACKET_MATCH_CONTROL,{42,1,16,111,111},true);
     send(NETWORKPACKET_MATCH_CONTROL,{41,1,16,111,111},false,true);
     send(NETWORKPACKET_MATCH_CONTROL,{42,0,16,111,111},false);
-    send(NETWORKPACKET_MATCH_CONTROL,{42,1,3,111,111},false);
+    // The two fastest settings are real shared pacing and travel over this packet; only a
+    // value below GAMESPEED_MIN is refused. Protocol 56 is what keeps them off older peers.
+    expectedSpeed=3;send(NETWORKPACKET_MATCH_CONTROL,{42,1,3,111,111},true);
+    expectedSpeed=GAMESPEED_MIN;send(NETWORKPACKET_MATCH_CONTROL,{42,1,GAMESPEED_MIN,111,111},true);
+    expectedSpeed=GAMESPEED_DEFAULT;
+    send(NETWORKPACKET_MATCH_CONTROL,{42,1,GAMESPEED_MIN-1,111,111},false);
+    send(NETWORKPACKET_MATCH_CONTROL,{42,1,0,111,111},false);
     send(NETWORKPACKET_MATCH_CONTROL,{42,1,33,111,111},false);
     send(NETWORKPACKET_MATCH_CONTROL,{42,1,16,111,112},false);
     send(NETWORKPACKET_MATCH_CONTROL,{42,1,16,111,111,0},false);

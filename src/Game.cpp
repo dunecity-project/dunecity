@@ -3473,10 +3473,9 @@ void Game::runMainLoop() {
         const int actualFrameTime = frameEnd - frameStart;  // Actual time for this frame
         frameTime += actualFrameTime;
         
-        // Bound catch-up after stalls, but keep at least the previous fastest
-        // setting's 24ms budget. At 4ms/tick a 60Hz frame needs 4-5 ticks;
-        // a three-tick budget would discard time and defeat the faster setting.
-        // The independent ten-cycle guard below still prevents renderer starvation.
+        // Bound catch-up after stalls with a 24ms floor: 2ms/tick needs 8-9 cycles
+        // per 60Hz frame. The independent ten-cycle guard below bounds render latency
+        // while allowing the fastest setting's 500 cycles/s at that frame rate.
         const int maxFrameTime = std::max(getGameSpeed() * 3, 24);
         if (frameTime > maxFrameTime) {
             frameTime = maxFrameTime;

@@ -119,7 +119,9 @@
 
 
 #define GAMESPEED_MAX 32
-#define GAMESPEED_MIN 4   // Fastest: 4ms per cycle (twice the previous 8ms maximum speed)
+// Fastest: 2ms per cycle (500 cycles/s), twice the previous 4ms setting.
+// Default tick-based gameplay conversions remain at 16ms.
+#define GAMESPEED_MIN 2
 #define GAMESPEED_DEFAULT 16  // 16ms per cycle = default game speed (matches 0.97.5)
 #define MILLI2CYCLES(MILLISECONDS) ((MILLISECONDS)/GAMESPEED_DEFAULT)   // this is calculated in game milliseconds (dune 2 has about the same in game speed "fastest")
 #define VOLUME_MAX 100

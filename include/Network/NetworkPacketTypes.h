@@ -136,7 +136,9 @@
 // 55: Custom Hard/Brutal base attacks mobilise the whole ground army on Hunt,
 //     retaining live invasion orders across repeated contacts. Older peers
 //     send different troops and use different movement and attack orders.
-#define NETWORK_PROTOCOL_VERSION            55
+// 56: Allow 2/3ms shared game speeds in GameInitSettings and MATCH_CONTROL.
+//     Older peers reject these values; save and observer layouts are unchanged.
+#define NETWORK_PROTOCOL_VERSION            56
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

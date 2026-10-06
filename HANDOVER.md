@@ -1,3 +1,39 @@
+# 2026-10-06 — Faster game-speed settings (1.0.809)
+
+The speed bars and keyboard controls now reach 3 ms and 2 ms per simulation
+cycle, with 2 ms twice the previous 4 ms maximum. The default remains 16 ms
+and the slow end 32 ms. Existing saved settings are retained. Tick-based
+simulation conversions remain at the default; the 24 ms frame-debt floor and
+ten-cycle frame guard are unchanged. Protocol 56 excludes older peers that
+reject the new values. Save 9852, observer runtime 7 and AI policy v90 remain.
+
+A bounded Claude Max worker implemented the bounds, protocol and relevant
+native/network coverage; it reached its turn cap before a final report.
+Codex reviewed the patch, removed a duplicate source-parsing pacing model,
+and completed independent verification. At controlled 60 Hz, the actual
+SDL/Metal game loop measured 62.428 / 249.897 / 333.235 / 499.787 cycles/s at
+16 / 4 / 3 / 2 ms: new/old maximum ratio 1.999972. A private presentation hook
+compensated for the remote display's non-blocking VSync; it is absent from the
+shipping binary. These are lightweight Mac-mini opening measurements, not
+MBA FPS or a guarantee for CPU-bound armies. The unchanged relay buffer also
+limits the achievable rate on higher-latency connections.
+
+Three real network peers pass shared-speed, decoder, authority, pause/resume
+and late-spectator checks at 2 ms, matching state at cycle 1800. All 56 CTest
+targets pass in 741.22 seconds. Pre/post dependency audits, version consistency
+and diff checks pass. Portable ARM64 bundle checks pass for 36 Mach-O files,
+portable load paths, deep/strict signature and bundled SDL hidden rendering.
+Native/portable executable code and string sections match. Executable SHA-256:
+`40e8f36f1531d8521d4e57fcf3dc7fb98094336887a04f1e65ad0b9dbb3ad76f`.
+
+MBA installation is pending because SSH became unreachable before transfer.
+The last fresh check found idle 808 with hash
+`22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`;
+no app replacement occurred. The user has been asked to keep the MBA awake.
+The verified 64.5 MB archive and rollback/profile verifiers are ready in
+`../outputs/game-speed-809-20261006/`. Nothing pushed or publicly published.
+Detailed evidence and limits: [docs/game-speed-809.md](docs/game-speed-809.md).
+
 # 2026-10-06 — Custom-game spice label and explanation (1.0.808)
 
 The Spice caption now reserves the GUI style's measured width and is vertically
