@@ -193,6 +193,27 @@ const std::string& Dune2RAssetManager::getRevision() const noexcept {
     return revision;
 }
 
+uint64_t Dune2RAssetManager::getCatalogVersion() const noexcept {
+    return catalogVersion;
+}
+
+const std::string& Dune2RAssetManager::getTargetIdentity() const noexcept {
+    return targetIdentity;
+}
+
+const std::vector<std::string>& Dune2RAssetManager::getRequiredPackIDs() const noexcept {
+    return requiredPackIDs;
+}
+
+std::string Dune2RAssetManager::missingRequiredPackID() const {
+    for(const auto& required : requiredPackIDs) {
+        if(findPack(required) == nullptr) {
+            return required;
+        }
+    }
+    return {};
+}
+
 bool Dune2RAssetManager::isReadOnly() const noexcept {
     return readOnly;
 }
@@ -214,6 +235,16 @@ bool Dune2RAssetManager::isSafeRelativeAssetPath(const std::string& path) {
     return path.find_first_not_of(
                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/")
            == std::string::npos;
+}
+
+bool Dune2RAssetManager::parseCatalogVersion(const std::string& text, uint64_t& version) {
+    version = 0;
+    if(text.empty() || text.size() > 19
+       || text.find_first_not_of("0123456789") != std::string::npos) {
+        return false;
+    }
+    version = std::stoull(text);
+    return true;
 }
 
 std::string Dune2RAssetManager::sha256Bytes(const std::string& bytes) {
@@ -240,23 +271,78 @@ std::string Dune2RAssetManager::sha256File(const std::string& filename) {
 }
 
 void Dune2RAssetManager::loadCatalog() {
-    for(const auto* filename : {"asset-catalog-online.ini", "asset-catalog.ini"}) {
+    auto parseFile = [this](const char* filename, Dune2RAssetManager& into) {
         const auto path = std::filesystem::path(modPath) / filename;
-        if(!std::filesystem::is_regular_file(path)) continue;
+        if(!std::filesystem::is_regular_file(path)) return false;
         try {
             if(std::filesystem::file_size(path) > 1024u * 1024u) {
                 THROW(std::runtime_error, "Dune2R catalog exceeds 1 MiB");
             }
             std::ifstream input(path, std::ios::binary);
             const std::string contents((std::istreambuf_iterator<char>(input)), {});
-            packs.clear();
-            parseCatalog(contents);
-            return;
+            into.packs.clear();
+            into.parseCatalog(contents);
+            return true;
         } catch(const std::exception& error) {
             SDL_Log("Dune2R catalog %s rejected: %s", filename, error.what());
+            return false;
+        }
+    };
+
+    Dune2RAssetManager bundled(*this), online(*this);
+    const bool haveBundled = parseFile("asset-catalog.ini", bundled);
+    const bool haveOnline = parseFile("asset-catalog-online.ini", online);
+
+    // A modern bundled catalog states which packs this application ships. A published
+    // catalog may add packs, but removing one would take artwork away from a build that
+    // already pins it - whatever publication counter another branch has reached.
+    // Legacy bundled catalogs (version 0) keep their previous behaviour and no floor.
+    if(haveBundled && bundled.catalogVersion != 0) {
+        requiredPackIDs.clear();
+        requiredPackIDs.reserve(bundled.packs.size());
+        for(const auto& pack : bundled.packs) {
+            requiredPackIDs.push_back(pack.id);
         }
     }
-    THROW(std::runtime_error, "No valid Dune2R asset catalog is available");
+    bundled.requiredPackIDs = online.requiredPackIDs = requiredPackIDs;
+
+    const Dune2RAssetManager* chosen = nullptr;
+    if(haveOnline && haveBundled && bundled.catalogVersion != 0) {
+        // A refreshed online cache supersedes the bundled catalog only as a newer
+        // publication - or as the very same target - and only with the floor intact.
+        const auto missing = online.missingRequiredPackID();
+        const char* refusal = nullptr;
+        if(online.catalogVersion < bundled.catalogVersion) {
+            refusal = "an older publication";
+        } else if(online.catalogVersion == bundled.catalogVersion
+                  && online.targetIdentity != bundled.targetIdentity) {
+            refusal = "a different target under the same publication number";
+        } else if(!missing.empty()) {
+            refusal = "a target without a bundled pack";
+        }
+        if(refusal != nullptr) {
+            SDL_Log("Dune2R online catalog (version %llu) ignored in favour of the bundled "
+                    "catalog (version %llu): %s%s%s",
+                    static_cast<unsigned long long>(online.catalogVersion),
+                    static_cast<unsigned long long>(bundled.catalogVersion), refusal,
+                    missing.empty() ? "" : ", missing ", missing.c_str());
+            chosen = &bundled;
+        } else {
+            chosen = &online;
+        }
+    } else if(haveOnline) {
+        chosen = &online;
+    } else if(haveBundled) {
+        chosen = &bundled;
+    }
+    if(chosen == nullptr) {
+        THROW(std::runtime_error, "No valid Dune2R asset catalog is available");
+    }
+    baseURL = chosen->baseURL;
+    revision = chosen->revision;
+    catalogVersion = chosen->catalogVersion;
+    targetIdentity = chosen->targetIdentity;
+    packs = chosen->packs;
 }
 
 void Dune2RAssetManager::parseCatalog(const std::string& contents) {
@@ -272,6 +358,12 @@ void Dune2RAssetManager::parseCatalog(const std::string& contents) {
     }
     revision = catalog.getStringValue("Catalog", "Revision", "");
     baseURL = catalog.getStringValue("Catalog", "BaseURL", "");
+    // Legacy catalogs have no Version. They stay loadable as version 0; a present
+    // field has to be a plain decimal number, so a damaged value cannot pose as new.
+    const auto versionField = catalog.getStringValue("Catalog", "Version", "0");
+    if(!parseCatalogVersion(versionField, catalogVersion)) {
+        THROW(std::runtime_error, "Invalid Dune2R asset catalog version");
+    }
     const int packCount = catalog.getIntValue("Catalog", "PackCount", 0);
     const std::string expectedBase = "https://raw.githubusercontent.com/dunecity-project/dunecity/"
                                     + revision + "/mods/Dune2R/graphics_hd/units";
@@ -338,6 +430,19 @@ void Dune2RAssetManager::parseCatalog(const std::string& contents) {
         }
         packs.push_back(std::move(pack));
     }
+
+    // Everything the runtime has to treat as one artwork target. The publication
+    // counter is deliberately excluded: it orders targets, it does not identify them.
+    std::ostringstream identity;
+    identity << "revision=" << revision << "\nbase=" << baseURL << "\npacks=" << packs.size();
+    for(const auto& pack : packs) {
+        identity << "\npack=" << pack.id << '|' << pack.displayName << '|' << pack.variant
+                 << '|' << pack.unit << '|' << pack.files.size();
+        for(const auto& file : pack.files) {
+            identity << "\nfile=" << file.relativePath << '|' << file.size << '|' << file.sha256;
+        }
+    }
+    targetIdentity = sha256Bytes(identity.str());
 }
 
 Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& contents) {
@@ -350,6 +455,27 @@ Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& con
         auto candidate = *this;
         candidate.packs.clear();
         candidate.parseCatalog(contents);
+        // An older publication must not replace the target this installation pins.
+        if(candidate.catalogVersion < catalogVersion) {
+            THROW(std::runtime_error, "the published catalog version "
+                  + std::to_string(candidate.catalogVersion) + " is older than the installed "
+                  + std::to_string(catalogVersion));
+        }
+        // One publication counter describes exactly one target. The same number with a
+        // different revision, base URL, pack set or expected file is a conflict, not an
+        // update: accepting it would let a reused number replace a pinned target. The
+        // identical target may refresh. Legacy catalogs have no counter (0) and keep
+        // their previous behaviour, so this check does not apply to them.
+        if(candidate.catalogVersion == catalogVersion && catalogVersion != 0
+           && candidate.targetIdentity != targetIdentity) {
+            THROW(std::runtime_error, "publication version " + std::to_string(catalogVersion)
+                  + " already describes a different artwork target");
+        }
+        // Published catalogs may add packs, never remove one this application ships.
+        if(const auto missing = candidate.missingRequiredPackID(); !missing.empty()) {
+            THROW(std::runtime_error, "the published catalog is missing the bundled asset pack "
+                  + missing);
+        }
         {
             std::ofstream output(staged, std::ios::binary | std::ios::trunc);
             output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
@@ -365,9 +491,13 @@ Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& con
             if(std::filesystem::exists(backup)) std::filesystem::rename(backup, destination);
             throw;
         }
-        result.changed = revision != candidate.revision;
+        // Changed means "a different target", not just a different revision: new
+        // expected sizes, hashes or pack metadata change what has to be installed.
+        result.changed = targetIdentity != candidate.targetIdentity;
         baseURL = std::move(candidate.baseURL);
         revision = std::move(candidate.revision);
+        catalogVersion = candidate.catalogVersion;
+        targetIdentity = std::move(candidate.targetIdentity);
         packs = std::move(candidate.packs);
         result.success = true;
         result.message = "Catalog refreshed: " + std::to_string(packs.size()) + " available packs.";
@@ -402,6 +532,57 @@ bool Dune2RAssetManager::isPackInstalled(const Dune2RAssetPack& pack) const {
     return std::all_of(pack.files.begin(), pack.files.end(), [&](const Dune2RAssetFile& file) {
         return verifiedFile(destination / file.relativePath, file);
     });
+}
+
+Dune2RAssetReadiness Dune2RAssetManager::checkReadiness() const {
+    Dune2RAssetReadiness result;
+    result.revision = revision;
+    result.catalogVersion = catalogVersion;
+    const std::filesystem::path unitsRoot = std::filesystem::path(modPath)
+                                            / "graphics_hd" / "units";
+    for(const auto& pack : packs) {
+        result.totalBytes += pack.totalBytes();
+        uint64_t packMissingBytes = 0;
+        for(const auto& file : pack.files) {
+            // Only the installed location counts. Staging and partial files are
+            // never a playable target, however complete they look.
+            if(!verifiedFile(unitsRoot / pack.unit / file.relativePath, file)) {
+                packMissingBytes += file.size;
+            }
+        }
+        if(packMissingBytes > 0) {
+            result.missingPackIDs.push_back(pack.id);
+            result.missingBytes += packMissingBytes;
+        }
+    }
+    // An empty catalog describes no playable target, so it is never "ready".
+    result.complete = !packs.empty() && result.missingPackIDs.empty();
+    result.fingerprint = installedFingerprint();
+    return result;
+}
+
+std::string Dune2RAssetManager::installedFingerprint() const {
+    const std::filesystem::path unitsRoot = std::filesystem::path(modPath)
+                                            / "graphics_hd" / "units";
+    std::ostringstream text;
+    // The target this was measured against, then what is on disk. A changed expected
+    // size or hash therefore invalidates a cached ready result even when the installed
+    // bytes are untouched.
+    text << modPath << '|' << revision << '|' << catalogVersion << '|' << targetIdentity
+         << '|' << packs.size();
+    for(const auto& pack : packs) {
+        text << '\n' << pack.unit;
+        for(const auto& file : pack.files) {
+            std::error_code sizeError, timeError;
+            const auto path = unitsRoot / pack.unit / file.relativePath;
+            const auto size = std::filesystem::file_size(path, sizeError);
+            const auto written = std::filesystem::last_write_time(path, timeError);
+            text << '|' << file.relativePath << ':' << file.sha256 << ':' << file.size << ':'
+                 << (sizeError ? 0u : size) << ':'
+                 << (timeError ? 0LL : static_cast<long long>(written.time_since_epoch().count()));
+        }
+    }
+    return sha256Bytes(text.str());
 }
 
 Dune2RAssetInstallResult Dune2RAssetManager::install(

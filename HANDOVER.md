@@ -1,3 +1,51 @@
+# 2026-10-07 — Automatic Dune2R artwork preparation (1.0.815)
+
+Local candidate `test/pr89-on-812` now prepares canonical Dune2R artwork when
+selected in Custom Game and before continuing a persisted selection or changing
+mods in player setup. The gate runs before mod-version capture. It verifies the
+installed target, completes missing/changed files from pinned GitHub URLs, and
+verifies final paths again before proceeding. All six remastered packs are
+required (238 files, 383,787,346 bytes); the Asset Editor remains an optional
+inspection/preview route.
+
+A visible progress menu offers Retry/Cancel. Native work is joined before menu
+destruction; browser work uses deferred tasks on its single Asyncify thread and
+pumps drawing/input between download steps. Cancel takes priority even if the
+current verification completes successfully. A complete local target works when
+the catalog request fails offline. Ready results expire after 60 seconds and
+are invalidated by changed file/manifest fingerprints. Shared immutable snapshots
+and derived mods retain their existing pinned-content retrieval behavior.
+
+Catalog `Version` is a publication counter, not a Git timestamp. Generate from the
+previous catalog: `python3 scripts/generate-dune2r-asset-catalog.py --revision <public-asset-commit>`.
+An identical target preserves its counter; a changed target increments it. Carry
+the latest published catalog into the checkout before generating updates on a
+branch. Equal nonzero counters must identify the same parsed target. Modern
+bundled catalogs define required pack IDs: online refreshes may add packs but
+cannot remove bundled ones, including the candidate Infantry pack. Legacy
+catalogs without Version retain compatibility. No metaserver changes are needed.
+
+Final native Catch2 passed all 972 cases and 10,219,427 assertions with network,
+Refinery-atlas and Metal playback opt-ins enabled. All four selected CTest targets
+passed; the real menu probe covers three window sizes, both selection and persisted
+start gates, cancellation of a complete target, deferred execution, failures and
+immutable guards. Python asset/catalog tests passed all 15 cases. A fresh-profile
+real-engine probe downloaded all six packs, verified the installed target, repaired
+a same-size corrupt PNG while retaining an unchanged pack, and passed Infantry
+animation, actual editor APPLY, map load, 3x projection and simulation-digest checks.
+The prior 814 integration passed all 59 native targets; unchanged simulation/AI
+suites were not repeated. Full browser compilation was unavailable on this host
+because the installed Emscripten lacks LLVM/Binaryen dependencies; its cooperative
+execution path was exercised natively. The local candidate is for this ARM64
+MacBook Air (macOS26.5.2); bundled Homebrew libraries require macOS26.
+
+Validation and local-package receipts are recorded in
+`../outputs/dune2r-auto-art-20261007/`. The accompanying manual guide starts with
+Custom Game / Dune2R and the automatic download, then the house-bound infantry
+map; it also includes cache, cancellation and repair checks. Local test builds
+use their separate profile and do not replace the currently running app. This
+candidate is not a production publication.
+
 # 2026-10-07 — PR89 local integration and asset-editor access (1.0.814)
 
 Local branch `test/pr89-on-812` combines PR89 head c80d0157 with production

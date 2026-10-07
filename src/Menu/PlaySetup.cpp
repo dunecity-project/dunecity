@@ -2,6 +2,7 @@
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CrossplayMenu.h>
+#include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/MenuBase.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/INIFile.h>
@@ -196,6 +197,19 @@ void playCustomGame(bool online) {
         if(!setup.mods.empty() && setup.mods[setup.mod].name != oldMod) {
             if(mods.setActiveMod(setup.mods[setup.mod].name)) setup.rules = effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
             else for(size_t i = 0; i < setup.mods.size(); ++i) if(setup.mods[i].name == oldMod) setup.mod = static_cast<int>(i);
+        }
+        // The canonical Dune2R artwork is completed and verified here, before this game
+        // captures a mod version - also when the mod was switched in the player setup,
+        // which returns to this loop. A cancelled or failed download returns to the map
+        // chooser rather than starting with partial art. An already verified, unchanged
+        // target costs nothing.
+        if(setup.mod >= 0 && setup.mod < static_cast<int>(setup.mods.size())) {
+            const auto artwork = ensureDune2RArtworkReady(setup.mods[setup.mod].name);
+            if(!artwork.ready) {
+                if(!artwork.message.empty()) PlayError(artwork.message).showMenu();
+                chooseMap = true;
+                continue;
+            }
         }
         const auto path = setup.maps[setup.map];
         GameInitSettings init(getBasename(path, true), readCompleteFile(path), setup.sharedHouse, setup.rules);

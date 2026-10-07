@@ -1,3 +1,23 @@
+# Dune City 1.0.815 — local PR89 candidate
+
+Choosing Dune2R, or continuing a game setup with Dune2R already selected, now
+prepares its remastered artwork automatically. The first download contains six
+packs (approximately 384 MB), including Harkonnen Infantry Remastered.
+
+- A progress panel checks the GitHub catalog, verifies cached files and downloads
+  missing or changed files. Retry continues after a connection failure; Cancel
+  returns to setup without starting a game.
+- Complete verified artwork remains playable offline. Later setup attempts check
+  for published updates; immediate repeated interactions reuse a short cache.
+- Catalog publication versions and required bundled packs prevent an older or
+  conflicting catalog from removing artwork. Shared versions retain their pinned
+  content.
+- Includes the approved PR89 city artwork and production 1.0.812 fixes. Gameplay,
+  saves and network protocol 57 retain their existing behavior.
+
+Use the accompanying isolated test launcher and guide for the prepared Harkonnen
+Soldier map. This is a local test candidate.
+
 # Dune City 1.0.814 — local PR89 candidate
 
 Includes PR89's approved DuneCity special-building artwork and optional Harkonnen

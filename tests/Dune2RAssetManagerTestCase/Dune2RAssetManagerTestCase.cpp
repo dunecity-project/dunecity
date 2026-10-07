@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace {
 struct CatalogFixture {
@@ -44,6 +47,82 @@ void writeOfflinePack(const std::filesystem::path& root) {
             << "[Pack.0]\nID=offline\nDisplayName=Offline fixture\nVariant=remastered\n"
             << "Unit=offlineunit\nFileCount=1\nFile.0=unit.ini|" << bytes.size() << '|'
             << Dune2RAssetManager::sha256Bytes(bytes) << '\n';
+}
+
+// One pack whose two files hold the same bytes. Only the first is installed, so the
+// second can be completed from the verified local duplicate and the download path is
+// exercised without any network request.
+void writeDuplicatePack(const std::filesystem::path& root, const std::string& version) {
+    const std::string bytes = "identical remastered pose";
+    const auto unit = root / "graphics_hd" / "units" / "duplicateunit";
+    std::filesystem::create_directories(unit / "atlases" / "idle");
+    {
+        std::ofstream payload(unit / "unit.ini", std::ios::binary);
+        payload << bytes;
+    }
+    const std::string revision(40, 'c');
+    std::ofstream catalog(root / "asset-catalog.ini", std::ios::trunc);
+    catalog << "[Catalog]\nSchema=1\nRevision=" << revision << '\n';
+    if(!version.empty()) catalog << "Version=" << version << '\n';
+    catalog << "BaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
+            << revision << "/mods/Dune2R/graphics_hd/units\nPackCount=1\n"
+            << "[Pack.0]\nID=duplicate\nDisplayName=Duplicate fixture\nVariant=remastered\n"
+            << "Unit=duplicateunit\nFileCount=2\nFile.0=unit.ini|" << bytes.size() << '|'
+            << Dune2RAssetManager::sha256Bytes(bytes) << '\n'
+            << "File.1=atlases/idle/east.png|" << bytes.size() << '|'
+            << Dune2RAssetManager::sha256Bytes(bytes) << '\n';
+}
+
+std::string replaceAll(std::string text, const std::string& from, const std::string& to) {
+    for(size_t position = text.find(from); position != std::string::npos;
+        position = text.find(from, position + to.size())) {
+        text.replace(position, from.size(), to);
+    }
+    return text;
+}
+
+// A catalog published at another asset revision without the Harkonnen Infantry pack,
+// which is the shape production still serves online.
+std::string withoutInfantryPack(std::string contents, const std::string& currentRevision,
+                                const std::string& newRevision = std::string(40, 'a')) {
+    const auto infantry = contents.find("[Pack.2]");
+    const auto following = contents.find("[Pack.3]");
+    REQUIRE(infantry != std::string::npos);
+    REQUIRE(following != std::string::npos);
+    REQUIRE(contents.find("ID=harkonneninfantry") != std::string::npos);
+    contents.erase(infantry, following - infantry);
+    for(int pack = 3; pack <= 5; ++pack) {
+        contents = replaceAll(contents, "[Pack." + std::to_string(pack) + "]",
+                              "[Pack." + std::to_string(pack - 1) + "]");
+    }
+    contents = replaceAll(contents, "PackCount=6", "PackCount=5");
+    REQUIRE(contents.find("ID=harkonneninfantry") == std::string::npos);
+    return replaceAll(contents, currentRevision, newRevision);
+}
+
+std::string withoutCatalogVersion(std::string contents) {
+    const auto version = contents.find("Version=");
+    REQUIRE(version != std::string::npos);
+    contents.erase(version, contents.find('\n', version) + 1 - version);
+    return contents;
+}
+
+std::string withCatalogVersion(std::string contents, uint64_t version) {
+    const std::string field = "Version=" + std::to_string(version);
+    const auto existing = contents.find("Version=");
+    if(existing != std::string::npos) {
+        contents.replace(existing, contents.find('\n', existing) - existing, field);
+        return contents;
+    }
+    const auto revision = contents.find("Revision=");
+    REQUIRE(revision != std::string::npos);
+    return contents.insert(contents.find('\n', revision) + 1, field + "\n");
+}
+
+// The catalog production still publishes online: an older asset revision, five packs
+// without Harkonnen Infantry, and no publication counter at all.
+std::string olderPublishedCatalog(const std::string& contents, const std::string& currentRevision) {
+    return withoutCatalogVersion(withoutInfantryPack(contents, currentRevision));
 }
 
 std::map<std::string, std::string> directoryFingerprint(const std::filesystem::path& root) {
@@ -141,13 +220,10 @@ TEST_CASE("Dune2R refreshed catalogs persist independently of bundled catalogs",
     CatalogFixture fixture;
     Dune2RAssetManager manager(fixture.root.string());
     const auto oldRevision = manager.getRevision();
-    auto updated = fixture.contents;
     const std::string revision(40, 'a');
-    size_t pos = 0;
-    while((pos = updated.find(oldRevision, pos)) != std::string::npos) {
-        updated.replace(pos, oldRevision.size(), revision);
-        pos += revision.size();
-    }
+    // A new asset revision is a new target, so it arrives as the next publication.
+    const auto updated = withCatalogVersion(replaceAll(fixture.contents, oldRevision, revision),
+                                            manager.getCatalogVersion() + 1);
     const auto result = manager.applyCatalog(updated);
     INFO(result.message);
     REQUIRE(result.success);
@@ -187,7 +263,12 @@ TEST_CASE("Dune2R catalog supports the transferred repository without widening t
         auto candidate = fixture.contents;
         const auto start = candidate.find("BaseURL=") + 8;
         candidate.replace(start, candidate.find_first_of("\r\n", start) - start, trusted + suffix);
-        REQUIRE(manager.applyCatalog(candidate).success);
+        // A different base URL is a different target, so it carries the next number.
+        candidate = withCatalogVersion(candidate, manager.getCatalogVersion() + 1);
+        const auto result = manager.applyCatalog(candidate);
+        INFO(result.message);
+        REQUIRE(result.success);
+        CHECK(result.changed);
     }
     for(const auto& untrusted : {
             std::string("https://raw.githubusercontent.com/dunecity-project/other/"),
@@ -252,6 +333,352 @@ TEST_CASE("Dune2R source catalog loads immutable packs", "[Dune2RAssets]") {
             CHECK(found->displayName == "Atreides Refinery Remastered");
         }
     }
+}
+
+TEST_CASE("Dune2R readiness recognises a complete cached target without any request", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    Dune2RAssetManager manager(working.string());
+    REQUIRE_FALSE(manager.isReadOnly());
+    REQUIRE(manager.getPacks().size() == 1);
+
+    // The catalog URLs point at a revision that does not exist, so a complete local
+    // target is the only way this can report ready: nothing is fetched.
+    const auto ready = manager.checkReadiness();
+    CHECK(ready.complete);
+    CHECK(ready.missingPackIDs.empty());
+    CHECK(ready.missingBytes == 0);
+    CHECK(ready.totalBytes == 3);
+    CHECK(ready.revision == manager.getRevision());
+    CHECK_FALSE(ready.fingerprint.empty());
+    CHECK(manager.installedFingerprint() == ready.fingerprint);
+
+    // A verified target is reused instead of being installed again.
+    const auto reinstalled = manager.install({"offline"});
+    CHECK(reinstalled.success);
+    CHECK_FALSE(reinstalled.changed);
+    CHECK(manager.installedFingerprint() == ready.fingerprint);
+
+    // Losing a file must invalidate both the readiness and the cached digest.
+    std::filesystem::remove(working / "graphics_hd" / "units" / "offlineunit" / "unit.ini");
+    const auto missing = manager.checkReadiness();
+    CHECK_FALSE(missing.complete);
+    CHECK(missing.missingPackIDs == std::vector<std::string>{"offline"});
+    CHECK(missing.missingBytes == 3);
+    CHECK(missing.fingerprint != ready.fingerprint);
+}
+
+TEST_CASE("Dune2R readiness treats changed published artwork as missing bytes", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    Dune2RAssetManager manager(working.string());
+    REQUIRE(manager.checkReadiness().complete);
+    const auto installedDigest = manager.installedFingerprint();
+
+    // Same path, new published bytes: a newer catalog, so the update is accepted.
+    const std::string replacement = "redrawn";
+    const std::string revision(40, 'd');
+    std::ostringstream updated;
+    updated << "[Catalog]\nSchema=1\nRevision=" << revision << "\nVersion=1791400000\n"
+            << "BaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
+            << revision << "/mods/Dune2R/graphics_hd/units\nPackCount=1\n"
+            << "[Pack.0]\nID=offline\nDisplayName=Offline fixture\nVariant=remastered\n"
+            << "Unit=offlineunit\nFileCount=1\nFile.0=unit.ini|" << replacement.size() << '|'
+            << Dune2RAssetManager::sha256Bytes(replacement) << '\n';
+    const auto applied = manager.applyCatalog(updated.str());
+    INFO(applied.message);
+    REQUIRE(applied.success);
+    CHECK(applied.changed);
+    CHECK(manager.getCatalogVersion() == 1791400000u);
+
+    const auto readiness = manager.checkReadiness();
+    CHECK_FALSE(readiness.complete);
+    CHECK(readiness.missingPackIDs == std::vector<std::string>{"offline"});
+    CHECK(readiness.missingBytes == replacement.size());
+    // The readiness digest follows the catalog, so a cached "ready" cannot survive
+    // an artwork change even when every installed file is untouched.
+    CHECK(readiness.fingerprint != installedDigest);
+}
+
+TEST_CASE("An older published Dune2R catalog cannot remove the shipped artwork", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    Dune2RAssetManager manager(fixture.root.string());
+    const auto revision = manager.getRevision();
+    const auto version = manager.getCatalogVersion();
+    REQUIRE(version > 1700000000u);
+    REQUIRE(manager.getPacks().size() == 6);
+    const auto older = olderPublishedCatalog(fixture.contents, revision);
+
+    const auto refused = manager.applyCatalog(older);
+    CHECK_FALSE(refused.success);
+    CHECK_FALSE(refused.changed);
+    CHECK(refused.message.find("older than the installed") != std::string::npos);
+    CHECK(manager.getRevision() == revision);
+    CHECK(manager.getCatalogVersion() == version);
+    CHECK(manager.getPacks().size() == 6);
+    CHECK_FALSE(std::filesystem::exists(fixture.root / "asset-catalog-online.ini"));
+
+    // A profile that production already refreshed holds that older catalog on disk.
+    // Loading must still pick the newer bundled target, including its Infantry pack.
+    {
+        std::ofstream installed(fixture.root / "asset-catalog-online.ini", std::ios::trunc);
+        installed << older;
+    }
+    Dune2RAssetManager reloaded(fixture.root.string());
+    CHECK(reloaded.getRevision() == revision);
+    CHECK(reloaded.getCatalogVersion() == version);
+    REQUIRE(reloaded.getPacks().size() == 6);
+    const auto& packs = reloaded.getPacks();
+    CHECK(std::any_of(packs.begin(), packs.end(),
+                      [](const auto& pack) { return pack.id == "harkonneninfantry"; }));
+    CHECK_FALSE(reloaded.checkReadiness().complete);
+}
+
+TEST_CASE("A changed expected size invalidates a cached Dune2R ready result", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    Dune2RAssetManager manager(working.string());
+    const auto ready = manager.checkReadiness();
+    REQUIRE(ready.complete);
+    REQUIRE(ready.totalBytes == 3);
+
+    // The installed bytes are untouched, but the catalog now expects a different size
+    // for the same path and hash. A cached "ready" must not survive that.
+    const std::string revision(40, 'b');
+    std::ostringstream resized;
+    resized << "[Catalog]\nSchema=1\nRevision=" << revision << "\nVersion=7\n"
+            << "BaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
+            << revision << "/mods/Dune2R/graphics_hd/units\nPackCount=1\n"
+            << "[Pack.0]\nID=offline\nDisplayName=Offline fixture\nVariant=remastered\n"
+            << "Unit=offlineunit\nFileCount=1\nFile.0=unit.ini|4|"
+            << Dune2RAssetManager::sha256Bytes("abc") << '\n';
+    const auto applied = manager.applyCatalog(resized.str());
+    INFO(applied.message);
+    REQUIRE(applied.success);
+    CHECK(applied.changed);
+
+    const auto stale = manager.checkReadiness();
+    CHECK_FALSE(stale.complete);
+    CHECK(stale.missingBytes == 4);
+    CHECK(stale.fingerprint != ready.fingerprint);
+    CHECK(manager.installedFingerprint() == stale.fingerprint);
+}
+
+TEST_CASE("A Dune2R catalog with a zero-byte asset entry is refused entirely", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    std::ifstream input(working / "asset-catalog.ini");
+    const std::string valid((std::istreambuf_iterator<char>(input)), {});
+    const auto zeroSized = replaceAll(valid, "unit.ini|3|", "unit.ini|0|");
+    REQUIRE(zeroSized != valid);
+
+    // An entry that claims nothing has to be fetched would otherwise verify as a
+    // complete target while the artwork is absent.
+    Dune2RAssetManager manager(working.string());
+    const auto refused = manager.applyCatalog(withCatalogVersion(zeroSized, 9));
+    INFO(refused.message);
+    CHECK_FALSE(refused.success);
+    CHECK(manager.checkReadiness().complete);
+    CHECK_FALSE(std::filesystem::exists(working / "asset-catalog-online.ini"));
+
+    // The same catalog as the only one present leaves no usable target at all, so no
+    // readiness can be reported from it.
+    const auto malformed = fixture.root / "malformed";
+    std::filesystem::create_directories(malformed);
+    {
+        std::ofstream broken(malformed / "asset-catalog.ini", std::ios::trunc);
+        broken << zeroSized;
+    }
+    CHECK_THROWS(Dune2RAssetManager(malformed.string()));
+}
+
+TEST_CASE("A reused Dune2R publication number cannot describe a different target", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    Dune2RAssetManager manager(fixture.root.string());
+    const auto revision = manager.getRevision();
+    const auto version = manager.getCatalogVersion();
+    const auto identity = manager.getTargetIdentity();
+    REQUIRE(version > 0);
+    REQUIRE_FALSE(identity.empty());
+
+    // Same number, but a different asset revision, base URL, expected size or expected
+    // hash. A counter identifies one target; a reused one must never replace it.
+    const auto conflictingRevision = replaceAll(fixture.contents, revision, std::string(40, 'b'));
+    auto conflictingSize = fixture.contents;
+    const auto sizeStart = conflictingSize.find('|', conflictingSize.find("File.0=")) + 1;
+    conflictingSize.replace(sizeStart, conflictingSize.find('|', sizeStart) - sizeStart, "4242");
+    auto conflictingHash = fixture.contents;
+    const auto hashStart = conflictingHash.find('|', sizeStart) + 1;
+    conflictingHash.replace(hashStart, 64, std::string(64, 'd'));
+    auto conflictingMetadata = replaceAll(fixture.contents, "DisplayName=Harkonnen Infantry Remastered",
+                                          "DisplayName=Harkonnen Infantry");
+    for(const auto& conflict : {conflictingRevision, conflictingSize, conflictingHash,
+                                conflictingMetadata}) {
+        const auto refused = manager.applyCatalog(conflict);
+        INFO(refused.message);
+        CHECK_FALSE(refused.success);
+        CHECK_FALSE(refused.changed);
+        CHECK(refused.message.find("already describes a different artwork target")
+              != std::string::npos);
+        CHECK(manager.getRevision() == revision);
+        CHECK(manager.getTargetIdentity() == identity);
+        CHECK_FALSE(std::filesystem::exists(fixture.root / "asset-catalog-online.ini"));
+    }
+
+    // The very same target may be refreshed; nothing changed, so nothing is reinstalled.
+    const auto unchanged = manager.applyCatalog(fixture.contents);
+    INFO(unchanged.message);
+    CHECK(unchanged.success);
+    CHECK_FALSE(unchanged.changed);
+    CHECK(manager.getTargetIdentity() == identity);
+
+    // A changed target under the next number is an update, and metadata alone counts.
+    const auto renamed = withCatalogVersion(conflictingMetadata, version + 1);
+    const auto applied = manager.applyCatalog(renamed);
+    INFO(applied.message);
+    REQUIRE(applied.success);
+    CHECK(applied.changed);
+    CHECK(manager.getRevision() == revision);
+    CHECK(manager.getTargetIdentity() != identity);
+
+    // A conflicting online file on disk is ignored in favour of the bundled catalog.
+    {
+        std::ofstream installed(fixture.root / "asset-catalog-online.ini", std::ios::trunc);
+        installed << withCatalogVersion(conflictingRevision, version);
+    }
+    Dune2RAssetManager reloaded(fixture.root.string());
+    CHECK(reloaded.getRevision() == revision);
+    CHECK(reloaded.getCatalogVersion() == version);
+    CHECK(reloaded.getTargetIdentity() == identity);
+}
+
+TEST_CASE("A newer Dune2R publication cannot drop a bundled asset pack", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    Dune2RAssetManager manager(fixture.root.string());
+    const auto revision = manager.getRevision();
+    const auto version = manager.getCatalogVersion();
+    REQUIRE(manager.getPacks().size() == 6);
+    REQUIRE(manager.getRequiredPackIDs().size() == 6);
+
+    // Another branch may have published a higher counter, but a build that ships the
+    // Infantry pack must never be talked out of it.
+    const auto newerWithoutInfantry =
+        withCatalogVersion(withoutInfantryPack(fixture.contents, revision), version + 1000);
+    const auto refused = manager.applyCatalog(newerWithoutInfantry);
+    INFO(refused.message);
+    CHECK_FALSE(refused.success);
+    CHECK(refused.message.find("missing the bundled asset pack harkonneninfantry")
+          != std::string::npos);
+    CHECK(manager.getPacks().size() == 6);
+    CHECK(manager.getCatalogVersion() == version);
+    CHECK_FALSE(std::filesystem::exists(fixture.root / "asset-catalog-online.ini"));
+
+    // The same catalog already written into the profile is ignored on load.
+    {
+        std::ofstream installed(fixture.root / "asset-catalog-online.ini", std::ios::trunc);
+        installed << newerWithoutInfantry;
+    }
+    Dune2RAssetManager reloaded(fixture.root.string());
+    CHECK(reloaded.getRevision() == revision);
+    CHECK(reloaded.getCatalogVersion() == version);
+    REQUIRE(reloaded.getPacks().size() == 6);
+    const auto& packs = reloaded.getPacks();
+    CHECK(std::any_of(packs.begin(), packs.end(),
+                      [](const auto& pack) { return pack.id == "harkonneninfantry"; }));
+
+    // Adding a pack is allowed: the floor is a minimum, not an exact set.
+    auto extended = withCatalogVersion(fixture.contents, version + 1);
+    extended = replaceAll(extended, "PackCount=6", "PackCount=7");
+    extended += "\n[Pack.6]\nID=extra\nDisplayName=Added Pack\nVariant=remastered\n"
+                "Unit=extraunit\nFileCount=1\nFile.0=unit.ini|7|"
+                + Dune2RAssetManager::sha256Bytes("[Unit]\n") + "\n";
+    const auto accepted = reloaded.applyCatalog(extended);
+    INFO(accepted.message);
+    REQUIRE(accepted.success);
+    CHECK(accepted.changed);
+    CHECK(reloaded.getPacks().size() == 7);
+}
+
+TEST_CASE("Legacy Dune2R catalogs keep their refreshed-online precedence", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeOfflinePack(working);
+    const auto bundled = Dune2RAssetManager(working.string()).getRevision();
+    CHECK(Dune2RAssetManager(working.string()).getCatalogVersion() == 0);
+
+    // Neither file carries a version, which is what an installation refreshed before
+    // this field looks like. The refreshed online catalog still wins.
+    std::ifstream input(working / "asset-catalog.ini");
+    const std::string legacy((std::istreambuf_iterator<char>(input)), {});
+    const std::string refreshedRevision(40, 'e');
+    {
+        std::ofstream online(working / "asset-catalog-online.ini", std::ios::trunc);
+        online << replaceAll(legacy, bundled, refreshedRevision);
+    }
+    Dune2RAssetManager manager(working.string());
+    CHECK(manager.getRevision() == refreshedRevision);
+    CHECK(manager.getCatalogVersion() == 0);
+}
+
+TEST_CASE("A cancelled Dune2R completion keeps the installed artwork and blocks readiness", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeDuplicatePack(working, "1791310979");
+    const auto unit = working / "graphics_hd" / "units" / "duplicateunit";
+    const auto before = directoryFingerprint(unit);
+
+    Dune2RAssetManager manager(working.string());
+    REQUIRE_FALSE(manager.isReadOnly());
+    const auto incomplete = manager.checkReadiness();
+    REQUIRE_FALSE(incomplete.complete);
+    REQUIRE(incomplete.missingPackIDs == std::vector<std::string>{"duplicate"});
+    CHECK(incomplete.missingBytes == incomplete.totalBytes / 2);
+
+    int progressCalls = 0;
+    const auto cancelled = manager.install({"duplicate"}, [&](const Dune2RAssetProgress& progress) {
+        ++progressCalls;
+        CHECK(progress.totalBytes == incomplete.totalBytes);
+        return false;
+    });
+    CHECK(progressCalls == 1);
+    CHECK_FALSE(cancelled.success);
+    CHECK_FALSE(cancelled.changed);
+    CHECK(cancelled.message.find("Download cancelled") != std::string::npos);
+    // The previously verified file is still exactly where it was, and the game may
+    // not start: readiness is still incomplete.
+    CHECK(directoryFingerprint(unit) == before);
+    CHECK_FALSE(manager.checkReadiness().complete);
+
+    // Retrying completes the pack from the verified local duplicate, so a cancel
+    // costs no progress and the final target is the installed, verified one.
+    const auto completed = manager.install({"duplicate"});
+    INFO(completed.message);
+    REQUIRE(completed.success);
+    CHECK(completed.changed);
+    CHECK(manager.checkReadiness().complete);
+}
+
+TEST_CASE("Dune2R readiness inspects an immutable snapshot without changing it", "[Dune2RAssets][workshop]") {
+    CatalogFixture fixture;
+    const auto snapshot = fixture.root / ("ws-" + std::string(64, 'f'));
+    writeDuplicatePack(snapshot, "1791310979");
+    const auto before = directoryFingerprint(snapshot);
+
+    Dune2RAssetManager manager(snapshot.string());
+    REQUIRE(manager.isReadOnly());
+    const auto readiness = manager.checkReadiness();
+    CHECK_FALSE(readiness.complete);
+    CHECK(readiness.missingPackIDs == std::vector<std::string>{"duplicate"});
+    // Pinned content: completing it here is refused before any file is touched.
+    const auto refused = manager.install({"duplicate"});
+    CHECK_FALSE(refused.success);
+    CHECK(refused.message.find("immutable") != std::string::npos);
+    CHECK(directoryFingerprint(snapshot) == before);
+    CHECK(manager.installedFingerprint() == readiness.fingerprint);
 }
 
 TEST_CASE("Dune2R downloader resumes and verifies a live asset", "[Dune2RAssets][network]") {

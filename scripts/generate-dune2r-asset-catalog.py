@@ -30,7 +30,54 @@ def git_blob(repo: Path, revision: str, path: Path) -> bytes:
     return subprocess.check_output(["git", "show", f"{revision}:{relative}"], cwd=repo)
 
 
-def build_catalog(repo: Path, revision: str) -> str:
+VERSION_KEY = "Version="
+
+
+def target_lines(catalog: str) -> list[str]:
+    """The lines that identify the artwork target.
+
+    Comments and the publication counter are presentation and ordering, not target:
+    everything else - revision, base URL, pack metadata and every expected file path,
+    size and hash - is what the runtime has to treat as one target.
+    """
+    kept = []
+    for line in catalog.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith(VERSION_KEY):
+            continue
+        kept.append(stripped)
+    return kept
+
+
+def catalog_version(catalog: str) -> int:
+    """Publication counter recorded in a catalog; 0 for legacy catalogs without one."""
+    for line in catalog.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(VERSION_KEY):
+            value = stripped[len(VERSION_KEY):].strip()
+            return int(value) if value.isdigit() else 0
+    return 0
+
+
+def publication_version(target: str, previous: str | None) -> int:
+    """Next publication counter for this target.
+
+    Git dates cannot order publications: two asset commits can carry the same
+    committer date, and a commit made later can carry an earlier one. The catalog
+    therefore keeps its own counter, carried forward from the catalog being replaced.
+    An unchanged target keeps its number so regeneration is idempotent, a changed
+    target takes the next one, and a legacy catalog without a counter starts at 1.
+    """
+    if previous is None:
+        return 1
+    number = catalog_version(previous)
+    if number <= 0:
+        return 1
+    return number if target_lines(previous) == target_lines(target) else number + 1
+
+
+def build_catalog(repo: Path, revision: str, previous: str | None = None) -> str:
+    """Catalog text for `revision`, numbered after the catalog in `previous`."""
     revision = git_revision(repo, revision)
     prefix = "mods/Dune2R/graphics_hd/units/"
     paths = subprocess.check_output(
@@ -72,6 +119,9 @@ def build_catalog(repo: Path, revision: str) -> str:
             lines.append(f"File.{file_index}={relative}|{len(blob)}|{digest}")
         lines.append("")
 
+    target = "\n".join(lines)
+    version = publication_version(target, previous)
+    lines.insert(lines.index(f"Revision={revision}") + 1, f"Version={version}")
     return "\n".join(lines)
 
 
@@ -84,9 +134,13 @@ def main() -> int:
     repo = args.repo.resolve()
     revision = git_revision(repo, args.revision or "HEAD")
     output = args.output or repo / "mods/Dune2R/asset-catalog.ini"
+    # The catalog being replaced carries the counter forward, so an unchanged target
+    # keeps its published number and a changed one is unmistakably newer.
+    previous = output.read_text(encoding="ascii") if output.is_file() else None
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(build_catalog(repo, revision), encoding="ascii", newline="\n")
-    print(f"Wrote {output} pinned to {revision}")
+    catalog = build_catalog(repo, revision, previous)
+    output.write_text(catalog, encoding="ascii", newline="\n")
+    print(f"Wrote {output} pinned to {revision} as publication {catalog_version(catalog)}")
     return 0
 
 

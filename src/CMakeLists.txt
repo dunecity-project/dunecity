@@ -220,6 +220,7 @@ target_sources(dunecity
         Menu/ModEditorMenu.cpp
         Menu/Dune2RAssetMenu.cpp
         Menu/Dune2REditorMenu.cpp
+        Menu/Dune2RReadinessMenu.cpp
         Menu/HowToPlayMenu.cpp
 
         # Network
