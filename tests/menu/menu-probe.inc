@@ -147,6 +147,81 @@ int runMenuProbe() {
                             "Android skin cache marker changed approved content identity");
                 std::filesystem::remove(marker);
             }
+            if(name == "Dune2R") {
+                // The optional remastered artwork is downloaded into the canonical
+                // mod and is deliberately absent from every shipped package, so a
+                // verified download arrives as files the installer payload does not
+                // have. That must not change this mod's approved identity: when it
+                // did, an actual running online game refused the join with "New mods
+                // cannot be joined after the game starts".
+                namespace fs = std::filesystem;
+                const fs::path root = mods.getModPath(name);
+                const fs::path units = root / "graphics_hd" / "units";
+                const fs::path unit = units / "approvalprobe";
+                const fs::path staging = units / "approvalprobe.download";
+                const fs::path compact = root / "graphics_compact" / "objpics";
+                const fs::path catalog = root / "asset-catalog.ini";
+                const auto shipped = readCompleteFile(catalog.string());
+                menuRequire(!token.empty() && !shipped.empty(),
+                            "Canonical Dune2R has no approved identity or no bundled catalog");
+                SDL_Log("DUNE2R_APPROVAL_TOKEN: %s", token.c_str());
+
+                // A completed pack, the downloader's mount marker, an interrupted
+                // pack's staging, optional compact media, and the online catalog
+                // bookkeeping Dune2RAssetManager writes around its atomic swap.
+                fs::create_directories(unit / "atlases" / "idle");
+                { std::ofstream art(unit / "atlases" / "idle" / "east.png", std::ios::binary);
+                  art << "downloaded remastered pose"; }
+                { std::ofstream manifest(unit / "unit.ini"); manifest << "[Unit]\n; approved probe\n"; }
+                { std::ofstream mounted(units / ".mount-revision"); mounted << "approval-probe\n"; }
+                fs::create_directories(staging);
+                { std::ofstream partial(staging / "east.png.part", std::ios::binary); partial << "half"; }
+                fs::create_directories(compact);
+                { std::ofstream objpic(compact / "approvalprobe.png", std::ios::binary); objpic << "compact"; }
+                { std::ofstream refreshed(root / "asset-catalog-online.ini", std::ios::binary);
+                  refreshed << shipped; }
+                { std::ofstream previous(root / ".asset-catalog.previous", std::ios::binary);
+                  previous << shipped; }
+                menuRequire(OnlineModPolicy::approved(),
+                            "Verified optional Dune2R artwork lost the canonical mod's online approval");
+                menuRequire(OnlineModPolicy::fingerprint() == token,
+                            "Downloaded Dune2R artwork changed the approved content identity");
+
+                // The required bundled catalog stays part of that identity: it is
+                // where the asset manager reads the pack floor it enforces.
+                { std::ofstream edited(catalog, std::ios::app); edited << "\n; local edit\n"; }
+                menuRequire(!OnlineModPolicy::approved(),
+                            "Edited required Dune2R catalog retained online approval");
+                { std::ofstream restored(catalog, std::ios::binary); restored << shipped; }
+                menuRequire(OnlineModPolicy::fingerprint() == token,
+                            "Restoring the bundled Dune2R catalog did not restore its identity");
+
+                // So do its rules: optional media is excluded, gameplay content is not.
+                const fs::path rules = root / "GameOptions.ini";
+                const auto options = readCompleteFile(rules.string());
+                menuRequire(!options.empty(), "Missing bundled Dune2R rules fixture");
+                { std::ofstream changed(rules, std::ios::app); changed << "\nModified = true\n"; }
+                menuRequire(!OnlineModPolicy::approved(),
+                            "Edited Dune2R rules retained online approval");
+                { std::ofstream restored(rules, std::ios::binary); restored << options; }
+                menuRequire(OnlineModPolicy::fingerprint() == token,
+                            "Restoring the bundled Dune2R rules did not restore its identity");
+
+                // Approval is granted to the canonical installed name only. Authored
+                // copies and Workshop snapshot aliases keep using a pregame lobby.
+                menuRequire(!OnlineModPolicy::approved("Dune2R Remaster Draft")
+                            && !OnlineModPolicy::approved("ws-" + std::string(64, 'a')),
+                            "A derived or snapshot Dune2R name gained canonical approval");
+
+                fs::remove_all(unit);
+                fs::remove_all(staging);
+                fs::remove(units / ".mount-revision");
+                fs::remove(compact / "approvalprobe.png");
+                fs::remove(root / "asset-catalog-online.ini");
+                fs::remove(root / ".asset-catalog.previous");
+                menuRequire(OnlineModPolicy::fingerprint() == token,
+                            "Removing the optional artwork changed the approved identity");
+            }
 
             GameInitSettings campaign(HOUSE_ATREIDES, effectiveGameOptions, 1);
             campaign.enableCoop(true, "Approved campaign");
