@@ -1,3 +1,13 @@
+## 2026-10-07 — production 1.0.816 completed
+
+PRs #89/#90 are merged. Immutable tag v1.0.816 resolves to 94a5e6c62d240cc14c977b4ff5d7669eb00a5ed1. Stable CI 37595012438 passed all platform builds, native tests (10,217,948 assertions), Mac signing/notarization, signed update feeds and GitHub publication. All 13 public assets match their published hashes; three manifests and two appcasts pass Ed25519 verification. Public Mac app passes Gatekeeper as Notarized Developer ID.
+
+SourceForge 37596888123 passed nine-file checksum readback and all three platform defaults. Public dunecity branch and dunecity-v1.0.816 tag both resolve to the exact release SHA. Website b9bf9ecb96f76717229526e8a8779d996d16ecf3 deployed in 37597062242 from exact stable Emscripten artifact 11470229438. All eight live browser artifacts match their manifest; game/runtime files match the staged artifact. Public pages, P2P health and fresh browser rendering passed. No signaling/metaserver functional changes; signaling provenance alone changed.
+
+Private public-P2P native/browser running-game join, decline/retry and promotion passed; two native peers matched state after promotion. Two actual 1.0.816 browsers confirmed equal content, started a private match and moved their units without page errors/desynchronisation. Actual live Dune2R game rendered remastered Soldiers using verified cached art with raw GitHub blocked. Fresh live profile resolution persistence, aspect and fullscreen checks passed. Earlier failed online-approval check was fixed and retained as negative-control evidence.
+
+After the user's MBA game closed, installed the signed public 1.0.816 app at /Applications/dunecity.app, preserving configuration and the previous815 app in /Applications/.dunecity-backup-before-816-20261007-195826/dunecity.app. Installed binary matches verified public app SHA256 bf7355fbea00c8b961e0964b231bdf49e786f8d7a0a144f366e50d261783cfa3. No running game was interrupted. Detailed release receipt/logs: outputs/release-815/receipt.md (historical directory name). User test selections: docs/testing-1.0.816.md. The older preparation entries below are dated history; publication is complete.
+
 ## 2026-10-07 — final stable version 1.0.816
 
 The final optional-art approval correction publishes as816 so the already installed/running local815candidate can receive a signed update. Publiclatest remains812until publication;815is an unpublished local candidate. No running MBAgame is interrupted. Final release requires PR90CI, public multiplayer gameplay, signed packages/feeds, SourceForge and exact-tag browser/site deployment proof. Tests of the815candidate apply to unchanged functional code;816adds the normal version metadata bump.
