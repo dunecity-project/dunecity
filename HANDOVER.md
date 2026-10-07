@@ -1,3 +1,25 @@
+# 2026-10-07 — Release recovery and final browser replay (1.0.812)
+
+Recovered the stalled 811 release. Both failed CI runs at 493e99ed had one
+failure only: the protocol test still pinned 56 after the shipped protocol
+advanced to 57. Claude Max updated the two pins and stale wire-probe wording;
+all six affected native test targets pass, including the complete 947-case
+Catch2 binary. Codex reviewed the patch and added the source protocol rationale.
+No gameplay change follows 811; 812 includes version/test/documentation changes.
+The previous full 58-target native suite had only the stale protocol failure.
+
+The public isolated signaling preview was removed by the normal website deploy.
+Restored its existing reviewed entrypoint, then ran Four Corners seed315473198
+with the unmodified shipping 811 WASM and two native peers. The browser joined
+as spectator, a first play request was declined, the second approved, checkpoint
+replacement completed, and play continued without browser errors. Both native
+peers matched at cycle5714 with 490 objects, digest8c08b3cfa2747451/9da3d76a0bc1c32d.
+This is the captured failing map/seed; no allocator or Asyncify instrumentation
+was inserted. Browser shell only supplies an isolated profile/name for the probe.
+Artifacts and Claude report: ../outputs/release-812/.
+Production publication remains pending at this commit; release automation will
+build signed platform packages, SourceForge and Play Online from the final tag.
+
 # 2026-10-07 — Ground rotation memory corruption (1.0.811 candidate)
 
 The exact Four Corners init (seed 315473198, 49,810 bytes) reproduces an

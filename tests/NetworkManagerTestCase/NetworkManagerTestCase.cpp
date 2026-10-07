@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 56;
+static constexpr int kWireProtocolVersion = 57;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -48,9 +48,11 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 54 restores Hunt launcher spacing and releases rebuilt armies by strength.
     // 55 sends the whole ground army to Hunt live attacks on owned buildings.
     // 56 accepts 2/3ms speed settings which older peers reject.
+    // 57 wraps the rounded combat turn direction, so a 56 peer writes a different
+    // track index and rotates ground units differently from the same cycle.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 56);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 57);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

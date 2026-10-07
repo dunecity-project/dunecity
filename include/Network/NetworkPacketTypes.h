@@ -138,6 +138,8 @@
 //     send different troops and use different movement and attack orders.
 // 56: Allow 2/3ms shared game speeds in GameInitSettings and MATCH_CONTROL.
 //     Older peers reject these values; save and observer layouts are unchanged.
+// 57: Wrap ground combat rotation after movement; older peers can generate an invalid
+//     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
 #define NETWORK_PROTOCOL_VERSION            57
 
 // Mod transfer limits
