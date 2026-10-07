@@ -42,7 +42,8 @@ static void probeMatchControlWire() {
     send(NETWORKPACKET_MATCH_CONTROL,{41,1,16,111,111},false,true);
     send(NETWORKPACKET_MATCH_CONTROL,{42,0,16,111,111},false);
     // The two fastest settings are real shared pacing and travel over this packet; only a
-    // value below GAMESPEED_MIN is refused. Protocol 56 is what keeps them off older peers.
+    // value below GAMESPEED_MIN is refused. Protocol 56 introduced that gate and the shipped
+    // version has advanced since, so peers below NETWORK_PROTOCOL_VERSION never see these values.
     expectedSpeed=3;send(NETWORKPACKET_MATCH_CONTROL,{42,1,3,111,111},true);
     expectedSpeed=GAMESPEED_MIN;send(NETWORKPACKET_MATCH_CONTROL,{42,1,GAMESPEED_MIN,111,111},true);
     expectedSpeed=GAMESPEED_DEFAULT;

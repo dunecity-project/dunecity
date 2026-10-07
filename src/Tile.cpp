@@ -813,7 +813,15 @@ void Tile::clearTerrain() {
     deadUnits.clear();
 }
 
-void Tile::setTrack(Uint8 direction) {
+void Tile::setTrack(int direction) {
+    // Replay has produced directions outside 0..NUM_ANGLES-1 here. The write then
+    // landed past tracksCreationTime, on the damage vector's own pointers, so the
+    // corruption only surfaced much later - typically freeing the tile. There is no
+    // terrain change to invent for an impossible direction, so drop it.
+    if (direction < 0 || direction >= NUM_ANGLES) {
+        return;
+    }
+
     if (type == Terrain_Sand || type == Terrain_Dunes || isSpice()) {
         tracksCreationTime[direction] = currentGame->getGameCycleCount();
     }

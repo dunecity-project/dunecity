@@ -451,6 +451,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
         set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        add_test(NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --phases current
+            --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
+        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        add_test(NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
+        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
         add_test(NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)

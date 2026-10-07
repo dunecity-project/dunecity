@@ -1,3 +1,60 @@
+# 2026-10-07 — PR89 local integration candidate (1.0.813)
+
+Local branch `test/pr89-on-812` combines PR89 head c80d0157 with production
+1.0.812 (90b2e159). Version remains 1.0.813; protocol57, the ground-rotation
+wrap, invalid-track guard and their regression probes are retained. Production
+1.0.812 has already been published and independently verified. Historical
+candidate entries below predate that release and describe their earlier gates.
+This integration is for local testing; native build, full tests and actual
+graphics/download checks are pending. No production publication or local
+application replacement is authorized by this local-readiness request.
+
+# 2026-10-07 — Release recovery and final browser replay (1.0.812)
+
+Recovered the stalled 811 release. Both failed CI runs at 493e99ed had one
+failure only: the protocol test still pinned 56 after the shipped protocol
+advanced to 57. Claude Max updated the two pins and stale wire-probe wording;
+all six affected native test targets pass, including the complete 947-case
+Catch2 binary. Codex reviewed the patch and added the source protocol rationale.
+No gameplay change follows 811; 812 includes version/test/documentation changes.
+The previous full 58-target native suite had only the stale protocol failure.
+
+The public isolated signaling preview was removed by the normal website deploy.
+Restored its existing reviewed entrypoint, then ran Four Corners seed315473198
+with the unmodified shipping 811 WASM and two native peers. The browser joined
+as spectator, a first play request was declined, the second approved, checkpoint
+replacement completed, and play continued without browser errors. Both native
+peers matched at cycle5714 with 490 objects, digest8c08b3cfa2747451/9da3d76a0bc1c32d.
+This is the captured failing map/seed; no allocator or Asyncify instrumentation
+was inserted. Browser shell only supplies an isolated profile/name for the probe.
+Artifacts and Claude report: ../outputs/release-812/.
+Production publication remains pending at this commit; release automation will
+build signed platform packages, SourceForge and Play Online from the final tag.
+
+# 2026-10-07 — Ground rotation memory corruption (1.0.811 candidate)
+
+The exact Four Corners init (seed 315473198, 49,810 bytes) reproduces an
+out-of-bounds tracksCreationTime[8] write in the browser, followed by observer
+divergence and a Tile destructor/free trap during checkpoint replacement.
+Private unit diagnostics identify a Deviator and Launcher switching from
+Dynasty movement rotation [0,8) to the combat fallback with an angle above 7.5.
+turnRight rounded that to 8. The same real-unit transition fails natively before
+the repair; wrapping the rounded direction passes in vanilla, DuneCity and Dune2R.
+Tile::setTrack now accepts int and rejects negative or >= NUM_ANGLES directions
+before touching the array. The populated-tile, adjacent-container, save/load and
+teardown fixture passes all current cases; archived e5797cd3 passes valid tracks
+and fails 8, 9, 255 and -1 under a bounds trap. On native arm64 index 8 falls in
+padding; on wasm32 it overwrites damage's begin pointer. Asyncify high water was
+1492 of 4096 bytes during the actual bounds replay, so no capacity patch was made.
+
+Claude Max supplied the tile guard and initial regression fixture in a bounded
+900-second run that timed out before its report. Codex traced and corrected the
+rotation producer, finished the fixture launcher, and independently ran both
+before/after regressions. Protocol advances to 57 because the direction correction
+changes synchronized combat behavior. Save 9852, runtime 7 and policy v90 are intact.
+Full native tests, fresh exact-source Four Corners browser replay and publication
+are pending at this commit. Production remains 1.0.796; see ../outputs/release-809/.
+
 # 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.813 candidate)
 
 Candidate branch `release-1.0.811-dune2r-assets` starts at PR #88's exact head,
@@ -99,21 +156,21 @@ The native probe now perturbs a digest-bearing credits field by spending credits
 its former addCityCredits injection could be clamped to zero room and fail to
 exercise resync. JOIN_DESYNC_ONCE=1 JOIN_MENU_DURING_RESYNC=1 fails on archived
 809 with the stuck-modal assertion and passes with this patch, one real resync,
-no retained modal and matching three-peer state at cycle1800. The promotion
+no retained modal and matching three-peer state at cycle 1800. The promotion
 fixture distinguishes pending approval from the legitimate completed-join notice.
-All56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
-checks pass. Protocol56, save9852, observer runtime7 and AI policyv90 are unchanged.
+All 56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
+checks pass. Protocol 56, save 9852, observer runtime 7 and AI policy v90 are unchanged.
 
-Public release remains held: original809 browser promotion on Four Corners has
+Public release remains held: original 809 browser promotion on Four Corners has
 intermittently trapped in free during Map/Tile teardown. This menu fix is a
 separate verified defect and is not proof that the heap trap is repaired. The
 recent original-stack and larger-stack passing trials used Ergsun-Odenkirk, so
-neither clears the FourCorners failure. A FourCorners replay has byte-identical
-GameInitSettings (seed315473198) to the named failing run. ASAN O3 could not keep
-up with the diagnostic25Hz host and expired its observer stream; no heap error
+neither clears the Four Corners failure. A Four Corners replay has byte-identical
+GameInitSettings (seed 315473198) to the named failing run. ASAN O3 could not keep
+up with the diagnostic 25 Hz host and expired its observer stream; no heap error
 was reported before disconnect, and it did not reach promotion. No speculative
 Asyncify capacity or malformed-map fix was committed. Diagnostic artifacts are
-in ../outputs/release-809/. Latest public stable at this checkpoint remains796.
+in ../outputs/release-809/. Latest public stable at this checkpoint remains 796.
 
 # 2026-10-06 — Faster game-speed settings (1.0.809)
 
@@ -2918,7 +2975,7 @@ All eight CTest groups pass across the full run and corrected unit rerun; 200
 Node relay tests pass. Real native three-peer WebRTC test passes client pause,
 host resume/speed, concurrent pause requests/client resume, menu-close behavior,
 malformed payload validation, and spectator admission at paused cycle711.
-Host/Partner/Newcomer match at cycle1800 and original peers match after departure.
+Host/Partner/Newcomer match at cycle 1800 and original peers match after departure.
 Screenshots reviewed for toolbar and host-only settings. Evidence:
 /tmp/dunecity-multiplayer-controls/live-4 and ctest*.log, relay-tests-2.log.
 Interactive browser crossplay and ENet LAN play were not repeated.
@@ -2948,7 +3005,7 @@ real-engine Easy2/Hard5/Brutal9 probes. Three ordinary campaign runs checked134
 enemy snapshots with no cap violations or new RTS types. Hard5/Brutal5 observed
 net income1748/3030 per minute versus goals1800/3150; not a full balance study.
 Evidence and measured limitations are documented alongside the matrix.
-Native spectator hot-join also passes with matching state at cycle1800.
+Native spectator hot-join also passes with matching state at cycle 1800.
 No browser-crossplay or public release claim.
 
 Local delivery complete: Developer ID signed, app and DMG accepted by Apple,
