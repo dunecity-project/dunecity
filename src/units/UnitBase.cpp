@@ -187,6 +187,7 @@ void UnitBase::init() {
     pathRequestQueued = false;
 
     unitList.push_back(this);
+    currentGame->invalidateCarryallCandidateIds();
 }
 
 UnitBase::~UnitBase() {
@@ -199,6 +200,7 @@ UnitBase::~UnitBase() {
 
     currentGame->getObjectManager().removeObject(objectID);
     unitList.remove(this);
+    currentGame->invalidateCarryallCandidateIds();
 }
 
 
@@ -253,6 +255,13 @@ void UnitBase::saveObserverRuntime(OutputStream& s) const {
     s.writeSint32(cachedPathDestination.x); s.writeSint32(cachedPathDestination.y);
     s.writeUint32(cachedPathRevision); s.writeFixPoint(lastDistanceToDestination);
     s.writeUint8(noProgressCount); s.writeSint32(carryallRequestCooldown);
+    // Observer runtime 7: the long-stall rescue clock. A spectator that restarted these would
+    // grant every stalled unit a fresh thirty seconds the host is not giving it, and would then
+    // book transport on a different cycle than the host did.
+    s.writeUint32(lastProgressCycle);
+    s.writeSint32(stallAnchor.x); s.writeSint32(stallAnchor.y);
+    s.writeUint32(stallIntentTarget);
+    s.writeSint32(stallIntentDestination.x); s.writeSint32(stallIntentDestination.y);
 }
 void UnitBase::loadObserverRuntime(InputStream& s) {
     const auto kind=s.readUint8();
@@ -261,6 +270,14 @@ void UnitBase::loadObserverRuntime(InputStream& s) {
     cachedPathDestination.x=s.readSint32(); cachedPathDestination.y=s.readSint32();
     cachedPathRevision=s.readUint32(); lastDistanceToDestination=s.readFixPoint();
     noProgressCount=s.readUint8(); carryallRequestCooldown=s.readSint32();
+    lastProgressCycle=s.readUint32();
+    stallAnchor.x=s.readSint32(); stallAnchor.y=s.readSint32();
+    stallIntentTarget=s.readUint32();
+    stallIntentDestination.x=s.readSint32(); stallIntentDestination.y=s.readSint32();
+    // A clock stamped in the future would never expire, so a malformed stream is rejected here
+    // rather than silently disabling the rescue for the whole spectated match.
+    if(currentGame!=nullptr && lastProgressCycle>currentGame->getGameCycleCount())
+        throw std::runtime_error("Invalid spectator stall clock");
 }
 
 bool UnitBase::usesLauncherRocketPair() const {
@@ -559,6 +576,7 @@ void UnitBase::cancelDeployment() {
     currentGame->getObjectManager().removeObject(objectID);
     currentGame->getHouse(originalHouseID)->cancelCreatedUnit(itemID);
     unitList.remove(this);
+    currentGame->invalidateCarryallCandidateIds();
 
     delete this;
 }
@@ -575,6 +593,7 @@ void UnitBase::destroy() {
     currentGame->getHouse(originalHouseID)->decrementUnits(itemID);
 
     unitList.remove(this);
+    currentGame->invalidateCarryallCandidateIds();
 
     if(isVisible()) {
         if(currentGame->randomGen.rand(1,100) <= getInfSpawnProp()) {
@@ -1333,6 +1352,15 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
         attackMode = newAttackMode;
     }
 
+    if(attackMode == STOP) {
+        // Stop means stop, including an outstanding transport booking: previously the implied
+        // doMove2Pos below was unforced, so shouldCancelPickupOnMove() kept the booking and the
+        // carryall still arrived, lifted the unit and put it back down where it stood.
+        // attackMode is already STOP at this point, and attackModeAfterCancellingPickup() only
+        // rewrites a CARRYALLREQUESTED mode, so this cannot recurse back into doSetAttackMode.
+        cancelCarryallPickup();
+    }
+
     if(attackMode == GUARD || attackMode == STOP) {
         if(moving && !justStoppedMoving) {
             doMove2Pos(nextSpot, false);
@@ -2020,6 +2048,125 @@ void UnitBase::finishPathRequest(PathRequestStats& stats) {
     }
 }
 
+bool UnitBase::hasMovementIntent() const {
+    // A stopped unit wants nothing, and a unit whose destination is its own tile has either
+    // arrived or deliberately parked. engageTarget() parks destination on the current tile the
+    // moment it decides to fire instead of close in (see the combat branch above), so a unit
+    // holding its ground in a firefight is excluded by exactly the same test.
+    if(attackMode == STOP) {
+        return false;
+    }
+    return destination.isValid() && destination != location;
+}
+
+void UnitBase::stampStallProgress() {
+    lastProgressCycle = (currentGame != nullptr) ? currentGame->getGameCycleCount() : 0;
+    stallAnchor = location;
+    stallIntentTarget = target.getObjectID();
+    stallIntentDestination = destination;
+}
+
+void UnitBase::noteExplicitPlayerOrder() {
+    stampStallProgress();
+}
+
+void UnitBase::updateStallTracking() {
+    if(currentGame == nullptr) {
+        return;
+    }
+
+    const Uint32 targetId = target.getObjectID();
+
+    // Occupying a different tile than when the clock was stamped is the only movement signal
+    // used. It is what makes the clock immune to pathfinding churn: clearPath(), a cache miss, a
+    // request still queued behind three thousand others and a requeued search all leave the unit
+    // on the same tile, so none of them look like progress. It also covers legacy and Dynasty
+    // stepping without either having to report anything, and a unit lifted off the map or
+    // redeployed elsewhere arrives with a different location and restarts the clock.
+    bool progressed = (location != stallAnchor);
+
+    // A different job. Target identity is compared first because engageTarget() rewrites
+    // destination every time a chased target moves, which is the same job continuing; only a
+    // different target id is a new one. Destination is compared when there is no target, which
+    // is where real move orders and AI route changes land.
+    if(targetId != stallIntentTarget) {
+        progressed = true;
+    } else if(targetId == NONE_ID && destination != stallIntentDestination) {
+        progressed = true;
+    }
+
+    // Nothing left to wait for: hold the clock at "now" so arriving, stopping or being parked
+    // never leaves a stale stall behind for the next order to inherit.
+    if(!hasMovementIntent()) {
+        progressed = true;
+    }
+
+    if(progressed) {
+        stampStallProgress();
+    }
+}
+
+Uint32 UnitBase::getStalledCycleCount() const {
+    if(currentGame == nullptr || stallAnchor.isInvalid() || !active || pickedUp
+            || !hasMovementIntent()) {
+        return 0;
+    }
+    const Uint32 cycle = currentGame->getGameCycleCount();
+    return (cycle > lastProgressCycle) ? (cycle - lastProgressCycle) : 0;
+}
+
+bool UnitBase::isLongStalled() const {
+    return getStalledCycleCount() >= static_cast<Uint32>(longStallRescueCycles);
+}
+
+void UnitBase::tryLongStallCarryallRescue() {
+    // A unit in the middle of a step, or still turning towards one, is inside an ordinary
+    // movement delay. Only a unit that has been standing on the same tile for the whole
+    // threshold is a candidate.
+    if(!active || pickedUp || moving || !isAGroundUnit() || getHealth() <= 0) {
+        return;
+    }
+    if(carryallRequestCooldown > 0 || !isLongStalled()) {
+        return;
+    }
+    // STOP is an order to stay put; CARRYALLREQUESTED already has transport intent of its own,
+    // which GroundUnit::checkPos() owns.
+    if(attackMode == STOP || attackMode == CARRYALLREQUESTED) {
+        return;
+    }
+    if(currentGameMap == nullptr || !currentGameMap->tileExists(location)) {
+        return;
+    }
+
+    auto* ground = static_cast<GroundUnit*>(this);
+    if(ground->isAwaitingPickup() || ground->hasBookedCarrier()) {
+        return;  // At most one booking per unit.
+    }
+    if(getOwner() == nullptr || !getOwner()->hasCarryalls()) {
+        return;
+    }
+    // The same authorization the existing automatic requests use: a human player opts in through
+    // the game option, a bot always manages its own transport.
+    if(!(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops
+         || getOwner()->isAI())) {
+        return;
+    }
+
+    // Spread simultaneous stalls over at most one second of simulation time, including
+    // the first attempt. The phase uses synchronized state, so worker timing cannot affect it.
+    if((currentGame->getGameCycleCount() + getObjectID()) % carryallRescueJitterCycles != 0) {
+        return;
+    }
+
+    // Deliberately no MIN_CARRYALL_LIFT_DISTANCE floor. That six-tile floor exists so the legacy
+    // distance heuristics do not call a carryall for a trip the unit could just drive; it is kept
+    // intact for those. A unit that has not moved a single tile in thirty seconds is not making
+    // that trip either way, however short it is, so the floor would only exclude the shortest
+    // permanent deadlocks. The drop lands on a normal legal nearby spot (Carryall::deployUnit ->
+    // findDeploySpot) when the exact goal is occupied; no exact arrival is promised.
+    ground->requestCarryallRescue();
+}
+
 bool UnitBase::turnDynastyBody(int wantedAngle) {
     if(!usesDynastyGroundTiming() || dynastyRouteTick==0) return false;
     const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount())*(GAMESPEED_DEFAULT*3);
@@ -2088,7 +2235,9 @@ void UnitBase::turnRight() {
         drawnAngle = lround(angle) + NUM_ANGLES;
         angle += NUM_ANGLES;
     } else {
-        drawnAngle = lround(angle);
+        // Movement rotation uses [0,8). Its route clock can clear with the body
+        // still between 7.5 and 8, so combat rotation must wrap the rounded 8.
+        drawnAngle = lround(angle) % NUM_ANGLES;
     }
 }
 
@@ -2173,6 +2322,12 @@ bool UnitBase::update() {
     if(getHealth() <= 0) {
         destroy();
         return false;
+    }
+
+    if(active) {
+        // After movement, so a tile reached this cycle counts as progress immediately.
+        updateStallTracking();
+        tryLongStallCarryallRescue();
     }
 
     if(recalculatePathTimer > 0) recalculatePathTimer--;
@@ -2406,6 +2561,9 @@ bool UnitBase::isCachedPathStillValid() {
         }
 
         if(++nodesChecked >= kPathValidationProbeCount) {
+            // Record this validation for long routes too. The unchecked tail is
+            // still protected by the live collision check before each step.
+            cachedPathRevision = currentRevision;
             registerHit();
             return true;
         }

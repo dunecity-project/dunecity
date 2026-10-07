@@ -130,6 +130,12 @@ inline bool isAcceptableReceivedGameInitSettings(const GameInitSettings& setting
     }
 
     for(const GameInitSettings::HouseInfo& houseInfo : houses) {
+        // Checked before the closed-row skip below: a closed row can be reopened in the lobby
+        // and would then play with whatever factor it carried, so every row is bounded.
+        if(!SpiceIncome::isValid(houseInfo.spiceIncomeMultiplier)) {
+            reason = "spice income factor out of range";
+            return false;
+        }
         // Saved multiplayer lobbies retain explicitly closed rows.
         if(houseInfo.houseID == HOUSE_UNUSED && houseInfo.playerInfoList.empty()) continue;
         if(!isKnownHouse(houseInfo.houseID)) {

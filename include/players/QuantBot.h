@@ -30,6 +30,10 @@ class Harvester;
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
+#include <players/ArmyPosturePolicy.h>
+#include <players/CombatPowerPolicy.h>
+#include <players/FrontBatteryPolicy.h>
+#include <players/SpecialUnitPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
 
@@ -39,6 +43,9 @@ class Harvester;
 #include <map>
 #include <unordered_map>
 #include <array>
+#include <optional>
+#include <vector>
+#include <list>
 
 class QuantBot : public Player
 {
@@ -112,6 +119,7 @@ public:
     void onDecrementStructures(int itemID, const Coord& location) override;
     void onDecrementUnits(int itemID) override;
     void onIncrementUnitKills(int itemID) override;
+    void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) override;
     void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) override;
 
 private:
@@ -246,6 +254,38 @@ private:
     /// many answer one aircraft. Both bound the work this pass can create.
     static constexpr int kAirRescueRadius = 40;
     static constexpr int kAirRescueDefenders = 3;
+    /// How far an attack on one of our own buildings or workers pulls troops
+    /// from. Scaled by the observed local threat between these bounds, so a
+    /// raid stays a district response and a real assault reaches the army.
+    static constexpr int kEmergencyBandMin = 12;
+    static constexpr int kEmergencyBandMax = 40;
+    static int emergencyResponseRadius(int threatValue);
+
+    /// Does this house answer a real attack on a building it owns with its whole
+    /// ground army? Scoped exactly like the whole-army dispatch and the hunting
+    /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
+    /// deliberately independent of the optional recovery policy.
+    bool wholeArmyBaseDefence() const;
+    /// Is \a contact right now shooting at a building we own? A live hostile
+    /// attacker, our structure as its target, and inside weapon range of it. A dead,
+    /// stopped, friendly or merely nearby enemy is not.
+    bool attackingOwnedBuilding(const ObjectBase* contact) const;
+    /// Is this unit's defence contact such an attack? Those contacts are hunted
+    /// rather than guarded, so the troop keeps the engine's attacking behaviour.
+    bool baseDefenceAssignment(const UnitBase* unit) const;
+    /// Every available ground combat troop, wherever on the map it stands, onto
+    /// one attack on a building we own: the main base or an outlying colony,
+    /// including an R/C/I zone. No response radius, no proportional quota and no
+    /// posture, strength or assembly condition - those bound fresh offence, not
+    /// a house being attacked at home. Human orders, repair runs, booked
+    /// carryall pickups, workers, builders, transports and the air planner's
+    /// aircraft keep their units, and a hunting launcher stays a hunter so its
+    /// close-range escape keeps working.
+    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const Coord& contact);
+    /// How close to the contact a troop's own fight already counts as this
+    /// battle. Those troops keep their orders, so repeated scans never restart
+    /// an order or a path that is already taking a unit into the same fight.
+    static constexpr int kBaseScrambleContactTiles = 8;
 
 
     Coord findMcvPlaceLocation(const MCV* pMCV);
@@ -296,7 +336,11 @@ private:
     static constexpr int kMcvLocalRadius = 20;
     static constexpr int kMcvDeployRoom = 12;
     Coord findPlaceLocation(Uint32 itemID);
-    bool preservesGroundAccess(Uint32 item, Coord pos);
+    /// `clearedZones` are object ids this placement is about to demolish; their
+    /// tiles count as passable, because by the time the building stands they
+    /// are. Pass nothing for an ordinary placement.
+    bool preservesGroundAccess(Uint32 item, Coord pos,
+                               const std::vector<Uint32>* clearedZones = nullptr);
     void clearPlacementCache(bool geometryChanged = true, bool reuseForBuilder = false);
     Coord findRedevelopmentSite(Uint32 itemID);
     bool redevelopmentZones(Uint32 itemID, Coord pos, std::vector<Uint32>& zones) const;
@@ -309,10 +353,83 @@ private:
                                       int* crimeBenefit = nullptr, int* crimeHotspot = nullptr);
 
     Coord findEffectiveTurretPlaceLocation(Uint32 itemID);
+    /// Site for an enemy-facing battery emplacement, in city mode as well as
+    /// outside it. The ordinary city coverage planner keeps every other
+    /// rocket-turret decision; see the definition for why the battery needs its
+    /// own search rather than reusing a coverage score that has no front.
+    Coord findFrontBatteryPlaceLocation();
+    /// Last resort for an established city with no free legal ground left on
+    /// the side the enemy comes from: a tile of an eligible own R/C/I lot,
+    /// preferring lower displacement cost. Invalid - and no lot is
+    /// ever touched - whenever findFrontBatteryPlaceLocation() has an answer,
+    /// whenever the battery rule's own gates are shut, and outside Custom
+    /// Hard/Brutal city mode. Choosing this site commits nothing: the lot is
+    /// still standing when the order is accepted and is displaced only by
+    /// commitBatteryClearance(), at the moment finished material is placed on
+    /// it.
+    ///
+    /// With a valid `requiredSite` the same search becomes a re-validation of
+    /// that one tile and returns it only if every rule still holds; this is
+    /// how the commit re-applies the whole decision to the live map instead of
+    /// keeping a second copy of its conditions.
+    Coord findBatteryClearanceSite(Coord requiredSite = Coord::Invalid());
+    /// The single own R/C/I lot an emplacement at `pos` would displace, or false
+    /// if that tile is not a legal clearance candidate. Revalidates ownership,
+    /// type, services, growth, occupancy, reservations and the local
+    /// economic floor around `anchor`, so it is also the check made again
+    /// immediately before the lot is demolished.
+    /// Local R/C/I lot counts followed by their population/job totals.
+    std::array<int,6> batteryZoneCounts(Coord anchor) const;
+    bool batteryClearanceZones(Coord pos, std::vector<Uint32>& zones, Coord anchor,
+                               const std::array<int,6>* localCounts = nullptr) const;
+    /// Displace the lot under a reserved battery emplacement, at the moment the
+    /// finished material that will stand on it is about to be placed. Returns
+    /// true when a lot was demolished in this call; the caller then places the
+    /// finished item on the ground it freed, in the same synchronous build
+    /// call. Returns false - and touches nothing - in every other case,
+    /// including when free ground has opened in the meantime, in which case the
+    /// reservation is retargeted onto that free ground instead.
+    bool commitBatteryClearance(const BuilderBase* builder, Uint32 itemToBePlaced,
+                                std::list<Coord>& placeLocations, int spendable,
+                                int economyReserve, int commitmentShortfall = 0,
+                                bool* defer = nullptr);
+    /// Lots displaced so far in this construction pass, across every yard.
+    /// Reset by build(); bounds the work a single pass may do regardless of
+    /// how many yards hold a clearance reservation. Derived, never serialised.
+    int batteryClearancesThisPass = 0;
+    /// Anchor a battery belongs to: the colony of the yard planning it, then the
+    /// shelter cluster, then the house centre. Shared by the free-ground search
+    /// and the clearance fallback so both face the same way.
+    Coord batteryAnchor();
+    /// Geometry a battery search needs once per pass rather than per candidate.
+    struct BatteryGeometry {
+        Coord anchor = Coord::Invalid();
+        Coord forward = Coord(0, 0);
+        std::vector<Coord> turrets;   ///< Standing and already reserved emplacements.
+        int frontTurrets = 0;         ///< Of those, how many are on the enemy side.
+        int localTurrets = 0;         ///< Of those, how many belong to this colony.
+        int coverRadius = 1, clusterRadius = 2, frontAllowance = 0;
+    };
+    BatteryGeometry batteryGeometry(Coord anchor, Coord forward);
+    /// Clearance site already chosen for this anchor in this build pass.
+    /// Derived exactly like turretSiteCache: retired by clearPlacementCache()
+    /// on any geometry change or planning-builder change, never serialised.
+    std::optional<Coord> batteryClearanceCache;
+    /// Planning builder the two caches below were filled for. Both are anchored
+    /// on that yard's colony, so an unreserved yard must not inherit another
+    /// unreserved yard's answer. Derived, never serialised.
+    Uint32 turretSearchBuilder = NONE_ID;
+    /// Non-city emplacement sites already chosen in this build pass, keyed by
+    /// item. findTurretPlaceLocation is called as a validity probe by several
+    /// rules and then once more for the real site, and the world does not change
+    /// between those calls; a geometry change retires the entry in
+    /// clearPlacementCache(). Derived state: never serialised, and it returns
+    /// exactly what a repeated search would have returned.
+    std::map<Uint32, Coord> turretSiteCache;
     // preferHunting=false returns the body at home instead of the attack
     // centroid, for troops that must not be dragged towards the front.
     Coord findSquadCenter(int houseID, bool preferHunting = true);
-    Coord findBaseCentre(int houseID);
+    Coord findBaseCentre(int houseID) const;
     Coord findBestDeathHandTarget(int enemyHouseID);
     const UnitBase* findLightRaiderTarget(const UnitBase* raider) const;
     const UnitBase* findThreateningTank(const UnitBase* raider) const;
@@ -549,6 +666,264 @@ private:
     };
     CityPlanningPolicy::PassSearch<Uint32, CityTurretResult> cityTurretSearch;
     unsigned cityReadyYardCount = 1; // Derived each build pass, for fair replan sweeps.
+
+    // ---- Army posture, cohesion and the outnumbered dispatch gate ----------
+    //
+    // Custom Hard/Brutal only. Campaign pacing and roles, helper bots, support
+    // mode and the established Easy/Medium home-reserve behaviour are untouched:
+    // recoveryActive() is the single gate and every call site checks it.
+    //
+    // Saved state. The posture and its age decide orders, so a save or a network
+    // checkpoint taken mid-withdrawal has to carry them; the attrition ledger is
+    // cumulative, so recomputing it after a load is impossible. Appended under
+    // the SAVEGAMEVERSION 9852 gate.
+    ArmyPosturePolicy::Posture armyPosture = ArmyPosturePolicy::Posture::Offensive;
+    Uint32 postureSince = 0;
+    ArmyPosturePolicy::AttritionLedger attrition;
+    /// Tracked Custom wave. Same type as the campaign wave, so membership,
+    /// objective and save/load are the proven ones.
+    CampaignDifficultyPolicy::Wave customWave;
+    /// Protected assembly point, chosen for turret cover and distance from the
+    /// observed enemy rather than for screening workers.
+    Coord protectedRally = Coord::Invalid();
+    Uint32 protectedRallyCycle = std::numeric_limits<Uint32>::max();
+    /// Corruption bound only. It is NOT a wave size cap: an unlimited or a
+    /// ten-thousand unit override can legitimately field far more than a few
+    /// thousand attackers, so this is sized to the engine's own object space
+    /// rather than to an assumed army size. A count beyond it cannot describe
+    /// any reachable world state and means the stream is damaged.
+    static constexpr Uint32 kCustomWaveLimit = 1u << 20;
+    /// Deterministic fair recall cursor: an index into the wave's sorted member
+    /// ids, so every pass continues where the last one stopped and no member can
+    /// be starved by a permanently higher-priority neighbour.
+    Uint32 recallCursor = 0;
+    /// When the main squad's local disadvantage started, for the persistence
+    /// requirement. Reset while the squad is not outmatched.
+    Uint32 localPressureSince = std::numeric_limits<Uint32>::max();
+    /// A sustained local withdrawal holds until the squad is actually home or
+    /// the house is ready again. Without this the recall stopped the moment the
+    /// enemy drifted out of the measuring radius and the same units resumed the
+    /// attack they were being pulled off.
+    Uint32 localWithdrawSince = std::numeric_limits<Uint32>::max();
+    /// Cycle of the most recent material mobile-combat loss, for the quiet test
+    /// that gates every resume path.
+    Uint32 lastMaterialLossCycle = std::numeric_limits<Uint32>::max();
+
+    /// True when this controller runs the recovery/cohesion behaviour at all.
+    bool recoveryActive() const;
+    /// Thresholds from config, converted to cycles once per use.
+    ArmyPosturePolicy::Thresholds postureThresholds() const;
+    /// One bounded pass over units and structures: deployable power, assembly,
+    /// the observed front and the core-attack emergency. Fog and team respecting;
+    /// neutral worms and ambient units are never observed as hostile.
+    struct ArmySurvey {
+        CombatPowerPolicy::Force deployable;   ///< Ours, active, healthy, orderable.
+        /// Ours plus allied troops that are actually NEAR the chosen front or the
+        /// main cohort. A distant ally's home army is not strength this house can
+        /// bring to a fight and must never bypass the outnumbered veto.
+        CombatPowerPolicy::Force allied;
+        CombatPowerPolicy::Force hostileFront; ///< Observed, near the front anchor.
+        CombatPowerPolicy::Force squad;        ///< The tracked wave, where it stands.
+        CombatPowerPolicy::Force squadHostile; ///< Observed hostiles around the wave.
+        /// Friendly strength near the squad, including allies and the static
+        /// cover that actually reaches it, on the same radius as squadHostile.
+        CombatPowerPolicy::Force squadSupport;
+        /// Wave members actually present in the local engagement. A dispersed
+        /// wave's empty centroid cannot establish that its main force is losing.
+        int64_t localWavePower = 0;
+        /// Healthy deployable military value in credits, over the SAME combat
+        /// population the configured militaryValueLimit covers: every armed
+        /// unit including aircraft, excluding support, inactive cargo/bay
+        /// occupants and units withheld for repair. This is the 80% numerator.
+        int64_t deployableValue = 0;
+        /// The ground-only part of the same figure, kept separate so the
+        /// telemetry can distinguish an air-heavy army from a ground one and so
+        /// the ground power comparisons are never contaminated by it.
+        int64_t deployableGroundValue = 0;
+        int64_t deployableAirValue = 0;
+        int64_t assembledPower = 0;            ///< Healthy power already at the rally.
+        int64_t designatedPower = 0;           ///< Healthy power that belongs there.
+        /// Tracked wave power already inside the assembly radius, for the ready
+        /// gate: a wave is ready when it is gathered, not merely when it exists.
+        int64_t assembledWavePower = 0;
+        bool coreUnderAttack = false;
+        bool frontObserved = false;
+        Coord frontAnchor = Coord::Invalid();
+        int waveMembers = 0;
+        /// Local holding strength around the attacked core asset, and the
+        /// hostile power actually attacking it. A minor raid that the local
+        /// defenders and turret cover outweigh is not a house emergency.
+        /// Measured per attacked asset, and reported for the one that actually
+        /// decided: a house-wide total lets a strong colony's garrison answer
+        /// for a raid on an undefended one, and describes no real place.
+        int64_t coreThreatPower = 0;
+        int64_t coreHoldingPower = 0;
+        bool coreSeriouslyDamaged = false;
+        Coord coreAt = Coord::Invalid();
+    };
+    ArmySurvey surveyArmy(const ObjectBase* plannedFront = nullptr);
+    /// Posture evaluation, once per AI pass this house actually takes.
+    void updateArmyPosture();
+    /// Apply the current posture to units: hold reinforcements, recall the wave.
+    /// Bounded by the configured order budget and the path queue; never touches a
+    /// unit under a human order, a forced player order, cargo, a repair run or an
+    /// emergency base-defence assignment.
+    void applyArmyPosture(int& orderBudget);
+    /// Withdraw one unit to \a destination. AREAGUARD plus a forced move: the
+    /// forced flag suppresses target acquisition on the way (UnitBase.cpp:1756)
+    /// and the engine clears it on arrival (UnitBase.cpp:903,962), which is what
+    /// re-enables area defence at the rally. RETREAT is deliberately not used:
+    /// it returns false from isInGuardRange/isInAttackRange (UnitBase.cpp:1446,
+    /// 1492), so a retreating army cannot shoot back at all.
+    /// \a radius is the assembly spread around \a anchor, derived from the size
+    /// of the force coming home exactly as the established rally radius is.
+    /// \a slots is the shared list of standable tiles near the anchor, scanned
+    /// once per pass by assemblySlots(); per-unit passability is still checked,
+    /// because infantry and vehicles do not share terrain rules.
+    bool withdrawUnit(const UnitBase* unit, Coord anchor, int radius = 3,
+                      const std::vector<Coord>* slots = nullptr,
+                      std::set<int64_t>* reserved = nullptr);
+    /// Assembly spread for a force of \a members units: large enough that the
+    /// resume share of that force can actually stand inside it. A radius that
+    /// cannot hold eighty percent of the army would make "assembled" unreachable
+    /// and the house would never resume.
+    static int assemblyRadius(int members);
+    int assemblyForceSize() const;
+    int armyAssemblyRadius() const;
+    /// One bounded scan per pass: tiles within \a radius of \a anchor that are
+    /// on the map, not mountain, not built on and not in observed danger.
+    std::vector<Coord> assemblySlots(Coord anchor, int radius) const;
+    /// Is this unit ours to order right now?
+    bool orderableCombatUnit(const UnitBase* unit) const;
+    /// Is this unit still answering a live emergency contact? Stale entries are
+    /// dropped by checkAllUnits(), so a true answer means an actual defence or
+    /// anti-air rescue in progress, not a reserve being held back.
+    bool activeDefenceAssignment(const UnitBase* unit) const;
+    /// Custom Hard/Brutal attacks use engine Hunt without tactical overrides.
+    bool engineHuntAttack(const UnitBase* unit) const;
+    /// A true launcher — rocket artillery, not a Deviator — attacking under
+    /// engine Hunt. Only these keep their close-range spacing while hunting.
+    bool huntingLauncher(const UnitBase* unit) const;
+    /// How far a hunting launcher should stand off \a threat, or 0 when that
+    /// enemy is not close enough to be worth breaking contact for. Proximity is
+    /// measured against the enemy's own reach and the inner part of the
+    /// launcher's band, never its whole range: an outranged enemy at the edge of
+    /// that range is a target, not a threat.
+    int launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const;
+    /// Short close-range escape for a hunting launcher. \a knownThreat is the
+    /// authoritative damager of a damage callback; without one the nearest
+    /// qualifying closing enemy is used. Hunt and tracked army membership are
+    /// kept, so the launcher resumes firing across the gap it opens. Returns
+    /// true when this pass belongs to the escape.
+    bool escapeCloseThreatWhileHunting(const UnitBase* launcher,
+                                       const ObjectBase* knownThreat = nullptr);
+    /// One of this house's colonies: a core building, the core buildings
+    /// clustered with it and the living emplacements that actually reach it.
+    /// Derived once per search from the structure list, so "colony" means a real
+    /// group of this house's own buildings rather than a map region.
+    struct ColonyCluster {
+        Coord at = Coord::Invalid();
+        Uint32 id = 0;
+        int cores = 0;     ///< Own core buildings in the cluster.
+        int cover = 0;     ///< Living emplacements whose range reaches it.
+        int64_t score = 0; ///< The established shelter score.
+    };
+    std::vector<ColonyCluster> colonyClusters() const;
+    /// The production/repair cluster this house would actually shelter at: the
+    /// strongest accessible group of its own core buildings, not the arithmetic
+    /// mean of every structure it owns. On a two-colony map the mean sits in open
+    /// sand between them, which is the worst possible place to gather.
+    Coord shelterAnchor();
+    /// The colony an offensive should form up at: the most enemy-facing colony
+    /// that has real local defence, otherwise the shelter cluster. A forward
+    /// colony with no cover is never chosen, because massing the army on exposed
+    /// ground is worse than walking a little further.
+    Coord stagingAnchor() const;
+    /// How far this colony's own buildings actually extend from \a anchor, so a
+    /// staging point can be placed outside the built-up area instead of in the
+    /// gaps between its buildings.
+    int colonyFootprintRadius(Coord anchor) const;
+    /// Protected assembly point with hysteresis and a bounded search.
+    Coord findProtectedRallyLocation();
+    /// Offensive form-up point: a safe, standable, bounded, deterministic slot
+    /// just OUTSIDE the staging colony's own footprint, preferring the enemy
+    /// facing side and leaving roads and exits clear. An army gathering inside
+    /// its own base cannot deploy out of it; the shelter is a separate place and
+    /// stays inside. Falls back to the shelter when there is no usable exterior
+    /// ground at all, so this is never worse than the previous behaviour.
+    Coord offensiveStagingLocation() const;
+    /// Actual reserve slots must be exterior too, not just their centre.
+    bool offensiveAssemblySlot(Coord at) const;
+    /// How far outside the colony footprint the form-up search may look. Fixed
+    /// and narrow: it bounds the scan, and "a little outside" is the intent.
+    static constexpr int kStagingBand = 8;
+    /// Where this house currently gathers: the exterior staging point while
+    /// offensive, the protected shelter while withdrawing or recovering, and the
+    /// established squad rally outside Custom Hard/Brutal.
+    Coord assemblyPoint();
+    /// The anchor the assembly measurements and the arrival tests use. Same
+    /// posture split as assemblyPoint(), as a const helper for the survey.
+    Coord armyAssemblyAnchor() const;
+    /// Bounded local protection for a threatened or observed forward colony.
+    /// Finite: at most a few units, and never
+    /// the troops already committed to an offensive, so a quiet colony cannot
+    /// drain the army and a raided one is not simply ignored.
+    void assignColonyGuards(int& orderBudget);
+    /// Which units this house currently wants holding which colony, derived
+    /// fresh from observed world state and cached for the current cycle only.
+    /// Derived rather than remembered on purpose: a remembered assignment would
+    /// differ between a live host and a reloaded peer on the first pass after a
+    /// load, and the posture state that must survive a save is already saved.
+    const std::map<Uint32,Coord>& colonyGuardPosts() const;
+    mutable std::map<Uint32,Coord> colonyGuardSet;
+    mutable Uint32 colonyGuardCycle = std::numeric_limits<Uint32>::max();
+    /// Finite reserve. A raided colony gets real help; it can never become a
+    /// second army that starves the offensive.
+    static constexpr int kColonyGuardMax = 4;
+    /// Runtime-only exterior staging cache. Recomputed whenever the cycle
+    /// changes, exactly like lastSurvey, so it is never carried across a save
+    /// and a reload reproduces it from live state rather than restoring it.
+    mutable Coord offensiveStaging = Coord::Invalid();
+    mutable Uint32 offensiveStagingCycle = std::numeric_limits<Uint32>::max();
+    mutable Coord offensiveColonyAnchor = Coord::Invalid();
+    mutable int offensiveColonyFootprint = 0;
+    mutable bool exteriorStagingAvailable = false;
+    /// Tracked-wave bookkeeping: drop the dead, expire a stalled sortie, keep the
+    /// shared objective. Mirrors the campaign wave rules for Custom Hard/Brutal.
+    void updateCustomWave();
+    /// Shared reachable objective for a Custom wave, or null when none is
+    /// observed. Visible enemy structures only, and only ones the wave can
+    /// actually reach over ground: an objective behind impassable terrain
+    /// otherwise sends the whole wave into a forced path search it can never
+    /// satisfy.
+    const ObjectBase* customWaveObjective(const UnitBase* unit) const;
+    /// Can this ground unit actually reach attacking range of this object over
+    /// terrain it can cross? A bounded reachability answer, not a full path.
+    bool groundAttackReachable(const UnitBase* unit, const ObjectBase* target) const;
+    /// Adopt this house's existing autonomous attackers into the tracked wave.
+    /// A save written before the posture existed carries Hard/Brutal units that
+    /// are already hunting; without this they would never be recalled, because
+    /// the recall only ever touches tracked members.
+    void adoptLegacyHuntersIntoWave();
+    bool legacyHuntersAdopted = false;
+    /// Outnumbered dispatch gate, including the 80%-of-configured-limit bypass.
+    ArmyPosturePolicy::DispatchGate offensiveDispatchGate(const ArmySurvey& survey) const;
+    /// Front battery goal for this base, zero when the feature is off or the
+    /// economy is not ready. Never lowers the established counter-air goal.
+    int frontBatteryGoal(int coverageCap, int refineries, int heavyFactories,
+                         int repairYards, const ArmySurvey& survey) const;
+    /// Observed enemy approach direction for battery siting, from visible enemy
+    /// bases and remembered structure losses only.
+    Coord observedFrontDirection(Coord anchor) const;
+    /// Cached survey for this AI pass. Runtime only: recomputed by
+    /// updateArmyPosture() on every pass this house takes, so a reload or an
+    /// observer checkpoint reproduces it from live state rather than carrying it.
+    ArmySurvey lastSurvey;
+    Uint32 lastSurveyCycle = std::numeric_limits<Uint32>::max();
+    /// The tracked squad is locally outmatched and should disengage even though
+    /// the house as a whole is still offensive. Recomputed every pass alongside
+    /// the survey, so it is derived state and not part of the save.
+    bool localSquadWithdraw = false;
 
     void checkAllUnits();
     void retreatAllUnits();

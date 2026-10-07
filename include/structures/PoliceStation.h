@@ -26,8 +26,21 @@ public:
     ObjectInterface* getInterfaceContainer() override;
     void handleSpawnClick();
     void doSpawnVehicles();
-    bool isReinforcementLimitReached() const;
-    bool canSpawnVehicles() const { return spawnTimer <= 0 && getHealth() > 0 && !isReinforcementLimitReached(); }
+    /**
+        True when the game's effective unit limit leaves no room for any member of the
+        patrol. House::getMaxUnits() and the per-category policy behind it are the only
+        authority here, so the sidebar status reports the limit the player selected and
+        nothing else. A police-local count ceiling is not a unit limit.
+    */
+    bool isUnitLimitReached() const;
+    /**
+        True when a QuantBot controller of this house has exhausted its configured
+        military-value target. That is an AI army policy, independent of the game's unit
+        limit, and must never be reported as one.
+    */
+    bool isReinforcementBudgetReached() const;
+    bool canSpawnVehicles() const { return spawnTimer <= 0 && getHealth() > 0
+        && !isUnitLimitReached() && !isReinforcementBudgetReached(); }
     int getMaxSpawnTimer() const;
     int getPercentComplete() const { return spawnTimer * 100 / getMaxSpawnTimer(); }
 protected:

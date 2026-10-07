@@ -353,15 +353,11 @@ void Tile::assignAirUnit(Uint32 newObjectID) {
 }
 
 void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
-    // Only increment revision if tile transitions from passable to blocked
-    bool wasPassable = assignedNonInfantryGroundObjectList.empty();
-    
+    // Traffic must not invalidate every vehicle's cached route. Movement still
+    // checks the next tile, and searches refresh occupancy each slice. Structures
+    // bump the revision on placement/destruction, mountain changes in setType(),
+    // and repaired zone footprints in Game::loadSaveGame().
     assignedNonInfantryGroundObjectList.push_back(newObjectID);
-    
-    if(currentGameMap != nullptr && wasPassable) {
-        // Tile just became blocked (0 -> 1 unit) - invalidate paths
-        currentGameMap->incrementPathingRevision();
-    }
 }
 
 int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
@@ -806,7 +802,15 @@ void Tile::clearTerrain() {
     deadUnits.clear();
 }
 
-void Tile::setTrack(Uint8 direction) {
+void Tile::setTrack(int direction) {
+    // Replay has produced directions outside 0..NUM_ANGLES-1 here. The write then
+    // landed past tracksCreationTime, on the damage vector's own pointers, so the
+    // corruption only surfaced much later - typically freeing the tile. There is no
+    // terrain change to invent for an impossible direction, so drop it.
+    if (direction < 0 || direction >= NUM_ANGLES) {
+        return;
+    }
+
     if (type == Terrain_Sand || type == Terrain_Dunes || isSpice()) {
         tracksCreationTime[direction] = currentGame->getGameCycleCount();
     }
@@ -828,15 +832,8 @@ void Tile::unassignAirUnit(Uint32 objectID) {
 }
 
 void Tile::unassignNonInfantryGroundObject(Uint32 objectID) {
+    // Structure destruction invalidates routes explicitly in ~StructureBase.
     assignedNonInfantryGroundObjectList.remove(objectID);
-    
-    // Only increment revision if tile transitions from blocked to passable
-    bool isNowPassable = assignedNonInfantryGroundObjectList.empty();
-    
-    if(currentGameMap != nullptr && isNowPassable) {
-        // Tile just became passable (1 -> 0 units) - invalidate paths
-        currentGameMap->incrementPathingRevision();
-    }
 }
 
 void Tile::unassignUndergroundUnit(Uint32 objectID) {

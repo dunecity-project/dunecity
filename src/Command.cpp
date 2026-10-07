@@ -25,6 +25,7 @@
 
 #include <Game.h>
 #include <House.h>
+#include <Map.h>
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
 #include <structures/PoliceStation.h>
@@ -217,6 +218,14 @@ void Command::executeCommand() const {
                 if (auto* bot=dynamic_cast<QuantBot*>(player.get())) bot->onHumanUnitOrder(unit->getObjectID());
     }
 
+    // Only accepted human orders reset the stall clock, and this executes on every peer.
+    // AI helpers deliberately leave repeated identical routing intents on the same clock.
+    const auto applyMovementOrder = [human](UnitBase* unit, bool validIntent, const auto& action) {
+        if(human && validIntent) unit->cancelCarryallPickup();
+        action();
+        if(human && validIntent) unit->noteExplicitPlayerOrder();
+    };
+
     switch(commandID) {
 
         case CMD_PLACE_STRUCTURE: {
@@ -242,7 +251,9 @@ void Command::executeCommand() const {
             if(!CommandAuthorization::isValidBooleanParameter(parameter[3])) {
                 return;
             }
-            unit->doMove2Pos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
+            applyMovementOrder(unit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+                unit->doMove2Pos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
+            });
         } break;
 
         case CMD_UNIT_MOVE2OBJECT: {
@@ -253,7 +264,10 @@ void Command::executeCommand() const {
             if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
                 return;
             }
-            unit->doMove2Object((int) parameter[1]);
+            const auto* target = currentGame->getObjectManager().getObject(parameter[1]);
+            applyMovementOrder(unit, target != nullptr && target != unit, [&] {
+                unit->doMove2Object((int) parameter[1]);
+            });
         } break;
 
         case CMD_UNIT_ATTACKPOS: {
@@ -267,7 +281,9 @@ void Command::executeCommand() const {
             if(!CommandAuthorization::isValidBooleanParameter(parameter[3])) {
                 return;
             }
-            unit->doAttackPos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
+            applyMovementOrder(unit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+                unit->doAttackPos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
+            });
         } break;
 
         case CMD_UNIT_ATTACKOBJECT: {
@@ -278,7 +294,12 @@ void Command::executeCommand() const {
             if(!mayActOnObject(playerID, commandID, parameter[0], pUnit)) {
                 return;
             }
-            pUnit->doAttackObject((int) parameter[1], true);
+            const auto* target = currentGame->getObjectManager().getObject(parameter[1]);
+            const bool validIntent = target != nullptr && target != pUnit
+                && (pUnit->canAttack() || isHarvesterLikeUnit(pUnit->getItemID()));
+            applyMovementOrder(pUnit, validIntent, [&] {
+                pUnit->doAttackObject((int) parameter[1], true);
+            });
         } break;
 
                 case CMD_UNIT_HEAL: {
@@ -295,7 +316,9 @@ void Command::executeCommand() const {
                     || pTarget->getHealth() >= pTarget->getMaxHealth()) {
                 return;
             }
-            pUnit->doAttackObject((int) parameter[1], true);
+            applyMovementOrder(pUnit, pTarget != pUnit, [&] {
+                pUnit->doAttackObject((int) parameter[1], true);
+            });
         } break;
 case CMD_INFANTRY_CAPTURE: {
             if(parameter.size() != 2) {
@@ -316,7 +339,9 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], pGroundUnit)) {
                 return;
             }
-            pGroundUnit->doRequestCarryallDrop((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(pGroundUnit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+                pGroundUnit->doRequestCarryallDrop((int) parameter[1], (int) parameter[2]);
+            });
         } break;
 
         case CMD_UNIT_SENDTOREPAIR: {
@@ -342,6 +367,7 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             pUnit->doSetAttackMode((ATTACKMODE) parameter[1]);
+            if(human) pUnit->noteExplicitPlayerOrder();
         } break;
 
         case CMD_DEVASTATOR_STARTDEVASTATE: {
@@ -660,4 +686,3 @@ case CMD_INFANTRY_CAPTURE: {
     }
 
 }
-

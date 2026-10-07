@@ -61,11 +61,11 @@ protected:
         spawnSelectButton.setVisible(false);
         spawnSelectButton.setTooltipText(_("Deploy 3 troopers and 1 trike near this station"));
         spawnSelectButton.setOnClick(std::bind(&PoliceStationInterface::onSpawn, this));
-        unitLimitLabel.setText("Unit limit\nreached");
-        unitLimitLabel.setTextFontSize(11);
-        unitLimitLabel.setTextColor(COLOR_WHITE, COLOR_BLACK);
-        unitLimitLabel.setVisible(false);
-        spawnBox.addWidget(&unitLimitLabel, Point((SIDEBARWIDTH - 25 - getWidth(pTexture))/2, 5), getTextureSize(pTexture));
+        reinforcementStatusLabel.setText("Unit limit\nreached");
+        reinforcementStatusLabel.setTextFontSize(11);
+        reinforcementStatusLabel.setTextColor(COLOR_WHITE, COLOR_BLACK);
+        reinforcementStatusLabel.setVisible(false);
+        spawnBox.addWidget(&reinforcementStatusLabel, Point((SIDEBARWIDTH - 25 - getWidth(pTexture))/2, 5), getTextureSize(pTexture));
 
         Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
 
@@ -97,7 +97,11 @@ protected:
             spawnProgressBar.setTexture(pTexture);
             spawnProgressBar.setProgress(pPoliceStation->getPercentComplete());
             spawnSelectButton.setVisible(pPoliceStation->canSpawnVehicles());
-            unitLimitLabel.setVisible(pPoliceStation->isReinforcementLimitReached());
+            const bool unitLimitReached = pPoliceStation->isUnitLimitReached();
+            const bool armyTargetReached = pPoliceStation->isReinforcementBudgetReached();
+            reinforcementStatusLabel.setText(unitLimitReached ? "Unit limit\nreached"
+                                                              : "Army target\nreached");
+            reinforcementStatusLabel.setVisible(unitLimitReached || armyTargetReached);
 
             levelLabel.setText("3 Troopers");
             vehiclesLabel.setText("1 Trike");
@@ -110,7 +114,7 @@ protected:
     }
 
 private:
-    Label unitLimitLabel;
+    Label reinforcementStatusLabel;
     void onSpawn() {
         ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
         PoliceStation* pPoliceStation = dynamic_cast<PoliceStation*>(pObject);

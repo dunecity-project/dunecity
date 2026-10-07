@@ -20,8 +20,11 @@
 #include <structures/StructureBase.h>
 #include <Network/NetworkManager.h>
 #include <mod/ModManager.h>
+#include <units/Harvester.h>
+#include <units/RebelHarvester.h>
 #include <units/UnitBase.h>
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
@@ -292,6 +295,12 @@ Uint32 advanceToSuspension(Game& game, int limit) {
 #include "dead-slot-phase.inc"
 
 // ---------------------------------------------------------------------------
+// 4b. Unit traffic versus long-lived geometry, and the cost of a goal this
+//     unit cannot enter. Uses steerable()/pinOrder()/resetScheduler() above.
+// ---------------------------------------------------------------------------
+#include "traffic-phase.inc"
+
+// ---------------------------------------------------------------------------
 // 5. An ordinary save taken mid-suspension keeps the established reset
 //    semantics, and the affected units must requeue promptly rather than
 //    waiting out a stale cooldown.
@@ -333,6 +342,8 @@ void checkOrdinaryMidSuspensionLoad() {
             if(unit == nullptr) continue;
             require(!unit->pathRequestQueued, "An ordinary load reset the pending flag");
             require(unit->recalculatePathTimer == 0, "An ordinary load carries no stale cooldown");
+            require(unit->stallAnchor.isInvalid() && unit->getStalledCycleCount() == 0,
+                "An ordinary load gives a fresh carryall rescue grace period");
         }
         int requeueCycle = -1;
         for(int i = 0; i < 25 && requeueCycle < 0; ++i) {
@@ -378,12 +389,17 @@ int runBudgetProbe() {
     // All phases unless a comma-separated subset is named, which keeps iteration
     // on one phase cheap without weakening the default run.
     const char* requested = std::getenv("BUDGET_PROBE_PHASES");
-    const std::string phases = (requested != nullptr && *requested != '\0') ? requested : "slice,budget,inputs,control,observer,parser,deadslot,ordinary,cleanup";
+    const std::string phases = (requested != nullptr && *requested != '\0') ? requested : "slice,budget,inputs,traffic,control,observer,parser,deadslot,ordinary,cleanup";
     auto wanted = [&phases](const char* name) { return phases.find(name) != std::string::npos; };
 
     if(wanted("slice")) checkSliceEqualsWhole();
     if(wanted("budget")) checkStrictBudget();
     if(wanted("inputs")) checkCrossTickInputs();
+    if(wanted("traffic")) {
+        checkTrafficVersusGeometry();
+        checkOccupiedGoalApproach();
+        checkHarvesterPendingGuard();
+    }
     if(wanted("control")) checkObserverRestoreControl();
     if(wanted("observer")) checkObserverContinuation();
     if(wanted("parser")) checkMalformedContinuation();

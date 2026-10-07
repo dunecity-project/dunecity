@@ -180,15 +180,22 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {
-    settings.gameOptions = options;
-
     INIFile config(getConfigFilepath());
-    writeGameOptionsToConfig(config, "Game Options", options);
     const std::string section = userGameOptionsSection();
-    if(!section.empty()) {
+    if(section.empty()) {
+        // Vanilla has no per-mod section, so its choices are the global defaults.
+        settings.gameOptions = options;
+        writeGameOptionsToConfig(config, "Game Options", options);
+    } else {
         // The mod's own GameOptions.ini stays untouched: it is hashed for
         // multiplayer config checks. The player's choices live here instead
         // and are layered over the mod's defaults.
+        //
+        // The global section is deliberately NOT written from here. What is being saved is the
+        // effective rule set, which already has the active mod's defaults folded into it, so
+        // copying it to "Game Options" exported those mod defaults to vanilla and every other mod:
+        // changing any single option while Dune City was active used to carry Dune City's whole
+        // rule set - now including its carryall default - into vanilla play.
         writeGameOptionsToConfig(config, section, options);
     }
     if(!config.saveChangesTo(getConfigFilepath())) {

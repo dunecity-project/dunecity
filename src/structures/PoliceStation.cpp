@@ -67,15 +67,16 @@ int PoliceStation::getMaxSpawnTimer() const {
     return Palace::getSpecialWeaponCooldownForHouse(HOUSE_FREMEN);
 }
 
-bool PoliceStation::isReinforcementLimitReached() const {
-    int militaryUnits = 0;
-    for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item) {
-        if (item != Unit_Frigate && !isCarryallUnit(item) && item != Unit_MCV
-            && item != Unit_Harvester && item != Unit_RebelHarvester
-            && item != Unit_Sandworm && !isAmbientUnit(item))
-            militaryUnits += owner->getNumItems(item);
-    }
-    if (militaryUnits >= 250) return true;
+// A partial patrol is allowed while either category has room. The House checks
+// resolve the effective game limit and the existing infantry-in-thirds policy.
+bool PoliceStation::isUnitLimitReached() const {
+    return owner != nullptr
+        && owner->isUnitLimitReached(Unit_Trike)
+        && owner->isUnitLimitReached(Unit_Trooper);
+}
+
+bool PoliceStation::isReinforcementBudgetReached() const {
+    if (owner == nullptr) return false;
     for (const auto& player : owner->getPlayerList()) {
         const auto* bot = dynamic_cast<const QuantBot*>(player.get());
         if (bot && !bot->permitsPoliceReinforcement(0)) return true;
@@ -91,8 +92,10 @@ void PoliceStation::doSpawnVehicles() {
     constexpr int patrolSize = 4;
     for (int i = 0; i < patrolSize; ++i) {
         const Uint32 item = i == 0 ? Unit_Trike : Unit_Trooper;
-        // Recheck each batch member so the player's military count cannot exceed 250.
-        if (isReinforcementLimitReached()) { capped += patrolSize - i; break; }
+        // The engine admission check below runs per batch member, so the house cannot
+        // overshoot the selected limit while this patrol deploys. Stop early only when
+        // no category has room left for anything the patrol contains.
+        if (isUnitLimitReached()) { capped += patrolSize - i; break; }
         bool militaryCapped = false;
         for (const auto& player : owner->getPlayerList()) {
             const auto* bot = dynamic_cast<const QuantBot*>(player.get());

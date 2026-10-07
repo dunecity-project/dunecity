@@ -106,6 +106,7 @@ std::mutex Game::performanceLogMutex;
 #include <units/HarvesterHelpers.h>
 #include <units/InfantryBase.h>
 #include <units/GroundUnit.h>
+#include <units/Carryall.h>
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <structures/Airport.h>
@@ -353,6 +354,283 @@ void Game::queuePathRequest(Uint32 objectId) {
     }
 }
 
+void Game::invalidateCarryallCandidateIds() {
+    carryallCandidateCycle = std::numeric_limits<Uint32>::max();
+    carryallCandidateUnitCount = std::numeric_limits<size_t>::max();
+    carryallCandidateIds.clear();
+}
+
+const std::vector<Uint32>& Game::getCarryallCandidateIds() {
+    // Unit creation/removal invalidates this index, including equal-count replacements within
+    // one cycle. The count check also catches bulk lifecycle changes. Existence, owner, activity,
+    // health and booking are revalidated by the caller on every lookup.
+    if(carryallCandidateCycle != gameCycleCount || carryallCandidateUnitCount != unitList.size()) {
+        carryallCandidateIds.clear();
+        for(const UnitBase* unit : unitList) {
+            if(unit != nullptr && isCarryallUnit(unit->getItemID())) {
+                carryallCandidateIds.push_back(unit->getObjectID());
+            }
+        }
+        carryallCandidateCycle = gameCycleCount;
+        carryallCandidateUnitCount = unitList.size();
+    }
+    return carryallCandidateIds;
+}
+
+bool Game::isLegalRecoveryTile(const UnitBase* pUnit, const Coord& candidate) const {
+    if(!currentGameMap->tileExists(candidate)) {
+        return false;
+    }
+
+    // The unit's own rule for the tile: terrain, occupancy and, for infantry, how many of its own
+    // team already stand there.
+    if(!pUnit->canPass(candidate.x, candidate.y)) {
+        return false;
+    }
+
+    const Tile* pTile = currentGameMap->getTile(candidate);
+
+    // canPass() lets a vehicle drive onto enemy infantry because it would squash them on the way
+    // through. Arriving on top of them is not the same thing, so a recovery takes a free tile, the
+    // way a carryall drop does.
+    if(!pUnit->isInfantry() && pTile->hasAGroundObject()) {
+        return false;
+    }
+
+    // Recovery must not be a quiet way of destroying the unit, and deploying onto a bloom
+    // triggers it under the unit's feet.
+    return !pTile->isSpiceBloom() && !pTile->isSpecialBloom();
+}
+
+Coord Game::findPassengerRecoverySpot(const UnitBase* pUnit, const Coord& anchor) const {
+    // Near where it was lost first: a recovery that searched the whole map before looking next
+    // door would scatter an army. The map-wide fallback below handles a corner that stays blocked.
+    static constexpr int maxRecoveryRadius = 12;
+
+    for(int radius = 0; radius <= maxRecoveryRadius; ++radius) {
+        for(int dy = -radius; dy <= radius; ++dy) {
+            for(int dx = -radius; dx <= radius; ++dx) {
+                if(std::max(std::abs(dx), std::abs(dy)) != radius) {
+                    continue;  // Only the new ring; the inner ones were searched already.
+                }
+
+                const Coord candidate(anchor.x + dx, anchor.y + dy);
+                if(isLegalRecoveryTile(pUnit, candidate)) {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    return Coord::Invalid();
+}
+
+Coord Game::findGlobalRecoverySpot(const UnitBase* pUnit, Uint32 windowIndex) const {
+    // When nothing near the anchor is legal, a bounded window of the map is searched instead.
+    // The window start advances by its own width every turn in the recovery queue, so turns walk the whole
+    // map and a unit whose own corner is permanently walled in still gets out. Derived from the
+    // queue round and the unit id only: no cursor is kept, so nothing has to be saved.
+    static constexpr Uint32 globalWindowTiles = 1024;
+
+    const Uint32 width = static_cast<Uint32>(currentGameMap->getSizeX());
+    const Uint32 total = width * static_cast<Uint32>(currentGameMap->getSizeY());
+    if(total == 0) {
+        return Coord::Invalid();
+    }
+
+    const Uint32 start = static_cast<Uint32>((static_cast<Uint64>(windowIndex) * globalWindowTiles
+                                            + pUnit->getObjectID()) % total);
+    const Uint32 examined = std::min(globalWindowTiles, total);
+    for(Uint32 step = 0; step < examined; ++step) {
+        const Uint32 index = (start + step) % total;
+        const Coord candidate(static_cast<int>(index % width), static_cast<int>(index / width));
+        if(isLegalRecoveryTile(pUnit, candidate)) {
+            return candidate;
+        }
+    }
+
+    return Coord::Invalid();
+}
+
+bool Game::recoverOrphanedPassenger(UnitBase* pUnit, const Coord& anchor, Uint32 windowIndex) {
+    // Stale bookings go first, and reciprocally: leaving the other aircraft's target set would
+    // send it after a unit that is back on the map and no longer expecting a lift. The anchor was
+    // captured before any of this, because clearing the target is what makes the tile search see
+    // the unit's real options.
+    if(pUnit->isAGroundUnit()) {
+        auto* passenger = static_cast<GroundUnit*>(pUnit);
+        passenger->releaseReplacementPickup(nullptr);
+        passenger->bookCarrier(nullptr);
+    }
+    pUnit->setTarget(nullptr);
+
+    Coord spot = currentGameMap->tileExists(anchor) ? findPassengerRecoverySpot(pUnit, anchor)
+                                                    : Coord::Invalid();
+    if(spot.isInvalid()) {
+        spot = findGlobalRecoverySpot(pUnit, windowIndex);
+    }
+    if(spot.isInvalid()) {
+        return false;
+    }
+
+    // The same path a carryall drop uses: map occupancy, the spatial grid, visibility,
+    // respondability and a sane attack mode all come from deploy().
+    pUnit->setForced(false);
+    pUnit->deploy(spot);
+    return true;
+}
+
+void Game::reconcileTransportContainment() {
+    // Pass one: what the containers actually hold. Every house is scanned, not just one: a
+    // deviated carryall keeps flying its original owner's cargo, and a passenger's own house can
+    // change while it is hidden, so ownership says nothing about who holds whom.
+    std::unordered_set<Uint32> contained;
+    std::unordered_map<Uint32, Carryall*> claimant;   ///< Actual cargo ownership only.
+    std::vector<std::pair<Carryall*, Uint32>> staleCargo;        ///< Entries that are not cargo.
+    std::vector<std::pair<Carryall*, Uint32>> duplicateCargo;    ///< One extra entry in one carrier.
+    std::vector<Uint32> candidates;
+    Coord houseAnchor[NUM_HOUSES];
+    for(Coord& anchor : houseAnchor) {
+        anchor.invalidate();
+    }
+
+    for(UnitBase* pUnit : unitList) {
+        if(pUnit == nullptr) {
+            continue;
+        }
+
+        if(auto* carryall = dynamic_cast<Carryall*>(pUnit)) {
+            for(const Uint32 cargoID : carryall->getCargoIds()) {
+                // Live passenger validity, not merely "the id resolves": a structure or a unit
+                // standing on the map is not cargo, and an entry naming one is unusable.
+                auto* passenger = dynamic_cast<UnitBase*>(objectManager.getObject(cargoID));
+                if(passenger == nullptr || !passenger->isPickedUp() || passenger->isActive()) {
+                    staleCargo.emplace_back(carryall, cargoID);   // Including NONE_ID.
+                    continue;
+                }
+
+                const auto claim = claimant.emplace(cargoID, carryall);
+                if(claim.second) {
+                    contained.insert(cargoID);   // The one claim that counts as containment.
+                } else if(claim.first->second == carryall) {
+                    duplicateCargo.emplace_back(carryall, cargoID);  // Listed twice by one carrier.
+                } else {
+                    staleCargo.emplace_back(carryall, cargoID);      // A second carrier's claim.
+                }
+            }
+
+            // A pickup request is not cargo. An inactive ground target cannot be collected;
+            // release the stale request just as engageTarget() does, without letting it displace
+            // a later carrier's real passenger claim.
+            if(ObjectBase* pTarget = carryall->getTarget();
+               pTarget != nullptr && pTarget->isAGroundUnit() && !pTarget->isActive()) {
+                carryall->setTarget(nullptr);
+            }
+        }
+
+        const int houseID = pUnit->getOwner()->getHouseID();
+        if(pUnit->isActive() && !pUnit->isPickedUp() && currentGameMap->tileExists(pUnit->getLocation())
+           && houseAnchor[houseID].isInvalid()) {
+            houseAnchor[houseID] = pUnit->getLocation();
+        }
+
+        if(pUnit->isAGroundUnit() && pUnit->isPickedUp() && !pUnit->isActive() && pUnit->getHealth() > 0) {
+            candidates.push_back(pUnit->getObjectID());
+        }
+    }
+
+    for(StructureBase* pStructure : structureList) {
+        if(pStructure == nullptr) {
+            continue;
+        }
+
+        // Only a running job counts. A refinery keeps pointing at the last harvester it released,
+        // so a free drop-off's pointer is history; believing it would hide a unit for ever.
+        if(pStructure->acceptsHarvesterDropoff() && !pStructure->isHarvesterDropoffFree()) {
+            if(const UnitBase* occupant = pStructure->getContainedHarvesterUnit()) {
+                contained.insert(occupant->getObjectID());
+            }
+        }
+        if(const UnitBase* occupant = pStructure->getContainedRepairUnit()) {
+            contained.insert(occupant->getObjectID());   // Already gated on an actual repair job.
+        }
+
+        const int houseID = pStructure->getOwner()->getHouseID();
+        if(houseAnchor[houseID].isInvalid() && currentGameMap->tileExists(pStructure->getLocation())) {
+            houseAnchor[houseID] = pStructure->getLocation();
+        }
+    }
+
+    for(const auto& entry : staleCargo) {
+        entry.first->releaseCargoId(entry.second);
+    }
+    for(const auto& entry : duplicateCargo) {
+        entry.first->releaseExtraCargoId(entry.second);   // Keeps the one real claim.
+    }
+
+    // Pass two: hidden units no container holds. Object-id order, so the batch below is the same
+    // batch on every peer whatever order the unit list happens to be in.
+    std::sort(candidates.begin(), candidates.end());
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                    [&contained](const Uint32 id) { return contained.count(id) > 0; }),
+                     candidates.end());
+
+    // Bounded work per pass, rotated by the pass index so a long queue of hidden units is worked
+    // through instead of the same prefix being retried. Both the batch position and the map-wide
+    // search window below come from the cycle counter and the candidate order alone: no chooser
+    // cursor exists, so nothing new has to be saved and every peer makes the same choices.
+    static constexpr size_t recoveryBatch = 32;
+    const Uint32 passIndex = gameCycleCount / transportContainmentIntervalCycles;
+    int recovered = 0;
+    int unplaceable = 0;
+    const size_t attempts = std::min(recoveryBatch, candidates.size());
+    const Uint64 firstSlot = static_cast<Uint64>(passIndex) * attempts;
+    const size_t offset = candidates.empty() ? 0 : static_cast<size_t>(firstSlot % candidates.size());
+
+    for(size_t step = 0; step < attempts; ++step) {
+        const Uint32 candidateID = candidates[(offset + step) % candidates.size()];
+        auto* pUnit = dynamic_cast<UnitBase*>(objectManager.getObject(candidateID));
+        if(pUnit == nullptr) {
+            continue;
+        }
+
+        // Where it was lost, then where it was told to hold, then anything its house still holds,
+        // and finally the middle of the map: a unit whose house owns nothing else must still have
+        // somewhere to come back to.
+        Coord anchor = pUnit->getLocation();
+        if(!currentGameMap->tileExists(anchor)) {
+            anchor = pUnit->getGuardPoint();
+        }
+        if(!currentGameMap->tileExists(anchor)) {
+            anchor = houseAnchor[pUnit->getOwner()->getHouseID()];
+        }
+        if(!currentGameMap->tileExists(anchor)) {
+            anchor = Coord(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2);
+        }
+
+        // Advance the map window once per queue round, rather than once per global pass.
+        // Otherwise a unit in a 64-unit batch is only tried on alternate passes and its windows
+        // can permanently skip half of a power-of-two map. No saved cursor is needed.
+        const Uint32 windowIndex = static_cast<Uint32>((firstSlot + step) / candidates.size());
+        if(recoverOrphanedPassenger(pUnit, anchor, windowIndex)) {
+            ++recovered;
+        } else {
+            ++unplaceable;
+        }
+    }
+
+    recoveredPassengerCount += static_cast<Uint32>(recovered);
+    unplaceablePassengerCount = static_cast<Uint32>(unplaceable);
+    pendingPassengerCount = static_cast<Uint32>(candidates.size() - attempts + unplaceable);
+
+    if(recovered > 0 || unplaceable > 0 || !staleCargo.empty() || !duplicateCargo.empty()) {
+        SDL_Log("Transport containment at cycle %u: recovered %d hidden unit(s), %d with no legal"
+                " tile yet, %u still queued, dropped %zu unusable and %zu duplicate cargo entries",
+                gameCycleCount, recovered, unplaceable, pendingPassengerCount, staleCargo.size(),
+                duplicateCargo.size());
+    }
+}
+
 /**
     The destructor frees up all the used memory.
 */
@@ -569,6 +847,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
     // keeps the request-lifecycle conservation check honest across a load.
     pathRequestsCancelled += activePathJobs.size();
     activePathJobs.clear();
+    invalidateCarryallCandidateIds();
 
     // Initialize performance logging
     initPerformanceLog();
@@ -3194,10 +3473,9 @@ void Game::runMainLoop() {
         const int actualFrameTime = frameEnd - frameStart;  // Actual time for this frame
         frameTime += actualFrameTime;
         
-        // Bound catch-up after stalls, but keep at least the previous fastest
-        // setting's 24ms budget. At 4ms/tick a 60Hz frame needs 4-5 ticks;
-        // a three-tick budget would discard time and defeat the faster setting.
-        // The independent ten-cycle guard below still prevents renderer starvation.
+        // Bound catch-up after stalls with a 24ms floor: 2ms/tick needs 8-9 cycles
+        // per 60Hz frame. The independent ten-cycle guard below bounds render latency
+        // while allowing the fastest setting's 500 cycles/s at that frame rate.
         const int maxFrameTime = std::max(getGameSpeed() * 3, 24);
         if (frameTime > maxFrameTime) {
             frameTime = maxFrameTime;
@@ -3672,6 +3950,14 @@ void Game::updateGameState() {
 
     screenborder->update();
     triggerManager.trigger(gameCycleCount);
+
+    // Units hidden inside nothing are put back on the map here, on a fixed cadence read only from
+    // the cycle counter: a continuous match, a loaded save, a restored observer and a replay all
+    // reconcile at the same cycles, whatever the worker count is.
+    if(gameCycleCount > 0 && (gameCycleCount % transportContainmentIntervalCycles) == 0) {
+        reconcileTransportContainment();
+    }
+
     processObjects();
 
     // DuneCity: advance one phase of the city simulation
@@ -4448,6 +4734,7 @@ bool Game::loadSaveGame(InputStream& stream) {
     // keeps the request-lifecycle conservation check honest across a load.
     pathRequestsCancelled += activePathJobs.size();
     activePathJobs.clear();
+    invalidateCarryallCandidateIds();
 
     const char* loadStage = "header";
     auto logLoadStage = [&stream, &loadStage](const char* stage) {
@@ -4554,6 +4841,30 @@ bool Game::loadSaveGame(InputStream& stream) {
                 setupHouseInfo.graphicsSkin = initHouseInfo.graphicsSkin;
                 break;
             }
+        }
+    }
+
+    // The resolved delivery income factors. Read positionally from SMUL and never from the
+    // identity match above, which cannot speak for a row that was played as Random. The House
+    // objects get their own copy from their own save block; this is the setup metadata the
+    // load-game lobby displays.
+    if(savegameVersion >= SpiceIncome::kFirstSavegameVersion) {
+        if(stream.readUint32() != SpiceIncome::kSetupMarker) {
+            SDL_Log("Game::loadSaveGame(): spice income marker missing");
+            return false;
+        }
+        const Uint32 numSpiceFactors = stream.readUint32();
+        if(numSpiceFactors != houseInfoListSetup.size()) {
+            SDL_Log("Game::loadSaveGame(): spice income count disagrees with the setup rows");
+            return false;
+        }
+        for(GameInitSettings::HouseInfo& setupHouseInfo : houseInfoListSetup) {
+            const Uint32 factor = stream.readUint32();
+            if(!SpiceIncome::isValid(factor)) {
+                SDL_Log("Game::loadSaveGame(): invalid saved spice income factor %u", factor);
+                return false;
+            }
+            setupHouseInfo.spiceIncomeMultiplier = factor;
         }
     }
 
@@ -4752,6 +5063,11 @@ bool Game::loadSaveGame(InputStream& stream) {
                 }
             }
         }
+        if(detachedTiles > 0) {
+            // Units loaded earlier may hold routes through a detached footprint.
+            // Tile assignment no longer invalidates routes for ordinary traffic.
+            currentGameMap->incrementPathingRevision();
+        }
         if(detachedTiles > 0 || overlappingTiles > 0) {
             SDL_Log("Loaded game: re-attached %d zone tiles, %d zone tiles overlap another object",
                     detachedTiles, overlappingTiles);
@@ -4914,6 +5230,24 @@ void Game::saveGame(OutputStream& fs) {
             visualHouse = houseInfo.houseID;
         }
         fs.writeSint32(visualHouse);
+    }
+
+    // The resolved per-row delivery income factors (SAVEGAMEVERSION 9851+).
+    //
+    // This cannot be recovered from gameInitSettings when the game is reloaded: a row the
+    // player left on Random still reads HOUSE_INVALID there, so looking the factor up by house
+    // identity would hand every Random row the default instead of what it played with. The
+    // live House knows, because INIMapLoader seeded it from the resolved row, so that is what
+    // is written here - one factor per saved setup row, in row order.
+    fs.writeUint32(SpiceIncome::kSetupMarker);
+    fs.writeUint32(houseInfoListSetup.size());
+    for(const GameInitSettings::HouseInfo& houseInfo : houseInfoListSetup) {
+        const House* pHouse = (houseInfo.houseID >= 0 && houseInfo.houseID < NUM_HOUSES)
+            ? house[houseInfo.houseID].get() : nullptr;
+        // A row whose house no longer exists (eliminated and cleaned up) keeps the factor the
+        // setup row itself carries. Both are already validated, so neither needs clamping.
+        fs.writeUint32(pHouse != nullptr ? pHouse->getSpiceIncomeMultiplier()
+                                         : houseInfo.spiceIncomeMultiplier);
     }
 
     //write the map size
@@ -6598,10 +6932,20 @@ bool Game::handleNetworkUpdates() {
     if(!pNetworkManager->lateJoinStatus().empty() && lastJoinStatus!=pNetworkManager->lateJoinStatus()) {
         lastJoinStatus=pNetworkManager->lateJoinStatus(); addToNewsTicker(lastJoinStatus);
     }
-    if(pNetworkManager->lateJoinReady()) { bQuitGame=true; return true; }
+    if(pNetworkManager->lateJoinReady()) {
+        // Close menus before the checkpoint replaces this Game, while callbacks can
+        // still access the live game and its houses.
+        if(pInGameMenu) { pInGameMenu.reset(); bMenu=false; }
+        bQuitGame=true; return true;
+    }
     if(pNetworkManager->lateJoinPaused()) {
         startWaitingForOtherPlayersTime=0; pWaitingForOtherPlayers.reset();
-        if(!pInGameMenu) { pInGameMenu=std::make_unique<JoinProgressWindow>(); bMenu=true; }
+        // During a checkpoint transfer, doInput() only accepts progress-window events.
+        // Replace any open menu so the visible controls remain usable.
+        if(!dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())) {
+            pInGameMenu.reset();
+            pInGameMenu=std::make_unique<JoinProgressWindow>(); bMenu=true;
+        }
         if(auto* progress=dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())) progress->refresh();
         return true;
     }
@@ -6728,6 +7072,10 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         houses.mixInt32(pHouse->getCredits());
         houses.mixInt32(pHouse->getNumStructures());
         houses.mixInt32(pHouse->getNumUnits());
+        // Mixed in its own right, not just through the credits it produces: two peers that
+        // disagree about a house's delivery rate must be told so at the next digest, rather
+        // than at whatever later cycle the difference first reaches a refinery.
+        houses.mixUint32(pHouse->getSpiceIncomeMultiplier());
     }
     digest.houseHash = houses.value();
 
@@ -6994,6 +7342,10 @@ bool Game::acceptJoinRequest(const std::string& request, const std::string& name
             const auto* target=house[h].get(); if(!target || target->getPlayerList().empty()) continue;
             GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h),target->getTeamID());
             info.colorOfHouse=getHouseVisualHouse(h);
+            // Rebuilt from the live house, so the factor has to come from there too: these
+            // rows are resolved houses, and the joining peer must see the rate this match is
+            // actually being paid at.
+            info.spiceIncomeMultiplier=target->getSpiceIncomeMultiplier();
             int index=0;
             for(const auto& p : target->getPlayerList()) {
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(!spectator && h==slot.house && index==slot.controller ? name : p->getPlayername(),
@@ -7015,6 +7367,9 @@ GameInitSettings Game::spectatorSnapshot() {
         const auto* target=house[h].get(); if(!target || target->getPlayerList().empty()) continue;
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h),target->getTeamID());
         info.colorOfHouse=getHouseVisualHouse(h);
+        // As in acceptJoinRequest: a spectator reconstructs houses from this snapshot and has
+        // to pay out at the same rate as the players it is watching.
+        info.spiceIncomeMultiplier=target->getSpiceIncomeMultiplier();
         for(const auto& player : target->getPlayerList()) info.addPlayerInfo({player->getPlayername(),player->getPlayerclass()});
         snapshot.addHouseInfo(info);
     }
@@ -7041,7 +7396,12 @@ std::string Game::saveObserverRuntime() const {
     // the searches the host has already partly paid for: flushing them on the host
     // instead would be a mutation no peer performs, so the stream carries the whole
     // continuation state rather than a restart hint.
-    out.writeUint32(6); out.writeUint32(gameCycleCount);
+    //
+    // Version 7 adds each unit's long-stall rescue clock (UnitBase::saveObserverRuntime).
+    // That clock is thirty seconds of simulation time long, so restarting it on the spectator
+    // would hand every already-stalled unit a grace period the host is not giving it and the two
+    // would then book transport on different cycles.
+    out.writeUint32(7); out.writeUint32(gameCycleCount);
     out.writeUint32(negotiatedBudget); out.writeUint32(cmdManager.getNetworkCycleBuffer());
     out.writeUint32(currentGameMap->getPathingRevision());
     out.writeUint32(carryOverTokens);
@@ -7097,7 +7457,10 @@ std::string Game::saveObserverRuntime() const {
 void Game::loadObserverRuntime(const std::string& bytes) {
     IMemoryStream in(bytes.data(),bytes.size());
     const auto runtimeVersion=in.readUint32();
-    if((runtimeVersion!=6) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    if((runtimeVersion!=7) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    // The checkpoint replaces this instance's unit set, so the derived carrier index describes
+    // units that may no longer exist. Rebuilt on first use after this.
+    invalidateCarryallCandidateIds();
     negotiatedBudget=in.readUint32(); const auto buffer=in.readUint32();
     if(negotiatedBudget<kMinBudget || negotiatedBudget>kMaxBudget || buffer>1000) throw std::runtime_error("Invalid spectator checkpoint budget");
     cmdManager.setNetworkCycleBuffer(buffer);

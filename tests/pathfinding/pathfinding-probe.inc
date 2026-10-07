@@ -6,7 +6,9 @@
 #include <Map.h>
 #include <units/UnitBase.h>
 #include <mod/ModManager.h>
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <memory>
 #include <set>
 
@@ -46,8 +48,8 @@ int runPathfindingProbe() {
     }
     if (!changedTile) throw std::runtime_error("Missing obstacle-change fixture");
     const int originalTerrain = changedTile->getType();
-    int capped = 0, empty = 0;
-    std::size_t nodes = 0;
+    int capped = 0, empty = 0, blockedGoals = 0;
+    std::size_t nodes = 0, savedNodes = 0;
     double referenceMs = 0, candidateMs = 0;
     const int rounds = 3;
     for (int round = 0; round < rounds; ++round) {
@@ -77,22 +79,48 @@ int runPathfindingProbe() {
             // Alternate order to avoid giving one version consistently warm caches.
             if ((i + round) % 2) { reference(); candidate(); }
             else { candidate(); reference(); }
-            if (expected != actual || expectedNodes != actualNodes) {
-                SDL_Log("PATH_PROBE_FAIL: round=%d query=%zu unit=%u item=%d start=%d,%d dest=%d,%d nodes=%d/%d",
+            // A goal this unit may enter must still produce byte-identical work:
+            // that is the regression guard. A goal it may not enter is now
+            // approached from an adjacent tile instead of being proved
+            // unreachable, so for those the contract is the approach itself --
+            // no more work than the proof cost, a passable route, and never a
+            // step onto the goal.
+            const bool goalEnterable = q.unit->canPass(q.destination.x, q.destination.y);
+            bool ok = goalEnterable ? (expected == actual && expectedNodes == actualNodes)
+                                    : (actualNodes <= expectedNodes);
+            if (ok && !goalEnterable) {
+                for (const Coord& step : actual) {
+                    if (step == q.destination || !q.unit->canPass(step.x, step.y)) { ok = false; break; }
+                }
+                if (ok && !actual.empty() && actual != expected) {
+                    const Coord last = actual.back();
+                    ok = std::max(std::abs(last.x-q.destination.x), std::abs(last.y-q.destination.y)) <= 1;
+                }
+            }
+            if (!ok) {
+                SDL_Log("PATH_PROBE_FAIL: round=%d query=%zu unit=%u item=%d start=%d,%d dest=%d,%d "
+                        "enterable=%d nodes=%d/%d len=%zu/%zu",
                     round,i,q.unit->getObjectID(),q.unit->getItemID(),q.start.x,q.start.y,
-                    q.destination.x,q.destination.y,expectedNodes,actualNodes);
-                throw std::runtime_error("Pathfinding route or expansion count changed");
+                    q.destination.x,q.destination.y,goalEnterable?1:0,expectedNodes,actualNodes,
+                    expected.size(),actual.size());
+                throw std::runtime_error(goalEnterable
+                    ? "Pathfinding route or expansion count changed for an enterable goal"
+                    : "Occupied-goal approach is not a bounded, passable route next to the goal");
             }
             if (round == 0) {
                 capped += expectedNodes >= 16384; empty += expected.empty(); nodes += expectedNodes;
+                if (!goalEnterable) { blockedGoals++; savedNodes += expectedNodes - actualNodes; }
             }
         }
         referenceMs += roundReferenceMs; candidateMs += roundCandidateMs;
         SDL_Log("PATH_PROBE_ROUND: round=%d queries=%zu reference_ms=%.3f candidate_ms=%.3f",
             round,queries.size(),roundReferenceMs,roundCandidateMs);
     }
-    SDL_Log("PATH_PROBE_PASS: queries=%zu rounds=%d unit_types=%zu nodes=%zu capped=%d empty=%d reference_ms=%.3f candidate_ms=%.3f speedup=%.3f",
-        queries.size(),rounds,types.size(),nodes,capped,empty,referenceMs,candidateMs,referenceMs/candidateMs);
+    SDL_Log("PATH_PROBE_PASS: queries=%zu rounds=%d unit_types=%zu nodes=%zu capped=%d empty=%d "
+            "blocked_goals=%d nodes_saved_on_blocked_goals=%zu "
+            "reference_ms=%.3f candidate_ms=%.3f speedup=%.3f",
+        queries.size(),rounds,types.size(),nodes,capped,empty,blockedGoals,savedNodes,
+        referenceMs,candidateMs,referenceMs/candidateMs);
     game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
     return MENU_QUIT_DEFAULT;
 }

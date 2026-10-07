@@ -35,10 +35,13 @@
 
       - it can claim an open seat or an unowned bot seat without displacing a human
         (CustomGamePlayers::onClickPlayerDropDownBox sends SetHumanPlayer with its own name);
-      - the house, team, colour and partner-slot drop-downs are only enabled for the house row
+      - the house, team and partner-slot drop-downs are only enabled for the house row
         the client currently occupies (CustomGamePlayers.cpp, the bIsThisPlayer loops), so
-        ChangeHouse, ChangeTeam, ChangeColor and ChangePlayer are legitimate only for a house
-        where the sender holds a seat.
+        ChangeHouse, ChangeTeam and ChangePlayer are legitimate only for a house where the
+        sender holds a seat. ChangeColor retains the same ownership rule for setup
+        compatibility, although the colour selector has been removed from the menu;
+      - the spice income selector is never enabled on a client, not even for its own row, so
+        ChangeSpiceIncome from a client is always refused.
 
     Anything else - seating another player, renaming a seat, changing a house the sender does
     not occupy - is not something the client UI can produce, so the host refuses it. The whole
@@ -212,6 +215,14 @@ inline Decision authorizeClientEvent(const SeatSnapshot& snapshot, const std::st
             }
             return Decision::Allow;
         }
+
+        case ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome:
+            // The spice income factor is a match rule, not a seat preference: it decides how
+            // much every house earns, so only the host sets it - including for the row the
+            // sender occupies. The client's own selector is disabled, so its UI cannot produce
+            // this event at all; one arriving over the wire is a peer that was modified.
+            // Deliberately *not* folded into the own-house case above.
+            return Decision::RejectHostOnly;
 
         default:
             return Decision::RejectHostOnly;

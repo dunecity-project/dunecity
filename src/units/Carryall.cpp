@@ -161,7 +161,11 @@ void Carryall::checkPos()
                     UnitBase* pUnit = static_cast<UnitBase*>(currentGame->getObjectManager().getObject(unitID));
 
                     if(pUnit == nullptr) {
-                        return;
+                        // An entry that no longer resolves cannot be flown anywhere. Returning
+                        // here left it at the head of the list forever, which kept the aircraft
+                        // booked with cargo it could never put down.
+                        releaseCargoId(unitID);
+                        continue;
                     }
 
                     if((pUnit != nullptr) && (pUnit->isInfantry() == false) && (droppedUnits > 0)) {
@@ -295,6 +299,44 @@ void Carryall::deployUnit(Uint32 unitID)
             clearPath();
         }
     }
+}
+
+void Carryall::releaseCargoId(Uint32 unitID)
+{
+    const size_t before = pickedUpUnitList.size();
+    pickedUpUnitList.remove(unitID);
+    if(pickedUpUnitList.size() == before) {
+        return;
+    }
+
+    if(pickedUpUnitList.empty()) {
+        if(!aDropOfferer) {
+            setTarget(nullptr);
+            setDestination(guardPoint);
+        }
+        droppedOffCargo = true;
+        drawnFrame = 0;
+
+        clearPath();
+    }
+}
+
+bool Carryall::releaseExtraCargoId(Uint32 unitID)
+{
+    bool kept = false;
+    bool removed = false;
+    for(auto it = pickedUpUnitList.begin(); it != pickedUpUnitList.end(); ) {
+        if(*it != unitID) {
+            ++it;
+        } else if(!kept) {
+            kept = true;   // The first entry is the actual claim.
+            ++it;
+        } else {
+            it = pickedUpUnitList.erase(it);
+            removed = true;
+        }
+    }
+    return removed;
 }
 
 void Carryall::destroy()
@@ -512,13 +554,25 @@ void Carryall::pickupTarget()
             || pGroundUnitTarget->isBadlyDamaged()
             || pGroundUnitTarget->isAwaitingPickup()) {
 
+            // The passenger is identified once, before anything can run. doRepair() below issues
+            // a forced move, which cancels the booking that brought this aircraft here and with
+            // it our own target; reading target again afterwards enrolled NONE_ID and left the
+            // passenger hidden inside nothing.
+            const Uint32 passengerID = pGroundUnitTarget->getObjectID();
+
             if(pGroundUnitTarget->isBadlyDamaged() || (pGroundUnitTarget->hasATarget() == false && !isHarvesterLikeUnit(pGroundUnitTarget->getItemID())))   {
                 pGroundUnitTarget->doRepair();
             }
 
+            // The repair trip asks for a carryall again, and that request can land on a different
+            // aircraft. Exactly one carrier owns a passenger: this one is about to take it, so any
+            // replacement booking is released now, while the unit is still something the other
+            // aircraft's own checks can see.
+            pGroundUnitTarget->releaseReplacementPickup(this);
+
             ObjectBase* newTarget = pGroundUnitTarget->hasATarget() ? pGroundUnitTarget->getTarget() : nullptr;
 
-            pickedUpUnitList.push_back(target.getObjectID());
+            pickedUpUnitList.push_back(passengerID);
             pGroundUnitTarget->setPickedUp(this);
 
             drawnFrame = 1;

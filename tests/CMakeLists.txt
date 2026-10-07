@@ -26,6 +26,10 @@ target_sources(dunelegacy_tests
         GasDeviationPolicyTestCase.cpp
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
+        ArmyPosturePolicyTestCase.cpp
+        # The army-recovery test asserts that every new behavioural config field
+        # reaches the multiplayer hash, so it drives the real QuantBotConfig.
+        ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
         QuantBotCityPolicyTestCase.cpp
         QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
@@ -415,6 +419,24 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
         set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # A ground unit walled in on a real map really does stop moving, so the thirty-second
+        # long-stall rescue can be measured against the engine instead of being simulated:
+        # the clock survives a queued path request and a route cleared every cycle, and the
+        # rescue books exactly one free owned carrier and delivers to the unit's own goal.
+        add_test(NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
+        set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # A unit that is not on the map belongs to one carrier or one busy structure bay: the
+        # pickup of a badly damaged booked passenger enrols that unit even though its own repair
+        # order can promise it to another aircraft, and units already hidden inside nothing are
+        # recovered - including from a walled-off corner, with no anchor at all, and in bounded
+        # batches - without disturbing valid cargo or bay occupants. Runs all three engines and
+        # repeats the scheduled boundary under one and four path workers.
+        add_test(NAME transport_containment_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/transport-containment-probe)
+        set_tests_properties(transport_containment_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Brutal only plans past its configured military value cap when the lobby
         # selected an explicit unit-count override; the engine count limit stays
         # the authority, and other difficulties keep the configured cap.
@@ -426,6 +448,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
         set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        add_test(NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --phases current
+            --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
+        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        add_test(NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
+        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
         add_test(NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
@@ -486,6 +517,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-budget-probe)
         set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Police reinforcement admission: the unit limit the lobby selected is the only
+        # authority for the sidebar status and for deployment, and the station's own
+        # garrison restrictions stay independent of it.
+        add_test(NAME police_reinforcement_limit COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-reinforcement-probe --repeatable
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/police-reinforcement-probe)
+        set_tests_properties(police_reinforcement_limit PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         # MCVs must turn into yards on the rock the base already stands on,
         # even while the advanced core and its turret cover are unfinished.
         # The reported match ran this map and mod; the fixture asserts that
@@ -552,6 +592,61 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --custom-attack-probe --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/custom-attack-probe)
         set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal army recovery: reinforcements assemble at home, a
+        # badly traded main-force collapse withdraws while an ordinary raid does
+        # not, the withdrawal really moves units home and still defends on
+        # arrival, the outnumbered dispatch gate holds its 80%-of-configured
+        # boundary, the enemy-facing battery is legal and corridor-preserving,
+        # the special allocator learns, and a large wave is recalled fairly.
+        add_test(NAME quantbot_army_recovery COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --recovery-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/army-recovery-probe)
+        set_tests_properties(quantbot_army_recovery PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal whole-army dispatch: one attack sends every
+        # available combat troop to engine Hunt - idle, targeting, moving,
+        # tracked from an older wave, posted as a colony guard or produced at a
+        # remote colony - while human orders, repair runs, transports, workers,
+        # MCVs and the air planner's aircraft keep theirs. An attack on a
+        # building we own then pulls an adequate local response in one event,
+        # including hunting troops, and Easy/Medium keep their shared waves.
+        add_test(NAME quantbot_whole_army_dispatch COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --whole-army-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/whole-army-dispatch-probe)
+        set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
+        # already too close makes a hunting launcher move away over real game
+        # cycles, keeping engine Hunt, its tracked army membership and its
+        # firing range, while a distant enemy - even one that just hit it -
+        # produces no order, and human/repair/transit/defence authority, other
+        # hunters, Deviators, Easy/Medium and campaign games keep theirs.
+        add_test(NAME quantbot_launcher_kiting COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/launcher-kiting-probe)
+        set_tests_properties(quantbot_launcher_kiting PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        add_test(NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --battery-clearance-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
+        set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # Spice income: the lobby's per-house delivery factor reaches the live house, a real
+        # refinery unloading a real harvester pays exactly the delivered cargo times that
+        # factor at every accepted step, and the factor survives a save and load. All three
+        # mods are measured: DuneCity adds city taxes, which must not earn at the factor, and
+        # Tornie adds the Worfinery/Harvestank pair, which must.
+        foreach(spice_mod IN ITEMS vanilla dunecity Tornie)
+            add_test(NAME house_spice_income_${spice_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --spice-income-probe --repeatable
+                --mod ${spice_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/spice-income-${spice_mod}-probe)
+            set_tests_properties(house_spice_income_${spice_mod} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        endforeach()
         # Credit storage: refined spice and city taxes share the refinery/silo
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
         # City tax only exists with the dunecity mod, so both mods are measured.

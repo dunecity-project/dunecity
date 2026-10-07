@@ -214,6 +214,12 @@ public:
 
     virtual void setPickedUp(UnitBase* newCarrier);
 
+    /// Is this unit currently inside a transport or a structure bay rather than on the map?
+    /// True from setPickedUp() until the unit is deployed again. On its own it does not say
+    /// which container holds the unit; Game's containment reconciliation answers that from the
+    /// actual carrier cargo lists and structure occupant pointers.
+    inline bool isPickedUp() const { return pickedUp; }
+
     /**
         Updates this unit.
         \return true if this unit still exists, false if it was destroyed
@@ -407,6 +413,48 @@ public:
     /// Every other two-weapon unit keeps its legacy follow-up shot delay.
     static constexpr Sint32 defaultSecondaryWeaponCycles = 15;
 
+    /**
+        Long-stall carryall rescue.
+
+        Thirty seconds of simulation time on the same tile while the unit still wants to be
+        somewhere else. Measured in game cycles, never in wall-clock time, so every peer and
+        every observer reaches the threshold on the same cycle. Deliberately independent of
+        pathfinding: a unit waiting behind a long request queue, or one whose cached route is
+        cleared on every blocked step, accumulates stall time exactly like a unit whose searches
+        all fail. clearPath() and a pending search do not touch this clock.
+    */
+    static constexpr Sint32 longStallRescueCycles = MILLI2CYCLES(30000);
+
+    /**
+        Minimum cycles between two automatic rescue attempts for one unit, before the
+        per-unit jitter below. A failed attempt does not restart the thirty-second clock and
+        does not change the unit's mode: it simply retries after this cooldown.
+    */
+    static constexpr Sint32 carryallRescueCooldownCycles = MILLI2CYCLES(5000);
+
+    /// Spreads simultaneous retries of a stalled army across cycles. Derived from the object
+    /// id, so it is identical on every peer.
+    static constexpr Sint32 carryallRescueJitterCycles = 64;
+
+    /// How long this unit has been on the same tile while still wanting to move. Zero while it
+    /// is making progress or has no movement intent.
+    Uint32 getStalledCycleCount() const;
+
+    /// True once the long-stall threshold has been reached. Diagnostic/test accessor.
+    bool isLongStalled() const;
+
+    /**
+        An explicit order from a real player restarts the stall clock even when it repeats the
+        previous coordinates. Autonomous AI route re-issues deliberately do not call this: an
+        identical order re-sent every cycle must not suppress stall detection for a unit that
+        never actually moves.
+    */
+    void noteExplicitPlayerOrder();
+
+    /// Releases an outstanding carryall pickup. Only ground units can be carried, so the base
+    /// implementation does nothing; GroundUnit cancels its booking.
+    virtual void cancelCarryallPickup() {}
+
 protected:
     // Counts belong to the original house even while a unit is deviated.
     void registerUnit();
@@ -454,6 +502,27 @@ protected:
     void turnRight();
 
     void quitDeviation();
+
+    /**
+        Stamps the stall clock whenever the unit actually got somewhere or was given a different
+        job. Polled once per update instead of hooked into every order path, so a player command,
+        an AI order, a deviation revert and an internal retarget are all covered without any
+        caller having to remember to call it.
+
+        Intent is compared as "which target" first and "which destination" only when there is no
+        target: engageTarget() rewrites destination every time a chased target moves, and that is
+        the same job, not a new one. A changed target id is a new job.
+    */
+    void updateStallTracking();
+
+    /// Does this unit still want to be somewhere other than where it is?
+    bool hasMovementIntent() const;
+
+    /// Restamps the stall clock at the current cycle and tile.
+    void stampStallProgress();
+
+    /// Asks for a carryall once the long-stall threshold is reached, subject to the throttle.
+    void tryLongStallCarryallRescue();
 
     bool SearchPathWithAStar(size_t& nodesExpanded, bool& invalidDestination);
     bool isCachedPathStillValid();
@@ -508,6 +577,15 @@ protected:
     FixPoint lastDistanceToDestination = -1;  ///< Distance to destination on last pathfinding attempt
     Uint8    noProgressCount = 0;             ///< Attempts without getting closer
     Sint32   carryallRequestCooldown = 0;     ///< Cooldown timer to prevent spam requests
+
+    // Long-stall rescue tracking. Transient on an ordinary save, exactly like the pathfinding
+    // continuation state above: an ordinary load grants every unit a fresh thirty-second grace
+    // period rather than changing the save format. Carried in the observer runtime stream
+    // (version 7) so a spectator continues the same clocks the host is already running.
+    Uint32   lastProgressCycle = 0;                    ///< Cycle of the last tile change or new job
+    Coord    stallAnchor = Coord::Invalid();           ///< Tile observed when the clock was stamped
+    Uint32   stallIntentTarget = NONE_ID;              ///< Target that defined the current job
+    Coord    stallIntentDestination = Coord::Invalid(); ///< Destination that defined the current job
 
     Sint32  findTargetTimer;         ///< When to look for the next target?
     Sint32  primaryWeaponTimer;      ///< When can the primary weapon shot again?

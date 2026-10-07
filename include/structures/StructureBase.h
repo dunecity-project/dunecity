@@ -135,6 +135,15 @@ public:
     virtual UnitBase* getContainedHarvesterUnit() { return nullptr; }
     virtual const UnitBase* getContainedHarvesterUnit() const { return nullptr; }
 
+    /**
+        The vehicle stored inside this structure's repair bay, or nullptr.
+
+        Only a RepairYard has one. Together with getContainedHarvesterUnit() and the carriers'
+        cargo lists this is what Game's containment reconciliation treats as authoritative: a unit
+        hidden off the map belongs to one of these containers or to nothing at all.
+    */
+    virtual const UnitBase* getContainedRepairUnit() const { return nullptr; }
+
     bool isRepairing() const { return repairing; }
 
     Coord getClosestPoint(const Coord& objectLocation) const override;

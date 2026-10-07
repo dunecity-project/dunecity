@@ -121,6 +121,20 @@ House::House(InputStream& stream) : choam(this) {
     } else {
         cityTaxReceipts = 0;
     }
+    // SAVEGAMEVERSION 9851+ persists the delivery income factor. A save from before it was
+    // played at the original rate, so that is what resuming it means. A save that does carry
+    // the field but carries a factor this build does not accept is refused rather than
+    // defaulted: continuing such a match at 1x would quietly change its economy.
+    if (currentGame && currentGame->getLoadedSavegameVersion() >= SpiceIncome::kFirstSavegameVersion) {
+        const Uint32 savedMultiplier = stream.readUint32();
+        if(!SpiceIncome::isValid(savedMultiplier)) {
+            THROW(std::runtime_error, "House::House(): invalid saved spice income factor "
+                + std::to_string(savedMultiplier) + ".");
+        }
+        spiceIncomeMultiplier = savedMultiplier;
+    } else {
+        spiceIncomeMultiplier = SpiceIncome::kDefault;
+    }
     oldCredits = lround(storedCredits+startingCredits+cityCredits);
     maxUnits = stream.readSint32();
     maxHarvesters = stream.readSint32();
@@ -206,6 +220,10 @@ void House::init() {
     capacity = 0;
     powerRequirement = 0;
 
+    // Every house earns the original rate until a lobby row says otherwise. Campaign and
+    // skirmish never set it, and neither does an old save.
+    spiceIncomeMultiplier = SpiceIncome::kDefault;
+
     nextStorageWarningCycle = 0;
 
     numVisibleEnemyUnits = 0;
@@ -229,6 +247,7 @@ void House::save(OutputStream& stream) const {
     stream.writeFixPoint(startingCredits);
     stream.writeFixPoint(cityCredits);
     stream.writeFixPoint(cityTaxReceipts);
+    stream.writeUint32(spiceIncomeMultiplier);
     stream.writeSint32(maxUnits);
     stream.writeSint32(maxHarvesters);
     stream.writeSint32(quota);
@@ -424,6 +443,15 @@ void House::warnStorageFull() {
     }
     nextStorageWarningCycle = currentCycle + MILLI2CYCLES(5*1000);
     currentGame->addToNewsTicker(_("@DUNE.ENG|145#As insufficient spice storage is available, spice is lost."));
+}
+
+
+void House::setSpiceIncomeMultiplier(Uint32 multiplier) {
+    if(!SpiceIncome::isValid(multiplier)) {
+        THROW(std::invalid_argument, "House::setSpiceIncomeMultiplier(): invalid factor "
+            + std::to_string(multiplier) + ".");
+    }
+    spiceIncomeMultiplier = multiplier;
 }
 
 

@@ -24,22 +24,35 @@
 
 #include <list>
 
-/// A full lobby refresh is 4 events per house slot (MAX_CUSTOM_GAME_PLAYERS = 9), so 64 is
-/// already far above anything a legitimate lobby sends.
+/// A maximal lobby refresh is 7 events per house row - house, team, colour, graphics skin,
+/// spice income, and one event for each of the two player seats - and the lobby has at most
+/// MAX_CUSTOM_GAME_PLAYERS = 9 rows, so 7 * 9 = 63 events.
+///
+/// The largest list that is ever sent is one more than that: getChangeEventListForNewPlayer
+/// appends the seat claim for the joining player to a full refresh, which is 64. So this bound
+/// is exactly the worst legitimate case, with nothing to spare - adding another per-row event
+/// means raising it. Anything beyond is refused before a single event is allocated.
 #define CHANGEEVENTLIST_MAX_EVENTS 64
 
 class ChangeEventList {
 public:
     class ChangeEvent {
     public:
+        /// Wire values. Append only: a peer decodes these by number, so renumbering an entry
+        /// would make two builds disagree about what a lobby change means.
         enum class EventType {
             ChangeHouse,
             ChangeTeam,
             ChangeColor,
             ChangePlayer,
             SetHumanPlayer,
-            ChangeGraphicsSkin
+            ChangeGraphicsSkin,
+            ChangeSpiceIncome    ///< host-only; see LobbyAuthorization
         };
+
+        /// The highest event type this build understands, and therefore the bound the decoder
+        /// checks. Kept next to the enum so adding a type cannot forget to widen it.
+        static constexpr EventType lastEventType = EventType::ChangeSpiceIncome;
 
 
         ChangeEvent(EventType eventType, Uint32 slot, Uint32 newValue)
@@ -53,7 +66,7 @@ public:
 
         explicit ChangeEvent(InputStream& stream) {
             const Uint32 rawEventType = stream.readUint32();
-            if(rawEventType > static_cast<Uint32>(EventType::ChangeGraphicsSkin)) {
+            if(rawEventType > static_cast<Uint32>(lastEventType)) {
                 throw InputStream::error("ChangeEventList: unknown change event type!");
             }
             eventType = static_cast<EventType>(rawEventType);

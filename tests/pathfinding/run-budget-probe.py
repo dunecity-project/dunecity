@@ -2,7 +2,8 @@
 """Check the strict per-cycle pathfinding node budget on a real saved game.
 
 Drives the production scheduler: slice/whole equality, the hard budget under a
-request storm, the cross-tick input policy, observer continuation captured while
+request storm, the cross-tick input policy, unit traffic versus long-lived
+geometry and the cost of an occupied goal, observer continuation captured while
 searches are suspended, ordinary mid-suspension load and teardown. Requires the
 existing macOS Ninja build and its bundled game data.
 """
@@ -26,7 +27,8 @@ parser.add_argument('--profile-from', type=Path,
                     help='Copy settings and installed mods from this profile so the exact saved '
                          'mod revision resolves offline')
 parser.add_argument('--phases', default='',
-                    help='Comma-separated subset of slice,budget,inputs,observer,parser,ordinary,cleanup')
+                    help='Comma-separated subset of slice,budget,inputs,traffic,control,observer,'
+                         'parser,deadslot,ordinary,cleanup')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=False)

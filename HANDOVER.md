@@ -1,3 +1,1006 @@
+# 2026-10-07 — Release recovery and final browser replay (1.0.812)
+
+Recovered the stalled 811 release. Both failed CI runs at 493e99ed had one
+failure only: the protocol test still pinned 56 after the shipped protocol
+advanced to 57. Claude Max updated the two pins and stale wire-probe wording;
+all six affected native test targets pass, including the complete 947-case
+Catch2 binary. Codex reviewed the patch and added the source protocol rationale.
+No gameplay change follows 811; 812 includes version/test/documentation changes.
+The previous full 58-target native suite had only the stale protocol failure.
+
+The public isolated signaling preview was removed by the normal website deploy.
+Restored its existing reviewed entrypoint, then ran Four Corners seed315473198
+with the unmodified shipping 811 WASM and two native peers. The browser joined
+as spectator, a first play request was declined, the second approved, checkpoint
+replacement completed, and play continued without browser errors. Both native
+peers matched at cycle5714 with 490 objects, digest8c08b3cfa2747451/9da3d76a0bc1c32d.
+This is the captured failing map/seed; no allocator or Asyncify instrumentation
+was inserted. Browser shell only supplies an isolated profile/name for the probe.
+Artifacts and Claude report: ../outputs/release-812/.
+Production publication remains pending at this commit; release automation will
+build signed platform packages, SourceForge and Play Online from the final tag.
+
+# 2026-10-07 — Ground rotation memory corruption (1.0.811 candidate)
+
+The exact Four Corners init (seed 315473198, 49,810 bytes) reproduces an
+out-of-bounds tracksCreationTime[8] write in the browser, followed by observer
+divergence and a Tile destructor/free trap during checkpoint replacement.
+Private unit diagnostics identify a Deviator and Launcher switching from
+Dynasty movement rotation [0,8) to the combat fallback with an angle above 7.5.
+turnRight rounded that to 8. The same real-unit transition fails natively before
+the repair; wrapping the rounded direction passes in vanilla, DuneCity and Dune2R.
+Tile::setTrack now accepts int and rejects negative or >= NUM_ANGLES directions
+before touching the array. The populated-tile, adjacent-container, save/load and
+teardown fixture passes all current cases; archived e5797cd3 passes valid tracks
+and fails 8, 9, 255 and -1 under a bounds trap. On native arm64 index 8 falls in
+padding; on wasm32 it overwrites damage's begin pointer. Asyncify high water was
+1492 of 4096 bytes during the actual bounds replay, so no capacity patch was made.
+
+Claude Max supplied the tile guard and initial regression fixture in a bounded
+900-second run that timed out before its report. Codex traced and corrected the
+rotation producer, finished the fixture launcher, and independently ran both
+before/after regressions. Protocol advances to 57 because the direction correction
+changes synchronized combat behavior. Save 9852, runtime 7 and policy v90 are intact.
+Full native tests, fresh exact-source Four Corners browser replay and publication
+are pending at this commit. Production remains 1.0.796; see ../outputs/release-809/.
+
+# 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
+
+An Escape menu open when an observer requires a fresh checkpoint was left on
+screen even though the paused input path only accepts JoinProgressWindow events.
+The network update now replaces that menu with progress controls and closes it
+before replacing the Game, while its houses and callbacks remain alive.
+
+The native probe now perturbs a digest-bearing credits field by spending credits;
+its former addCityCredits injection could be clamped to zero room and fail to
+exercise resync. JOIN_DESYNC_ONCE=1 JOIN_MENU_DURING_RESYNC=1 fails on archived
+809 with the stuck-modal assertion and passes with this patch, one real resync,
+no retained modal and matching three-peer state at cycle 1800. The promotion
+fixture distinguishes pending approval from the legitimate completed-join notice.
+All 56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
+checks pass. Protocol 56, save 9852, observer runtime 7 and AI policy v90 are unchanged.
+
+Public release remains held: original 809 browser promotion on Four Corners has
+intermittently trapped in free during Map/Tile teardown. This menu fix is a
+separate verified defect and is not proof that the heap trap is repaired. The
+recent original-stack and larger-stack passing trials used Ergsun-Odenkirk, so
+neither clears the Four Corners failure. A Four Corners replay has byte-identical
+GameInitSettings (seed 315473198) to the named failing run. ASAN O3 could not keep
+up with the diagnostic 25 Hz host and expired its observer stream; no heap error
+was reported before disconnect, and it did not reach promotion. No speculative
+Asyncify capacity or malformed-map fix was committed. Diagnostic artifacts are
+in ../outputs/release-809/. Latest public stable at this checkpoint remains 796.
+
+# 2026-10-06 — Faster game-speed settings (1.0.809)
+
+The speed bars and keyboard controls now reach 3 ms and 2 ms per simulation
+cycle, with 2 ms twice the previous 4 ms maximum. The default remains 16 ms
+and the slow end 32 ms. Existing saved settings are retained. Tick-based
+simulation conversions remain at the default; the 24 ms frame-debt floor and
+ten-cycle frame guard are unchanged. Protocol 56 excludes older peers that
+reject the new values. Save 9852, observer runtime 7 and AI policy v90 remain.
+
+A bounded Claude Max worker implemented the bounds, protocol and relevant
+native/network coverage; it reached its turn cap before a final report.
+Codex reviewed the patch, removed a duplicate source-parsing pacing model,
+and completed independent verification. At controlled 60 Hz, the actual
+SDL/Metal game loop measured 62.428 / 249.897 / 333.235 / 499.787 cycles/s at
+16 / 4 / 3 / 2 ms: new/old maximum ratio 1.999972. A private presentation hook
+compensated for the remote display's non-blocking VSync; it is absent from the
+shipping binary. These are lightweight Mac-mini opening measurements, not
+MBA FPS or a guarantee for CPU-bound armies. The unchanged relay buffer also
+limits the achievable rate on higher-latency connections.
+
+Three real network peers pass shared-speed, decoder, authority, pause/resume
+and late-spectator checks at 2 ms, matching state at cycle 1800. All 56 CTest
+targets pass in 741.22 seconds. Pre/post dependency audits, version consistency
+and diff checks pass. Portable ARM64 bundle checks pass for 36 Mach-O files,
+portable load paths, deep/strict signature and bundled SDL hidden rendering.
+Native/portable executable code and string sections match. Executable SHA-256:
+`40e8f36f1531d8521d4e57fcf3dc7fb98094336887a04f1e65ad0b9dbb3ad76f`.
+
+Installed on Stefans-MacBook-Air.local from clean source commit
+`4c3c10b100e27fa7bc689b8a85101ce17873080a` after the connection recovered.
+A separate fresh check confirms 809 version/hash, deep/strict signature,
+bundled SDL initialization/hidden rendering, Desktop shortcut and all 2,066
+save/INI files unchanged. Verified 808 remains at
+`/Applications/.dunecity-backup-before-809-20261006/dunecity.app` with hash
+`22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`.
+No match was stopped or launched. Receipts and the verified archive are in
+`../outputs/game-speed-809-20261006/`. Nothing pushed or publicly published.
+Detailed evidence and limits: [docs/game-speed-809.md](docs/game-speed-809.md).
+
+# 2026-10-06 — Custom-game spice label and explanation (1.0.808)
+
+The Spice caption now reserves the GUI style's measured width and is vertically
+centred beside its multiplier dropdown. The existing line above the roster
+explains that the factor multiplies credits from harvester deliveries and that
+2x means double. Reusing that line preserves the six-house layout at 640x480;
+campaign co-op readiness and the joining-client status remain intact.
+
+Pre/post Ninja dependency audits, the native CTest target and the existing menu
+navigation probe pass. Rendered menus were inspected at 640x480, 854x480 and
+1280x720; the smallest layout retains its existing compact caption policy and
+shows the explanation above the rows. Menu probe elapsed time: 220.85 seconds.
+This is a menu-only change over 807: AI policy, protocol 55, save 9852 and observer
+runtime 7 are unchanged. No new cosmetic mirror tests or AI tuning were added.
+Evidence: ../outputs/quantbot-map-evaluation-807-20261006/menu-screenshots/ and
+menu-808-final.log.
+
+Installed on Stefans-MacBook-Air.local from clean source commit
+`08f5a0d3ae1e24d80ee88757ce18379a0bf326ff`. A fresh independent check confirms
+808 version/hash, deep/strict signature, bundled SDL initialization/hidden
+rendering, Desktop shortcut and all 2,066 save/INI files unchanged. Executable
+SHA-256: `22e649c8cfdfecb03102a210caccffb47a6d91bde18261680b7d2a894066820f`.
+All 36 bundled ARM64 Mach-O files have portable load paths; native/portable code
+and string sections match. 807 remains at
+`/Applications/.dunecity-backup-before-808-20261006/dunecity.app`. No match was
+stopped or launched; nothing pushed or publicly published.
+
+The frozen 807 gameplay engine now wins All against Atreides in all 10 tested
+seeds against the four allied Hard original AIPlayer houses (38:23–52:04).
+Sihaya-Ferryman: three seeds, both roster orders, six completed Brutal QuantBot
+versus Brutal QuantBot games; Harkonnen wins four, Atreides two. Three unfinished
+60-minute runs were repeated with a 120-minute cap and all finished by 89:01;
+their pre-60-minute event records match exactly. Configuration, outcomes and
+neutral worm-house gates pass. The observer-side control retains the same
+winner and initial Hunt cycles, but is not byte-identical. These are controlled
+headless Mac-mini samples, not MBA FPS or a general win-rate certification.
+Large-army path waits and storage losses remain concrete investigation leads;
+no AI tuning was made without a failed requested matchup. Full results and
+per-unit/per-house ledgers: [docs/quantbot-map-evaluation-807.md](docs/quantbot-map-evaluation-807.md).
+
+# 2026-10-06 — Whole-army base Hunt response (1.0.807)
+
+The latest MBA 805 telemetry still showed small local Area Guard responses to
+building attacks. Custom Hard/Brutal now sends every available ground combat
+troop to Hunt the actual invader at any owned building, including a remote
+R/C/I colony. Damage callbacks and normal scans recognise the attack; hostile
+turret fire is included. No posture, strength, assembly, response-radius or
+proportional quota gate holds this emergency response back. Human control, the
+existing repair policy, carryall pickup reservations, non-combat units and
+specialised aircraft/air rescue keep their authority. Harvester raids retain
+bounded local response.
+
+Repeated scans retain a live base contact so simultaneous district attacks do
+not reverse the army's travel each pass. A worker raid cannot reclaim those
+defenders. Launcher spacing remains Hunt, preserves the base assignment during
+the escape and resumes firing. Assignments and forced travel expire when the
+attacker dies or stops targeting the building. An invalid guard point in the
+existing saved unit order distinguishes these mobile Hunt defenders from
+ordinary posted defenders; there is no additional serialized state.
+
+A bounded Claude subscription worker implemented the base response and focused
+probes. Root corrected simultaneous-contact retargeting, turret recognition,
+ordinary posted-defence authority and worker-raid priority. Negative checks on
+806 fail the new whole-army Hunt assertions; the two-contact fixture also failed
+before the root correction. Final focused checks verify Hard/Brutal in all three
+postures, remote R/C/I, two simultaneous attacks, turret fire, 47-tile reserves,
+actual movement/damage, launcher escape and subsequent fire, and contact expiry.
+Human, repair, transport, aircraft and bounded-worker boundaries are retained.
+
+Exact captured saves run for 24,000 cycles. Red's first base response sends 134
+and retains five already in battle; final army has 249 ground troops, 243 Hunt.
+Blue's first response sends 201 and corrects eight already fighting, yielding
+209 Hunt defenders; ten repair-policy reservations are held. Responses continue
+while Withdrawing/Recovering. Blue's already invaded position still loses.
+One/four actual path workers match all 12 state checkpoints and complete gameplay
+save bytes for each match (excluding the release label):
+red `d4b494e10f9ef1a44dcc113f37d52a1a70168517218ce3239dbfc4a6b3f7ea75`,
+blue `49f6b8bd8f75bf532275b8b514da70a6a582bb0e8621a8e5429256bfa0fa51d2`.
+These are headless Mac-mini simulations, not rendered MBA FPS measurements.
+
+Fresh All against Atreides, using the exact preceding controlled configuration
+(seed 1547732733, tech 8, city simulation, Atreides Brutal QuantBot versus four
+Hard AIPlayer houses, unlimited units/harvesters, concrete on, explored/no fog,
+worm respawn/spice on, turret power off, drops off, spice 1x), wins at cycle
+143964 (38m23.424s). One reproducible scenario does not establish a win rate.
+
+All 56 CTest targets pass: the full run passed 55, and the native suite passed
+after correcting its release-protocol pin from 54 to 55. Full-run time was
+866.90 seconds; the final native rerun was 2.94 seconds. No production code
+changed after these gameplay checks. Pre/post dependency audits and diff checks
+pass. Portable ARM64 bundle passes all 36 Mach-O
+architecture/load-path checks, deep/strict ad-hoc signature and bundled SDL
+initialization/hidden rendering. Native and portable executable code/string
+sections match. Portable executable SHA-256:
+`bf7f3a7b318ac5680e7e210a47278588f760d7de60f248b885f50938a23996e9`.
+Protocol 55 / policy `whole-army-base-scramble-v90`; save 9852 / runtime 7.
+Installed on Stefans-MacBook-Air.local at `/Applications/dunecity.app` from
+source commit `abdf71e70697a01cae2ba27ed86aa9bfc2103e97`. A separate fresh check
+confirms version/hash, deep/strict signature, bundled SDL hidden rendering,
+Desktop shortcut and all 2,061 save/INI files unchanged. The verified 805
+rollback is `/Applications/.dunecity-backup-before-807-20261006/dunecity.app`.
+No running match was stopped or launched. The temporary idle-sleep hold used
+for transfer was removed. Nothing pushed or publicly published.
+Evidence and receipts: ../outputs/base-scramble-807-20261006/.
+
+# 2026-10-05 — Hunt launcher spacing and strength-based recovery (1.0.806)
+
+Captured the MBA 805 red-stuck-in-base and blue-stuck-in-base saves, exact immutable
+map/mod revisions, and live telemetry. Both baseline replays remain Recovering
+through 24,000 cycles, with zero Hunt orders. Blue starts with 220 ground combat
+troops, 82,080 military value against an 80,000 limit, and 169 available troops;
+it ends with four. Physical assembly and a quiet period blocked recovery release;
+even its timeouts were vetoed by continuing losses.
+
+Recovery now serves the existing 25-second dwell and releases on healthy ground
+attack readiness plus the existing outnumbered/80%-fixed-limit gate. Real core
+emergencies and severe defeat retain priority. Release discards old attrition
+baselines and local pressure clocks, preserving lifetime kills/losses; fresh
+battle losses can still trigger withdrawal. Whole available armies retain engine
+Hunt, with human control, repair/cargo and ongoing asset defence preserved.
+Hunting standard/elite launchers escape close visible dangerous ground enemies
+in short steps, stay Hunt and resume firing. Nearby tile occupants replace a
+per-launcher global scan; distant damage does not cause escape.
+
+Real saved replays: red sends 133 troops at cycle 120950 and ends with 274 ground,
+252 Hunt and 71,360 military value. Blue sends 150 at 85304; its already invaded
+position still loses. Both release without assembly or a quiet interval. One/four
+path workers match all 12 checkpoints and complete gameplay save bytes:
+red `4eee846e790d0831a2e3d7fed4287f0136cdcab96445c4b840a18c02b7ddc0c5`,
+blue `9520c38c2605c5d0bb4c31da6c0b5f653756cbea75440d85796e2a46d822ba2f`.
+Timings are headless Mac-mini simulation, not rendered MBA FPS.
+
+Fresh All against Atreides uses seed 1547732733, tech 8, DuneCity/city simulation,
+Atreides Brutal QuantBot versus four Hard AIPlayer houses, unlimited units and
+harvesters, concrete on, no fog, explored map, worm respawn/spice on, turret power
+off, drops off, and 1x spice. At 40 minutes, 805 has no buildings and about 15,600
+military value; 806 has an intact economy and 199,410. The fixed build wins at
+cycle 160466 (42m47.456s). This is one reproducible configuration, not a general
+win-rate claim. An earlier run with different explored/worm settings is retained
+separately and excluded from this controlled comparison.
+
+Claude's subscription worker implemented bounded launcher/recovery changes and
+real-engine probes. Root reviewed, replayed both saves, tested the full scenario
+and path workers, and made observer continuation independent of preceding
+destructive stress fixtures. All existing exact continuation assertions remain:
+bot bytes, physical state/RNG, every unit order, own credits and 100 frames across
+unit/build phases. The artificial post-stress world exposed the documented
+fractional city-credit checkpoint mismatch; this patch does not certify general
+spectator city accounting or fix that independent issue.
+
+All 56 CTest targets pass (825.81 seconds), including native policy/protocol,
+launcher, whole-army, recovery, battery, air defence and all affected modes.
+Recovery covers a 922-unit recall, release boundaries/emergencies and a fresh
+losing battle. Launchers increase actual distance from one to six tiles and deal
+subsequent damage. Pre/post build dependency audits and diff checks pass.
+Protocol 54 / policy `hunt-and-strength-recovery-v89`; save 9852 / runtime 7.
+Portable 36-Mach-O ARM64 bundle passes load-path checks, deep/strict ad-hoc
+signature and bundled SDL hidden rendering. Native/portable code and string
+sections match; whole-file hashes differ from portable fixups/signing.
+Executable SHA-256: `5fb3c80c137e20668d3744eba3a0d2385cbc24a4ee1120f7ca73984262709c10`.
+MBA installation awaits reachability and app close; last verified installed app
+is 805. No running game was stopped. Nothing pushed or publicly published.
+Evidence: ../outputs/launcher-kiting-806-20261005/.
+
+# 2026-10-05 — Verified 1.0.805 installed on the MBA
+
+Installed the tested portable ARM64 bundle at `/Applications/dunecity.app` on
+Stefans-MacBook-Air.local after SSH connectivity returned. Independent fresh
+verification confirms version 1.0.805, source commit
+`0b45765d0d312cb0196e5f48b583d06d419125ad`, executable SHA-256
+`67b9f0e9ab0e1a1a809a59b3dfe7c1db851c588eeb38f2a55d7bddca18e3e490`, deep/strict signature and bundled
+SDL initialization/hidden rendering. The usual Desktop shortcut resolves to
+this app. All 1,977 checked save/INI files are unchanged.
+No running match was stopped or launched. The verified 1.0.804 rollback remains
+at `/Applications/.dunecity-backup-before-805-20261004/dunecity.app`.
+Receipts and independent verification: ../outputs/drip-feed-805-20261004/.
+Nothing was pushed or publicly published. The earlier transfer-pending entry
+below is superseded by this completed installation.
+
+# 2026-10-04 — Portable 1.0.805 verified; MBA transfer pending
+
+Portable ARM64 bundle from source `0b45765d0d312cb0196e5f48b583d06d419125ad` passes
+all 36 Mach-O architecture/dependency checks, deep/strict ad-hoc signature
+verification and bundled SDL initialization plus hidden-window rendering.
+Executable SHA-256: `67b9f0e9ab0e1a1a809a59b3dfe7c1db851c588eeb38f2a55d7bddca18e3e490`.
+Bundle, install script and immutable source metadata are in
+../outputs/drip-feed-805-20261004/. Installation was blocked when
+Stefans-MacBook-Air.local stopped answering SSH during transfer. No app swap
+occurred; 1.0.804 remains installed. Final installation must retain its rollback
+and confirm save/INI bytes and the Desktop shortcut independently. No public
+publication or push occurred.
+
+# 2026-10-04 — Whole-army Hunt and asset emergency response (1.0.805)
+
+The user's latest MBA 1.0.804 session `1791113712003073-0` confirms small
+staging-cohort dispatches despite a large reserve: at cycle 229300 Harkonnen
+sent 43 troops / 20,250 accounted credits with 222,150 available. At cycle 232989
+Ordos dispatched one defender against a local threat valued at 10,138. Those
+records show insufficient orders, not proof that additional healthy responders
+were available at every losing contact.
+
+Custom Hard/Brutal now dispatches every available ground combat unit to engine
+Hunt in one pass. Removed percentage reserve, local staging-cohort selection,
+colony holdback and exclusions for ordinary targets, movement and old tracked
+Area Guard orders. Existing hunters keep their orders and join the same tracked
+army. Unready recruits wait for the next viable launch. This behavior also works
+when the optional recovery policy is disabled. Aircraft retain their existing
+strike planner; Easy/Medium, campaign and helper dispatch scope is unchanged.
+Human control, cargo/repair ownership and an actual ongoing emergency outrank
+fresh offense. Ending defense contacts use the same lifetime check as the scan.
+The configured attrition recovery and 80% fixed-limit outnumbered bypass remain.
+
+Asset emergencies pull nearby eligible combat troops, including hunters engaged
+elsewhere, in one event. The local response band grows from 12 to 40 tiles with
+observed unsupported threat, while proportional reinforcements can come from
+farther away. The ordinary scan now rechecks ground attacks on harvesters and
+rebel harvesters as well as buildings; this missing recheck was exposed by the
+new regression fixture. Aircraft rescue keeps its existing reachable firing
+positions and capability/authority guards. No new serialized fields: save 9852
+and observer runtime 7 remain; protocol 53 separates changed lockstep decisions.
+Telemetry 17 / policy `whole-army-hunt-and-emergency-defence-v88`.
+
+Independent real-engine runs load the captured `drip-feed.dls` at cycle 145638
+with its exact immutable map/mod revisions: Custom DuneCity city simulation,
+128x128 Sihaya-Ferryman, seed 1637816920, Harkonnen/Ordos Brutal. Over 24,000 cycles
+(384 simulation seconds), 804 dispatches 57/79/24/18-unit subsets and finishes
+Harkonnen with 148 Hunt / 235 Area Guard ground troops. Final 805 dispatches
+232/101/113 new hunters alongside surviving hunters. Immediately after the
+first launch all 279 available ground troops are Hunt; the next launch gives
+all 332 Hunt, and the third all 371. The final state has 362 Hunt of 382 active
+ground combat units, with repair, defense and new recruits accounting for other
+roles. Ordos is recovering and therefore launches no fresh offensive army.
+Actual emergencies dispatch up to 105 troops. These are command and bounded
+simulation results, not a guarantee of simultaneous physical arrivals or game
+balance.
+
+One-worker versus four-worker (400-microsecond per-task delay stress) matches all
+12 checkpoints and complete serialized gameplay bytes, release label excluded:
+`25a0a33f82aba6ceb6ba0e17381e780c3b0838ea9b3770a14057f5532cd566b1`. Inline headless update mean/p99 is
+1.502/5.269 ms versus 804's 1.134/4.849 ms; the fixed run performs substantially
+more fighting. Artificially delayed workers are a determinism stress check, not
+production throughput. These are Mac-mini timings, not MBA rendered FPS.
+
+All 55 CTest target outcomes pass across the full 814.53-second run and final
+affected-target reruns. The full run initially failed the new harvester-scan
+case; after fixing that production path, the whole-army test passed. Final
+native/custom-attack/recovery/whole-army targets pass (49.44 s), and all three
+Vanilla/DuneCity/Dune2R air-defense probes pass (36.14 s). The mixed-state probe
+checks both Hard/Brutal, remote reserves, tracked guards, busy targets/movement,
+human/repair/transport exclusions, recovery-disabled operation, ended contacts,
+Hunt retention, single-recruit readiness and base/worker response. Existing
+observer city-accounting limitations remain documented under 802; these ordinary
+saved-match runs compare the complete save independently.
+
+Pre/post-build dependency audits, version consistency and diff whitespace checks
+pass. Evidence: ../outputs/drip-feed-805-20261004/. Local Claude subscription
+worker session ca0ac6cc-c173-4b0d-a781-97f1808df155 produced the bounded patch and
+full/focused evidence; Codex ended the run after review and owns final contact,
+configuration, saved-match and packaging checks. Private installation follows
+below only when independently verified; nothing was pushed or published.
+
+# 2026-10-04 — Verified 1.0.804 MBA installation
+
+Installed the tested portable ARM64 app at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from source commit
+`fd3988819ec02fdcab5f0e7218355d1c6573ac91`. The game was closed before installation;
+no running match was interrupted or launched. Independent inspection confirms
+version 1.0.804, executable SHA-256
+`9bf9228779f881faafc4b5475c0554066b7182d33ceb3ceb506269ea74153394`, deep/strict
+ad-hoc signature verification and bundled SDL initialization/hidden rendering.
+The usual `~/Desktop/DuneCity.app` shortcut resolves to the installed app.
+
+All 1,936 checked saves and INI files are byte-identical to the pre-install
+manifest. The verified 1.0.803 rollback is retained at
+`/Applications/.dunecity-backup-before-804-20261004/dunecity.app`, executable SHA-256
+`39f63436b506efadcf42a698097f15de222cf1b3ae2d253cdb0787115e8a8610`.
+Receipts and independent verification: ../outputs/army-assembly-804-20261004/.
+This was a private installation; nothing was pushed or publicly published.
+
+# 2026-10-04 — Engine Hunt, exterior assembly and colony defence (1.0.804)
+
+Custom Hard/Brutal ground attackers now use engine Hunt. Shared forced objectives
+were removed; ordinary scans and damage callbacks no longer kite, assign prey or
+regroup a hunting attacker. Repair and emergency base defence keep their roles.
+Wave tracking supports commitment accounting and withdrawal. Idle units that
+have stopped attacking release their commitment instead of blocking later waves.
+
+Captured MBA 1.0.803 telemetry showed both houses repeatedly withdrawing after
+small raids on already damaged core assets, despite much stronger local defence.
+Core emergencies now require material hostile power and a disadvantage at the
+specific attacked asset; a half-damaged building doubles threat for this test,
+without bypassing it. A local defeat also requires material tracked power
+actually present near the engagement, at least 20% of tracked wave power. A raid
+at an empty centroid between dispersed attackers cannot recall the whole army.
+Attrition recovery and the 1.5x ground-front gate with its 80% fixed-limit bypass
+remain active.
+
+Reserves gather outside a real colony footprint, on safe ground off its roads;
+withdrawal uses the sheltered rally. Both the centre and actual scatter/arrival
+slots use the exterior rule. A blocked exterior search falls back to shelter.
+The footprint is bounded by the colony neighbourhood, without clipping away
+outer streets. Formation scoring favours the near edge of the exterior band.
+A substantial locally assembled cohort can leave while remote colonies produce
+reinforcements. Its commitment share retains local reserves and counts existing
+hunters, stays below the global share, and cannot stack on a repeated unchanged
+pass. New batches must meet the existing viable-wave minimum after scaling value
+by the commitment percentage, including cheap infantry.
+
+A single threatened or observed forward colony can receive at most four reserve
+units from a house with more than twelve healthy ground troops. This shares the
+existing recall order budget, protects newly dispatched hunters, repair runs,
+human orders and emergency defenders at execution, and never claims the active
+wave. It is a small post, rather than comprehensive defence of every colony.
+Campaign, helper and Easy/Medium army behaviour retain their existing scope.
+
+Independent saved-game checks load `army-stuck-803.dls` with its exact immutable
+map/mod revisions: 2P 128x128 Sihaya-Ferryman, seed 332779187, Atreides/Mercenary
+Brutal, DuneCity city simulation. From cycle 159040 through 183040 (384 simulation
+seconds), 1.0.803 ended with zero Hunt ground units in either house, despite eight
+logged small dispatches. 1.0.804 dispatches four actual Hunt batches per house:
+Atreides 58/56/34/54 units and Mercenary 89/44/61/46. Mercenary finishes with 114
+hunters and 101 targeting ground troops. Atreides withdraws at 181429 after
+21,940 credits of mobile losses versus 5,060 confirmed hostile kills in its fully
+sampled window, with worsening readiness; neither a core raid nor local defeat
+caused that withdrawal.
+
+One/four actual path-worker runs match all twelve state checkpoints and final
+serialized gameplay bytes (release label excluded), SHA-256
+`7feaaa5ce0a16eb0fb3407e9d783c49d1c0feb2ea1c7d3965000319988150238`.
+A separate four-worker run with a 400-microsecond deterministic task delay also
+matches. Headless update mean/p99 is 0.954/4.625 ms with one worker and
+0.830/4.601 ms with four, versus baseline 0.610/3.804 ms. The new run does more
+active fighting; these are Mac-mini simulation measurements, not MBA rendered
+FPS or evidence that combat throughput is cheaper than idle simulation.
+
+Focused real-engine recovery checks pass, including attack-mode retention on
+damage and ordinary scans, remote-reserve readiness, empty-centroid raids,
+exterior destinations, colony authority changes between choice/execution,
+79.9/80.0/80.1% boundaries, bounded recall of over 900 units and observer/save
+continuation. All 54 CTest target outcomes pass. The full run took 771.75 seconds and
+found one obsolete protocol-pin assertion; after updating it to 52, the native
+target rerun passed in 1.42 seconds. The remaining 53 targets passed in the full
+run. The native target retains three optional asset/network skips.
+
+No serialized fields added: save 9852 and observer runtime 7 remain unchanged.
+Network protocol 52 separates peers with different AI decisions. Telemetry is
+17, policy `engine-hunt-and-colony-assembly-v87`. The observer city-accounting
+limitation documented under 1.0.802 remains: passing this army-scoped continuation
+is not certification of all observer accounting. Ordinary saved-match worker
+parity above compares the complete save.
+
+Portable ARM64 1.0.804 is staged and passes all 36 Mach-O dependency/architecture
+checks, deep/strict ad-hoc signature verification and packaged SDL initialization
+plus hidden-window rendering. Packaged executable SHA-256:
+`9bf9228779f881faafc4b5475c0554066b7182d33ceb3ceb506269ea74153394`.
+Version consistency and pre/post-build Ninja dependency audits pass. Evidence and
+portable bundle: ../outputs/army-assembly-804-20261004/. This development
+verification preceded the MBA installation recorded above; nothing was pushed
+or publicly published.
+
+# 2026-10-04 — Verified 1.0.803 installation on the MBA
+
+Installed the portable ARM64 app at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from source commit
+`594a7b1132a8c138052b6a27a42134ae2acd2bf3`. Independent inspection confirms
+version 1.0.803, deep/strict signature verification and bundled SDL initialization
+and hidden-window rendering. All 36 packaged Mach-O files passed the local
+dependency/architecture audit. Installed executable SHA-256:
+`39f63436b506efadcf42a698097f15de222cf1b3ae2d253cdb0787115e8a8610`.
+
+All 1,895 checked save and INI files are byte-identical to the pre-install
+baseline. The usual Desktop shortcut resolves to the installed app. The prior
+1.0.799 app is retained at
+`/Applications/.dunecity-backup-before-803-20261004/dunecity.app`; its executable
+SHA-256 is `da1b7525506f52d38e9b13991ef1e6a7f3d000c65a84a22ddfc2ef0bb9d9572b`.
+The running-game guard initially deferred installation; the retry proceeded
+after the game exited. No match was launched or stopped by the installer.
+
+The latest captured MBA match ran 1.0.799, which lacks the 1.0.802/803 front
+battery logic. This explains why that match did not demonstrate the new build-out;
+live 1.0.803 match behavior has not yet been observed. Installation receipts,
+independent verification and package evidence: ../outputs/battery-install-803/.
+Captured prior session: ../outputs/rocket-battery-live-20261004/.
+This was a private installation; nothing was pushed or publicly published.
+
+# 2026-10-04 — Enemy-facing battery lot clearance (1.0.803 development)
+
+Custom Hard/Brutal DuneCity QuantBot can reclaim one owned R/I/C lot when a
+needed rocket battery has no legal free site. The lot and turret tile must face
+an observed enemy approach and belong to the construction yard's colony.
+Lower displacement cost wins, preserving the preference for less developed,
+less valuable lots. A land-value or small-growth change during construction no
+longer cancels every otherwise valid project.
+
+Clearance preserves at least three local lots of the displaced type and six
+local R/I/C lots overall, within two rocket weapon ranges. Modest lots remain
+eligible; more developed lots must represent at most 20% of their type's local
+population/jobs. Hospital/church overlays, foreign lots, human/shared houses
+and essential buildings are protected. Roads, exits, zone frontage, movement
+corridors, mutual support, spacing, cluster limits and the front quota are
+validated against the map after the proposed clearance.
+
+Queue acceptance does not demolish. Execution revalidates the owned active
+construction yard, site, demand, economy, tech, power and finished material.
+Without concrete, demolition and finished-turret placement share a build call.
+With concrete, the completed Slab1 uses the reclaimed tile immediately while
+the turret remains queued and all queued costs are funded. An attack or later
+cancellation can still prevent that turret completing after foundation commit.
+One-credit funding shortages defer without losing the lot or finished material;
+exact funding does not reserve the turret's price twice. Invalid projects
+cancel with the lot intact. Newly opened free sites retarget the project.
+
+At most one lot is cleared per build pass across all yards, independently of
+prior accepted orders. Derived placement caches invalidate on geometry and
+builder changes; the local zone census runs once per search. No new serialized
+fields: save 9852, observer runtime 7, multiplayer protocol 51. The separate
+1.0.802 observer accounting limitation remains as recorded below.
+
+The dedicated real-engine clearance fixture completes turrets with concrete
+on/off, using ordinary production payments and frames. It checks cancellation,
+destroyed yards, changed sites, free-site retargeting, two-colony economic and
+cache boundaries, shared-human scope, all three types, two ready yards sharing
+one execution limit, unfinished material and exact/one-credit-short funding.
+Bot-stream reload re-derives the same site; this is not general world-save
+certification. Stable treasury, power and observed approach are fixture inputs.
+
+Full CTest: **54/54 targets passed** (750.93 seconds). Extended ready-material
+checks then passed with **one and four actual path workers**, including changed
+occupancy, shared-human authority and lost power. Their clearance outcomes match:
+concrete on completes a turret at frame 1776 (lot removed at 275); concrete off
+completes at frame 1500 (lot removed at 1499). Each removes one of 30 lots. The
+cross-yard case commits one lot; exact funding places concrete while a one-credit
+shortfall preserves the lot. All R/I/C types are eligible. Outcome SHA-256:
+40f9c1b7a209d23c8c509b637f31119651ecc18c5f5dfb9249a74e9fdea220cf.
+
+The two-colony fixture records 25 clearance searches per run, means 28.52/29.12
+microseconds and maxima 82/91 microseconds with one/four workers. No clearance
+search exceeds 33 ms. These are fixture aggregate mean/max values, not live MBA
+FPS or a full-match benchmark. Native app version/signature, version consistency,
+Python syntax, diff checks and pre/post-build Ninja dependency audits pass.
+Evidence: ../outputs/rocket-battery-clearance-20261004/. Native 1.0.803 is built
+locally; that development task did not install, push or publish it. Subsequent
+MBA installation is recorded above.
+
+# 2026-10-04 — QuantBot army recovery, dispatch and batteries (1.0.802 development)
+
+Custom Hard/Brutal bots now track Offensive, Withdrawing and Recovering postures.
+A fully sampled 90-second window requires material mobile losses (1500 credits,
+20% of starting deployable value), poor confirmed hostile return (<65%) and
+corroborating readiness/front deterioration. A sustained local disadvantage
+pulls the tracked wave back; a material severe defeat or serious core attack can
+withdraw immediately. Tiny raids, friendly fire and neutral worms do not cause
+house panic. Friendly local wave members count once, within the same radius as
+the enemy comparison. Enemy observations respect teams and visibility.
+
+New ground attacks wait when observed hostile ground power is at least 1.5x
+friendly deployable ground power, unless healthy deployable military value is at
+least **80% of the fixed configured militaryValueLimit**. Armed aircraft count in
+that percentage, while the ground comparison stays separate. Actual positive
+purchase prices are used, including sixty-credit Soldiers. An 80000-credit limit
+bypasses at 64000. This is not the rolling Brutal override production budget;
+zero stays unlimited and positive selected unit overrides keep their meaning.
+Recovery/base emergencies and a complete gathered dispatch budget still gate an
+attack. Only assembled candidates leave: distant reserves cannot hold a complete
+wave hostage or become individual forward trickles. Existing commitment is
+subtracted, and a wave shares a reachable observed objective.
+
+A protected rally belongs to a real defended production colony, with bounded
+search and immediate invalidation when unsafe, built over or impassable. Its
+assembly area expands for force size and actual safe terrain capacity. Recall
+uses dispersed, reserved destinations, danger priority and a saved fair cursor.
+Each call issues at most 12 orders; above 150 queued requests it permits pending
+work replacement and at most two fresh requests, rather than starving recall.
+Forced Area Guard suppresses chasing while walking home and permits defence on
+arrival. Repairs, human orders and urgent defenders keep priority.
+
+After two refineries, a heavy factory and a repair yard, demand-scaled rocket
+batteries grow towards the observed approach. Siting respects colony-local front
+quotas, overlapping cover, spacing, corridors, factory access and city rules.
+Critical/remote first cover, reserves, power and economic growth retain priority.
+Within the special group, Devastator/Sonic/Deviator selection uses recorded
+return/loss with exploration and least-owned ties; the outer group budget remains.
+
+Verified production-object probes cover modes, real hostile/friendly kills,
+79.9/80.0/80.1% dispatch, visible armies with hidden bases, ordinary/minor raids,
+readiness, cohesive dispatch, distant reserves, recovery/resumption, old-hunter
+adoption, large saved waves, legal battery sites and special selection. The final
+966-unit recall receives bounded orders over 83 passes at the actual 50-cycle
+cadence. All 857 survivors move closer; 686 (80%) reach shelter by cycle 17750,
+after about 284 seconds of simulation travel. The path queue peaks at 36 and
+drains to zero. One/four path workers have identical stress outputs and a
+100-frame ordinary continuation history hash of 7282608833290629464.
+
+Save format is 9852; posture, clocks, ledger, wave and recall cursor are saved.
+Protocol is 50 and new config fields enter the multiplayer hash. Observer
+runtime remains 7: the derived survey is recomputed before BOTH unit and build
+phases, and no supplemental layout was added. A checkpoint taken between phases
+matches this bot's saved bytes/exact balances, all unit orders, object/RNG digests
+for 100 frames; repeated ordinary loads match full house-inclusive digests.
+**This is scoped AI continuation evidence, not general spectator certification:**
+a one-credit difference in another house's city checkpoint accounting was also
+observed. Full serialized object bytes include existing visual/load-normalised
+fields and are not claimed identical. No change was made to that separate issue.
+
+Two paired fresh 40-minute headless simulations use the prior match's recorded
+map, seeds 1394458362/3, both Brutal, unlimited units, concrete on, turret power
+off and bundled DuneCity data, against the frozen 1.0.801 binary. New wave counts
+are 6/18 versus 24/23; both houses survive all four runs. Recorded mobile loss
+counts are lower, but combat exposure and trajectories differ; this does not
+establish win-rate or per-unit balance improvements. New posture calls average
+56–63 microseconds; the largest recorded call is 4.432 ms. No recorded selected
+AI scope exceeds 33 ms. These are aggregate mean/max values, not percentiles or
+live MBA FPS. Evidence: `../outputs/ai-recovery-implementation-20261004/`.
+
+Full CTest: **53/53 targets passed** (732.09 seconds), including the native
+policy/config/protocol tests, army recovery, transport, movement, command/network,
+menu, all registered AI mode probes, degradation, spice income and credit storage.
+Ninja dependency audits and native signature verification passed. Native 1.0.802
+is built locally. Nothing has been installed, pushed or published in this task.
+See [army recovery reference](docs/quantbot-army-recovery.md) for policy limits.
+
+# 2026-10-04 — Carryall passenger loss and match elimination (1.0.801 development)
+
+A damaged unit's pickup called `doRepair()`, which could cancel the collecting
+carryall's target and book another aircraft. The first aircraft then stored the
+changed target ID (sometimes `NONE_ID`) while hiding the actual unit. These
+invisible, untargetable combat units still counted for house survival, explaining
+the apparent Mercenary survivors and the match that would not end.
+
+Pickup now captures the passenger ID before the callback and releases any
+replacement booking reciprocally before hiding the passenger. Unresolvable cargo
+entries no longer leave an aircraft stuck at the front of its cargo list.
+
+`Game::reconcileTransportContainment()` also repairs existing orphaned ground
+units from older saves. It reads actual carryall cargo and busy refinery/repair
+occupants across all houses. A pending pickup request is never treated as cargo;
+inactive pickup targets are released without displacing a real passenger. A free
+refinery's historical occupant pointer does not suppress recovery. Invalid and
+duplicate cargo entries are pruned while retaining one real carrier claim.
+
+Every 625 simulation cycles, sorted orphan IDs receive up to 32 recovery attempts.
+The ordinary deployment path restores map occupancy, spatial-grid membership,
+visibility and selectable/combat state without changing ownership or unit counts.
+A radius-12 search prefers the last position, then guard/owned-position/centre
+fallbacks; a bounded 1024-tile global window handles blocked local terrain.
+Windows advance per queue round, so a unit attempted only on alternate passes
+still searches consecutive map slices. A 64-unit backlog on a 128x128 map exposed
+and now guards against the previous batch-window starvation. Recovery never
+forces a vehicle onto an occupied tile, deploys onto a bloom, or kills a unit just
+to produce victory. Progress requires a legal tile and a sufficiently stable
+candidate queue; a full map leaves passengers queued and reports that condition.
+
+| Property | Enforcement and verification |
+| --- | --- |
+| Stable pickup and one booking | Real damaged passenger, free yard, second aircraft; correct cargo ID, reciprocal booking release, repair delivery and repaired release |
+| Preserve real containment | Real cargo, busy refinery/repair bay, different-owner cargo, stale earlier pickup request, free-refinery historical pointer |
+| Legal recovery and progress | Null/stale/destroyed carrier, occupied tile, blocked local area, sole far legal tile, invalid anchors, 32+8 batch, stable 64-unit power-of-two-map queue |
+| Normal elimination | Last recovered opponent and its spawned crew destroyed normally; enemy no longer alive and local game `finished && won` |
+| Determinism and persistence | No RNG use; ordinary/repeated load and observer restore have identical per-cycle digests and saved bytes; one vs four path workers share the same profile and produce identical continuations |
+| Regression sensitivity | Private original pickup body fails the correct-passenger assertion; pre-integration stale-request and map-window fixtures fail before their respective fixes |
+
+The native production-object probe passes **1340 checks per mod** in Vanilla,
+DuneCity and Dune2R, and repeats Vanilla under four path workers. The captured MBA
+replay completed all 211555 cycles: Mercenary ended `alive=0`, with zero structures,
+13 remaining units and **zero orphaned passengers across all houses**. Repairing
+pickup changes subsequent combat, so this is mechanism/regression evidence rather
+than reproduction of the original final troop counts. It is not a live FPS test.
+Full CTest: **52/52 targets passed** (673.14 seconds), including the transport
+probe, carryall flight/rescue, core network protocol gate, lobby/relay security,
+movement, AI, menus and income. Ninja dependency audits passed before and after
+building. Private evidence: `../outputs/carryall-ghost-fix-801/`.
+
+Save layout remains 9851 and observer runtime remains 7; recovery has no stored
+chooser cursor. Network protocol is 49 because older peers would simulate a
+different transport outcome. The native 1.0.801 app is built and ad-hoc signature
+verified. Source is local only; the MBA installation remains 1.0.799. Nothing has
+been pushed, published or installed by this repair task.
+
+# 2026-10-04 — Custom Game spice income and simplified rows (1.0.800)
+
+Custom Game now offers a spice income factor of 1x, 2x, 3x, 4x or 5x per
+house row, for human players and bots. Default 1x preserves the original rate;
+a 700-spice delivery pays 1400 at 2x. Controllers sharing a house share its
+factor. Fresh offline setup and online hosts can choose the rate; clients see
+the host's choice and cannot change it. Loaded matches show their saved rate
+read-only. Campaign and skirmish new-game defaults remain 1x.
+
+The rightmost "Original" house-colour selector and its bonus-palette checkbox
+have been removed from every Custom Game row at the user's request. Fresh
+matches use their house colours. Saved colour overrides and existing colour
+serialization remain intact, including through a loaded lobby rebuild. The
+DuneCity SimCity/Dune2 graphics skin selector remains available. Row widths
+omit redundant captions at narrow resolutions without hiding the spice or skin
+controls.
+
+The multiplier is applied exactly once when Refinery or Tornie's Worfinery
+accepts actual spice from a worker. It does not change cargo capacity, map
+spice, extraction speed, starting credits, city taxes, refunds or other income.
+Existing silo storage and the 999999 credit ceiling still apply; gross refined
+income statistics follow the multiplied payout as the existing accounting path
+does. Integer multiplication preserves fractional and interrupted deliveries.
+
+Persistence and network gates: save format 9851 adds a House field and an SMUL
+array for resolved setup rows, while MOD7 appends per-row factors to
+GameInitSettings. Standalone HouseInfo serialization remains frozen. Random
+rows attach their rate during INIMapLoader resolution, and SMUL is written
+from live houses so resumed Random choices retain the actual rate. Old saves
+without these fields default to 1x. Invalid factors and mismatched MOD7 counts
+are refused. Protocol 48 separates the new lobby event, setup format and state
+digest from older peers; multiplayer peers need matching builds. Observer
+runtime remains version 7, using the ordinary House save block. Join and
+spectator descriptors copy each live rate, and state digests include it before
+any delivery occurs.
+
+Codex delegated source exploration and implementation to one local,
+subscription-authenticated Claude Code worker, then independently reviewed and
+integrated strict count validation, loaded co-op rate retention, colour control
+removal, fixture conversion and migration checks. The bounded worker reached
+its turn cap after completing the patch; one focused read-only continuation
+returned its acceptance report. No API billing or model override was enabled.
+
+All 51 configured CTest targets pass across the full run and four focused
+reruns. The initial full run passed 47 targets; the remaining menu fixture had
+an incomplete synthesized co-op save prefix, and three statistics probes had
+synthesized legacy 9840 House bytes using offsets from before the new four-byte
+field. After correcting those fixtures, all four reruns passed (menu navigation
+227.48 seconds, all three native sizes; statistics in Vanilla, DuneCity and
+Dune2R). Production income checks passed in Vanilla, DuneCity and
+Tornie, including factors 1..5, fractional/partial/interrupted loads, damaged
+refineries, storage/credit limits, independent houses, Random resolution,
+ordinary save/reload and snapshot metadata. A private negative control that
+removed the production Refinery multiplier failed the expected 2x payout check;
+the multiplier was restored and the income checks passed afterward.
+
+An independent native probe loaded the captured 1.0.796 MBA match (save version
+9850, original file unchanged), checked six houses default to 1x, changed live
+rates without changing original initialization metadata, and verified new
+ordinary save/reload, resolved SMUL setup, spectator descriptor, observer
+restore and rate-sensitive digest. This passed without advancing the match.
+No two-process live peer match was exercised for this new economic rule.
+
+Rendered menu checks cover 640x480, 854x480 and 1280x720, shared-controller and
+saved lobbies. Nine rows fit horizontally at all three sizes and vertically
+at 720 pixels; their pre-existing vertical overflow at 480 pixels remains.
+The new selector adds no row height. Build and dependency audits pass, and all
+three source version files agree on 1.0.800. Final source, build and diff checks
+passed; the complete implementation and its tests are captured in git.
+
+Development app: build/bin/dunecity.app. Evidence:
+../outputs/spice-multiplier-800/. This task does not publish or install 1.0.800;
+the previous private MBA installation remains 1.0.799.
+
+# 2026-10-03 — 1.0.799 installed on the MBA
+
+Installed code commit `887d305900ce3a6bac32afa058d263d74950921b` at
+`/Applications/dunecity.app` on `Stefans-MacBook-Air.local`, continuing the
+requested MBA installation with the carryall rescue and DuneCity default change.
+All 48 CTest targets passed before replacement. The guard verified the previous
+1.0.798 executable and checked for a running game before staging and again before
+replacement; no game was stopped or match launched.
+
+The portable package's 36 ARM64 Mach-O files, deep/strict signatures and bundled
+SDL initialization/hidden-window rendering passed locally and on the MBA.
+Independent installed-app checks confirmed version 1.0.799 and executable SHA256
+`da1b7525506f52d38e9b13991ef1e6a7f3d000c65a84a22ddfc2ef0bb9d9572b`.
+All 1855 current profile save/INI files remained byte-identical. The 1.0.798
+rollback app is retained at
+`/Applications/.dunecity-backup-before-799-20261003/dunecity.app`, executable SHA256
+`b8c1ee655f50c8843f2879eab94b88880cc2cbe8cc418625518e8ef41d88075c`.
+The earlier 1.0.796 rollback copy is also retained.
+
+Receipts, independent verification, package and audit are in
+`/Users/stefan/Documents/projects/outputs/carryall-install-799/`.
+This is a private MBA installation. No push or public release was performed;
+multiplayer peers require the new protocol 47 build too.
+
+# 2026-10-03 — Long-stall carryall rescue and DuneCity default (1.0.799)
+
+Eligible active ground units with an outstanding movement intent now request an
+owned free carryall after 30 seconds / 1875 simulation cycles on the same tile.
+The clock survives clearPath, queued searches and identical AI route reissues.
+A changed tile or job resets it; accepted explicit human movement/attack orders
+reset it through synchronized Command execution even when coordinates repeat.
+Stopped, parked, inactive, carried and physically moving units are excluded.
+Short blocked trips qualify too. Existing pickup, nearby legal landing and
+repair-yard priority rules remain authoritative; destination arrival still needs
+an available aircraft and a legal landing area.
+
+The first automatic attempt and retries use deterministic per-unit phases.
+Unavailable transport leaves the original mode/navigation/combat intact and
+retries after roughly five seconds plus jitter. Explicit carryall orders keep
+transport-wait intent and bypass an earlier automatic cooldown. Candidate lookup
+scans a derived carrier-ID index in unitList order, validates ownership/activity/
+health/booking and excludes temporary delivery flights. Creation/removal and
+checkpoint restoration invalidate the index, including equal-count replacements.
+Stop or a new player movement/attack order releases both sides of a pickup
+immediately, preventing a cancelled assignment from surviving same-cycle rebooking.
+
+DuneCity's bundled Manual Carryall Drops default is true. Explicit per-mod off
+choices and saved match rules remain effective. Saving mod options now writes
+only that mod's section; it no longer exports the mod's effective rules into the
+Vanilla global defaults. Vanilla, Tornie and Dune2R defaults are unchanged.
+Ordinary save format remains 9850 with a fresh rescue grace period on load.
+Observer runtime 7 serializes the rescue timer/intent; protocol 47 separates
+these simulation decisions from older peers. All three source version files are 799.
+
+Codex delegated the bounded source investigation and implementation to local
+subscription-authenticated Claude Code, then reviewed and integrated command
+validation, reciprocal cancellation, lifecycle invalidation and first-attempt
+spreading. Focused real-engine checks pass in Vanilla and DuneCity (802 checks
+per mode), including queued/cleared paths, moving-target destination churn,
+invalid/unauthorized orders, a two-tile stall, unavailable/busy/enemy/delivery
+carriers, same-cycle replacement/rebooking, complete pickup/drop and repair
+priority. Disabling only the new fallback in a private negative-control binary
+fails the expected eligible-stalled-unit booking assertion. No production object
+was replaced for the negative control. Existing flight tests cover all three modes.
+
+The captured MBA save/mod was replayed for 4000 ticks with fixed 5000-node budget:
+
+| Measurement | 1.0.798 | 1.0.799 |
+| --- | ---: | ---: |
+| Initially ordered local cohort changing tiles / 900 | 511 | 528 |
+| Distinct units observed as carryall cargo | 737 | 828 |
+| Final queued paths | 2642 | 2616 |
+| Mean time inside simulation updates (ms) | 7.637 | 8.008 |
+| p99 update time (ms) | 37.565 | 38.101 |
+
+Cargo counts include 118 units already carried at load and all existing transport,
+not only new rescues. Tile changes include transport and do not prove arrival.
+Timings are steady-clock durations on claw.local including worker waits/internal
+logging, excluding loading/compiling/extra observations; they are not MBA FPS or
+process CPU. Later workloads differ with gameplay. This adds recovery rather than
+a measured FPS gain and does not clear every large-army stall.
+
+One versus four workers produced all 41 identical digests, identical gameplay
+save bytes and identical final observer runtime bytes. The path budget/traffic/
+inputs/control/observer/parser/ordinary-load/cleanup probe passes; restored
+120-tick tails have identical states and saved bytes. Dependency audits and native
+Release builds pass, with source version agreement. All 48 configured CTest targets pass (full-ctest.log). The guarded MBA
+installation and independent verification below pass; no push or public release.
+Evidence: ../outputs/stuck-carryall-799/ and ../outputs/carryall-install-799/.
+
+# 2026-10-03 — 1.0.798 installed on the MBA
+
+At the user's request, installed the tested code commit
+`eaa25981990f0d3084c68106d308e23e490b80d4` at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`. The installer checked that no game was running before
+staging and again before replacing the app; no game was stopped or match launched.
+The package includes the 1.0.797 police capacity fix and 1.0.798 pathfinding changes
+described below. Shared navigation remains unimplemented.
+
+Fresh `cmake --install` bundled all runtime dependencies. The package's 36 ARM64
+Mach-O files have portable library references. Deep/strict signatures and bundled
+SDL initialization/hidden-window rendering passed locally, during the guarded
+installation and independently from the installed app. Installed version and
+executable SHA-256 were independently verified:
+`b8c1ee655f50c8843f2879eab94b88880cc2cbe8cc418625518e8ef41d88075c`.
+
+All 1776 profile save/INI files remained byte-identical. The previous verified
+1.0.796 app is retained at
+`/Applications/.dunecity-backup-before-798-20261003/dunecity.app` (executable SHA-256
+`1bb8574583e286df42eb68cc2df92a5e507d60a0de41b929ffe53ef9b4979db5`).
+Receipts, portable package and independent verification are in
+`/Users/stefan/Documents/projects/outputs/path-install-798/`.
+This was a private MBA installation; nothing was pushed or publicly released.
+
+# 2026-10-03 — Large-army path backlog (local 1.0.798)
+
+The MBA's installed 1.0.796 match was captured as `path-stuck.dls` at cycle 75937,
+with exact pinned DuneCity mod revision `c8d6d3bed38f1cd8`. Live logs showed about
+5880 units, 3320–3440 queued paths and saturation of the 5000-node budget. The save
+SHA256 is `cdfe1a141a228d50cbba1779f8a9297c7a580b64ad353fd00c62fb2da1ce3cb8`.
+This patch is local; the MBA installation and production release were not replaced.
+
+Ground-unit tile assignment/removal no longer changes the global pathing revision.
+Structure placement/destruction, mountain transitions and repaired zone footprints
+still invalidate it. Long-route prefix validation now records its revision. Every
+actual step still checks live collision rules. AStar accepts an adjacent approach
+when its original goal cannot be entered, retaining the original goal and cache /
+fingerprint identity; free booked refinery and repair-yard entries remain exact.
+Both harvester classes exclude pending searches from blocked-refinery failures.
+No shared flow fields, formations, local-detour system or adaptive-budget changes
+are included. The remaining congestion needs shared strategic navigation with
+local collision handling and nearby arrival positions, rather than a dependency
+on a single squad leader.
+
+Protocol 46 separates the changed navigation/patrol rules from older peers.
+Ordinary save format 9850 and observer runtime 6 are unchanged; no fields were added.
+The native Release build and source metadata are 1.0.798.
+
+Private replay: same save/mod, 2000 ticks, four workers, fixed 5000 nodes/tick.
+The reference was local 1.0.797 (same pathfinder as public 796, with its police fix).
+
+| Measurement | Reference | 1.0.798 |
+| --- | ---: | ---: |
+| Applied search results (including empty routes) | 3817 | 8648 |
+| Final queued paths | 3375 | 2618 |
+| Initial local cohort that changed tiles / 900 | 383 | 472 |
+| Time inside simulation updates (seconds) | 22.803 | 15.323 |
+
+These are steady-clock update durations on claw.local, including worker waits and
+internal logging, excluding compilation/loading and extra observer scans. They are
+not MBA FPS or aggregate process CPU time. Different movement produces different
+later gameplay workloads. Cohort movement means at least one tile change, including
+possible transport, not destination arrival. Tripling the original budget alone
+moved 476/900 and took 26.416 seconds; the implemented fixes achieve similar cohort
+progress with the original budget. The remaining queue means this is a measured
+first improvement, not a claim that all large-army stalls are eliminated.
+
+Validation: 46 CTest targets passed in the full run; the unit target passed after
+its independently pinned protocol expectation was intentionally updated 45→46.
+Three optional live-download/GPU unit cases stayed skipped. Native build, source
+version agreement, Ninja dependency audits and whitespace checks passed.
+The real-engine path probe passed strict budget, lifecycle, cancellation, terrain
+churn, ordinary mid-search load, observer continuation/control and cleanup checks
+(480 static slice/whole comparisons; 7,456,537 diagnostic assertions overall).
+Controlled production vehicles retained routes through future traffic, rejected
+an occupied immediate step, invalidated routes for actual walls/mountains, and
+reached free refinery/repair-yard entry tiles. The pending-harvester counter was
+exercised in the captured DuneCity mode; the parallel RebelHarvester check runs
+only for a Tornie save, so its new guard was source-reviewed here.
+
+One and four workers, including deliberately delayed four-worker completion,
+matched all 21 checkpoints and final gameplay-save bytes over 2000 ticks. The
+comparator excludes only the release-label field. Saved-state SHA256:
+`2b3ddbd8b3e47b87181ae62f9c25cb9ae4bfa2827980a8ec689ca0ba1bce912e`.
+Reference AStar checks sampled eight units per type: 728 queries, 15 types, three
+rounds. Enterable goals kept exact routes/node counts; blocked goals saved 292960
+nodes in the first round. Unchanged unreachable fallback routes remain permitted.
+Restoring the previous Tile, AStar or Harvester implementation individually in a
+private binary reproduced its corresponding new traffic/cost/pending-counter
+failure; the final traffic fixture passed all 244 checks.
+
+The first traffic fixture allowed unrelated combat/transport to change its subject.
+It was replaced with controlled production vehicles, and fixture relocation now
+releases prior tile occupancy before assigning the new position. The initial goal
+cost bound also passed baseline; the final bound requires no more expansions than
+the otherwise identical free goal (119 versus 132; baseline blocked goal 245).
+
+Subscription delegation used Claude session `5fd94ace-d1a6-4eaf-bd46-28822b35b48e`
+for source investigation/implementation. Its narrow shell permissions blocked
+preparatory commands, so it claimed no runtime checks. Codex reviewed/integrated,
+corrected the fixtures and ran all validation. Captures, scripts, raw measurements
+and the diagnosis are in `/Users/stefan/Documents/projects/outputs/path-stall-20261003/`.
+
+# 2026-10-03 — Police unit capacity fix (local 1.0.797)
+
+The user requested that police must not claim "Unit limit reached" below the game's
+max-units limit. PoliceStation had a separate 250-raw-military-unit ceiling, counting
+individual infantry one-for-one rather than the engine's thirds, and combined that
+ceiling with Brutal's army-value gate for both deployment and the sidebar label.
+
+The separate 250 ceiling is removed. The station now queries House's existing Trike
+and Trooper admission policies; a partial patrol remains available while either
+category has room. Every deployed member is checked again against House capacity.
+Effective default, zero/unlimited, positive override and shared-Hard count policies
+remain owned by House. The Brutal army-value gate remains independent and the actual
+sidebar identifies it as "Army target reached" instead of claiming a unit limit.
+Cooldown, disabled catalogue items, deployment space, police funding and charges
+retain their prior rules. No save fields changed; format remains 9850.
+
+Protocol 45 separates peers whose automatic/commanded police patrols can differ.
+Source metadata and the rebuilt native app are 1.0.797. This is a local development
+build: production remains 1.0.796 and the MBA installation was not replaced.
+
+Validation uses the real-engine `police_reinforcement_limit` CTest fixture, including
+actual PoliceStationInterface widgets (not source-string matching). Restoring the
+old 250 predicate reproduced a false unit-limit result below the selected cap;
+restoring the fix passed. Boundary checks cover 300+ individual troopers, default
+and explicit-positive limits, exact-cap blocking, zero/unlimited, one remaining
+vehicle slot, two remaining infantry slots, the separate Brutal target label,
+cooldowns, disabled catalogue and blocked deployment space. A blocked patrol
+retains its ready cooldown. Synthetic fixture counts are restored before exit.
+An initial blocked-space fixture shared half-full infantry tiles with earlier
+patrols; an independent clear pocket plus structure-blocked rings corrected the
+fixture without changing movement rules.
+
+The delegated worker's 15 affected/adjacent CTest targets passed (unit, lobby,
+network wire, commands, Brutal override, police placement/budget/reinforcement,
+city growth, MCV/custom attack, Starport, degradation, credit storage and stats).
+After review replaced two source-contract assertions with actual sidebar checks
+and added partial-patrol boundaries, the full unit target and police reinforcement
+target passed again. Native Release build, version agreement, Ninja dependency
+audits and diff whitespace checks passed. This is targeted verification, not a
+claim that all 47 registered CTest targets were rerun for this patch.
+
+Standing subscription delegation was honoured with Claude Max session
+7f57c13b-366d-420c-a470-db54d27ce608; Codex reviewed/integrated the patch, actual UI
+checks, partial-patrol checks and protocol/version metadata. Evidence is in
+`/Users/stefan/Documents/projects/outputs/police-unit-limit-797/`.
+
 # 1.0.796 full release preparation (2026-10-03)
 
 The authorized production release combines the private 1.0.793–795 performance,
@@ -1871,7 +2874,7 @@ All eight CTest groups pass across the full run and corrected unit rerun; 200
 Node relay tests pass. Real native three-peer WebRTC test passes client pause,
 host resume/speed, concurrent pause requests/client resume, menu-close behavior,
 malformed payload validation, and spectator admission at paused cycle711.
-Host/Partner/Newcomer match at cycle1800 and original peers match after departure.
+Host/Partner/Newcomer match at cycle 1800 and original peers match after departure.
 Screenshots reviewed for toolbar and host-only settings. Evidence:
 /tmp/dunecity-multiplayer-controls/live-4 and ctest*.log, relay-tests-2.log.
 Interactive browser crossplay and ENet LAN play were not repeated.
@@ -1901,7 +2904,7 @@ real-engine Easy2/Hard5/Brutal9 probes. Three ordinary campaign runs checked134
 enemy snapshots with no cap violations or new RTS types. Hard5/Brutal5 observed
 net income1748/3030 per minute versus goals1800/3150; not a full balance study.
 Evidence and measured limitations are documented alongside the matrix.
-Native spectator hot-join also passes with matching state at cycle1800.
+Native spectator hot-join also passes with matching state at cycle 1800.
 No browser-crossplay or public release claim.
 
 Local delivery complete: Developer ID signed, app and DMG accepted by Apple,

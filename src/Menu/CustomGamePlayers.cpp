@@ -256,6 +256,8 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         mainVBox.addWidget(&setupModeRow, 28);
     }
     readinessLabel.setTextFontSize(12);
+    if(!isCoopGameType(gameInitSettings.getGameType()))
+        readinessLabel.setText(_("Spice income: multiplies credits from harvester deliveries. 2x = double."));
     mainVBox.addWidget(&readinessLabel, 22);
 
     mainVBox.addWidget(Spacer::create(), 0.04);
@@ -386,8 +388,6 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     }
 
     bool bLoadMultiplayer = (gameInitSettings.getGameType() == GameType::LoadMultiplayer);
-    const bool bBonusHouseColorsAvailable = bLoadMultiplayer
-        || ModManager::instance().isTornieContentActive();
 
     buttonHBox.addWidget(HSpacer::create(10));
 
@@ -408,12 +408,55 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 
     bool thisPlayerPlaced = false;
 
+    // How wide a house row may be.
+    //
+    // Every row is one HBox of fixed-width columns, so its minimum width is their sum
+    // (HBox::getMinimumSize). mainHBox puts the row inside leftVBox and then adds HSpacer(8)
+    // and the 180px map preview, and windowWidget insets mainVBox by 48px - so this is what is
+    // left for the row itself: 404px at 640x480, 618px at 854x480, 1044px at 1280x720.
+    //
+    // DuneCity rows include a graphics skin selector. At narrow resolutions, omit redundant
+    // captions before tightening the controls: each drop-down already names its selection.
+    // House colour overrides remain in saved/network setup data, but have no menu column.
+    const int rowBudget = getRendererWidth() - 48 - 8 - 180;
+
+    struct RowWidths {
+        int houseLabel = 60, houseBox = 95, teamBox = 85;
+        int spiceLabel = 36, spiceBox = 56;
+        int skinLabel = 30, skinBox = 72;
+        int gap = 10, subGap = 6;
+    } row;
+    row.spiceLabel = GUIStyle::getInstance().getMinimumLabelSize(_("Spice"), 12).x;
+
+    const auto rowWidth = [&] {
+        int total = row.houseLabel + row.houseBox + row.gap + row.teamBox
+                  + row.subGap + row.spiceLabel + row.spiceBox;
+        if(duneCitySkinControls)        total += row.subGap + row.skinLabel + row.skinBox;
+        return total;
+    };
+
+    if(rowWidth() > rowBudget) row.skinLabel = 0;
+    if(rowWidth() > rowBudget) row.spiceLabel = 0;
+    if(rowWidth() > rowBudget) {
+        row.gap = 5;
+        row.houseBox = 85; row.teamBox = 70; row.spiceBox = 46; row.skinBox = 62;
+    }
+    if(rowWidth() > rowBudget) row.houseLabel = 0;
+    if(rowWidth() > rowBudget) {
+        row.gap = 4; row.subGap = 4;
+        row.houseBox = 72; row.teamBox = 58; row.spiceBox = 40; row.skinBox = 56;
+    }
+
     for(int i=0;i<numHouses;i++) {
         HouseInfo& curHouseInfo = houseInfo[i];
 
         // set up header row with Label "House", DropDown for house selection and DropDown for team selection
         curHouseInfo.houseLabel.setText(_("House"));
-        curHouseInfo.houseHBox.addWidget(&curHouseInfo.houseLabel, compactPlayers ? 42 : 60);
+        if(row.houseLabel > 0) {
+            curHouseInfo.houseHBox.addWidget(&curHouseInfo.houseLabel, row.houseLabel);
+        } else {
+            curHouseInfo.houseLabel.setVisible(false);
+        }
 
         if(bLoadMultiplayer) {
             if(i < (int) houseInfoListSetup.size()) {
@@ -438,7 +481,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             curHouseInfo.houseDropDown.setEnabled(bServer);
         }
         curHouseInfo.houseDropDown.setOnSelectionChange(std::bind(&CustomGamePlayers::onChangeHousesDropDownBoxes, this, std::placeholders::_1, i));
-        curHouseInfo.houseHBox.addWidget(&curHouseInfo.houseDropDown, compactPlayers && (bBonusHouseColorsAvailable || duneCitySkinControls) ? 85 : 95);
+        curHouseInfo.houseHBox.addWidget(&curHouseInfo.houseDropDown, row.houseBox);
 
         if(bLoadMultiplayer) {
             if(i < (int) houseInfoListSetup.size()) {
@@ -457,8 +500,57 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             curHouseInfo.teamDropDown.setEnabled(bServer);
         }
         curHouseInfo.teamDropDown.setOnSelectionChange(std::bind(&CustomGamePlayers::onChangeTeamDropDownBoxes, this, std::placeholders::_1, i));
-        curHouseInfo.houseHBox.addWidget(HSpacer::create(compactPlayers && duneCitySkinControls ? 5 : 10));
-        curHouseInfo.houseHBox.addWidget(&curHouseInfo.teamDropDown, compactPlayers && (bBonusHouseColorsAvailable || duneCitySkinControls) ? 70 : 85);
+        curHouseInfo.houseHBox.addWidget(HSpacer::create(row.gap));
+        curHouseInfo.houseHBox.addWidget(&curHouseInfo.teamDropDown, row.teamBox);
+
+        // Spice income. Every row has one, in every mod, for a human or a bot alike, and the
+        // two controllers of a shared house share it because they share the house economy.
+        //
+        // Only the host of a fresh custom game may change it: it decides how much each house
+        // earns, so it is a match rule rather than a seat preference (LobbyAuthorization
+        // refuses ChangeSpiceIncome from a client even for its own row). A load-game lobby
+        // shows what the saved match was played at, read-only.
+        {
+            Uint32 selectedFactor = SpiceIncome::kDefault;
+            if(bLoadMultiplayer && i < static_cast<int>(houseInfoListSetup.size())) {
+                selectedFactor = houseInfoListSetup.at(i).spiceIncomeMultiplier;
+            } else if(isCoopGameType(gameInitSettings.getGameType())) {
+                for(const auto& fixed : fixedCoopHouses) {
+                    if(fixed.houseID == gameInitSettings.getHouseID()) {
+                        selectedFactor = fixed.spiceIncomeMultiplier;
+                        break;
+                    }
+                }
+            }
+            curHouseInfo.spiceIncomeLabel.setText(_("Spice"));
+            curHouseInfo.spiceIncomeLabel.setTextFontSize(12);
+            curHouseInfo.spiceIncomeLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter));
+            for(Uint32 factor = SpiceIncome::kMin; factor <= SpiceIncome::kMax; ++factor) {
+                curHouseInfo.spiceIncomeDropDown.addEntry(
+                    std::to_string(factor) + "x", static_cast<int>(factor));
+            }
+            curHouseInfo.spiceIncomeDropDown.setSelectedItem(
+                static_cast<int>(SpiceIncome::isValid(selectedFactor)
+                    ? selectedFactor - SpiceIncome::kMin : 0));
+            // The entries read "1x", so say what is multiplied. Nothing else scales: not the
+            // cargo a harvester carries, not the spice on the map, not taxes or starting cash.
+            curHouseInfo.spiceIncomeDropDown.setTooltipText(
+                _("Spice delivery income only: credits paid when a harvester unloads"));
+            // Campaign and skirmish co-op play at the original rate, like the campaign itself,
+            // so their lobby shows 1x without offering a choice.
+            curHouseInfo.spiceIncomeDropDown.setEnabled(
+                !bLoadMultiplayer && bServer && !isCoopGameType(gameInitSettings.getGameType()));
+            curHouseInfo.spiceIncomeDropDown.setOnSelectionChange(
+                std::bind(&CustomGamePlayers::onChangeSpiceIncomeDropDownBoxes,
+                          this, std::placeholders::_1, i));
+            curHouseInfo.houseHBox.addWidget(HSpacer::create(row.subGap));
+            if(row.spiceLabel > 0) {
+                curHouseInfo.houseHBox.addWidget(&curHouseInfo.spiceIncomeLabel, row.spiceLabel);
+            } else {
+                curHouseInfo.spiceIncomeLabel.setVisible(false);
+            }
+            curHouseInfo.houseHBox.addWidget(&curHouseInfo.spiceIncomeDropDown, row.spiceBox);
+        }
 
         if(duneCitySkinControls) {
             GameInitSettings::GraphicsSkin selectedSkin = GameInitSettings::GraphicsSkin::SimCity;
@@ -480,9 +572,13 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             curHouseInfo.graphicsSkinDropDown.setOnSelectionChange(
                 std::bind(&CustomGamePlayers::onChangeGraphicsSkinDropDownBoxes,
                           this, std::placeholders::_1, i));
-            curHouseInfo.houseHBox.addWidget(HSpacer::create(6));
-            curHouseInfo.houseHBox.addWidget(&curHouseInfo.graphicsSkinLabel, 30);
-            curHouseInfo.houseHBox.addWidget(&curHouseInfo.graphicsSkinDropDown, 72);
+            curHouseInfo.houseHBox.addWidget(HSpacer::create(row.subGap));
+            if(row.skinLabel > 0) {
+                curHouseInfo.houseHBox.addWidget(&curHouseInfo.graphicsSkinLabel, row.skinLabel);
+            } else {
+                curHouseInfo.graphicsSkinLabel.setVisible(false);
+            }
+            curHouseInfo.houseHBox.addWidget(&curHouseInfo.graphicsSkinDropDown, row.skinBox);
         }
 
         int selectedColor = HOUSE_INVALID;
@@ -500,18 +596,15 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             curHouseInfo.bonusColorCheckbox.setText(_("Bonus"));
             curHouseInfo.bonusColorCheckbox.setChecked(false);
             addColorDropDownEntries(curHouseInfo.colorDropDown, HOUSE_INVALID, false);
-            curHouseInfo.bonusColorCheckbox.setEnabled(bServer && bBonusHouseColorsAvailable);
-            curHouseInfo.bonusColorCheckbox.setVisible(bBonusHouseColorsAvailable);
-            curHouseInfo.colorDropDown.setEnabled(bServer);
         }
         curHouseInfo.bonusColorCheckbox.setOnClick(std::bind(&CustomGamePlayers::onBonusColorCheckbox, this, i));
         curHouseInfo.colorDropDown.setOnSelectionChange(std::bind(&CustomGamePlayers::onChangeColorDropDownBoxes, this, std::placeholders::_1, i));
-        curHouseInfo.houseHBox.addWidget(HSpacer::create(compactPlayers && duneCitySkinControls ? 5 : 10));
-        if(bBonusHouseColorsAvailable) {
-            curHouseInfo.houseHBox.addWidget(&curHouseInfo.bonusColorCheckbox, 75);
-            curHouseInfo.houseHBox.addWidget(HSpacer::create(6));
-        }
-        curHouseInfo.houseHBox.addWidget(&curHouseInfo.colorDropDown, compactPlayers && (bBonusHouseColorsAvailable || duneCitySkinControls) ? 85 : 95);
+        // Retain legacy colour selections for loaded matches and synchronized setup while
+        // removing the colour and bonus-palette controls from Custom Game rows.
+        curHouseInfo.bonusColorCheckbox.setVisible(false);
+        curHouseInfo.bonusColorCheckbox.setEnabled(false);
+        curHouseInfo.colorDropDown.setVisible(false);
+        curHouseInfo.colorDropDown.setEnabled(false);
 
         curHouseInfo.houseInfoVBox.addWidget(&curHouseInfo.houseHBox);
 
@@ -912,9 +1005,8 @@ void CustomGamePlayers::update() {
             ? _("Players must join this lobby before you start. Hot joining is unavailable for new mods.")
             : solo ? _("Start now. Others can watch or ask to join while you play.") : _("Your co-op partner is ready."));
     } else if(!bServer && startGameTime == 0) readinessLabel.setText(_("Waiting for the host to start."));
-    else if(setup) readinessLabel.setText(setup->online
-        ? _("Create Lobby when ready. Friends can replace an AI; hot join also allows spectators.")
-        : _("Choose your map and opponents, then Start Game."));
+    else if(setup) readinessLabel.setText(
+        _("Spice income: multiplies credits from harvester deliveries. 2x = double."));
 
     if(startGameTime > 0) {
         // Check if config mismatch was detected - abort game start
@@ -1089,6 +1181,27 @@ void CustomGamePlayers::onReceiveChangeEventList(const std::string& senderName,
                     skin == GameInitSettings::GraphicsSkin::Dune2 ? 1 : 0);
             } break;
 
+            case ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome: {
+                // Reaching here means the host decided this: a client's request was refused
+                // by authorizeClientTransaction before anything was applied, and the host's
+                // own broadcast is what a client sees. A factor outside the accepted range is
+                // dropped rather than rounded, so a modified host cannot move this lobby to a
+                // rate the local build would not itself play at.
+                if(!SpiceIncome::isValid(changeEvent.newValue)) {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                "CustomGamePlayers: ignoring invalid spice income factor %u",
+                                changeEvent.newValue);
+                    break;
+                }
+                DropDownBox& box = houseInfo[changeEvent.slot].spiceIncomeDropDown;
+                for(int entry = 0; entry < box.getNumEntries(); entry++) {
+                    if(box.getEntryIntData(entry) == static_cast<int>(changeEvent.newValue)) {
+                        box.setSelectedItem(entry);
+                        break;
+                    }
+                }
+            } break;
+
             case ChangeEventList::ChangeEvent::EventType::ChangePlayer: {
                 int newPlayer = (int) changeEvent.newValue;
 
@@ -1158,6 +1271,12 @@ ChangeEventList CustomGamePlayers::getChangeEventList()
             changeEventList.changeEventList.emplace_back(
                 ChangeEventList::ChangeEvent::EventType::ChangeGraphicsSkin, i, skin);
         }
+        // Unconditional: the selector exists in every mod, so this is also what carries the
+        // choice across a Back/Next trip through the map browser and across the connection and
+        // shared-house toggles, which rebuild the lobby from this list.
+        changeEventList.changeEventList.emplace_back(
+            ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome, i,
+            static_cast<Uint32>(curHouseInfo.spiceIncomeDropDown.getSelectedEntryIntData()));
 
         if(player1 == PLAYER_HUMAN) {
             std::string playername = curHouseInfo.player1DropDown.getSelectedEntry();
@@ -1926,6 +2045,11 @@ void CustomGamePlayers::addAllPlayersToGameInitSettings()
             newHouseInfo.graphicsSkin = GameInitSettings::sanitizeGraphicsSkin(
                 curHouseInfo.graphicsSkinDropDown.getSelectedEntryIntData());
         }
+        // Row order is what matters: houseID may still be HOUSE_INVALID here, and INIMapLoader
+        // carries this factor onto whichever house the Random row resolves to.
+        const int selectedFactor = curHouseInfo.spiceIncomeDropDown.getSelectedEntryIntData();
+        newHouseInfo.spiceIncomeMultiplier = SpiceIncome::isValid(static_cast<Uint32>(selectedFactor))
+            ? static_cast<Uint32>(selectedFactor) : SpiceIncome::kDefault;
         colorOfHouse = resolveSelectedColorSlot(colorOfHouse, houseID);
         if(isValidHouseColorSlot(colorOfHouse)) {
             newHouseInfo.colorOfHouse = colorOfHouse;
@@ -2319,6 +2443,23 @@ void CustomGamePlayers::onChangeGraphicsSkinDropDownBoxes(bool bInteractive, int
     }
 }
 
+void CustomGamePlayers::onChangeSpiceIncomeDropDownBoxes(bool bInteractive, int houseInfoNum) {
+    if(houseInfoNum < 0 || houseInfoNum >= numHouses) {
+        return;
+    }
+    // Only the host ever originates this. A client's selector is disabled, so reaching here
+    // interactively on a client would mean the widget state and the authority rule disagree;
+    // sending anyway would just earn a refusal and a log line on the host.
+    if(bInteractive && bServer && pNetworkManager != nullptr) {
+        const int selectedFactor = houseInfo[houseInfoNum].spiceIncomeDropDown.getSelectedEntryIntData();
+        ChangeEventList changeEventList;
+        changeEventList.changeEventList.emplace_back(
+            ChangeEventList::ChangeEvent::EventType::ChangeSpiceIncome,
+            houseInfoNum, static_cast<Uint32>(selectedFactor));
+        pNetworkManager->sendChangeEventList(changeEventList);
+    }
+}
+
 void CustomGamePlayers::onBonusColorCheckbox(int houseInfoNum) {
     if(houseInfoNum < 0 || houseInfoNum >= numHouses) {
         return;
@@ -2433,8 +2574,8 @@ void CustomGamePlayers::onPeerDisconnected(const std::string& playername, bool b
                 houseInfo[i].player2DropDown.setEnabled(bIsThisPlayer);
                 houseInfo[i].houseDropDown.setEnabled(bIsThisPlayer);
                 houseInfo[i].teamDropDown.setEnabled(bIsThisPlayer);
-                houseInfo[i].bonusColorCheckbox.setEnabled(bIsThisPlayer);
-                houseInfo[i].colorDropDown.setEnabled(bIsThisPlayer);
+                houseInfo[i].bonusColorCheckbox.setEnabled(false);
+                houseInfo[i].colorDropDown.setEnabled(false);
             }
         }
 
@@ -2545,9 +2686,12 @@ void CustomGamePlayers::setPlayer2Slot(const std::string& playername, int slot) 
             houseInfo[i].player2DropDown.setEnabled(bIsThisPlayer);
             houseInfo[i].houseDropDown.setEnabled(bIsThisPlayer);
             houseInfo[i].teamDropDown.setEnabled(bIsThisPlayer);
-            houseInfo[i].bonusColorCheckbox.setEnabled(bIsThisPlayer);
-            houseInfo[i].colorDropDown.setEnabled(bIsThisPlayer);
+            houseInfo[i].bonusColorCheckbox.setEnabled(false);
+            houseInfo[i].colorDropDown.setEnabled(false);
             houseInfo[i].graphicsSkinDropDown.setEnabled(duneCitySkinControls && bIsThisPlayer);
+            // Not bIsThisPlayer: a client never edits the spice income, not even for the row
+            // it occupies. It still sees the host's choice, because the host broadcasts it.
+            houseInfo[i].spiceIncomeDropDown.setEnabled(false);
         }
     }
 
@@ -2561,6 +2705,7 @@ void CustomGamePlayers::checkPlayerBoxes() {
         shared.teamDropDown.setEnabled(false);
         shared.bonusColorCheckbox.setEnabled(false);
         shared.colorDropDown.setEnabled(false);
+        shared.spiceIncomeDropDown.setEnabled(false);
     }
     int numPlayers = 0;
 
@@ -2716,6 +2861,8 @@ void CustomGamePlayers::disableAllDropDownBoxes() {
         curHouseInfo.colorDropDown.setOnClickEnabled(false);
         curHouseInfo.graphicsSkinDropDown.setEnabled(false);
         curHouseInfo.graphicsSkinDropDown.setOnClickEnabled(false);
+        curHouseInfo.spiceIncomeDropDown.setEnabled(false);
+        curHouseInfo.spiceIncomeDropDown.setOnClickEnabled(false);
         curHouseInfo.player1DropDown.setEnabled(false);
         curHouseInfo.player1DropDown.setOnClickEnabled(false);
         curHouseInfo.player2DropDown.setEnabled(false);

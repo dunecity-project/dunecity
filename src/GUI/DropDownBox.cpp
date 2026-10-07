@@ -267,6 +267,13 @@ void DropDownBox::drawOverlay(Point position) {
         }
         listBox.draw(position + Point(0,bListBoxAbove ? -listBox.getSize().y : getSize().y));
     }
+
+    // The open button already receives this widget's mouse movement, so it knows how long the
+    // pointer has rested on it; this is what actually puts its tooltip on screen. Drawn after
+    // the popup so an explanation is never hidden behind the list it belongs to.
+    if(isVisible() && !openListBoxButton.getTooltipText().empty()) {
+        openListBoxButton.drawOverlay(position + Point(getSize().x - openListBoxButton.getSize().x - 1, 1));
+    }
 }
 
 void DropDownBox::resize(Uint32 width, Uint32 height) {

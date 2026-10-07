@@ -95,7 +95,38 @@ struct QuantBotConfig {
     
     // Single set of ratios used across all difficulties
     HouseRatios unitRatios;
-    
+
+    // === Army recovery, cohesion and front batteries ===
+    //
+    // One shared block rather than a per-difficulty table: the behaviour itself
+    // is restricted to Custom Hard/Brutal in code, and campaign pacing, campaign
+    // roles and the established Easy/Medium small-wave reserve are untouched.
+    //
+    // Every field is an integer in milliseconds of game time or in basis points,
+    // so nothing here can introduce a floating-point difference between peers.
+    // All values are PROVISIONAL and untuned; they are hashed for multiplayer.
+    struct RecoverySettings {
+        bool enabled;                 // Posture machine for Custom Hard/Brutal
+        int attritionWindowMs;        // Material mobile-combat attrition window
+        int lossShareBps;             // Window loss vs window-start deployable cost
+        int tradeShareBps;            // Confirmed hostile loss vs our own
+        int lossFloorCredits;         // Material floor; minor raids never panic
+        int localWithdrawBps;         // Local squad disengage ratio
+        int localSevereBps;           // Severe: withdraw with no dwell
+        int localPersistMs;           // Local disadvantage must persist this long
+        int resumeAssembledBps;       // Share of the designated wave gathered
+        int resumeAdvantageBps;       // Front advantage needed to resume
+        int stabiliseMs;              // Quiet time before resuming
+        int minWithdrawMs;            // Ordinary dwell while withdrawing
+        int maxWithdrawMs;            // Bounded fallback out of withdrawing
+        int maxRecoverMs;             // Bounded fallback out of recovering
+        int outnumberedBps;           // Hostile front power that counts as outnumbered
+        int dispatchBypassBps;        // Share of CONFIGURED limit that bypasses it
+        int recallOrdersPerPass;      // Fair recall/hold orders per AI pass
+        bool frontBatteriesEnabled;   // Enemy-facing rocket batteries
+    };
+    RecoverySettings recovery;
+
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)

@@ -242,8 +242,10 @@ void RebelHarvester::checkPos()
                     requestCarryall();
                 }
                 
-                // Check if path to refinery is blocked - request carryall if stuck
-                if(!awaitingPickup && !moving && pathList.empty() && destination != location) {
+                // Check if path to refinery is blocked - request carryall if stuck.
+                // Waiting for the scheduler to compute a route is not a failure.
+                if(!awaitingPickup && !moving && pathList.empty() && destination != location
+                   && !hasPendingPathRequest()) {
                     // Not moving, no path, but has a destination - path is likely blocked
                     returnPathFailCounter++;
                     if(returnPathFailCounter >= 3) {

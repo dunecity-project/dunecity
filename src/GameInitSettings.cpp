@@ -36,6 +36,51 @@ constexpr Uint32 GAMEINIT_MOD6_MARKER = 0x4D4F4436; // MOD6: original unit damag
 constexpr Uint32 GAMEINIT_MOD5_MARKER = 0x4D4F4435; // MOD5: construction yard limit
 constexpr Uint32 GAMEINIT_MOD4_MARKER = 0x4D4F4434;  // "MOD4": immutable Workshop revisions
 constexpr Uint32 GAMEINIT_MOD3_MARKER = 0x4D4F4433;  // "MOD3": graphics-only DuneCity skins
+constexpr Uint32 GAMEINIT_MOD7_MARKER = 0x4D4F4437; // MOD7: per-house spice income multiplier
+
+/// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
+/// which is why a format that adds one has to raise SAVEGAMEVERSION and the protocol version.
+constexpr bool isKnownModMarker(Uint32 marker) {
+    return marker == GAMEINIT_MOD_MARKER || marker == GAMEINIT_MOD2_MARKER
+        || marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
+        || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
+        || marker == GAMEINIT_MOD7_MARKER;
+}
+
+/// MOD2 and later carry the per-house colour array.
+constexpr bool markerHasHouseColors(Uint32 marker) {
+    return marker != GAMEINIT_MOD_MARKER;
+}
+
+/// MOD3 and later carry the per-house skin array and the campaign skin.
+constexpr bool markerHasGraphicsSkins(Uint32 marker) {
+    return marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
+        || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
+        || marker == GAMEINIT_MOD7_MARKER;
+}
+
+/// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
+/// one of these and then ran out is a truncated stream, not an old format: the read rethrows.
+constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
+    return marker == GAMEINIT_MOD4_MARKER || marker == GAMEINIT_MOD5_MARKER
+        || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER;
+}
+
+/// MOD5 and later carry the construction yard limit.
+constexpr bool markerHasYardLimit(Uint32 marker) {
+    return marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
+        || marker == GAMEINIT_MOD7_MARKER;
+}
+
+/// MOD6 and later carry the original-unit-damage rule.
+constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
+    return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER;
+}
+
+/// MOD7 and later carry the per-house spice income multipliers.
+constexpr bool markerHasSpiceIncome(Uint32 marker) {
+    return marker == GAMEINIT_MOD7_MARKER;
+}
 }
 
 // Helper to capture current mod info
@@ -146,11 +191,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        if (modMarker == GAMEINIT_MOD_MARKER || modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
+        if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
             modChecksum = stream.readString();
 
-            if(modMarker == GAMEINIT_MOD2_MARKER || modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
+            if(markerHasHouseColors(modMarker)) {
                 Uint32 numHouseColors = stream.readUint32();
                 stream.requireReadableElements(numHouseColors, 4);
                 for(Uint32 i = 0; i < numHouseColors; i++) {
@@ -160,7 +205,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     }
                 }
             }
-            if(modMarker == GAMEINIT_MOD3_MARKER || modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
+            if(markerHasGraphicsSkins(modMarker)) {
                 const Uint32 numHouseSkins = stream.readUint32();
                 stream.requireReadableElements(numHouseSkins, 4);
                 for(Uint32 i = 0; i < numHouseSkins; ++i) {
@@ -171,15 +216,15 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 }
                 campaignGraphicsSkin = sanitizeGraphicsSkin(stream.readUint32());
             }
-            if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) {
+            if(markerHasWorkshopRevisions(modMarker)) {
                 modRevisionHash = stream.readString();
                 modRevisionVersion = stream.readUint32();
                 mapRevisionHash = stream.readString();
                 mapRevisionVersion = stream.readUint32();
                 mapRevisionManifest = stream.readString();
-                if(modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER)
+                if(markerHasYardLimit(modMarker))
                     gameOptions.maximumNumberOfConstructionYardsOverride = stream.readSint32();
-                if(modMarker == GAMEINIT_MOD6_MARKER)
+                if(markerHasOriginalUnitDamage(modMarker))
                     gameOptions.originalUnitDamage = stream.readBool();
                 const auto validHash = [](const std::string& hash) {
                     return hash.empty() || (hash.size() == 64 && hash.find_first_not_of("0123456789abcdef") == std::string::npos);
@@ -187,9 +232,30 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 if(!validHash(modRevisionHash) || !validHash(mapRevisionHash) || mapRevisionManifest.size() > 65536)
                     throw std::runtime_error("Invalid Workshop revision descriptor.");
             }
+            if(markerHasSpiceIncome(modMarker)) {
+                // The factors the lobby chose, in row order. A row may still be Random here,
+                // so these are matched by position, never by house identity.
+                const Uint32 numSpiceFactors = stream.readUint32();
+                if(numSpiceFactors > static_cast<Uint32>(MAX_CUSTOM_GAME_PLAYERS)
+                   || numSpiceFactors != houseInfoList.size()) {
+                    throw std::runtime_error("Invalid spice income factor count.");
+                }
+                stream.requireReadableElements(numSpiceFactors, 4);
+                for(Uint32 i = 0; i < numSpiceFactors; ++i) {
+                    const Uint32 factor = stream.readUint32();
+                    // Refused, not clamped: a factor this build does not recognise would make
+                    // this peer pay a different rate than the one that wrote the stream.
+                    if(!SpiceIncome::isValid(factor)) {
+                        throw std::runtime_error("Invalid spice income factor.");
+                    }
+                    if(i < houseInfoList.size()) {
+                        houseInfoList[i].spiceIncomeMultiplier = factor;
+                    }
+                }
+            }
         }
     } catch (InputStream::eof&) {
-        if(modMarker == GAMEINIT_MOD4_MARKER || modMarker == GAMEINIT_MOD5_MARKER || modMarker == GAMEINIT_MOD6_MARKER) throw;
+        if(markerHasWorkshopRevisions(modMarker)) throw;
         // Old format without mod info - use defaults
         modName = "vanilla";
         modChecksum = "";
@@ -253,6 +319,22 @@ GameInitSettings GameInitSettings::readSaveSetup(InputStream& stream, HouseInfoL
             [&](const HouseInfo& candidate) { return candidate.houseID == house.houseID; });
         if(init != saved.houseInfoList.end()) house.graphicsSkin = init->graphicsSkin;
     }
+    if(version >= SpiceIncome::kFirstSavegameVersion) {
+        // Deliberately *not* matched by identity against saved.houseInfoList: a row that was
+        // played as Random still says HOUSE_INVALID there, so identity matching would silently
+        // hand that row the default factor. SMUL carries the resolved rows instead, and it is
+        // the only authority for them.
+        if(stream.readUint32() != SpiceIncome::kSetupMarker)
+            THROW(std::runtime_error, "Invalid saved spice income factors.");
+        const auto factors = stream.readUint32();
+        if(factors != count) THROW(std::runtime_error, "Invalid saved spice income count.");
+        for(auto& house : houses) {
+            const Uint32 factor = stream.readUint32();
+            if(!SpiceIncome::isValid(factor))
+                THROW(std::runtime_error, "Invalid saved spice income factor.");
+            house.spiceIncomeMultiplier = factor;
+        }
+    }
     return saved;
 }
 
@@ -260,6 +342,8 @@ GameInitSettings::~GameInitSettings() {
 }
 
 void GameInitSettings::save(OutputStream& stream) const {
+    if(houseInfoList.size() > static_cast<std::size_t>(MAX_CUSTOM_GAME_PLAYERS))
+        THROW(std::runtime_error, "GameInitSettings::save(): too many house rows.");
     stream.writeSint8(static_cast<Sint8>(gameType));
     stream.writeSint8(houseID);
 
@@ -293,7 +377,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD6_MARKER);
+    stream.writeUint32(GAMEINIT_MOD7_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -314,6 +398,18 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeString(mapRevisionManifest);
     stream.writeSint32(gameOptions.maximumNumberOfConstructionYardsOverride);
     stream.writeBool(gameOptions.originalUnitDamage);
+
+    // MOD7: the chosen per-row spice income factors. Written last so the block stays append
+    // only. The writer refuses an out-of-range factor rather than normalising it, so a bug
+    // upstream surfaces here instead of becoming a save that two builds read differently.
+    stream.writeUint32(houseInfoList.size());
+    for(const HouseInfo& houseInfo : houseInfoList) {
+        if(!SpiceIncome::isValid(houseInfo.spiceIncomeMultiplier)) {
+            THROW(std::runtime_error, "GameInitSettings::save(): invalid spice income factor "
+                + std::to_string(houseInfo.spiceIncomeMultiplier) + ".");
+        }
+        stream.writeUint32(houseInfo.spiceIncomeMultiplier);
+    }
 }
 
 

@@ -98,7 +98,11 @@ std::string cityOptions() {
     out << "Rocket-Turrets Need Power = true\n";
     out << "Sandworms Respawn = true\n";
     out << "Killed Sandworms Drop Spice = true\n";
-    out << "Manual Carryall Drops = false\n";
+    // Dune City plays with large armies on crowded maps, where the carryall is the only way out of
+    // a deadlock a human player cannot micro around. Vanilla, Tornie and Dune2R keep the original
+    // default. A player's own choice for this mod lives in the config's "Game Options dunecity"
+    // section and is layered over this file, so an explicit false is never overwritten by a reseed.
+    out << "Manual Carryall Drops = true\n";
     out << "Maximum Number of Units Override = 0\n";
     out << "Maximum Number of Harvesters Override = -1\n";
     out << "Immortal Human Player = false\n";

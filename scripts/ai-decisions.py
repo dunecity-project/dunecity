@@ -515,7 +515,33 @@ def match_report(db):
                 residential_over_stronger_jobs=zone_exceptions,factory_gates=dict(gates),
                 attacks=dict(records=len(attacks),positive_new_force=sum(row['data'].get('force_value',0)>0 for row in attacks),
                     first_minute=round(attacks[0]['cycle']/cps/60,2) if attacks else None),
-                attack_gates=dict(Counter(row['data'].get('reason') for row in own if row['event']=='attack_deferred'))))
+                attack_gates=dict(Counter(row['data'].get('reason') for row in own if row['event']=='attack_deferred')),
+                # Army posture (Custom Hard/Brutal): the transitions, why they
+                # happened, how many recall orders were issued, and whether the
+                # outnumbered veto was lifted by the configured value share.
+                # These make the recovery behaviour identifiable in a capture
+                # without having to grep the raw events.
+                posture=dict(
+                    transitions=[dict(minute=round(row['cycle']/cps/60,2),
+                                      to=row['data'].get('to'),reason=row['data'].get('reason'),
+                                      emergency=bool(row['data'].get('emergency')))
+                                 for row in own if row['event']=='army_posture'],
+                    reasons=dict(Counter(row['data'].get('reason') for row in own
+                                         if row['event']=='army_posture')),
+                    recall_orders=sum(row['data'].get('issued',0) for row in own
+                                      if row['event']=='army_recall'),
+                    recall_passes=sum(1 for row in own if row['event']=='army_recall'),
+                    recall_deferred=sum(1 for row in own if row['event']=='army_recall_deferred'),
+                    legacy_hunters_adopted=sum(row['data'].get('adopted',0) for row in own
+                                               if row['event']=='army_legacy_hunters_adopted'),
+                    outnumbered_bypasses=sum(1 for row in own
+                                             if row['event']=='attack_outnumbered_bypass'),
+                    front_battery_sites=sum(1 for row in own
+                                            if row['event']=='front_battery_site'
+                                            and row['data'].get('valid')),
+                    protected_rally_fallbacks=dict(Counter(
+                        row['data'].get('fallback') for row in own
+                        if row['event']=='protected_rally' and row['data'].get('fallback'))))))
         matches.append(dict(session=session,metadata=meta,last_cycle=last_cycle,minutes=round(last_cycle/cps/60,2),
             policies=sorted({row['envelope'].get('policy_version','unknown') for row in rows}),
             events=dict(kinds),warnings=warnings,players=players,

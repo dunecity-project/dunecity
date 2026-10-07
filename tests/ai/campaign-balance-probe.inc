@@ -19,10 +19,15 @@
 #include "shared-spending-probe.inc"
 #include "police-placement-probe.inc"
 #include "police-budget-probe.inc"
+#include "police-reinforcement-probe.inc"
 #include "city-growth-probe.inc"
 #include "mcv-deployment-probe.inc"
 #include "opening-economy-probe.inc"
 #include "army-movement-probe.inc"
+#include "army-recovery-probe.inc"
+#include "army-recovery-continuation-probe.inc"
+#include "whole-army-dispatch-probe.inc"
+#include "launcher-kiting-probe.inc"
 #include "air-defense-probe.inc"
 #include "custom-attack-probe.inc"
 #include "custom-city-cap-probe.inc"
@@ -41,6 +46,7 @@
 #include "refund-provenance-probe.inc"
 #include "campaign-city-economy-probe.inc"
 #include "degradation-probe.inc"
+#include "spice-income-probe.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -98,10 +104,17 @@ int runCampaignBalanceProbe() {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
+    int rosterRow = 0;
     for (const auto& [h,team] : roster) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), team);
         if (h==humanHouse) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
         info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
+        // Give every row a different delivery income factor, as a host would in the lobby, so
+        // the probe can check which house ended up with which - including that no row picked
+        // up a neighbour's rate. Matches SpiceIncomeProbe::assignedFactors.
+        if(std::getenv("BALANCE_SPICE_INCOME_PROBE"))
+            info.spiceIncomeMultiplier = SpiceIncome::kMin + (rosterRow % SpiceIncome::kChoiceCount);
+        ++rosterRow;
         init.addHouseInfo(info);
     }
     auto game = std::make_unique<Game>();
@@ -136,6 +149,13 @@ int runCampaignBalanceProbe() {
         runCampaignCityEconomyProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_SPICE_INCOME_PROBE")) {
+        // Takes the owning pointer: it saves the match, replaces the Game with a reload and
+        // measures the resumed delivery on the loaded one.
+        runSpiceIncomeProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_CREDIT_STORAGE_PROBE")) {
         runCreditStorageProbe(*game);runCreditCaptureProbe(*game);runRefundProvenanceProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -160,6 +180,10 @@ int runCampaignBalanceProbe() {
         runPoliceBudgetProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_POLICE_REINFORCEMENT_PROBE")) {
+        runPoliceReinforcementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_CITY_GROWTH_PROBE")) {
         runCityGrowthProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -178,6 +202,20 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_ARMY_PROBE")) {
         runArmyMovementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_RECOVERY_PROBE")) {
+        runArmyRecoveryProbe(*game);
+        if (!std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) runArmyRecoveryContinuationProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_WHOLE_ARMY_PROBE")) {
+        runWholeArmyDispatchProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {
+        runLauncherKitingProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CUSTOM_ATTACK_PROBE")) {

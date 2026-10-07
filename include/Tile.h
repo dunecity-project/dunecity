@@ -311,7 +311,11 @@ public:
 
     void clearTerrain();
 
-    void setTrack(Uint8 direction);
+    /// Records sand tracks for one of the eight drawn directions. `direction`
+    /// is a plain int so an already-invalid signed angle (a unit's drawnAngle is
+    /// a Sint8) arrives as a negative number instead of becoming a large
+    /// unsigned value; out-of-range directions are ignored.
+    void setTrack(int direction);
 
     void selectAllPlayersUnits(int houseID, ObjectBase** lastCheckedObject, ObjectBase** lastSelectedObject);
     void selectAllPlayersUnitsOfType(int houseID, int itemID, ObjectBase** lastCheckedObject, ObjectBase** lastSelectedObject);

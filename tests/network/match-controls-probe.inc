@@ -104,10 +104,14 @@ static bool probeMatchControls(Game& game, const std::string& role, const std::s
                 throw std::runtime_error("players paused at different cycles");
             if(stage==1) {
                 if(host && !exists("speed-set")) {
-                    if(!game.requestGameSpeed(4)) throw std::runtime_error("host could not change paused speed");
+                    // The fastest setting, so the real request/broadcast/receive path is
+                    // checked at the boundary a peer on the previous protocol would refuse.
+                    if(!game.requestGameSpeed(GAMESPEED_MIN)) throw std::runtime_error("host could not change paused speed");
+                    if(game.requestGameSpeed(GAMESPEED_MIN-1)) throw std::runtime_error("host set a speed below the fastest setting");
+                    if(game.getGameSpeed()!=GAMESPEED_MIN) throw std::runtime_error("refused speed changed the host's pacing");
                     write("speed-set");
                 }
-                if(!host && game.getGameSpeed()==4) write("speed-received");
+                if(!host && game.getGameSpeed()==GAMESPEED_MIN) write("speed-received");
                 if(host && exists("speed-received")) {game.toggleMatchPause(); write("done-1");}
             } else if(stage==2 && !host) {
                 game.toggleMatchPause(); write("done-2");

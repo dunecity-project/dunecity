@@ -117,6 +117,7 @@ private:
     void onChangeTeamDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
     void onChangeColorDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
     void onChangeGraphicsSkinDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
+    void onChangeSpiceIncomeDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
     void onBonusColorCheckbox(int houseInfoNum);
     void onChangePlayerDropDownBoxes(bool bInteractive, int boxnum);
     void onClickPlayerDropDownBox(int boxnum);
@@ -194,6 +195,8 @@ private:
         DropDownBox     colorDropDown;
         Label           graphicsSkinLabel;
         DropDownBox     graphicsSkinDropDown;
+        Label           spiceIncomeLabel;
+        DropDownBox     spiceIncomeDropDown;
         HBox            playerHBox;
         PictureLabel    player1ArrowLabel;
         Label           player1Label;

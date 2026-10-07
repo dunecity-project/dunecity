@@ -208,8 +208,13 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                 bestCoord = currentCoord;
             }
 
-            if(currentCoord == destination) {
-                // destination found
+            // Approach a blocked goal without exhaustively proving it unreachable.
+            // Keep the original goal: an enterable yard/refinery still needs an
+            // exact route. Nodes were passable when opened; movement checks each
+            // step again because occupants can change between search slices.
+            if(currentCoord == destination
+               || (getMapData(currentCoord).h <= 1.5_fix && !pUnit->canPass(destination.x, destination.y))) {
+                // Goal or adjacent approach found.
                 smallestHeuristic = getMapData(currentCoord).h;
                 bestCoord = currentCoord;
                 break;

@@ -47,6 +47,8 @@ parser.add_argument('--opening-economy-probe', action='store_true')
 parser.add_argument('--starport-probe', action='store_true', help='Exercise reserved cash with above-normal Starport prices')
 parser.add_argument('--helper-economy-probe', action='store_true', help='Verify advanced campaign helper worker investment and paid imports')
 parser.add_argument('--city-campaign-probe', action='store_true', help='Verify campaign city limits, permissions, depletion and save/load')
+parser.add_argument('--spice-income-probe', action='store_true',
+                    help='Verify the per-house spice delivery income factor against real refinery unloading')
 parser.add_argument('--credit-storage-probe', action='store_true',
                     help='Verify the shared spice/tax storage limit, exempt starting cash and refunds')
 parser.add_argument('--stats-probe', action='store_true', help='Verify campaign results with a shared human/AI house')
@@ -56,14 +58,29 @@ parser.add_argument('--degradation-probe', action='store_true',
                     help='Verify Dynasty-aligned power damage, foundation decay and their save state')
 parser.add_argument('--radar-probe', action='store_true')
 parser.add_argument('--army-probe', action='store_true')
+parser.add_argument('--path-workers', type=int, default=0,
+                    help='Pin the pathfinding worker count (0 leaves the engine default). '
+                         'Used to show that a probe reaches the same result under one and '
+                         'four workers.')
+parser.add_argument('--recovery-probe', action='store_true',
+                    help='Verify Custom Hard/Brutal army recovery, wave cohesion, the outnumbered '
+                         'dispatch gate, enemy-facing batteries and the special-unit allocator')
+parser.add_argument('--battery-clearance-probe', action='store_true',
+                    help='Verify crowded-city rocket batteries replace eligible R/I/C lots through real production')
 parser.add_argument('--air-defense-probe', action='store_true')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
+parser.add_argument('--police-reinforcement-probe', action='store_true',
+                    help='Verify police reinforcements follow the selected unit limit, not a police-local ceiling')
 parser.add_argument('--city-growth-probe', action='store_true',
                     help='Verify continuous city growth while proactive defence/supplier goals are unmet')
 parser.add_argument('--mcv-deployment-probe', action='store_true',
                     help='Verify MCVs deploy on the rock the base already holds instead of driving around it')
 parser.add_argument('--custom-attack-probe', action='store_true')
+parser.add_argument('--whole-army-probe', action='store_true',
+                    help='Verify the Custom Hard/Brutal whole-army dispatch and asset emergency defence')
+parser.add_argument('--launcher-kiting-probe', action='store_true',
+                    help='Verify hunting launchers escape a too-close enemy while keeping Hunt')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
@@ -197,16 +214,25 @@ if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'
 if args.radar_probe: env['BALANCE_RADAR_PROBE'] = '1'
 if args.army_probe: env['BALANCE_ARMY_PROBE'] = '1'
+if args.recovery_probe: env['BALANCE_RECOVERY_PROBE'] = '1'
+if args.battery_clearance_probe:
+    env['BALANCE_RECOVERY_PROBE'] = '1'
+    env['BALANCE_BATTERY_CLEARANCE_ONLY'] = '1'
+if args.path_workers > 0: env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
 if args.air_defense_probe: env['BALANCE_AIR_DEFENSE_PROBE'] = '1'
 if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'
 if args.police_budget_probe: env['BALANCE_POLICE_BUDGET_PROBE'] = '1'
+if args.police_reinforcement_probe: env['BALANCE_POLICE_REINFORCEMENT_PROBE'] = '1'
 if args.city_growth_probe: env['BALANCE_CITY_GROWTH_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
+if args.whole_army_probe: env['BALANCE_WHOLE_ARMY_PROBE'] = '1'
+if args.launcher_kiting_probe: env['BALANCE_LAUNCHER_KITING_PROBE'] = '1'
 if args.factory_recovery_probe: env['BALANCE_FACTORY_RECOVERY_PROBE'] = '1'
 if args.starport_probe: env['BALANCE_STARPORT_PROBE'] = '1'
 if args.helper_economy_probe: env['BALANCE_HELPER_ECONOMY_PROBE'] = '1'
 if args.city_campaign_probe: env['BALANCE_CITY_CAMPAIGN_PROBE'] = '1'
+if args.spice_income_probe: env['BALANCE_SPICE_INCOME_PROBE'] = '1'
 if args.credit_storage_probe: env['BALANCE_CREDIT_STORAGE_PROBE'] = '1'
 if args.stats_probe: env['BALANCE_STATS_PROBE'] = '1'
 if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'

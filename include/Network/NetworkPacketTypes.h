@@ -107,7 +107,40 @@
 // Version 44: Fractional repairs finish at maximum HP. Explicit unit overrides
 //             also change Brutal military production and count admission. Older
 //             peers would compute different repair releases and AI orders.
-#define NETWORK_PROTOCOL_VERSION            44
+// Version 45: Police patrol admission uses the effective game unit-category limits
+//             instead of a separate 250-unit ceiling. Older peers can spawn different
+//             patrols from the same command or AI tick.
+// Version 47: A ground unit that has been on the same tile for thirty seconds of simulation
+//             time while still wanting to move asks for a carryall, retrying on a throttle
+//             rather than once per completed path search, and Stop now releases an outstanding
+//             pickup booking. Which units are lifted, and on which cycle, is simulation state:
+//             a peer on version 46 would keep driving a unit this build flies, and would hold a
+//             booking this build cancels. The observer runtime stream is version 7 for the same
+//             reason.
+// 48: per-house spice income multipliers. The lobby gained a change-event type and
+//     GameInitSettings gained the MOD7 block, so a 47 peer cannot decode either; the factor
+//     also feeds the state digest, so an older peer would compute a different house hash.
+// 49: carryall pickup keeps the actual passenger and releases replacement bookings;
+//     deterministic containment recovery restores orphaned passengers from older matches.
+//     Older peers would hide different units and disagree about house survival.
+// 50: QuantBot army posture. A Custom Hard/Brutal house withdraws, assembles at
+//     a protected rally and gates its offensive dispatch on an outnumbered front
+//     and a share of its configured military value. Which units move, when a
+//     wave leaves and where emplacements are built are all simulation state, so
+//     a peer on 49 would issue different AI orders from the same cycle and the
+//     two would diverge. The save layout is 9852 for the same reason.
+// 51: Custom Hard/Brutal city batteries may replace eligible enemy-facing R/I/C
+//     lots. Peers on 50 would preserve those lots and issue different orders.
+// 54: Hunt launchers retain close-range spacing; rebuilt armies leave recovery
+//     by strength. Older peers would issue different movement and attack orders.
+// 55: Custom Hard/Brutal base attacks mobilise the whole ground army on Hunt,
+//     retaining live invasion orders across repeated contacts. Older peers
+//     send different troops and use different movement and attack orders.
+// 56: Allow 2/3ms shared game speeds in GameInitSettings and MATCH_CONTROL.
+//     Older peers reject these values; save and observer layouts are unchanged.
+// 57: Wrap ground combat rotation after movement; older peers can generate an invalid
+//     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
+#define NETWORK_PROTOCOL_VERSION            57
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

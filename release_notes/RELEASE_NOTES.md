@@ -1,3 +1,22 @@
+# Dune City 1.0.805
+
+Custom Hard and Brutal attacks send the whole available ground army to engine Hunt in one dispatch, including remote reserves and troops left in old Area Guard orders. The percentage reserve and local staging-cohort selection are removed. Existing hunters keep their orders; new recruits gather until the next viable launch.
+
+- Attacks on owned buildings and harvesters pull a larger nearby defense, including hunters busy elsewhere. Ordinary scans now recheck harvester attacks as well as building attacks.
+- Human orders, repair and transport roles, and ongoing emergency defense retain their units. Aircraft keep their existing strike planner.
+- Existing saves remain compatible. Multiplayer peers must all update: network protocol 53 separates the new AI decisions.
+
+# Dune City 1.0.804
+
+Custom Hard and Brutal armies attack using engine Hunt. The bot leaves their
+movement and target selection to Hunt, including when an attacker takes damage.
+
+- Reserves assemble outside their colony, leaving streets clear; withdrawing armies use a sheltered rally.
+- A ready local force can attack while reinforcements at other colonies catch up, keeping its configured reserve.
+- Small raids on damaged, well-defended buildings and enemies between scattered troops no longer repeatedly recall the whole army.
+- Threatened and forward colonies can receive a small defensive post without taking troops already attacking.
+- Existing saves remain compatible. Multiplayer peers must all update: the network protocol is now 52.
+
 # Dune City 1.0.796
 
 Five DuneCity maps now ship with the full release: 4 corners v1, DuneCity (192x192), test (256x256), city seige and Alkozeltser 4 Cities v1. They are available on clean desktop and browser installations through the DuneCity map selection.

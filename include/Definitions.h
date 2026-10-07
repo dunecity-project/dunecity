@@ -93,7 +93,19 @@
 //       have the old flat conversion estimate cleared on load
 //       (DeviationReward::migrateLegacyLedger) so the two accountings cannot mix.
 // 9850: MOD6 game rules persist the original unit damage checkbox.
-#define SAVEGAMEVERSION     9850
+// 9851: per-house spice income multiplier. Three places carry it, because no single one of
+//       them can: MOD7 in GameInitSettings carries the *chosen* lobby rows (which may still
+//       say Random), the SMUL block after the setup colours carries the *resolved* rows of a
+//       saved match, and House carries the live factor the simulation actually pays out with.
+// 9852: QuantBot army posture. A Custom Hard/Brutal house carries its posture
+//       (offensive, withdrawing, recovering) and the cycle it entered it, the
+//       cumulative mobile-combat attrition ledger with its baseline ring, the
+//       tracked Custom wave and its shared objective, the protected assembly
+//       point and the fair recall cursor. None of it can be recomputed after a
+//       load: the ledger is cumulative, and the posture decides whether a unit
+//       is marching home or marching out, so a save or network checkpoint taken
+//       mid-withdrawal has to carry it.
+#define SAVEGAMEVERSION     9852
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
@@ -107,7 +119,9 @@
 
 
 #define GAMESPEED_MAX 32
-#define GAMESPEED_MIN 4   // Fastest: 4ms per cycle (twice the previous 8ms maximum speed)
+// Fastest: 2ms per cycle (500 cycles/s), twice the previous 4ms setting.
+// Default tick-based gameplay conversions remain at 16ms.
+#define GAMESPEED_MIN 2
 #define GAMESPEED_DEFAULT 16  // 16ms per cycle = default game speed (matches 0.97.5)
 #define MILLI2CYCLES(MILLISECONDS) ((MILLISECONDS)/GAMESPEED_DEFAULT)   // this is calculated in game milliseconds (dune 2 has about the same in game speed "fastest")
 #define VOLUME_MAX 100

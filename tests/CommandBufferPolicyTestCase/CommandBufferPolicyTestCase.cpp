@@ -209,7 +209,7 @@ TEST_CASE("CommandBufferPolicy: the largest buffer still emits a parseable packe
     REQUIRE(CommandValidation::isAcceptableCommandListEntryCount(entries));
 
     // And it has to be a ceiling on the cycle count, not only on the millisecond budget: at
-    // GAMESPEED_MIN the same budget converts to four times as many cycles.
+    // GAMESPEED_MIN the same budget converts to eight times as many cycles as at the default.
     REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(0xFFFFFFFFu, GAMESPEED_MIN)
             == CommandBufferPolicy::kMaxRelayBufferCycles);
 }
@@ -294,16 +294,59 @@ TEST_CASE("CommandBufferPolicy: the budget is clamped at both ends",
         REQUIRE(CommandBufferPolicy::relayCommandBufferCycles(300, 0)
                 == CommandBufferPolicy::relayCommandBufferCycles(300, GAMESPEED_DEFAULT));
     }
+
+    SECTION("a speed outside the settable range is pulled back into it, not divided by") {
+        // Zero and negative are the only values that cannot be a duration at all; everything
+        // else is clamped, so a peer sending 1 is treated as the fastest real setting rather
+        // than inflating the window. Nothing here may divide by zero.
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(0) == GAMESPEED_DEFAULT);
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(-1) == GAMESPEED_DEFAULT);
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(GAMESPEED_MIN - 1)
+                == static_cast<Uint32>(GAMESPEED_MIN));
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(GAMESPEED_MIN)
+                == static_cast<Uint32>(GAMESPEED_MIN));
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(GAMESPEED_MIN + 1) == 3u);
+        REQUIRE(CommandBufferPolicy::sanitizedGameSpeedMs(GAMESPEED_MAX + 1)
+                == static_cast<Uint32>(GAMESPEED_MAX));
+    }
+}
+
+TEST_CASE("CommandBufferPolicy: the fastest settings are latency-limited, not mis-sized",
+          "[network][relay][buffer]") {
+    // The receiver window caps the allowance in *cycles*, so the faster the match the less
+    // wall-clock latency that same allowance covers. This is the documented capacity limit of
+    // an HTTP-polled relay match at the two fastest settings: the pair runs below its
+    // configured cycle rate, waiting on the lockstep rule, rather than running incorrectly.
+    // Nothing about it is new - the cap already bound at 4ms - and the policy is unchanged.
+    const Uint32 cover = CommandBufferPolicy::kMaxRelayBufferCycles * GAMESPEED_MIN;
+    REQUIRE(cover < CommandBufferPolicy::kMinRelayBudgetMs);
+    REQUIRE(CommandBufferPolicy::relayCommandBufferCycles(0, GAMESPEED_MIN)
+            == CommandBufferPolicy::kMaxRelayBufferCycles);
+
+    // At the default speed the floor budget still fits inside the cap, which is why the
+    // limit is a property of the fast settings and not of the policy.
+    REQUIRE(CommandBufferPolicy::relayCommandBufferCycles(0, GAMESPEED_DEFAULT)
+            < CommandBufferPolicy::kMaxRelayBufferCycles);
 }
 
 TEST_CASE("CommandBufferPolicy: milliseconds become cycles of this match, rounded up",
           "[network][relay][buffer]") {
     // MILLI2CYCLES() divides by GAMESPEED_DEFAULT whatever the match is set to. A latency
-    // budget converted that way is four times too small at GAMESPEED_MIN, where the match runs
-    // four times as many cycles per second.
+    // budget converted that way is eight times too small at GAMESPEED_MIN, where the match runs
+    // eight times as many cycles per second.
     REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(1600, 16) == 70); // cycle cap
     REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(1600, 32) == 50);
     REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(160, 4) == 40);
+
+    // The two fastest settings convert the same wall-clock budget into proportionally more
+    // cycles, up to the cap. 120ms is 40 cycles at 3ms and 60 at 2ms; the floor and the
+    // rounding still apply at both.
+    REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(120, 3) == 40);
+    REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(120, 2) == 60);
+    REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(121, 3) == 41);  // rounded up
+    REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(8, 2) == CommandBufferPolicy::kMinBufferCycles);
+    REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(141, 2)
+            == CommandBufferPolicy::kMaxRelayBufferCycles);
 
     // Rounded up: a budget that is not a whole number of cycles must not be shortened.
     REQUIRE(CommandBufferPolicy::cyclesForMilliseconds(17, 16) == 5);   // floor applies

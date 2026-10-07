@@ -20,6 +20,7 @@
 
 #include <units/UnitBase.h>
 
+class Carryall;
 
 class GroundUnit : public UnitBase
 {
@@ -47,9 +48,39 @@ public:
     void checkPos() override;
 
     void doRequestCarryallDrop(int x, int y);
+
+    /**
+        Explicit transport intent: the player's carryall-drop order, a repair trip, a harvester
+        that wants a lift, and the re-booking retry in checkPos(). Puts the unit into
+        CARRYALLREQUESTED whether or not a carrier was free, which is what makes it keep asking,
+        and is deliberately never blocked by the automatic-rescue cooldown.
+        \return true if a carrier was booked
+    */
     bool requestCarryall();
-    void cancelCarryallPickup();
+
+    /**
+        The automatic long-stall rescue. Distinguished from requestCarryall() because it must not
+        change what the unit is doing when no carrier is free: a unit that cannot be collected
+        keeps its own attack mode, keeps navigating and keeps fighting, instead of being parked in
+        CARRYALLREQUESTED waiting for a flight that is not coming.
+        \return true if a carrier was booked
+    */
+    bool requestCarryallRescue();
+
+    void cancelCarryallPickup() override;
     void setPickedUp(UnitBase* newCarrier) override;
+
+    /**
+        Releases a pickup booking held by any carrier other than \a keepCarrier.
+
+        Called by the aircraft that is actually collecting this unit. A repair order issued during
+        the pickup cancels the original booking and asks for transport again, which can promise
+        this unit to a second aircraft; that booking has to go before the unit becomes cargo and
+        stops being visible to the other aircraft's own release checks. Unlike
+        cancelCarryallPickup() this does not touch the attack mode: the unit is not losing its
+        lift, it is being collected right now.
+    */
+    void releaseReplacementPickup(const UnitBase* keepCarrier);
 
     using UnitBase::doMove2Pos;
     void doMove2Pos(int xPos, int yPos, bool bForced) override;
@@ -97,6 +128,22 @@ public:
 protected:
     void move() override;
     void navigate() override;
+
+    /**
+        The first carrier of ours that could collect this unit right now, or nullptr.
+
+        Scans Game's derived carryall index rather than the whole unit list, and revalidates every
+        candidate against the live object: still present, still a carryall, ours, active, alive,
+        on the map, unbooked, and a carrier we actually own rather than a delivery flight that is
+        about to leave the map and take the booking with it.
+
+        "First" is unitList order, which is the selection the explicit request has always made.
+    */
+    Carryall* findFreeCarrier() const;
+
+    /// Arms the automatic-rescue throttle, jittered by object id so a stalled army does not
+    /// rescan on one cycle. Deterministic: no clock and no randomness.
+    void armCarryallRequestThrottle();
 
     bool    awaitingPickup;     ///< Is this unit waiting for pickup?
     Uint32  bookedCarrier;      ///< What is the carrier if waiting for pickup?

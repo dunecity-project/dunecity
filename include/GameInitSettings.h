@@ -20,6 +20,7 @@
 
 #include "Definitions.h"
 #include "DataTypes.h"
+#include "SpiceIncome.h"
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 
@@ -85,6 +86,12 @@ public:
             }
         }
 
+        /**
+            The frozen legacy layout: houseID, team, then the player list. Deliberately not
+            extended. Everything added since - colorOfHouse, graphicsSkin, spiceIncomeMultiplier -
+            travels in a marked block of its own, because old saves and old peers parse these
+            bytes positionally and have no way to skip a field they do not know about.
+        */
         void save(OutputStream& stream) const {
             stream.writeSint32(houseID);
             stream.writeSint32(team);
@@ -103,6 +110,9 @@ public:
         int             colorOfHouse;
         int             team;
         GraphicsSkin    graphicsSkin = GraphicsSkin::SimCity;
+        /// Spice-delivery income factor for this row, 1x unless the lobby chose otherwise.
+        /// Outside the legacy save block above; see SpiceIncome.h.
+        Uint32          spiceIncomeMultiplier = SpiceIncome::kDefault;
         PlayerInfoList  playerInfoList;
     };
 

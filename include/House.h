@@ -27,6 +27,7 @@ class ObjectData;
 #include <misc/OutputStream.h>
 #include <Definitions.h>
 #include <DataTypes.h>
+#include <SpiceIncome.h>
 #include <AITeamInfo.h>
 #include <data.h>
 #include <Choam.h>
@@ -206,6 +207,17 @@ public:
     inline const Choam& getChoam() const { return choam; };
 
 
+    /// What a refinery pays this house per unit of spice a harvester delivers, relative to the
+    /// original rate. Chosen per house row in the Custom Game lobby; 1 everywhere else.
+    inline Uint32 getSpiceIncomeMultiplier() const { return spiceIncomeMultiplier; }
+    /**
+        Sets the delivery income factor. Refuses anything outside SpiceIncome's range instead of
+        clamping: a factor that silently became 1 would make this house earn at a different rate
+        than the peers it is playing against.
+        \param  multiplier  the factor to use
+    */
+    void setSpiceIncomeMultiplier(Uint32 multiplier);
+
     inline FixPoint getStartingCredits() const { return startingCredits; }
     inline FixPoint getStoredCredits() const { return storedCredits; }
     inline FixPoint getCityCredits() const { return cityCredits; }
@@ -326,6 +338,9 @@ protected:
     FixPoint startingCredits; ///< number of starting credits this player still has
     FixPoint cityCredits;     ///< spendable city tax income, excluded from the harvested-spice quota
     FixPoint cityTaxReceipts; ///< cumulative gross city tax collected this mission (statistic only: never spent, never reduced by police costs or credit caps)
+    /// Delivery income factor for this house (SAVEGAMEVERSION 9851). Part of the simulation:
+    /// it is mixed into the state digest and read at every refinery payout.
+    Uint32 spiceIncomeMultiplier;
     /// Next game cycle at which the "storage is full" ticker may repeat.
     /// Presentation only; it never influences the simulation.
     Uint32 nextStorageWarningCycle;
