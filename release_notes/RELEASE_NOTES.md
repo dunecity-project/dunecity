@@ -1,3 +1,31 @@
+# Dune City 1.0.815
+
+Dune2R now downloads and updates its remastered artwork automatically when you select it in Custom Game or continue a setup with it already selected. The first download contains six packs, approximately 384 MB, including Harkonnen Infantry Remastered.
+
+- A progress panel verifies cached artwork and downloads missing or changed files from GitHub. Retry resumes after a connection failure; Cancel returns to setup. Complete verified artwork works offline.
+- Harkonnen Soldiers gain directional movement, combat, collapse and aftermath animation. Other houses and Troopers retain their existing artwork.
+- Adds 30 approved special-building artwork bindings to the DuneCity Dune2 skin. Choose DuneCity, Rebels and Skin Dune2 to see the new city buildings.
+- Dune2R enlarges terrain, buildings and units together while menus and the sidebar keep their size. The Classic toggle remains available during a match.
+- Built-in Dune2R artwork is available in Asset Editors for inspection and preview. Shared mod versions retain their pinned content.
+
+Includes the production 1.0.812 fixes. Existing saves remain compatible and network protocol remains 57. Saves, settings and user mods stay in the separate user folder. No metaserver update is required.
+
+# Dune City 1.0.814 — local PR89 candidate
+
+Includes PR89's approved DuneCity special-building artwork and optional Harkonnen
+Infantry Remastered pack, integrated with the production 1.0.812 fixes.
+
+- Built-in Dune2R can now open Asset Editors to download and preview its artwork.
+  Shared versions can be inspected; their downloads remain disabled.
+- Dune2R enlarges the world presentation coherently while menus and the sidebar
+  keep their size. The Classic toggle remains available during a match.
+- Harkonnen Soldier animation includes movement, combat return, collapse and
+  aftermath. Other houses and Troopers keep their existing artwork.
+- Saves and gameplay rules retain the production behavior; network protocol is 57.
+
+This is a local test candidate. Use the accompanying isolated test launcher and
+guide for the correct mod, skin, asset pack and prepared infantry map.
+
 # Dune City 1.0.805
 
 Custom Hard and Brutal attacks send the whole available ground army to engine Hunt in one dispatch, including remote reserves and troops left in old Area Guard orders. The percentage reserve and local staging-cohort selection are removed. Existing hunters keep their orders; new recruits gather until the next viable launch.

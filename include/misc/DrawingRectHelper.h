@@ -19,6 +19,7 @@
 #define DRAWINGRECTHELPER_H
 
 #include <misc/SDL2pp.h>
+#include <misc/Dune2RPresentation.h>
 
 extern SDL_Renderer* renderer;
 
@@ -118,7 +119,7 @@ inline SDL_Rect calcSpriteSourceRect(SDL_Texture *pTexture, int col, int numCols
     \return the rectangle for drawing pSurface at the specified position when passed to SDL_BlitSurface
 */
 inline SDL_Rect calcSpriteDrawingRect(SDL_Surface* pSurface, int x, int y, int numCols, int numRows = 1, HAlign halign = HAlign::Left, VAlign valign = VAlign::Top) {
-    SDL_Rect rect = { x, y, pSurface->w/numCols, pSurface->h/numRows };
+    SDL_Rect rect = { x, y, dune2rWorldExtent(pSurface->w/numCols), dune2rWorldExtent(pSurface->h/numRows) };
 
     switch(halign) {
         case HAlign::Left:      /*nothing*/         break;
@@ -153,6 +154,8 @@ inline SDL_Rect calcSpriteDrawingRect(SDL_Texture* pTexture, int x, int y, int n
 
     rect.w /= numCols;
     rect.h /= numRows;
+    rect.w = dune2rWorldExtent(rect.w);
+    rect.h = dune2rWorldExtent(rect.h);
 
     switch(halign) {
         case HAlign::Left:      /*nothing*/         break;

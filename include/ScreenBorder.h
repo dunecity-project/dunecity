@@ -27,6 +27,7 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <cmath>
 
 #define SCROLLBORDER 3
 
@@ -229,6 +230,7 @@ public:
     */
     inline int world2screenX(int x) const
     {
+        if(presentationScale != 1) return scaledWorldToScreen(x, topLeftCorner.x, shakingOffset.x, presentationRect.x);
         return world2zoomedWorld(x - topLeftCorner.x + shakingOffset.x + topLeftCornerOnScreen.x);
     }
 
@@ -239,6 +241,7 @@ public:
     */
     inline int world2screenX(float x) const
     {
+        if(presentationScale != 1) return scaledWorldToScreen(x, topLeftCorner.x, shakingOffset.x, presentationRect.x);
         return world2zoomedWorld(x - (float) topLeftCorner.x + (float) shakingOffset.x + (float) topLeftCornerOnScreen.x);
     }
 
@@ -249,6 +252,7 @@ public:
     */
     inline int world2screenX(FixPoint x) const
     {
+        if(presentationScale != 1) return world2screenX(x.toFloat());
         return world2zoomedWorld(x.toFloat() - (float) topLeftCorner.x + (float) shakingOffset.x + (float) topLeftCornerOnScreen.x);
     }
 
@@ -259,6 +263,7 @@ public:
     */
     inline int world2screenY(int y) const
     {
+        if(presentationScale != 1) return scaledWorldToScreen(y, topLeftCorner.y, shakingOffset.y, presentationRect.y);
         return world2zoomedWorld(y - topLeftCorner.y + shakingOffset.y + topLeftCornerOnScreen.y);
     }
 
@@ -269,6 +274,7 @@ public:
     */
     inline int world2screenY(float y) const
     {
+        if(presentationScale != 1) return scaledWorldToScreen(y, topLeftCorner.y, shakingOffset.y, presentationRect.y);
         return world2zoomedWorld(y - (float) topLeftCorner.y + (float) shakingOffset.y + (float) topLeftCornerOnScreen.y);
     }
 
@@ -279,6 +285,7 @@ public:
     */
     inline int world2screenY(FixPoint y) const
     {
+        if(presentationScale != 1) return world2screenY(y.toFloat());
         return world2zoomedWorld(y.toFloat() - (float) topLeftCorner.y + (float) shakingOffset.y + (float) topLeftCornerOnScreen.y);
     }
 
@@ -289,6 +296,7 @@ public:
     */
     inline int screen2worldX(int x) const
     {
+        if(presentationScale != 1) return scaledScreenToWorld(x, topLeftCorner.x, shakingOffset.x, presentationRect.x);
         return zoomedWorld2world(x) - topLeftCornerOnScreen.x + topLeftCorner.x + shakingOffset.x;
     }
 
@@ -299,6 +307,7 @@ public:
     */
     inline int screen2worldY(int y) const
     {
+        if(presentationScale != 1) return scaledScreenToWorld(y, topLeftCorner.y, shakingOffset.y, presentationRect.y);
         return zoomedWorld2world(y) - topLeftCornerOnScreen.y + topLeftCorner.y + shakingOffset.y;
     }
 
@@ -329,6 +338,8 @@ public:
         \return true, if inside, false otherwise
     */
     inline bool isScreenCoordInsideMap(int x, int y) const {
+        if(presentationScale != 1) return x >= presentationRect.x && x < presentationRect.x + presentationRect.w
+            && y >= presentationRect.y && y < presentationRect.y + presentationRect.h;
         return (zoomedWorld2world(x) >= topLeftCornerOnScreen.x  && zoomedWorld2world(x) < bottomRightCornerOnScreen.x
                 && zoomedWorld2world(y) >= topLeftCornerOnScreen.y  && zoomedWorld2world(y) < bottomRightCornerOnScreen.y);
     }
@@ -339,6 +350,10 @@ public:
         \param newMapSizeY         the number of map tiles in y direction
     */
     void adjustScreenBorderToMapsize(int newMapSizeX, int newMapSizeY);
+
+    // Local graphics mode changes preserve the same world-space camera centre.
+    void setPresentationScale(int scale);
+    int getPresentationScale() const { return presentationScale; }
 
 
     void shakeScreen(int numShakingCycles) {
@@ -360,6 +375,16 @@ public:
     }
 
 private:
+    int scaledWorldToScreen(double value, int origin, int shake, int pixelOrigin) const {
+        return pixelOrigin + static_cast<int>(std::lround(
+            (value - origin + shake) * (currentZoomlevel + 1) * presentationScale / 4.0));
+    }
+    int scaledScreenToWorld(int value, int origin, int shake, int pixelOrigin) const {
+        return origin - shake + static_cast<int>(std::lround(
+            (value - pixelOrigin) * 4.0 / ((currentZoomlevel + 1) * presentationScale)));
+    }
+    int presentationScale = 1;
+    SDL_Rect presentationRect{};
     SDL_Rect gameBoardRect;         ///< the complete game board rectangle
 
     int mapSizeX;                   ///< The number of tiles in x direction

@@ -39,6 +39,7 @@ TEST_CASE("AI telemetry separates sessions and ends bounded capture explicitly",
     REQUIRE_FALSE(writer.enabled());
     std::ifstream input(first);
     std::stringstream contents; contents << input.rdbuf();
+    input.close(); // Windows cannot remove the fixture while its reader is open.
     REQUIRE(contents.str().find("\"event\":\"capture_limit\"") != std::string::npos);
     REQUIRE(contents.str().find("\"cycle\":200") != std::string::npos);
     REQUIRE(writer.start(root.string(), AITelemetry::Record()));
@@ -64,6 +65,7 @@ TEST_CASE("AI telemetry retains fractional income and records the real closing c
     std::ifstream input(file);
     std::string line, last;
     while (std::getline(input, line)) last = line;
+    input.close();
     REQUIRE(last.find("\"cycle\":746182") != std::string::npos);
     REQUIRE(last.find("\"event\":\"session_end\"") != std::string::npos);
     REQUIRE(writer.start(root.string(), AITelemetry::Record()));
@@ -91,6 +93,7 @@ TEST_CASE("Telemetry thins repeated growth observations without dropping actual 
     REQUIRE(writer.write(300,-1,-1,"game_summary",AITelemetry::Record().set("ended",1))!=0);
     writer.stop();
     std::ifstream input(path); std::stringstream contents; contents<<input.rdbuf();
+    input.close();
     REQUIRE(contents.str().find("\"event\":\"game_summary\"")!=std::string::npos);
     REQUIRE(contents.str().find("\"event\":\"capture_limit\"")!=std::string::npos);
     REQUIRE(contents.str().find("\"terminal_events_retained\":1")!=std::string::npos);
@@ -120,6 +123,7 @@ TEST_CASE("Performance capture aggregates every sample and flushes partial windo
         if(line.find("\"event\":\"performance_window\"")!=std::string::npos) { window=line; ++windows; }
         last=line;
     }
+    in.close();
     REQUIRE(windows==1);
     REQUIRE(window.find("\"count\":3,\"sum\":350000,\"max\":300000,\"max_cycle\":20")!=std::string::npos);
     REQUIRE(window.find("\"over_33ms\":2,\"over_100ms\":1,\"over_250ms\":1")!=std::string::npos);
@@ -132,6 +136,7 @@ TEST_CASE("Performance capture aggregates every sample and flushes partial windo
     REQUIRE(writer.isWorstFrame(1));
     writer.stop();
     std::ifstream secondIn(second); std::stringstream contents; contents<<secondIn.rdbuf();
+    secondIn.close();
     REQUIRE(contents.str().find("ai.build")==std::string::npos);
     if(const char* artifact=std::getenv("DUNECITY_PERFORMANCE_TEST_EXPORT"))
         std::filesystem::copy_file(file,artifact,std::filesystem::copy_options::overwrite_existing);
@@ -155,6 +160,7 @@ TEST_CASE("Every substantial frame stall is timestamped including smaller consec
         ++stalls;all+=line;
         REQUIRE(line.find("\"session_wall_us\":")!=std::string::npos);
     }
+    in.close();
     REQUIRE(stalls==3);
     REQUIRE(all.find("\"duration_us\":100000")!=std::string::npos);
     REQUIRE(all.find("\"duration_us\":1500000")!=std::string::npos);

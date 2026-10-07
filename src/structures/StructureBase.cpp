@@ -415,8 +415,8 @@ void StructureBase::drawSelectionBox() {
     SDL_Rect dest;
     dest.x = screenborder->world2screenX(realX);
     dest.y = screenborder->world2screenY(realY);
-    dest.w = world2zoomedWorld(TILESIZE * structureSize.x);
-    dest.h = world2zoomedWorld(TILESIZE * structureSize.y);
+    dest.w = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.x));
+    dest.h = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.y));
 
     //now draw the selection box thing, with parts at all corners of structure
 
@@ -446,7 +446,7 @@ void StructureBase::drawSelectionBox() {
 
     // health bar
     for(int i=1;i<=currentZoomlevel+1;i++) {
-        renderDrawHLine(renderer, dest.x, dest.y-i-1, dest.x + (lround((getHealth()/getMaxHealth())*(world2zoomedWorld(TILESIZE)*structureSize.x - 1))), getHealthColor());
+        renderDrawHLine(renderer, dest.x, dest.y-i-1, dest.x + (lround((getHealth()/getMaxHealth())*(dest.w - 1))), getHealthColor());
     }
 }
 
@@ -454,8 +454,8 @@ void StructureBase::drawOtherPlayerSelectionBox() {
     SDL_Rect dest;
     dest.x = screenborder->world2screenX(realX) + (currentZoomlevel+1);
     dest.y = screenborder->world2screenY(realY) + (currentZoomlevel+1);
-    dest.w = world2zoomedWorld(TILESIZE * structureSize.x) - 2*(currentZoomlevel+1);
-    dest.h = world2zoomedWorld(TILESIZE * structureSize.y) - 2*(currentZoomlevel+1);
+    dest.w = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.x)) - 2*(currentZoomlevel+1);
+    dest.h = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.y)) - 2*(currentZoomlevel+1);
 
     //now draw the selection box thing, with parts at all corners of structure
 

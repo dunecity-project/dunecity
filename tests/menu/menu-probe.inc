@@ -8,6 +8,8 @@
 #include <MapEditor/MapSettingsWindow.h>
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/CustomGameMenu.h>
+#include <Menu/Dune2RReadinessMenu.h>
+#include <mod/Dune2RAssetManager.h>
 #include <Menu/CrossplayMenu.h>
 #include <Menu/OptionsMenu.h>
 #include <Menu/AboutMenu.h>
@@ -1648,8 +1650,312 @@ int runMenuProbe() {
                     "Loading a map lost city palette or structures");
     }
     ModManager::instance().setActiveMod("vanilla");
-    { ModMenu menu(ModMenu::Purpose::MapEditor); menuCapture(menu,"map-working-mod"); }
-    { ModMenu menu(ModMenu::Purpose::AssetEditors); menuCapture(menu,"asset-working-mod"); }
+    {
+        // The map editor only activates the chosen mod, so a bundled mod has
+        // always been a legal selection here. Pin that it stayed that way.
+        ModMenu menu(ModMenu::Purpose::MapEditor);
+        int bundled = -1;
+        for(size_t i = 0; i < menu.mods.size(); ++i)
+            if(menu.mods[i].name == "vanilla") bundled = static_cast<int>(i);
+        menuRequire(bundled >= 0, "Map editor mod list lost the bundled vanilla rules");
+        menu.modListBox.setSelectedItem(bundled);
+        menuRequire(menu.editButton.isEnabled(), "Map editor refuses a bundled working mod");
+        menuRequire(menu.statusLabel.getText() == "The selected mod is used only for this editor session.",
+                    "Map editor working-mod status copy changed");
+        menuCapture(menu,"map-working-mod");
+    }
+    {
+        // The asset editors inspect packaged sprites and keep render
+        // preferences outside the mod payload, so the built-in Dune2R and
+        // shared snapshots must open. Download/catalog writes stay refused by
+        // Dune2RAssetManager itself, not by hiding the editor.
+        ModMenu menu(ModMenu::Purpose::AssetEditors);
+        menuRequire(menu.titleLabel.getText() == "Asset Editors - Choose Mod",
+                    "Asset editor mod chooser changed identity");
+        int dune2r = -1;
+        for(size_t i = 0; i < menu.mods.size(); ++i) {
+            menuRequire(ModManager::instance().getContentBase(menu.mods[i].name) == "Dune2R",
+                        "Asset editors offered a mod that is not Dune2R content");
+            if(menu.mods[i].name == "Dune2R") dune2r = static_cast<int>(i);
+        }
+        menuRequire(dune2r >= 0, "Asset editors cannot reach the built-in Dune2R mod");
+        menu.modListBox.setSelectedItem(dune2r);
+        menuRequire(menu.editButton.isEnabled(),
+                    "Built-in Dune2R cannot open the asset editor, so its packs are unreachable");
+        menuRequire(menu.statusLabel.getText()
+                    == "Preview sprites, set render preferences and download asset packs into this mod.",
+                    "Asset editor status copy does not describe asset inspection");
+        menuCapture(menu,"asset-working-mod");
+
+        // Same selection as a shared immutable version: still inspectable, and
+        // the copy now has to say that downloads are disabled.
+        const auto marker = std::filesystem::path(ModManager::instance().getModPath("Dune2R"))
+                            / "workshop-revision.ini";
+        struct Marker {
+            std::filesystem::path path;
+            ~Marker() { std::error_code code; std::filesystem::remove(path, code); }
+        } immutableMarker{marker};
+        { std::ofstream sidecar(marker); sidecar << "[Workshop]\nImmutable = true\n"; }
+        menuRequire(std::filesystem::is_regular_file(marker), "Cannot write the shared-version fixture");
+        menu.updateModDetails();
+        menuRequire(menu.editButton.isEnabled(),
+                    "A shared Dune2R version cannot be inspected in the asset editor");
+        menuRequire(menu.statusLabel.getText()
+                    == "Shared version: inspect sprites and set render preferences. Downloads stay disabled.",
+                    "Shared asset-editor copy does not explain the download guard");
+        { ModMenu source(ModMenu::Purpose::ModEditor);
+          int shared = -1;
+          for(size_t i = 0; i < source.mods.size(); ++i)
+              if(source.mods[i].name == "Dune2R") shared = static_cast<int>(i);
+          menuRequire(shared >= 0, "Mod editor list lost Dune2R");
+          source.modListBox.setSelectedItem(shared);
+          menuRequire(!source.editButton.isEnabled(),
+                      "Bundled or shared Dune2R became editable mod source"); }
+    }
+    {
+        // Automatic artwork readiness. Choosing the canonical Dune2R mod, or starting
+        // with it restored from the profile, completes and verifies its published
+        // artwork before a game is set up - no Asset Editor visit. This isolated
+        // profile replaces the 384 MB shipped target with a small fixture catalog that
+        // carries a newer monotonic version, so the real selection and start boundary
+        // runs without downloading the published packs, and the older five-pack catalog
+        // that production still serves online cannot replace the fixture either.
+        namespace fs = std::filesystem;
+        auto& mods = ModManager::instance();
+        const fs::path dune2r = mods.getModPath("Dune2R");
+        const fs::path bundledCatalog = dune2r / "asset-catalog.ini";
+        const fs::path onlineCatalog = dune2r / "asset-catalog-online.ini";
+        const fs::path probeUnit = dune2r / "graphics_hd" / "units" / "probeunit";
+        const std::string shipped = readCompleteFile(bundledCatalog.string());
+        menuRequire(shipped.find("\nVersion=") != std::string::npos,
+                    "The shipped Dune2R catalog carries no monotonic version");
+
+        const std::string fixtureVersion = "1891310979";
+        // Two catalogued files with the same bytes: the missing one is completed from
+        // the verified local copy, so the whole selection-to-start path runs with no
+        // network request and no shipped pack download.
+        const std::string artwork = "[Unit]\n; probe remastered artwork\n";
+        const std::string digest = Dune2RAssetManager::sha256Bytes(artwork);
+        const std::string length = std::to_string(artwork.size());
+        auto writeFixtureCatalog = [&](const std::string& revision, const std::string& eastDigest,
+                                       const std::string& eastLength) {
+            std::ofstream catalog(onlineCatalog, std::ios::trunc);
+            catalog << "[Catalog]\nSchema=1\nRevision=" << revision << "\nVersion=" << fixtureVersion
+                    << "\nBaseURL=https://raw.githubusercontent.com/dunecity-project/dunecity/"
+                    << revision << "/mods/Dune2R/graphics_hd/units\nPackCount=1\n"
+                    << "[Pack.0]\nID=probe\nDisplayName=Probe artwork\nVariant=remastered\n"
+                    << "Unit=probeunit\nFileCount=2\n"
+                    << "File.0=unit.ini|" << length << "|" << digest << "\n"
+                    << "File.1=atlases/idle/east.png|" << eastLength << "|" << eastDigest << "\n";
+            catalog.close();
+            menuRequire(static_cast<bool>(catalog), "Cannot write the readiness fixture catalog");
+            // The modern bundle defines a required pack floor. Replace it too in
+            // this isolated fixture; restore the shipping bundle at the end.
+            fs::copy_file(onlineCatalog, bundledCatalog, fs::copy_options::overwrite_existing);
+        };
+        auto installFixtureArtwork = [&]() {
+            fs::create_directories(probeUnit / "atlases" / "idle");
+            fs::remove(probeUnit / "atlases" / "idle" / "east.png");
+            std::ofstream payload(probeUnit / "unit.ini", std::ios::binary | std::ios::trunc);
+            payload << artwork;
+        };
+        const fs::path mountMarker = dune2r / "graphics_hd" / "units" / ".mount-revision";
+        const fs::path eastFile = probeUnit / "atlases" / "idle" / "east.png";
+
+        {
+            // Choosing the canonical remaster completes its artwork there and then.
+            installFixtureArtwork();
+            writeFixtureCatalog(std::string(40, '1'), digest, length);
+            fs::remove(mountMarker);
+            forgetDune2RArtworkReadiness();
+            menuRequire(mods.setActiveMod("vanilla"), "Cannot start the artwork fixture on vanilla");
+            auto readySetup = setup;
+            readySetup.players = ChangeEventList{};
+            CustomGameMenu browser(false, false, &readySetup);
+            int choice = -1;
+            for(size_t i = 0; i < browser.availableMods.size(); ++i)
+                if(browser.availableMods[i].name == "Dune2R") choice = static_cast<int>(i);
+            menuRequire(choice >= 0, "Dune2R is not offered in the custom game mod picker");
+            menuRequire(!fs::exists(eastFile), "The incomplete artwork fixture was not set up");
+            browser.modDropDown.setSelectedItem(choice, true);
+            menuRequire(mods.getActiveModName() == "Dune2R", "Picking Dune2R did not activate it");
+            menuRequire(!browser.hasChildWindow(), "Completing Dune2R artwork reported a problem");
+            menuRequire(fs::exists(eastFile) && readCompleteFile(eastFile.string()) == artwork,
+                        "Choosing Dune2R did not complete its missing artwork");
+            menuRequire(fs::exists(mountMarker), "A completed install did not stamp the mount revision");
+            menuCapture(browser, "dune2r-artwork-ready");
+            browser.onNext();
+            menuRequire(browser.retVal == MENU_SETUP_PLAYERS,
+                        "A verified Dune2R artwork target did not reach player setup");
+            menuRequire(readySetup.mods[readySetup.mod].name == "Dune2R",
+                        "Player setup captured a different mod than the chosen remaster");
+            Dune2RAssetManager started(dune2r.string());
+            // The published catalog check ran once here. Online it still serves
+            // production's older five packs, offline it fails; neither may replace this
+            // newer target or remove a pack from it.
+            menuRequire(started.getRevision() == std::string(40, '1')
+                        && started.getCatalogVersion() == 1891310979ull
+                        && started.getPacks().size() == 1,
+                        "An older published catalog replaced the newer local artwork target");
+            menuRequire(started.checkReadiness().complete,
+                        "The game started against something other than a verified complete target");
+        }
+
+        // An unchanged target costs no further catalog request and no re-verification,
+        // and no other mod is gated at all.
+        const Uint32 cachedStart = SDL_GetTicks();
+        menuRequire(ensureDune2RArtworkReady("Dune2R").ready, "Cached Dune2R readiness was lost");
+        menuRequire(SDL_GetTicks() - cachedStart < 250,
+                    "Readiness repeated its catalog check for an unchanged target");
+        for(const char* other : {"vanilla", "dunecity", "Tornie"})
+            menuRequire(ensureDune2RArtworkReady(other).ready
+                        && ensureDune2RArtworkReady(other).message.empty(),
+                        "A mod other than the canonical remaster was gated");
+
+        {
+            // The browser uses deferred work on one SDL thread. Exercise that exact
+            // path natively, including cancellation with ALREADY COMPLETE artwork.
+            for(const bool cooperative : {false, true}) {
+                Dune2RReadinessMenu cancelled(std::make_unique<Dune2RAssetManager>(dune2r.string()),
+                                             false, cooperative);
+                cancelled.requestCancel();
+                const auto deadline = SDL_GetTicks() + 30000;
+                while(!cancelled.isSettled() && static_cast<Sint32>(deadline - SDL_GetTicks()) > 0) {
+                    cancelled.update(); SDL_Delay(5);
+                }
+                menuRequire(cancelled.isFinished() && cancelled.wasCancelled() && !cancelled.isReady(),
+                            "Cancelling a complete target still allowed a start");
+            }
+            fs::remove(eastFile);
+            Dune2RReadinessMenu browserWork(std::make_unique<Dune2RAssetManager>(dune2r.string()),
+                                           false, true);
+            const auto deadline = SDL_GetTicks() + 30000;
+            while(!browserWork.isSettled() && static_cast<Sint32>(deadline - SDL_GetTicks()) > 0) {
+                browserWork.update(); SDL_Delay(5);
+            }
+            menuRequire(browserWork.isReady() && fs::exists(eastFile),
+                        "Cooperative artwork download did not verify and finish");
+            // The single-thread path also has to report between the files it
+            // checksums; otherwise the browser tab stops drawing and stops taking
+            // Cancel for the whole verification of the published target.
+            menuRequire(browserWork.completedBytes.load() > 0
+                        && browserWork.completedBytes.load() == browserWork.totalBytes.load(),
+                        "Cooperative verification never reported its checked bytes");
+        }
+
+        {
+            // Published artwork that changed but cannot be fetched is a retryable
+            // failure, never a silent partial start, and the installed pack survives.
+            const std::string published = "[Unit]\n; republished pose\n";
+            writeFixtureCatalog(std::string(40, '2'), Dune2RAssetManager::sha256Bytes(published),
+                                std::to_string(published.size()));
+            forgetDune2RArtworkReadiness();
+            Dune2RReadinessMenu menu(std::make_unique<Dune2RAssetManager>(dune2r.string()), false);
+            menuRequire(!menu.isSettled(), "The readiness menu finished before it checked anything");
+            const auto deadline = SDL_GetTicks() + 60000;
+            while(!menu.isSettled() && static_cast<Sint32>(deadline - SDL_GetTicks()) > 0) {
+                menu.update();
+                SDL_Delay(5);
+            }
+            menuRequire(menu.isSettled() && !menu.isReady() && !menu.isFinished(),
+                        "An unreachable artwork publisher did not stop at a retryable failure");
+            SDL_Log("DUNE2R_ARTWORK_FAILURE: %s", menu.getMessage().c_str());
+            for(const Widget* widget : {static_cast<const Widget*>(&menu.titleLabel),
+                                        static_cast<const Widget*>(&menu.introLabel),
+                                        static_cast<const Widget*>(&menu.statusLabel),
+                                        static_cast<const Widget*>(&menu.progressBar),
+                                        static_cast<const Widget*>(&menu.retryButton),
+                                        static_cast<const Widget*>(&menu.cancelButton)}) {
+                const auto* geometry = menu.windowWidget.getWidgetDataFromWidget(widget);
+                menuRequire(geometry != nullptr
+                            && geometry->position.x >= 0 && geometry->position.y >= 0
+                            && geometry->position.x + geometry->size.x <= getRendererWidth()
+                            && geometry->position.y + geometry->size.y <= getRendererHeight()
+                            && geometry->size.y >= widget->getMinimumSize().y,
+                            "The artwork readiness panel is clipped at this window size");
+            }
+            menuRequire(menu.retryButton.isEnabled() && menu.retryButton.isVisible(),
+                        "A failed artwork step offered no retry");
+            menuCapture(menu, "dune2r-artwork-failure");
+            menuRequire(readCompleteFile((probeUnit / "unit.ini").string()) == artwork
+                        && readCompleteFile(eastFile.string()) == artwork,
+                        "A failed artwork replacement lost or changed the installed pack");
+            menu.requestCancel();
+            menuRequire(menu.isFinished() && menu.wasCancelled() && !menu.isReady(),
+                        "Cancelling a failed artwork step did not return to the chooser");
+        }
+
+        {
+            // Cancelling keeps the installed artwork and never reports a startable target.
+            forgetDune2RArtworkReadiness();
+            Dune2RReadinessMenu menu(std::make_unique<Dune2RAssetManager>(dune2r.string()), false);
+            menu.requestCancel();
+            const auto deadline = SDL_GetTicks() + 30000;
+            while(!menu.isSettled() && static_cast<Sint32>(deadline - SDL_GetTicks()) > 0) {
+                menu.update();
+                SDL_Delay(5);
+            }
+            menuRequire(menu.isFinished() && menu.wasCancelled() && !menu.isReady(),
+                        "A cancelled artwork check reported a ready target");
+            menuRequire(readCompleteFile((probeUnit / "unit.ini").string()) == artwork
+                        && readCompleteFile(eastFile.string()) == artwork,
+                        "A cancelled artwork check changed the installed pack");
+        }
+
+        {
+            // A pinned shared version is immutable: its exact revision arrives with the
+            // shared revision, so readiness must neither write into it nor block it.
+            const auto sidecar = dune2r / "workshop-revision.ini";
+            { std::ofstream marker(sidecar); marker << "[Workshop]\nImmutable = true\n"; }
+            forgetDune2RArtworkReadiness();
+            const auto catalogWritten = fs::last_write_time(onlineCatalog);
+            const auto artworkWritten = fs::last_write_time(eastFile);
+            menuRequire(ensureDune2RArtworkReady("Dune2R").ready,
+                        "A pinned shared version must not block its own game");
+            menuRequire(fs::last_write_time(onlineCatalog) == catalogWritten
+                        && fs::last_write_time(eastFile) == artworkWritten
+                        && readCompleteFile(eastFile.string()) == artwork,
+                        "Readiness wrote into an immutable shared version");
+            fs::remove(sidecar);
+        }
+
+        {
+            // Dune2R restored from the profile is gated at the start boundary too, with
+            // the chooser never touched. Artwork that cannot even be checked shows a
+            // retryable error instead of starting.
+            forgetDune2RArtworkReadiness();
+            for(const auto& damagedCatalog : {onlineCatalog, bundledCatalog}) {
+                std::ofstream damaged(damagedCatalog, std::ios::trunc);
+                damaged << "not a catalog";
+            }
+            menuRequire(mods.setActiveMod("Dune2R"), "Cannot restore Dune2R as the persisted choice");
+            auto blockedSetup = setup;
+            blockedSetup.players = ChangeEventList{};
+            for(size_t i = 0; i < blockedSetup.mods.size(); ++i)
+                if(blockedSetup.mods[i].name == "Dune2R") blockedSetup.mod = static_cast<int>(i);
+            CustomGameMenu browser(false, false, &blockedSetup);
+            menuRequire(browser.modDropDown.getSelectedIndex() >= 0
+                        && browser.availableMods[browser.modDropDown.getSelectedIndex()].name == "Dune2R",
+                        "The persisted Dune2R choice was not restored in the chooser");
+            menuRequire(!browser.hasChildWindow(), "Opening the chooser already reported an artwork problem");
+            browser.onNext();
+            menuRequire(browser.retVal != MENU_SETUP_PLAYERS,
+                        "A game started although the Dune2R artwork could not be checked");
+            menuRequire(browser.hasChildWindow(), "Unreadable Dune2R artwork was refused silently");
+            menuCapture(browser, "dune2r-artwork-blocked", true);
+        }
+
+        // Restore the profile: the shipped catalog, no fixture artwork, no online cache.
+        { std::ofstream restored(bundledCatalog, std::ios::binary | std::ios::trunc); restored << shipped; }
+        fs::remove(onlineCatalog);
+        fs::remove_all(probeUnit);
+        fs::remove_all(dune2r / "graphics_hd" / "units" / "probeunit.download");
+        fs::remove(dune2r / "graphics_hd" / "units" / ".mount-revision");
+        menuRequire(readCompleteFile(bundledCatalog.string()) == shipped,
+                    "The shipped Dune2R catalog was not restored");
+        forgetDune2RArtworkReadiness();
+        menuRequire(mods.setActiveMod("vanilla"), "Cannot restore vanilla after the artwork fixture");
+    }
     {
         const std::string draft = "Workshop UI Probe";
         auto& manager = ModManager::instance();

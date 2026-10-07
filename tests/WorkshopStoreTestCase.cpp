@@ -48,7 +48,7 @@ TEST_CASE("Workshop downloaded bytes must match manifest and corrupt cache can b
     REQUIRE(other.get(r.hash).hash==r.hash);
     REQUIRE_THROWS(other.importRevision(r.manifest,std::string(64,'0'),1,r.directory));
 }
-TEST_CASE("Workshop rejects unsafe paths case aliases symlinks and noncanonical manifests","[workshop]") {
+TEST_CASE("Workshop rejects unsafe paths case aliases and noncanonical manifests","[workshop]") {
     Fixture f;auto r=f.save();
     auto bad=r.manifest;bad.replace(bad.find("kind=mod"),8,"kind=map");REQUIRE_THROWS(Workshop::parseManifest(bad));
     auto row="file="+Workshop::hashBytes("x")+",1,";
@@ -59,7 +59,18 @@ TEST_CASE("Workshop rejects unsafe paths case aliases symlinks and noncanonical 
     f.write("DATA/a","one");f.write("data/b","two"); // directory case aliases differ on case-sensitive platforms only
     if(std::filesystem::exists(f.source/"DATA/b"))std::filesystem::remove_all(f.source/"DATA");
     else REQUIRE_THROWS(f.save());
-    std::filesystem::create_symlink(f.source/"mod.ini",f.source/"link.ini");REQUIRE_THROWS(f.save());
+}
+TEST_CASE("Workshop rejects symlink payloads when the test account can create them","[workshop]") {
+    Fixture f;
+    std::error_code error;
+    std::filesystem::create_symlink(f.source/"mod.ini",f.source/"link.ini",error);
+#ifdef _WIN32
+    if(error.value() == 1314) { // ERROR_PRIVILEGE_NOT_HELD; do not change OS policy.
+        SKIP("Windows test account lacks the privilege to create a symlink fixture");
+    }
+#endif
+    REQUIRE_FALSE(error);
+    REQUIRE_THROWS(f.save());
 }
 TEST_CASE("Workshop maps pin required mod without confusing map format version","[workshop]") {
     Fixture f;auto mod=f.save();auto mapdir=f.root/"map";std::filesystem::create_directories(mapdir);

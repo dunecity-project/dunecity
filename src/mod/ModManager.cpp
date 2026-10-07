@@ -28,6 +28,7 @@
 #include <misc/fnkdat.h>
 #include <misc/FileSystem.h>
 #include <misc/exceptions.h>
+#include <misc/Dune2RPresentation.h>
 #include <Definitions.h>
 #include <globals.h>
 #include <main.h>
@@ -45,6 +46,7 @@
 #include <climits>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 
 // File names
@@ -452,6 +454,7 @@ std::string ModManager::installerContentHash(const std::string& name) const {
 
 void ModManager::initialize() {
     activeContentBase.clear();
+    activeDune2RRemasterPresentation = false;
     // Get mods base path in user config directory
     char tmp[FILENAME_MAX];
     if (fnkdat("mods", tmp, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT) < 0) {
@@ -516,8 +519,13 @@ void ModManager::initialize() {
     }
 
     try {
-        activeContentBase = getContentBase(activeMod);
+        std::string verifiedModPath;
+        activeContentBase = resolveContentBase(activeMod, &verifiedModPath);
         const ModInfo activeInfo = readModIni(getModPath(activeMod));
+        const ModInfo verifiedInfo = verifiedModPath.empty()
+            ? activeInfo : readModIni(verifiedModPath);
+        activeDune2RRemasterPresentation = dune2rUsesRemasterPresentation(
+            activeMod, activeContentBase, verifiedInfo.baseMod.empty());
         activeCustomHouse = activeInfo.customHouse;
         activeGuestCustomHouse = makeTornieGuestCustomHouse(getContentBase(activeMod));
         activeMentats = activeInfo.mentats;
@@ -526,6 +534,7 @@ void ModManager::initialize() {
                 activeMod.c_str(), e.what());
         activeMod = VANILLA_MOD_NAME;
         activeContentBase = VANILLA_MOD_NAME;
+        activeDune2RRemasterPresentation = false;
         activeCustomHouse = {};
         activeGuestCustomHouse = {};
         activeMentats.clear();
@@ -638,6 +647,7 @@ bool ModManager::setActiveMod(const std::string& name) {
     
     const std::string previousMod = activeMod;
     const std::string previousContentBase = activeContentBase;
+    const bool previousDune2RRemasterPresentation = activeDune2RRemasterPresentation;
     const CustomHouseInfo previousCustomHouse = activeCustomHouse;
     const CustomHouseInfo previousGuestCustomHouse = activeGuestCustomHouse;
     const std::vector<ModMentatInfo> previousMentats = activeMentats;
@@ -645,8 +655,14 @@ bool ModManager::setActiveMod(const std::string& name) {
     try {
         activeMod = name;
         activeContentBase.clear();
-        activeContentBase = getContentBase(activeMod);
+        activeDune2RRemasterPresentation = false;
+        std::string verifiedModPath;
+        activeContentBase = resolveContentBase(activeMod, &verifiedModPath);
         const ModInfo activeInfo = readModIni(getModPath(activeMod));
+        const ModInfo verifiedInfo = verifiedModPath.empty()
+            ? activeInfo : readModIni(verifiedModPath);
+        activeDune2RRemasterPresentation = dune2rUsesRemasterPresentation(
+            activeMod, activeContentBase, verifiedInfo.baseMod.empty());
         activeCustomHouse = activeInfo.customHouse;
         activeGuestCustomHouse = makeTornieGuestCustomHouse(getContentBase(activeMod));
         activeMentats = activeInfo.mentats;
@@ -670,6 +686,7 @@ bool ModManager::setActiveMod(const std::string& name) {
                 name.c_str(), previousMod.c_str(), e.what());
         activeMod = previousMod;
         activeContentBase = previousContentBase;
+        activeDune2RRemasterPresentation = previousDune2RRemasterPresentation;
         activeCustomHouse = previousCustomHouse;
         activeGuestCustomHouse = previousGuestCustomHouse;
         activeMentats = previousMentats;
@@ -2217,7 +2234,10 @@ bool ModManager::writeModInfo(const std::string& modPath, const ModInfo& info) c
     const auto path = std::filesystem::path(modPath) / MOD_INI_FILE;
     const auto temp = (path.parent_path() / ".mod-metadata-writing").string();
     try {
-        INIFile ini = std::filesystem::exists(path) ? INIFile(path.string()) : INIFile(false, std::string("Mod metadata"));
+        auto metadataFile = std::filesystem::exists(path)
+            ? std::make_unique<INIFile>(path.string())
+            : std::make_unique<INIFile>(false, std::string("Mod metadata"));
+        INIFile& ini = *metadataFile;
         ini.setStringValue("Mod", "Display Name", info.displayName);
         ini.setStringValue("Mod", "Author", info.author);
         ini.setStringValue("Mod", "Description", info.description);
@@ -2237,6 +2257,12 @@ bool ModManager::writeModInfo(const std::string& modPath, const ModInfo& info) c
 
 std::string ModManager::getContentBase(const std::string& name) const {
     if(name == activeMod && !activeContentBase.empty()) return activeContentBase;
+    return resolveContentBase(name);
+}
+
+std::string ModManager::resolveContentBase(const std::string& name,
+                                           std::string* verifiedModPath) const {
+    if(verifiedModPath) verifiedModPath->clear();
     if(!isValidModName(name)) return name;
     const auto path = std::filesystem::path(getModPath(name));
     if(name.rfind("ws-", 0) == 0) {
@@ -2249,6 +2275,7 @@ std::string ModManager::getContentBase(const std::string& name) const {
             throw std::runtime_error("Invalid immutable mod identity.");
         const auto revision = Workshop::store().get(hash);
         if(revision.kind != "mod") throw std::runtime_error("The selected revision is not a mod.");
+        if(verifiedModPath) *verifiedModPath = revision.directory;
         return revision.base;
     }
     try {

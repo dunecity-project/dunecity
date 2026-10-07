@@ -418,6 +418,10 @@ bool UnitBase::drawEnhancedUnitSprite(int x, int y, int idleDirection,
     }
     Uint32 elapsedMs = nowMs + getObjectID() * 97u;
 
+    if(getItemID() == Unit_Soldier && (moving || turning)) {
+        // Starting to move resumes the gait, never a stationary recovery pose.
+        enhancedCombatAnimationStartMs = std::numeric_limits<Uint32>::max();
+    }
     if(enhancedCombatAnimationStartMs != std::numeric_limits<Uint32>::max()) {
         const int firingDirection = combatDirection >= 0 && combatDirection < NUM_ANGLES
             ? combatDirection
@@ -426,10 +430,18 @@ bool UnitBase::drawEnhancedUnitSprite(int x, int y, int idleDirection,
             getItemID(), getOwner()->getHouseID(), GFXManager::EnhancedUnitState::Combat,
             firingDirection);
         const Uint32 combatElapsed = nowMs - enhancedCombatAnimationStartMs;
+        const Uint32 recoveryDuration = pGFXManager->getEnhancedUnitAnimationDuration(
+            getItemID(), getOwner()->getHouseID(), GFXManager::EnhancedUnitState::CombatReturn,
+            firingDirection);
         if(combatDuration > 0 && combatElapsed < combatDuration) {
             state = GFXManager::EnhancedUnitState::Combat;
             renderDirection = firingDirection;
             elapsedMs = combatElapsed;
+        } else if(combatDuration > 0 && recoveryDuration > 0
+                  && combatElapsed - combatDuration < recoveryDuration) {
+            state = GFXManager::EnhancedUnitState::CombatReturn;
+            renderDirection = firingDirection;
+            elapsedMs = combatElapsed - combatDuration;
         } else {
             enhancedCombatAnimationStartMs = std::numeric_limits<Uint32>::max();
         }
@@ -674,10 +686,10 @@ void UnitBase::drawSelectionBox() {
     SDL_Rect dest = calcDrawingRect(selectionBox, screenborder->world2screenX(realX), screenborder->world2screenY(realY), HAlign::Center, VAlign::Center);
     SDL_RenderCopy(renderer, selectionBox, nullptr, &dest);
 
-    int x = screenborder->world2screenX(realX) - getWidth(selectionBox)/2;
-    int y = screenborder->world2screenY(realY) - getHeight(selectionBox)/2;
+    int x = dest.x;
+    int y = dest.y;
     for(int i=1;i<=currentZoomlevel+1;i++) {
-        renderDrawHLine(renderer, x+1, y-i, x+1 + (lround((getHealth()/getMaxHealth())*(getWidth(selectionBox)-3))), getHealthColor());
+        renderDrawHLine(renderer, x+1, y-i, x+1 + (lround((getHealth()/getMaxHealth())*(dest.w-3))), getHealthColor());
     }
 }
 

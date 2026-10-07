@@ -17,6 +17,7 @@
 
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CustomGamePlayers.h>
+#include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/PlaySetup.h>
 
 #include <FileClasses/GFXManager.h>
@@ -246,6 +247,11 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
         if(manager.setActiveMod(availableMods[choice].name)) {
             // The player's own mod choice is what the next custom game starts from.
             rememberCustomGameMod(availableMods[choice].name);
+            // Choosing the canonical remaster starts its artwork readiness here, so
+            // nobody has to visit the Asset Editor first. Cancelling leaves the
+            // chooser open; Next checks again before a game is set up.
+            const auto gate = ensureDune2RArtworkReady(availableMods[choice].name);
+            if(!gate.ready && !gate.message.empty()) openWindow(MsgBox::create(gate.message));
             currentGameOptions = effectiveGameOptions = manager.loadEffectiveGameOptions(settings.gameOptions);
             allowJoinAfterStartCheckbox.setEnabled(connectionChoice.getSelectedIndex() == 1 && OnlineModPolicy::approved());
             if(!OnlineModPolicy::approved()) allowJoinAfterStartCheckbox.setChecked(false);
@@ -355,6 +361,21 @@ void CustomGameMenu::onNext()
     }
 
     if(!prepareSelectedMap()) return;
+
+    // The canonical Dune2R artwork has to be complete and verified before this game
+    // captures a mod version, including when the mod was restored from the profile
+    // and the dropdown was never touched. A cancelled or failed download keeps the
+    // chooser open instead of starting with partial art.
+    {
+        const int modChoice = modDropDown.getSelectedIndex();
+        if(modChoice >= 0 && modChoice < static_cast<int>(availableMods.size())) {
+            const auto gate = ensureDune2RArtworkReady(availableMods[modChoice].name);
+            if(!gate.ready) {
+                if(!gate.message.empty()) openWindow(MsgBox::create(gate.message));
+                return;
+            }
+        }
+    }
 
     if(setup) {
         auto path = getSelectedMapPath();

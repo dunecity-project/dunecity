@@ -1,3 +1,134 @@
+# 2026-10-07 — Production 1.0.815 release preparation
+
+PR89 now integrates production812, the approved city/Infantry artwork, built-in Asset
+Editor access and automatic canonical Dune2R preparation. Its head was fast-forwarded
+to178ba3ae and marked ready. Candidate push37583843793 and PR37583848329 passed all
+platform checks (macOS only on the push run), including pinned4.0.14 Emscripten.
+
+Independent Claude subscription review d9e25942-ca5e-4a41-a435-fde6a41ff12a found and
+fixed missing browser persistence calls at catalog/install write sites and a checksum
+scan that did not yield on the browser thread. The native incremental build and
+pre/post dependency audits passed; CTest passed973cases (970passed,3opt-in skips),
+the presentation target and the menu probe at640/854/1280. Earlier815 validation
+passed all972cases with those three opt-ins enabled. Modern bundled Python passes
+all15asset/catalog tests. Source, screenshots and reports are in
+`../outputs/release-815/` and the earlier local evidence directories below.
+
+Codex review also queues a serialized follow-up when browser writes arrive during
+an IDBFS sync (six shell tests pass), and uses deferred Asset Editor tasks with
+progress/input pumping on the browser thread. Native Editor tasks remain async.
+The baseline uninstrumented shipping WASM has been exercised through real browser
+Custom Game selection and persisted Next: cancellation retained completed packs
+and staging, retry completed all238files, and an independent browser SHA256 audit
+verified383,787,346bytes without a page error. The final browser fixes still require
+platform CI and browser reload/repair/editor/play verification before publication.
+
+The worker could not execute the SDK script under its allowed tools. No SDK pin was
+changed; production validation uses the actual pinned CI artifact instead. Local
+Homebrew libraries targetmacOS26; public packages are built separately by stable CI.
+Stefan's MBA already has the local815app in /Applications and the prepared house-bound
+Infantry map in its normal user maps folder; installation receipts in the prior815
+output directory show all profile files preserved.
+
+Release publication, signed feeds, SourceForge, the website and final live browser
+verification are still pending and tracked in `../outputs/release-815/receipt.md`.
+The following entries describe earlier local/candidate evidence.
+
+# 2026-10-07 — Automatic Dune2R artwork preparation (1.0.815)
+
+Local candidate `test/pr89-on-812` now prepares canonical Dune2R artwork when
+selected in Custom Game and before continuing a persisted selection or changing
+mods in player setup. The gate runs before mod-version capture. It verifies the
+installed target, completes missing/changed files from pinned GitHub URLs, and
+verifies final paths again before proceeding. All six remastered packs are
+required (238 files, 383,787,346 bytes); the Asset Editor remains an optional
+inspection/preview route.
+
+A visible progress menu offers Retry/Cancel. Native work is joined before menu
+destruction; browser work uses deferred tasks on its single Asyncify thread and
+pumps drawing/input between download steps. Cancel takes priority even if the
+current verification completes successfully. A complete local target works when
+the catalog request fails offline. Ready results expire after 60 seconds and
+are invalidated by changed file/manifest fingerprints. Shared immutable snapshots
+and derived mods retain their existing pinned-content retrieval behavior.
+
+Catalog `Version` is a publication counter, not a Git timestamp. Generate from the
+previous catalog: `python3 scripts/generate-dune2r-asset-catalog.py --revision <public-asset-commit>`.
+An identical target preserves its counter; a changed target increments it. Carry
+the latest published catalog into the checkout before generating updates on a
+branch. Equal nonzero counters must identify the same parsed target. Modern
+bundled catalogs define required pack IDs: online refreshes may add packs but
+cannot remove bundled ones, including the candidate Infantry pack. Legacy
+catalogs without Version retain compatibility. No metaserver changes are needed.
+
+Final native Catch2 passed all 972 cases and 10,219,427 assertions with network,
+Refinery-atlas and Metal playback opt-ins enabled. All four selected CTest targets
+passed; the real menu probe covers three window sizes, both selection and persisted
+start gates, cancellation of a complete target, deferred execution, failures and
+immutable guards. Python asset/catalog tests passed all 15 cases. A fresh-profile
+real-engine probe downloaded all six packs, verified the installed target, repaired
+a same-size corrupt PNG while retaining an unchanged pack, and passed Infantry
+animation, actual editor APPLY, map load, 3x projection and simulation-digest checks.
+The prior 814 integration passed all 59 native targets; unchanged simulation/AI
+suites were not repeated. Full browser compilation was unavailable on this host
+because the installed Emscripten lacks LLVM/Binaryen dependencies; its cooperative
+execution path was exercised natively. The local candidate is for this ARM64
+MacBook Air (macOS26.5.2); bundled Homebrew libraries require macOS26.
+
+Validation and local-package receipts are recorded in
+`../outputs/dune2r-auto-art-20261007/`. The accompanying manual guide starts with
+Custom Game / Dune2R and the automatic download, then the house-bound infantry
+map; it also includes cache, cancellation and repair checks. Local test builds
+use their separate profile and do not replace the currently running app. This
+candidate is not a production publication.
+
+# 2026-10-07 — PR89 local integration and asset-editor access (1.0.814)
+
+Local branch `test/pr89-on-812` combines PR89 head c80d0157 with production
+1.0.812 (90b2e159), integration commit 7be69f8c. Protocol57, the ground-rotation
+wrap, invalid-track guard and their regression probes are retained. Production
+1.0.812 has already been published and independently verified; historical
+candidate entries below describe earlier gates. This branch is a local candidate.
+
+Review found the Asset Editors chooser disabled built-in Dune2R and shared
+snapshots, making the new pack unreachable through its supported UI. The chooser
+now allows asset inspection for those selections, while Mod Editor protection
+stays intact. Immutable download/catalog guards remain in Dune2RAssetManager;
+shared-version render preferences remain in user configuration. Version 1.0.814
+identifies the integration plus this access fix; no gameplay rules changed.
+
+The integrated 813 tree passed all 59 native CTest targets. The full Catch2 run
+passed 962 cases and 10,219,290 assertions with the three optional network,
+Refinery-atlas and GPU checks enabled. Metal Refinery playback had zero cache
+misses on its second loop. Python packaging/catalog and skin checks passed.
+The real menu probe verifies built-in asset access, shared-version inspection,
+protected Mod Editor source, and the existing Map Editor selection at three
+window sizes. Its access fix passed before the final version-only rebuild.
+
+A private real-engine probe downloaded/hash-verified all 49 Infantry pack files
+(34,640,457 bytes) at pinned asset commit e4285d2d, drew all 48 directional/state
+slots, collapse and aftermath, loaded the deterministic Harkonnen fixture and
+verified real 3x projection/click inversion, graphics-toggle state digest, camera
+bounds, mod switching, classic faction/unit fallbacks and snapshot write refusal.
+The small 32x32 map recentres when Classic can fit the whole map; that is legal
+camera clamping, not a requirement to preserve an impossible off-centre view.
+All 30 new DuneCity building bindings were independently audited and loaded;
+all 789 old skin files remain byte-identical. Optional Dune2R media stays outside
+the installer. New catalog: six packs, including Harkonnen Infantry Remastered.
+
+Artifacts, complete logs, delegated report and manual test kit are in
+`../outputs/pr89-local-20261007/`. The manual launcher isolates configuration,
+mods, artwork and saves, includes a house-bound map with eight Harkonnen Soldiers
+and a preplaced Barracks, and restores the candidate catalog if production's
+older online catalog was refreshed. Harkonnen WOR Troopers do not exercise this
+artwork. For the city artwork use Dune City, Rebels, Skin Dune2; Hospital and
+Church are residential civic overlays. A normal built-in Dune2R copy is required
+for downloads; derived drafts do not activate canonical remaster presentation.
+
+This candidate is not pushed, merged upstream, published, or installed over the
+existing application. Local bundle/readiness and MacBook Air runtime receipts
+belong in the artifact directory. PR89's draft status and stable feeds are unchanged.
+
 # 2026-10-07 — Release recovery and final browser replay (1.0.812)
 
 Recovered the stalled 811 release. Both failed CI runs at 493e99ed had one
@@ -43,6 +174,96 @@ before/after regressions. Protocol advances to 57 because the direction correcti
 changes synchronized combat behavior. Save 9852, runtime 7 and policy v90 are intact.
 Full native tests, fresh exact-source Four Corners browser replay and publication
 are pending at this commit. Production remains 1.0.796; see ../outputs/release-809/.
+
+# 2026-10-06 — Approved artwork and isolated Dune2R presentation (1.0.813 candidate)
+
+Candidate branch `release-1.0.811-dune2r-assets` starts at PR #88's exact head,
+`e5797cd3ef3e14ad95d7ebff96a2dd0978936364` (1.0.810). The user requested that
+upstream work be included after verification. Main/stable publication remains
+held by the Four Corners browser observer-promotion heap trap documented below;
+this candidate does not claim to repair it. Do not merge, tag stable, or advance
+website/download/browser feeds merely because candidate build checks pass.
+
+The asset-only commit `e4285d2d1e8f4e633b724a9f1040705a25313c5a` adds 60 DuneCity
+files (30 accepted special buildings) and 49 optional Dune2R Infantry files.
+All 789 previously published DuneCity skin files remain byte-identical. The
+complete DuneCity pack contains 65 packages, 784 PNGs, 384 ordered Industrial
+smoke frames and 33 approved 182x110 portraits. Unauthored slots retain fallback.
+See [accepted DuneCity pack](docs/dunecity-accepted-asset-pack-811.md).
+
+The separate Harkonnen Infantry pack registers Soldier 32 / Harkonnen 0, the
+basic Infantry squad's descendant. It contains 48 directional/state sets and
+386 approved poses: Idle, Movement, Combat, Combat Return, prone/fallen and
+Aftermath. All source canvases were uniformly reduced 1024->512 without fitting
+or recentering individual poses; exact per-pose timing and a common 256,451 anchor
+are retained. The catalog pins the asset-only commit at the transferred public
+repository. Legacy immutable URLs remain trusted without accepting arbitrary
+repositories. Base platform packages exclude these optional downloadable files.
+See [Infantry pack](docs/dune2r-infantry-pack-811.md).
+
+Enhanced presentation belongs only to the built-in `Dune2R` mod and verified
+immutable Dune2R Workshop snapshots: ordinary tiles
+occupy 48px, classic fallback art and building footprints grow coherently, and
+authored HQ unit sizes are not multiplied twice. Existing zoom, sidebar/menu
+sizes, simulation grid, collision, timing, RNG, network protocol and save bytes
+stay unchanged. ScreenBorder inversely projects clicks and preserves the camera
+across toggles. A bounded local corpse token displays the approved fallen art
+without delaying simulation death or entering saves/digests. Classic, DuneCity,
+Tornie and other mods retain their prior presentation. Mixed-graphics live
+multiplayer and visual play tests remain required; unit/source invariants are
+not proof of those tests. See [presentation contract](docs/dune2r-world-presentation.md).
+
+The 1.0.812 follow-up recognizes online `ws-<64 lowercase hex>` identities only
+when ModManager resolves a verified canonical revision with content base Dune2R
+and no descendant Base Mod. The capability is cached/restored at activation. The unit
+manifest loader and new Infantry hooks use that same gate. Arbitrary derived
+mods and snapshots of other bases remain at their prior scale. Preexisting
+content-base graphics-toggle behavior is retained. Snapshot EditoR preferences
+use a snapshot-specific section in the user's config rather than writing into
+the immutable mod. Real revision-store fixtures cover canonical versus derived
+identity, forged sidecars, tampered/missing revisions and unchanged payloads
+after local preference edits. No multiplayer checksum or protocol fields are added.
+
+The 1.0.813 safety follow-up also makes asset downloads/catalog refresh read-only
+for immutable online snapshots, including renamed copies with an immutable
+sidecar. The UI remains inspectable and explains that downloads belong in the
+working Dune2R mod before hosting. Guards run before network calls or file writes;
+three additional offline tests cover unchanged snapshot bytes, empty/missing
+selections and normal mutable-mod behavior. Candidate 812 passed all four remote
+platform build jobs plus native/relay/signaling checks before this final guard.
+
+Windows MSVC 19.38 rejected conditional construction of noncopyable INIFile in
+three existing paths. Unique ownership preserves the same read/write behavior
+without changing INIFile ownership semantics. Windows test fixtures now use the
+native environment setter and close readers before removing temporary logs.
+The symlink security test is independent and reports a skip only for Windows
+ERROR_PRIVILEGE_NOT_HELD, without weakening the other security checks or changing
+OS policy. All nine local Windows CTest targets passed on final source 1.0.813:
+the primary native suite has 960 passed cases, two explicit capability/opt-in
+skips and 10,219,271 passed assertions. The focused presentation/catalog target
+subsequently passed all 21 cases / 370 assertions with its live download test
+enabled. Real Direct3D Refinery playback drew 234/240 frames including initial
+decode warm-up, with zero second-loop misses. Eight Infantry packager, eight DuneCity packaging, eight browser
+mod, one immutable-catalog and five browser-shell checks also passed; the ordered
+pixel comparison verified all 386 runtime poses against the approved sources.
+
+Android metadata is 0.2.29 / 1000549 with game payload 1.0.813. The DuneCity skin
+content fingerprint is `D7CAF796B1349228`. Final code commit
+`6ec781f3d9cde2887487b2057f2308818a1c01f9` passed both candidate CI runs
+37518651928 and 37518659527: Windows, Linux, macOS, Emscripten and configured
+native/relay/signaling checks. The macOS candidate is unsigned/not notarized;
+stable signing and all publication jobs were deliberately skipped.
+
+The final arm64 Android native build, dependency audit and APK packaging passed.
+Its debug signature verifies; packaged native libraries match the stripped staged
+libraries. All 849 Android skin files match source bytes. Windows includes all
+784 PNGs byte-identically and all 65 manifests with only checkout line-ending
+differences. The browser payload verifies all 849 skins, five required City maps,
+769 Tornie files and the six-pack Dune2R catalog. All three inspected base payloads
+exclude optional Dune2R media. See [final candidate evidence](docs/candidate-1.0.813-verification.md)
+and draft PR #89 for artifact hashes and the remaining release gate.
+No phone was attached at the final ADB check. No stable release, website deployment,
+main merge, on-device play-test or successful live mixed-graphics match is implied.
 
 # 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
 

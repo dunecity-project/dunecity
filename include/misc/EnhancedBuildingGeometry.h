@@ -9,12 +9,13 @@
 
 inline SDL_Rect calcEnhancedBuildingDrawingRect(int footprintWidth, unsigned int zoom,
                                                 SDL_Point frameSize, SDL_Point imageAnchor,
-                                                SDL_Point screenAnchor) {
+                                                SDL_Point screenAnchor, int presentationScale = 1) {
     if(footprintWidth <= 0 || zoom >= NUM_ZOOMLEVEL || frameSize.x <= 0 || frameSize.y <= 0) {
         return {};
     }
     // Anchors are already in screen pixels. TILESIZE is world units, not pixels.
-    const int width = footprintWidth * D2_TILESIZE * static_cast<int>(zoom + 1);
+    const int width = footprintWidth * D2_TILESIZE * static_cast<int>(zoom + 1)
+                      * (presentationScale == 3 ? 3 : 1);
     const double scale = static_cast<double>(width) / frameSize.x;
     return {
         screenAnchor.x - static_cast<int>(std::lround(imageAnchor.x * scale)),

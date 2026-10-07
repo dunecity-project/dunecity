@@ -30,6 +30,9 @@ docs/*
 !docs/style.css
 !docs/dunecity-graphics-skins.md
 !docs/dunecity-skins-integration.md
+!docs/dunecity-accepted-asset-pack-811.md
+!docs/dune2r-world-presentation.md
+!docs/dune2r-infantry-pack-811.md
 !docs/spectator-transfer.md
 !docs/quantbot-army-recovery.md
 !docs/city-scenarios.md

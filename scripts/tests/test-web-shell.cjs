@@ -78,3 +78,31 @@ test('analytics failure is bounded and does not reject the game callback', async
     await context.Module.reportMatchStats('start','browser-test-match','{}');
     assert.equal(attempts,2);
 });
+
+
+test('writes requested during a pending sync persist in one serialized follow-up', () => {
+    const { context } = shell(1280,720);
+    let content = 'catalog', active = 0;
+    const snapshots = [], callbacks = [];
+    context.FS = { syncfs(populate, callback) {
+        assert.equal(populate, false);
+        assert.equal(active, 0, 'filesystem syncs must not overlap');
+        active++;
+        snapshots.push(content);
+        callbacks.push(error => { active--; callback(error); });
+    }};
+    context.Module.requestPersistentSync();
+    content = 'completed artwork';
+    context.Module.requestPersistentSync();
+    context.Module.requestPersistentSync();
+    assert.deepEqual(snapshots, ['catalog']);
+    callbacks[0](null);
+    assert.deepEqual(snapshots, ['catalog', 'completed artwork']);
+    callbacks[1](null);
+    assert.equal(active, 0);
+    assert.equal(callbacks.length, 2);
+    content = 'saved game';
+    context.Module.requestPersistentSync();
+    assert.equal(snapshots[2], 'saved game');
+    callbacks[2](null);
+});

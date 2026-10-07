@@ -17,6 +17,7 @@
 
 #include <Game.h>
 #include <misc/OMemoryStream.h>
+#include <misc/Dune2RPresentation.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -2439,6 +2440,10 @@ void Game::applyPendingBudgetChanges() {
 
 void Game::drawScreen()
 {
+    const int presentationScale = ModManager::instance().usesDune2RRemasterPresentation()
+        && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
+    screenborder->setPresentationScale(presentationScale);
+    Dune2RWorldDrawingScope worldDrawing(presentationScale);
     Coord TopLeftTile = screenborder->getTopLeftTile();
     Coord BottomRightTile = screenborder->getBottomRightTile();
 
@@ -2547,6 +2552,7 @@ void Game::drawScreen()
         SDL_Texture* hiddenTexZoomed = pGFXManager->getZoomedObjPic(ObjPic_Terrain_Hidden, currentZoomlevel);
         SDL_Texture* hiddenFogTexZoomed = pGFXManager->getZoomedObjPic(ObjPic_Terrain_HiddenFog, currentZoomlevel);
         int zoomedTileSize = world2zoomedWorld(TILESIZE);
+        const int drawnTileSize = dune2rWorldExtent(zoomedTileSize);
         for(int x = screenborder->getTopLeftTile().x - 1; x <= screenborder->getBottomRightTile().x + 1; x++) {
             for (int y = screenborder->getTopLeftTile().y - 1; y <= screenborder->getBottomRightTile().y + 1; y++) {
 
@@ -2559,7 +2565,7 @@ void Game::drawScreen()
                         if(hideTile != 0) {
                             SDL_Rect source = { hideTile*zoomedTileSize, 0, zoomedTileSize, zoomedTileSize };
                             SDL_Rect drawLocation = {   screenborder->world2screenX(x*TILESIZE), screenborder->world2screenY(y*TILESIZE),
-                                                        zoomedTileSize, zoomedTileSize };
+                                                        drawnTileSize, drawnTileSize };
                             SDL_RenderCopy(renderer, hiddenTexZoomed, &source, &drawLocation);
                         }
 
@@ -2574,7 +2580,7 @@ void Game::drawScreen()
                                 SDL_Rect source = { fogTile*zoomedTileSize, 0,
                                                     zoomedTileSize, zoomedTileSize };
                                 SDL_Rect drawLocation = {   screenborder->world2screenX(x*TILESIZE), screenborder->world2screenY(y*TILESIZE),
-                                                            zoomedTileSize, zoomedTileSize };
+                                                            drawnTileSize, drawnTileSize };
 
                                 SDL_RenderCopy(renderer, hiddenFogTexZoomed, &source, &drawLocation);
                             }
@@ -2583,7 +2589,7 @@ void Game::drawScreen()
                         if(!debug) {
                             SDL_Rect source = { zoomedTileSize*15, 0, zoomedTileSize, zoomedTileSize };
                             SDL_Rect drawLocation = {   screenborder->world2screenX(x*TILESIZE), screenborder->world2screenY(y*TILESIZE),
-                                                        zoomedTileSize, zoomedTileSize };
+                                                        drawnTileSize, drawnTileSize };
                             SDL_RenderCopy(renderer, hiddenTexZoomed, &source, &drawLocation);
                         }
                     }
@@ -2591,7 +2597,7 @@ void Game::drawScreen()
                     // we are outside the map => draw complete hidden
                     SDL_Rect source = { zoomedTileSize*15, 0, zoomedTileSize, zoomedTileSize };
                     SDL_Rect drawLocation = {   screenborder->world2screenX(x*TILESIZE), screenborder->world2screenY(y*TILESIZE),
-                                                zoomedTileSize, zoomedTileSize };
+                                                drawnTileSize, drawnTileSize };
                     SDL_RenderCopy(renderer, hiddenTexZoomed, &source, &drawLocation);
                 }
             }
@@ -2875,6 +2881,7 @@ void Game::drawScreen()
 
 
 ///////////draw game bar
+    worldDrawing.reset(); // Sidebar, menus, text and cursor stay at their original UI scale.
     pInterface->draw(Point(0,0));
     pInterface->drawOverlay(Point(0,0));
     drawCityPlacementHint();
@@ -4511,6 +4518,8 @@ void Game::toggleDune2RVisuals() {
         return;
     }
     pGFXManager->toggleDune2RVisuals();
+    screenborder->setPresentationScale(ModManager::instance().usesDune2RRemasterPresentation()
+        && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1);
     addToNewsTicker(pGFXManager->isDune2RVisualsEnabled()
         ? "Dune2R visuals enabled"
         : "Classic visuals enabled");

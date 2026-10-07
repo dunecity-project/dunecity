@@ -25,6 +25,8 @@
 #include <SpatialGrid.h>
 #include <SoundPlayer.h>
 #include <ScreenBorder.h>
+#include <FileClasses/GFXManager.h>
+#include <mod/ModManager.h>
 
 #include <players/HumanPlayer.h>
 
@@ -132,6 +134,22 @@ void InfantryBase::blitToScreen() {
 
     SDL_Rect source = calcSpriteSourceRect(graphic[currentZoomlevel], temp, numImagesX, (walkFrame/10 == 3) ? 1 : walkFrame/10, numImagesY);
 
+    const bool enhancedInfantry = getItemID() == Unit_Soldier
+        && owner->getHouseID() == HOUSE_HARKONNEN
+        && ModManager::instance().isInitialized()
+        && ModManager::instance().usesDune2RRemasterPresentation();
+    const Uint8 blend = enhancedInfantry ? pGFXManager->getDune2RVisualBlend() : 0;
+    const bool classicAlreadyDrawn = blend > 0 && blend < SDL_ALPHA_OPAQUE;
+    if(classicAlreadyDrawn) {
+        SDL_RenderCopy(renderer, graphic[currentZoomlevel], &source, &dest);
+    }
+    if(blend > 0 && drawEnhancedUnitSprite(
+        screenborder->world2screenX(realX), screenborder->world2screenY(realY))) {
+        return;
+    }
+    if(classicAlreadyDrawn) {
+        return;
+    }
     SDL_RenderCopy(renderer, graphic[currentZoomlevel], &source, &dest);
 }
 
@@ -401,7 +419,10 @@ void InfantryBase::destroy() {
             // "normal" dead
             pTile->assignDeadUnit( DeadUnit_Infantry,
                                         owner->getHouseID(),
-                                        Coord(lround(realX), lround(realY)));
+                                        Coord(lround(realX), lround(realY)),
+                                        pGFXManager->recordEnhancedInfantryFall(
+                                            getItemID(), owner->getHouseID(), drawnAngle,
+                                            currentGame->getGameTime()));
 
             if(isVisible(getOwner()->getTeamID())) {
                 soundPlayer->playSoundAt(getRandomOf({Sound_Scream1,Sound_Scream2,Sound_Scream3,Sound_Scream4,Sound_Scream5,Sound_Trumpet}),location);
