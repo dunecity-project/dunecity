@@ -7,6 +7,7 @@ const statusNode = document.getElementById('status');
 const progressNode = document.getElementById('progress');
 let lastDependencyCount = 0;
 let syncPending = false;
+let syncQueued = false;
 let gameReady = false;
 let analyticsQueue = Promise.resolve();
 
@@ -69,11 +70,15 @@ var Module = {
         });
     }],
     requestPersistentSync: function() {
-        if (syncPending || typeof FS === 'undefined') return;
+        if (typeof FS === 'undefined') return;
+        if (syncPending) { syncQueued = true; return; }
         syncPending = true;
+        syncQueued = false;
         FS.syncfs(false, function(error) {
             syncPending = false;
             if (error) console.error('Could not save browser data:', error);
+            // Writes made during the previous snapshot need another serialized sync.
+            if (syncQueued) Module.requestPersistentSync();
         });
     },
     markGameReady: function() {

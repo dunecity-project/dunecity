@@ -1,22 +1,14 @@
-# Dune City 1.0.815 — local PR89 candidate
+# Dune City 1.0.815
 
-Choosing Dune2R, or continuing a game setup with Dune2R already selected, now
-prepares its remastered artwork automatically. The first download contains six
-packs (approximately 384 MB), including Harkonnen Infantry Remastered.
+Dune2R now downloads and updates its remastered artwork automatically when you select it in Custom Game or continue a setup with it already selected. The first download contains six packs, approximately 384 MB, including Harkonnen Infantry Remastered.
 
-- A progress panel checks the GitHub catalog, verifies cached files and downloads
-  missing or changed files. Retry continues after a connection failure; Cancel
-  returns to setup without starting a game.
-- Complete verified artwork remains playable offline. Later setup attempts check
-  for published updates; immediate repeated interactions reuse a short cache.
-- Catalog publication versions and required bundled packs prevent an older or
-  conflicting catalog from removing artwork. Shared versions retain their pinned
-  content.
-- Includes the approved PR89 city artwork and production 1.0.812 fixes. Gameplay,
-  saves and network protocol 57 retain their existing behavior.
+- A progress panel verifies cached artwork and downloads missing or changed files from GitHub. Retry resumes after a connection failure; Cancel returns to setup. Complete verified artwork works offline.
+- Harkonnen Soldiers gain directional movement, combat, collapse and aftermath animation. Other houses and Troopers retain their existing artwork.
+- Adds 30 approved special-building artwork bindings to the DuneCity Dune2 skin. Choose DuneCity, Rebels and Skin Dune2 to see the new city buildings.
+- Dune2R enlarges terrain, buildings and units together while menus and the sidebar keep their size. The Classic toggle remains available during a match.
+- Built-in Dune2R artwork is available in Asset Editors for inspection and preview. Shared mod versions retain their pinned content.
 
-Use the accompanying isolated test launcher and guide for the prepared Harkonnen
-Soldier map. This is a local test candidate.
+Includes the production 1.0.812 fixes. Existing saves remain compatible and network protocol remains 57. Saves, settings and user mods stay in the separate user folder. No metaserver update is required.
 
 # Dune City 1.0.814 — local PR89 candidate
 

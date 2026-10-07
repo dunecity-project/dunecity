@@ -10,9 +10,11 @@
 #include <Menu/Dune2RAssetMenu.h>
 
 #include <Colors.h>
+#include <CursorManager.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
 #include <globals.h>
+#include <misc/FrameYield.h>
 #include <mod/ModManager.h>
 #include <mod/Workshop.h>
 #include <sand.h>
@@ -24,6 +26,14 @@
 #include <sstream>
 
 namespace {
+
+std::launch assetTaskPolicy() {
+#ifdef __EMSCRIPTEN__
+    return std::launch::deferred;
+#else
+    return std::launch::async;
+#endif
+}
 
 std::string formatSize(uint64_t bytes) {
     std::ostringstream text;
@@ -128,7 +138,7 @@ void Dune2RAssetMenu::onRefreshCatalog() {
     disableQuiting(true);
     statusLabel.setText(_("Checking the published asset catalog..."));
     progressBar.setText(_("Checking"));
-    installTask = std::async(std::launch::async, [this] { return assetManager->refreshCatalog(); });
+    installTask = std::async(assetTaskPolicy(), [this] { return assetManager->refreshCatalog(); });
 }
 
 Dune2RAssetMenu::~Dune2RAssetMenu() {
@@ -179,7 +189,7 @@ void Dune2RAssetMenu::refreshSelectionStatus() {
         + "\n" + std::to_string(installed) + _(" installed and checksum-verified.")
         + "\n" + (assetManager->isReadOnly()
             ? _("Switch to the Dune2R working mod to download assets.")
-            : _("Interrupted downloads resume from their partial files.")));
+            : _("Retry keeps verified files and continues the download.")));
     progressBar.setProgress(ids.empty() ? 0.0 : 100.0 * installed / ids.size());
     progressBar.setText(installed == static_cast<int>(ids.size()) ? _("Verified") : _("Ready"));
 }
@@ -205,13 +215,31 @@ void Dune2RAssetMenu::onDownload() {
     progressBar.setProgress(0.0);
     progressBar.setText(_("Starting download"));
 
-    installTask = std::async(std::launch::async, [this, ids] {
+    installTask = std::async(assetTaskPolicy(), [this, ids] {
         return assetManager->install(ids, [this](const Dune2RAssetProgress& progress) {
             completedBytes = progress.completedBytes;
             totalBytes = progress.totalBytes;
-            std::lock_guard<std::mutex> lock(progressTextMutex);
-            progressPack = progress.packName;
-            progressFile = progress.filename;
+            {
+                std::lock_guard<std::mutex> lock(progressTextMutex);
+                progressPack = progress.packName;
+                progressFile = progress.filename;
+            }
+#ifdef __EMSCRIPTEN__
+            // This callback runs between network steps on the single SDL thread.
+            // Keep drawing/input live without recursively polling installTask.
+            statusLabel.setText(progress.packName + "\n" + progress.filename);
+            progressBar.setProgress(progress.totalBytes == 0 ? 0.0
+                : 100.0 * progress.completedBytes / progress.totalBytes);
+            progressBar.setText(formatSize(progress.completedBytes) + " / "
+                                + formatSize(progress.totalBytes));
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            draw();
+            presentWithCursor();
+            yieldFrameToBrowser(1);
+            SDL_Event event{};
+            while(SDL_PollEvent(&event)) doInput(event);
+#endif
             return true;
         });
     });
@@ -222,7 +250,7 @@ void Dune2RAssetMenu::update() {
         return;
     }
     if(refreshingCatalog) {
-        if(installTask.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        if(installTask.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) return;
         const auto result = installTask.get();
         refreshingCatalog = false;
         downloading = false;
@@ -248,7 +276,7 @@ void Dune2RAssetMenu::update() {
         }
     }
 
-    if(installTask.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+    if(installTask.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
         return;
     }
 

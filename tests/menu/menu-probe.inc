@@ -1835,6 +1835,12 @@ int runMenuProbe() {
             }
             menuRequire(browserWork.isReady() && fs::exists(eastFile),
                         "Cooperative artwork download did not verify and finish");
+            // The single-thread path also has to report between the files it
+            // checksums; otherwise the browser tab stops drawing and stops taking
+            // Cancel for the whole verification of the published target.
+            menuRequire(browserWork.completedBytes.load() > 0
+                        && browserWork.completedBytes.load() == browserWork.totalBytes.load(),
+                        "Cooperative verification never reported its checked bytes");
         }
 
         {

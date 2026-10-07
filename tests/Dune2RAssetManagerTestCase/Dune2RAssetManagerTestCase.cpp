@@ -369,6 +369,53 @@ TEST_CASE("Dune2R readiness recognises a complete cached target without any requ
     CHECK(missing.fingerprint != ready.fingerprint);
 }
 
+TEST_CASE("Dune2R readiness reports between files and can be abandoned", "[Dune2RAssets]") {
+    CatalogFixture fixture;
+    const auto working = fixture.root / "Dune2R";
+    writeDuplicatePack(working, "1791400001");
+    Dune2RAssetManager manager(working.string());
+    REQUIRE(manager.getPacks().size() == 1);
+    const uint64_t target = manager.getPacks().front().totalBytes();
+
+    // The caller that has to keep one thread responsive is reported to before every
+    // file, with the total of the whole target known from the first report.
+    std::vector<uint64_t> checkedAt;
+    const auto readiness = manager.checkReadiness([&](uint64_t checked, uint64_t total) {
+        CHECK(total == target);
+        checkedAt.push_back(checked);
+        return true;
+    });
+    // Before each of the two files and once for the finished scan, so a progress
+    // display driven from here reaches the whole target.
+    CHECK(checkedAt == std::vector<uint64_t>{0, target / 2, target});
+    CHECK_FALSE(readiness.complete);
+    CHECK(readiness.totalBytes == target);
+    CHECK(readiness.missingPackIDs == std::vector<std::string>{"duplicate"});
+    CHECK_FALSE(readiness.fingerprint.empty());
+
+    // Refusing at the first file abandons the scan: no further file is read, and the
+    // partial result can neither report a complete target nor be cached, because it
+    // carries no fingerprint to compare a later target against.
+    int reports = 0;
+    const auto abandoned = manager.checkReadiness([&](uint64_t, uint64_t) {
+        ++reports;
+        return false;
+    });
+    CHECK(reports == 1);
+    CHECK_FALSE(abandoned.complete);
+    CHECK(abandoned.fingerprint.empty());
+    CHECK(abandoned.missingPackIDs.empty());
+    CHECK(abandoned.revision == manager.getRevision());
+    CHECK(abandoned.totalBytes == target);
+
+    // A complete target still verifies, and abandoning it is equally refused.
+    const auto unit = working / "graphics_hd" / "units" / "duplicateunit";
+    std::filesystem::copy_file(unit / "unit.ini", unit / "atlases" / "idle" / "east.png",
+                               std::filesystem::copy_options::overwrite_existing);
+    CHECK(manager.checkReadiness().complete);
+    CHECK_FALSE(manager.checkReadiness([](uint64_t, uint64_t) { return false; }).complete);
+}
+
 TEST_CASE("Dune2R readiness treats changed published artwork as missing bytes", "[Dune2RAssets]") {
     CatalogFixture fixture;
     const auto working = fixture.root / "Dune2R";

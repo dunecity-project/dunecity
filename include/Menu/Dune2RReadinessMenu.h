@@ -31,7 +31,9 @@
     installed target again. Native work runs on one worker at a time and is polled from
     update(), so the menu keeps drawing and Cancel stays responsive. Cancelling or
     failing keeps each unfinished pack in place and does not report ready. Browser work
-    runs cooperatively on its single thread, yielding between network steps.
+    runs cooperatively on its single thread, yielding between network steps and between
+    the files it checksums, and asks for a persistent sync once the installed target or
+    a resumable partial download changed.
 */
 class Dune2RReadinessMenu final : public MenuBase {
 public:
@@ -69,7 +71,8 @@ private:
     void fail(const std::string& reason);
     void finish(bool success);
     void setWorking(bool working);
-    void showDownloadProgress();
+    /// Byte counter shared by the download and the checksum verification.
+    void showByteProgress();
     void pumpProgress();
     std::launch launchPolicy() const;
 

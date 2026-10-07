@@ -12,6 +12,13 @@
 #include <FileClasses/INIFile.h>
 #include <Network/ENetHttp.h>
 #include <misc/exceptions.h>
+#ifdef __EMSCRIPTEN__
+// Browser only: the mod directory lives in IDBFS, so written bytes reach
+// IndexedDB through the shared persistence seam and nowhere else. The native
+// test target links this translation unit without the browser runtime, so the
+// seam is referenced only where it is implemented.
+#include <misc/WebRuntime.h>
+#endif
 
 #include <SDL.h>
 
@@ -152,6 +159,18 @@ bool isHexDigest(const std::string& value) {
            && std::all_of(value.begin(), value.end(), [](unsigned char character) {
                   return std::isxdigit(character) != 0;
               });
+}
+
+// The artwork download is the largest thing this application writes into the
+// browser profile. Ask for a persistent sync at each point where the installed
+// target changed, so a reload keeps downloaded packs, a refreshed catalog and the
+// partial files an interrupted download resumes from. The browser shell's periodic
+// timer alone drops a request while another sync is in flight, which would lose a
+// finished 384 MB download to a reload. Native builds compile this to nothing.
+void persistBrowserWrites() {
+#ifdef __EMSCRIPTEN__
+    WebRuntime::syncPersistentFiles();
+#endif
 }
 
 bool verifiedFile(const std::filesystem::path& path, const Dune2RAssetFile& file) {
@@ -501,6 +520,7 @@ Dune2RAssetInstallResult Dune2RAssetManager::applyCatalog(const std::string& con
         packs = std::move(candidate.packs);
         result.success = true;
         result.message = "Catalog refreshed: " + std::to_string(packs.size()) + " available packs.";
+        persistBrowserWrites();
     } catch(const std::exception& error) {
         result.message = std::string("Keeping the previous catalog: ") + error.what();
         std::error_code ignored;
@@ -534,26 +554,48 @@ bool Dune2RAssetManager::isPackInstalled(const Dune2RAssetPack& pack) const {
     });
 }
 
-Dune2RAssetReadiness Dune2RAssetManager::checkReadiness() const {
+Dune2RAssetReadiness Dune2RAssetManager::checkReadiness(const VerifyCallback& onProgress) const {
     Dune2RAssetReadiness result;
     result.revision = revision;
     result.catalogVersion = catalogVersion;
-    const std::filesystem::path unitsRoot = std::filesystem::path(modPath)
-                                            / "graphics_hd" / "units";
     for(const auto& pack : packs) {
         result.totalBytes += pack.totalBytes();
+    }
+    const std::filesystem::path unitsRoot = std::filesystem::path(modPath)
+                                            / "graphics_hd" / "units";
+    uint64_t checkedBytes = 0;
+    // Reported between files rather than inside one: the catalog caps a single file
+    // well below the target's total, so a caller driving this from one thread gets
+    // control back often enough to draw and to cancel. An abandoned scan reports no
+    // packs and no fingerprint, so it can neither be started from nor cached.
+    const auto abandoned = [&]() {
+        Dune2RAssetReadiness stopped;
+        stopped.revision = revision;
+        stopped.catalogVersion = catalogVersion;
+        stopped.totalBytes = result.totalBytes;
+        return stopped;
+    };
+    for(const auto& pack : packs) {
         uint64_t packMissingBytes = 0;
         for(const auto& file : pack.files) {
+            if(onProgress && !onProgress(checkedBytes, result.totalBytes)) {
+                return abandoned();
+            }
             // Only the installed location counts. Staging and partial files are
             // never a playable target, however complete they look.
             if(!verifiedFile(unitsRoot / pack.unit / file.relativePath, file)) {
                 packMissingBytes += file.size;
             }
+            checkedBytes += file.size;
         }
         if(packMissingBytes > 0) {
             result.missingPackIDs.push_back(pack.id);
             result.missingBytes += packMissingBytes;
         }
+    }
+    // The last file is reported too, so a caller's progress reaches the whole target.
+    if(onProgress && !onProgress(checkedBytes, result.totalBytes)) {
+        return abandoned();
     }
     // An empty catalog describes no playable target, so it is never "ready".
     result.complete = !packs.empty() && result.missingPackIDs.empty();
@@ -718,5 +760,9 @@ Dune2RAssetInstallResult Dune2RAssetManager::install(
         SDL_Log("Dune2R asset install failed: %s", error.what());
         result.message = error.what();
     }
+    // Also after a cancellation or a failure: the staged pack and its partial file
+    // are what the retry continues from, and an installed pack was already swapped
+    // in for every pack this run completed.
+    persistBrowserWrites();
     return result;
 }

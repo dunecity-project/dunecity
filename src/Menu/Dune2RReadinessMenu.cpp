@@ -151,9 +151,32 @@ void Dune2RReadinessMenu::startVerify(Phase verifyPhase) {
     statusLabel.setText(verifyPhase == Phase::Confirm
         ? _("Verifying the installed artwork...")
         : _("Checking the installed artwork against the published checksums..."));
+    completedBytes = 0;
+    totalBytes = 0;
+    {
+        // The download's last pack and file must not be left standing over the
+        // verification that follows it.
+        std::lock_guard<std::mutex> lock(progressTextMutex);
+        progressPack.clear();
+        progressFile.clear();
+    }
+    progressBar.setProgress(0.0);
     progressBar.setText(_("Verifying"));
-    verifyTask = std::async(launchPolicy(),
-                            [this] { return assetManager->checkReadiness(); });
+    verifyTask = std::async(launchPolicy(), [this] {
+        return assetManager->checkReadiness([this](uint64_t checked, uint64_t total) {
+            completedBytes = checked;
+            totalBytes = total;
+            if(cooperative) {
+                // Checksumming the whole published target takes seconds on one
+                // thread. Draw and take input between files, exactly as the
+                // download does, so the browser tab never sits blocked and Cancel
+                // stays usable. A native worker only reads the flag below.
+                showByteProgress();
+                pumpProgress();
+            }
+            return !cancelRequested.load();
+        });
+    });
 }
 
 void Dune2RReadinessMenu::startDownload() {
@@ -183,7 +206,7 @@ void Dune2RReadinessMenu::startDownload() {
                 progressFile = progress.filename;
             }
             if(cooperative) {
-                showDownloadProgress();
+                showByteProgress();
                 pumpProgress();
             }
             // Returning false keeps this unfinished staged pack from replacing
@@ -215,7 +238,7 @@ void Dune2RReadinessMenu::pumpProgress() {
     }
 }
 
-void Dune2RReadinessMenu::showDownloadProgress() {
+void Dune2RReadinessMenu::showByteProgress() {
     const uint64_t completed = completedBytes.load();
     const uint64_t total = totalBytes.load();
     progressBar.setProgress(total == 0 ? 0.0 : 100.0 * static_cast<double>(completed)
@@ -307,6 +330,8 @@ void Dune2RReadinessMenu::update() {
 
         case Phase::Verify:
         case Phase::Confirm: {
+            // A native worker reports its checked bytes through the same counters.
+            showByteProgress();
             if(verifyTask.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
                 return;
             }
@@ -359,7 +384,7 @@ void Dune2RReadinessMenu::update() {
         }
 
         case Phase::Download: {
-            showDownloadProgress();
+            showByteProgress();
             if(installTask.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
                 return;
             }

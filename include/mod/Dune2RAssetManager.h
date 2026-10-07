@@ -58,6 +58,11 @@ struct Dune2RAssetReadiness {
 class Dune2RAssetManager final {
 public:
     using ProgressCallback = std::function<bool(const Dune2RAssetProgress&)>;
+    /// Reports progress while checkReadiness() checksums the catalogued files, with
+    /// the bytes already checked and the total of the complete target. Returning false
+    /// abandons the check; an abandoned check never reports a complete target and
+    /// carries no fingerprint, so nothing about it can be cached or started from.
+    using VerifyCallback = std::function<bool(uint64_t checkedBytes, uint64_t totalBytes)>;
 
     explicit Dune2RAssetManager(const std::string& dune2rModPath);
 
@@ -79,7 +84,10 @@ public:
     bool isPackInstalled(const Dune2RAssetPack& pack) const;
 
     /// Checksum-verify every catalogued pack in its final (non-staging) location.
-    Dune2RAssetReadiness checkReadiness() const;
+    /// Checksumming the published target reads hundreds of megabytes, so a caller
+    /// that has to stay responsive on one thread passes a callback and is reported to
+    /// between files.
+    Dune2RAssetReadiness checkReadiness(const VerifyCallback& onProgress = {}) const;
     /// Digest of the target identity plus each installed file's size and modification
     /// time. Cheap enough to run on a menu interaction, and it changes whenever the
     /// installed files change or the catalog expects a different size, hash or pack.

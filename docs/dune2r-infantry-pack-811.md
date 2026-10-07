@@ -1,6 +1,6 @@
-# Approved Harkonnen Infantry pack — 1.0.811 candidate
+# Approved Harkonnen Infantry pack — 1.0.815
 
-This is optional **Dune2R** artwork, not a DuneCity skin. The pack is
+The **Dune2R** mod downloads this artwork automatically when selected in Custom Game, or before continuing a setup with Dune2R already selected. The first preparation includes all six remastered packs (approximately 384 MB); subsequent preparations verify cached files and fetch missing or changed artwork. The pack is
 `mods/Dune2R/graphics_hd/units/harkonneninfantry/`: 48 directional atlases and
 one engine manifest, containing 386 approved poses (34,640,457 bytes).
 
@@ -56,11 +56,9 @@ the ordered runtime-file digest is
 `051f39801f2b821beed9613c68872553dee074c738f849ebc2d05535003c69a3`.
 
 Base desktop, Android and browser packages continue excluding downloadable
-Dune2R artwork. Players download it through the existing asset manager and
+Dune2R artwork. The automatic preparation panel offers Retry and Cancel; complete verified artwork remains playable offline. Players can also inspect and
 preview it in the Dune2R EditoR. The new Return to Idle section is available
 there, and missing sections or uninstalled packs retain classic fallback.
 
 See [world presentation](dune2r-world-presentation.md) for the separate Dune2R
-scale change and multiplayer/save isolation. This candidate has not cleared
-the upstream browser observer-promotion release gate; the asset commit is
-not a stable release announcement.
+scale change and multiplayer/save isolation. [Testing 1.0.815](testing-1.0.815.md) gives the exact mod, skin and unit selections. Release evidence is recorded separately in `HANDOVER.md`.

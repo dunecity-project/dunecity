@@ -1,3 +1,39 @@
+# 2026-10-07 — Production 1.0.815 release preparation
+
+PR89 now integrates production812, the approved city/Infantry artwork, built-in Asset
+Editor access and automatic canonical Dune2R preparation. Its head was fast-forwarded
+to178ba3ae and marked ready. Candidate push37583843793 and PR37583848329 passed all
+platform checks (macOS only on the push run), including pinned4.0.14 Emscripten.
+
+Independent Claude subscription review d9e25942-ca5e-4a41-a435-fde6a41ff12a found and
+fixed missing browser persistence calls at catalog/install write sites and a checksum
+scan that did not yield on the browser thread. The native incremental build and
+pre/post dependency audits passed; CTest passed973cases (970passed,3opt-in skips),
+the presentation target and the menu probe at640/854/1280. Earlier815 validation
+passed all972cases with those three opt-ins enabled. Modern bundled Python passes
+all15asset/catalog tests. Source, screenshots and reports are in
+`../outputs/release-815/` and the earlier local evidence directories below.
+
+Codex review also queues a serialized follow-up when browser writes arrive during
+an IDBFS sync (six shell tests pass), and uses deferred Asset Editor tasks with
+progress/input pumping on the browser thread. Native Editor tasks remain async.
+The baseline uninstrumented shipping WASM has been exercised through real browser
+Custom Game selection and persisted Next: cancellation retained completed packs
+and staging, retry completed all238files, and an independent browser SHA256 audit
+verified383,787,346bytes without a page error. The final browser fixes still require
+platform CI and browser reload/repair/editor/play verification before publication.
+
+The worker could not execute the SDK script under its allowed tools. No SDK pin was
+changed; production validation uses the actual pinned CI artifact instead. Local
+Homebrew libraries targetmacOS26; public packages are built separately by stable CI.
+Stefan's MBA already has the local815app in /Applications and the prepared house-bound
+Infantry map in its normal user maps folder; installation receipts in the prior815
+output directory show all profile files preserved.
+
+Release publication, signed feeds, SourceForge, the website and final live browser
+verification are still pending and tracked in `../outputs/release-815/receipt.md`.
+The following entries describe earlier local/candidate evidence.
+
 # 2026-10-07 — Automatic Dune2R artwork preparation (1.0.815)
 
 Local candidate `test/pr89-on-812` now prepares canonical Dune2R artwork when
