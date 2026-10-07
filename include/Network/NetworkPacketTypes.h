@@ -138,7 +138,7 @@
 //     send different troops and use different movement and attack orders.
 // 56: Allow 2/3ms shared game speeds in GameInitSettings and MATCH_CONTROL.
 //     Older peers reject these values; save and observer layouts are unchanged.
-#define NETWORK_PROTOCOL_VERSION            56
+#define NETWORK_PROTOCOL_VERSION            57
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

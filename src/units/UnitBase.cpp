@@ -2235,7 +2235,9 @@ void UnitBase::turnRight() {
         drawnAngle = lround(angle) + NUM_ANGLES;
         angle += NUM_ANGLES;
     } else {
-        drawnAngle = lround(angle);
+        // Movement rotation uses [0,8). Its route clock can clear with the body
+        // still between 7.5 and 8, so combat rotation must wrap the rounded 8.
+        drawnAngle = lround(angle) % NUM_ANGLES;
     }
 }
 

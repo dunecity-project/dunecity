@@ -1,3 +1,27 @@
+# 2026-10-07 — Ground rotation memory corruption (1.0.811 candidate)
+
+The exact Four Corners init (seed 315473198, 49,810 bytes) reproduces an
+out-of-bounds tracksCreationTime[8] write in the browser, followed by observer
+divergence and a Tile destructor/free trap during checkpoint replacement.
+Private unit diagnostics identify a Deviator and Launcher switching from
+Dynasty movement rotation [0,8) to the combat fallback with an angle above 7.5.
+turnRight rounded that to 8. The same real-unit transition fails natively before
+the repair; wrapping the rounded direction passes in vanilla, DuneCity and Dune2R.
+Tile::setTrack now accepts int and rejects negative or >= NUM_ANGLES directions
+before touching the array. The populated-tile, adjacent-container, save/load and
+teardown fixture passes all current cases; archived e5797cd3 passes valid tracks
+and fails 8, 9, 255 and -1 under a bounds trap. On native arm64 index 8 falls in
+padding; on wasm32 it overwrites damage's begin pointer. Asyncify high water was
+1492 of 4096 bytes during the actual bounds replay, so no capacity patch was made.
+
+Claude Max supplied the tile guard and initial regression fixture in a bounded
+900-second run that timed out before its report. Codex traced and corrected the
+rotation producer, finished the fixture launcher, and independently ran both
+before/after regressions. Protocol advances to 57 because the direction correction
+changes synchronized combat behavior. Save 9852, runtime 7 and policy v90 are intact.
+Full native tests, fresh exact-source Four Corners browser replay and publication
+are pending at this commit. Production remains 1.0.796; see ../outputs/release-809/.
+
 # 2026-10-07 — Observer checkpoint menu recovery (1.0.810 candidate)
 
 An Escape menu open when an observer requires a fresh checkpoint was left on
@@ -9,21 +33,21 @@ The native probe now perturbs a digest-bearing credits field by spending credits
 its former addCityCredits injection could be clamped to zero room and fail to
 exercise resync. JOIN_DESYNC_ONCE=1 JOIN_MENU_DURING_RESYNC=1 fails on archived
 809 with the stuck-modal assertion and passes with this patch, one real resync,
-no retained modal and matching three-peer state at cycle1800. The promotion
+no retained modal and matching three-peer state at cycle 1800. The promotion
 fixture distinguishes pending approval from the legitimate completed-join notice.
-All56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
-checks pass. Protocol56, save9852, observer runtime7 and AI policyv90 are unchanged.
+All 56 CTest targets pass (927.08s), pre/post dependency audits and browser-shell
+checks pass. Protocol 56, save 9852, observer runtime 7 and AI policy v90 are unchanged.
 
-Public release remains held: original809 browser promotion on Four Corners has
+Public release remains held: original 809 browser promotion on Four Corners has
 intermittently trapped in free during Map/Tile teardown. This menu fix is a
 separate verified defect and is not proof that the heap trap is repaired. The
 recent original-stack and larger-stack passing trials used Ergsun-Odenkirk, so
-neither clears the FourCorners failure. A FourCorners replay has byte-identical
-GameInitSettings (seed315473198) to the named failing run. ASAN O3 could not keep
-up with the diagnostic25Hz host and expired its observer stream; no heap error
+neither clears the Four Corners failure. A Four Corners replay has byte-identical
+GameInitSettings (seed 315473198) to the named failing run. ASAN O3 could not keep
+up with the diagnostic 25 Hz host and expired its observer stream; no heap error
 was reported before disconnect, and it did not reach promotion. No speculative
 Asyncify capacity or malformed-map fix was committed. Diagnostic artifacts are
-in ../outputs/release-809/. Latest public stable at this checkpoint remains796.
+in ../outputs/release-809/. Latest public stable at this checkpoint remains 796.
 
 # 2026-10-06 — Faster game-speed settings (1.0.809)
 
@@ -2828,7 +2852,7 @@ All eight CTest groups pass across the full run and corrected unit rerun; 200
 Node relay tests pass. Real native three-peer WebRTC test passes client pause,
 host resume/speed, concurrent pause requests/client resume, menu-close behavior,
 malformed payload validation, and spectator admission at paused cycle711.
-Host/Partner/Newcomer match at cycle1800 and original peers match after departure.
+Host/Partner/Newcomer match at cycle 1800 and original peers match after departure.
 Screenshots reviewed for toolbar and host-only settings. Evidence:
 /tmp/dunecity-multiplayer-controls/live-4 and ctest*.log, relay-tests-2.log.
 Interactive browser crossplay and ENet LAN play were not repeated.
@@ -2858,7 +2882,7 @@ real-engine Easy2/Hard5/Brutal9 probes. Three ordinary campaign runs checked134
 enemy snapshots with no cap violations or new RTS types. Hard5/Brutal5 observed
 net income1748/3030 per minute versus goals1800/3150; not a full balance study.
 Evidence and measured limitations are documented alongside the matrix.
-Native spectator hot-join also passes with matching state at cycle1800.
+Native spectator hot-join also passes with matching state at cycle 1800.
 No browser-crossplay or public release claim.
 
 Local delivery complete: Developer ID signed, app and DMG accepted by Apple,
