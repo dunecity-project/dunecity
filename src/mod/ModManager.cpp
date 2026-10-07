@@ -339,6 +339,26 @@ CustomHouseInfo makeTornieGuestCustomHouse(const std::string& activeModName) {
     return info;
 }
 
+// Optional presentation media is omitted from shipped packages and preserved
+// across managed reseeds. Downloading it must not change the canonical mod's
+// installed-rules identity. Dune2RAssetManager separately checks the published
+// catalog and file hashes when preparing artwork; required bundled metadata,
+// rules and asset-catalog.ini remain in the installer comparison below.
+bool isDune2RDownloadManagedPath(const std::string& relative) {
+    static constexpr const char* managedDirectories[] = {
+        "graphics_hd/units/",          // installed packs, <unit>.download staging, .mount-revision
+        "graphics_compact/objpics/",   // optional compact presentation media
+        "graphics_hd/.atlas-backups/"  // local atlas cache, preserved across a reseed
+    };
+    for(const char* directory : managedDirectories) {
+        if(relative.rfind(directory, 0) == 0) return true;
+    }
+    // The refreshed online catalog and the backup/pending files of its atomic swap.
+    return relative == "asset-catalog-online.ini"
+        || relative == ".asset-catalog.previous"
+        || relative == ".asset-catalog.pending";
+}
+
 } // namespace
 
 ModManager& ModManager::instance() {
@@ -406,6 +426,10 @@ std::string ModManager::installerContentHash(const std::string& name) const {
                 if(name == DUNECITY_MOD_NAME
                    && (relative == "graphics_skins/.bundled-skin-fingerprint"
                        || relative.rfind("graphics_skins/.dune2r_graphics_skins_", 0) == 0)) continue;
+                // Applied to both the trusted and the actual collection, so approval
+                // is the same whether the bundled payload is a shipped package (which
+                // has no optional media) or a source checkout (which does).
+                if(name == DUNE2R_MOD_NAME && isDune2RDownloadManagedPath(relative)) continue;
                 files[relative] = digest(entry.path());
             }
             return files;

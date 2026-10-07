@@ -1,3 +1,13 @@
+## 2026-10-07 — final stable version 1.0.816
+
+The final optional-art approval correction publishes as816 so the already installed/running local815candidate can receive a signed update. Publiclatest remains812until publication;815is an unpublished local candidate. No running MBAgame is interrupted. Final release requires PR90CI, public multiplayer gameplay, signed packages/feeds, SourceForge and exact-tag browser/site deployment proof. Tests of the815candidate apply to unchanged functional code;816adds the normal version metadata bump.
+
+## 2026-10-07 — 1.0.815 optional artwork and online approval
+
+PR89 merged into main eb52893f after candidate37586632428/37586636165 and merged-main37588904240 passed. Actual shipping-WASM browser testing downloaded/cancelled/retried all six packs, independently verified238files/383787346bytes, repaired same-size gravel corruption while preserving unchanged Infantry, and verified reload persistence and offline cached preparation. The Infantry fixture rendered new Soldiers and Classic/zoom controls; browser Asset Editor REFRESH/DOWNLOAD succeeded without pthread creation or JavaScript errors.
+
+A production-origin private-room check caught downloaded optional Dune2R media invalidating installerContentHash, which made running-game joins treat the canonical mod as edited. Exclude only download-managed presentation/cache paths from canonical Dune2R identity; keep required catalog, metadata and rules checked. Authored/derived/snapshot identities remain unchanged. Independent Claude follow-up added a three-size real-engine regression; disabling the exclusion reproduced the exact approval failure, restoring it passed238.45seconds. Presentation and skin probes pass, with clean dependency audits. Source fixes are recorded for the unpublished815release; stable publication still requires final CI/browser-native gameplay, signing, mirror and live website proof. Review and browser evidence: outputs/release-815.
+
 # 2026-10-07 — Production 1.0.815 release preparation
 
 PR89 now integrates production812, the approved city/Infantry artwork, built-in Asset
