@@ -1648,8 +1648,68 @@ int runMenuProbe() {
                     "Loading a map lost city palette or structures");
     }
     ModManager::instance().setActiveMod("vanilla");
-    { ModMenu menu(ModMenu::Purpose::MapEditor); menuCapture(menu,"map-working-mod"); }
-    { ModMenu menu(ModMenu::Purpose::AssetEditors); menuCapture(menu,"asset-working-mod"); }
+    {
+        // The map editor only activates the chosen mod, so a bundled mod has
+        // always been a legal selection here. Pin that it stayed that way.
+        ModMenu menu(ModMenu::Purpose::MapEditor);
+        int bundled = -1;
+        for(size_t i = 0; i < menu.mods.size(); ++i)
+            if(menu.mods[i].name == "vanilla") bundled = static_cast<int>(i);
+        menuRequire(bundled >= 0, "Map editor mod list lost the bundled vanilla rules");
+        menu.modListBox.setSelectedItem(bundled);
+        menuRequire(menu.editButton.isEnabled(), "Map editor refuses a bundled working mod");
+        menuRequire(menu.statusLabel.getText() == "The selected mod is used only for this editor session.",
+                    "Map editor working-mod status copy changed");
+        menuCapture(menu,"map-working-mod");
+    }
+    {
+        // The asset editors inspect packaged sprites and keep render
+        // preferences outside the mod payload, so the built-in Dune2R and
+        // shared snapshots must open. Download/catalog writes stay refused by
+        // Dune2RAssetManager itself, not by hiding the editor.
+        ModMenu menu(ModMenu::Purpose::AssetEditors);
+        menuRequire(menu.titleLabel.getText() == "Asset Editors - Choose Mod",
+                    "Asset editor mod chooser changed identity");
+        int dune2r = -1;
+        for(size_t i = 0; i < menu.mods.size(); ++i) {
+            menuRequire(ModManager::instance().getContentBase(menu.mods[i].name) == "Dune2R",
+                        "Asset editors offered a mod that is not Dune2R content");
+            if(menu.mods[i].name == "Dune2R") dune2r = static_cast<int>(i);
+        }
+        menuRequire(dune2r >= 0, "Asset editors cannot reach the built-in Dune2R mod");
+        menu.modListBox.setSelectedItem(dune2r);
+        menuRequire(menu.editButton.isEnabled(),
+                    "Built-in Dune2R cannot open the asset editor, so its packs are unreachable");
+        menuRequire(menu.statusLabel.getText()
+                    == "Preview sprites, set render preferences and download asset packs into this mod.",
+                    "Asset editor status copy does not describe asset inspection");
+        menuCapture(menu,"asset-working-mod");
+
+        // Same selection as a shared immutable version: still inspectable, and
+        // the copy now has to say that downloads are disabled.
+        const auto marker = std::filesystem::path(ModManager::instance().getModPath("Dune2R"))
+                            / "workshop-revision.ini";
+        struct Marker {
+            std::filesystem::path path;
+            ~Marker() { std::error_code code; std::filesystem::remove(path, code); }
+        } immutableMarker{marker};
+        { std::ofstream sidecar(marker); sidecar << "[Workshop]\nImmutable = true\n"; }
+        menuRequire(std::filesystem::is_regular_file(marker), "Cannot write the shared-version fixture");
+        menu.updateModDetails();
+        menuRequire(menu.editButton.isEnabled(),
+                    "A shared Dune2R version cannot be inspected in the asset editor");
+        menuRequire(menu.statusLabel.getText()
+                    == "Shared version: inspect sprites and set render preferences. Downloads stay disabled.",
+                    "Shared asset-editor copy does not explain the download guard");
+        { ModMenu source(ModMenu::Purpose::ModEditor);
+          int shared = -1;
+          for(size_t i = 0; i < source.mods.size(); ++i)
+              if(source.mods[i].name == "Dune2R") shared = static_cast<int>(i);
+          menuRequire(shared >= 0, "Mod editor list lost Dune2R");
+          source.modListBox.setSelectedItem(shared);
+          menuRequire(!source.editButton.isEnabled(),
+                      "Bundled or shared Dune2R became editable mod source"); }
+    }
     {
         const std::string draft = "Workshop UI Probe";
         auto& manager = ModManager::instance();

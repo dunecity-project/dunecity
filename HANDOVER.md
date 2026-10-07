@@ -1,13 +1,49 @@
-# 2026-10-07 — PR89 local integration candidate (1.0.813)
+# 2026-10-07 — PR89 local integration and asset-editor access (1.0.814)
 
 Local branch `test/pr89-on-812` combines PR89 head c80d0157 with production
-1.0.812 (90b2e159). Version remains 1.0.813; protocol57, the ground-rotation
+1.0.812 (90b2e159), integration commit 7be69f8c. Protocol57, the ground-rotation
 wrap, invalid-track guard and their regression probes are retained. Production
-1.0.812 has already been published and independently verified. Historical
-candidate entries below predate that release and describe their earlier gates.
-This integration is for local testing; native build, full tests and actual
-graphics/download checks are pending. No production publication or local
-application replacement is authorized by this local-readiness request.
+1.0.812 has already been published and independently verified; historical
+candidate entries below describe earlier gates. This branch is a local candidate.
+
+Review found the Asset Editors chooser disabled built-in Dune2R and shared
+snapshots, making the new pack unreachable through its supported UI. The chooser
+now allows asset inspection for those selections, while Mod Editor protection
+stays intact. Immutable download/catalog guards remain in Dune2RAssetManager;
+shared-version render preferences remain in user configuration. Version 1.0.814
+identifies the integration plus this access fix; no gameplay rules changed.
+
+The integrated 813 tree passed all 59 native CTest targets. The full Catch2 run
+passed 962 cases and 10,219,290 assertions with the three optional network,
+Refinery-atlas and GPU checks enabled. Metal Refinery playback had zero cache
+misses on its second loop. Python packaging/catalog and skin checks passed.
+The real menu probe verifies built-in asset access, shared-version inspection,
+protected Mod Editor source, and the existing Map Editor selection at three
+window sizes. Its access fix passed before the final version-only rebuild.
+
+A private real-engine probe downloaded/hash-verified all 49 Infantry pack files
+(34,640,457 bytes) at pinned asset commit e4285d2d, drew all 48 directional/state
+slots, collapse and aftermath, loaded the deterministic Harkonnen fixture and
+verified real 3x projection/click inversion, graphics-toggle state digest, camera
+bounds, mod switching, classic faction/unit fallbacks and snapshot write refusal.
+The small 32x32 map recentres when Classic can fit the whole map; that is legal
+camera clamping, not a requirement to preserve an impossible off-centre view.
+All 30 new DuneCity building bindings were independently audited and loaded;
+all 789 old skin files remain byte-identical. Optional Dune2R media stays outside
+the installer. New catalog: six packs, including Harkonnen Infantry Remastered.
+
+Artifacts, complete logs, delegated report and manual test kit are in
+`../outputs/pr89-local-20261007/`. The manual launcher isolates configuration,
+mods, artwork and saves, includes a house-bound map with eight Harkonnen Soldiers
+and a preplaced Barracks, and restores the candidate catalog if production's
+older online catalog was refreshed. Harkonnen WOR Troopers do not exercise this
+artwork. For the city artwork use Dune City, Rebels, Skin Dune2; Hospital and
+Church are residential civic overlays. A normal built-in Dune2R copy is required
+for downloads; derived drafts do not activate canonical remaster presentation.
+
+This candidate is not pushed, merged upstream, published, or installed over the
+existing application. Local bundle/readiness and MacBook Air runtime receipts
+belong in the artifact directory. PR89's draft status and stable feeds are unchanged.
 
 # 2026-10-07 — Release recovery and final browser replay (1.0.812)
 

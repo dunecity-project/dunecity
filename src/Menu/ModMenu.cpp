@@ -94,12 +94,20 @@ void ModMenu::refreshModList(const std::string& select) {
 void ModMenu::updateModDetails() {
     const int index = modListBox.getSelectedIndex();
     const bool selected = index >= 0 && index < static_cast<int>(mods.size());
-    editButton.setEnabled(selected && (purpose != Purpose::ModEditor || (!bundledMod(mods[index].name) && !immutableMod(mods[index].name)))
-        && (purpose != Purpose::AssetEditors || (!bundledMod(mods[index].name) && !immutableMod(mods[index].name))));
+    // Asset editors can inspect protected mods. Their download manager guards
+    // immutable writes, and shared-version render preferences live in user config.
+    editButton.setEnabled(selected && (purpose != Purpose::ModEditor
+        || (!bundledMod(mods[index].name) && !immutableMod(mods[index].name))));
     createButton.setEnabled(selected);
     if(!selected) { detailsLabel.setText(_("No compatible mods installed.")); return; }
     const auto& mod = mods[index];
     detailsLabel.setText(mod.displayName + "  |  " + mod.author + "\n" + mod.description);
+    if(purpose == Purpose::AssetEditors) {
+        statusLabel.setText(immutableMod(mod.name)
+            ? _("Shared version: inspect sprites and set render preferences. Downloads stay disabled.")
+            : _("Preview sprites, set render preferences and download asset packs into this mod."));
+        return;
+    }
     statusLabel.setText((purpose != Purpose::MapEditor && bundledMod(mod.name)) || immutableMod(mod.name)
         ? _("Bundled and shared versions are protected. Create a copy to edit.")
         : _("The selected mod is used only for this editor session."));
@@ -147,7 +155,8 @@ void ModMenu::onEdit() {
         if(bundledMod(name) || immutableMod(name)) return;
         ModEditorMenu(name).showMenu();
     } else {
-        if(purpose == Purpose::AssetEditors && (bundledMod(name) || immutableMod(name))) return;
+        // Asset editors enforce their own write guards. Both editors restore
+        // the previous active mod and rules when the session ends.
         auto& manager = ModManager::instance();
         const std::string previous = manager.getActiveModName();
         const auto previousOptions = effectiveGameOptions;
