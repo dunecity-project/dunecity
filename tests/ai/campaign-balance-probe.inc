@@ -91,7 +91,9 @@ int runCampaignBalanceProbe() {
         init=GameInitSettings(customMap,contents,true,settings.gameOptions);
     }
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
-    init.setMultiplePlayersPerHouse(true);
+    const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
+    init.setLocalSpectator(localSpectator);
+    init.setMultiplePlayersPerHouse(!localSpectator);
     std::vector<std::pair<int,int>> roster;
     if(customMap) {
         std::istringstream input(std::getenv("BALANCE_ROSTER") ? std::getenv("BALANCE_ROSTER") : "");
@@ -109,7 +111,7 @@ int runCampaignBalanceProbe() {
     int rosterRow = 0;
     for (const auto& [h,team] : roster) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), team);
-        if (h==humanHouse) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
+        if (h==humanHouse && !localSpectator) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
         info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
         // Give every row a different delivery income factor, as a host would in the lobby, so
         // the probe can check which house ended up with which - including that no row picked
@@ -125,6 +127,8 @@ int runCampaignBalanceProbe() {
     // Restore ordinary AI/command execution before advancing any game cycles.
     game->bReplay = true;
     game->initGame(init);
+    if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
+        throw std::runtime_error("Custom diagnostic did not create the real local observer");
     // This diagnostic can retain a full hour of every house's decisions.
     // The normal game capture limit is deliberately unchanged.
     if(std::getenv("BALANCE_CAPTURE_MIB"))

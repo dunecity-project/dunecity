@@ -1,3 +1,56 @@
+## 2026-10-09 — 1.0.819 civic priority fixed and tested; MBA install pending
+
+The 1.0.818 installed binary was verified in the live MBA capture. Its installment
+funding path still lost the yard to upstream saving/investment branches, and
+missing Radar erased civic eligibility. Its earlier fixture forced a demand flag
+without reaching the simulation's real population threshold; it established
+funding mechanics, not normal scheduling progress.
+
+QuantBot now derives Stadium/Airport need from `missingDemandCivics` on real
+population and queue-inclusive counts. It walks missing mod prerequisites/legal
+yard upgrades and puts a funded required civic before optional protection saving,
+extra power, spice capacity and technology. Actual storage overflow, blackout,
+observed aircraft and selected emergency service retain their priority. Unloading
+backlog expansion can wait for the single required civic commitment; otherwise
+persistent backlog saving could starve that civic. Funding still requires the real
+foundation/start budget and continuing income, with full unpaid queues reserved.
+No serialized fields changed (save 9852); deterministic AI orders change, so
+protocol is 60 and both wire-test pins were updated.
+
+The controlled captured New Beginning map (SHA256
+`abdce857634a34b2b9da243efa1b89afdc2a906864d98a98b67416380d8b5`), seed 223970290,
+all-AI detached spectator, normal paid construction/concrete, four Brutal factions
+and map Brain teams 1/2/3/5 reaches 66 minutes. The 1.0.818 baseline built zero stadiums;
+1.0.819 built one in every house and rebuilt Neutral's destroyed stadium. Harkonnen
+also built an Airport. Stadium orders enter at 178–391 credits versus price 3,000;
+Airport at 734 versus 5,000. No grants/instant construction were used in these matches.
+These are fresh controlled matches, not an exact live-team/save replay. The map
+starts without harvestable spice but contains 12 blooms. Candidate SQLite import:
+84,365 events, zero invalid/incomplete records. Detailed timing/limits and test
+instructions: `docs/testing-1.0.819.md`.
+
+All 70 registered native CTest gates pass: core 32/32 (535.85s), AI/economy 38/38
+(417.32s), against unchanged shipping source/executable fingerprints. The two-pass
+priority regression with the actual preserved 818 AI object fails because it queues
+extra nuclear capacity instead of the Stadium; 819 orders the Stadium in one pass.
+Real paid Radar placement -> Stadium, negative valve, duplicate, foundation,
+zero-credit pause/resume/completion, aircraft, blackout and non-city checks pass.
+The synthetic optional-protection case skips because its crime 250 is a real
+emergency; it is not counted as proof. Actual whole-match Harkonnen yard 913 instead
+orders its needed Airport at cycle 196625 over its winning unurgent Rocket Turret
+candidate. Dangerous-crime urgency remains source-reviewed rather than forced.
+
+Native Release build, version/diff checks and pre/post Ninja dependency audits
+pass. The portable local ad-hoc app has 36 ARM64 Mach-O files, portable library paths,
+native/package code/string equivalence, deep/strict signature and bundled SDL
+initialization/hidden rendering. Packaged executable SHA256:
+`fbb900ce1e9dcf852aee2f820bf432e9dca201be12575d2ec1f3c167a6dd7282`.
+Artifacts/receipts: `/Users/stefan/Documents/projects/outputs/stadium-starvation-819`
+and `/Users/stefan/Documents/projects/outputs/install-819-mba`. The guarded installer preserves the old app and
+INI/save profile; it has not run because MBA SSH connection attempts time out.
+The user was asked to wake/connect the MBA while local validation completed.
+No running match was stopped. No push, production publication or CI run occurred.
+
 ## 2026-10-09 — 1.0.818 installed on the MBA
 
 On `feature/custom-game-spectator`, fixes the reported eight-house Colonists

@@ -10,6 +10,7 @@ comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
 import configparser
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,8 @@ root = Path(__file__).resolve().parents[2]
 house_names = ('harkonnen','atreides','ordos','fremen','sardaukar','mercenary','neutral','rebels','custom','wildspade','kleshmersh','tharpique')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
+parser.add_argument('--quantbot-object', type=Path,
+                    help='Diagnostic-only policy comparison: link a preserved QuantBot object')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--repeatable', action='store_true', help='Keep each CTest run in a fresh subdirectory')
 parser.add_argument('--custom-map', type=Path, help='Run all occupied slots of a custom map instead of the campaign')
@@ -31,6 +34,8 @@ parser.add_argument('--level', type=int, choices=range(1,10), default=4)
 parser.add_argument('--mod', choices=('vanilla','dunecity','Dune2R','Tornie'), default='vanilla')
 parser.add_argument('--house', choices=tuple(h for h in house_names if h!='neutral'), default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
+parser.add_argument('--local-spectator', action='store_true',
+                    help='Run a custom-map all-AI match through the real detached spectator setup')
 parser.add_argument('--harvester-limit', type=int, choices=range(-1,101), default=-1)
 parser.add_argument('--rocket-turrets-need-power', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--concrete-required', action=argparse.BooleanOptionalAction, default=None)
@@ -55,6 +60,8 @@ parser.add_argument('--stats-probe', action='store_true', help='Verify campaign 
 parser.add_argument('--growth-installment-probe', action='store_true',
                     help='Verify that a demanded Stadium/Airport and a planned reactor enter production '
                          'on a start budget and are charged in installments from arriving income')
+parser.add_argument('--civic-priority-probe', action='store_true',
+                    help='Isolate required civic priority against active optional investment rules')
 parser.add_argument('--nuclear-probe', action='store_true')
 parser.add_argument('--reactor-safety-probe', action='store_true')
 parser.add_argument('--degradation-probe', action='store_true',
@@ -103,6 +110,10 @@ if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
+if args.local_spectator and not args.custom_map:
+    parser.error('--local-spectator requires --custom-map.')
+if args.quantbot_object and not args.quantbot_object.is_file():
+    parser.error('--quantbot-object must name an existing object file.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if not args.custom_map and (args.roster or args.house not in house_names[:3]):
@@ -190,6 +201,14 @@ link = link[link.index('&&')+1:]
 link = link[:link.index('&&')]
 link[link.index('-o')+1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+policy_comparison = None
+if args.quantbot_object:
+    preserved = args.quantbot_object.resolve()
+    if sum(arg.endswith('/players/QuantBot.cpp.o') for arg in link) != 1:
+        raise RuntimeError('Expected one QuantBot object in the diagnostic link.')
+    link = [str(preserved) if arg.endswith('/players/QuantBot.cpp.o') else arg for arg in link]
+    policy_comparison = {'object': str(preserved),
+                         'sha256': hashlib.sha256(preserved.read_bytes()).hexdigest()}
 with (out/'build.log').open('w') as log:
     subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
     subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
@@ -202,10 +221,13 @@ if args.rocket_turrets_need_power is not None:
     env['BALANCE_ROCKET_TURRETS_NEED_POWER'] = str(int(args.rocket_turrets_need_power))
 if args.concrete_required is not None:
     env['BALANCE_CONCRETE_REQUIRED'] = str(int(args.concrete_required))
+if args.local_spectator:
+    env['BALANCE_LOCAL_SPECTATOR'] = '1'
 if args.custom_map:
     env['BALANCE_CUSTOM_MAP'] = str(args.custom_map.resolve())
     env['BALANCE_ROSTER'] = ','.join(f'{house}:{team}' for house, team in roster)
-(out/'setup.json').write_text(json.dumps({**vars(args), 'resolved_roster': roster}, default=str, indent=2)+'\n')
+(out/'setup.json').write_text(json.dumps({**vars(args), 'resolved_roster': roster,
+                                       'policy_comparison': policy_comparison}, default=str, indent=2)+'\n')
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'
 if args.harvester_safety_probe: env['BALANCE_HARVESTER_SAFETY_PROBE'] = '1'
 if args.sourceforge_probe: env['BALANCE_SOURCEFORGE_PROBE'] = '1'
@@ -216,7 +238,9 @@ if args.controls_probe or args.sourceforge_probe:
     (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\nInterface Height = 480\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
-if args.growth_installment_probe: env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
+if args.growth_installment_probe or args.civic_priority_probe:
+    env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
+if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
 if args.nuclear_probe or args.reactor_safety_probe: env['BALANCE_NUCLEAR_PROBE'] = '1'
 if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'

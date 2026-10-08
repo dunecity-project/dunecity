@@ -5514,28 +5514,122 @@ void QuantBot::build(int militaryValue) {
         return false;
     };
 
-    auto demandedCivicForYard = [&](const BuilderBase* yard) {
-        if (!citySimEnabled) return Uint32(NONE_ID);
-        const auto blocked = currentGame->getCitySimulation()->getHouseState(houseID).civicDemandBlocked;
-        auto available = [&](Uint32 item) {
-            return yard->isAvailableToBuild(item) && findPlaceLocation(item).isValid();
-        };
-        return Uint32(CityEconomyInvestmentPolicy::demandedCivic(blocked,
-            itemCount[Structure_Stadium], (blocked & DuneCity::NeedStadium) && available(Structure_Stadium),
-            itemCount[Structure_Airport], (blocked & DuneCity::NeedAirport) && available(Structure_Airport)));
+    // What the city simulation itself treats as a structural civic cap, taken
+    // from its own population thresholds rather than from the clip flag.
+    // civicDemandBlocked only marks a city update at which a positive valve was
+    // pinned to zero; it goes quiet again during the phase where the raw valve
+    // is negative, even though the population is still over the threshold and
+    // the civic is still absent. Required infrastructure must not lose its
+    // priority between those phases, so the need is derived from
+    // DuneCity::missingDemandCivics - no second set of thresholds exists here -
+    // and the clip mask is kept separately as evidence that demand is being
+    // pinned right now.
+    //
+    // Counts are queue-inclusive, so an order placed by any yard quiets the
+    // need immediately and a second yard cannot buy a duplicate.
+    const uint8_t civicDemandClipped = citySimEnabled
+        ? currentGame->getCitySimulation()->getHouseState(houseID).civicDemandBlocked : uint8_t(0);
+    const uint8_t civicStructuralNeed = [&]() -> uint8_t {
+        if (!citySimEnabled) return 0;
+        DuneCity::ValveInputs thresholds;
+        thresholds.resPop = ownResPop;
+        thresholds.comPop = ownComPop;
+        thresholds.indPop = ownIndPop;
+        thresholds.hasStadium = itemCount[Structure_Stadium] > 0;
+        thresholds.hasAirport = itemCount[Structure_Airport] > 0;
+        // Industry's seaport requirement is not a civic this rule buys; the
+        // starport rules below own it, so it is never reported missing here.
+        thresholds.hasStarport = true;
+        return DuneCity::missingDemandCivics(thresholds);
+    }();
+
+    // A required civic the yard cannot build yet is not an absent demand: the
+    // missing link in the mod's own prerequisite chain - including the legal
+    // yard upgrade - is what has to be bought first. Houses whose Radar was
+    // destroyed or never built stayed capped for a whole match because
+    // availability erased the demand instead of producing this plan. Nothing
+    // about the chain is hard-coded; it is walked out of ObjectData exactly as
+    // the core-defence rule walks it.
+    struct CivicPlan {
+        Uint32 civic = NONE_ID;   ///< the needed civic itself
+        Uint32 order = NONE_ID;   ///< the civic, or the prerequisite to buy before it
+        bool upgrade = false;     ///< the yard needs its own legal upgrade first
+        bool pending = false;     ///< already ordered; nothing more to buy this pass
+        const char* reason = "no_structural_need";
     };
-    int civicReserveCost = 0;
-    // The civic demand goes quiet as soon as the project is queued, because the
-    // queued order already counts in itemCount. Its income priority does not go
-    // quiet with it: queuedProductionCost (above) already withholds the whole
-    // unpaid remainder of every queue from this pass's spendable money, which is
-    // exactly the reserve an accepted stadium, airport or reactor needs. No extra
-    // reservation is added here, or the same credits would be withheld twice.
-    if (citySimEnabled) for (const auto* structure : getStructureList()) {
-        if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_ConstructionYard) continue;
-        const auto civic = demandedCivicForYard(static_cast<const BuilderBase*>(structure));
-        if (civic != NONE_ID) civicReserveCost = std::max(civicReserveCost,int(data[civic][houseID].price));
-    }
+    auto planCivicForYard = [&](const BuilderBase* yard) {
+        CivicPlan plan;
+        if (!citySimEnabled || yard == nullptr || civicStructuralNeed == 0) return plan;
+        for (const Uint32 candidate : {Uint32(Structure_Stadium), Uint32(Structure_Airport)}) {
+            const uint8_t flag = candidate == Uint32(Structure_Stadium)
+                ? uint8_t(DuneCity::NeedStadium) : uint8_t(DuneCity::NeedAirport);
+            if (!(civicStructuralNeed & flag)) continue;
+            // A mod that disables the civic, or a tech level that has not
+            // reached it, is not a cap this house can lift.
+            if (!data[candidate][houseID].enabled
+                || data[candidate][houseID].techLevel > currentGame->techLevel) {
+                plan.reason = "civic_not_in_mod_or_tech";
+                continue;
+            }
+            plan.civic = candidate;
+            break;
+        }
+        if (plan.civic == NONE_ID) return plan;
+        plan.reason = "chain_exhausted";
+        Uint32 step = plan.civic;
+        for (int depth = 0; depth < Structure_LastID && step != NONE_ID; ++depth) {
+            if (!data[step][houseID].enabled || data[step][houseID].techLevel > currentGame->techLevel) {
+                plan.reason = "prerequisite_not_in_mod_or_tech";
+                return plan;
+            }
+            if (itemCount[step] > getHouse()->getNumItems(step)) {
+                plan.pending = true;
+                plan.reason = step == plan.civic ? "civic_queued" : "prerequisite_queued";
+                return plan;
+            }
+            if (campaignAvailableToBuild(yard, step)) {
+                if (!findPlaceLocation(step).isValid()) {
+                    plan.reason = step == plan.civic ? "civic_no_site" : "prerequisite_no_site";
+                    return plan;
+                }
+                // Ordering into a power deficit is not progress: the city would
+                // brown out the zones this civic is meant to unlock. Leave the
+                // yard to the generator rules and claim it on a later pass.
+                if (data[step][houseID].power
+                        > getHouse()->getProducedPower() - getHouse()->getPowerRequirement()) {
+                    plan.reason = "power_headroom";
+                    return plan;
+                }
+                plan.order = step;
+                plan.reason = step == plan.civic ? "civic" : "prerequisite";
+                return plan;
+            }
+            if (yard->getCurrentUpgradeLevel() < data[step][houseID].upgradeLevel
+                && yard->getMaxUpgradeLevel() >= data[step][houseID].upgradeLevel) {
+                plan.upgrade = true;
+                plan.reason = "yard_upgrade";
+                return plan;
+            }
+            Uint32 missing = NONE_ID;
+            bool ordered = false;
+            for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite) {
+                if (!data[step][houseID].prerequisiteStructuresSet[prerequisite]
+                    || getHouse()->getNumItems(prerequisite) > 0) continue;
+                // Queue-inclusive: a prerequisite already ordered is waited for,
+                // never ordered a second time.
+                if (itemCount[prerequisite] > 0) { ordered = true; continue; }
+                missing = Uint32(prerequisite);
+                break;
+            }
+            if (missing == NONE_ID && ordered) {
+                plan.pending = true;
+                plan.reason = "prerequisite_queued";
+                return plan;
+            }
+            step = missing;
+        }
+        return plan;
+    };
 
     // Estimate travel from existing refineries, with a bounded local spice scan.
     // Missing nearby fields retain a conservative long trip instead of inventing
@@ -6170,6 +6264,12 @@ void QuantBot::build(int militaryValue) {
         int price=0, cost=0, proceeds=0, score=0, delay=0, capacity=0, foundationCost=0;
         const char* kind="economy";
         const char* reason="unavailable";
+        /// The service evaluation actually found a present emergency behind this
+        /// candidate: dangerous crime in occupied buildings, or enemy aircraft
+        /// already over our own structures. Deliberately not "this candidate
+        /// scored highly" and not "this is a protection candidate" - treating
+        /// routine coverage as urgent is what starved required civics.
+        bool urgent=false;
         Coord site=Coord::Invalid();
     };
     std::vector<CapitalCandidate> capitalCandidates;
@@ -6295,6 +6395,29 @@ void QuantBot::build(int militaryValue) {
         const int configured = data[item][houseID].buildtime;
         return 15 * (citySimEnabled ? DuneCity::getCityBuildTime(item,configured) : configured);
     };
+    // Cash the other builders must leave alone while a yard is saving for a
+    // required civic or its missing prerequisite. Only what that yard's own
+    // funding guard asks for: the foundation it will queue plus one engine
+    // installment. Withholding the whole price here is the full-cash rule this
+    // planner deliberately does not apply to installment projects, and on a
+    // 3,000-credit stadium it would have stopped every factory as well.
+    //
+    // The demand itself goes quiet as soon as the project is queued, because the
+    // queued order already counts in itemCount. Its income priority does not go
+    // quiet with it: queuedProductionCost (above) already withholds the whole
+    // unpaid remainder of every queue from this pass's spendable money. No extra
+    // reservation is added for a queued order, or the same credits would be
+    // withheld twice.
+    int civicReserveCost = 0;
+    if (citySimEnabled && civicStructuralNeed != 0) for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_ConstructionYard) continue;
+        const auto plan = planCivicForYard(static_cast<const BuilderBase*>(structure));
+        if (plan.order == NONE_ID) continue;
+        const int price = data[plan.order][houseID].price;
+        civicReserveCost = std::max(civicReserveCost,
+            CityEconomyInvestmentPolicy::productionStartBudget(price,
+                std::max(0, buildingCapitalCost(plan.order) - price), cityBuildTicks(plan.order)));
+    }
     // A city map with no usable spice has to grow a tax base out of its
     // starting grant: a processing bay, the port's income ladder and an
     // imported transport all earn nothing there, and 1.0.816 spent the whole
@@ -6669,6 +6792,7 @@ void QuantBot::build(int militaryValue) {
                     true,service.item,service.site)) {
                     service.score=dangerousCrimeProperties>0 ? 6000 : 2500;
                     service.reason=dangerousCrimeProperties>0 ? "crime_prevention" : "crime_maintenance";
+                    service.urgent=dangerousCrimeProperties>0;
                 } else if ((airEngaged || coreShortfall>0
                         || (!openingWorkersNeeded() && itemCount[Structure_Refinery]>0))
                     && (airEngaged || uncoveredCoreAssets>0
@@ -6687,6 +6811,7 @@ void QuantBot::build(int militaryValue) {
                         service.score=airEngaged ? 3000 : uncoveredCoreAssets>0 ? 2600 : 2000;
                         service.reason=airEngaged ? "air_coverage"
                             : uncoveredCoreAssets>0 ? "core_coverage" : "uncovered_base";
+                        service.urgent=airEngaged;
                     }
                 }
                 if (service.item!=NONE_ID && service.site.isValid()) {
@@ -6991,7 +7116,8 @@ void QuantBot::build(int militaryValue) {
                 .set("kind",c.kind).set("price",c.price).set("total_cost_with_power",c.cost)
                 .set("proceeds_or_military_value",c.proceeds).set("additional_funded_capacity",c.capacity)
                 .set("foundation_cost",c.foundationCost).set("score",c.score).set("delay_cycles",c.delay)
-                .set("reason",c.reason).set("affordable",money>=c.price+c.foundationCost));
+                .set("reason",c.reason).set("urgent",c.urgent)
+                .set("affordable",money>=c.price+c.foundationCost));
         }
         capitalDecision=traceDecision("capital_plan",AITelemetry::Record().set("policy_version",2)
             .set("mode",citySimEnabled ? "dunecity" : "vanilla").set("campaign",isCampaignGameType(currentGame->gameType))
@@ -8465,6 +8591,18 @@ void QuantBot::build(int militaryValue) {
                 auto onInstallments = [&](Uint32 item) {
                     return item != Uint32(NONE_ID) && item == installmentProject;
                 };
+                // Evaluated once for this yard and this pass, then used by both
+                // the protected-plot guard below and the civic rule itself, so
+                // the bounded site search runs once rather than per rule.
+                const CivicPlan civicPlan = planCivicForYard(pBuilder);
+                const bool civicClaimsYard = civicPlan.order != NONE_ID || civicPlan.upgrade;
+                // Protection that the service evaluation actually found to be an
+                // emergency, plus enemy aircraft already over our own buildings,
+                // keep their place above required civics. Routine coverage, its
+                // saving and a merely high capital score do not: that is what
+                // took the yard on pass after pass while the city stayed capped.
+                const bool urgentProtection = airEngaged
+                    || (capitalPending() && capitalCandidates[capitalChoice].urgent);
 
                 if (storageExpansionNeeded() && getHouse()->hasPower()
                     && campaignAvailableToBuild(pBuilder,Structure_Silo)
@@ -8485,7 +8623,7 @@ void QuantBot::build(int militaryValue) {
                 // owns the decision in that case.
                 if (itemID==NONE_ID && cityGrowthProtected && capitalPending()
                     && capitalCandidates[capitalChoice].builder==pBuilder->getObjectID()
-                    && demandedCivicForYard(pBuilder)==Uint32(NONE_ID)) {
+                    && !civicClaimsYard) {
                     itemID=affordableCityZone(pBuilder,money);
                     if (itemID!=NONE_ID) structureRule="dedicated_city_growth";
                 }
@@ -8709,9 +8847,84 @@ void QuantBot::build(int militaryValue) {
                             .set("spice_remaining",lastCalculatedSpice).set("funded",itemID != NONE_ID));
                     }
                 }
+                // A structural civic cap is required infrastructure, not optional
+                // growth. While the civic is missing, the valve for the zones this
+                // house already owns is pinned at 0 (DuneCity::computeDemandValves),
+                // so every optional purchase below buys capacity that cannot
+                // develop and spends the civic's down payment doing it. It
+                // therefore outranks routine protection coverage and its saving,
+                // profitable-spice and opening tech, planned reactor capacity and
+                // ordinary zoning. Live blackout recovery, storage overflow,
+                // observed enemy aircraft and an actual dangerous-crime emergency
+                // all stay above it.
+                //
+                // When the civic itself is not buildable yet, this orders or saves
+                // for the missing link in the mod's own prerequisite chain - the
+                // reason houses whose Radar was destroyed stayed capped for the
+                // rest of the match. The project is charged in installments by the
+                // engine out of arriving income, exactly as the reactor above is;
+                // nothing here demands the full price inside a forecast window.
+                if (itemID == NONE_ID && !skipRemainingStructureLogic && citySimEnabled
+                    && !urgentProtection && civicClaimsYard) {
+                    if (civicPlan.upgrade) {
+                        const int cost = pBuilder->getUpgradeCost();
+                        if (cost > 0 && (money >= cost || cashFlow.projectedCash >= cost)) {
+                            serviceSavingHold = true;
+                            skipRemainingStructureLogic = true;
+                            structureRule = "unlock_demanded_civic";
+                            if (money >= cost && !pBuilder->isUpgrading()
+                                && pBuilder->getHealth() >= pBuilder->getMaxHealth())
+                                upgradeWithLogging(__LINE__);
+                        }
+                    } else {
+                        const Uint32 project = civicPlan.order;
+                        const bool isCivic = project == civicPlan.civic;
+                        const int price = data[project][houseID].price;
+                        const int foundationBudget = std::max(0, buildingCapitalCost(project) - price);
+                        const auto funding = CityEconomyInvestmentPolicy::installmentOrder(
+                            money, price, foundationBudget, cityBuildTicks(project), forecastNetIncome);
+                        if (funding.funded()) {
+                            skipRemainingStructureLogic = true;
+                            serviceSavingHold = funding.reserve;
+                            if (funding.order) {
+                                installmentProject = project;
+                                // Execution asks only for the installment: the foundation
+                                // orders are queued and charged separately before it, so
+                                // demanding their cost again here would double count them.
+                                installmentProjectStartBudget = CityEconomyInvestmentPolicy::firstInstallment(
+                                    price,cityBuildTicks(project));
+                            }
+                            itemID = funding.order ? project : NONE_ID;
+                            structureRule = itemID == NONE_ID
+                                ? (isCivic ? "save_demanded_civic" : "save_civic_prerequisite")
+                                : isCivic ? (project == Structure_Stadium ? "residential_civic" : "commercial_civic")
+                                : "civic_prerequisite";
+                        }
+                    }
+                }
+                // Record the derived need, the clip mask it is deliberately not
+                // taken from, and why this yard did or did not act on it. Emitted
+                // at normal planning frequency only while a structural need
+                // exists, so the next starvation report is falsifiable without
+                // re-deriving the condition from demand valves.
+                if (civicStructuralNeed != 0) traceDecision("city_civic_demand",
+                    AITelemetry::Record().set("builder",pBuilder->getObjectID())
+                        .set("structural_need",int(civicStructuralNeed))
+                        .set("demand_clipped_now",int(civicDemandClipped))
+                        .set("res_pop",ownResPop).set("com_pop",ownComPop)
+                        .set("res_demand",ownResValve).set("com_demand",ownComValve)
+                        .set("civic",civicPlan.civic).set("planned_order",civicPlan.order)
+                        .set("plan_reason",civicPlan.reason).set("yard_upgrade",civicPlan.upgrade)
+                        .set("already_ordered",civicPlan.pending)
+                        .set("stadium_committed",itemCount[Structure_Stadium])
+                        .set("airport_committed",itemCount[Structure_Airport])
+                        .set("urgent_protection",urgentProtection)
+                        .set("power_headroom",getHouse()->getProducedPower()-getHouse()->getPowerRequirement())
+                        .set("spendable",money).set("continuing_income",forecastNetIncome)
+                        .set("reserved",civicReserveCost).set("rule",structureRule));
                 // Honour the winning service before optional power headroom,
-                // opening tech, civic growth and production expansion. Actual
-                // blackout recovery above remains necessary to operate it.
+                // opening tech and production expansion. Required civics above and
+                // actual blackout recovery stay ahead of it.
                 if (itemID == NONE_ID && !skipRemainingStructureLogic
                     && protectionCapital && capitalPending()
                     && capitalCandidates[capitalChoice].builder == pBuilder->getObjectID()) {
@@ -9100,47 +9313,12 @@ void QuantBot::build(int militaryValue) {
                     }
                 }
 
-                // An announced growth cap is a funded investment, before
-                // optional tech, extra production, services and additional zoning.
-                if (itemID == NONE_ID && !skipRemainingStructureLogic && isCitySim) {
-                    const Uint32 civic = demandedCivicForYard(pBuilder);
-                    if (civic != NONE_ID) {
-                        // The cap is announced, so residential/commercial zoning
-                        // cannot grow until this civic exists: the valve is pinned
-                        // at 0 (DuneCity::applyDemandValves). Order it on a
-                        // production start budget and let the engine charge the
-                        // installments from the tax that keeps arriving, for as
-                        // long as that takes. Positive ongoing income is the test,
-                        // not a horizon in which the whole price must be covered.
-                        const int price = data[civic][houseID].price;
-                        const int foundationBudget = std::max(0, buildingCapitalCost(civic) - price);
-                        const auto funding = CityEconomyInvestmentPolicy::installmentOrder(
-                            money, price, foundationBudget, cityBuildTicks(civic), forecastNetIncome);
-                        if (funding.funded()) {
-                            skipRemainingStructureLogic = true;
-                            // The idle-yard fallback below may not spend the down
-                            // payment on a plot that cannot develop anyway.
-                            serviceSavingHold = funding.reserve;
-                            if (funding.order) {
-                                installmentProject = civic;
-                                // Execution asks only for the installment: the foundation
-                                // orders are queued and charged separately before it, so
-                                // demanding their cost again here would double count them.
-                                installmentProjectStartBudget = CityEconomyInvestmentPolicy::firstInstallment(
-                                    price,cityBuildTicks(civic));
-                            }
-                            itemID = funding.order ? civic : NONE_ID;
-                            structureRule = itemID == NONE_ID ? "save_demanded_civic"
-                                : civic == Structure_Stadium ? "residential_civic" : "commercial_civic";
-                        }
-                        if (emitStatsLog) traceDecision("city_civic_investment",AITelemetry::Record()
-                            .set("item",civic).set("funded",itemID != NONE_ID).set("cash",money)
-                            .set("price",price).set("foundation_budget",foundationBudget)
-                            .set("start_budget",CityEconomyInvestmentPolicy::productionStartBudget(
-                                price,foundationBudget,cityBuildTicks(civic)))
-                            .set("continuing_income",forecastNetIncome).set("saving",funding.reserve));
-                    }
-                }
+                // The demanded-civic rule used to sit here, below routine
+                // protection saving, profitable-spice/opening tech and planned
+                // reactor capacity. In a contested city those branches win every
+                // pass, so it was never reached and the city stayed capped. It now
+                // runs above them; see "A structural civic cap is required
+                // infrastructure" earlier in this chain.
 
                 // Proactively cover the whole city, not just the first two
                 // factories. Planned turrets count, so parallel yards fill gaps.
