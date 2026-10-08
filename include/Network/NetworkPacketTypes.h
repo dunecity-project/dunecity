@@ -140,7 +140,10 @@
 //     Older peers reject these values; save and observer layouts are unchanged.
 // 57: Wrap ground combat rotation after movement; older peers can generate an invalid
 //     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
-#define NETWORK_PROTOCOL_VERSION            57
+// 58: QuantBot establishes city tax income before optional spice technology on
+//     depleted maps. Older peers issue different construction and import orders
+//     from the same state. Save and runtime layouts remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            58
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

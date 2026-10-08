@@ -59,6 +59,60 @@ inline bool openingRefineryInvestment(bool brutal, int workers, int target, int 
     return openingWorkersNeeded(workers,target,brutal)
         && refineries < std::max(0,target);
 }
+// A city map whose remaining spice cannot support one worker earns nothing
+// from a processing bay, a port's income ladder or an imported transport. The
+// sustainable worker target is the line, because it is already the remaining
+// field divided by the active houses and recomputed from the live map: an
+// initially rich map that later depletes crosses it without a second
+// threshold, and nothing has to be stored in the save to notice.
+inline bool spiceEconomyViable(int sustainableWorkers) { return sustainableWorkers > 0; }
+
+// The smallest city that pays its own bills: the same four 100-credit lots
+// that preferRefinery() already trades a 400-credit refinery against.
+constexpr int kBootstrapZoneSeed = 4;
+
+// Tax is only income once it can be banked. A house with no storage capacity
+// at all drops every credit its city earns on arrival, so the first capacity
+// source belongs to the opening and not to optional tech - a developed city
+// with zero capacity is the same bankruptcy as no city at all, just with a
+// larger gross figure. Queued capacity counts, so one order settles it.
+inline bool cityStorageMissing(int capacityIncludingQueued) {
+    return capacityIncludingQueued <= 0;
+}
+
+// One taxable residential lot does not fund a city opening. Keep the small
+// seed and storage ahead of optional technology; queue-inclusive commitments
+// reserve their own cost while the real simulation develops the lots.
+inline bool cityBootstrapIncomplete(bool citySim, bool spiceViable,
+                                    int zonesIncludingQueued,
+                                    int capacityIncludingQueued) {
+    if (!citySim || spiceViable) return false;
+    if (cityStorageMissing(capacityIncludingQueued)) return true;
+    return zonesIncludingQueued < kBootstrapZoneSeed;
+}
+
+// Cash the opening still needs: the uncommitted lots plus, while nothing can
+// be banked, the real price of the cheapest legal capacity source. Committed
+// orders have already charged their own price, so only the remainder is
+// withheld from optional spending.
+inline int cityBootstrapReserve(bool incomplete, int zonesIncludingQueued, int lotCost,
+                                int storageCost) {
+    if (!incomplete) return 0;
+    return std::max(0, kBootstrapZoneSeed - std::max(0, zonesIncludingQueued))
+            * std::max(0, lotCost)
+        + std::max(0, storageCost);
+}
+
+// An economic transport is an economy upgrade only when there is something to
+// carry: a working harvesting fleet, or damaged vehicles and a bay to repair
+// them in. Mirrors the capital transport lane's own usefulness gate so a port
+// import cannot buy what a factory would have refused.
+inline bool economicTransportUseful(int spiceRemaining, int workers, int refineries,
+                                    int combatVehicles, int repairYards) {
+    if (spiceRemaining > 0 && workers > 0 && refineries > 0) return true;
+    return combatVehicles > 0 && repairYards > 0;
+}
+
 inline int demandedCivic(uint8_t blocked, int stadiumCommitted, bool stadiumAvailable,
                          int airportCommitted, bool airportAvailable) {
     if ((blocked & DuneCity::NeedStadium) && stadiumCommitted == 0 && stadiumAvailable)

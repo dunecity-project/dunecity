@@ -4899,7 +4899,28 @@ void QuantBot::build(int militaryValue) {
                 largestMilitaryUnitValue = std::max(largestMilitaryUnitValue, data[item][houseID].price);
     const int militaryBudget = planningMilitaryBudget(militaryValue, money, largestMilitaryUnitValue);
 	const bool citySimEnabled = currentGame && currentGame->isCitySimEnabled();
-    if (citySimEnabled && itemCount[Structure_ConstructionYard]>0) {
+    // One reading of the remaining field, shared by the space decision here and
+    // by the cash decisions further down. A tiny field that supports no worker
+    // must not count as viable for one and not the other: "any spice at all"
+    // would reserve every corner tile for production the house can never fund.
+    // Under city sim this is exactly mapSpiceHarvesterTarget below, because
+    // vanillaEconomy is false there; the city divisor is also the stricter one.
+    int spiceCompetitors = 0;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (getHouse(h) && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
+    const int citySpiceWorkerTarget = QuantBotBuildPolicy::desiredSpiceHarvesters(
+        lastCalculatedSpice, spiceCompetitors, harvesterLimit);
+    // Space is reserved on the same terms as cash. A house whose field supports
+    // no worker and which has no tax base yet cannot pay for either footprint,
+    // and on a cramped slot the two reserved areas plus their access margin are
+    // the whole buildable surface: the lots that would earn that money get
+    // "no_site" instead. On the captured 192x192 start that cost two houses
+    // every zone site for 43,000 cycles. Reserve production space once the city
+    // funds it.
+    const bool cityFundsProduction = !citySimEnabled || citySpiceWorkerTarget > 0
+        || (getHouse()->getCapacity()>0 && currentGame->getCitySimulation()
+            && currentGame->getCitySimulation()->getHouseState(houseID).taxBaseEighths > 0);
+    if (citySimEnabled && cityFundsProduction && itemCount[Structure_ConstructionYard]>0) {
         planningCityProductionPlots=true;
         for (Uint32 item:{Structure_HeavyFactory,Structure_RepairYard}) {
             if (!data[item][houseID].enabled || data[item][houseID].techLevel>currentGame->techLevel) continue;
@@ -5145,13 +5166,12 @@ void QuantBot::build(int militaryValue) {
 	int strategicReserveCost = strategicReserveItem == NONE_ID ? 0
 		: data[strategicReserveItem][houseID].price;
 
-    int spiceCompetitors = 0;
-    for (int h = 0; h < NUM_HOUSES; ++h)
-        if (getHouse(h) && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
     const int spiceShare = lastCalculatedSpice / std::max(1, spiceCompetitors);
+    // Same competitor count and, under city sim, the same target the space
+    // reservation above already used.
     const int mapSpiceHarvesterTarget = vanillaEconomy
         ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, campaignEconomyPush ? 1 : spiceCompetitors, harvesterLimit)
-        : QuantBotBuildPolicy::desiredSpiceHarvesters(lastCalculatedSpice, spiceCompetitors, harvesterLimit);
+        : citySpiceWorkerTarget;
     const int spiceHarvesterTarget = citySimEnabled ? mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
             spiceShare,mapSpiceHarvesterTarget,getHouse()->getNumItems(Structure_Refinery),harvesterLimit);
@@ -6262,6 +6282,83 @@ void QuantBot::build(int militaryValue) {
         return data[item][houseID].price + foundation
             + (power*generationCostPerThousand+999)/1000;
     };
+    // A city map with no usable spice has to grow a tax base out of its
+    // starting grant: a processing bay, the port's income ladder and an
+    // imported transport all earn nothing there, and 1.0.816 spent the whole
+    // 2,000 on exactly those before a single demanded lot was ever zoned.
+    // Until the seed is committed and actually taxable, optional tech, repair
+    // capacity, peaceful coverage and bargain imports must leave its cash
+    // alone. Essential power and a present threat still outrank it, and the
+    // counts come from itemCount, so queued orders already hold their place
+    // and parallel yards cannot buy the same seed twice.
+    const bool spiceEconomyViable =
+        CityEconomyInvestmentPolicy::spiceEconomyViable(mapSpiceHarvesterTarget);
+    // A lot pays for its own foundation and for the roads that connect it;
+    // an unconnected 2x2 never develops, so it is part of the lot's price.
+    const int cityBootstrapLotCost = buildingCapitalCost(Structure_ZoneResidential)
+        + 2 * std::max(0, data[Structure_Road][houseID].price);
+    // Somewhere to put the money. Capacity comes from the mod's own tables,
+    // not from an assumption about which building stores credits: take the
+    // cheapest item this house can actually build and place that reports any
+    // capacity at all. In the shipped tree that is the Refinery (1,005) and
+    // then the Silo (10,000) behind it - so on a spiceless map a refinery is
+    // bought for its vault and its tech, never to feed a harvester, and the
+    // distinction is in the rule that buys it, not in the building.
+    int cityStorageCapacityIncludingQueued = getHouse()->getCapacity();
+    for (Uint32 item = Structure_FirstID; item <= Structure_LastID; ++item)
+        cityStorageCapacityIncludingQueued += std::max(0,
+            itemCount[item] - getHouse()->getNumItems(item)) * std::max(0, data[item][houseID].capacity);
+    Uint32 cityStorageItem = NONE_ID;
+    int cityStorageCost = 0;
+    if (citySimEnabled
+        && CityEconomyInvestmentPolicy::cityStorageMissing(cityStorageCapacityIncludingQueued))
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || !structure->isABuilder()) continue;
+            const auto* builder = static_cast<const BuilderBase*>(structure);
+            if (builder->getItemID() != Structure_ConstructionYard) continue;
+            for (Uint32 item = Structure_FirstID; item <= Structure_LastID; ++item) {
+                if (data[item][houseID].capacity <= 0) continue;
+                if (!campaignAvailableToBuild(builder,item)) continue;
+                const int cost = buildingCapitalCost(item);
+                if (cityStorageItem != NONE_ID && cost >= cityStorageCost) continue;
+                if (!findPlaceLocation(item).isValid()) continue;
+                cityStorageItem = item; cityStorageCost = cost;
+            }
+        }
+    // Live, not latched: cityZonesIncludingQueued rises as this pass places
+    // orders, so the reserve shrinks lot by lot and several yards in the same
+    // pass cannot each withhold - or each buy - the whole seed. Only a city
+    // the simulation actually demands can be seeded; with no positive R/C/I
+    // demand there is nothing to protect and nothing to wait for, so the
+    // ordinary ladder must not be held up either.
+    bool cityParallelBootstrapFunding = false;
+    auto cityBootstrapNeeded = [&] {
+        // Nothing to hold cash for without a yard that can place a lot.
+        return cityYards > 0
+            && CityEconomyInvestmentPolicy::cityBootstrapIncomplete(citySimEnabled,
+                spiceEconomyViable, cityZonesIncludingQueued,
+                cityStorageCapacityIncludingQueued)
+            && (!cityParallelBootstrapFunding
+                || CityEconomyInvestmentPolicy::cityStorageMissing(cityStorageCapacityIncludingQueued))
+            // A house that owns no lot at all holds the seed whatever the
+            // current valves say. On the first pass the simulation has not
+            // published any demand yet, and a map-placed Starport spent the
+            // whole grant on bargains in that one-tick window - the original
+            // bankruptcy, on a different map. Once some lots exist, continued
+            // protection does need demand, so a finished city releases it.
+            // Unbankable income needs no demand reading at all: the vault is
+            // worth buying the moment the city can earn anything.
+            && (cityZonesIncludingQueued == 0
+                || CityEconomyInvestmentPolicy::cityStorageMissing(cityStorageCapacityIncludingQueued)
+                || ownResValve > 0 || ownComValve > 0 || ownIndValve > 0);
+    };
+    auto cityBootstrapReserve = [&] {
+        return CityEconomyInvestmentPolicy::cityBootstrapReserve(cityBootstrapNeeded(),
+            cityZonesIncludingQueued, cityBootstrapLotCost,
+            cityStorageItem == NONE_ID
+                || !CityEconomyInvestmentPolicy::cityStorageMissing(cityStorageCapacityIncludingQueued)
+                ? 0 : cityStorageCost);
+    };
     // A large starting grant can pay for the first heavy line AND keep it
     // operating. In that case construction throughput, not income, is the
     // opening constraint. Budget its missing prerequisites and four minutes of
@@ -6290,6 +6387,16 @@ void QuantBot::build(int militaryValue) {
         && firstFactoryLegal && firstFactoryProduction>0 && militaryValue<militaryBudget
         && money>=firstFactoryCapital+cashBuffer
         && cashFlow.projectedCash>=firstFactoryCapital+firstFactoryProduction+cashBuffer;
+    // A funded established city can grow and produce in parallel. Its cash
+    // must cover both commitments, rather than treating one tiny tax receipt
+    // as permission to spend a scarce opening grant on optional technology.
+    const int bootstrapCommitment=CityEconomyInvestmentPolicy::cityBootstrapReserve(true,
+        cityZonesIncludingQueued,cityBootstrapLotCost,cityStorageItem==NONE_ID ? 0 : cityStorageCost);
+    const bool establishedCityIncome=getHouse()->getNumItems(Structure_HeavyFactory)>0
+        && getHouse()->getCapacity()>0 && ownTaxBaseEighths>0 && forecastTax>forecastUpkeep;
+    cityParallelBootstrapFunding=establishedCityIncome || (ownTaxBaseEighths>0
+        && money>=firstFactoryCapital+cashBuffer+bootstrapCommitment
+        && cashFlow.projectedCash>=firstFactoryCapital+firstFactoryProduction+cashBuffer+bootstrapCommitment);
     // When cash covers another line AND four minutes of its operation, use
     // the established parallel factory/repair build order. City demand is not
     // a prerequisite for production: factories also supply the city's MCVs.
@@ -7096,6 +7203,8 @@ void QuantBot::build(int militaryValue) {
                     if (accepted) {
                         cityPendingDisplayPopulation += QuantBotCityPolicy::displayPopulation(initialCityPopulation(itemID));
                         if(DuneCity::isCityZoneStructure(itemID)) ++cityZonesIncludingQueued;
+                        if (itemID>=Structure_FirstID && itemID<=Structure_LastID)
+                            cityStorageCapacityIncludingQueued+=std::max(0,data[itemID][houseID].capacity);
                         money-=quotedPrice;
                         capitalOrderedCost+=quotedPrice;
                         if (AITelemetry::log().enabled()) capitalOrders.set(std::to_string(pBuilder->getObjectID())+":"+std::to_string(before),
@@ -7528,6 +7637,12 @@ void QuantBot::build(int militaryValue) {
                     || capitalCandidates[capitalChoice].item==Unit_Carryall
                     || capitalCandidates[capitalChoice].item==Unit_MCV)) protectedCash=0;
                 protectedCash=std::max(protectedCash,capitalReserve(pBuilder->getObjectID()));
+                // A no-spice city's seed cash belongs to the yard that can
+                // zone. No factory, port or market bargain may spend it on
+                // the way there; only construction yards build R/C/I lots, so
+                // nothing legitimate is withheld from its owner.
+                if (pBuilder->getItemID() != Structure_ConstructionYard)
+                    protectedCash = std::max(protectedCash,cityBootstrapReserve());
                 // Saving for optional capital must not stop the yard from
                 // relieving the storage ceiling that prevents further saving.
                 if (pBuilder->getItemID()==Structure_ConstructionYard && storageExpansionNeeded()
@@ -8018,7 +8133,9 @@ void QuantBot::build(int militaryValue) {
                         // workers without applying a second arbitrary half-cash cap.
                         auto buyEconomicImport = [&](Uint32 item, const char* rule) {
                             const int price = purchasePrice(pBuilder,item);
-                            const int cash = money + reserve.reserved - capitalReserve(pBuilder->getObjectID());
+                            const int portReserve = std::max(capitalReserve(pBuilder->getObjectID()),
+                                cityBootstrapReserve());
+                            const int cash = money + reserve.reserved - portReserve;
                             if (item==Unit_Harvester && !bargainWorkers && harvesterInvestmentReserve()==0
                                 && QuantBotSpendingPolicy::marginalSpice(spiceShare,
                                     std::min(itemCount[item]*workerAnnualIncome(),itemCount[Structure_Refinery]*bayAnnualIncome),
@@ -8034,7 +8151,7 @@ void QuantBot::build(int militaryValue) {
                                 .set("normal_price", data[item][houseID].price)
                                 .set("spendable", money).set("economic_cash", cash)
                                 .set("reserved_cash", reserve.reserved).set("worker_target", workerTarget));
-                            const int availableReserve=std::max(0,reserve.reserved-capitalReserve(pBuilder->getObjectID()));
+                            const int availableReserve=std::max(0,reserve.reserved-portReserve);
                             money+=availableReserve;
                             const bool accepted=produceItemWithLogging(item,__LINE__,rule);
                             money-=availableReserve;
@@ -8050,12 +8167,22 @@ void QuantBot::build(int militaryValue) {
                         // it is still unaffordable, preserve this port's savings.
                         if (capitalSupplier && capitalPending()
                             && capitalCandidates[capitalChoice].item==Unit_MCV) break;
-                        if (itemCount[Unit_Carryall] == 0)
+                        // A market transport is still only worth its price when
+                        // there is something to carry. The capital/factory lane
+                        // already refuses one without a working harvesting
+                        // fleet or vehicle repair traffic; a discounted import
+                        // is the same purchase, so it answers to the same gate.
+                        const bool transportUseful = CityEconomyInvestmentPolicy::economicTransportUseful(
+                            lastCalculatedSpice,getHouse()->getNumItems(Unit_Harvester),
+                            getHouse()->getNumItems(Structure_Refinery),combatVehicles,
+                            getHouse()->getNumItems(Structure_RepairYard));
+                        if (itemCount[Unit_Carryall] == 0 && transportUseful)
                             buyEconomicImport(Unit_Carryall, "first_economic_transport");
                         while (itemCount[Unit_Harvester] < workerTarget) {
                             if (!buyEconomicImport(Unit_Harvester, "starport_spice_economy")) break;
                         }
-                        while (harvesterInvestmentReserve() == 0 && itemCount[Unit_Carryall] < transportTarget)
+                        while (transportUseful && harvesterInvestmentReserve() == 0
+                            && itemCount[Unit_Carryall] < transportTarget)
                             if (!buyEconomicImport(Unit_Carryall, "starport_transport_capacity")) break;
 
                         // Imports are opportunistic: every discounted combat type
@@ -8075,14 +8202,17 @@ void QuantBot::build(int militaryValue) {
                             const int64_t right = int64_t(purchasePrice(pBuilder,b)) * data[a][houseID].price;
                             return left != right ? left < right : a < b;
                         });
+                        // A bargain is still optional spending: it may not come
+                        // out of the cash a no-spice city needs to start earning.
+                        const int bargainReserve = std::max({harvesterInvestmentReserve(),
+                            capitalReserve(pBuilder->getObjectID()),cityBootstrapReserve()});
                         for (Uint32 unit : bargains) {
                             const int price = purchasePrice(pBuilder,unit);
                             const int value = data[unit][houseID].price;
-                            while (money + reserve.reserved - std::max(harvesterInvestmentReserve(),capitalReserve(pBuilder->getObjectID())) >= price && choam.getNumAvailable(unit) > 0
+                            while (money + reserve.reserved - bargainReserve >= price && choam.getNumAvailable(unit) > 0
                                 && int64_t(militaryValue) + value <= militaryBudget
                                 && !getHouse()->isUnitLimitReached(unit)) {
-                                const int availableReserve=std::max(0,reserve.reserved
-                                    - std::max(harvesterInvestmentReserve(),capitalReserve(pBuilder->getObjectID())));
+                                const int availableReserve=std::max(0,reserve.reserved - bargainReserve);
                                 money+=availableReserve;
                                 const bool accepted=produceItemWithLogging(unit,__LINE__,"starport_bargain");
                                 money-=availableReserve;
@@ -8474,6 +8604,66 @@ void QuantBot::build(int militaryValue) {
                         skipRemainingStructureLogic = true;
                     }
                 }
+                // No usable spice: the demanded lots ARE the opening. They do
+                // not wait for a harvesting economy, but they do need somewhere
+                // to bank what they earn. This sits directly below essential
+                // power and a live air attack, and above crime service, opening
+                // tech, repair capacity, peaceful coverage and production: a
+                // 500-credit police station cannot pay for itself while the
+                // house owns no taxable lot, and buying it first is how the
+                // grant ran out. The zone is demand-ranked by the ordinary
+                // chooser, so a negative-demand lot is never forced; when no
+                // lot is available this rule yields the pass rather than
+                // holding the cash.
+                const bool liveAirThreat = protectionCapital && capitalPending()
+                    && capitalCandidates[capitalChoice].reason == std::string("air_coverage");
+                // Reserve the vault footprint before housing can occupy it.
+                // Keeping the zone seed protected after this purchase prevents
+                // the first tiny tax receipt from unlocking optional technology.
+                if (itemID == NONE_ID && !skipRemainingStructureLogic && citySimEnabled
+                    && !liveAirThreat && cityBootstrapNeeded()
+                    && CityEconomyInvestmentPolicy::cityStorageMissing(cityStorageCapacityIncludingQueued)
+                    && cityStorageItem != NONE_ID) {
+                    skipRemainingStructureLogic = true;
+                    structureRule = "city_saving_for_income_storage";
+                    if (money >= buildingCapitalCost(cityStorageItem)) {
+                        itemID = cityStorageItem;
+                        structureRule = "city_income_storage";
+                    }
+                    if (emitStatsLog) traceDecision("city_income_storage", AITelemetry::Record()
+                        .set("item",cityStorageItem).set("cost",cityStorageCost)
+                        .set("capacity",data[cityStorageItem][houseID].capacity)
+                        .set("capacity_including_queued",cityStorageCapacityIncludingQueued)
+                        .set("zones_including_queued",cityZonesIncludingQueued)
+                        .set("credits",money).set("spice_remaining",lastCalculatedSpice)
+                        .set("funded",itemID != NONE_ID));
+                }
+                if (itemID == NONE_ID && !skipRemainingStructureLogic && citySimEnabled
+                    && !liveAirThreat && cityBootstrapNeeded()
+                    && cityZonesIncludingQueued < CityEconomyInvestmentPolicy::kBootstrapZoneSeed) {
+                    const Uint32 seed = chooseCityZone(pBuilder,true);
+                    if (seed != NONE_ID) {
+                        skipRemainingStructureLogic = true;
+                        structureRule = "city_saving_for_no_spice_bootstrap";
+                        const int storageSaving=CityEconomyInvestmentPolicy::cityStorageMissing(
+                            cityStorageCapacityIncludingQueued) ? cityStorageCost : 0;
+                        if (money >= buildingCapitalCost(seed)+storageSaving) {
+                            itemID = seed;
+                            structureRule = "city_no_spice_bootstrap";
+                        } else if (storageSaving>0 && money>=storageSaving) {
+                            // Bank income from the lots already committed before
+                            // another lot consumes the vault's remaining cash.
+                            skipRemainingStructureLogic=false;
+                        }
+                        if (emitStatsLog) traceDecision("city_no_spice_bootstrap", AITelemetry::Record()
+                            .set("item",seed).set("zones_including_queued",cityZonesIncludingQueued)
+                            .set("seed_target",CityEconomyInvestmentPolicy::kBootstrapZoneSeed)
+                            .set("tax_base_eighths",ownTaxBaseEighths).set("credits",money)
+                            .set("price",purchasePrice(pBuilder,seed))
+                            .set("lot_cost",cityBootstrapLotCost).set("reserved",cityBootstrapReserve())
+                            .set("spice_remaining",lastCalculatedSpice).set("funded",itemID != NONE_ID));
+                    }
+                }
                 // Honour the winning service before optional power headroom,
                 // opening tech, civic growth and production expansion. Actual
                 // blackout recovery above remains necessary to operate it.
@@ -8695,7 +8885,15 @@ void QuantBot::build(int militaryValue) {
                 // maps use fewer workers; missions that lock the port keep their
                 // normal early-tech progression. Authored campaign rebuild lists
                 // are handled above and do not acquire extra opening structures.
+                // This is a spice-income ladder: income-producing refineries,
+                // the port, then its repair support. On a city map whose spice
+                // cannot support a worker that premise is false - the refinery
+                // earns nothing and the port's prerequisite walk charges the
+                // whole grant to it. Wait for the city's own tax base to fund
+                // the port; the ladder then proceeds unchanged, prerequisites
+                // included, so military imports stay reachable.
                 if (itemID == NONE_ID && !skipRemainingStructureLogic
+                    && !cityBootstrapNeeded()
                     && starportMarketAvailable && !fundedFactoryOpening
                     && data[Structure_StarPort][houseID].enabled
                     && currentGame->techLevel >= data[Structure_StarPort][houseID].techLevel) {
@@ -8749,6 +8947,7 @@ void QuantBot::build(int militaryValue) {
                 // Further processing capacity competes with demanded tax growth.
                 const int openingRefineries = QuantBotBuildPolicy::openingSpiceRefineries(spiceHarvesterTarget);
                 if (itemID == NONE_ID && !skipRemainingStructureLogic && isCitySim
+                    && spiceEconomyViable
                     && itemCount[Structure_Refinery] == 0
                     && campaignAvailableToBuild(pBuilder,Structure_Refinery)
                     && findPlaceLocation(Structure_Refinery).isValid()) {

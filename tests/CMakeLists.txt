@@ -599,6 +599,23 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/city-growth-probe)
         set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A city map with no usable spice must seed demanded R/C/I out of its
+        # starting grant, including the storage needed to bank its tax. Optional
+        # port technology and transport must leave this budget intact.
+        add_test(NAME quantbot_no_spice_city COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-spice-city-probe --repeatable
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/no-spice-city-probe)
+        set_tests_properties(quantbot_no_spice_city PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        foreach(no_spice_map IN ITEMS dunecity low-cash)
+            add_test(NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py
+                --map ${no_spice_map} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/no-spice-income-probe)
+            set_tests_properties(quantbot_no_spice_income_${no_spice_map}
+                PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        endforeach()
         foreach(starport_mod IN ITEMS vanilla dunecity)
             add_test(NAME quantbot_starport_${starport_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --starport-probe --level 9 --repeatable

@@ -74,6 +74,10 @@ parser.add_argument('--police-reinforcement-probe', action='store_true',
                     help='Verify police reinforcements follow the selected unit limit, not a police-local ceiling')
 parser.add_argument('--city-growth-probe', action='store_true',
                     help='Verify continuous city growth while proactive defence/supplier goals are unmet')
+parser.add_argument('--no-spice-city-probe', action='store_true',
+                    help='Verify a city map with no usable spice seeds demanded R/C/I out of its '
+                         'starting grant instead of refinery/port/transport capital, across power '
+                         'starvation, bankruptcy, parallel yards, depletion and save/load')
 parser.add_argument('--mcv-deployment-probe', action='store_true',
                     help='Verify MCVs deploy on the rock the base already holds instead of driving around it')
 parser.add_argument('--custom-attack-probe', action='store_true')
@@ -224,6 +228,7 @@ if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'
 if args.police_budget_probe: env['BALANCE_POLICE_BUDGET_PROBE'] = '1'
 if args.police_reinforcement_probe: env['BALANCE_POLICE_REINFORCEMENT_PROBE'] = '1'
 if args.city_growth_probe: env['BALANCE_CITY_GROWTH_PROBE'] = '1'
+if args.no_spice_city_probe: env['BALANCE_NO_SPICE_CITY_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
 if args.whole_army_probe: env['BALANCE_WHOLE_ARMY_PROBE'] = '1'

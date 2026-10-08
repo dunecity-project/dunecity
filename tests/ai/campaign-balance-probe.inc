@@ -21,6 +21,7 @@
 #include "police-budget-probe.inc"
 #include "police-reinforcement-probe.inc"
 #include "city-growth-probe.inc"
+#include "no-spice-city-probe.inc"
 #include "mcv-deployment-probe.inc"
 #include "opening-economy-probe.inc"
 #include "army-movement-probe.inc"
@@ -186,6 +187,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_CITY_GROWTH_PROBE")) {
         runCityGrowthProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_NO_SPICE_CITY_PROBE")) {
+        runNoSpiceCityProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_MCV_DEPLOYMENT_PROBE")) {

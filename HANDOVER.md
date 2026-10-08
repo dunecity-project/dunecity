@@ -1,3 +1,64 @@
+## 2026-10-08 — local candidate 1.0.817: no-spice city income opening
+
+Implemented on `feature/custom-game-spectator` after the completed MBA `no money`
+match. Original 1.0.816 session `1791440520505988-0` and the save's embedded
+NewBeginning 192x192 map were frozen before the user's next match. Imported all
+8,844 events into SQLite with zero invalid records. Final cumulative summaries
+show all four Brutal AIs at zero cash, zero R/I/C and zero city income. The port
+prerequisite ladder consumed the grant, then held the yard for an unaffordable
+Repair Yard. Native pre-fix 1.0.817 also reproduces the opening in three houses;
+the fourth builds one industrial lot, so this is not a byte-identical save replay.
+
+QuantBot now protects actual credit storage plus four demanded seed lots when
+the sustainable live-map spice worker target is zero. Essential power and live
+air threats keep precedence. Queue-inclusive commitments shrink only as ordinary
+orders are accepted; accepted capacity counts immediately across parallel yards.
+Optional port tech, peaceful services/coverage and imports wait for this opening.
+Factory/repair footprints no longer exclude every income plot on cramped starts
+before a viable spice field or bankable tax base exists. A port buys transport
+only for a real harvesting fleet or repair traffic. Established factories with
+bankable tax exceeding upkeep retain the ordinary protected growth/service lane
+and affordable army production; a funded new line can also run beside the seed.
+
+One Refinery is legitimately needed for storage in this mod: capacity 1,005 at
+tech 1, with the 10,000-credit Silo behind it. The opening chooses the cheapest
+legal, placeable capacity source from mod data and records `city_income_storage`.
+Without it, apparently positive gross city tax is discarded. Tests therefore
+require cumulative `city_net_applied`, rather than projected or gross income.
+
+Final source completes 18 isolated 12-minute scenarios: the captured map/seed at
+all four difficulties, three additional seeds, six zero-spice geometry/difficulty
+variants, and five normal-spice/non-city controls. All 54 active zero-spice AI
+openings bank more than 100 credits; surviving cities build at least four lots.
+One 64x64 house is defeated before its fourth lot; a prebuilt Sardaukar city uses
+its existing industrial workforce and grows demanded R/C. These are retained
+explicitly rather than counted as income failures or silently omitted.
+
+An additional 60-minute original-seed Brutal run reaches 225,000 cycles with all
+four houses alive, 43–79 R/I/C lots built per house, military production and
+14,192–40,695 cumulative banked city credits. Normal-spice controls actually refine
+8,133–16,486 credits; Vanilla/Dune2R zero-spice controls complete without acquiring
+city lots. All these games use original grants and ordinary production updates.
+
+Native Release build, pre/post Ninja dependency audits and diff checks pass.
+Three new CTest gates exercise real queue policy and ordinary banked income on
+1,500/2,000-credit maps. The final full CTest run passes all 65 gates in 894.19
+seconds, including native Catch, spectator/continuation, no-spice income,
+opening-economy, city-growth, Starport, shared-spending and credit storage checks.
+No serialized fields are added (save 9852). Network protocol is bumped 57→58,
+including its pins, because deterministic AI construction/import orders differ.
+
+Local app: `build/bin/dunecity.app`, version 1.0.817, on claw.local. The active MBA
+game/installation and public release remain 1.0.816. No install, push, PR, tag,
+platform CI, signing or publication was performed for this task. The native app
+uses local Homebrew libraries; portable release packaging is separate.
+Test selections: `docs/testing-1.0.817.md`; full receipt and invariants:
+`docs/no-spice-economy-817.md`. Captured inputs, SQLite, bounded Claude trace/patch/
+focused review outputs, parent corrections, simulations and final source hashes:
+`../outputs/no-spice-economy-817/`. Intermediate prototype results are excluded
+from the final-source receipts. Already-spent grants are not regenerated when
+loading the old zero-zone save.
+
 ## 2026-10-08 — local candidate 1.0.817: Offline Custom Game spectator mode
 
 Implemented on `feature/custom-game-spectator`, based on 4b69d0eb (production 1.0.816).
