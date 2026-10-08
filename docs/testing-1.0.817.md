@@ -3,12 +3,13 @@
 This candidate adds **Spectate** to Offline Custom Game. The viewer uses no faction or
 starting position, sees the entire map and minimap, and can inspect every house's buildings.
 The AI controls every active faction. It also fixes the no-spice city income opening.
-Production and the currently running MBA app remain
-1.0.816; that app does not have this new checkbox yet.
+Production remains 1.0.816. The MBA now has **1.0.817** installed in
+`/Applications/dunecity.app`; the usual Desktop DuneCity shortcut opens it.
 
 The rebuilt native candidate is at
 `/Users/stefan/Documents/projects/dunecity-pr89-test/build/bin/dunecity.app` on claw.local.
-It is a local development build, using this host's Homebrew libraries.
+That native build uses this host's Homebrew libraries. The MBA installation is a
+portable copy with those libraries bundled, verified on the MBA after installation.
 
 ## Observe the no-spice opening
 

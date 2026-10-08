@@ -100,6 +100,11 @@ simulation receipts are retained at
 `final-60-minute/summary.json` describe the final source. Earlier prototype runs
 are diagnostic history and are excluded from these results.
 
-This is a local 1.0.817 candidate. Production and the MBA installation are still
-1.0.816; platform CI, portable packaging, signing and public publication have not
-been performed for this change.
+This is a local 1.0.817 candidate, now installed on the MBA at
+`/Applications/dunecity.app`. The portable bundle's game code matches the tested
+native build; dependency, local signature and runtime checks pass independently
+on the MBA. All 2,335 checked save/settings files are unchanged, and the prior
+1.0.816 app is retained for rollback. Installation receipts are in
+`/Users/stefan/Documents/projects/outputs/install-817-mba/`.
+Production remains 1.0.816; platform CI, Developer ID notarization and public
+publication have not been performed for this candidate.

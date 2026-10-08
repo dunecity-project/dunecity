@@ -1,3 +1,28 @@
+## 2026-10-08 — 1.0.817 installed on the MBA
+
+Installed the tested portable ARM64 candidate at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from clean source commit
+`a64c7db28c7dee49fa96cbaa734541b80eb23d9d`. It includes Offline Custom Game
+Spectate and the no-spice city income fix described below. The game was closed
+before preparation and the guarded app swap; no match was stopped or started.
+
+CMake install bundled the Homebrew dependencies, including SDL3 for sdl2-compat,
+and applied the normal local ad-hoc signature. All 36 Mach-O files have ARM64 and
+portable load paths. Native and packaged executable code/string sections match.
+Deep/strict signature verification and bundled SDL initialization/hidden rendering
+pass locally, on the MBA staging copy, on the installed app, and on a fresh
+independent verification. Installed executable SHA256:
+`1a219e75494e039b6b5dfdc831bb3133b513abc01e2890e20f0829d066cf0df0`.
+
+All 2,335 checked `.dls`/`.ini` files and the user configuration are byte-identical
+before/after installation. The usual `~/Desktop/DuneCity.app` shortcut resolves
+to the installed app. Signed public 1.0.816 is retained at
+`/Applications/.dunecity-backup-before-817-20261008/dunecity.app`, with its original
+binary SHA256 `bf7355fbea00c8b961e0964b231bdf49e786f8d7a0a144f366e50d261783cfa3`.
+Private package and independent receipts: `../outputs/install-817-mba/`.
+Production remains 1.0.816; no source push, public release or notarization was
+performed. The entries below record the earlier implementation/verification state.
+
 ## 2026-10-08 — local candidate 1.0.817: no-spice city income opening
 
 Implemented on `feature/custom-game-spectator` after the completed MBA `no money`
