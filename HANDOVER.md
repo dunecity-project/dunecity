@@ -1,4 +1,4 @@
-## 2026-10-09 — local 1.0.818 verified; MBA installation prepared
+## 2026-10-09 — 1.0.818 installed on the MBA
 
 On `feature/custom-game-spectator`, fixes the reported eight-house Colonists
 spectator startup crash, saved-map filtering/metadata rows, and partial-price
@@ -47,8 +47,18 @@ version consistency and diff checks pass. The portable bundle has 36 ARM64 Mach-
 files, portable load paths, native/package code and string equivalence, deep/strict
 ad-hoc signature and bundled SDL initialization/hidden rendering checks.
 
-MBA installation is prepared, with a guarded no-game swap and fresh profile/config
-comparison; not yet executed in this entry. Public production remains 1.0.816.
+Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app` from source
+commit `da777bef82dc9c79cf16577af5dbad3c8943fed0`. The guarded swap completed with no
+game running; no match was stopped or started. All 2,408 checked `.ini`/`.dls`
+profile files and the configuration are byte-identical before/after installation.
+Independent readback repeats the installed version/hash, deep/strict signature,
+bundled SDL hidden rendering and profile comparison, and confirms the usual
+`~/Desktop/DuneCity.app` shortcut resolves to the installed app. Executable SHA256:
+`a9b010fd7f9a95027de360d69659d2c6d9b3b55f59123c94db75b628061e9d55`.
+Previous 817 is retained at
+`/Applications/.dunecity-backup-before-818-20261008/dunecity.app` with its verified
+original SHA256 `1a219e75494e039b6b5dfdc831bb3133b513abc01e2890e20f0829d066cf0df0`.
+The transferred archive hash matches before extraction. Public production remains 1.0.816.
 No push, PR, public release, platform CI or notarization was performed. Test steps:
 `docs/testing-1.0.818.md`. Private receipts: `../outputs/map-visibility-818/`,
 `../outputs/stadium-ai-818/final-validated/`,

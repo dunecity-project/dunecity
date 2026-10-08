@@ -2,7 +2,10 @@
 
 This candidate fixes the eight-house Colonists spectator startup crash, saved-map
 filtering and installment funding for needed city infrastructure. Public production
-remains 1.0.816. Local installation and final verification are recorded in HANDOVER.md.
+remains 1.0.816. It is installed on the MBA at `/Applications/dunecity.app`, with
+the usual Desktop shortcut. All 2,408 checked profile files and configuration are
+unchanged; the previous 817 app is backed up. Independent installed-app verification
+passes. Detailed receipts are recorded in HANDOVER.md.
 
 ## Spectator startup
 
