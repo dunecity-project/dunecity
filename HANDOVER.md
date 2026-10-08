@@ -1,4 +1,4 @@
-## 2026-10-09 — 1.0.819 civic priority fixed and tested; MBA install pending
+## 2026-10-09 — 1.0.819 civic priority fixed, tested and installed on the MBA
 
 The 1.0.818 installed binary was verified in the live MBA capture. Its installment
 funding path still lost the yard to upstream saving/investment branches, and
@@ -46,10 +46,22 @@ native/package code/string equivalence, deep/strict signature and bundled SDL
 initialization/hidden rendering. Packaged executable SHA256:
 `fbb900ce1e9dcf852aee2f820bf432e9dca201be12575d2ec1f3c167a6dd7282`.
 Artifacts/receipts: `/Users/stefan/Documents/projects/outputs/stadium-starvation-819`
-and `/Users/stefan/Documents/projects/outputs/install-819-mba`. The guarded installer preserves the old app and
-INI/save profile; it has not run because MBA SSH connection attempts time out.
-The user was asked to wake/connect the MBA while local validation completed.
-No running match was stopped. No push, production publication or CI run occurred.
+and `/Users/stefan/Documents/projects/outputs/install-819-mba`.
+
+Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app` from source
+commit `87176482aeb854df4a011954f7dcd70f8f3a4edb` after SSH connectivity returned.
+The transferred archive SHA256 matched
+`10992e36dd2aa8569f7b830c9eaf9754e0464c3eab14275663b1d85f45661ce4`.
+The guarded swap and independent readback verify the version/executable hash,
+deep/strict signature, bundled SDL initialization/hidden rendering and unchanged
+configuration and all 2,482 checked `.ini`/`.dls` profile files. The usual
+`~/Desktop/DuneCity.app` shortcut resolves to the installed app. Previous 1.0.818
+is retained at `/Applications/.dunecity-backup-before-819-20261008/dunecity.app`,
+with verified executable SHA256
+`a9b010fd7f9a95027de360d69659d2c6d9b3b55f59123c94db75b628061e9d55`.
+No running match was stopped or started. Installation receipts are
+`install-819-receipt.json` and `independent-verification.json` in the install
+artifact directory. No push, production publication or CI run occurred.
 
 ## 2026-10-09 — 1.0.818 installed on the MBA
 

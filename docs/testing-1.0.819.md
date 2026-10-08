@@ -1,9 +1,9 @@
 # Testing local candidate 1.0.819
 
 This candidate fixes required city infrastructure losing the construction yard to
-optional spending. It is tested and packaged, ready for local installation. MBA
-installation is pending because SSH is timing out. The last verified installed
-MBA baseline is 1.0.818.
+optional spending. It is installed on the MBA at `/Applications/dunecity.app`.
+Open the usual Desktop **DuneCity.app** shortcut. The installed version and
+bundled runtime were independently verified; saves, maps and settings are unchanged.
 
 ## Watch the AI build a stadium
 
@@ -105,7 +105,13 @@ The portable app has 36 ARM64 Mach-O files, portable library paths, executable
 code/string equivalence with the native build, a deep/strict ad-hoc signature and
 bundled SDL initialization plus hidden-window rendering. Packaged executable SHA256:
 `fbb900ce1e9dcf852aee2f820bf432e9dca201be12575d2ec1f3c167a6dd7282`.
-The guarded installer requires no game running, retains the old app and checks
-all `.ini`/`.dls` profile files and the Desktop shortcut. Installation has not yet
-run. The earlier forced-flag funding fixture did not establish normal
-game scheduling progress; its passing result should not be used for that claim.
+The guarded installer completed with no game running and retains 1.0.818 at
+`/Applications/.dunecity-backup-before-819-20261008/dunecity.app`. Independent
+readback verifies the installed version/hash, signature and runtime, the Desktop
+shortcut and all 2,482 `.ini`/`.dls` profile files unchanged. No match was stopped
+or started. Receipts are in
+`/Users/stefan/Documents/projects/outputs/install-819-mba/install-819-receipt.json`
+and `independent-verification.json` in the same directory.
+
+The earlier forced-flag funding fixture did not establish normal game scheduling
+progress; its passing result should not be used for that claim.
