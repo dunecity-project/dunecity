@@ -75,6 +75,21 @@ protected:
     virtual ~DefaultObjectInterface() { ; };
 
     /**
+        Accent colour for this panel: the colour of the *inspected object's* owner, not of the
+        local view house. Identical for one's own buildings. While observing (or in debug) the
+        panel can belong to any house, and every figure in it is already read from
+        pObject->getOwner() - so the colour has to agree about whose building this is instead of
+        tinting another house's numbers with the view house's colour.
+    */
+    Uint32 ownerAccentColor() const {
+        const ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
+        const House* pOwner = pObject ? pObject->getOwner() : nullptr;
+        const int houseID = pOwner ? pOwner->getHouseID()
+                                   : (pLocalHouse ? pLocalHouse->getHouseID() : HOUSE_HARKONNEN);
+        return getHouseColorRGB(getHouseVisualHouse(houseID), 3);
+    }
+
+    /**
         This method updates the object interface.
         If the object doesn't exists anymore then update returns false.
         \return true = everything ok, false = the object container should be removed

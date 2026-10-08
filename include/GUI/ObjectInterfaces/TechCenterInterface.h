@@ -62,7 +62,7 @@ protected:
         spawnSelectButton.setTooltipText(_("Deploy IX vehicles"));
         spawnSelectButton.setOnClick(std::bind(&TechCenterInterface::onSpawn, this));
 
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         levelLabel.setTextFontSize(12);
         levelLabel.setTextColor(color);

@@ -117,6 +117,9 @@ public:
 
 private:
     void removeOldContainer();
+    /// Disables the freshly created object panel while observing, so every panel type is
+    /// read-only from one place. See the definition for why disabling the container is enough.
+    void makeContainerReadOnlyWhileObserving();
     void drawCityStatsOverlay();
     void updateJoinRequestButton();
 

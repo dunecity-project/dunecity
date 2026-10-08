@@ -212,9 +212,21 @@ public:
         GameInitSettings result(*this);
         result.gameType=GameType::LoadMultiplayer;
         result.filename="online-resume.dls"; result.filedata=data; result.houseInfoList.clear();
+        // Local observation is a property of this machine's setup screen, never of a snapshot
+        // handed to a peer. A network observer is admitted through the spectator grant instead.
+        result.localSpectator=false;
         return result;
     }
     inline Uint32 getRandomSeed() const { return randomSeed; };
+
+    /**
+        Offline Custom Game "Spectate": every map faction is left to an AI and this machine
+        watches. Deliberately *not* part of save() or the stream constructor and deliberately
+        not sent to a peer, so the savegame and network formats are untouched; Game persists
+        observation through the existing non-network local-player byte instead.
+    */
+    inline bool isLocalSpectator() const { return localSpectator; };
+    inline void setLocalSpectator(bool spectate) { localSpectator = spectate; };
 
     inline bool isMultiplePlayersPerHouse() const { return multiplePlayersPerHouse; };
     inline void setMultiplePlayersPerHouse(bool multiplePlayersPerHouse) { this->multiplePlayersPerHouse = multiplePlayersPerHouse; };
@@ -279,6 +291,9 @@ private:
     Uint32          randomSeed = 0;
 
     bool            multiplePlayersPerHouse = false;
+
+    /// Local-only; see isLocalSpectator(). Never serialized, never transmitted.
+    bool            localSpectator = false;
 
     SettingsClass::GameOptionsClass gameOptions;
     GraphicsSkin    campaignGraphicsSkin = GraphicsSkin::SimCity;

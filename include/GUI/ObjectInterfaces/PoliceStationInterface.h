@@ -67,7 +67,7 @@ protected:
         reinforcementStatusLabel.setVisible(false);
         spawnBox.addWidget(&reinforcementStatusLabel, Point((SIDEBARWIDTH - 25 - getWidth(pTexture))/2, 5), getTextureSize(pTexture));
 
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         levelLabel.setTextFontSize(11);
         levelLabel.setTextColor(color);

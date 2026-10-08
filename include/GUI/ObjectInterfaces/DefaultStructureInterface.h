@@ -89,8 +89,15 @@ protected:
 
         StructureBase* pStructure = dynamic_cast<StructureBase*>(pObject);
         if(pStructure != nullptr) {
-            destroyButton.setVisible(pLocalPlayer && pLocalPlayer->getHouse() == pStructure->getOwner());
-            if(pStructure->getHealth() >= pStructure->getMaxHealth()) {
+            // While observing, pLocalPlayer is the detached view identity and its house is
+            // whichever house the view is anchored to - so without this the Destroy button
+            // would appear on that house's buildings. Repair is hidden for the same reason:
+            // neither is an observer's to press. Both are also refused downstream, but an
+            // observer should not be shown controls at all.
+            const bool observing = currentGame->isObserving();
+            destroyButton.setVisible(!observing && pLocalPlayer
+                                     && pLocalPlayer->getHouse() == pStructure->getOwner());
+            if(observing || pStructure->getHealth() >= pStructure->getMaxHealth()) {
                 repairButton.setVisible(false);
             } else {
                 repairButton.setVisible(true);

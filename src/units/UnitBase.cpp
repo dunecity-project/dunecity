@@ -519,7 +519,10 @@ void UnitBase::blitToScreen() {
 }
 
 ObjectInterface* UnitBase::getInterfaceContainer() {
-    if((pLocalHouse == owner && isRespondable()) || (debug == true)) {
+    // isRespondable() still gates the owner's own panel (a unit inside a carryall has no
+    // action bar), but an observer inspects any unit's real state regardless.
+    if((pLocalHouse == owner && isRespondable()) || debug
+       || (currentGame != nullptr && currentGame->isObserving())) {
         return UnitInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);
@@ -557,13 +560,12 @@ void UnitBase::deploy(const Coord& newLocation) {
             if(currentGameMap->getTile(location)->isSpiceBloom()) {
                 currentGameMap->getTile(location)->triggerSpiceBloom(getOwner());
                 
-                // Check if unit should be destroyed by the bloom
-                GameType gameType = currentGame->getGameInitSettings().getGameType();
-                bool isImmortal = (!isNetworkGameType(gameType)
-                                  && gameType != GameType::LoadMultiplayer
-                                  && currentGame->getGameInitSettings().getGameOptions().immortalHumanPlayer
-                                  && getOwner() == pLocalHouse);
-                
+                // Check if unit should be destroyed by the bloom. Same authority as
+                // ObjectBase::handleDamage: an observer's view anchor is an AI faction, and
+                // watching must not make its units survive a bloom they would have died in.
+                const bool isImmortal = currentGame->localHumanImmortalityApplies()
+                                        && getOwner() == pLocalHouse;
+
                 if(!isImmortal) {
                     setHealth(0);
                     setVisible(VIS_ALL, false);

@@ -92,7 +92,7 @@ void RepairYard::save(OutputStream& stream) const {
 
 
 ObjectInterface* RepairYard::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return RepairYardInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

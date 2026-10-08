@@ -770,6 +770,13 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
     ObjectBase *lastCheckedObject = nullptr;
     ObjectBase *lastSelectedObject = nullptr;
 
+    // An observer sees the whole map, so it must also be able to click on it. Without this the
+    // view house's exploration would decide what is inspectable, which is neither its own
+    // information nor the observer's. Reading exploration here never writes it, and selection
+    // confers no control: Game::setCursorMode and the order paths refuse an observer, and the
+    // detached view identity holds a controller id no command can be authorized against.
+    const bool observing = currentGame->isObserving();
+
     //if selection rectangle is checking only one tile and has shift selected we want to add/ remove that unit from the selected group of units
     if(!objectARGMode) {
         currentGame->unselectAll(currentGame->getSelectedList());
@@ -783,7 +790,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
         if (!tile_center)
             return;
 
-        if(tile_center->isExploredByTeam(pHouse->getTeamID()) || debug) {
+        if(tile_center->isExploredByTeam(pHouse->getTeamID()) || debug || observing) {
             lastCheckedObject = tile_center->getObjectAt(realX, realY);
         } else {
             lastCheckedObject = nullptr;
@@ -844,7 +851,10 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
             for(auto j = std::min(y1, y2); j <= std::max(y1, y2); j++) {
                 const auto tile = getTile_internal(i, j);
 
-                if (tile && tile->hasAnObject() && tile->isExploredByTeam(pHouse->getTeamID()) && !tile->isFoggedByTeam(pHouse->getTeamID())) {
+                const bool visibleHere = observing
+                    || (tile && tile->isExploredByTeam(pHouse->getTeamID())
+                        && !tile->isFoggedByTeam(pHouse->getTeamID()));
+                if (tile && tile->hasAnObject() && visibleHere) {
                     tile->selectAllPlayersUnits(pHouse->getHouseID(), &lastCheckedObject, &lastSelectedObject);
                 }
             }

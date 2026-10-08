@@ -418,6 +418,32 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/network/run-command-execution-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/command-probe)
         set_tests_properties(game_command_regressions PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+        # Offline Custom Game "Spectate": two real AI factions with no observer controller or
+        # start slot, full map and radar without touching exploration, owner-specific panels for
+        # every owner, every mutation route refused while the owners' own commands still work,
+        # and observation preserved across save and reload. Separate from the menu probe so
+        # neither has to carry the other's runtime.
+        add_test(NAME local_spectator_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-probe)
+        set_tests_properties(local_spectator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Control case: the shared non-network local-player byte must keep its old meaning for
+        # an ordinary human single-player save, and must never read back as an observer.
+        add_test(NAME local_spectator_ordinary_round_trip COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --ordinary-round-trip
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-ordinary-probe)
+        set_tests_properties(local_spectator_ordinary_round_trip PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        # The Offline Custom Game setup row itself, against the real CustomGamePlayers widgets.
+        add_test(NAME local_spectator_setup_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --setup
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-setup-probe)
+        set_tests_properties(local_spectator_setup_probe PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
         add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

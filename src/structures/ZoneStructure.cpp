@@ -230,7 +230,7 @@ void ZoneStructure::setResidentialPopulation(int population) {
 ZoneStructure::~ZoneStructure() = default;
 
 ObjectInterface* ZoneStructure::getInterfaceContainer() {
-    if ((pLocalHouse == owner) || (debug == true)) {
+    if (mayShowOwnerInterface()) {
         return ZoneStructureInterface::create(objectID);
     }
     return DefaultObjectInterface::create(objectID);

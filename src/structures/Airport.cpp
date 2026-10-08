@@ -45,7 +45,7 @@ void Airport::init() {
 Airport::~Airport() = default;
 
 ObjectInterface* Airport::getInterfaceContainer() {
-    if (owner==pLocalHouse || debug) return AirportInterface::create(objectID);
+    if (mayShowOwnerInterface()) return AirportInterface::create(objectID);
     return DefaultObjectInterface::create(objectID);
 }
 

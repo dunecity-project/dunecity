@@ -66,7 +66,7 @@ protected:
 
         weaponSelectButton.setOnClick(std::bind(&PalaceInterface::onSpecial, this));
 
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         levelLabel.setTextFontSize(12);
         levelLabel.setTextColor(color);

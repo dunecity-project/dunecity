@@ -222,7 +222,7 @@ void BuilderBase::save(OutputStream& stream) const {
 }
 
 ObjectInterface* BuilderBase::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return BuilderInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

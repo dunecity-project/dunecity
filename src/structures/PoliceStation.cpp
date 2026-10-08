@@ -54,7 +54,7 @@ void PoliceStation::save(OutputStream& stream) const {
 }
 
 ObjectInterface* PoliceStation::getInterfaceContainer() {
-    if (pLocalHouse == owner || debug) return PoliceStationInterface::create(objectID);
+    if (mayShowOwnerInterface()) return PoliceStationInterface::create(objectID);
     return DefaultObjectInterface::create(objectID);
 }
 

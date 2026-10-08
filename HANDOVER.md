@@ -1,3 +1,61 @@
+## 2026-10-08 — local candidate 1.0.817: Offline Custom Game spectator mode
+
+Implemented on `feature/custom-game-spectator`, based on 4b69d0eb (production 1.0.816).
+The source and tests are committed locally; no push, PR, tag or new public release. Native
+app rebuilt at `build/bin/dunecity.app`, bundle version 1.0.817. The MBA's installed
+`/Applications/dunecity.app` remains 1.0.816: process 97912 was running during final verification.
+No active game was interrupted or installation replaced. Test selections: `docs/testing-1.0.817.md`.
+
+Offline Custom Game gains **Spectate** beside **Shared house**. Turning it on replaces the
+human seat with an AI and preserves configured AI/faction/team choices. Every active house
+belongs to AI; the observer consumes no faction or start position. Whole-map and minimap
+visibility, selection of unexplored foreign buildings, and every owner's full detail panels
+are available. Panel figures and accent colours come from the selected object's owner.
+Factory lists remain scrollable for inspection while order buttons are disabled. Choosing
+Online clears/hides this offline choice; turning it off restores a human seat.
+
+`Game::isSpectating()` stays network-only for observer streams, lockstep, checkpoint loading
+and loaded city reconciliation. `Game::isObserving()` drives the shared view/input paths. The
+network-only CommandManager execution gate is unchanged: local AI city tools still execute
+through its shared command queue.
+
+Read-only authority is enforced by the detached, unregistered UI identity with reserved
+`Player::OBSERVER_PLAYER_ID = 255`, outside the real controller range (max 191). A generic
+Command execution guard rejects that issuer before any mutation, including global pause and
+city commands. Sidebar containers block action input; Repair/Destroy/Upgrade controls remain
+hidden after updates. Order cursors, radar right-click orders, city budget edits and chat
+mutation cheats are blocked. Local camera, pause, speed, save and restart remain usable.
+Viewing leaves faction exploration/fog state intact. The immortal-human option now requires a
+registered human controller, so anchoring the view to an AI never makes that AI invulnerable.
+
+Observer saves reuse the existing local-player byte (255); no saved field or wire version is
+added. The loader reconstructs the detached view and runtime-only setup choice, so **Restart
+Game after loading** also remains an all-AI observed match. Ordinary saves restore an actual
+human, with invalid saved IDs refused safely. Four continuation tests exposed a separate
+existing layout error: network-format saves omit that ID byte, but local loading interpreted
+the default value as an ID. Local opening now resolves the named human or deterministic first
+human fallback, validated with both matching and different local profile names. Network
+lobby/controller reassignment is unchanged.
+
+Verification on this arm64 Mac: version metadata agrees at 1.0.817; pre/post incremental
+Ninja dependency audits and the Release native build pass. Initial full 62-gate CTest run:
+58 passed, four continuation failures. After the loader correction and restart check, the
+nine affected/focused gates pass: native Catch suite, game command regressions, all three
+spectator gates, transport containment, unit route continuation, deviation reward and
+projectile continuation. The unchanged menu navigation gate passed in the full run. The
+spectator runtime checks cover AI progress, real radar without a powered faction radar,
+owner-specific numbers for two houses, read-only input, real-owner command positive controls,
+AI city commands through the shared queue, save/load and restart. Ordinary human and real
+setup-widget control cases pass separately. Shipping objects are linked into diagnostic
+probes; no test hook ships in the app.
+
+Actual SDL screenshots show the checked Spectate control and both owners' building details
+(including distinct power figures). Native 1.0.817 launches and the Tuono-Orac map chooser
+renders. The native physical input walkthrough did not finish; engine and setup behaviour
+were exercised by the automated probes. Logs, review notes and verification receipt:
+`../outputs/spectator-mode-817/`. No 1.0.817 platform CI, signing/notarization or browser/public
+release verification has been performed.
+
 ## 2026-10-07 — production 1.0.816 completed
 
 PRs #89/#90 are merged. Immutable tag v1.0.816 resolves to 94a5e6c62d240cc14c977b4ff5d7669eb00a5ed1. Stable CI 37595012438 passed all platform builds, native tests (10,217,948 assertions), Mac signing/notarization, signed update feeds and GitHub publication. All 13 public assets match their published hashes; three manifests and two appcasts pass Ed25519 verification. Public Mac app passes Gatekeeper as Notarized Developer ID.
