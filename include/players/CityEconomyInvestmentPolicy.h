@@ -113,6 +113,65 @@ inline bool economicTransportUseful(int spiceRemaining, int workers, int refiner
     return combatVehicles > 0 && repairYards > 0;
 }
 
+// Accepting an order only puts an item into a builder's queue. Nothing is
+// charged at that moment: BuilderBase::updateProductionProgress() deducts
+// price/(buildTime*15) per tick from whatever credits the house actually has,
+// makes no progress at all while the till is empty, and resumes when income
+// arrives (src/structures/BuilderBase.cpp). Foundation slabs are ordinary
+// queued orders ahead of the building and are paid the same way; the planner's
+// reserves are bookkeeping, not credits already spent.
+//
+// A growth-cap project therefore never needed its price banked, and it does not
+// need its price covered by any short forecast window either. It needs enough
+// in hand to enter production and make real progress, and income that keeps
+// arriving. A 3000-credit stadium on 400 cash and 300 tax per minute finishes
+// in about ten minutes; gating it on a four-minute forecast would reproduce the
+// original deadlock, where the yard held back, the cheap-zone fallback spent
+// the same credits next pass, and the residential valve stayed capped at 0 for
+// a whole match.
+struct InstallmentOrder {
+    bool order = false;   ///< start now: the production start budget is in hand
+    bool reserve = false; ///< short of the start budget only; keep credits for it
+    /// Worth holding credits for. False means neither income nor cash can pay
+    /// for it at all, so nothing is withheld and the city keeps spending.
+    bool funded() const { return order || reserve; }
+};
+
+/// An integer planning approximation of what the engine charges per tick once
+/// production runs. BuilderBase works in FixPoint and charges price/(buildTime*15)
+/// per tick, which for a long build is a fraction of a credit; this rounds that
+/// down to whole credits and never below 1, so the planner asks for a credit it
+/// can actually hold rather than a fraction it cannot represent.
+inline int firstInstallment(int price, int buildTicks) {
+    if (price <= 0) return 0;
+    return std::max(1, price / std::max(1, buildTicks));
+}
+
+/// The budget an order needs in hand to enter production and progress: the
+/// foundation orders the planner will queue ahead of it, plus one installment
+/// of the building. Deliberately not a fraction of the price - the remainder is
+/// what future income is for.
+inline int productionStartBudget(int price, int foundationCost, int buildTicks) {
+    return std::max(0, foundationCost) + firstInstallment(price, buildTicks);
+}
+
+/// `continuingIncome` is bankable net income per planning horizon (tax less
+/// upkeep, plus spice receipts): strictly positive means the installments will
+/// keep being paid, however long that takes. With no income at all the project
+/// still goes ahead if the house can simply pay for it outright, and otherwise
+/// nothing is reserved, because a permanently stalled order would occupy the
+/// yard and starve the city instead of buying something it can finish.
+inline InstallmentOrder installmentOrder(int spendable, int price, int foundationCost,
+                                         int buildTicks, int continuingIncome) {
+    InstallmentOrder result;
+    if (price <= 0) return result;
+    if (continuingIncome <= 0 && spendable < price + std::max(0, foundationCost))
+        return result;
+    result.order = spendable >= productionStartBudget(price, foundationCost, buildTicks);
+    result.reserve = !result.order;
+    return result;
+}
+
 inline int demandedCivic(uint8_t blocked, int stadiumCommitted, bool stadiumAvailable,
                          int airportCommitted, bool airportAvailable) {
     if ((blocked & DuneCity::NeedStadium) && stadiumCommitted == 0 && stadiumAvailable)

@@ -143,7 +143,10 @@
 // 58: QuantBot establishes city tax income before optional spice technology on
 //     depleted maps. Older peers issue different construction and import orders
 //     from the same state. Save and runtime layouts remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            58
+// 59: Needed civic buildings and nuclear power enter gradual-payment production
+//     before their full price is saved. Older peers choose different construction
+//     and spending orders. Save and runtime layouts remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            59
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

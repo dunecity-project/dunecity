@@ -631,10 +631,16 @@ void INIMapLoader::loadHouses()
 
             auto pPlayer = pPlayerData->create(pNewHouse, playerInfo.playerName);
 
-            if( ((!isNetworkGameType(pGame->getGameInitSettings().getGameType())) && (dynamic_cast<HumanPlayer*>(pPlayer.get()) != nullptr))
-                || (playerInfo.playerName == pGame->getLocalPlayerName())) {
+            // Only a real human player may become the local pair. Matching the local
+            // name alone used to adopt an AI slot as pLocalHouse while leaving
+            // pLocalPlayer null - an observed game names an AI slot after the
+            // watching player, and the inconsistent pair crashed unit deployment.
+            if( auto* pHuman = dynamic_cast<HumanPlayer*>(pPlayer.get());
+                pHuman != nullptr
+                && (!isNetworkGameType(pGame->getGameInitSettings().getGameType())
+                    || playerInfo.playerName == pGame->getLocalPlayerName())) {
                 pLocalHouse = pNewHouse;
-                pLocalPlayer = dynamic_cast<HumanPlayer*>(pPlayer.get());
+                pLocalPlayer = pHuman;
             }
 
             pNewHouse->addPlayer(std::move(pPlayer));
@@ -1125,9 +1131,12 @@ House* INIMapLoader::getOrCreateHouse(int houseID) {
 
                     auto pPlayer = pPlayerData->create(pNewHouse.get(), playerInfo.playerName);
 
-                    if(playerInfo.playerName == pGame->getLocalPlayerName()) {
+                    // Same rule as loadHouses(): the local name on an AI slot must not
+                    // leave pLocalHouse set with a null pLocalPlayer.
+                    if(auto* pHuman = dynamic_cast<HumanPlayer*>(pPlayer.get());
+                       pHuman != nullptr && playerInfo.playerName == pGame->getLocalPlayerName()) {
                         pLocalHouse = pNewHouse.get();
-                        pLocalPlayer = dynamic_cast<HumanPlayer*>(pPlayer.get());
+                        pLocalPlayer = pHuman;
                     }
 
                     pNewHouse->addPlayer(std::move(pPlayer));

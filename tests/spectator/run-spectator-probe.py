@@ -18,12 +18,17 @@ parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--map', type=Path, required=True)
 parser.add_argument('--mod', default='dunecity')
 parser.add_argument('--seed', type=int, default=20260817)
+parser.add_argument('--eight-houses', action='store_true',
+                    help='Use eight Brutal AI houses, including Neutral and an AI with the local name')
+parser.add_argument('--shared-house', action='store_true')
 parser.add_argument('--ordinary-round-trip', action='store_true',
                     help='Run the control case: an ordinary human single-player save/reload')
 parser.add_argument('--setup', action='store_true',
                     help='Exercise the Offline Custom Game Spectate checkbox and roster')
 parser.add_argument('--wall-timeout', type=int, default=600)
 args = parser.parse_args()
+if args.eight_houses and args.ordinary_round_trip:
+    parser.error('--eight-houses is an observer regression, not the ordinary-player control.')
 
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -82,6 +87,10 @@ if args.ordinary_round_trip:
     env['SPECTATOR_ORDINARY_ROUND_TRIP'] = '1'
 if args.setup:
     env['SPECTATOR_SETUP_PROBE'] = '1'
+if args.eight_houses:
+    env['SPECTATOR_EIGHT_HOUSES'] = '1'
+if args.shared_house:
+    env['SPECTATOR_SHARED_HOUSE'] = '1'
 
 logpath = out / 'run.log'
 with logpath.open('w') as log:

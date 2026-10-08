@@ -180,6 +180,9 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+# Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
+# map rows, and a locally edited workshop map keeps its authored mod in the filter.
+add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
 
 # Standalone network wire harness.
@@ -429,6 +432,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/spectator-probe)
         set_tests_properties(local_spectator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        foreach(shared IN ITEMS off on)
+            set(shared_args)
+            if(shared STREQUAL "on")
+                list(APPEND shared_args --shared-house)
+            endif()
+            add_test(NAME local_spectator_worm_startup_${shared} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --eight-houses ${shared_args}
+                --map "${CMAKE_SOURCE_DIR}/tests/spectator/8P-preplaced-worms.ini"
+                --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/spectator-worm-${shared}-probe)
+            set_tests_properties(local_spectator_worm_startup_${shared} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # Control case: the shared non-network local-player byte must keep its old meaning for
         # an ordinary human single-player save, and must never read back as an observer.
         add_test(NAME local_spectator_ordinary_round_trip COMMAND ${Python3_EXECUTABLE}
@@ -608,6 +623,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/no-spice-city-probe)
         set_tests_properties(quantbot_no_spice_city PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A growth-cap project (demanded Stadium/Airport, planned reactor) must enter
+        # production without its price banked and be charged in installments out of
+        # arriving tax: the reported 1.0.817 city never ordered a 3000-credit stadium
+        # in 247109 cycles. Concrete is required so the foundation budget is exercised.
+        add_test(NAME quantbot_growth_installments COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --growth-installment-probe
+            --repeatable --level 9 --mod dunecity --concrete-required
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/growth-installment-probe)
+        set_tests_properties(quantbot_growth_installments PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(no_spice_map IN ITEMS dunecity low-cash)
             add_test(NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py

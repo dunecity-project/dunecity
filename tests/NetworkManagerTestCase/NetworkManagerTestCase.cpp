@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 58;
+static constexpr int kWireProtocolVersion = 59;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -51,9 +51,10 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 57 wraps the rounded combat turn direction, so a 56 peer writes a different
     // track index and rotates ground units differently from the same cycle.
     // 58 gives depleted-map city income priority over optional technology.
+    // 59 starts needed civic and nuclear projects with gradual payment.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 58);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 59);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

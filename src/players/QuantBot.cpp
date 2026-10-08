@@ -5525,6 +5525,12 @@ void QuantBot::build(int militaryValue) {
             itemCount[Structure_Airport], (blocked & DuneCity::NeedAirport) && available(Structure_Airport)));
     };
     int civicReserveCost = 0;
+    // The civic demand goes quiet as soon as the project is queued, because the
+    // queued order already counts in itemCount. Its income priority does not go
+    // quiet with it: queuedProductionCost (above) already withholds the whole
+    // unpaid remainder of every queue from this pass's spendable money, which is
+    // exactly the reserve an accepted stadium, airport or reactor needs. No extra
+    // reservation is added here, or the same credits would be withheld twice.
     if (citySimEnabled) for (const auto* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_ConstructionYard) continue;
         const auto civic = demandedCivicForYard(static_cast<const BuilderBase*>(structure));
@@ -6281,6 +6287,13 @@ void QuantBot::build(int militaryValue) {
             ? size.x*size.y*data[Structure_Slab1][houseID].price : 0;
         return data[item][houseID].price + foundation
             + (power*generationCostPerThousand+999)/1000;
+    };
+    // The engine's own installment divisor: BuilderBase::updateProductionProgress()
+    // charges price/(buildTime*15) per tick, taking the city build time in city
+    // games. Used to price one installment, never to predict a completion date.
+    auto cityBuildTicks = [&](Uint32 item) {
+        const int configured = data[item][houseID].buildtime;
+        return 15 * (citySimEnabled ? DuneCity::getCityBuildTime(item,configured) : configured);
     };
     // A city map with no usable spice has to grow a tax base out of its
     // starting grant: a processing bay, the port's income ladder and an
@@ -7161,6 +7174,16 @@ void QuantBot::build(int militaryValue) {
 				// Correlate only decisions made for this builder in this planning pass.
                 zoneDecisionIds.erase(pBuilder->getObjectID());
 
+                // The one item this builder pass may queue on a production start
+                // budget instead of its full price, and the budget it needs. Set
+                // only by the growth-cap rules below, and only after live demand,
+                // mode, tech, placement, prerequisites, the no-existing-or-pending
+                // copy check and a positive income test have all passed. Any other
+                // item keeps the shared-cash budget guard unchanged.
+                Uint32 installmentProject = NONE_ID;
+                int installmentProjectStartBudget = 0;
+                bool emergencyFoundationOrder = false;
+
                 // Record actual queue acceptance for unit and structure production.
 				auto produceItemWithLogging = [&](Uint32 itemID, int sourceLine, const char* rule = "unit_mix_or_prerequisite") {
                     if(!cityAdmitsStructure(itemID)) return false;
@@ -7172,11 +7195,22 @@ void QuantBot::build(int militaryValue) {
                        && itemCount[Structure_ConstructionYard] + itemCount[Unit_MCV] >= yardLimit) return false;
                     const int quotedPrice=purchasePrice(pBuilder,itemID);
                     const bool emergencyGenerator=!getHouse()->hasPower()
-                        && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant);
-                    if (!emergencyGenerator && money<quotedPrice) {
+                        && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant
+                            || (emergencyFoundationOrder
+                                && (itemID==Structure_Slab1 || itemID==Structure_Slab4)));
+                    // A validated growth-cap project is charged by the engine in
+                    // installments out of arriving income, so the shared cash
+                    // budget asks it for its production start budget instead of
+                    // its price. The obligation is still booked in full below, so
+                    // nothing else spends the same credits.
+                    const bool installment = itemID!=NONE_ID && itemID==installmentProject;
+                    const int budgetFloor = installment ? installmentProjectStartBudget : quotedPrice;
+                    if (!emergencyGenerator && money<budgetFloor) {
                         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",capitalDecision)
                             .set("builder",pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
-                            .set("price",quotedPrice).set("spendable",money).set("reason","shared_cash_budget"));
+                            .set("price",quotedPrice).set("spendable",money)
+                            .set("budget_floor",budgetFloor).set("installments",installment)
+                            .set("reason",installment ? "installment_start_budget" : "shared_cash_budget"));
                         return false;
                     }
 
@@ -8426,6 +8460,11 @@ void QuantBot::build(int militaryValue) {
                 // that budget, or the service is never ordered at all.
                 bool serviceSavingHold = false;
 								bool skipRemainingStructureLogic = false;
+                // True once a growth-cap rule below has selected its project on a
+                // production start budget rather than its full price.
+                auto onInstallments = [&](Uint32 item) {
+                    return item != Uint32(NONE_ID) && item == installmentProject;
+                };
 
                 if (storageExpansionNeeded() && getHouse()->hasPower()
                     && campaignAvailableToBuild(pBuilder,Structure_Silo)
@@ -8439,8 +8478,14 @@ void QuantBot::build(int militaryValue) {
                 // Honour the growth allocation in the actual yard decision,
                 // not just the shared cash reserve. Previously this yard could
                 // immediately spend the protected plot's budget on a service.
+                // An announced growth cap outranks the protected plot: while the
+                // civic is missing the valve for that plot's own demand is pinned
+                // at 0, so this allocation would buy a lot that cannot develop and
+                // spend the civic's down payment doing it. The civic rule below
+                // owns the decision in that case.
                 if (itemID==NONE_ID && cityGrowthProtected && capitalPending()
-                    && capitalCandidates[capitalChoice].builder==pBuilder->getObjectID()) {
+                    && capitalCandidates[capitalChoice].builder==pBuilder->getObjectID()
+                    && demandedCivicForYard(pBuilder)==Uint32(NONE_ID)) {
                     itemID=affordableCityZone(pBuilder,money);
                     if (itemID!=NONE_ID) structureRule="dedicated_city_growth";
                 }
@@ -8803,11 +8848,20 @@ void QuantBot::build(int militaryValue) {
 							itemID = Structure_NuclearPlant; structureRule = "power";
 							logDebug("CITY-POWER: Building Nuclear Plant (buffer=%d, target=%d, required=%d)",
 									 buffer, targetBuffer, required);
-						} else if ((!powerGenerationPending() && campaignAvailableToBuild(pBuilder,Structure_WindTrap))
+						} else if (((!powerGenerationPending() || !getHouse()->hasPower())
+								&& campaignAvailableToBuild(pBuilder,Structure_WindTrap))
 							&& findPlaceLocation(Structure_WindTrap).isValid()) {
+							// A reactor already in flight normally satisfies the one
+							// generator this rule keeps pending. An actual blackout is
+							// different: the reactor is charged in installments out of
+							// income the blackout itself is destroying, so waiting for
+							// it can starve its own funding indefinitely. Cheap wind is
+							// buildable now and produceItemWithLogging's emergency
+							// generator path pays for it even with the reactor's
+							// obligation booked, so recovery never waits for capacity.
 							itemID = Structure_WindTrap; structureRule = "power";
-							logDebug("CITY-POWER: Building Windtrap (no Nuclear available, buffer=%d, target=%d)",
-									 buffer, targetBuffer);
+							logDebug("CITY-POWER: Building Windtrap (no Nuclear available, buffer=%d, target=%d, blackout=%d)",
+									 buffer, targetBuffer, getHouse()->hasPower() ? 0 : 1);
 						}
 					}
 				}
@@ -8818,12 +8872,37 @@ void QuantBot::build(int militaryValue) {
                     && campaignAvailableToBuild(pBuilder,Structure_NuclearPlant)
                     && (itemID == NONE_ID || itemID == Structure_WindTrap || itemID == Structure_NuclearPlant)
                     && findPlaceLocation(Structure_NuclearPlant).isValid()) {
-                    skipRemainingStructureLogic = true;
-                    itemID = money >= data[Structure_NuclearPlant][houseID].price ? Structure_NuclearPlant : NONE_ID;
-                    structureRule = itemID == NONE_ID ? "save_nuclear_growth" : "nuclear_growth_investment";
+                    // The house still has power here - this is planned capacity, not
+                    // a blackout - so the reactor can be ordered on a down payment and
+                    // charged in installments like any other order. An actual shortfall
+                    // is answered above, where an immediately affordable windtrap still
+                    // wins, so emergency power never waits for a reactor's instalments.
+                    const int price = data[Structure_NuclearPlant][houseID].price;
+                    const int foundationBudget = std::max(0, buildingCapitalCost(Structure_NuclearPlant) - price);
+                    const auto funding = CityEconomyInvestmentPolicy::installmentOrder(
+                        money, price, foundationBudget, cityBuildTicks(Structure_NuclearPlant),
+                        forecastNetIncome);
+                    if (funding.funded()) {
+                        skipRemainingStructureLogic = true;
+                        serviceSavingHold = funding.reserve;
+                        if (funding.order) {
+                            installmentProject = Structure_NuclearPlant;
+                            // Execution asks only for the installment: the foundation
+                            // orders are queued and charged separately before it, so
+                            // demanding their cost again here would double count them.
+                            installmentProjectStartBudget = CityEconomyInvestmentPolicy::firstInstallment(
+                                price,cityBuildTicks(Structure_NuclearPlant));
+                        }
+                        itemID = funding.order ? Structure_NuclearPlant : NONE_ID;
+                        structureRule = itemID == NONE_ID ? "save_nuclear_growth" : "nuclear_growth_investment";
+                    }
                     if (emitStatsLog) traceDecision("nuclear_investment",AITelemetry::Record()
                         .set("funded",itemID != NONE_ID).set("cash",money)
-                        .set("price",data[Structure_NuclearPlant][houseID].price).set("reserve",cityPowerReserve));
+                        .set("price",price).set("foundation_budget",foundationBudget)
+                        .set("start_budget",CityEconomyInvestmentPolicy::productionStartBudget(
+                            price,foundationBudget,cityBuildTicks(Structure_NuclearPlant)))
+                        .set("continuing_income",forecastNetIncome).set("saving",funding.reserve)
+                        .set("reserve",cityPowerReserve));
                 }
                 // Restore a lost heavy production line before optional growth.
                 // Walk missing prerequisites (e.g. the light factory lost in the
@@ -9026,13 +9105,40 @@ void QuantBot::build(int militaryValue) {
                 if (itemID == NONE_ID && !skipRemainingStructureLogic && isCitySim) {
                     const Uint32 civic = demandedCivicForYard(pBuilder);
                     if (civic != NONE_ID) {
-                        skipRemainingStructureLogic = true;
-                        itemID = money >= data[civic][houseID].price ? civic : NONE_ID;
-                        structureRule = itemID == NONE_ID ? "save_demanded_civic"
-                            : civic == Structure_Stadium ? "residential_civic" : "commercial_civic";
+                        // The cap is announced, so residential/commercial zoning
+                        // cannot grow until this civic exists: the valve is pinned
+                        // at 0 (DuneCity::applyDemandValves). Order it on a
+                        // production start budget and let the engine charge the
+                        // installments from the tax that keeps arriving, for as
+                        // long as that takes. Positive ongoing income is the test,
+                        // not a horizon in which the whole price must be covered.
+                        const int price = data[civic][houseID].price;
+                        const int foundationBudget = std::max(0, buildingCapitalCost(civic) - price);
+                        const auto funding = CityEconomyInvestmentPolicy::installmentOrder(
+                            money, price, foundationBudget, cityBuildTicks(civic), forecastNetIncome);
+                        if (funding.funded()) {
+                            skipRemainingStructureLogic = true;
+                            // The idle-yard fallback below may not spend the down
+                            // payment on a plot that cannot develop anyway.
+                            serviceSavingHold = funding.reserve;
+                            if (funding.order) {
+                                installmentProject = civic;
+                                // Execution asks only for the installment: the foundation
+                                // orders are queued and charged separately before it, so
+                                // demanding their cost again here would double count them.
+                                installmentProjectStartBudget = CityEconomyInvestmentPolicy::firstInstallment(
+                                    price,cityBuildTicks(civic));
+                            }
+                            itemID = funding.order ? civic : NONE_ID;
+                            structureRule = itemID == NONE_ID ? "save_demanded_civic"
+                                : civic == Structure_Stadium ? "residential_civic" : "commercial_civic";
+                        }
                         if (emitStatsLog) traceDecision("city_civic_investment",AITelemetry::Record()
                             .set("item",civic).set("funded",itemID != NONE_ID).set("cash",money)
-                            .set("price",data[civic][houseID].price));
+                            .set("price",price).set("foundation_budget",foundationBudget)
+                            .set("start_budget",CityEconomyInvestmentPolicy::productionStartBudget(
+                                price,foundationBudget,cityBuildTicks(civic)))
+                            .set("continuing_income",forecastNetIncome).set("saving",funding.reserve));
                     }
                 }
 
@@ -9812,7 +9918,8 @@ void QuantBot::build(int militaryValue) {
                     // whenever its real footprint and price are feasible. Extra
                     // windtrap room is no longer a reason to choose less capacity.
                     const bool nuclear = nuclearSite.isValid()
-                        && cash >= data[Structure_NuclearPlant][houseID].price;
+                        && (cash >= data[Structure_NuclearPlant][houseID].price
+                            || onInstallments(Structure_NuclearPlant));
                     itemID = nuclear ? Structure_NuclearPlant : windSite.isValid() ? Structure_WindTrap : NONE_ID;
                     if (itemID == NONE_ID) skipRemainingStructureLogic = true;
                     traceDecision("city_generator_choice", AITelemetry::Record().set("item",itemID)
@@ -9824,6 +9931,7 @@ void QuantBot::build(int militaryValue) {
                         .set("nuclear_placement",placementScoreDetails[Structure_NuclearPlant])
                         .set("nuclear_site",nuclearSite.isValid()).set("nuclear_price",data[Structure_NuclearPlant][houseID].price)
                         .set("wind_needed",windNeeded).set("wind_site",windSite.isValid()).set("nuclear",nuclear)
+                        .set("installments",nuclear && onInstallments(Structure_NuclearPlant))
                         .set("industrial_demand",ownIndValve));
                 }
             if (itemID!=NONE_ID && itemID!=Structure_WindTrap
@@ -9885,7 +9993,12 @@ void QuantBot::build(int militaryValue) {
                 itemID=NONE_ID;
                 skipRemainingStructureLogic=true;
             }
+            // A validated growth-cap project is the one order that may stand below
+            // its price here: the engine charges it in installments out of arriving
+            // income, and queuedProductionCost already withholds its whole unpaid
+            // remainder from every later pass, so nothing else spends that income.
             if ((vanillaEconomy || isCitySim) && itemID != NONE_ID && money < data[itemID][houseID].price
+                && !onInstallments(itemID)
                 && !(isCitySim && !getHouse()->hasPower()
                     && (itemID == Structure_WindTrap || itemID == Structure_NuclearPlant))) {
                 if (emitStatsLog) traceDecision("construction_rejected", AITelemetry::Record()
@@ -9956,6 +10069,10 @@ void QuantBot::build(int militaryValue) {
                 && pBuilder->getProductionQueueSize()==0
                 && !(protectionCapital && capitalPending())
                 && !serviceSavingHold
+                // An installment-funded growth-cap project is deliberately short
+                // of its full price. That is not "cannot afford it": replacing it
+                // with a plot here is what prevented it from ever being ordered.
+                && !onInstallments(itemID)
                 && (!selectedPlaceLocation.isValid() || money<selectedCost)) {
                 const Uint32 zone=affordableCityZone(pBuilder,money);
                 if (zone!=NONE_ID) {
@@ -10023,10 +10140,28 @@ void QuantBot::build(int militaryValue) {
                 const auto& foundations=plan.orders;
                 int foundationCost=0;
                 for (const auto& foundation:foundations) foundationCost+=purchasePrice(pBuilder,foundation.item);
-                if (!foundations.empty() && money < purchasePrice(pBuilder,itemID)+foundationCost) {
+                // Foundations are queued ahead of the building, so this is where the
+                // whole production start budget has to be payable: the foundations
+                // plus the building's first installment. The execution check then
+                // asks for the installment alone, because queueing the foundations
+                // has already charged their cost against this pass's money.
+                //
+                // A blackout exemption matches produceItemWithLogging(): the cheap
+                // generator that restores income must not be refused here because an
+                // unpaid queue has withheld the planner's virtual money, or a city
+                // with a reactor in flight could never recover under concrete rules.
+                const bool emergencyGenerator = !getHouse()->hasPower()
+                    && (itemID == Structure_WindTrap || itemID == Structure_NuclearPlant);
+                const int acceptanceFloor = onInstallments(itemID)
+                    ? CityEconomyInvestmentPolicy::productionStartBudget(
+                          purchasePrice(pBuilder,itemID),foundationCost,cityBuildTicks(itemID))
+                    : purchasePrice(pBuilder,itemID)+foundationCost;
+                if (!foundations.empty() && !emergencyGenerator && money < acceptanceFloor) {
                     traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",capitalDecision)
                         .set("builder",planningBuilder).set("item",itemID).set("reason","foundation_budget")
-                        .set("price",purchasePrice(pBuilder,itemID)).set("foundation_cost",foundationCost).set("spendable",money));
+                        .set("price",purchasePrice(pBuilder,itemID)).set("foundation_cost",foundationCost)
+                        .set("acceptance_floor",acceptanceFloor).set("installments",onInstallments(itemID))
+                        .set("spendable",money));
                     continue;
                 }
                 size_t foundationsQueued=0;
@@ -10036,10 +10171,15 @@ void QuantBot::build(int militaryValue) {
                     placeLocations.clear();
                 };
                 for (const auto& foundation : foundations) {
+                    // These slabs belong to the validated blackout recovery site.
+                    // Its unpaid reactor reservation must not block the slabs while
+                    // allowing only the generator itself through the same guard.
+                    emergencyFoundationOrder = emergencyGenerator;
                     if (!produceItemWithLogging(foundation.item,__LINE__,"building_foundation")) break;
                     placeLocations.push_back(Coord(foundation.x,foundation.y));
                     ++foundationsQueued;
                 }
+                emergencyFoundationOrder = false;
                 if (foundationsQueued!=foundations.size()) {
                     cancelFoundations();
                     continue;

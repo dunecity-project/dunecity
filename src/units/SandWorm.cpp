@@ -330,6 +330,10 @@ bool Sandworm::sleepOrDie() {
 void Sandworm::setTarget(const ObjectBase* newTarget) {
     GroundUnit::setTarget(newTarget);
 
+    // Preplaced worms load before the spectator view has a local house. Keep
+    // their target state, but defer the local warning until that view exists.
+    if(newTarget == nullptr || pLocalHouse == nullptr) return;
+
     const int localHouseID = pLocalHouse->getHouseID();
     const Uint16 localHouseMask = warningWormSignMaskForHouse(localHouseID);
     if( (newTarget != nullptr) && (newTarget->getOwner() == pLocalHouse)

@@ -575,7 +575,12 @@ void UnitBase::deploy(const Coord& newLocation) {
             }
         }
 
-        if(pLocalHouse == getOwner()) {
+        // Offline observation has no controlling player: Game::setupSpectatorView()
+        // only builds the detached view object after the map has been loaded, so
+        // units pre-placed by INIMapLoader deploy while pLocalPlayer is still null.
+        // The owner can still match the anchor house, which crashed an observed
+        // start on a map with pre-placed units. A real human player is unaffected.
+        if(pLocalPlayer != nullptr && pLocalHouse == getOwner()) {
             pLocalPlayer->onUnitDeployed(this);
         }
     }

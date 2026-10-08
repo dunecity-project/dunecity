@@ -238,6 +238,11 @@ void LoadMapWindow::onMapTypeChange(int buttonID)
     mapList.clearAllEntries();
 
     for(const std::string& filename : getFileNamesList(currentMapDirectory, "ini", true, FileListOrder_Name_CaseInsensitive_Asc)) {
+        // "<map>.ini.workshop.ini" is the revision metadata beside a map, not a map.
+        // The custom game chooser skips it the same way (CustomGameMenu::onMapTypeChange).
+        if(filename.size() >= 13 && filename.substr(filename.size() - 13) == ".workshop.ini") {
+            continue;
+        }
         mapList.addEntry(filename.substr(0, filename.length() - 4));
     }
 

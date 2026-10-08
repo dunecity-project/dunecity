@@ -52,6 +52,9 @@ parser.add_argument('--spice-income-probe', action='store_true',
 parser.add_argument('--credit-storage-probe', action='store_true',
                     help='Verify the shared spice/tax storage limit, exempt starting cash and refunds')
 parser.add_argument('--stats-probe', action='store_true', help='Verify campaign results with a shared human/AI house')
+parser.add_argument('--growth-installment-probe', action='store_true',
+                    help='Verify that a demanded Stadium/Airport and a planned reactor enter production '
+                         'on a start budget and are charged in installments from arriving income')
 parser.add_argument('--nuclear-probe', action='store_true')
 parser.add_argument('--reactor-safety-probe', action='store_true')
 parser.add_argument('--degradation-probe', action='store_true',
@@ -213,6 +216,7 @@ if args.controls_probe or args.sourceforge_probe:
     (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\nInterface Height = 480\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
+if args.growth_installment_probe: env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
 if args.nuclear_probe or args.reactor_safety_probe: env['BALANCE_NUCLEAR_PROBE'] = '1'
 if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'

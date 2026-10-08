@@ -120,10 +120,18 @@ struct MapMetadata {
         m.players=countPlayers(ini);
         return m;
     }
+    // The type filter accepts a map by its derived category OR by the exact mod
+    // dependency a verified sidecar recorded for it. The two disagree precisely for
+    // a locally edited workshop map: the edit can remove the content that named the
+    // category (a downloaded city map saved without city buildings classifies as
+    // vanilla) while the revision it still belongs to is unchanged. Filtering on the
+    // category alone hid such a map from the very mod it was authored for. Bundled,
+    // downloaded and metaserver rows are unaffected: read() sets dependency=mod, and
+    // a metaserver row leaves it empty.
     bool matches(const std::string& filterMod, int sizeBand, int maxPlayers) const {
         const int extent=std::max(width,height);
         const int band=extent<=64?1:extent<=128?2:extent<=192?3:extent<=256?4:5;
-        return (filterMod.empty() || mod==filterMod)
+        return (filterMod.empty() || mod==filterMod || dependency==filterMod)
             && (!sizeBand || band==sizeBand) && (!maxPlayers || players==maxPlayers);
     }
 };

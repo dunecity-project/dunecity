@@ -1,3 +1,60 @@
+## 2026-10-09 — local 1.0.818 verified; MBA installation prepared
+
+On `feature/custom-game-spectator`, fixes the reported eight-house Colonists
+spectator startup crash, saved-map filtering/metadata rows, and partial-price
+funding for needed Stadium/Airport/planned Nuclear Plant. AIs whose names match
+the local profile can no longer create a null local human pair; unit deployment
+callbacks and preplaced sandworm warnings tolerate the view not being created yet.
+Shared house is optional. Exact captured Colonists map, all eight Brutal houses
+including Neutral, passes 172 observer checks with Shared house off and another
+172 with it on, including simulation, ownership, input authority and save/restart.
+These use a controlled seed/stronger fog checks, not an exact MBA session replay.
+
+Needed city infrastructure enters production on its actual foundation/start budget
+with positive ongoing income. All downstream full-price guards honour only the
+validated per-yard project; unpaid obligations still reserve the full balance.
+Foundations are booked once. Blackout recovery can queue cheap wind and foundations
+beside a pending reactor. Dedicated actual-QuantBot tests cover all three projects,
+duplicate prevention, real foundation placement, paid progress, zero-credit pause,
+resumption and bounded completion under a declared test grant; ordinary guards
+and non-city controls remain. No serialized state changed (save 9852); deterministic
+AI orders differ, so protocol is bumped 58 to 59 with its wire-test pins.
+
+The original ended MBA match was imported into SQLite: 71,382 events, zero invalid
+records, zero Stadium orders. The final 66-minute fresh-start comparison on the
+captured New Beginning map/seed 59770805 accepts four Nuclear orders at 236–704
+credits versus price 2,000, and a Stadium at 686 versus price 3,000. Final cumulative
+summary confirms four reactors and one Stadium built. Baseline 817 accepts none.
+Final import: 98,510 events, zero invalid/incomplete records. Airport is exercised
+by the dedicated cap fixture, not this match. Initial map spice is zero; later
+blooms generate spice. No claim of identical replay, all-house project timing or
+improved match balance is made.
+
+Both saved MBA maps were intact. New Beginning's Vanilla-derived category differed
+from its authored DuneCity dependency; filtering accepts either without rewriting
+content/category or weakening revision checks. BigCityLife already appears in the
+baseline scan, so its earlier absence is not assigned that same root cause. The
+editor excludes `.workshop.ini` metadata rows. Real editor and Custom Game widgets
+at all three test sizes verify the saved-map fixtures and unchanged map bytes.
+
+All 69 CTest gates have passing results: full run 68/69 in 794.84 seconds, then the
+menu gate passes in 234.79 seconds using a fully fresh generated output directory.
+The old fixture sidecars referred to removed generated cache entries; merely
+resetting its profile did not remove these outside-profile test artifacts. Earlier
+failures and generated profiles are preserved. No shipping code changed between
+the successful checks. Native Release build, pre/post Ninja dependency audits,
+version consistency and diff checks pass. The portable bundle has 36 ARM64 Mach-O
+files, portable load paths, native/package code and string equivalence, deep/strict
+ad-hoc signature and bundled SDL initialization/hidden rendering checks.
+
+MBA installation is prepared, with a guarded no-game swap and fresh profile/config
+comparison; not yet executed in this entry. Public production remains 1.0.816.
+No push, PR, public release, platform CI or notarization was performed. Test steps:
+`docs/testing-1.0.818.md`. Private receipts: `../outputs/map-visibility-818/`,
+`../outputs/stadium-ai-818/final-validated/`,
+`../outputs/spectator-colonists-crash-818/independent/` and
+`../outputs/install-818-mba/`.
+
 ## 2026-10-08 — 1.0.817 installed on the MBA
 
 Installed the tested portable ARM64 candidate at `/Applications/dunecity.app` on

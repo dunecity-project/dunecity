@@ -48,6 +48,7 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     const auto path = std::string(std::getenv("MENU_PROBE_OUT"))+"/"+std::getenv("MENU_PROBE_WIDTH")+"-"+name+".bmp";
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
 }
+#include "user-map-list-probe.inc"
 int runLiveMapCatalogueProbe() {
     settings.network.relayUseDevelopmentEndpoint=false;
     settings.general.playerName="Map catalogue tester";
@@ -92,6 +93,7 @@ int runMenuProbe() {
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
                 "Probe did not render at the requested dimensions");
     settings.general.playerName = "Menu tester";
+    verifySavedUserMapLists();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
     settings.network.directDevelopmentEndpoint = "";

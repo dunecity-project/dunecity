@@ -89,6 +89,21 @@ void advance(Game& game, int cycles) {
     for(int i = 0; i < cycles; ++i) game.updateGameState();
 }
 
+UnitBase* seedGroundUnit(House* owner) {
+    auto* anchor = anyStructureOf(owner);
+    const Coord from = anchor ? anchor->getLocation() : Coord(8,8);
+    for(int radius=2;radius<50;++radius)
+        for(int dy=-radius;dy<=radius;++dy)
+            for(int dx=-radius;dx<=radius;++dx) {
+                const Coord at(from.x+dx,from.y+dy);
+                if(!currentGameMap->tileExists(at)) continue;
+                auto* tile=currentGameMap->getTile(at);
+                if(tile->hasAGroundObject() || tile->isMountain()) continue;
+                if(auto* unit=owner->placeUnit(Unit_Quad,at.x,at.y,true)) return unit;
+            }
+    return nullptr;
+}
+
 /// Finds free ground near a house's existing buildings and plants one there, so the fixture
 /// never has to skip a check for want of a building of the right kind.
 StructureBase* seedStructure(House* owner, Uint32 itemID) {
@@ -146,6 +161,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
 
     const auto houses = housesWithControllers(game);
     require(houses.size() >= 2, "Fixture needs at least two controlled houses");
+    if(std::getenv("SPECTATOR_EIGHT_HOUSES"))
+        require(houses.size() == 8, "The eight-house observer lost a faction, including Neutral");
     int controllers = 0;
     for(House* house : houses)
         for(const auto& player : house->getPlayerList()) {
@@ -193,8 +210,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         require(seedStructure(owner, Structure_LightFactory) != nullptr,
                 "Could not seed a factory for the production panel check");
     }
-    require(second->createUnit(Unit_Quad, true) != nullptr, "Could not seed a unit for order checks");
-    require(first->createUnit(Unit_Quad, true) != nullptr, "Could not seed a view-house unit");
+    require(seedGroundUnit(second) != nullptr, "Could not deploy a unit for order checks");
+    require(seedGroundUnit(first) != nullptr, "Could not deploy a view-house unit");
     advance(game, 20);
 
     // ------------------------------------------------- cycles advance, no observer defeat
@@ -234,6 +251,7 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         UnitBase* victim = nullptr;
         for(UnitBase* candidate : unitList)
             if(candidate->getOwner() == pLocalHouse && candidate->isAGroundUnit()
+               && candidate->isActive() && currentGameMap->tileExists(candidate->getLocation())
                && candidate->getItemID() != Unit_Sandworm) { victim = candidate; break; }
         if(victim != nullptr) {
             const Coord where = victim->getLocation();
@@ -998,12 +1016,23 @@ int runSpectatorProbeMain() {
         std::getenv("SPECTATOR_SEED") ? std::getenv("SPECTATOR_SEED") : "20260817", nullptr, 10));
     const bool ordinary = std::getenv("SPECTATOR_ORDINARY_ROUND_TRIP") != nullptr;
 
-    GameInitSettings init(mapPath, contents, false, settings.gameOptions);
+    GameInitSettings init(mapPath, contents, std::getenv("SPECTATOR_SHARED_HOUSE") != nullptr,
+                          settings.gameOptions);
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Two real factions, both AI when observing, so no faction or start position is consumed.
     const HOUSETYPE firstHouse = HOUSE_ATREIDES;
     const HOUSETYPE secondHouse = HOUSE_HARKONNEN;
-    {
+    if(std::getenv("SPECTATOR_EIGHT_HOUSES")) {
+        for(int id=0;id<8;++id) {
+            GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(id),id+1);
+            // Matching an AI's name used to create an invalid local human pair
+            // while preplaced worms were still being loaded.
+            info.addPlayerInfo({id==0 ? settings.general.playerName
+                                     : getHouseNameByNumber(static_cast<HOUSETYPE>(id)),
+                                "qBotBrutal"});
+            init.addHouseInfo(info);
+        }
+    } else {
         GameInitSettings::HouseInfo one(firstHouse, 1);
         one.addPlayerInfo({ordinary ? settings.general.playerName
                                     : getHouseNameByNumber(firstHouse),
