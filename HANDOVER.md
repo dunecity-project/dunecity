@@ -42,10 +42,32 @@ pre/post Ninja dependency audits and diff checks pass. All 76 native CTest targe
 Ornithopter engine probes in Vanilla, DuneCity and Dune2R.
 Protocol advances 62 -> 63 for synchronized AI decisions; telemetry policy is
 `ornithopter-local-launcher-priority-v91`, with local wing/cover and escort fields.
-Save version remains 9853. Nothing pushed, published or installed on the MBA.
+Save version remains 9853. Nothing pushed or publicly published.
 The rebuilt app is `build/bin/dunecity.app` in this checkout. Evidence and the
 bounded Claude reports are in `../outputs/ornithopter-ai-20261009/`.
 Duplicate worker probe apps were removed after retaining their logs (98 MB).
+
+MBA installation completed at 2026-10-09 09:39:41 UTC from implementation
+commit `b59f07f9c579cb795c0d11ec5aaf98f99d165b77`. A fresh CMake install made
+the portable ARM64 app; all 36 Mach-O dependency sets use portable/system
+paths. The native and packaged executable code/string sections match, all
+3,515 native resource files match the package, and original aircraft art and
+72 bundled scenarios match source. Deep/strict signatures and bundled SDL
+initialization/hidden rendering passed locally, staged, installed and through
+an independent fresh SSH read-back on `Stefans-MacBook-Air.local`.
+All 3,650 installed files/symlinks match the candidate. Installed executable
+SHA-256: `ba33262e388666cebd4cc65387a0ba70e4a0bdbd7375fcbee64d0cd223935264`.
+The installer retained the byte-identical 1.0.822 app at
+`/Applications/.dunecity-backup-before-1.0.823-20261009-203934/dunecity.app`.
+The Desktop shortcut resolves to `/Applications/dunecity.app`. All 2,770
+save/settings/map/replay and configuration files selected by the receipt's
+suffix list have unchanged hashes, and all 29,559 profile file/symlink entries
+have unchanged metadata. Bulk telemetry uses the metadata comparison rather
+than a full 30 GB content hash. No running game was interrupted; runtime
+checks bypass the user profile. Receipts, package, Claude's bounded read-only
+installer audit and independent verification belong in
+`../outputs/ornithopter-install-823-20261009/`. Protocol 63 requires matching
+multiplayer peers; this installation did not publish a public release.
 
 ## 2026-10-09 — local 1.0.822: airplane map exits
 
