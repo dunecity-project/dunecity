@@ -89,8 +89,13 @@ covers all eleven bundled scenarios at 640, 854 and 1280 pixels.
 
 The packaged maps and sidecars are byte-identical to the source copies. A
 map-only incremental build dependency now reruns bundle packaging. Browser
-payload checker regressions pass; a production browser build was not run for
-this content change. Release 1.0.820 is prepared locally, with no publication.
+payload checker regressions pass. Release 1.0.820 was published on 2026-10-09
+from tag v1.0.820 (8ed2e69c). Stable CI 37877452294 passed all platforms,
+Apple notarization and updater signing. Published Mac ZIP maps and metadata
+are byte-identical to these source files. The exact stable browser artifact
+passed its content audit and was deployed by website run 37878733753; the live
+manifest and all eight artifact hashes match the release. SourceForge run
+37878677986 verified readback hashes, source refs and all three OS defaults.
 
 Detailed conversion and installation receipts are under
 `../outputs/scenario-promotion-20261009/`. The actual save reload and scenario

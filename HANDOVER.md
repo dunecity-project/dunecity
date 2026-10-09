@@ -1,3 +1,46 @@
+## 2026-10-09 — 1.0.820 published to production
+
+PR 91 merged as 8ed2e69cc6e3165d7bed7afbbd3057cf8a3e0276 and immutable
+v1.0.820 points to that source. Main CI 37876040549 passed on retry 2; stable
+CI 37877452294 passed every platform, tests, Apple notarization and updater
+signing. The initial self-hosted npm certificate failure was repaired by using
+its existing /etc/ssl/cert.pem trust store (strict SSL remains enabled); no
+release source or security check was bypassed.
+
+All 13 public GitHub asset sizes/hashes, three Ed25519 updater manifests and two
+appcasts were independently verified against the existing trust key. The public
+Mac DMG passes deep/strict signatures, portable-library and hidden rendering
+checks, stapled notarization validation and Gatekeeper (Notarized Developer ID).
+The published Mac ZIP contains all 11 authored scenarios and sidecars byte for
+byte. SourceForge run 37878677986 verified seven packages plus notes/checksums,
+readback hashes, source refs and three OS defaults; anonymous public defaults,
+asset sizes and source refs independently match the tagged source.
+
+Exact stable browser artifact 11593556027 passed the content audit (12 city maps,
+11 metadata sidecars, 69,058,707 data bytes). Website 57bef0a was deployed by
+run 37878733753; security run 37878733621 passed. Live build.json reports 1.0.820
+and the exact tag source, all 8 artifact hashes match, both download pages have
+current release copy/links, and public P2P health is status=ok/protocol=1. Only
+the redundant browser rebuild 37878678083 was cancelled after the exact artifact
+was available. Signaling code and browser shell remain unchanged from 1.0.816;
+only service provenance advances. Existing server state/configuration survive.
+
+Private matches on the public signaling service cover spectator promotion
+among three native peers and a four-participant room with two native players,
+one browser player and one browser spectator. The browser stayed spectating after decline,
+retried successfully, entered normal play and continued without page errors;
+both native peers had identical post-promotion digests. A second browser
+received the live checkpoint and inspected a foreign building. Candidate
+browser 3waysplit startup passed with Shared house off and all three cities
+visible. Fresh production rendering and scenario/display checks are recorded
+under ../outputs/release-820/ with all publication and verification receipts.
+
+This production task does not replace the MBA app or touch its user profile.
+The last verified MBA installation was 1.0.819; the signed public 1.0.820
+release is now available through its updater. Its
+previous 3waysplit user-map installation remains separate from the now-global
+scenario. Save 9852 and protocol 60 are unchanged from the candidate.
+
 ## 2026-10-09 — 1.0.820: global user scenarios and 3waysplit conversion
 
 All eleven authored single-player scenarios are bundled, including six missing
