@@ -774,6 +774,160 @@ void runWholeArmyDispatchProbe(Game& game) {
             bot->localSquadWithdraw=false;
         }
 
+        // ---- Launchers in the waves, and the rescue handing them back -------
+        //
+        // "Launchers are never in the attack waves" has no type exclusion
+        // behind it: launchGroundHunt() filters on ownership, health, activity,
+        // human orders, workers, saboteurs and sandworms, and launchers are
+        // none of those. The one mechanism that claims them specifically is the
+        // anti-air rescue, which sorts launchers first. So the contract is:
+        // every free launcher is dispatched; a launcher on a LIVE air contact
+        // is withheld; and when that contact dies or breaks off the launcher is
+        // released and joins the next wave. The ground_hunt record reports each
+        // of those populations so a live match no longer needs inference.
+        {
+            bot->defenceAssignments.clear();
+            bot->defenceResponseCycles.clear();
+            bot->customWave.members.clear();
+            bot->colonyGuardSet.clear();
+            bot->colonyGuardCycle=std::numeric_limits<Uint32>::max();
+            bot->manualUnitOrders.clear();
+            bot->localSquadWithdraw=false;
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            bot->attackTimer=0;
+            getQuantBotConfig().recovery.enabled=false;
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->militaryValueLimit=1;
+
+            // Launchers far enough from the colony that answering the rescue is
+            // a journey: a defender that can already shoot is not what empties
+            // a wave, so the bound is about the ones that have to march.
+            std::vector<UnitBase*> guns;
+            for(int i=0;i<6;++i) guns.push_back(spawn(owner,Unit_Launcher,Coord(38+i%3,4+i/3)));
+            auto* colony=place(owner,Structure_ConstructionYard,Coord(16,12));
+            require(colony,"Launcher handoff fixture could not place its colony");
+            auto* raider=spawn(enemy,Unit_Ornithopter,Coord(14,12));
+            // A whole wing on one building is what 1.0.823 actually sends, and
+            // it is what multiplied a per-building bound by the wing size.
+            auto* wingman=spawn(enemy,Unit_Ornithopter,Coord(14,16));
+            publish();
+            auto rearm=[&] {
+                bot->customWave.members.clear();
+                for(auto* unit:roster) {
+                    if(unit->getOwner()!=owner || unit->isAFlyingUnit()) continue;
+                    unit->setHealth(unit->getMaxHealth());
+                    bot->doSetAttackMode(unit,GUARD);
+                    bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                    unit->setForced(false);
+                }
+                bot->manualUnitOrders.clear();
+            };
+            auto hunting=[&] {
+                int n=0;for(auto* gun:guns) if(gun->getAttackMode()==HUNT) ++n;return n;
+            };
+            auto assigned=[&] {
+                int n=0;
+                for(auto* gun:guns) if(bot->defenceAssignments.count(gun->getObjectID())) ++n;
+                return n;
+            };
+
+            // 1. No live air contact: every launcher goes with the wave.
+            raider->setHealth(0);wingman->setHealth(0);
+            rearm();
+            bot->launchGroundHunt();
+            require(hunting()==int(guns.size()),
+                "A whole-army dispatch left launchers out of the wave");
+
+            // 2. A whole wing on one building we own claims launchers, and the
+            //    claim stays inside the documented per-building bound instead of
+            //    being multiplied by the number of aircraft in the wing. The
+            //    dispatch then withholds exactly the claimed launchers.
+            rearm();
+            auto hover=[&](UnitBase* bird,Coord at) {
+                bird->setLocation(origin+at);
+                bird->setHealth(bird->getMaxHealth());
+                bird->doSetAttackMode(AREAGUARD);
+                bird->doAttackObject(colony,true);
+                require(bird->getTarget()==colony,"Launcher handoff fixture raider is not attacking");
+            };
+            hover(raider,Coord(14,12));
+            hover(wingman,Coord(14,16));
+            for(auto* gun:guns)
+                require(!gun->isInWeaponRange(raider) && !gun->isInWeaponRange(wingman),
+                    "The rescue fixture launchers can already shoot, so no journey is bounded");
+            bot->defendStructuresFromAircraft();
+            const int claimed=assigned();
+            SDL_Log("WHOLE_ARMY_DIAG: wing of 2 on one building claimed %d of %zu launchers "
+                "(bound %d, journey %d tiles)",claimed,guns.size(),
+                QuantBot::kAirRescueDefenders,range(guns.front(),colony));
+            require(claimed>0,"The rescue never claimed a launcher for a live air attack");
+            require(claimed<=QuantBot::kAirRescueDefenders,
+                "One attacked building claimed more travelling anti-air responders than its bound");
+            require(claimed<int(guns.size()),
+                "The anti-air rescue claimed every launcher the house owned");
+            // An older aircraft can join a contact already owned by a newer
+            // one. Count those existing journeys before processing ID order.
+            bot->defenceAssignments.clear();rearm();
+            raider->setHealth(0);
+            bot->defendStructuresFromAircraft();
+            require(assigned()==QuantBot::kAirRescueDefenders,
+                "The later-ID aircraft did not establish its rescue");
+            const auto continuingAssignments=bot->defenceAssignments;
+            hover(raider,Coord(14,12));
+            bot->defendStructuresFromAircraft();
+            require(assigned()==QuantBot::kAirRescueDefenders,
+                "An earlier-ID new contact multiplied an existing building rescue");
+            require(bot->defenceAssignments==continuingAssignments,
+                "A new contact restarted travelling defenders");
+            for(auto* gun:guns)
+                if(bot->defenceAssignments.count(gun->getObjectID()))
+                    require(bot->activeDefenceAssignment(gun),
+                        "A launcher was claimed by a contact that is not live");
+            bot->launchGroundHunt();
+            for(auto* gun:guns)
+                require((gun->getAttackMode()==HUNT)
+                        !=bool(bot->activeDefenceAssignment(gun)),
+                    "A launcher was both withheld for air defence and dispatched, or neither");
+
+            // 3. The aircraft dies: the claim is released and the launcher is
+            //    back in the next wave. This is the handoff the complaint is
+            //    about - a rescue that never ends keeps the launchers forever.
+            raider->setHealth(0);wingman->setHealth(0);
+            bot->checkAllUnits();
+            require(assigned()==0,"A dead aircraft kept its anti-air claim on the launchers");
+            rearm();
+            bot->launchGroundHunt();
+            require(hunting()==int(guns.size()),
+                "Launchers released by a finished rescue did not rejoin the wave");
+
+            // 4. The same handoff when the aircraft merely breaks off: it is
+            //    alive and visible but no longer attacking anything of ours and
+            //    out of every launcher's reach.
+            rearm();
+            hover(raider,Coord(14,12));
+            bot->defendStructuresFromAircraft();
+            require(assigned()>0,"The break-off fixture never claimed a launcher");
+            raider->setLocation(origin+Coord(44,24));
+            bot->doSetAttackMode(raider,STOP);
+            raider->setTarget(nullptr);
+            for(auto* gun:guns)
+                require(!gun->isInWeaponRange(raider),
+                    "The break-off fixture aircraft is still within a launcher's reach");
+            bot->checkAllUnits();
+            require(assigned()==0,"A disengaged aircraft kept its anti-air claim");
+            rearm();
+            bot->launchGroundHunt();
+            require(hunting()==int(guns.size()),
+                "Launchers released by a disengaged aircraft did not rejoin the wave");
+
+            raider->setHealth(0);wingman->setHealth(0);
+            for(auto* gun:guns) retire(gun);
+            if(colony->getHealth()>0) colony->setHealth(0);
+            bot->defenceAssignments.clear();
+            bot->customWave.members.clear();
+            getQuantBotConfig().recovery.enabled=true;
+        }
+
         // ---- Easy, Medium and campaign behaviour are untouched --------------
         {
             bot->defenceAssignments.clear();

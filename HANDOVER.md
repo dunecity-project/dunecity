@@ -1,3 +1,67 @@
+## 2026-10-09 — local 1.0.824: target-search cost, worker veto and launcher rescue cap
+
+The completed MBA 1.0.823 Twin Cities match `1791540101576215-0`
+(seed 640734567, 256x256, cutoff 165339) imports 56,570 events into SQLite,
+quick-check OK, with one `game_summary` and `session_end`. It ended by user
+quit. There were 3,981 harvester strike decisions, not confirmed kills.
+A native sample attributed 1,436 of 3,357 main-thread samples (42.8%) to
+`UnitBase::targeting -> ObjectBase::findTarget`. The latest 145.695 seconds
+of performance windows attributed 53.66% of wall time to `frame.units`,
+versus 0.70% to `ai.ornithopter_safe_strikes` (worst pass 2.59 ms).
+
+All three shared target searches now visit ordered ring perimeters directly;
+the old loops traversed every ring's square and discarded its interior.
+Codex's old/new oracle matches exact traversal order in 1,548 cases through
+radius 128, including clipped rectangular boundaries. A 64-ring walk drops
+from 349,504 square-loop checks to 16,129 perimeter positions. The real-engine
+empty 128x128 Hunt probe performs 68,993 visits versus a closed-form old-loop
+count of 2,839,839 (41.2x fewer). A failed refresh while retaining a distant
+target now waits one second instead of repeating every simulation cycle:
+2 searches over the probe's 60 cycles instead of 60. Air-strike approach checks
+only run when a candidate can change the winner, and launcher score/range
+lookups are computed once per planner pass. Synchronous per-search Ornithopter
+file logging is removed. These are workload results, not a live FPS claim.
+
+Enemy Harvester and RebelHarvester units are excluded from autonomous air
+selection at every rank, engine reacquisition, retained orders and firing.
+Explicit human orders retain authority. In shared HumanPlayer/QuantBot houses,
+the existing saved human-order lease distinguishes manual orders from stale
+forced AI orders; the latter are released before any shot without waiting for
+the planner. No object layout, save format or RNG changes.
+
+Launchers were eligible for ground waves already. The final match recorded
+11 Harkonnen waves and one Atreides wave; Atreides remained in recovery until
+cycle 162904 and dispatched 229 units at 163704. Live air-defense assignments
+keep launchers out of an offensive wave. The rescue cap incorrectly applied
+three travelling responders per aircraft rather than per attacked building,
+so a wing could monopolize launchers. The cap now counts across contacts,
+including existing journeys before processing new contacts. Existing rescue
+orders stay stable; defenders already able to fire remain available for local
+AA fire. Launchers rejoin a wave after death or break-off ends their contact.
+Ground-wave logs now report launcher dispatch, availability, defense holds,
+already hunting and unavailable counts. Air-rescue logs expose the building's
+travelling-defender count and cap.
+
+| Property | Enforcement | Verification |
+| --- | --- | --- |
+| Search cost and target ties remain bounded | Ordered ring visitor; failed-search cooldown | Exact-order oracle; dense 64x64 hunter/prey and empty-map workload probes in three mods |
+| AI aircraft do not attack workers | Planner/search filters plus execution guard using human leases | All flight modes; 900 cycles with stale orders; explicit human damage |
+| One building does not claim a wing's worth of launchers | Shared victim cap, pre-counted continuing journeys | Two-aircraft cap; lower-ID arriving contact regression; preserved assignments |
+| Available launchers go with attack waves | Existing whole-army dispatch; ended-defense release | Launcher dispatch and death/break-off handoff probes |
+
+Claude implemented the bounded patch. Codex's independent shared-house worker
+and newly arriving rescue-contact regressions both failed on the initial patch,
+then passed after integration corrections. Pre/post Ninja dependency audits,
+version consistency and diff checks pass. The native and portable ARM64 game
+code/string sections match, and each runtime's initialization/rendering passes.
+All 76 final native CTests pass in 1020.71 seconds, including the three-mod
+worker veto, target-search workload, recovery, whole-army dispatch and launcher
+kiting checks. MBA installation: pending.
+Protocol advances 63 -> 64 for changed synchronized decisions; policy is
+`ornithopter-worker-veto-target-search-v92`. Save version remains 9853.
+Evidence: `../outputs/ornithopter-perf-824-20261009/`; private bundle/receipts:
+`../outputs/ornithopter-install-824-20261009/`. Nothing pushed or published.
+
 ## 2026-10-09 — local 1.0.823: Ornithopter unit raids and launcher priority
 
 The ended MBA Twin Cities session `1791533979427273-0` (seed 391527621,

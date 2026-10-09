@@ -1,5 +1,6 @@
 // Real target selection with a tempting raid and simultaneous home/worker threat.
 #include <players/AirStrikePolicy.h>
+#include <units/Ornithopter.h>
 
 void runAirDefenseProbe(Game& game) {
     auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
@@ -393,6 +394,109 @@ void runAirDefenseProbe(Game& game) {
             bot->doSetAttackMode(flyer(),STOP);strike();
             require(flyer()->getTarget()==nullptr,
                 "A large wing entered Deviator cover, which converts whatever it hits");
+
+            // === Enemy workers are never an autonomous air target ===
+            // Raiding roaming ground units made harvesters prey as well, which
+            // is not a raid anyone asked for. The veto is absolute for an
+            // aircraft nobody is flying by hand: no selection at any rank, no
+            // stale order kept, no reacquisition below the planner, and no shot.
+            unitList.remove(deviator);deviator->setVisible(VIS_ALL,false);
+            bot->manualUnitOrders.clear();
+            auto* worker1=spawn(enemy,Unit_Harvester,Coord(13,20));
+            UnitBase* worker2=nullptr;
+            if(!isTornieExclusiveItem(Unit_RebelHarvester)
+                || ModManager::instance().isTornieContentActive())
+                worker2=spawn(enemy,Unit_RebelHarvester,Coord(15,22));
+            auto withWorkers=[&](int count) {
+                unitList.clear();unitList.push_back(worker1);
+                if(worker2) unitList.push_back(worker2);
+                for(int i=0;i<count;++i) unitList.push_back(fleet[i]);
+            };
+            auto notAWorker=[&](const char* why) {
+                require(flyer()->getTarget()!=worker1 && (!worker2 || flyer()->getTarget()!=worker2),why);
+            };
+            // An exposed worker with nothing else around is simply not a target.
+            withWorkers(1);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==nullptr,"An ordinary raid selected an exposed enemy harvester");
+            // The same pass still raids an ordinary combat unit beside it, so
+            // this is a worker veto and not a disabled raid.
+            withWorkers(1);unitList.push_back(prey);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==prey,"The control tank beside the workers was not raided");
+            notAWorker("The raid chose a worker over the exposed tank next to it");
+            // Escorts first still holds, and the worker under the escort is
+            // still not what gets hit.
+            escortA->setVisible(owner->getTeamID(),true);
+            withWorkers(4);unitList.push_back(escortA);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==escortA,
+                "A wing at the ratio did not take the launcher escorting the workers");
+            notAWorker("A wing at the ratio raided a worker under launcher escort");
+            escortA->setVisible(VIS_ALL,false);
+            // A retained order - an older build's, or one restored from a save -
+            // is dropped by the planner rather than flown out.
+            withWorkers(1);
+            bot->doSetAttackMode(flyer(),STOP);bot->doAttackObject(flyer(),worker1,true);
+            require(flyer()->getTarget()==worker1,"The stale-order fixture could not set its order");
+            require(static_cast<Ornithopter*>(flyer())->isVetoedAutonomousPrey(worker1),
+                "A shared-house AI worker order bypassed the execution veto");
+            const FixPoint staleWorkerHealth=worker1->getHealth();
+            for(int step=0;step<900;++step) {game.processObjects();++game.gameCycleCount;}
+            notAWorker("A shared-house stale AI worker order survived without a planner pass");
+            require(worker1->getHealth()>=staleWorkerHealth,
+                "A shared-house stale AI worker order fired before the planner pass");
+            strike();
+            notAWorker("A stale worker order survived the air planner");
+            // Real frames from the dropped state: the engine's own
+            // reacquisition must not put the worker back, and nothing fires.
+            const FixPoint worker1Full=worker1->getHealth();
+            const FixPoint worker2Full=worker2 ? worker2->getHealth() : FixPoint(0);
+            auto workersUnhurt=[&](const char* why) {
+                require(worker1->getHealth()>=worker1Full
+                        && (!worker2 || worker2->getHealth()>=worker2Full),why);
+            };
+            for(auto mode:{STOP,GUARD,AREAGUARD,AMBUSH,HUNT}) {
+                bot->doSetAttackMode(flyer(),mode);
+                require(flyer()->findTarget()!=worker1
+                        && (!worker2 || flyer()->findTarget()!=worker2),
+                    "An autonomous ornithopter search returned an enemy harvester");
+                for(int step=0;step<300;++step) {game.processObjects();++game.gameCycleCount;}
+                workersUnhurt("An autonomously flown ornithopter shot an enemy harvester");
+                notAWorker("Autonomous reacquisition below the planner picked an enemy harvester");
+            }
+            bot->doSetAttackMode(flyer(),STOP);
+
+            // An actual human order in the shared house keeps its authority.
+            bot->onHumanUnitOrder(flyer()->getObjectID());
+            bot->doAttackObject(flyer(),worker1,true);
+            require(!static_cast<Ornithopter*>(flyer())->isVetoedAutonomousPrey(worker1),
+                "A human order in a shared house was classified as autonomous");
+            bool manualHit=false;
+            const FixPoint manualWorkerHealth=worker1->getHealth();
+            for(int step=0;step<4000 && !manualHit;++step) {
+                game.processObjects();++game.gameCycleCount;
+                manualHit=worker1->getHealth()<manualWorkerHealth;
+            }
+            require(manualHit,"A human-ordered shared-house aircraft never damaged its target");
+            bot->doSetAttackMode(flyer(),STOP);bot->manualUnitOrders.clear();
+
+            // A house with no human operator also drops stale orders without a
+            // planner pass. Our own harvester is the enemy bot's worker target.
+            auto* aiBird=spawn(enemy,Unit_Ornithopter,Coord(13,16));
+            unitList.clear();unitList.push_back(aiBird);unitList.push_back(worker);
+            worker->setVisible(enemy->getTeamID(),true);
+            aiBird->doSetAttackMode(STOP);aiBird->doAttackObject(worker,true);
+            const FixPoint ourWorkerFull=worker->getHealth();
+            for(int step=0;step<900;++step) {game.processObjects();++game.gameCycleCount;}
+            require(aiBird->getTarget()!=worker,
+                "An aircraft of a house with no human operator kept a worker target");
+            require(worker->getHealth()>=ourWorkerFull,
+                "An aircraft of a house with no human operator shot a harvester");
+            aiBird->doSetAttackMode(STOP);aiBird->setVisible(VIS_ALL,false);
+            aiBird->setHealth(0);
+            worker1->setVisible(VIS_ALL,false);
+            if(worker2) worker2->setVisible(VIS_ALL,false);
 
             unitList=outerUnits;structureList=outerStructures;
             bot->manualUnitOrders.clear();

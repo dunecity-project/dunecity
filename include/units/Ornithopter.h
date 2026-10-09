@@ -41,12 +41,19 @@ public:
 
     const ObjectBase* findTarget() const override;
 
+    /// Whether this hull must never hold \a candidate as an autonomous target.
+    /// Explicit human orders are unaffected, including in shared houses.
+    bool isVetoedAutonomousPrey(const ObjectBase* candidate) const;
+
 protected:
     virtual FixPoint getDestinationAngle() const override;
 
     virtual bool attack() override;
 
 private:
+    /// Releases a retained target the worker veto forbids. No saved state.
+    void dropVetoedAutonomousPrey();
+
     Uint32 timeLastShot;
 };
 

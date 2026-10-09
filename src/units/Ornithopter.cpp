@@ -26,15 +26,11 @@
 #include <SoundPlayer.h>
 #include <structures/StructureBase.h>
 #include <players/QuantBotConfig.h>
+#include <players/QuantBot.h>
+#include <units/HarvesterHelpers.h>
 #include <sand.h>
 #include <Definitions.h>
 
-#include <fstream>
-#include <mutex>
-#include <sstream>
-#include <ctime>
-#include <iomanip>
-#include <chrono>
 #include <iterator>
 
 #define ORNITHOPTER_FRAMETIME 3
@@ -53,65 +49,6 @@ bool isHumanControlledHouse(const House* house) {
     }
 
     return false;
-}
-
-void appendOrnithopterHuntLog(const std::string& message) {
-    static std::mutex logMutex;
-    static std::once_flag initFlag;
-    static std::string logPath;
-
-    // Lazily determine log file location and clear it once per run.
-    auto initLogPath = []() {
-        std::string configPath = getQuantBotConfigFilepath();
-        if(configPath.empty()) {
-            return std::string();
-        }
-
-        // Get the directory containing the config folder, not the config folder itself
-        const std::string::size_type slashPos = configPath.find_last_of("/\\");
-        if(slashPos == std::string::npos) {
-            return std::string();
-        }
-        std::string directory = configPath.substr(0, slashPos);
-        
-        // Get parent directory (one level up from config/)
-        const std::string::size_type parentSlashPos = directory.find_last_of("/\\");
-        if(parentSlashPos != std::string::npos) {
-            directory = directory.substr(0, parentSlashPos);
-        }
-        
-        std::string path = directory + "/ornithopter-hunt.log";
-
-        std::ofstream clearStream(path, std::ios::trunc);
-        if(clearStream) {
-            auto now = std::chrono::system_clock::now();
-            std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
-            clearStream << "=== Ornithopter hunt diagnostics started "
-                        << std::put_time(std::localtime(&nowTime), "%Y-%m-%d %H:%M:%S")
-                        << " ===\n";
-        }
-
-        return path;
-    };
-
-    std::call_once(initFlag, [&]() { logPath = initLogPath(); });
-
-    if(logPath.empty() || message.empty()) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> guard(logMutex);
-    std::ofstream stream(logPath, std::ios::app);
-    if(!stream) {
-        return;
-    }
-
-    auto now = std::chrono::system_clock::now();
-    std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
-
-    stream << std::put_time(std::localtime(&nowTime), "%H:%M:%S")
-           << " [cycle " << (currentGame ? currentGame->getGameCycleCount() : 0) << "] "
-           << message << '\n';
 }
 
 } // namespace
@@ -146,12 +83,6 @@ void Ornithopter::init() {
     bulletType = Bullet_SmallRocket;
 
     currentMaxSpeed = currentGame->objectData.data[itemID][originalHouseID].maxspeed;
-
-    static bool loggedInit = false;
-    if(!loggedInit) {
-        appendOrnithopterHuntLog("Ornithopter hunt logger initialized");
-        loggedInit = true;
-    }
 }
 
 Ornithopter::~Ornithopter() = default;
@@ -163,7 +94,27 @@ void Ornithopter::save(OutputStream& stream) const
     stream.writeUint32(timeLastShot);
 }
 
+bool Ornithopter::isVetoedAutonomousPrey(const ObjectBase* candidate) const {
+    if(!isHarvesterLikeObject(candidate)) return false;
+    if(!isHumanControlledHouse(owner)) return true;
+    // AI do* helpers bypass human command leases. A human in the same house
+    // therefore does not authorize a stale AI order; an actual player order
+    // does, including one restored with the existing saved lease.
+    for(const auto& player : owner->getPlayerList())
+        if(const auto* bot=dynamic_cast<const QuantBot*>(player.get());
+            bot && bot->managesAutonomousOrnithopter(this)) return true;
+    return false;
+}
+
+void Ornithopter::dropVetoedAutonomousPrey() {
+    if(target && isVetoedAutonomousPrey(target.getObjPointer())) {
+        releaseTarget();
+    }
+}
+
 void Ornithopter::checkPos() {
+    dropVetoedAutonomousPrey();
+
     AirUnit::checkPos();
 
     if(!target) {
@@ -220,6 +171,14 @@ FixPoint Ornithopter::getDestinationAngle() const {
 }
 
 bool Ornithopter::attack() {
+    // Last line of the worker veto: no shot is fired at a harvester an
+    // autonomously flown aircraft should never have been holding, even for the
+    // single cycle between acquiring it and the next position update.
+    if(target && isVetoedAutonomousPrey(target.getObjPointer())) {
+        releaseTarget();
+        return false;
+    }
+
     bool bAttacked = AirUnit::attack();
 
     if(bAttacked) {
@@ -229,10 +188,8 @@ bool Ornithopter::attack() {
 }
 
 const ObjectBase* Ornithopter::findTarget() const {
-    appendOrnithopterHuntLog("Ornithopter::findTarget() CALLED - this function IS running");
     const ATTACKMODE mode = getAttackMode();
     if(mode != HUNT || !isHumanControlledHouse(owner)) {
-        appendOrnithopterHuntLog("Skipping QuantBot path - mode or house check");
         return ObjectBase::findTarget();
     }
 
@@ -241,12 +198,15 @@ const ObjectBase* Ornithopter::findTarget() const {
 
     const ObjectBase* bestTarget = nullptr;
     double bestScore = -1.0;
-    int evaluatedStructures = 0;
-    int evaluatedUnits = 0;
-    int viableCandidates = 0;
 
-    auto evaluateCandidate = [&](const ObjectBase* candidate, const QuantBotConfig::TargetPriority& priority, bool isStructure) {
+    auto evaluateCandidate = [&](const ObjectBase* candidate, const QuantBotConfig::TargetPriority& priority) {
         if(candidate == nullptr || !candidate->isActive()) {
+            return;
+        }
+
+        // Autonomous acquisition never picks a worker, matching the veto the
+        // shared searches in ObjectBase::findTarget() apply to this hull.
+        if(isHarvesterLikeObject(candidate)) {
             return;
         }
 
@@ -267,47 +227,26 @@ const ObjectBase* Ornithopter::findTarget() const {
         FixPoint dist = blockDistance(getLocation(), candidate->getLocation());
         const double score = static_cast<double>(weight) / (dist.toDouble() + 1.0);
 
-        viableCandidates++;
         if(score > bestScore) {
             bestScore = score;
             bestTarget = candidate;
         }
-
-        if(isStructure) {
-            evaluatedStructures++;
-        } else {
-            evaluatedUnits++;
-        }
     };
 
     for(const StructureBase* pStructure : structureList) {
-        evaluateCandidate(pStructure, config.getStructurePriority(pStructure->getItemID()), true);
+        evaluateCandidate(pStructure, config.getStructurePriority(pStructure->getItemID()));
     }
 
     for(const UnitBase* pUnit : unitList) {
         if(pUnit->getOwner() == owner) {
             continue;
         }
-        evaluateCandidate(pUnit, config.getUnitPriority(pUnit->getItemID()), false);
+        evaluateCandidate(pUnit, config.getUnitPriority(pUnit->getItemID()));
     }
 
     if(bestTarget != nullptr) {
-        std::ostringstream stream;
-        stream << "Acquired target objectId=" << bestTarget->getObjectID()
-               << " itemID=" << bestTarget->getItemID()
-               << " score=" << std::fixed << std::setprecision(3) << bestScore
-               << " scanned(structures=" << evaluatedStructures
-               << ", units=" << evaluatedUnits
-               << ", viable=" << viableCandidates << ')';
-        appendOrnithopterHuntLog(stream.str());
         return bestTarget;
     }
-
-    std::ostringstream stream;
-    stream << "No viable target found. Scanned structures=" << evaluatedStructures
-           << " units=" << evaluatedUnits
-           << " viableCandidates=" << viableCandidates;
-    appendOrnithopterHuntLog(stream.str());
 
     return ObjectBase::findTarget();
 }

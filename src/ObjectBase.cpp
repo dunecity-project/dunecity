@@ -486,7 +486,47 @@ Uint32 ObjectBase::getHealthColor() const {
     }
 }
 
+ObjectBase::TargetSearchStats ObjectBase::targetSearchStats{};
+
 namespace {
+
+// Ordered ring walk. Every search below used to loop the whole (2r+1)^2 square
+// and discard the interior with a max(|dx|,|dy|)!=r test, which made a pure
+// perimeter traversal cubic in the search radius: a Hunt across a 256x256 map
+// is 64 grid rings, so 349504 cell tests to inspect 16129 cells. This visits
+// exactly the same cells in exactly the same x-then-y order in O(r) per ring,
+// so candidate order - and therefore every tie - is unchanged.
+template<typename Visit>
+void forEachRingOffset(int ring, Visit visit) {
+    if(ring <= 0) {
+        visit(0, 0);
+        return;
+    }
+
+    for(int dx = -ring; dx <= ring; ++dx) {
+        if(dx == -ring || dx == ring) {
+            // The two end columns are solid: every dy is on the perimeter.
+            for(int dy = -ring; dy <= ring; ++dy) {
+                visit(dx, dy);
+            }
+        } else {
+            visit(dx, -ring);
+            visit(dx, ring);
+        }
+    }
+}
+
+// Workers are never prey for an autonomous aircraft search. Enforced at the
+// search, which is the autonomous source: an explicit attack order does not
+// come through here, so manual control keeps targeting whatever it likes.
+bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candidate) {
+    if(seeker.getItemID() != Unit_Ornithopter) {
+        return false;
+    }
+
+    const int item = candidate.getItemID();
+    return item == Unit_Harvester || item == Unit_RebelHarvester;
+}
 
 // 0 = normal, 1 = walls (slightly deprioritized), 2 = carryalls (heavily deprioritized)
 int getTargetDeprioritizationLevel(const ObjectBase& candidate) {
@@ -525,37 +565,34 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
     FixPoint bestDistance = FixPt_MAX;
 
     for(int radius = 1; radius <= maxRadius; ++radius) {
-        for(int dx = -radius; dx <= radius; ++dx) {
-            for(int dy = -radius; dy <= radius; ++dy) {
-                if(std::abs(dx) != radius && std::abs(dy) != radius) {
-                    continue;
-                }
+        forEachRingOffset(radius, [&](int dx, int dy) {
+            const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
+            ++ObjectBase::targetSearchStats.cellsVisited;
+            if(!currentGameMap->tileExists(checkCoord)) {
+                return;
+            }
 
-                const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
-                if(!currentGameMap->tileExists(checkCoord)) {
-                    continue;
-                }
+            Tile* tile = currentGameMap->getTile(checkCoord);
+            if(!tile->hasAnObject()) {
+                return;
+            }
 
-                Tile* tile = currentGameMap->getTile(checkCoord);
-                if(!tile->hasAnObject()) {
-                    continue;
-                }
+            ObjectBase* candidate = tile->getObject();
+            if(candidate != nullptr && !isAutonomousTargetVetoed(seeker, *candidate)
+                && seeker.canAttack(candidate)
+                && currentGameMap->terrainAttackReachable(seeker,*candidate)) {
+                ++ObjectBase::targetSearchStats.candidatesTested;
+                const int deprio = getTargetDeprioritizationLevel(*candidate);
+                const FixPoint dist = blockDistance(seekerLocation, checkCoord);
 
-                ObjectBase* candidate = tile->getObject();
-                if(candidate != nullptr && seeker.canAttack(candidate)
-                    && currentGameMap->terrainAttackReachable(seeker,*candidate)) {
-                    const int deprio = getTargetDeprioritizationLevel(*candidate);
-                    const FixPoint dist = blockDistance(seekerLocation, checkCoord);
-
-                    // Prefer lower deprioritization; same tier -> prefer closer
-                    if(deprio < bestDeprio || (deprio == bestDeprio && dist < bestDistance)) {
-                        bestTarget = candidate;
-                        bestDeprio = deprio;
-                        bestDistance = dist;
-                    }
+                // Prefer lower deprioritization; same tier -> prefer closer
+                if(deprio < bestDeprio || (deprio == bestDeprio && dist < bestDistance)) {
+                    bestTarget = candidate;
+                    bestDeprio = deprio;
+                    bestDistance = dist;
                 }
             }
-        }
+        });
 
         // Early exit: if we found a non-deprioritized target this ring, stop
         if(bestTarget != nullptr && bestDeprio == 0) {
@@ -584,46 +621,46 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
     auto closestDistance = FixPt_MAX;
 
     for(int ring = 0; ring <= checkRange; ++ring) {
-        for(int dx = -ring; dx <= ring; ++dx) {
-            for(int dy = -ring; dy <= ring; ++dy) {
-                if(std::abs(dx) != ring && std::abs(dy) != ring) {
-                    continue;
-                }
-
-                const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
-                if(!currentGameMap->tileExists(checkCoord)) {
-                    continue;
-                }
-
-                const FixPoint distance = blockDistance(seekerLocation, checkCoord);
-                if(distance > FixPoint(checkRange)) {
-                    continue;
-                }
-
-                Tile* tile = currentGameMap->getTile(checkCoord);
-                if(tile->hasAnObject() == false) {
-                    continue;
-                }
-
-                if(!isTileVisibleToSeeker(seeker, checkCoord)) {
-                    continue;
-                }
-
-                ObjectBase* candidate = tile->getObject();
-                if(candidate == nullptr) {
-                    continue;
-                }
-
-                if(isDeprioritizedTarget(*candidate) && closestTarget != nullptr) {
-                    continue;
-                }
-
-                if(seeker.canAttack(candidate) && distance < closestDistance) {
-                    closestTarget = candidate;
-                    closestDistance = distance;
-                }
+        forEachRingOffset(ring, [&](int dx, int dy) {
+            const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
+            ++ObjectBase::targetSearchStats.cellsVisited;
+            if(!currentGameMap->tileExists(checkCoord)) {
+                return;
             }
-        }
+
+            const FixPoint distance = blockDistance(seekerLocation, checkCoord);
+            if(distance > FixPoint(checkRange)) {
+                return;
+            }
+
+            Tile* tile = currentGameMap->getTile(checkCoord);
+            if(tile->hasAnObject() == false) {
+                return;
+            }
+
+            if(!isTileVisibleToSeeker(seeker, checkCoord)) {
+                return;
+            }
+
+            ObjectBase* candidate = tile->getObject();
+            if(candidate == nullptr) {
+                return;
+            }
+
+            if(isAutonomousTargetVetoed(seeker, *candidate)) {
+                return;
+            }
+
+            if(isDeprioritizedTarget(*candidate) && closestTarget != nullptr) {
+                return;
+            }
+
+            ++ObjectBase::targetSearchStats.candidatesTested;
+            if(seeker.canAttack(candidate) && distance < closestDistance) {
+                closestTarget = candidate;
+                closestDistance = distance;
+            }
+        });
 
         if(closestTarget != nullptr && !isDeprioritizedTarget(*closestTarget)) {
             break;
@@ -671,67 +708,67 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
     for(int ring = 0; ring <= searchRadius; ++ring) {
         bool ringProducedCandidate = false;
 
-        for(int dx = -ring; dx <= ring; ++dx) {
-            for(int dy = -ring; dy <= ring; ++dy) {
-                if(ring != 0 && std::max(std::abs(dx), std::abs(dy)) != ring) {
+        forEachRingOffset(ring, [&](int dx, int dy) {
+            Coord cell(centerCell.x + dx, centerCell.y + dy);
+            ++ObjectBase::targetSearchStats.cellsVisited;
+            if(!grid.isCellCoordValid(cell)) {
+                return;
+            }
+
+            entries.clear();
+            if(!grid.collectEntries(cell, entries)) {
+                return;
+            }
+
+            for(const SpatialGridEntry& entry : entries) {
+                ObjectBase* candidate = entry.object;
+                if(candidate == nullptr || candidate == &seeker) {
                     continue;
                 }
 
-                Coord cell(centerCell.x + dx, centerCell.y + dy);
-                if(!grid.isCellCoordValid(cell)) {
+                const SpatialGridHandle& candidateHandle = candidate->getGridHandle();
+                if(!candidateHandle.matches(entry.key.objectId, entry.key.generation)) {
                     continue;
                 }
 
-                entries.clear();
-                if(!grid.collectEntries(cell, entries)) {
+                if(isAutonomousTargetVetoed(seeker, *candidate)) {
                     continue;
                 }
 
-                for(const SpatialGridEntry& entry : entries) {
-                    ObjectBase* candidate = entry.object;
-                    if(candidate == nullptr || candidate == &seeker) {
-                        continue;
-                    }
+                ++ObjectBase::targetSearchStats.candidatesTested;
+                if(!seeker.canAttack(candidate)) {
+                    continue;
+                }
+                if(huntMode && !currentGameMap->terrainAttackReachable(seeker,*candidate)) {
+                    if(terrainRejected) *terrainRejected=true;
+                    continue;
+                }
 
-                    const SpatialGridHandle& candidateHandle = candidate->getGridHandle();
-                    if(!candidateHandle.matches(entry.key.objectId, entry.key.generation)) {
-                        continue;
-                    }
+                const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
+                if(!isTileVisibleToSeeker(seeker, candidatePoint)) {
+                    continue;
+                }
 
-                    if(!seeker.canAttack(candidate)) {
-                        continue;
-                    }
-                    if(huntMode && !currentGameMap->terrainAttackReachable(seeker,*candidate)) {
-                        if(terrainRejected) *terrainRejected=true;
-                        continue;
-                    }
+                const FixPoint distance = blockDistance(seekerLocation, candidatePoint);
+                if(!huntMode && distance > FixPoint(checkRange)) {
+                    continue;
+                }
 
-                    const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
-                    if(!isTileVisibleToSeeker(seeker, candidatePoint)) {
-                        continue;
-                    }
+                const bool candidateDeprioritized = isDeprioritizedTarget(*candidate);
+                if(candidateDeprioritized && bestTarget != nullptr) {
+                    continue;
+                }
 
-                    const FixPoint distance = blockDistance(seekerLocation, candidatePoint);
-                    if(!huntMode && distance > FixPoint(checkRange)) {
-                        continue;
-                    }
+                const bool bestIsDeprioritized = (bestTarget != nullptr) && isDeprioritizedTarget(*bestTarget);
 
-                    const bool candidateDeprioritized = isDeprioritizedTarget(*candidate);
-                    if(candidateDeprioritized && bestTarget != nullptr) {
-                        continue;
-                    }
-
-                    const bool bestIsDeprioritized = (bestTarget != nullptr) && isDeprioritizedTarget(*bestTarget);
-
-                    if(distance < bestDistance ||
-                       (bestIsDeprioritized && !candidateDeprioritized)) {
-                        bestTarget = candidate;
-                        bestDistance = distance;
-                        ringProducedCandidate = true;
-                    }
+                if(distance < bestDistance ||
+                   (bestIsDeprioritized && !candidateDeprioritized)) {
+                    bestTarget = candidate;
+                    bestDistance = distance;
+                    ringProducedCandidate = true;
                 }
             }
-        }
+        });
 
         if(bestTarget != nullptr) {
             const FixPoint nextRingLowerBound = FixPoint((ring + 1) * cellSize);
@@ -808,6 +845,7 @@ const UnitBase* ObjectBase::findClosestTargetUnit() const {
 }
 
 const ObjectBase* ObjectBase::findClosestTarget() const {
+    ++targetSearchStats.searches;
     if(const SpatialGrid* grid = currentGame->getSpatialGrid()) {
         bool terrainRejected=false;
         if(const ObjectBase* target = findTargetViaGrid(*this, *grid, 0, true,&terrainRejected)) {
@@ -820,6 +858,7 @@ const ObjectBase* ObjectBase::findClosestTarget() const {
 }
 
 const ObjectBase* ObjectBase::findTarget() const {
+    ++targetSearchStats.searches;
     int checkRange = 0;
     bool huntMode = false;
 

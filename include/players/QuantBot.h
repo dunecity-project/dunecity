@@ -73,6 +73,8 @@ public:
 
     void update() override;
     void onHumanUnitOrder(Uint32 id);
+    /// Uses the existing human-order lease to distinguish AI orders in shared houses.
+    bool managesAutonomousOrnithopter(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;

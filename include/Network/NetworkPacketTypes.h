@@ -160,7 +160,7 @@
 //     budget expires, instead of disappearing over the city. Changed routes,
 //     retirement times and subsequent Airport RNG draws require matching peers.
 //     The aircraft save layout remains 9853.
-#define NETWORK_PROTOCOL_VERSION            63
+#define NETWORK_PROTOCOL_VERSION            64
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

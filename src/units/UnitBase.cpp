@@ -1761,12 +1761,21 @@ void UnitBase::targeting() {
                (attackMode == GUARD || attackMode == AREAGUARD || attackMode == AMBUSH || attackMode == HUNT)) {
                 if(!isInWeaponRange(target.getObjPointer())) {
                     const ObjectBase* pNewTarget = findTarget();
-                    
+
                     if(pNewTarget != nullptr) {
                         // Saboteurs need forced=true to pathfind onto occupied tiles
                         bool forceAttack = (getItemID() == Unit_Saboteur);
                         doAttackObject(pNewTarget, forceAttack);
                         findTargetTimer = 500;
+                    } else {
+                        // A unit closing on a distant target it keeps - no closer
+                        // option exists, or Hunt rejected the whole reachable set -
+                        // left the timer at zero and re-ran the entire search on
+                        // every single cycle for as long as it kept flying. That is
+                        // the same whole-map scan the acquisition path below runs at
+                        // most once a second, so it gets the same cadence; nothing
+                        // about which target is chosen changes.
+                        findTargetTimer = MILLI2CYCLES(1*1000);
                     }
                 }
             }

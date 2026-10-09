@@ -155,6 +155,20 @@ public:
     virtual const ObjectBase* findTarget() const;
 
     /**
+        Target-search workload counters. Process-wide diagnostics only: they are
+        never saved, never sent over the network and never read by the
+        simulation, so they cannot affect determinism. Probes reset and assert
+        on them to prove the ring walk stays bounded, the way
+        Map::terrainConnectivityBuilds proves the connectivity cache does.
+    */
+    struct TargetSearchStats {
+        Uint64 searches = 0;         ///< findTarget()/findClosestTarget() entries.
+        Uint64 cellsVisited = 0;     ///< Grid cells or map tiles the ring walk inspected.
+        Uint64 candidatesTested = 0; ///< Objects that reached the per-candidate filters.
+    };
+    static TargetSearchStats targetSearchStats;
+
+    /**
         One repair-yard healing step. setHealth() rejects any value above the maximum, so a saved
         occupant with a fractional residual (the stalled game held bays at 199.875 of 200) would
         make every further step a silent no-op and never leave its bay. Clamp the healed value
