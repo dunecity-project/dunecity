@@ -50,7 +50,7 @@ NuclearPlant::~NuclearPlant() {
 }
 
 ObjectInterface* NuclearPlant::getInterfaceContainer() {
-    if (pLocalHouse == owner || debug) return WindTrapInterface::create(objectID);
+    if (mayShowOwnerInterface()) return WindTrapInterface::create(objectID);
     return DefaultObjectInterface::create(objectID);
 }
 

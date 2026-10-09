@@ -189,6 +189,12 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         duneCitySkinControls = ModManager::instance().isCityModeActive();
     }
     installerApprovedForDisplay = OnlineModPolicy::approved();
+    // Watching is an offline-only choice. Clearing it here (rather than only hiding the
+    // checkbox) means an Offline setup carried into Online can never leave a network host
+    // believing it is a local observer.
+    if(setup && setup->online) setup->spectate = false;
+    spectating = setup && setup->spectate && !setup->online
+        && !isCoopGameType(gameInitSettings.getGameType());
     const bool compactPlayers = getRendererWidth() < 800;
 
     // set up window
@@ -247,8 +253,46 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         if(setup->online) setupModeRow.addWidget(&setupVisibility, 180);
         setupShared.setText(_("Shared house"));
         setupShared.setChecked(setup->sharedHouse);
+        setupShared.setEnabled(!spectating);
         setupShared.setOnClick([this]() { setup->sharedHouse = setupShared.isChecked(); rebuildSetup(true); });
         setupModeRow.addWidget(&setupShared, 1.0);
+        // Offline only. Online keeps the row free of a control that must never apply there.
+        if(!setup->online) {
+            setupSpectate.setText(_("Spectate"));
+            setupSpectate.setChecked(spectating);
+            setupSpectate.setTooltipText(_("Watch an AI-vs-AI match. Every faction is played by an AI; "
+                                           "you get the whole map and can inspect any building, but give no orders."));
+            setupSpectate.setOnClick([this]() {
+                using Event = ChangeEventList::ChangeEvent;
+                const bool watch = setupSpectate.isChecked();
+                setup->spectate = watch;
+                // Carry the configured AI rows across the rebuild; only the human seat changes
+                // hands. Turning watching on hands that seat to the AI fallback, turning it off
+                // drops the row-0 seat events so the rebuilt row falls back to its human default.
+                const int fallbackAI = PlayerFactory::getIndexByPlayerClass(DEFAULTAIPLAYERCLASS);
+                ChangeEventList kept = getChangeEventList();
+                for(auto it = kept.changeEventList.begin(); it != kept.changeEventList.end();) {
+                    const bool humanSeatRow = it->slot < 2;
+                    if(watch && it->eventType == Event::EventType::SetHumanPlayer) {
+                        if(fallbackAI < 0) { it = kept.changeEventList.erase(it); continue; }
+                        *it = Event(Event::EventType::ChangePlayer, it->slot,
+                                    static_cast<Uint32>(fallbackAI));
+                    } else if(!watch && humanSeatRow
+                              && it->eventType == Event::EventType::ChangePlayer) {
+                        it = kept.changeEventList.erase(it);
+                        continue;
+                    }
+                    ++it;
+                }
+                setup->players = kept;
+                quit(MENU_SETUP_CHANGED);
+            });
+            setupModeRow.addWidget(&setupSpectate, 1.0);
+        } else {
+            // Online: the control is neither laid out nor offered. Marked invisible as well as
+            // left out of the row, so nothing can report it as an available choice.
+            setupSpectate.setVisible(false);
+        }
         setupRules.setText(_("Game Rules"));
         setupRules.setOnClick([this]() { openWindow(GameOptionsWindow::create(setup->rules)); });
         setupModeRow.addWidget(&setupRules, 110);
@@ -406,7 +450,11 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 
     std::list<HOUSETYPE>  tmpBoundHousesOnMap = boundHousesOnMap;
 
-    bool thisPlayerPlaced = false;
+    // Watching means no faction controller belongs to this machine, so the human is treated as
+    // already seated: both the player 1 and player 2 branches below then build the ordinary
+    // open/closed/AI list for *every* row instead of handing the first row to the local player.
+    // No house enum, faction or start position is consumed by the observer.
+    bool thisPlayerPlaced = spectating;
 
     // How wide a house row may be.
     //
@@ -791,7 +839,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     leftVBox.addWidget(Spacer::create(), 0.3);
 
     // maybe there is a better fitting slot if we are loading a map in the old format with Brain=CPU and Brain=Human
-    if(brainEqHumanSlot >= 0) {
+    if(brainEqHumanSlot >= 0 && !spectating) {
         DropDownBox& dropDownBox1 = houseInfo[brainEqHumanSlot].player1DropDown;
         DropDownBox& dropDownBox2 = houseInfo[brainEqHumanSlot].player2DropDown;
 
@@ -2017,6 +2065,9 @@ void CustomGamePlayers::onNext()
 
 void CustomGamePlayers::addAllPlayersToGameInitSettings()
 {
+    // The single choke point both start routes pass through, so this is where the local-only
+    // observation choice is handed to the game. It is never serialized or sent to a peer.
+    gameInitSettings.setLocalSpectator(spectating);
     gameInitSettings.clearHouseInfo();
     if(isCoopGameType(gameInitSettings.getGameType())) {
         for(const auto& enemy : fixedCoopHouses)
@@ -2608,6 +2659,10 @@ void CustomGamePlayers::onStartGame(unsigned int timeLeft) {
 }
 
 void CustomGamePlayers::setPlayer2Slot(const std::string& playername, int slot) {
+    // While watching, no faction may be handed a human controller. This is the single place a
+    // human name is seated, so refusing here also covers a stale SetHumanPlayer event replayed
+    // from a roster that was captured before Spectate was switched on.
+    if(spectating) return;
     DropDownBox& dropDownBox = (slot % 2 == 0) ? houseInfo[slot / 2].player1DropDown : houseInfo[slot / 2].player2DropDown;
 
     std::string oldPlayerName = "";

@@ -41,7 +41,7 @@ public:
 
 protected:
     explicit RefineryAndSiloInterface(int objectID) : DefaultStructureInterface(objectID) {
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         mainHBox.addWidget(&textVBox);
 

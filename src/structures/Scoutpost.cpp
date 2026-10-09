@@ -83,7 +83,7 @@ bool Scoutpost::canAttack(const ObjectBase* object) const {
 }
 
 ObjectInterface* Scoutpost::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return WindTrapInterface::create(objectID);
     }
 

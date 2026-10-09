@@ -91,8 +91,10 @@ private:
     TextButton cancelLaunch;
     HBox setupMapRow, setupModeRow;
     DropDownBox setupMap, setupMod, setupConnection, setupVisibility;
-    Checkbox setupShared;
+    Checkbox setupShared, setupSpectate;
     TextButton setupRules, setupBrowseMaps;
+    /// True when this offline setup is watching an all-AI match (CustomPlaySetup::spectate).
+    bool spectating = false;
     Label readinessLabel;
 
     void onReceiveChatMessage(const std::string& name, const std::string& message);

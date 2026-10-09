@@ -58,7 +58,7 @@ WindTrap::~WindTrap() {
 }
 
 ObjectInterface* WindTrap::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return WindTrapInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

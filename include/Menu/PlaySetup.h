@@ -18,6 +18,10 @@ struct CustomPlaySetup {
     bool publicGame = true;
     bool allowJoinAfterStart = true;
     bool sharedHouse = false;
+    // Offline only: leave every faction to an AI and watch. Survives the map/mod/rules
+    // rebuilds because it lives here rather than in the rebuilt GameInitSettings, and is
+    // cleared whenever `online` is chosen so a host can never become a local observer.
+    bool spectate = false;
     SettingsClass::GameOptionsClass rules;
     ChangeEventList players;
 };

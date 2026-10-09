@@ -930,7 +930,12 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
         default: {
         } break;
     }
-    if(isSpectating() && !spectatorViewPlayer) setupSpectatorView();
+    // Offline Custom Game observation. loadSaveGame() has already restored this from the
+    // savegame's local-player byte, so only a fresh game takes it from the init settings.
+    if(!localObserver && newGameInitSettings.isLocalSpectator() && !isNetworkGameType(gameType)) {
+        localObserver = true;
+    }
+    if(isObserving() && !spectatorViewPlayer) setupSpectatorView();
     AITelemetry::startGame(AITelemetry::Record().set("version", VERSION)
         .set("mod", ModManager::instance().getActiveModName())
         .set("source", newGameInitSettings.getFilename()).set("seed", gameInitSettings.getRandomSeed())
@@ -2539,7 +2544,7 @@ void Game::drawScreen()
     /* draw selection rectangles */
     currentGameMap->for_each(x1, y1, x2, y2,
         [](Tile& t) {
-            if (debug || currentGame->isSpectating() || t.isExploredByTeam(pLocalHouse->getTeamID())) {
+            if (debug || currentGame->isObserving() || t.isExploredByTeam(pLocalHouse->getTeamID())) {
                 t.blitSelectionRects(screenborder->world2screenX(t.getLocation().x*TILESIZE),
                     screenborder->world2screenY(t.getLocation().y*TILESIZE));
             }
@@ -2548,7 +2553,10 @@ void Game::drawScreen()
 
 //////////////////////////////draw unexplored/shade
 
-    if(!debug && !isSpectating()) {
+    // Observation draws the whole map by *skipping* the unexplored/fog pass. Nothing here
+    // writes Tile explored/fog state, so the simulation's exploration and the AI's knowledge
+    // are byte-identical to a game nobody is watching.
+    if(!debug && !isObserving()) {
         SDL_Texture* hiddenTexZoomed = pGFXManager->getZoomedObjPic(ObjPic_Terrain_Hidden, currentZoomlevel);
         SDL_Texture* hiddenFogTexZoomed = pGFXManager->getZoomedObjPic(ObjPic_Terrain_HiddenFog, currentZoomlevel);
         int zoomedTileSize = world2zoomedWorld(TILESIZE);
@@ -2941,7 +2949,7 @@ void Game::drawScreen()
         pInGameMentat->draw();
     }
 
-    if(isSpectating()) {
+    if(isObserving()) {
         if(!spectatorLabel) spectatorLabel=pFontManager->createTextureWithText("Spectating",COLOR_WHITE,18);
         SDL_Rect rect=calcDrawingRect(spectatorLabel.get(),sideBarPos.x/2,topBarPos.h+8,HAlign::Center,VAlign::Top);
         SDL_RenderCopy(renderer,spectatorLabel.get(),nullptr,&rect);
@@ -3151,7 +3159,9 @@ case CursorMode_Heal: {
                             if(currentCursorMode != CursorMode_Normal) {
                                 //cancel special cursor mode
                                 setCursorMode(CursorMode_Normal);
-                            } else if(settings.general.leftClickOrders) {
+                            } else if(settings.general.leftClickOrders || isObserving()) {
+                                // An observer's right click only clears the inspection, never
+                                // orders the view house's units about.
                                 unselectAll(selectedList); selectedList.clear(); selectionMode=false;
                             } else if((!selectedList.empty()
                                             && (((objectManager.getObject(*selectedList.begin()))->getOwner() == pLocalHouse))
@@ -3197,6 +3207,7 @@ case CursorMode_Heal: {
                     }
 
                     if(selectionMode && mouse->button==SDL_BUTTON_LEFT && settings.general.leftClickOrders
+                        && !isObserving()
                         && currentCursorMode==CursorMode_Normal && !(SDL_GetModState() & KMOD_SHIFT)
                         && std::abs(mouse->x-screenborder->world2screenX(selectionRect.x))<=4
                         && std::abs(mouse->y-screenborder->world2screenY(selectionRect.y))<=4
@@ -3335,6 +3346,12 @@ void Game::updateCursor()
 
 void Game::setCursorMode(int mode)
 {
+    // Every non-normal cursor mode exists to issue an order (place, attack, move, heal,
+    // capture, carryall drop, city zone, city road). An observer keeps only the normal
+    // cursor, so none of those click handlers can be reached at all.
+    if (isObserving() && mode != CursorMode_Normal) {
+        return;
+    }
     if (cursorManager.canSetCursorMode(mode, std::vector<Uint32>(selectedList.begin(), selectedList.end()))) {
         currentCursorMode = mode;
         cursorManager.setCursorMode(mode);
@@ -3797,7 +3814,11 @@ void Game::runMainLoop() {
 void Game::initializeGameLoop() {
     if(pInterface == nullptr) {
         pInterface = std::make_unique<GameInterface>();
-        if(gameState == GameState::Loading) {
+        // Observation always gets the minimap, without the activation animation or voice -
+        // there is no radar installation here, only a view. RadarView::update() keeps it on.
+        if(isObserving()) {
+            pInterface->getRadarView().setRadarMode(true);
+        } else if(gameState == GameState::Loading) {
             pInterface->getRadarView().setRadarMode(pLocalHouse->hasRadarOn());
         } else if(pLocalHouse->hasRadarOn()) {
             pInterface->getRadarView().switchRadarMode(true);
@@ -4507,7 +4528,7 @@ void Game::onMentat()
 }
 
 bool Game::canSkipMission() const {
-    return !isSpectating() && !bReplay && !finished && !bQuitGame && pLocalPlayer && pLocalHouse
+    return !isObserving() && !bReplay && !finished && !bQuitGame && pLocalPlayer && pLocalHouse
         && CampaignControls::maySkip(gameInitSettings.getGameType(), gameInitSettings.getHouseID(),
                                      pLocalHouse->getHouseID(), true);
 }
@@ -4550,6 +4571,12 @@ void Game::onFeedback() {
 
 void Game::onCityBudget()
 {
+    // The budget window writes tax and police funding through CMD_CITY_SET_TAX_RATE /
+    // CMD_CITY_SET_BUDGET, and those city commands carry no acting object - so they are not
+    // covered by an owner check. Keep the window out of an observer's hands entirely.
+    if (isObserving()) {
+        return;
+    }
     if (!citySimulation_ || !citySimulation_->isInitialized()) {
         return;
     }
@@ -4954,13 +4981,46 @@ bool Game::loadSaveGame(InputStream& stream) {
                 }
             }
         }
+    } else if(savedNetworkLayout) {
+        // Network saves have no local-player byte. When opened locally, restore the
+        // named human controller, or the first human if this profile did not take part.
+        pLocalPlayer = dynamic_cast<HumanPlayer*>(getPlayerByName(getLocalPlayerName()));
+        if(!pLocalPlayer) {
+            for(const auto& savedHouse : house) {
+                if(!savedHouse) continue;
+                for(const auto& player : savedHouse->getPlayerList()) {
+                    pLocalPlayer = dynamic_cast<HumanPlayer*>(player.get());
+                    if(pLocalPlayer) break;
+                }
+                if(pLocalPlayer) break;
+            }
+        }
+        if(!pLocalPlayer || !pLocalPlayer->getHouse())
+            THROW(std::runtime_error, "This multiplayer save has no human player to restore locally.");
+        pLocalHouse = getHouse(pLocalPlayer->getHouse()->getHouseID());
+    } else if(savedLocalPlayerID == Player::OBSERVER_PLAYER_ID) {
+        // An offline observer's save carries the reserved controller id rather than a seat.
+        // Recognise it before looking for a controller: there is no real local controller to
+        // resolve, and setupSpectatorView() below rebuilds the detached view identity.
+        localObserver = true;
+        // Restart Game copies these local settings into a fresh Game. Reconstruct
+        // the runtime-only choice too, without adding it to the serialized format.
+        gameInitSettings.setLocalSpectator(true);
     } else {
-        // it is stored in the savegame, so set it up
         pLocalPlayer = dynamic_cast<HumanPlayer*>(getPlayerByID(savedLocalPlayerID));
-        pLocalHouse = house[pLocalPlayer->getHouse()->getHouseID()].get();
+        if(!pLocalPlayer || !pLocalPlayer->getHouse())
+            THROW(std::runtime_error, "This savegame names local player %u, which is not a human player in it.",
+                  static_cast<unsigned>(savedLocalPlayerID));
+        pLocalHouse = getHouse(pLocalPlayer->getHouse()->getHouseID());
     }
 
-    if(isSpectating()) setupSpectatorView();
+    if(isObserving()) setupSpectatorView();
+    else if(spectatorViewPlayer) {
+        // A network observer that has been promoted to a real controller reloads into this same
+        // Game. The seat search above has already attached the real human, so drop the detached
+        // UI identity rather than leaving a second HumanPlayer pointing at the view house.
+        spectatorViewPlayer.reset();
+    }
     if(!pLocalPlayer || !pLocalHouse) THROW(std::runtime_error, "Cannot assign the local co-op player.");
 
     debug = stream.readBool();
@@ -5236,6 +5296,8 @@ void Game::saveGame(OutputStream& fs) {
     }
 
     if(!isNetworkGameType(gameInitSettings.getGameType())) {
+        // Same byte, same format. An offline observer's pLocalPlayer is already the detached
+        // identity holding OBSERVER_PLAYER_ID, so observation persists without a new field.
         fs.writeUint8(pLocalPlayer->getPlayerID());
     }
 
@@ -5468,7 +5530,8 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
 }
 
 void Game::setGameWon() {
-    if(isSpectating()) return;
+    // An observer takes no side and keeps watching when its view house wins or loses.
+    if(isObserving()) return;
     if(!bQuitGame && !finished) {
         won = true;
         finished = true;
@@ -5479,7 +5542,7 @@ void Game::setGameWon() {
 
 
 void Game::setGameLost() {
-    if(isSpectating()) return;
+    if(isObserving()) return;
     if(!bQuitGame && !finished) {
         won = false;
         finished = true;
@@ -5491,6 +5554,8 @@ void Game::setGameLost() {
 
 bool Game::onRadarClick(Coord worldPosition, bool bRightMouseButton, bool bDrag) {
     if(bRightMouseButton) {
+        // The radar is a camera for an observer. Left click/drag below still recenters the view.
+        if(isObserving()) return false;
 
         if(handleSelectedObjectsActionClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE)) {
             indicatorFrame = 0;
@@ -5562,7 +5627,14 @@ void Game::handleChatInput(SDL_KeyboardEvent& keyboardEvent) {
                 md5stream << std::setw(2) << (int) md5sum[i];
             }
 
-            const std::string md5string = md5stream.str();
+            // Chat stays usable while observing, but none of the cheat codes below go through
+            // Command::executeCommand - the credits code calls House::returnCredits directly on
+            // the view house, and the cheat-mode, debug, immortality and win codes write Game
+            // state in place - so the reserved controller id does not stop any of them. Leaving
+            // the digest empty while observing means no code can match and the message is sent
+            // as ordinary chat text, whatever bCheatsEnabled says. Done once here rather than
+            // per branch so a cheat added later is covered without being remembered.
+            const std::string md5string = isObserving() ? std::string() : md5stream.str();
 
             if((bCheatsEnabled == false) && (md5string == "0xB8766C8EC7A61036B69893FC17AAF21E")) {
                 bCheatsEnabled = true;
@@ -5623,10 +5695,21 @@ void Game::handleChatInput(SDL_KeyboardEvent& keyboardEvent) {
 
 void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
 {
-    if(isSpectating()) {
+    if(isObserving()) {
+        // Allow-list, so a new hotkey cannot silently become an observer's order. Camera and
+        // menu keys pass; a local observer also keeps the view-only controls (zoom, overlays,
+        // the stats/FPS toggles, map mode and game speed) that change nothing in the world.
         switch(keyboardEvent.keysym.sym) {
             case SDLK_ESCAPE: case SDLK_RETURN: case SDLK_LEFT: case SDLK_RIGHT:
             case SDLK_UP: case SDLK_DOWN: case SDLK_TAB: break;
+            // Game speed, local pause, zoom, sound, FPS and screenshots. Each of these only
+            // touches this machine's view or settings. SDLK_p is deliberately absent: it opens
+            // the structure placement cursor.
+            case SDLK_KP_MINUS: case SDLK_MINUS: case SDLK_KP_PLUS: case SDLK_PLUS:
+            case SDLK_EQUALS: case SDLK_SPACE: case SDLK_F1: case SDLK_F2:
+            case SDLK_F11: case SDLK_F12: case SDLK_PRINTSCREEN: case SDLK_SYSREQ:
+                if(!isLocalObserver()) return;
+                break;
             default: return;
         }
     }
@@ -7257,6 +7340,22 @@ void Game::toggleMovementPaths() {
 
 bool Game::isSpectating() const { return pNetworkManager && pNetworkManager->isSpectating(); }
 
+bool Game::localHumanImmortalityApplies() const {
+    if(!gameInitSettings.getGameOptions().immortalHumanPlayer) return false;
+    const GameType type = gameInitSettings.getGameType();
+    if(isNetworkGameType(type) || type == GameType::LoadMultiplayer) return false;
+    // An observer has no human controller: pLocalPlayer is the detached view identity and
+    // pLocalHouse belongs to an AI. Require a real, registered human controller on that house.
+    if(isObserving() || pLocalHouse == nullptr) return false;
+    for(const auto& player : pLocalHouse->getPlayerList()) {
+        if(dynamic_cast<const HumanPlayer*>(player.get()) != nullptr
+           && getPlayerByID(player->getPlayerID()) == player.get()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Game::setupSpectatorView() {
     // Observation has no simulation player, controller slot or ownership. The UI's
     // legacy non-null HumanPlayer pointer uses a detached, unregistered view object.
@@ -7264,6 +7363,12 @@ void Game::setupSpectatorView() {
     for(const auto& h : house) if(h && !h->getPlayerList().empty()) { pLocalHouse=h.get(); break; }
     if(!pLocalHouse) THROW(std::runtime_error,"There is no house to observe.");
     spectatorViewPlayer=std::make_unique<HumanPlayer>(pLocalHouse,getLocalPlayerName());
+    // The view object is attached to a real house so the sidebar, minimap and cursor keep a
+    // non-null anchor, which means Player::doXxx-style ownership checks would pass for that
+    // house. Stamp the reserved controller id instead: it is never registered, so every
+    // Command this identity emits is refused by Command::executeCommand, without touching
+    // the command queue shared by the AI's city tools.
+    spectatorViewPlayer->playerID=Player::OBSERVER_PLAYER_ID;
     pLocalPlayer=spectatorViewPlayer.get();
 }
 

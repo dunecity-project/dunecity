@@ -62,7 +62,7 @@ AdvancedWindTrap::~AdvancedWindTrap() {
 }
 
 ObjectInterface* AdvancedWindTrap::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return WindTrapInterface::create(objectID);
     }
 

@@ -66,7 +66,12 @@ inline void resolveMod(GameInitSettings& init, bool allowDownload = true) {
 inline bool applyMapRevisionForSelectedMod(const std::string& path, GameInitSettings& init) {
     if(!existsFile(path + ".workshop.ini")) return false;
     INIFile metadata(path + ".workshop.ini");
-    const auto map = Workshop::store().get(metadata.getStringValue("Workshop", "Hash", ""));
+    const auto hash = metadata.getStringValue("Workshop", "Hash", "");
+    // Bundled scenarios may carry catalogue hints without a locally cached revision.
+    // Capture their bytes under the selected mod when the game starts. A nonempty
+    // revision still has to resolve and pass the exact-content checks below.
+    if(hash.empty()) return false;
+    const auto map = Workshop::store().get(hash);
     if(map.kind != "map" || map.files.empty() || map.files.front().hash != Workshop::hashBytes(init.getFiledata())) return false;
     Workshop::Revision selected;
     try { selected = Workshop::saveMod(ModManager::instance().getActiveModName()); }

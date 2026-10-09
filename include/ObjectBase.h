@@ -63,6 +63,20 @@ public:
 
     virtual ObjectInterface* getInterfaceContainer();
 
+    /**
+        Whether the sidebar may show this object's full, owner-specific panel (production
+        queue, city/power/refinery figures, upgrade and special-weapon state) rather than the
+        bare DefaultObjectInterface.
+
+        One predicate for every structure and unit type, so the sixteen getInterfaceContainer()
+        overrides cannot drift apart. True for the local player's own objects, in debug, and for
+        an observer - which is the whole point of watching: every owner's real numbers, read
+        from that owner. Showing a panel grants nothing; GameInterface disables the panel's
+        inputs while observing and the detached view identity cannot be authorized for any
+        command. Ownership is never transferred to make a panel appear.
+    */
+    bool mayShowOwnerInterface() const;
+
     virtual void assignToMap(const Coord& pos) = 0;
     virtual void blitToScreen() = 0;
 

@@ -1,6 +1,6 @@
 # Micropolis city aircraft
 
-1.0.817. The city Airport launches the two original Micropolis aircraft: the
+1.0.821. The city Airport launches the two original Micropolis aircraft: the
 traffic helicopter and the airplane. They use the original pixel art, the
 original movement and reporting arithmetic, and the engine's ordinary air-unit
 lifecycle, so hostile anti-air can shoot them down.
@@ -182,7 +182,11 @@ targeting rule was widened:
 
 ## Save and protocol compatibility
 
-`SAVEGAMEVERSION` 9852 → **9853** and `NETWORK_PROTOCOL_VERSION` 57 → **58**.
+`SAVEGAMEVERSION` 9852 → **9853** and `NETWORK_PROTOCOL_VERSION` 60 → **61**.
+
+The feature was first built as local 1.0.817 from production 1.0.816, where the
+next free protocol number was 58. Carrying it onto production 1.0.820 renumbered it to 61: 58, 59
+and 60 are main's QuantBot civic/economy decisions, which this build keeps.
 
 The helicopter now persists its home pad, patrol count, report cooldown, scan
 cooldown, report tally and return-home flag; the airplane its take-off frame and
@@ -195,7 +199,7 @@ aircraft keeps its position and starts a fresh patrol or an airborne cruise,
 because the old orbit/flyover state has no meaning in the new behaviour.
 
 The protocol bump is required for a different reason: the Airport draws from the
-shared simulation RNG with the original odds, so a peer on 57 consumes a
+shared simulation RNG with the original odds, so a peer on 60 consumes a
 different number of RNG values on the same cycle, flies the placeholder motion
 and keeps up to three aircraft per house. The two diverge immediately.
 

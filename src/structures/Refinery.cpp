@@ -99,7 +99,7 @@ void Refinery::save(OutputStream& stream) const {
 }
 
 ObjectInterface* Refinery::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return RefineryAndSiloInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

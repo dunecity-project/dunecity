@@ -140,14 +140,23 @@
 //     Older peers reject these values; save and observer layouts are unchanged.
 // 57: Wrap ground combat rotation after movement; older peers can generate an invalid
 //     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
-// 58: Micropolis city aircraft. The Airport launches them with the original
+// 58: QuantBot establishes city tax income before optional spice technology on
+//     depleted maps. Older peers issue different construction and import orders
+//     from the same state. Save and runtime layouts remain unchanged.
+// 59: Needed civic buildings and nuclear power enter gradual-payment production
+//     before their full price is saved. Older peers choose different construction
+//     and spending orders. Save and runtime layouts remain unchanged.
+// 60: Required city civics and their missing prerequisites outrank optional
+//     spending, including between positive demand-clipping phases. Older peers
+//     choose different construction orders. Save and runtime layouts are unchanged.
+// 61: Micropolis city aircraft. The Airport launches them with the original
 //     doAirport() odds from the shared simulation RNG, and both aircraft steer,
-//     report traffic and retire on the original sprite clock. A peer on 57 draws
+//     report traffic and retire on the original sprite clock. A peer on 60 draws
 //     a different number of RNG values on the same cycle, flies the placeholder
 //     orbit/flyover instead, and keeps up to three aircraft per house where this
 //     build keeps one of each — so the two diverge immediately. The save layout
 //     is 9853 for the same reason.
-#define NETWORK_PROTOCOL_VERSION            58
+#define NETWORK_PROTOCOL_VERSION            61
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -43,8 +43,17 @@ public:
     }
 
 protected:
+    bool handleMouseWheel(Sint32 x, Sint32 y, bool up) override {
+        // Scrolling changes only the inspected list's viewport. Keep production
+        // buttons disabled while allowing observers to inspect every entry.
+        if(currentGame->isObserving() && !isEnabled() && isVisible()
+           && pBuilderList && x >= 0 && y >= 0 && x < getSize().x && y < getSize().y)
+            return pBuilderList->handleMouseWheel(0, 0, up);
+        return DefaultStructureInterface::handleMouseWheel(x, y, up);
+    }
+
     explicit BuilderInterface(int objectID) : DefaultStructureInterface(objectID) {
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         upgradeButton.setText(_("Upgrade"));
         upgradeButton.setTextColor(color);
@@ -119,9 +128,15 @@ protected:
                 }
             }
 
+            // An observer reads the owner's real production and upgrade progress, but is
+            // offered no Upgrade button. This has to be decided on every update, not once at
+            // construction, because the branches below re-show it as the building's state
+            // changes. DefaultStructureInterface::update does the same for Repair and Destroy.
+            const bool observing = currentGame->isObserving();
+
             upgradeProgressBar.setVisible(pBuilder->isUpgrading());
-            upgradeButton.setVisible(!pBuilder->isUpgrading());
-            upgradeButton.setEnabled(!pBuilder->isUpgrading());
+            upgradeButton.setVisible(!observing && !pBuilder->isUpgrading());
+            upgradeButton.setEnabled(!observing && !pBuilder->isUpgrading());
 
             if(pBuilder->isUpgrading()) {
                 upgradeProgressBar.setProgress( ((pBuilder->getUpgradeProgress() * 100)/pBuilder->getUpgradeCost()).toDouble() );
@@ -129,13 +144,13 @@ protected:
 
             if(pBuilder->getHealth() >= pBuilder->getMaxHealth()) {
                 repairButton.setVisible(false);
-                if(pBuilder->isAllowedToUpgrade()) {
+                if(!observing && pBuilder->isAllowedToUpgrade()) {
                     upgradeButton.setVisible(true);
                 } else {
                     upgradeButton.setVisible(false);
                 }
             } else {
-                repairButton.setVisible(true);
+                repairButton.setVisible(!observing);
                 upgradeButton.setVisible(false);
                 repairButton.setToggleState(pBuilder->isRepairing());
             }
