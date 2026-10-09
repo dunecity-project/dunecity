@@ -75,12 +75,12 @@ uint64_t DecisionLog::write(uint32_t cycle, int house, int player,
         return 0;
     }
     const uint64_t id = ++sequence;
-    const auto row = Record().set("schema_version", 1).set("telemetry_version", 17).set("policy_version", "whole-army-base-scramble-v90")
+    const auto row = Record().set("schema_version", 1).set("telemetry_version", 17).set("policy_version", "ornithopter-local-launcher-priority-v91")
         .set("session", session).set("seq", id).set("cycle", cycle)
         .set("house", house).set("player", player).set("event", event).set("data", details).json() + '\n';
     if (bytes + row.size() > limit) {
         // Explicit terminal marker; a few hundred bytes beyond the configured cap.
-        stream << Record().set("schema_version", 1).set("telemetry_version", 17).set("policy_version", "whole-army-base-scramble-v90").set("session", session).set("seq", id)
+        stream << Record().set("schema_version", 1).set("telemetry_version", 17).set("policy_version", "ornithopter-local-launcher-priority-v91").set("session", session).set("seq", id)
             .set("cycle", cycle).set("house", -1).set("player", -1)
             .set("event", "capture_limit").set("data", Record().set("byte_limit", limit)).json() << '\n';
         stream.close();

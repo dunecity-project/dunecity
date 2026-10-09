@@ -1580,18 +1580,82 @@ TEST_CASE("Expansion chooses safe reachable new rock rather than adjacent yards"
     CHECK_FALSE(choose(w,h,tiles,{23*w+12},{23*w+0},{}).valid());
 }
 
-TEST_CASE("Air defence preempts building raids without hunting unrelated ground units", "[quantbot][air]") {
-    CHECK(AirStrikePolicy::targetRank(false,true)>AirStrikePolicy::targetRank(true,false));
-    CHECK(AirStrikePolicy::targetRank(false,false)==0);
-    CHECK(AirStrikePolicy::targetRank(false,true)>0);
+TEST_CASE("Air defence preempts building raids and ordinary ground units are raidable", "[quantbot][air]") {
+    // Something standing over one of our assets still preempts an exposed
+    // building. An ordinary enemy unit out in the open is a raid candidate now,
+    // at the same rank as that building: what decides whether a wing may fly at
+    // one is the launcher ratio below, not this rank. The old reading - a
+    // roaming unit is worth nothing - is what left aircraft holding at base
+    // while 551 of 3636 strikes in the reported match found a building to hit.
+    CHECK(AirStrikePolicy::targetRank(false,true,true)>AirStrikePolicy::targetRank(true,false,true));
+    CHECK(AirStrikePolicy::targetRank(false,false,true)==AirStrikePolicy::RaidRank);
+    CHECK(AirStrikePolicy::targetRank(true,false,true)==AirStrikePolicy::RaidRank);
+    CHECK(AirStrikePolicy::targetRank(false,true,false)==AirStrikePolicy::DefenseRank);
+    CHECK(AirStrikePolicy::targetRank(false,false,false)==0);
     CHECK(AirStrikePolicy::safetyRange(7)==12);
+    // The engagement radius is a launcher's own reach, so the wing is measured
+    // over exactly the ground that can shoot it.
+    CHECK(AirStrikePolicy::safetyRange(9)==AirStrikePolicy::kLocalEngagementRadius);
+}
+
+TEST_CASE("A wing pays for mobile launcher cover once per covering launcher", "[quantbot][air]") {
+    using namespace AirStrikePolicy;
+    // Only the launchers are outnumberable. A rocket turret is static with
+    // twice the health, and a Deviator converts what it hits, so neither has a
+    // price in aircraft.
+    CHECK(mobileLauncher(Unit_Launcher));
+    CHECK(mobileLauncher(Unit_EliteLauncher));
+    CHECK_FALSE(mobileLauncher(Unit_Deviator));
+    CHECK_FALSE(mobileLauncher(Structure_RocketTurret));
+    for(int item : {Unit_Launcher,Unit_EliteLauncher}) CHECK(antiAir(item));
+
+    CHECK(localWingPermits(0,0));          // uncovered ground is free
+    CHECK_FALSE(localWingPermits(3,1));
+    CHECK(localWingPermits(4,1));
+    CHECK_FALSE(localWingPermits(7,2));
+    CHECK(localWingPermits(8,2));
+    CHECK(localWingPermits(4,1)==(kAircraftPerMobileLauncher<=4));
+
+    Coverage field(60,60);
+    field.addMobileLauncher(Coord(20,20),safetyRange(9));
+    field.addMobileLauncher(Coord(46,20),safetyRange(9));
+    CHECK(field.mobileLaunchersAt(Coord(20,20))==1);
+    CHECK(field.mobileLaunchersAt(Coord(33,20))==2);   // the two reaches overlap
+    CHECK(field.mobileLaunchersAt(Coord(0,50))==0);
+    // Four may enter the reach of one launcher, but not the overlap of two.
+    CHECK(field.clearFootprint(Coord(20,20),Coord(1,1),4));
+    CHECK_FALSE(field.clearFootprint(Coord(33,20),Coord(1,1),4));
+    CHECK(field.clearFootprint(Coord(33,20),Coord(1,1),8));
+    // Every point of the route is priced, not just the endpoint: a wing of four
+    // cannot cross the overlap to reach ground only one launcher covers.
+    CHECK_FALSE(field.clearApproach(Coord(45,20),Coord(20,20),4));
+    CHECK(field.clearApproach(Coord(45,20),Coord(20,20),8));
+    // Withdrawal and escape stay on the conservative combined reading: any
+    // known cover at all is unsafe to retreat through, at any strength.
+    CHECK_FALSE(field.safe(Coord(20,20)));
+    CHECK_FALSE(field.clearWithdrawal(Coord(45,20),Coord(20,20)));
+
+    Coverage hard(60,60);
+    hard.add(Coord(20,20),safetyRange(8));
+    CHECK_FALSE(hard.clearFootprint(Coord(20,20),Coord(1,1),64));
+    CHECK_FALSE(hard.clearApproach(Coord(40,20),Coord(20,20),64));
+    CHECK(hard.mobileLaunchersAt(Coord(20,20))==0);
+
+    // Unlimited unit settings can put more than 255 launchers in one area.
+    Coverage crowded(3,3);
+    for(int i=0;i<300;++i) crowded.addMobileLauncher(Coord(1,1),1);
+    CHECK(crowded.mobileLaunchersAt(Coord(1,1))==300);
+    CHECK_FALSE(crowded.safe(Coord(1,1),1199));
+    CHECK(crowded.safe(Coord(1,1),1200));
+    CHECK_FALSE(localWingPermits(std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max()));
 }
 
 TEST_CASE("An attack on the base outranks a remote worker rescue", "[quantbot][air]") {
     const int base=AirStrikePolicy::underAttackRank(true);
     const int worker=AirStrikePolicy::underAttackRank(false);
     CHECK(base>worker);
-    CHECK(worker>AirStrikePolicy::targetRank(false,true));
+    CHECK(worker>AirStrikePolicy::targetRank(false,true,true));
     CHECK(AirStrikePolicy::emergencyRank(base));
     CHECK(AirStrikePolicy::emergencyRank(worker));
     CHECK_FALSE(AirStrikePolicy::emergencyRank(AirStrikePolicy::DefenseRank));

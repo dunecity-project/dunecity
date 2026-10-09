@@ -1,4 +1,6 @@
 // Real target selection with a tempting raid and simultaneous home/worker threat.
+#include <players/AirStrikePolicy.h>
+
 void runAirDefenseProbe(Game& game) {
     auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     auto* owner=game.getHouse(HOUSE_HARKONNEN);
@@ -63,9 +65,17 @@ void runAirDefenseProbe(Game& game) {
         const auto& config=getQuantBotConfig();auto settings=config.hard;
         settings.ornithopterAttackEnabled=true;
         // A real attack overrides raid safety, even under an anti-air escort.
+        // The escort itself is now what gets hit: flying into this engagement is
+        // already sanctioned by the emergency, so the aircraft kills the thing
+        // that shoots it rather than trading with the tank beside it. The rescue
+        // is not abandoned - the launcher stands on the harvester's attacker.
         launcher->setLocation(attacker->getLocation());unitList.push_back(launcher);
         bot->doSetAttackMode(air,STOP);bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==attacker,"Anti-air escort suppressed an active harvester rescue");
+        require(air->getTarget()==launcher,
+                "An escorted rescue did not engage the launcher escorting the attacker");
+        require(blockDistance(launcher->getLocation(),attacker->getLocation()).lround()
+                <=AirStrikePolicy::kLocalEngagementRadius,
+                "The escort fixture no longer has its launcher inside the engagement area");
         attacker->doSetAttackMode(STOP);
         launcher->doAttackObject(worker,true);
         bot->doAttackObject(air,raid,true);
@@ -139,6 +149,261 @@ void runAirDefenseProbe(Game& game) {
         bot->onHumanUnitOrder(air->getObjectID());bot->doAttackObject(air,raid,true);
         bot->tryLaunchOrnithopterStrike(settings,config);
         require(air->getTarget()==raid,"Defensive automation replaced a human aircraft order");
+
+        // === Ordinary ground prey, the launcher ratio and launcher first ===
+        // The reported match flew 3636 sorties and found a building to hit in
+        // 551 of them; a roaming enemy unit was never once a target, because an
+        // unescorted tank in the open ranked zero. It is prey now, and mobile
+        // rocket cover is priced in aircraft instead of forbidden outright.
+        {
+            auto outerUnits=unitList;auto outerStructures=structureList;
+            bot->manualUnitOrders.clear();
+            bot->difficulty=QuantBot::Difficulty::Hard;
+            bot->defenceAssignments.clear();bot->defenceResponseCycles.clear();
+            auto raids=config.hard;raids.ornithopterAttackEnabled=true;
+            auto strike=[&]{bot->tryLaunchOrnithopterStrike(raids,config);};
+            const int launcherReach=AirStrikePolicy::safetyRange(
+                currentGame->objectData.data[Unit_Launcher][enemy->getHouseID()].weaponrange);
+
+            // Only our own base stands: no exposed enemy building competes for
+            // the sortie, so every assertion below is about ground prey.
+            unitList.clear();structureList.clear();
+            structureList.push_back(base);
+            std::vector<UnitBase*> fleet;
+            for(int i=0;i<8;++i) {
+                auto* bird=spawn(owner,Unit_Ornithopter,Coord(2+i%4,20+i/4));
+                bot->doSetAttackMode(bird,STOP);
+                fleet.push_back(bird);
+            }
+            auto* prey=spawn(enemy,Unit_Tank,Coord(14,20));
+            auto* foot=spawn(enemy,Unit_Trooper,Coord(14,22));
+            auto* escortA=spawn(enemy,Unit_Launcher,Coord(12,20));
+            auto* escortB=spawn(enemy,Unit_Launcher,Coord(16,20));
+            escortA->setVisible(VIS_ALL,false);escortB->setVisible(VIS_ALL,false);
+            unitList.push_back(prey);unitList.push_back(foot);
+            require(blockDistance(prey->getLocation(),base->getClosestPoint(prey->getLocation()))
+                    .lround() > prey->getWeaponRange()+3,
+                "The prey is close enough to our base to be ordinary base defence,"
+                " so this would not test a roaming raid");
+            // One tank plus the wing, so no second candidate can decide a case.
+            auto wingOf=[&](int count){
+                unitList.clear();unitList.push_back(prey);
+                for(int i=0;i<count;++i) unitList.push_back(fleet[i]);
+            };
+            auto flyer=[&]{return fleet[0];};
+
+            // --- An exposed unit in the open is attacked, and really shot at.
+            wingOf(1);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==prey,
+                "A single aircraft ignored an exposed enemy tank with no anti-air near it");
+            require(flyer()->getAttackMode()==STOP && flyer()->wasForced(),
+                "The raid was not issued as an explicit forced order in STOP mode");
+            // Infantry is prey on the same terms.
+            unitList.clear();unitList.push_back(foot);unitList.push_back(flyer());
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==foot,"Exposed enemy infantry was not raided");
+
+            // Real frames: it flies there and damages the tank. Selection alone
+            // is what the old telemetry already showed for buildings.
+            wingOf(1);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==prey,"The firing fixture lost its target before flying");
+            const FixPoint preyFull=prey->getMaxHealth();
+            const int startedAway=blockDistance(flyer()->getLocation(),prey->getLocation()).lround();
+            const Uint32 fireDeadline=game.getGameCycleCount()+MILLI2CYCLES(120000);
+            bool damagedPrey=false,closed=false;
+            while(!damagedPrey && game.getGameCycleCount()<fireDeadline) {
+                for(int step=0;step<25;++step) {game.processObjects();++game.gameCycleCount;}
+                if(prey->getHealth()<preyFull) damagedPrey=true;
+                // Hold the fixture steady so what is measured is the attack run.
+                prey->setHealth(preyFull);
+                if(blockDistance(flyer()->getLocation(),prey->getLocation()).lround()<startedAway)
+                    closed=true;
+                if(!damagedPrey) strike();
+            }
+            require(closed,"The aircraft never flew towards the exposed tank it was sent at");
+            require(damagedPrey,"No aircraft ever damaged the exposed tank in the open");
+
+            // Launcher priority applies to an already-held base interception,
+            // even when the settings disable offensive raids.
+            const Coord preyAt=prey->getLocation();
+            const Coord escortAt=escortA->getLocation();
+            prey->setLocation(origin+Coord(5,4));
+            prey->doAttackObject(base,true);
+            escortA->setLocation(origin+Coord(19,4));
+            unitList.push_back(escortA);
+            escortA->setVisible(VIS_ALL,false);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==prey,
+                "The held emergency fixture did not acquire the base attacker");
+            raids.ornithopterAttackEnabled=false;
+            escortA->setVisible(owner->getTeamID(),true);
+            strike();
+            require(flyer()->getTarget()==escortA,
+                "A held emergency target or disabled raids suppressed launcher escort priority");
+            strike();
+            require(flyer()->getTarget()==escortA,"The emergency launcher interception was unstable");
+            raids.ornithopterAttackEnabled=true;
+            prey->doSetAttackMode(STOP);
+            prey->setLocation(preyAt);escortA->setLocation(escortAt);
+            escortA->setVisible(VIS_ALL,false);
+            unitList.remove(escortA);
+
+            // --- Mobile launcher cover is a price, not a wall.
+            escortA->setVisible(owner->getTeamID(),true);
+            unitList.push_back(escortA);
+            require(blockDistance(escortA->getLocation(),prey->getLocation()).lround()<=launcherReach,
+                "The escort fixture no longer covers the prey it is meant to protect");
+            auto wingWithEscort=[&](int count){wingOf(count);unitList.push_back(escortA);};
+            auto holdsAt=[&](int count,const char* why) {
+                wingWithEscort(count);
+                bot->doSetAttackMode(flyer(),STOP);strike();
+                require(flyer()->getTarget()==nullptr,why);
+            };
+            holdsAt(3,"Three aircraft raided into a launcher's cover, below the four-per-launcher ratio");
+            wingWithEscort(4);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==escortA,
+                "Four aircraft did not engage the launcher covering their prey first");
+            // Overlapping launchers cost twice as much: seven hold, eight fly.
+            escortB->setVisible(owner->getTeamID(),true);
+            unitList.push_back(escortB);
+            require(blockDistance(escortB->getLocation(),prey->getLocation()).lround()<=launcherReach
+                    && blockDistance(escortA->getLocation(),prey->getLocation()).lround()<=launcherReach,
+                "The overlap fixture needs both launchers covering the prey");
+            auto withBoth=[&](int count){
+                wingOf(count);unitList.push_back(escortA);unitList.push_back(escortB);
+            };
+            withBoth(7);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==nullptr,
+                "Seven aircraft entered the overlap of two launchers, which costs eight");
+            withBoth(8);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==escortA || flyer()->getTarget()==escortB,
+                "Eight aircraft did not engage either launcher of the two-launcher overlap");
+            unitList.remove(escortB);escortB->setVisible(VIS_ALL,false);
+
+            // --- Who counts as the local wing. One launcher, four aircraft, and
+            // each exclusion in turn has to put the sortie back below the ratio.
+            auto fourWithOne=[&]{
+                wingOf(4);unitList.push_back(escortA);
+                bot->doSetAttackMode(flyer(),STOP);strike();
+            };
+            fourWithOne();
+            require(flyer()->getTarget()==escortA,"The wing fixture does not start at the ratio");
+            auto* spare=fleet[3];
+            const Coord spareHome=spare->getLocation();
+            auto excluded=[&](const char* why) {
+                unitList.clear();unitList.push_back(prey);unitList.push_back(escortA);
+                for(int i=0;i<4;++i) unitList.push_back(fleet[i]);
+                bot->doSetAttackMode(flyer(),STOP);strike();
+                require(flyer()->getTarget()==nullptr,why);
+            };
+            spare->setLocation(origin.x+2,origin.y+2);
+            require(blockDistance(flyer()->getLocation(),spare->getLocation()).lround()
+                    > AirStrikePolicy::kLocalEngagementRadius,
+                "The distant aircraft is still inside the engagement radius");
+            excluded("An aircraft outside the engagement radius was counted as local support");
+            spare->setLocation(spareHome.x,spareHome.y);
+            bot->doSetAttackMode(spare,RETREAT);
+            excluded("A retreating aircraft was counted towards an offensive sortie");
+            bot->doSetAttackMode(spare,STOP);
+            bot->onHumanUnitOrder(spare->getObjectID());
+            excluded("A human-ordered aircraft was conscripted into the AI's force ratio");
+            bot->manualUnitOrders.clear();
+            spare->setHealth(spare->getMaxHealth()/8);
+            require(spare->isBadlyDamaged(),"The damaged-wing fixture is not badly damaged");
+            excluded("A badly damaged aircraft was counted towards an offensive sortie");
+            spare->setHealth(spare->getMaxHealth());
+            spare->setActive(false);
+            excluded("An inactive aircraft was counted towards an offensive sortie");
+            spare->setActive(true);
+            spare->setRespondable(false);
+            excluded("An unrespondable aircraft was counted towards an offensive sortie");
+            spare->setRespondable(true);
+            fourWithOne();
+            require(flyer()->getTarget()==escortA,"Restoring the wing did not restore the sortie");
+
+            // --- A launcher we cannot see, do not own or have already killed
+            // charges nothing. Three aircraft take the tank in each case.
+            auto threeTakePrey=[&](const char* why) {
+                wingOf(3);unitList.push_back(escortA);
+                bot->doSetAttackMode(flyer(),STOP);strike();
+                require(flyer()->getTarget()==prey,why);
+                require(flyer()->getTarget()!=escortA,"A launcher that charges nothing became prey itself");
+            };
+            escortA->setVisible(VIS_ALL,false);
+            threeTakePrey("A launcher hidden by fog was still charged for, inferring cover we cannot see");
+            escortA->setVisible(owner->getTeamID(),true);
+            holdsAt(3,"Revealing the launcher again did not restore its cover");
+            escortA->setHealth(0);
+            threeTakePrey("A dead launcher still protected the ground around it");
+            escortA->setHealth(escortA->getMaxHealth());
+            escortA->deviate(owner);
+            require(escortA->wasDeviated() && escortA->getOwner()==owner,
+                "The deviation fixture did not hand the launcher to our own house");
+            threeTakePrey("A launcher of our own was treated as enemy anti-air");
+            escortA->quitDeviation();
+            holdsAt(3,"Returning the launcher to the enemy did not restore its cover");
+
+            // --- A launcher arriving over our prey takes the attack run from an
+            // ordinary ground target; its death hands the run back.
+            escortA->setVisible(VIS_ALL,false);
+            wingOf(4);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==prey && flyer()->wasForced(),
+                "The arrival fixture does not start on a forced ordinary ground target");
+            escortA->setVisible(owner->getTeamID(),true);
+            wingOf(4);unitList.push_back(escortA);
+            strike();
+            require(flyer()->getTarget()==escortA,
+                "A launcher arriving over the prey did not take over the attack run");
+            strike();
+            require(flyer()->getTarget()==escortA,
+                "A live launcher attack run was re-chosen on the following pass");
+            escortA->setHealth(0);
+            strike();
+            require(flyer()->getTarget()==prey,
+                "Killing the escort did not hand the attack run back to the ground target");
+            escortA->setHealth(escortA->getMaxHealth());
+            escortA->setVisible(VIS_ALL,false);unitList.remove(escortA);
+
+            // --- Turret and Deviator cover has no price. Eight aircraft still
+            // do not enter it, and neither weapon becomes prey itself.
+            auto* turret=enemy->placeStructure(NONE_ID,Structure_RocketTurret,
+                origin.x+20,origin.y+18,true,true);
+            require(turret!=nullptr,"The hard-cover fixture could not place its rocket turret");
+            turret->setVisible(owner->getTeamID(),true);
+            structureList.push_back(turret);
+            require(blockDistance(turret->getLocation(),prey->getLocation()).lround()
+                    <= AirStrikePolicy::safetyRange(turret->getWeaponRange()),
+                "The rocket turret does not cover the prey, so this tests nothing");
+            wingOf(8);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==nullptr,
+                "A large wing entered rocket turret cover, which no number of aircraft buys");
+            structureList.remove(turret);
+            auto* deviator=spawn(enemy,Unit_Deviator,Coord(20,22));
+            require(blockDistance(deviator->getLocation(),prey->getLocation()).lround()
+                    <= AirStrikePolicy::safetyRange(deviator->getWeaponRange()),
+                "The Deviator does not cover the prey, so this tests nothing");
+            wingOf(8);unitList.push_back(deviator);
+            bot->doSetAttackMode(flyer(),STOP);strike();
+            require(flyer()->getTarget()==nullptr,
+                "A large wing entered Deviator cover, which converts whatever it hits");
+
+            unitList=outerUnits;structureList=outerStructures;
+            bot->manualUnitOrders.clear();
+            bot->defenceAssignments.clear();bot->defenceResponseCycles.clear();
+            for(auto* bird:fleet) {bird->setVisible(VIS_ALL,false);bot->doSetAttackMode(bird,STOP);}
+            for(auto* ground:{prey,foot,escortA,escortB,deviator}) ground->setVisible(VIS_ALL,false);
+            turret->setVisible(VIS_ALL,false);
+            // Hand the fixture back exactly as the human-order check left it.
+            bot->onHumanUnitOrder(air->getObjectID());bot->doAttackObject(air,raid,true);
+            require(air->getTarget()==raid,"The ground-prey block did not restore the outer fixture");
+        }
 
         // === Launchers rescue an outlying colony from aircraft ===
         // The reported match lost two remote construction yards, and the
@@ -350,7 +615,13 @@ void runAirDefenseProbe(Game& game) {
         }
     } catch(...) {unitList=savedUnits;structureList=savedStructures;throw;}
     unitList=savedUnits;structureList=savedStructures;
-    SDL_Log("AIR_DEFENSE_PASS: base/harvester attacks preempt raids and AA avoidance; damaged air still attacks,"
+    SDL_Log("AIR_DEFENSE_PASS: exposed ground units and infantry are raided and really damaged;"
+        " mobile launcher cover is priced four aircraft per covering launcher, overlaps multiply it,"
+        " and the launcher in the engagement area is hit first; wing counts exclude distant,"
+        " retreating, human-ordered, damaged, inactive and unrespondable aircraft; hidden, dead and"
+        " own launchers charge nothing; an arriving launcher takes the attack run and its death"
+        " returns it; rocket turret and Deviator cover holds against eight;"
+        " base/harvester attacks preempt raids and AA avoidance; damaged air still attacks,"
         " interceptions stay stable across volleys, base outranks remote rescue;"
         " proximity safety, resumption and human control preserved;"
         " launchers leave a ground skirmish and a rally point for aircraft over an outlying colony,"

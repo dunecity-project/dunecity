@@ -11361,23 +11361,51 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
     std::vector<const UnitBase*> aircraft;
     for(const auto* unit:getUnitList())
         if(unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
-            && unit->isActive() && unit->isRespondable() && !humanControls(unit)) aircraft.push_back(unit);
+            && unit->isActive() && unit->getHealth()>0
+            && unit->isRespondable() && !humanControls(unit)) aircraft.push_back(unit);
     ornithopterStrikeTeam.reset(); // Old saved mass-Hunt missions no longer grant permission to attack.
     if(aircraft.empty()) return false;
     AITelemetry::PerformanceScope perfScope("ai.ornithopter_safe_strikes",getGameCycleCount(),getHouse()->getHouseID());
 
     AirStrikePolicy::Coverage coverage(map.getSizeX(),map.getSizeY());
     int visibleAntiAir=0;
+    int visibleMobileLaunchers=0;
+    std::vector<const ObjectBase*> mobileLaunchers;
     auto addDefender=[&](const ObjectBase* defender) {
         if(!defender || !defender->isActive() || defender->getHealth()<=0
             || !defender->getOwner() || defender->getOwner()->getTeamID()==myTeam
             || !defender->isVisible(myTeam) || !AirStrikePolicy::antiAir(defender->getItemID())) return;
         // A temporary power outage does not make a turret district a safe sortie.
-        coverage.add(defender->getLocation(),AirStrikePolicy::safetyRange(defender->getWeaponRange()));
+        const int range=AirStrikePolicy::safetyRange(defender->getWeaponRange());
+        // Mobile rocket cover is a price, not a wall: count the overlap per tile
+        // so a wing is weighed against the launchers that actually cover it.
+        // Turrets and Deviators keep absolute cover. Nothing is inferred through
+        // fog here - an unseen launcher charges nothing and protects nothing.
+        if(AirStrikePolicy::mobileLauncher(defender->getItemID())) {
+            coverage.addMobileLauncher(defender->getLocation(),range);
+            mobileLaunchers.push_back(defender);
+            ++visibleMobileLaunchers;
+        } else {
+            coverage.add(defender->getLocation(),range);
+        }
         ++visibleAntiAir;
     };
     for(const auto* structure:getStructureList()) addDefender(structure);
     for(const auto* unit:getUnitList()) addDefender(unit);
+
+    // The wing that would fly the sortie, indexed around each aircraft rather
+    // than around the prey: a formation that gathers just outside a target's own
+    // radius is still a wing, and counting only near the target parks it there
+    // for the rest of the match. Badly damaged aircraft are not counted towards
+    // an offensive ratio; they still defend under the emergency ranks below.
+    LocalPointIndex wingIndex(map.getSizeX(),map.getSizeY());
+    std::vector<const UnitBase*> wing;
+    for(const auto* flier:aircraft) {
+        if(flier->getAttackMode()==RETREAT || flier->isBadlyDamaged()) continue;
+        if(isCampaignEnemy() && !campaignWave.members.count(flier->getObjectID())) continue;
+        wingIndex.add(flier->getLocation().x,flier->getLocation().y,wing.size());
+        wing.push_back(flier);
+    }
 
     std::vector<const ObjectBase*> defendedAssets;
     for(const auto* structure:getStructureList())
@@ -11397,7 +11425,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             largestAsset=std::max({largestAsset,size.x,size.y});
         }
     }
-    struct Candidate { const ObjectBase* object; int weight; int rank; };
+    struct Candidate { const ObjectBase* object; Coord size; int weight; int rank; };
     std::vector<Candidate> candidates;
     auto addCandidate=[&](const ObjectBase* object,const QuantBotConfig::TargetPriority& priority) {
         if(!object || !object->isActive() || object->getHealth()<=0 || !object->getOwner()
@@ -11418,11 +11446,11 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // damage callback reports which one it was for its own attacker.
         const bool attackingBase=engagingAsset ? victim->isAStructure()
             : (object==emergencyAttacker && emergencyOnBase);
-        // Avoid AA during raids and speculative patrols. An actual attack on
-        // our economy/base is different: recall the aircraft and kill the
-        // attacker, including launchers, rather than declaring rescue unsafe.
-        if(!underAttack && (AirStrikePolicy::antiAir(object->getItemID())
-            || !coverage.clearFootprint(object->getLocation(),size))) return;
+        // Cover is no longer decided here. Whether a raid can be flown depends
+        // on the wing that would fly it, which is per aircraft below; this pass
+        // only establishes what exists and what it is worth. Turret and Deviator
+        // cover still excludes everything standing in it, including the turret
+        // and the Deviator themselves, because that cover is absolute.
         // All undefended buildings are eligible, including zones absent from the
         // combat priority table; retain configured priorities for ranking.
         bool defensiveContact=false;
@@ -11434,11 +11462,16 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
                         defensiveContact=true;
                 });
         }
+        // Ordinary enemy ground units in the open are raid candidates now, not
+        // only the ones standing over something of ours. The offensive-enable
+        // and campaign-wave gates below are unchanged, so this opens nothing on
+        // the difficulties that do not raid, and there is still no mass Hunt:
+        // every order issued at the end of this function is an explicit target.
         const int rank=underAttack ? AirStrikePolicy::underAttackRank(attackingBase)
-            : AirStrikePolicy::targetRank(object->isAStructure(),defensiveContact);
+            : AirStrikePolicy::targetRank(object->isAStructure(),defensiveContact,true);
         if (rank==AirStrikePolicy::RaidRank && !diffSettings.ornithopterAttackEnabled) return;
         if (isCampaignEnemy() && rank==AirStrikePolicy::DefenseRank && !campaignLocalContact(object)) return;
-        if(rank>0) candidates.push_back({object,std::max(1,priority.build+priority.target),rank});
+        if(rank>0) candidates.push_back({object,size,std::max(1,priority.build+priority.target),rank});
     };
     for(const auto* structure:getStructureList())
         addCandidate(structure,config.getStructurePriority(structure->getItemID()));
@@ -11457,6 +11490,32 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // re-choosing between equivalent targets on every damage callback.
         const ObjectBase* held=nullptr;
         int heldRank=0;
+        // How many effective aircraft are flying with this one. One bounded
+        // index visit, not a scan of every aircraft per candidate.
+        bool launcherFirst=false;
+        int localWing=0;
+        wingIndex.visit(unit->getLocation().x,unit->getLocation().y,
+            AirStrikePolicy::kLocalEngagementRadius,[&](size_t i) {
+                if(blockDistance(unit->getLocation(),wing[i]->getLocation())
+                    <= AirStrikePolicy::kLocalEngagementRadius) ++localWing;
+            });
+        // Reachable for this aircraft on this pass. Emergencies accept known
+        // cover as they always have. A raid needs the whole target footprint
+        // and the direct approach to be affordable for this wing, so a
+        // favourable endpoint cannot buy passage through a deeper overlap
+        // somewhere along the route.
+        auto reachable=[&](const Candidate& candidate) {
+            if(AirStrikePolicy::emergencyRank(candidate.rank)) return true;
+            return coverage.clearFootprint(candidate.object->getLocation(),candidate.size,localWing)
+                && coverage.clearApproach(unit->getLocation(),
+                    candidate.object->getClosestPoint(unit->getLocation()),localWing);
+        };
+        // Deterministic ordering: rank, then score, then the lower object id.
+        auto preferred=[](double score,Uint32 id,double bestSoFar,const ObjectBase* incumbent) {
+            if(incumbent==nullptr) return true;
+            if(score!=bestSoFar) return score>bestSoFar;
+            return id<incumbent->getObjectID();
+        };
         if(!reserveDamagedUnitForRepair(unit) && unit->getAttackMode()!=RETREAT) {
             for(const auto& candidate:candidates) {
                 if (isCampaignEnemy() && candidate.rank==AirStrikePolicy::RaidRank
@@ -11464,11 +11523,12 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
                 if(!unit->canAttack(candidate.object)) continue;
                 const Coord endpoint=candidate.object->getClosestPoint(unit->getLocation());
                 double score=double(candidate.weight)/(blockDistance(unit->getLocation(),endpoint).toDouble()+1);
-                if(!AirStrikePolicy::emergencyRank(candidate.rank)
-                    && !coverage.clearApproach(unit->getLocation(),endpoint)) continue;
+                if(!reachable(candidate)) continue;
                 if(candidate.object==unit->getTarget() && unit->wasForced()
                     && candidate.rank>heldRank) { held=candidate.object; heldRank=candidate.rank; }
-                if(candidate.rank<bestRank || (candidate.rank==bestRank && score<=bestScore)) continue;
+                if(candidate.rank<bestRank) continue;
+                if(candidate.rank==bestRank
+                    && !preferred(score,candidate.object->getObjectID(),bestScore,target)) continue;
                 bestRank=candidate.rank;
                 bestScore=score;
                 target=candidate.object;
@@ -11476,6 +11536,42 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             if(AirStrikePolicy::holdsInterception(heldRank,bestRank)) {
                 target=held;
                 bestRank=heldRank;
+            }
+            // Launchers first, but only the ones in this engagement: the escort
+            // standing over our intended prey, or one already standing over the
+            // wing, is what kills the wing. A launcher on the far side of the
+            // map is still just a ground unit ranked by distance - promoting it
+            // on the item flag alone would march the wing past exposed prey.
+            // Finish a live launcher run; a newly arrived escort can replace
+            // any other prey, including a held emergency attacker.
+            if(target!=nullptr && !AirStrikePolicy::mobileLauncher(target->getItemID())) {
+                const Coord prey=target->getClosestPoint(unit->getLocation());
+                const ObjectBase* escort=nullptr;
+                double escortScore=-1;
+                for(const auto* launcher:mobileLaunchers) {
+                    if(!unit->canAttack(launcher)) continue;
+                    const auto& priority=config.getUnitPriority(launcher->getItemID());
+                    // The escort belongs to the already-authorized engagement.
+                    // It remains eligible for defense when raids are disabled.
+                    const Candidate candidate{launcher,Coord(1,1),
+                        std::max(1,priority.build+priority.target),bestRank};
+                    const Coord at=candidate.object->getClosestPoint(unit->getLocation());
+                    const int guard=AirStrikePolicy::safetyRange(candidate.object->getWeaponRange());
+                    const bool guardsPrey=blockDistance(at,prey)<=guard;
+                    const bool guardsWing=blockDistance(at,unit->getLocation())
+                        <=std::max(guard,AirStrikePolicy::kLocalEngagementRadius);
+                    if(!guardsPrey && !guardsWing) continue;
+                    // Entering this engagement is already sanctioned - by the
+                    // ratio for a raid, or by the emergency for a rescue - and
+                    // the escort is the reason the ratio was measured at all.
+                    if(!AirStrikePolicy::emergencyRank(bestRank) && !reachable(candidate)) continue;
+                    const double score=double(candidate.weight)
+                        /(blockDistance(unit->getLocation(),at).toDouble()+1);
+                    if(!preferred(score,candidate.object->getObjectID(),escortScore,escort)) continue;
+                    escort=candidate.object;
+                    escortScore=score;
+                }
+                if(escort!=nullptr) { target=escort; launcherFirst=true; }
             }
         }
         const bool modeChanged=unit->getAttackMode()!=STOP;
@@ -11492,9 +11588,18 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
                     .set("target",target->getObjectID()).set("target_item",target->getItemID())
                     .set("visible_anti_air",visibleAntiAir).set("safety_margin_tiles",5)
                     .set("held_target",held==target)
-                    .set("reason",bestRank==AirStrikePolicy::BaseUnderAttackRank ? "intercept_base_attacker"
+                    .set("local_wing",localWing)
+                    .set("visible_mobile_launchers",visibleMobileLaunchers)
+                    .set("local_covering_launchers",
+                        coverage.mobileLaunchersAt(target->getClosestPoint(unit->getLocation())))
+                    .set("launcher_first",launcherFirst)
+                    // A raid on a roaming unit is not an exposed building, and an
+                    // audit that calls it one cannot tell the two apart.
+                    .set("reason",launcherFirst ? "launcher_escort_first"
+                        : bestRank==AirStrikePolicy::BaseUnderAttackRank ? "intercept_base_attacker"
                         : bestRank==AirStrikePolicy::UnderAttackRank ? "intercept_active_attacker"
-                        : bestRank==AirStrikePolicy::RaidRank ? "exposed_building" : "defend_base_or_harvester"));
+                        : bestRank!=AirStrikePolicy::RaidRank ? "defend_base_or_harvester"
+                        : target->isAStructure() ? "exposed_building" : "exposed_unit"));
             }
         } else {
             if(modeChanged || hadTarget) { doSetAttackMode(unit,STOP); issued=true; }
@@ -11525,6 +11630,8 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             }
             if(modeChanged || hadTarget) traceDecision("ornithopter_hold",AITelemetry::Record()
                 .set("unit",unit->getObjectID()).set("visible_anti_air",visibleAntiAir)
+                .set("local_wing",localWing)
+                .set("visible_mobile_launchers",visibleMobileLaunchers)
                 .set("reason","no_safe_target_or_approach"));
         }
     }

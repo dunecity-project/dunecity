@@ -1,3 +1,52 @@
+## 2026-10-09 — local 1.0.823: Ornithopter unit raids and launcher priority
+
+The ended MBA Twin Cities session `1791533979427273-0` (seed 391527621,
+1.0.822, cutoff cycle 185043) was copied read-only and imported into SQLite:
+68,543 records, integrity check OK, one final game summary and session end.
+It logged 1,196 `no_safe_target_or_approach` holds and 3,636 strikes. All tank
+strikes were defensive; the source assigned roaming ground units rank zero
+and treated mobile launcher coverage as an unconditional raid veto.
+
+QuantBot now admits visible enemy ground units as offensive targets. A local
+wing within 14 tiles of the issuing aircraft can enter launcher coverage with
+at least four effective aircraft per overlapping Launcher/EliteLauncher.
+Both the target footprint and every sampled approach point must satisfy the
+ratio. Nearby launcher escorts take priority over their ground prey, including
+an already-held emergency interception with offensive raids disabled. After
+the launcher dies, ordinary ground targeting resumes. Base emergencies still
+outrank remote worker rescues, and live launcher interceptions remain stable.
+Rocket turret and Deviator cover retain the existing avoidance for ordinary
+raids; the existing emergency-defense exception still permits rescue through AA.
+
+The shared coverage map stores full integer overlap counts; more than 255
+launchers cannot silently reduce the required wing. Local force counts exclude
+human orders, retreating, inactive, dead, unrespondable and badly damaged
+planes, and campaign aircraft outside the authorized wave. Damaged aircraft
+still perform emergency defense. Human Ornithopter HUNT, other AI controllers,
+RNG and save layout are unchanged. Four-to-one is a chosen tactical heuristic;
+the probes do not establish a full-match win rate.
+
+| Property | Enforcement | Verification |
+| --- | --- | --- |
+| Exposed enemy units can be attacked | Ground raid rank and per-aircraft reachability | Engine flight closes distance and damages a tank; infantry selection |
+| Launcher escorts precede ground prey | Engagement-scoped launcher substitution after held-target selection | Arrival/death and held-emergency tests; disabled offensive setting |
+| Local advantage is required across the route | Indexed eligible wing, counted coverage, footprint and approach checks | 3/4 vs one, 7/8 vs two, crossed overlap, 300-launcher count boundary |
+| Human authority and defense remain intact | Aircraft ownership/control guards and emergency ranks | Manual orders, wing exclusions, damaged-air defense and base-over-field checks |
+
+Codex independently added the held-emergency regression, which failed on the
+initial worker patch with `A held emergency target or disabled raids suppressed
+launcher escort priority`, then passed after the correction. Claude's separate
+old-object/new-probe comparison is not used as an exact-source baseline.
+Final 1.0.823 app build, version consistency, deep/strict local signature,
+pre/post Ninja dependency audits and diff checks pass. All 76 native CTest targets pass in 995.91 seconds, including the final
+Ornithopter engine probes in Vanilla, DuneCity and Dune2R.
+Protocol advances 62 -> 63 for synchronized AI decisions; telemetry policy is
+`ornithopter-local-launcher-priority-v91`, with local wing/cover and escort fields.
+Save version remains 9853. Nothing pushed, published or installed on the MBA.
+The rebuilt app is `build/bin/dunecity.app` in this checkout. Evidence and the
+bounded Claude reports are in `../outputs/ornithopter-ai-20261009/`.
+Duplicate worker probe apps were removed after retaining their logs (98 MB).
+
 ## 2026-10-09 — local 1.0.822: airplane map exits
 
 The airplane's outside waypoints were rejected by the ordinary
