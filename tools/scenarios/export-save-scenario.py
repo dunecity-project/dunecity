@@ -62,6 +62,31 @@ KNOWN_RESETS = [
 ]
 
 
+def reject_aliased_paths(save, output, report):
+    """Refuse to run when two of the three paths name the same file.
+
+    ``Path.resolve`` already collapses ordinary symlink aliases, but it keeps a
+    hardlink's own name and, on a case-insensitive filesystem, whatever case the
+    caller typed. Either alias would let the scenario or the report overwrite the
+    input save. Where both paths exist, ``samefile`` settles it on filesystem
+    identity instead of on the text; comparing the text still covers two
+    destinations that do not exist yet. This runs before ``--force`` and before
+    anything is written.
+    """
+    labelled = (('save input', save), ('scenario output', output), ('report', report))
+    for index, (first, left) in enumerate(labelled):
+        for second, right in labelled[index + 1:]:
+            same = left == right
+            if not same and left.exists() and right.exists():
+                try:
+                    same = left.samefile(right)
+                except OSError:
+                    same = False
+            if same:
+                raise SystemExit('The ' + first + ' and the ' + second + ' must be distinct paths: '
+                                 + str(left) + ' and ' + str(right) + ' are the same file.')
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -289,8 +314,7 @@ def main():
     output = (arguments.output.resolve() if arguments.output
               else work / (save.stem + '-current.ini'))
     report_path = arguments.report.resolve() if arguments.report else work / 'report.json'
-    if len({save, output, report_path}) != 3:
-        raise SystemExit('Save input, scenario output and report must be distinct paths.')
+    reject_aliased_paths(save, output, report_path)
     if output.exists() and not arguments.force:
         raise SystemExit('Refusing to overwrite ' + str(output) + '; pass --force or pick another path.')
     if not arguments.selftest and not save.is_file():
