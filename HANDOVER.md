@@ -82,15 +82,19 @@ and passes deep/strict signatures and bundled SDL rendering. Native SHA-256:
 portable SHA-256:
 `51e2aaaf75a6560e9b6a5c60ee6a3c8332783b5a6f7e0604bd5f506ea804ec39`.
 
-MBA installation remains PENDING: a fresh hostname/no-running-game check
-briefly succeeded, but stage creation and subsequent default/IPv4/IPv6 SSH
-connections timed out. No app swap or profile write occurred, and no installed
-receipt exists. The exact audited archive, expected inventory, closed-game
-backup/rollback installer and independent readback script remain prepared.
-Once the MBA is reachable, run
-`python3 ../outputs/launcher-install-825-20261009/finish-install.py`, then verify
-its receipt and readback summary before claiming installation. The installer
-requires the previously verified 1.0.824 binary hash and retains all backups.
+MBA installation and independent read-back completed on
+2026-10-10T10:38:37.533634+11:00 (Australia/Sydney). `/Applications/dunecity.app`
+contains the exact audited 1.0.825 bundle from code commit
+`8540ddf686cc4b0870ebbca2bd621644e398e28b`, with all 3,650 files/symlinks verified.
+The installed binary matches portable SHA-256 above. Deep/strict signatures,
+bundled SDL initialization and hidden-window rendering pass. The Desktop
+shortcut resolves to the installed app. All 2,911 selected save/settings/map/replay
+and configuration hashes, plus all 31,280 profile file/symlink metadata entries,
+remain unchanged. The previous byte-identical 1.0.824 bundle is retained at
+`/Applications/.dunecity-backup-before-1.0.825-20261010-103827/dunecity.app`;
+older backups remain. Receipt and fresh read-back summary are in
+`../outputs/launcher-install-825-20261009/`. The earlier SSH timeout blocker
+is resolved; no public release or push occurred.
 
 Removed 127 owned generated probe apps (1,443,700,598 bytes), preserving
 logs, injected sources, isolated profiles, the exact save, SQLite, the canonical
