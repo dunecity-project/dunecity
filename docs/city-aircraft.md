@@ -185,8 +185,9 @@ targeting rule was widened:
 `SAVEGAMEVERSION` 9852 → **9853** and `NETWORK_PROTOCOL_VERSION` 60 → **61**.
 
 The feature was first built as local 1.0.817 from production 1.0.816, where the
-next free protocol number was 58. Carrying it onto production 1.0.820 renumbered it to 61: 58, 59
-and 60 are main's QuantBot civic/economy decisions, which this build keeps.
+next free protocol number was 58. Carrying it onto production 1.0.820
+renumbered it to 61: 58, 59 and 60 are main's QuantBot civic/economy decisions,
+which this build keeps.
 
 The helicopter now persists its home pad, patrol count, report cooldown, scan
 cooldown, report tally and return-home flag; the airplane its take-off frame and

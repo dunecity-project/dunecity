@@ -56,9 +56,28 @@ source 8ed2e69cc6e3165d7bed7afbbd3057cf8a3e0276. The integration differs from
 main only in the intended 30 aircraft, version and documentation paths; newer
 QuantBot, spectator and bundled scenario files match main. The bounded Claude
 worker completed the integration and native checks; Codex ran the version
-script and reviewed the merge. MBA packaging and installation follow this
-source commit, with verification recorded here after installation. This is a
-private local build; public release notes still describe production 1.0.820.
+script and reviewed the merge. Source commit is
+`0f617c6c3e42c982ff703eea4598ef5494d6cfbe` on
+`feature/micropolis-city-aircraft-821`; production main f8e99541 is an ancestor.
+This is a private local build; public release notes still describe production
+1.0.820.
+
+MBA installation completed at 2026-10-09 04:25 UTC. The portable app was made
+with the existing CMake install flow, which bundles dependencies and signs the
+app. All 36 Mach-O files have portable/system dependency paths; original
+aircraft assets and all 46 bundled scenario/sidecar files match source.
+Local, staged-MBA and installed-MBA hidden rendering checks pass with every
+loaded SDL library inside the app; deep/strict signatures pass. The installed
+binary SHA256 is
+`711f3242f502c22a4f6e247daaa9a330d44e34ec4b0b78adf9355000161e6c4a`.
+The existing `~/Desktop/DuneCity.app` shortcut still resolves to
+`/Applications/dunecity.app`. The previous 1.0.819 app is retained at
+`/Applications/.dunecity-backup-before-1.0.821-20261009-152459/dunecity.app`.
+No running game was interrupted. All 2,556 user save, settings and map files
+match their initial and final hashes. Existing aircraft speed overrides remain
+12.8 (plane) and 9.6 (helicopter); shipped original-motion defaults are 10.24
+and 6.4. Other custom unit settings are also retained. Installation receipts,
+portable audit and logs are in `../outputs/city-aircraft-install-821-20261009/`.
 
 The original feature-branch note is kept verbatim underneath as source history;
 its protocol 58 pin is what this integration renumbered to 61.
