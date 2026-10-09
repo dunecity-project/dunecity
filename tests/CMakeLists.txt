@@ -409,6 +409,29 @@ endif()
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
+            --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
+            --selftest --force --match-seconds 10 --min-structures 4 --min-units 19)
+        set_tests_properties(save_scenario_export PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        add_test(NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
+        set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)
+        add_test(NAME web_mod_payload_tests COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/tests/test_check_web_mods.py)
+        set_tests_properties(web_mod_payload_tests PROPERTIES TIMEOUT 30)
+        add_test(NAME bundled_city_eight_slot_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-eight-slot-startup
+            --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 384x384 - new beginning.ini"
+            --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
+        set_tests_properties(bundled_city_eight_slot_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        add_test(NAME bundled_three_way_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-three-way-startup
+            --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
+            --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
+        set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         add_test(NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)

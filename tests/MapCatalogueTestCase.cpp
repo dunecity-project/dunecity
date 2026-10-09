@@ -61,9 +61,9 @@ TEST_CASE("Released city maps retain their playable catalogue identities", "[map
     for(const auto& expected : std::vector<Expected>{
         {"4P - 128x128 - 4 corners", "4P - 128x128 - 4 corners", 128, 4, 1},
         {"4P - 192x192 - DuneCity", "4P - 192x192 - DuneCity", 192, 4, 0},
-        {"5P - 256x256 - test", "5P - 256x256 - test", 256, 5, 0},
-        // Neutral is authored as the eighth house; it is not a selectable catalogue player.
-        {"8P - 128x128 - city seige", "8P - 128x128 - city seige", 128, 7, 0},
+        {"5P - 256x256 - test", "5P - 256x256 - test", 256, 6, 0},
+        // A declared Neutral house has a real row in CustomGamePlayers.
+        {"8P - 128x128 - city seige", "8P - 128x128 - city seige", 128, 8, 0},
         {"Alkozeltser 4 Cities", "Alkozeltser 4 Cities", 256, 6, 1},
     }) {
         CAPTURE(expected.file);
@@ -101,6 +101,18 @@ TEST_CASE("Equivalent copies of a real map share one content key", "[maps][choos
     REQUIRE(MapCatalogue::contentKey(differentTerrain(bundled)) != key);
     // Nothing identifying means nothing to merge on.
     REQUIRE(MapCatalogue::contentKey("[BASIC]\nName=Empty\n").empty());
+}
+
+TEST_CASE("Declared Neutral houses count as lobby slots but ambient owners do not", "[maps][chooser]") {
+    INIFile ini(false, std::string("slot-count regression"));
+    ini.setStringValue("Harkonnen", "Brain", "Team1");
+    ini.setStringValue("Mercenary", "Brain", "Team2");
+    ini.setStringValue("UNITS", "ID001", "Neutral,Sandworm,256,10,0,Area Guard");
+    REQUIRE(MapMetadata::countPlayers(ini) == 2);
+    ini.setStringValue("Neutral", "Brain", "Team3");
+    REQUIRE(MapMetadata::countPlayers(ini) == 3);
+    ini.removeSection("Neutral");
+    REQUIRE(MapMetadata::countPlayers(ini) == 2);
 }
 
 TEST_CASE("The chooser lists one row per distinct map copy", "[maps][chooser]") {

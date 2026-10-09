@@ -1,3 +1,55 @@
+## 2026-10-09 — 1.0.820: global user scenarios and 3waysplit conversion
+
+All eleven authored single-player scenarios are bundled, including six missing
+MBA maps and the current-world 3waysplit conversion. Metropolis and the thirteen
+local laptop scenarios were already present byte for byte. Source user maps and
+save remain untouched. Catalogue-only sidecars retain Dune City dependency and
+versions without requiring the author's private cached revision. Empty hashes
+use ordinary new-game pinning; nonempty invalid hashes still fail. Declared
+Neutral factions now count as playable slots; ambient ownership alone does not.
+
+3P - 192x192 - 3waysplit contains 4,525 structures and 831 units, with Harkonnen
+team3, Sardaukar team4 and Neutral team1. All terrain, concrete, saved roads,
+health within quantization, teams and whole credits survive native reload. Five
+carried/repairing units deploy near legal positions in their own cities; 23
+Retreat orders reset to Area Guard. Normal city startup restores 1,536 frontage
+roads. 4,955 unowned substrate tiles use passive Atreides ownership with no
+selectable slot or forces, avoiding construction anchors for the active houses.
+Population, queues, cargo amounts, upgrades and live simulation restart as the
+user explicitly accepted. Save9852 and protocol60 remain unchanged.
+
+The diagnostic tools/scenarios/export-save-scenario.py uses the native save
+loader and map editor writer, then verifies in a separate engine process and
+steps sixty game seconds. Input/output/report collisions are refused and exact
+mod resolution is offline. The synthetic CTest covers damage, wall health,
+concrete+road, air over buildings, stacked and carried infantry, live Retreat,
+three factions and credits. Generic diagnostic rosters now handle all twelve
+house positions instead of truncating generic maps at six.
+
+A fresh menu check caught the new INI missing from the incremental app bundle.
+Maps and sidecars now participate in LINK_DEPENDS with CONFIGURE_DEPENDS, so
+map-only changes run the existing POST_BUILD copy. Browser payload validation
+also requires all twelve city INIs (including the existing third-party map)
+and eleven metadata sidecars. Native packaged content is byte-verified.
+
+The converted scenario is installed on the MBA as an SP User Map for the existing
+1.0.819 app. Remote readback verifies its SHA and all fifty existing maps/save
+files unchanged; the source save SHA matches the captured input. No app was
+replaced, no game was stopped/started, and no publication or push occurred.
+
+Claude delivered the bounded diagnostic implementation and initial synthetic
+checks using subscription authentication. Its native runs lacked the MBA's
+pinned cache; Codex stopped the stalled diagnostics, supplied the cache, reviewed
+and corrected faction capture, live modes, wall health, air placement, passive
+substrate ownership, offline resolution and startup road normalization. Codex
+completed integration and independent native/default-mod startup checks.
+
+Reference: docs/user-scenario-promotion.md and tools/scenarios/README.md.
+Evidence: ../outputs/scenario-promotion-20261009/ (source snapshots, reports,
+all ten original authored map startup tests, CTest logs, bundle verification,
+and MBA scenario installation receipt). Candidate checks are recorded in that
+reference document; these local checks are not public CI/deployment evidence.
+
 ## 2026-10-09 — 1.0.819 civic priority fixed, tested and installed on the MBA
 
 The 1.0.818 installed binary was verified in the live MBA capture. Its installment

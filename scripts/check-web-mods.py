@@ -19,7 +19,13 @@ CITY_MAPS = (
     '4P - 128x128 - 4 corners.ini', '4P - 192x192 - DuneCity.ini',
     '5P - 256x256 - test.ini', '8P - 128x128 - city seige.ini',
     'Alkozeltser 4 Cities.ini',
+    '2P - 128x128 Four Quadrants.ini', '4P - 192x192 - BigCityLife.ini',
+    '4P - 192x192 - New Beginning.ini', '4P - 384x384 - new beginning.ini',
+    '8P - 256x256 - Colonists.ini', '8P - 384x384 - Colonist.ini',
+    '3P - 192x192 - 3waysplit.ini',
 )
+CITY_MAP_METADATA = tuple(name + '.workshop.ini' for name in CITY_MAPS
+                          if name != 'Alkozeltser 4 Cities.ini')
 # Emscripten emits JSON properties before optimization and unquoted properties
 # after optimization. Read only its file records; never execute generated JS.
 FILE_RECORD = re.compile(
@@ -80,9 +86,14 @@ def check_payload(javascript, data, skin_payload=None):
         name = '/maps/singleplayer/' + relative
         if files.get(name) != (map_root / relative).read_bytes():
             raise ValueError('Missing or corrupt DuneCity map payload: ' + relative)
+    for relative in CITY_MAP_METADATA:
+        name = '/maps/singleplayer/' + relative
+        if files.get(name) != (map_root / relative).read_bytes():
+            raise ValueError('Missing or corrupt DuneCity map metadata: ' + relative)
     return {'verified_tornie_files': len(checked),
             'verified_dunecity_skin_files': len(skin_payload),
             'verified_dunecity_maps': len(CITY_MAPS),
+            'verified_dunecity_map_metadata': len(CITY_MAP_METADATA),
             'dune2r_files': sum(n.startswith('/mods/Dune2R/') for n in files),
             'data_bytes': len(data)}
 

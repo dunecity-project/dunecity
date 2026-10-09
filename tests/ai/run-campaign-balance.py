@@ -134,8 +134,12 @@ if args.custom_map:
             assigned.add(name)
     # Generic slots use the chosen player house first, then distinct opponents.
     # The engine still chooses their spawn slots using the supplied match seed.
-    candidates = [args.house] + [n for n in ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary') if n != args.house]
-    for slot in range(1, 7):
+    # Keep the existing six-house assignment order, then include the additional
+    # factions supported by the lobby. Large user maps have Player7/Player8.
+    candidates = [args.house] + [n for n in ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary',
+                                           'neutral', 'rebels', 'custom', 'wildspade', 'kleshmersh', 'tharpique')
+                                     if n != args.house]
+    for slot in range(1, len(house_names) + 1):
         section = sections.get(f'player{slot}')
         if not section:
             continue

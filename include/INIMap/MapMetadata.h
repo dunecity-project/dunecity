@@ -73,7 +73,7 @@ struct MapMetadata {
     // building field matters. Unknown names never change the category.
     static int countPlayers(const INIFile& ini) {
         int result=0;
-        for(const char* name:{"Harkonnen","Atreides","Ordos","Fremen","Sardaukar","Mercenary","Rebels","Custom","Wildspade","Kleshmersh","Tharpique"})
+        for(const char* name:{"Harkonnen","Atreides","Ordos","Fremen","Sardaukar","Mercenary","Neutral","Rebels","Custom","Wildspade","Kleshmersh","Tharpique"})
             if(ini.hasSection(name)) ++result;
         for(int i=1;i<=12;++i) if(ini.hasSection("Player"+std::to_string(i))) ++result;
         return result;

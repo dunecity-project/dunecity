@@ -63,4 +63,52 @@ void verifySavedUserMapLists() {
         menuRequire(readCompleteFile(path.string())==contents[i],"Browsing modified a saved map");
         fs::remove(path);fs::remove(path.string()+".workshop.ini");
     }
+
+    // Global copies must remain usable on a fresh profile without the author's
+    // private Workshop cache. Catalogue hints are not a pinned revision.
+    {
+        CustomPlaySetup setup;setup.mods=ModManager::instance().listModChoices();setup.rules=effectiveGameOptions;
+        CustomGameMenu browser(false,false,&setup);
+        browser.onMapTypeChange(0); // installed single-player maps
+        browser.mapModFilter.setSelectedItem(3); // DuneCity, all sizes and slot counts
+        browser.rebuildMapList();
+        const std::array<const char*,11> bundled={
+            "2P - 128x128 Four Quadrants.ini", "4P - 128x128 - 4 corners.ini",
+            "4P - 192x192 - BigCityLife.ini", "4P - 192x192 - DuneCity.ini",
+            "4P - 192x192 - New Beginning.ini", "4P - 384x384 - new beginning.ini",
+            "5P - 256x256 - test.ini", "8P - 128x128 - city seige.ini",
+            "8P - 256x256 - Colonists.ini", "8P - 384x384 - Colonist.ini",
+            "3P - 192x192 - 3waysplit.ini"};
+        for(const auto* name:bundled) {
+            bool present=false;
+            for(const auto visible:browser.visibleMaps) {
+                const auto& entry=browser.mapEntries[visible];
+                if(fs::path(entry.path).filename()!=name)continue;
+                present=true;
+                menuRequire(entry.metadata.dependency=="dunecity","Bundled scenario lost its authored mod");
+                const auto before=readCompleteFile(entry.path);
+                GameInitSettings init(name,before,false,setup.rules);
+                menuRequire(!WorkshopGameContent::applyMapRevisionForSelectedMod(entry.path,init),
+                    "Catalogue-only metadata became a pinned revision");
+                menuRequire(init.getMapRevisionHash().empty(),"Fresh scenario unexpectedly needs an old revision");
+                menuRequire(readCompleteFile(entry.path)==before,"Selecting a bundled map changed its contents");
+            }
+            if(!present) throw std::runtime_error(std::string("Global DuneCity list lost ")+name);
+        }
+        menuCapture(browser,"bundled-user-scenarios");
+    }
+
+    // A missing nonempty revision must still fail instead of silently starting
+    // the unpinned map. Only catalogue metadata with no hash uses the fallback.
+    const auto bad=directory/"map-list-bad-revision.ini";
+    {std::ofstream map(bad);map<<contents[0];}
+    {std::ofstream metadata(bad.string()+".workshop.ini");
+     metadata<<"[Workshop]\nMod=dunecity\nHash="<<std::string(64,'f')<<"\n";}
+    bool rejected=false;
+    try {
+        GameInitSettings init(bad.filename().string(),contents[0],false,effectiveGameOptions);
+        WorkshopGameContent::applyMapRevisionForSelectedMod(bad.string(),init);
+    } catch(const std::exception&) {rejected=true;}
+    menuRequire(rejected,"Invalid pinned revision was silently accepted");
+    fs::remove(bad);fs::remove(bad.string()+".workshop.ini");
 }
