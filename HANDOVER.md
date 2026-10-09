@@ -1,3 +1,57 @@
+## 2026-10-09 — local 1.0.822: airplane map exits
+
+The airplane's outside waypoints were rejected by the ordinary
+`ObjectBase::setDestination` map-tile validator. Its 6,000-sprite-tick timer
+then deleted it over the city. In isolated natural-flight replays with seeds
+1815979822 (the MBA BigCityLife seed) and 7, 7/10 flights on 192x192 BigCityLife
+and 9/10 on 384x384 Colonist expired inside. The smaller 51x31 fixture's ten
+flights crossed the boundary, which hid the larger-map failure.
+
+`AmbientAirplane::setFlightDestination` now retains outside coordinates for
+this aircraft alone, moving the engine's -1 sentinel one tile farther outside.
+Takeoff and westbound starts also use it. Budget expiry stops random retargeting
+and begins a deterministic outward departure, keeping an outside waypoint or
+choosing the nearest edge. Normal retirement happens only after the plane's
+centre crosses the map boundary. Original art, speeds, 11-10-9 takeoff, turning
+clock, Airport odds/cap/power, helicopter reports and hostile anti-air remain.
+The user explicitly chose original takeoff and exit only; there are no plane
+arrivals or landings.
+
+Version 1.0.822 is set through `scripts/bump-version.sh` in all three canonical
+files. Protocol 61 -> 62 and its wire test pin advance together because routes,
+retirement and subsequent Airport RNG draws changed. Save remains 9853: the
+plane still writes exactly two ints after AirUnit, with departure represented
+by zero remaining ticks and the inherited outside destination. Older aircraft
+saves keep their layout. Production main f8e99541 (1.0.820) remains an ancestor;
+current origin/main and live build.json still confirm that baseline. This is a
+local build, with no public release or CI claim.
+
+Verification: all 76 native CTest targets pass, with a fresh native app and
+pre/post Ninja dependency audits. Catch has 983 passing cases and three opt-in skips, with 10,237,675 assertions;
+real-engine city_aircraft_probe retains the original motion/art/traffic/combat
+checks and adds 400 retained waypoint draws, negative/sentinel corners,
+unchanged ground validation, actual movement through four edges, departure
+from the city interior, tile/spatial/unit/house cleanup, and 300 identical frames
+following an outside departure waypoint after reload. A diagnostic-only recorder
+at leaveMap, immediately before destruction, independently confirms all 20
+natural flights on BigCityLife/Colonist retire beyond the actual world bounds;
+two Colonist flights exhausted their budgets before flying out. These are
+isolated Airport flights on the source maps, not a full AI-match replay.
+An existing 1.0.817 aircraft save loads as 9853 with takeoff frame 10 and
+budget 5,991 intact, then steps 300 frames. Its exact immutable mod revision
+was copied from the old fixture into an isolated profile and resolved offline;
+no save bytes or mod identity were changed.
+Evidence: `../outputs/city-aircraft-flight-fix-20261009/`, especially
+`before-summary.json` and `exact-retirement-review/verified-retirements.json`.
+
+The bounded Claude worker implemented the repair and tests and reached its
+time budget after the complete passing native suite. Codex reviewed the patch
+and independently completed the full-flight and older-save checks. The portable
+1.0.822 app passes deep/strict signatures and hidden SDL rendering locally and
+in the MBA staging folder with its bundled SDL2/SDL3 runtime. Its 1.0.821 game
+closed before installation; no game was interrupted. Installation staging
+and receipts belong in `../outputs/city-aircraft-install-822-20261009/`.
+
 ## 2026-10-09 — local 1.0.821: Micropolis city aircraft on production 1.0.820
 
 The reviewed city-aircraft feature (branch base 4b69d0eb / local 1.0.817) was

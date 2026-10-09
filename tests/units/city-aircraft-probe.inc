@@ -12,8 +12,11 @@
 //   patrol      The helicopter steers onto its own saturated roads, reports
 //               heavy traffic at a bounded rate, and reports nothing at all
 //               over another player's congested roads.
-//   flight      The airplane runs the original take-off frames, steers, and
-//               leaves the map instead of patrolling.
+//   flight      The airplane runs the original take-off frames, steers, keeps
+//               the waypoints outside the map that ObjectBase::setDestination
+//               rejects, and ends every flight by crossing an edge — through
+//               each of the four edges, and after its budget expires over the
+//               city — never by disappearing over the map.
 //   defence     A hostile rocket turret can target, damage and destroy both,
 //               while same-team and ordinary ground weapons cannot; the wreck
 //               leaves no tile, unit-count or airport-slot reference behind.
@@ -24,6 +27,7 @@
 #include <Map.h>
 #include <Tile.h>
 #include <Bullet.h>
+#include <SpatialGrid.h>
 #include <sand.h>
 #include <mod/ModManager.h>
 #include <FileClasses/GFXManager.h>
@@ -140,6 +144,131 @@ int liveUnitsOfType(int itemID) {
     int count = 0;
     for(const UnitBase* unit : unitList) if(unit->getItemID() == itemID) ++count;
     return count;
+}
+
+/// No entry for `objectID` is left anywhere in the spatial grid.
+bool spatialGridReferences(Uint32 objectID) {
+    auto* grid = currentGame->getSpatialGrid();
+    if(grid == nullptr) return false;
+    std::vector<SpatialGridEntry> entries;
+    for(int y = 0; y < grid->getGridHeight(); ++y)
+        for(int x = 0; x < grid->getGridWidth(); ++x) {
+            entries.clear();
+            if(!grid->collectEntries(Coord(x, y), entries)) continue;
+            for(const SpatialGridEntry& entry : entries)
+                if(entry.object != nullptr && entry.object->getObjectID() == objectID) return true;
+        }
+    return false;
+}
+
+/// World units from the nearest map boundary; negative once outside.
+long edgeSlackWorld(long x, long y) {
+    const long w = static_cast<long>(currentGameMap->getSizeX()) * TILESIZE;
+    const long h = static_cast<long>(currentGameMap->getSizeY()) * TILESIZE;
+    return std::min(std::min(x, w - 1 - x), std::min(y, h - 1 - y));
+}
+
+/// AmbientAirplane::update() removes the plane in the same cycle in which its
+/// centre crosses the boundary, so the last frame a test can still read it on
+/// is up to one cycle of travel short of the edge. One cycle is at most 10.24
+/// world units on an axis and 10.86 diagonally (ObjectData MaxSpeed and
+/// CityAircraft::headingSpeed), so 12 is the tolerance for "it was at the edge".
+constexpr long kOneStepWorldUnits = 12;
+
+/// Which edge the plane was leaving through on its last live frame, or
+/// "inside" when it was nowhere near one — which is the bug this phase exists
+/// to catch: a plane that vanishes over the city instead of flying out.
+std::string leavingEdge(long x, long y) {
+    const long w = static_cast<long>(currentGameMap->getSizeX()) * TILESIZE;
+    const long h = static_cast<long>(currentGameMap->getSizeY()) * TILESIZE;
+    const long west = x, east = w - 1 - x, north = y, south = h - 1 - y;
+    const long nearest = std::min(std::min(west, east), std::min(north, south));
+    if(nearest > kOneStepWorldUnits) return "inside";
+    if(nearest == west) return "west";
+    if(nearest == east) return "east";
+    if(nearest == north) return "north";
+    return "south";
+}
+
+struct FlightEnd {
+    bool gone = false;
+    long x = 0, y = 0;                  ///< last live centre, world units
+    int remainingTicks = 0;
+    double travelTiles = 0.0;
+    int cycles = 0;
+    bool heldOutsideWaypoint = false;   ///< an off-map waypoint actually stuck
+    bool heldSentinelWhileCruising = false;
+    std::set<int> headings;
+};
+
+/// Follow a live plane through the real game loop until it is gone or the cycle
+/// budget runs out. Nothing is forced: no realX/realY and no destination is
+/// written, so what is measured is the movement the engine produces.
+FlightEnd followFlight(Game* game, Uint32 planeID, int cycleBudget) {
+    FlightEnd end;
+    auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+    cityRequire(live != nullptr, "the plane to follow was not alive to start with");
+    long prevX = lround(live->realX), prevY = lround(live->realY);
+    end.x = prevX;
+    end.y = prevY;
+    end.remainingTicks = live->getRemainingTicks();
+
+    for(int cycle = 0; cycle < cycleBudget; ++cycle) {
+        game->updateGameState();
+        ++end.cycles;
+        live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+        if(live == nullptr) {
+            end.gone = true;
+            break;
+        }
+
+        const long x = lround(live->realX), y = lround(live->realY);
+        const double dx = static_cast<double>(x - prevX), dy = static_cast<double>(y - prevY);
+        end.travelTiles += std::sqrt(dx * dx + dy * dy) / TILESIZE;
+        prevX = x;
+        prevY = y;
+
+        const Coord destination = live->getDestination();
+        if(destination.isValid()
+           && CA::isOutsideMap(destination.x, destination.y, currentGameMap->getSizeX(),
+                               currentGameMap->getSizeY()))
+            end.heldOutsideWaypoint = true;
+        // The outside margin reaches tile -1 on the west and north edges, which
+        // is INVALID_POS. A cruising plane must never be left with the engine's
+        // "no destination" sentinel, or it stops steering altogether.
+        if(destination.isInvalid() && live->getTakeoffFrame() == 0 && cycle > 20)
+            end.heldSentinelWhileCruising = true;
+        if(live->getTakeoffFrame() == 0) end.headings.insert(live->getAngle());
+
+        end.x = x;
+        end.y = y;
+        end.remainingTicks = live->getRemainingTicks();
+    }
+    return end;
+}
+
+/// Every flight that ends on its own must end beyond a map edge, with the
+/// engine's bookkeeping clean. `doAirplaneSprite` has exactly one ending,
+/// sprite.cpp:856 spriteNotInBounds; there is no landing and no timeout.
+void requireLeftTheMap(const FlightEnd& end, Uint32 planeID, House* owner,
+                       const std::string& what, const std::string& expectedEdge = "") {
+    cityRequire(end.gone, what + ": the plane never ended its flight");
+    cityRequire(!end.heldSentinelWhileCruising,
+                what + ": a cruising plane was left with the invalid-destination sentinel");
+    const std::string edge = leavingEdge(end.x, end.y);
+    cityRequire(edge != "inside",
+                what + ": the plane disappeared " + std::to_string(edgeSlackWorld(end.x, end.y) / TILESIZE)
+                     + " tiles inside the map (" + std::to_string(end.x / TILESIZE) + ','
+                     + std::to_string(end.y / TILESIZE) + ") instead of crossing an edge");
+    if(!expectedEdge.empty())
+        cityRequire(edge == expectedEdge,
+                    what + ": the plane left through the " + edge + " edge, expected " + expectedEdge);
+    cityRequire(!tileReferences(planeID), what + ": a departed plane left a tile reference");
+    cityRequire(!spatialGridReferences(planeID), what + ": a departed plane left a spatial-grid entry");
+    cityRequire(liveUnitsOfType(Unit_AmbientAirplane) == 0,
+                what + ": a departed plane is still in the unit list");
+    cityRequire(owner->getNumItems(Unit_AmbientAirplane) == 0,
+                what + ": a departed plane was still counted by its house");
 }
 
 // ---------------------------------------------------------------------------
@@ -432,8 +561,15 @@ void checkAirplaneFlight() {
     int previousFrame = plane->getTakeoffFrame();
     FixPoint takeoffEndX = startX;
     bool cruising = false;
+    bool heldOutsideWaypoint = false;
+    bool heldSentinelWhileCruising = false;
+    long lastX = lround(plane->realX), lastY = lround(plane->realY);
+    int lastTicks = plane->getRemainingTicks();
 
-    for(int cycle = 0; cycle < 20000; ++cycle) {
+    // Longer than kAirplaneMaxTicks (6000 sprite ticks = 18750 cycles) on
+    // purpose, so a flight whose budget expires is still followed to its real
+    // ending instead of being cut off by the loop and called "off map".
+    for(int cycle = 0; cycle < 26000; ++cycle) {
         game->updateGameState();
         auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
         if(live == nullptr) break;
@@ -443,8 +579,18 @@ void checkAirplaneFlight() {
             else { cruising = true; takeoffEndX = live->realX; }
         }
         if(cruising) headings.insert(live->getAngle());
+        const Coord destination = live->getDestination();
+        if(destination.isValid()
+           && CA::isOutsideMap(destination.x, destination.y, currentGameMap->getSizeX(),
+                               currentGameMap->getSizeY()))
+            heldOutsideWaypoint = true;
+        if(destination.isInvalid() && live->getTakeoffFrame() == 0 && cycle > 20)
+            heldSentinelWhileCruising = true;
         // A plane is not a patrol: it must never adopt the helicopter's home.
         cityRequire(live->getRemainingTicks() <= CA::kAirplaneMaxTicks, "flight budget grew");
+        lastX = lround(live->realX);
+        lastY = lround(live->realY);
+        lastTicks = live->getRemainingTicks();
     }
 
     cityRequire(takeoffFrames == std::vector<int>({11, 10, 9}),
@@ -452,15 +598,25 @@ void checkAirplaneFlight() {
     cityRequire(cruising, "the airplane never finished its take-off run");
     cityRequire(takeoffEndX > startX, "the airplane did not climb out eastwards");
     cityRequire(headings.size() > 1, "the airplane never changed heading after take-off");
-    cityRequire(game->getObjectManager().getObject(planeID) == nullptr,
-                "the airplane never ended its flight");
-    cityRequire(owner->getNumItems(Unit_AmbientAirplane) == 0, "a departed airplane was still counted");
-    cityRequire(!tileReferences(planeID), "a departed airplane left a tile reference");
-    cityRequire(liveUnitsOfType(Unit_AmbientAirplane) == 0, "a departed airplane is still in the unit list");
+    // Whether this particular flight happened to draw an outside waypoint is up
+    // to the shared RNG; that the outside draws are kept at all is asserted
+    // deterministically in checkOutsideWaypointHandling().
+    cityRequire(!heldSentinelWhileCruising,
+                "a cruising plane was left with the invalid-destination sentinel");
+    FlightEnd natural;
+    natural.gone = game->getObjectManager().getObject(planeID) == nullptr;
+    natural.x = lastX;
+    natural.y = lastY;
+    natural.remainingTicks = lastTicks;
+    requireLeftTheMap(natural, planeID, owner, "natural flight");
 
     record("flight", "takeoff_frames=11-10-9 headings=" + std::to_string(headings.size())
                    + " climb_out_world_units=" + std::to_string((takeoffEndX - startX).lround())
-                   + " ended=offmap");
+                   + " outside_waypoint_held=" + std::to_string(heldOutsideWaypoint ? 1 : 0)
+                   + " ended_edge=" + leavingEdge(lastX, lastY)
+                   + " end_tile=" + std::to_string(lastX / TILESIZE) + ','
+                   + std::to_string(lastY / TILESIZE)
+                   + " ticks_left=" + std::to_string(lastTicks));
 
     // The eastern-edge variant of newSprite(): no take-off run, heading west.
     const Coord edge(currentGameMap->getSizeX() - 4, 15);
@@ -478,6 +634,157 @@ void checkAirplaneFlight() {
     cityRequire(liveWest == nullptr || liveWest->realX < westStart,
                 "the westbound plane did not fly west");
     record("flight", "eastern_edge_variant=westbound_no_takeoff");
+    game.reset();
+    currentGame = nullptr;
+}
+
+/// The waypoints `doAirplaneSprite` draws reach 50 Micropolis units beyond
+/// every edge, and the first unit beyond the west or north edge floors to tile
+/// -1, which is the engine's INVALID_POS sentinel. The airplane has to keep
+/// both; every other unit has to keep the map-tile validation it relies on.
+void checkOutsideWaypointHandling() {
+    auto game = newCityGame(1806);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    powerHouse(owner);
+    game->updateGameState();
+
+    const Coord runway(12, 15);
+    clearGround(runway + Coord(-1, -1), 5, 5);
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the waypoint-test airplane");
+    plane->deploy(runway);
+
+    // Negative waypoints are kept as given.
+    plane->setFlightDestination(Coord(-4, 7));
+    cityRequire(plane->getDestination() == Coord(-4, 7), "an outside waypoint was rejected");
+    cityRequire(plane->getDestination().isValid(), "an outside waypoint read as no destination");
+
+    // The two sentinel corners: -1 on either axis would make Coord::isInvalid()
+    // true, so it is pushed one tile further out instead of being lost.
+    plane->setFlightDestination(Coord(-1, 7));
+    cityRequire(plane->getDestination().isValid() && plane->getDestination().x < 0
+                && plane->getDestination().y == 7,
+                "a west-margin waypoint of tile -1 was mistaken for no destination");
+    plane->setFlightDestination(Coord(7, -1));
+    cityRequire(plane->getDestination().isValid() && plane->getDestination().y < 0
+                && plane->getDestination().x == 7,
+                "a north-margin waypoint of tile -1 was mistaken for no destination");
+    plane->setFlightDestination(Coord(-1, -1));
+    cityRequire(plane->getDestination().isValid(),
+                "the (-1,-1) corner of the outside margin was mistaken for no destination");
+    const Coord beyondEast(currentGameMap->getSizeX() + 3, currentGameMap->getSizeY() + 3);
+    plane->setFlightDestination(beyondEast);
+    cityRequire(plane->getDestination() == beyondEast, "a waypoint beyond the far edges was rejected");
+
+    // The production draw: doAirplaneSprite's own random waypoints must reach
+    // outside the map and survive being stored. Every draw is checked, so a
+    // waypoint silently dropped back to the previous one is caught even if the
+    // particular draw happens to be interior.
+    int outsideDraws = 0, keptDraws = 0;
+    for(int draw = 0; draw < 400; ++draw) {
+        plane->setFlightDestination(Coord::Invalid());
+        plane->pickDestination();
+        const Coord drawn = plane->getDestination();
+        cityRequire(drawn.isValid(), "a drawn waypoint was lost: the plane has no destination");
+        ++keptDraws;
+        if(CA::isOutsideMap(drawn.x, drawn.y, currentGameMap->getSizeX(), currentGameMap->getSizeY()))
+            ++outsideDraws;
+        // The original margin is 50 Micropolis units, just over three tiles.
+        const int margin = CA::kAirplaneDestinationMargin / CA::kMicropolisUnitsPerTile + 1;
+        cityRequire(drawn.x >= -margin && drawn.y >= -margin
+                    && drawn.x <= currentGameMap->getSizeX() + margin
+                    && drawn.y <= currentGameMap->getSizeY() + margin,
+                    "a drawn waypoint left the original's outside margin");
+    }
+    cityRequire(keptDraws == 400, "a drawn waypoint was not stored");
+    cityRequire(outsideDraws > 0,
+                "no drawn waypoint ever reached outside the map, so the outside draws of "
+                "doAirplaneSprite are still being rejected");
+
+    // ObjectBase::setDestination must still refuse off-map waypoints for units
+    // that have to reach them on the ground.
+    const Coord infantryAt(14, 18);
+    clearGround(infantryAt, 2, 2);
+    auto* soldier = owner->createUnit(Unit_Soldier, true);
+    cityRequire(soldier != nullptr, "could not create the ground unit for the validator check");
+    soldier->deploy(infantryAt);
+    soldier->setDestination(Coord(-4, 7));
+    cityRequire(soldier->getDestination() != Coord(-4, 7),
+                "ObjectBase::setDestination now accepts off-map waypoints for ground units");
+    soldier->setDestination(beyondEast);
+    cityRequire(soldier->getDestination() != beyondEast,
+                "ObjectBase::setDestination now accepts waypoints beyond the far edges");
+
+    record("flight", "outside_waypoints=kept sentinel_corners=3 ground_validation=unchanged"
+                     " draws=400 outside_draws=" + std::to_string(outsideDraws));
+    game.reset();
+    currentGame = nullptr;
+}
+
+/// A flight must end by crossing a boundary, through whichever edge it is
+/// nearest, and the expiry of DuneCity's flight budget must start that
+/// departure rather than delete the plane over the city. No coordinate is
+/// written here: the planes are deployed in bounds and fly out themselves.
+void checkDepartureThroughEachEdge() {
+    struct Case { const char* edge; Coord at; };
+    auto game = newCityGame(1807);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    powerHouse(owner);
+    game->updateGameState();
+
+    const int w = currentGameMap->getSizeX();
+    const int h = currentGameMap->getSizeY();
+    for(const Case& testCase : {Case{"west", Coord(4, h / 2)},
+                                Case{"east", Coord(w - 5, h / 2)},
+                                Case{"north", Coord(w / 2, 2)},
+                                Case{"south", Coord(w / 2, h - 3)}}) {
+        clearGround(testCase.at + Coord(-1, -1), 3, 3);
+        auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+        cityRequire(plane != nullptr, "could not create the departing airplane");
+        plane->deploy(testCase.at);
+        const Uint32 planeID = plane->getObjectID();
+        // Spend the budget: the flight is over, so it has to leave.
+        plane->remainingTicks = 0;
+
+        const FlightEnd end = followFlight(game.get(), planeID, 4000);
+        const std::string what = std::string("departure through the ") + testCase.edge + " edge";
+        requireLeftTheMap(end, planeID, owner, what, testCase.edge);
+        cityRequire(end.travelTiles > 1.0, what + ": the plane did not actually travel");
+        record("flight", std::string("departure_edge=") + testCase.edge
+                       + " travel_tiles=" + std::to_string(static_cast<long>(end.travelTiles))
+                       + " cycles=" + std::to_string(end.cycles)
+                       + " end_tile=" + std::to_string(end.x / TILESIZE) + ','
+                       + std::to_string(end.y / TILESIZE));
+    }
+
+    // Expiry over the city: a real take-off, a cruise, then the budget runs out
+    // far from every edge. The plane must fly out, not disappear where it is.
+    const Coord runway(w / 2, h / 2);
+    clearGround(runway + Coord(-1, -1), 5, 5);
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the expiring airplane");
+    plane->deploy(runway);
+    plane->beginTakeoff();
+    const Uint32 planeID = plane->getObjectID();
+    for(int cycle = 0; cycle < 200; ++cycle) game->updateGameState();
+    auto* cruising = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+    cityRequire(cruising != nullptr, "the expiring airplane did not survive its take-off");
+    cityRequire(cruising->getTakeoffFrame() == 0, "the expiring airplane never reached cruise");
+    const long expiryX = lround(cruising->realX), expiryY = lround(cruising->realY);
+    cityRequire(edgeSlackWorld(expiryX, expiryY) > 4 * TILESIZE,
+                "the expiry case has to start over the city, not at an edge");
+    cruising->remainingTicks = 0;
+
+    const FlightEnd expired = followFlight(game.get(), planeID, 8000);
+    requireLeftTheMap(expired, planeID, owner, "budget expiry over the city");
+    cityRequire(expired.travelTiles > 4.0,
+                "budget expiry over the city: the plane vanished instead of flying out");
+    record("flight", "expiry_start_tile=" + std::to_string(expiryX / TILESIZE) + ','
+                   + std::to_string(expiryY / TILESIZE)
+                   + " expiry_edge=" + leavingEdge(expired.x, expired.y)
+                   + " travel_tiles=" + std::to_string(static_cast<long>(expired.travelTiles))
+                   + " end_tile=" + std::to_string(expired.x / TILESIZE) + ','
+                   + std::to_string(expired.y / TILESIZE));
     game.reset();
     currentGame = nullptr;
 }
@@ -634,7 +941,11 @@ void checkSaveContinuation() {
         else out += "h gone";
         if(p) out += " p " + std::to_string(p->realX.getRawValue()) + ',' + std::to_string(p->realY.getRawValue())
                    + ',' + std::to_string(p->getAngle()) + ',' + std::to_string(p->getTakeoffFrame())
-                   + ',' + std::to_string(p->getRemainingTicks()) + ',' + std::to_string(p->drawnFrame);
+                   + ',' + std::to_string(p->getRemainingTicks()) + ',' + std::to_string(p->drawnFrame)
+                   // The waypoint is part of the flight now that it can be
+                   // outside the map: a reload that dropped it would fly away.
+                   + ',' + std::to_string(p->getDestination().x)
+                   + ',' + std::to_string(p->getDestination().y);
         else out += " p gone";
         return out;
     };
@@ -687,6 +998,92 @@ void checkSaveContinuation() {
     currentGame = nullptr;
 }
 
+/// A plane following a waypoint outside the map, in its departure phase, has to
+/// come back from a save on exactly that route. Nothing new is written: the
+/// waypoint lives in the inherited destination fields and the phase is read off
+/// the flight budget, so the record is still the 9853 one.
+void checkDepartureSaveContinuation() {
+    auto game = newCityGame(1809);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    powerHouse(owner);
+    game->updateGameState();
+
+    const Coord runway(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2);
+    clearGround(runway + Coord(-1, -1), 5, 5);
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the departing airplane to save");
+    plane->deploy(runway);
+    plane->beginTakeoff();
+    const Uint32 planeID = plane->getObjectID();
+    for(int cycle = 0; cycle < 200; ++cycle) game->updateGameState();
+
+    auto* cruising = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+    cityRequire(cruising != nullptr, "the airplane to save did not survive its take-off");
+    cruising->remainingTicks = 0;
+    // A few more cycles: the flight logic only runs on the original's sprite
+    // ticks (one every 3.125 game cycles), so beginDeparture() needs one of
+    // those to choose and store the outward route.
+    for(int cycle = 0; cycle < 8; ++cycle) game->updateGameState();
+    cruising = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+    cityRequire(cruising != nullptr, "the departing airplane was removed over the city");
+    const Coord savedWaypoint = cruising->getDestination();
+    const Sint32 savedBudget = cruising->getRemainingTicks();
+    cityRequire(savedBudget == 0, "the saved airplane was not in its departure phase");
+    cityRequire(savedWaypoint.isValid()
+                && CA::isOutsideMap(savedWaypoint.x, savedWaypoint.y, currentGameMap->getSizeX(),
+                                    currentGameMap->getSizeY()),
+                "the departing airplane was not following a waypoint outside the map");
+
+    const std::string path = gCityAircraftOut + "/city-aircraft-departure-" + gCityAircraftMod + ".dls";
+    cityRequire(game->saveGame(path), "could not write the departure save");
+
+    auto trace = [&](const AmbientAirplane* p) {
+        if(p == nullptr) return std::string("gone");
+        return std::to_string(p->realX.getRawValue()) + ',' + std::to_string(p->realY.getRawValue())
+             + ',' + std::to_string(p->getAngle()) + ',' + std::to_string(p->getRemainingTicks())
+             + ',' + std::to_string(p->getDestination().x) + ','
+             + std::to_string(p->getDestination().y);
+    };
+
+    std::vector<std::string> expected;
+    for(int i = 0; i < 300; ++i) {
+        game->updateGameState();
+        expected.push_back(trace(
+            dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID))));
+    }
+    cityRequire(expected.back() == "gone",
+                "the departing airplane did not leave the map within 300 frames");
+    game.reset();
+    currentGame = nullptr;
+
+    game = std::make_unique<Game>();
+    currentGame = game.get();
+    game->initGame(GameInitSettings(path));
+    game->initializeGameLoop();
+    cityRequire(currentGame->getLoadedSavegameVersion() == 9853,
+                "the departure save is not a 9853 record");
+    auto* loaded = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+    cityRequire(loaded != nullptr, "the departing airplane did not come back");
+    cityRequire(loaded->getRemainingTicks() == savedBudget, "the departing airplane lost its budget");
+    cityRequire(loaded->getDestination() == savedWaypoint,
+                "the reloaded airplane lost its waypoint outside the map");
+
+    for(int i = 0; i < 300; ++i) {
+        game->updateGameState();
+        const std::string got = trace(
+            dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID)));
+        if(got != expected[i])
+            throw std::runtime_error("city-aircraft probe: departure save continuation differs at frame "
+                                     + std::to_string(i) + ": got [" + got + "] expected ["
+                                     + expected[i] + "]");
+    }
+    record("continuation", "departure_exact_frames=300 waypoint="
+                         + std::to_string(savedWaypoint.x) + ',' + std::to_string(savedWaypoint.y)
+                         + " savegame_version=9853");
+    game.reset();
+    currentGame = nullptr;
+}
+
 } // namespace
 
 int runCityAircraftProbe() {
@@ -708,8 +1105,11 @@ int runCityAircraftProbe() {
     checkUnpoweredAirportLaunchesNothing();
     checkTrafficPatrolAndReports();
     checkAirplaneFlight();
+    checkOutsideWaypointHandling();
+    checkDepartureThroughEachEdge();
     checkEnemyAirDefence();
     checkSaveContinuation();
+    checkDepartureSaveContinuation();
 
     gCityAircraftCsv.close();
     SDL_Log("CITY_AIRCRAFT_PROBE_PASS: %s", gCityAircraftMod.c_str());

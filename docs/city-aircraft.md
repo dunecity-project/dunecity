@@ -1,6 +1,6 @@
 # Micropolis city aircraft
 
-1.0.821. The city Airport launches the two original Micropolis aircraft: the
+1.0.822. The city Airport launches the two original Micropolis aircraft: the
 traffic helicopter and the airplane. They use the original pixel art, the
 original movement and reporting arithmetic, and the engine's ordinary air-unit
 lifecycle, so hostile anti-air can shoot them down.
@@ -134,9 +134,20 @@ in both senses: `"Heavy Traffic reported." (x, y)`.
 - Cruising steers with `turnTo(getDir(...))` every five sprite ticks.
 - At `absDist < 50` it draws a new destination from
   `[-50, size*16 + 50]` in both axes — the original's margin outside the map,
-  which is how the plane eventually leaves. It is removed, with no explosion,
-  once it is a tile beyond the edge.
-- It is not a patrol: it has no home, never seeks traffic and never returns.
+  which is how the plane eventually leaves. Airplane waypoints bypass the
+  ordinary map-tile destination validator, so those outside coordinates are
+  retained. Negative coordinates that collide with the engine's `-1` sentinel
+  are moved one tile farther out. The plane is removed, with no explosion,
+  when its centre crosses the map boundary.
+- DuneCity retains a 6,000-sprite-tick cruise budget. Expiry now starts an
+  outward departure instead of deleting the plane over the city: it keeps an
+  existing outside waypoint or picks the nearest edge deterministically, then
+  uses the original turning clock to fly through that edge. Departure stops
+  the random waypoint draws and persists in the existing budget and destination
+  fields.
+- It has no landing or arrival phase: it has no home, never seeks traffic and
+  never returns. Micropolis implements takeoff and free flight, then off-map
+  retirement; this port keeps that behavior.
 
 The airplane-to-aircraft collision explosions are omitted; they are part of
 Micropolis's disaster system (`enableDisasters` in `doAirplaneSprite`). The
@@ -182,12 +193,15 @@ targeting rule was widened:
 
 ## Save and protocol compatibility
 
-`SAVEGAMEVERSION` 9852 → **9853** and `NETWORK_PROTOCOL_VERSION` 60 → **61**.
+`SAVEGAMEVERSION` remains **9853** (the aircraft block added over 9852).
+`NETWORK_PROTOCOL_VERSION` is **62** for 1.0.822.
 
 The feature was first built as local 1.0.817 from production 1.0.816, where the
 next free protocol number was 58. Carrying it onto production 1.0.820
 renumbered it to 61: 58, 59 and 60 are main's QuantBot civic/economy decisions,
-which this build keeps.
+which this build keeps. The flight-exit repair advances it to 62 because
+changed routes and retirement times also change subsequent Airport RNG draws.
+The repair adds no saved fields; 9853 aircraft saves still load.
 
 The helicopter now persists its home pad, patrol count, report cooldown, scan
 cooldown, report tally and return-home flag; the airplane its take-off frame and
@@ -226,7 +240,11 @@ take-off frames, climb-out, heading changes, off-map ending and the
 eastern-edge variant; hostile anti-air destroying both with no tile, unit-list
 or house-count leak while same-team and ground weapons cannot target them; and
 a save taken mid-take-off restoring its visible artwork immediately and replaying
-300 frames bit-identically after reload. Sparse-road steering checks a road on
+300 frames bit-identically after reload. The exit regression also checks
+retained random outside waypoints, negative/sentinel coordinates, actual
+movement across every edge, departure after budget expiry, lifecycle cleanup,
+and 300 identical frames after loading an outside departure waypoint.
+Sparse-road steering checks a road on
 the opposite coordinate parity from its traffic cell origin.
 
 ```sh

@@ -156,7 +156,11 @@
 //     orbit/flyover instead, and keeps up to three aircraft per house where this
 //     build keeps one of each — so the two diverge immediately. The save layout
 //     is 9853 for the same reason.
-#define NETWORK_PROTOCOL_VERSION            61
+// 62: City airplanes retain off-map waypoints and fly out when their cruise
+//     budget expires, instead of disappearing over the city. Changed routes,
+//     retirement times and subsequent Airport RNG draws require matching peers.
+//     The aircraft save layout remains 9853.
+#define NETWORK_PROTOCOL_VERSION            62
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

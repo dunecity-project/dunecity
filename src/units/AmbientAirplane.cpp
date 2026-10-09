@@ -85,6 +85,31 @@ void AmbientAirplane::deploy(const Coord& newLocation)
     respondable = false;
 }
 
+/**
+    Point the plane at a waypoint that may be outside the map.
+
+    `ObjectBase::setDestination` (src/ObjectBase.cpp:378) only accepts a
+    waypoint on an existing tile, or the (INVALID_POS, INVALID_POS) sentinel,
+    and silently discards anything else.  That validation is right for every
+    unit that has to walk or drive to its destination, and it stays: the
+    airplane needs destinations that are deliberately outside the map.
+    `doAirplaneSprite` draws them from `[-50, size*16 + 50]` (sprite.cpp:825),
+    and flying to one is how the original plane leaves and ends its flight.
+    With the generic setter those waypoints never landed, so the plane kept
+    turning back over the city until its budget deleted it in mid-air.
+
+    A coordinate of exactly -1 is pushed one tile further out: INVALID_POS is
+    -1, and `Coord::isInvalid()` is true if *either* axis is -1, so a waypoint
+    one Micropolis unit beyond the west or north edge would otherwise read as
+    "no destination at all".
+*/
+void AmbientAirplane::setFlightDestination(const Coord& waypoint)
+{
+    const auto outward = [](int tile) { return tile == INVALID_POS ? INVALID_POS - 1 : tile; };
+    destination.x = outward(waypoint.x);
+    destination.y = outward(waypoint.y);
+}
+
 void AmbientAirplane::beginTakeoff()
 {
     // newSprite(SPRITE_AIRPLANE): `destX = sprite->x + 200; frame = 11;`
@@ -94,7 +119,7 @@ void AmbientAirplane::beginTakeoff()
     drawnAngle = static_cast<Sint8>(RIGHT);
 
     const int distance = 200 * TILESIZE / CA::kMicropolisUnitsPerTile;
-    setDestination(Coord((lround(realX) + distance) / TILESIZE, location.y));
+    setFlightDestination(Coord((lround(realX) + distance) / TILESIZE, location.y));
 }
 
 void AmbientAirplane::beginWestboundCruise()
@@ -107,7 +132,7 @@ void AmbientAirplane::beginWestboundCruise()
     drawnAngle = static_cast<Sint8>(LEFT);
 
     const int distance = 200 * TILESIZE / CA::kMicropolisUnitsPerTile;
-    setDestination(Coord((lround(realX) - distance) / TILESIZE, location.y));
+    setFlightDestination(Coord((lround(realX) - distance) / TILESIZE, location.y));
 }
 
 Coord AmbientAirplane::micropolisPosition() const
@@ -141,7 +166,36 @@ void AmbientAirplane::pickDestination()
         return (micro >= 0) ? micro / CA::kMicropolisUnitsPerTile
                             : -((-micro + CA::kMicropolisUnitsPerTile - 1) / CA::kMicropolisUnitsPerTile);
     };
-    setDestination(Coord(toTile(microX), toTile(microY)));
+    setFlightDestination(Coord(toTile(microX), toTile(microY)));
+}
+
+/**
+    End the flight the way the original does: by leaving the map.
+
+    `doAirplaneSprite` has no landing state and no timeout; the only ending is
+    sprite.cpp:856, `if (spriteNotInBounds(sprite)) sprite->frame = 0`.  The
+    flight budget is DuneCity's own bound on a plane whose random waypoints
+    keep falling back over a map far larger than the original's 120x100, so
+    when it runs out the plane is sent out through its nearest edge instead of
+    being removed over the city.
+
+    The phase needs no new saved state.  `remainingTicks == 0` is the budget
+    flag and is already serialised, the outward waypoint lives in the inherited
+    destination fields (ObjectBase writes them raw, src/ObjectBase.cpp:226), and
+    "already leaving" is read back off that waypoint, so a reload resumes the
+    same route instead of choosing a new one.
+*/
+void AmbientAirplane::beginDeparture()
+{
+    if(destination.isValid()
+       && CA::isOutsideMap(destination.x, destination.y,
+                           currentGameMap->getSizeX(), currentGameMap->getSizeY())) {
+        return;     // already on its way out, including after a reload
+    }
+
+    setFlightDestination(CA::departureWaypoint(location.x, location.y,
+                                               currentGameMap->getSizeX(),
+                                               currentGameMap->getSizeY()));
 }
 
 void AmbientAirplane::leaveMap()
@@ -206,25 +260,30 @@ bool AmbientAirplane::update()
     if(remainingTicks > 0) --remainingTicks;
 
     if(takeoffFrame == 0) {
-        // `if (absDist < 50) { pick a new destination }`
-        const Coord position = micropolisPosition();
-        const Coord target = micropolisDestination();
-        if(destination.isInvalid()
-           || CA::getDir(position.x, position.y, target.x, target.y).distance
-                  < CA::kAirplaneArriveDistance) {
-            pickDestination();
+        if(remainingTicks > 0) {
+            // `if (absDist < 50) { pick a new destination }`
+            const Coord position = micropolisPosition();
+            const Coord target = micropolisDestination();
+            if(destination.isInvalid()
+               || CA::getDir(position.x, position.y, target.x, target.y).distance
+                      < CA::kAirplaneArriveDistance) {
+                pickDestination();
+            }
+        } else {
+            // Budget spent: stop drawing waypoints over the city and leave.
+            beginDeparture();
         }
     }
 
-    // spriteNotInBounds(): the original removes the plane as its hot spot
-    // crosses the edge. One tile of slack keeps the whole sprite out of view
-    // first, matching what the engine's other fly-off units do.
-    const long x = lround(realX);
-    const long y = lround(realY);
-    if(x < -TILESIZE || y < -TILESIZE
-       || x > (currentGameMap->getSizeX() + 1) * TILESIZE
-       || y > (currentGameMap->getSizeY() + 1) * TILESIZE
-       || remainingTicks <= 0) {
+    // spriteNotInBounds() (sprite.cpp:459): the original retires the plane as
+    // its hot spot crosses the world edge. Here the same rule is applied to the
+    // unit's world centre. This is the only way a flight ends on its own: the
+    // budget starts the departure above, it never deletes the plane in mid-air
+    // over the map. Combat destruction inside the map goes the ordinary
+    // UnitBase::destroy() route and is unaffected.
+    const Coord position = micropolisPosition();
+    if(CA::notInBounds(position.x, position.y,
+                       currentGameMap->getSizeX(), currentGameMap->getSizeY())) {
         leaveMap();
         return false;
     }

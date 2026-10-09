@@ -206,6 +206,54 @@ TEST_CASE("Off-map detection matches spriteNotInBounds", "[city][aircraft]") {
     CHECK(notInBounds(0, h * 16, w, h));
 }
 
+TEST_CASE("Outside waypoints and the departure route", "[city][aircraft]") {
+    const int w = 64, h = 48;
+
+    // doAirplaneSprite draws destinations from [-50, size*16 + 50], so an
+    // ordinary cruise waypoint is regularly off the map; that is the original's
+    // only way of ending a flight.
+    CHECK_FALSE(isOutsideMap(0, 0, w, h));
+    CHECK_FALSE(isOutsideMap(w - 1, h - 1, w, h));
+    CHECK(isOutsideMap(-1, 0, w, h));
+    CHECK(isOutsideMap(0, -1, w, h));
+    CHECK(isOutsideMap(w, 0, w, h));
+    CHECK(isOutsideMap(0, h, w, h));
+
+    // The departure waypoint must sit outside the map, past the arrival radius
+    // so the plane keeps heading out, and past the notInBounds edge so the plane
+    // is always retired at the boundary before it could reach the waypoint.
+    CHECK(kAirplaneDepartureMarginTiles * kMicropolisUnitsPerTile > kAirplaneArriveDistance);
+    CHECK(kAirplaneDepartureMarginTiles * kMicropolisUnitsPerTile > kAirplaneDestinationMargin);
+
+    // Nearest edge, with a deterministic tie order (west, east, north, south)
+    // so every peer and every reload derives the same route.
+    CHECK(departureWaypoint(3, h / 2, w, h) == Coord(-kAirplaneDepartureMarginTiles, h / 2));
+    CHECK(departureWaypoint(w - 4, h / 2, w, h)
+          == Coord(w - 1 + kAirplaneDepartureMarginTiles, h / 2));
+    CHECK(departureWaypoint(w / 2, 3, w, h) == Coord(w / 2, -kAirplaneDepartureMarginTiles));
+    CHECK(departureWaypoint(w / 2, h - 4, w, h)
+          == Coord(w / 2, h - 1 + kAirplaneDepartureMarginTiles));
+    // A corner is a tie between two edges; west wins, and the same input always
+    // gives the same answer.
+    CHECK(departureWaypoint(0, 0, w, h) == Coord(-kAirplaneDepartureMarginTiles, 0));
+    CHECK(departureWaypoint(0, 0, w, h) == departureWaypoint(0, 0, w, h));
+
+    // Every route leads out, from every tile of a map of each supported scale.
+    for (const int size : {51, 64, 128, 192, 384}) {
+        for (int tile = 0; tile < size; tile += 7) {
+            for (const Coord probe : {Coord(tile, 0), Coord(tile, size - 1), Coord(0, tile),
+                                      Coord(size - 1, tile), Coord(tile, size / 2),
+                                      Coord(size / 2, tile)}) {
+                const Coord out = departureWaypoint(probe.x, probe.y, size, size);
+                CHECK(isOutsideMap(out.x, out.y, size, size));
+                // Never the (-1, -1) "no destination" sentinel on either axis.
+                CHECK(out.x != INVALID_POS);
+                CHECK(out.y != INVALID_POS);
+            }
+        }
+    }
+}
+
 TEST_CASE("Sprite clock keeps the original 50ms cadence without drift", "[city][aircraft]") {
     CHECK(kMicropolisSpriteIntervalMs == 50);          // sim.c:70 sim_delay
     CHECK(isSpriteTick(0));

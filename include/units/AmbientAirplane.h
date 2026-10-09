@@ -47,19 +47,27 @@ public:
 
     /// Current take-off frame (11, 10, 9) or 0 once cruising.
     Sint32 getTakeoffFrame() const { return takeoffFrame; }
-    /// Remaining sprite ticks before the flight is retired.
+    /// Remaining cruise ticks before the plane begins its outward departure.
     Sint32 getRemainingTicks() const { return remainingTicks; }
+    /// True once the flight budget is spent and the plane is heading off the map.
+    bool isDeparting() const { return remainingTicks <= 0; }
 
 private:
     Coord micropolisPosition() const;
     Coord micropolisDestination() const;
+    /// Accept a waypoint outside the map, which ObjectBase::setDestination
+    /// discards. Airplane-only; every other unit keeps the map-tile validation.
+    void setFlightDestination(const Coord& waypoint);
     /// doAirplaneSprite: `destX = getRandom((WORLD_W * 16) + 100) - 50`.
     void pickDestination();
+    /// Route out through the nearest edge once the flight budget is spent, so a
+    /// flight still ends by crossing the boundary and never by disappearing.
+    void beginDeparture();
     /// Leave the map without an explosion (original: `sprite->frame = 0`).
     void leaveMap();
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
-    Sint32 remainingTicks;  ///< DuneCity bound on a flight that never lands
+    Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
 };
 
 #endif // AMBIENTAIRPLANE_H

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 61;
+static constexpr int kWireProtocolVersion = 62;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -59,7 +59,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // diverge immediately.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 61);
+    // 62 preserves aircraft destinations outside the map and flies out on expiry.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 62);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

@@ -90,6 +90,7 @@
 #include <Definitions.h>
 #include <fixmath/FixPoint.h>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace DuneCity::CityAircraft {
@@ -313,6 +314,41 @@ inline bool notInBounds(int x, int y, int mapWidth, int mapHeight) {
     return x < 0 || y < 0
         || x >= mapWidth * kMicropolisUnitsPerTile
         || y >= mapHeight * kMicropolisUnitsPerTile;
+}
+
+/// True when a waypoint lies off the map, i.e. it is a leaving waypoint.
+/// doAirplaneSprite draws destinations from `[-50, size*16 + 50]`, so an
+/// ordinary cruise waypoint is regularly outside; that is how the original
+/// plane eventually crosses an edge and ends.
+inline bool isOutsideMap(int tileX, int tileY, int mapWidth, int mapHeight) {
+    return tileX < 0 || tileY < 0 || tileX >= mapWidth || tileY >= mapHeight;
+}
+
+/// DuneCity bound, not an original constant: how far outside the map the
+/// departure waypoint is placed, in tiles.  It has to be further out than
+/// kAirplaneArriveDistance (50 units = 3.125 tiles) so the plane keeps heading
+/// outward instead of treating the waypoint as reached and turning back, and
+/// further out than the notInBounds() edge, so the plane is always retired at
+/// the boundary before it could ever arrive.
+inline constexpr int kAirplaneDepartureMarginTiles = 4;
+
+/// The original airplane has no landing and no timeout: `doAirplaneSprite` ends
+/// a flight only at sprite.cpp:856, when spriteNotInBounds() becomes true.
+/// When DuneCity's flight budget (kAirplaneMaxTicks) runs out, the plane is
+/// therefore routed straight out through its nearest edge instead of being
+/// removed over the city.  Deterministic, tie order included, so every peer and
+/// every reload derives the same route from the same position.
+inline Coord departureWaypoint(int tileX, int tileY, int mapWidth, int mapHeight) {
+    const int west  = tileX + 1;
+    const int east  = mapWidth - tileX;
+    const int north = tileY + 1;
+    const int south = mapHeight - tileY;
+    const int nearest = std::min(std::min(west, east), std::min(north, south));
+
+    if (nearest == west)  return Coord(-kAirplaneDepartureMarginTiles, tileY);
+    if (nearest == east)  return Coord(mapWidth - 1 + kAirplaneDepartureMarginTiles, tileY);
+    if (nearest == north) return Coord(tileX, -kAirplaneDepartureMarginTiles);
+    return Coord(tileX, mapHeight - 1 + kAirplaneDepartureMarginTiles);
 }
 
 } // namespace DuneCity::CityAircraft
