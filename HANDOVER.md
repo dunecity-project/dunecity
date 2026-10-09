@@ -56,11 +56,29 @@ version consistency and diff checks pass. The native and portable ARM64 game
 code/string sections match, and each runtime's initialization/rendering passes.
 All 76 final native CTests pass in 1020.71 seconds, including the three-mod
 worker veto, target-search workload, recovery, whole-army dispatch and launcher
-kiting checks. MBA installation: pending.
+kiting checks. MBA installation and independent read-back verified.
 Protocol advances 63 -> 64 for changed synchronized decisions; policy is
 `ornithopter-worker-veto-target-search-v92`. Save version remains 9853.
 Evidence: `../outputs/ornithopter-perf-824-20261009/`; private bundle/receipts:
 `../outputs/ornithopter-install-824-20261009/`. Nothing pushed or published.
+
+MBA installation completed at 2026-10-09T11:18:24.970473+00:00 from code commit
+`476d7493598a4796128ba7ea852da95f048464fa`. The fresh portable candidate and installed app
+match all 3,650 files/symlinks; 3,515 native resource files and
+72 bundled scenarios match. Deep/strict signatures and bundled SDL rendering
+passed locally, staged, installed and through a fresh independent SSH read-back.
+Installed executable SHA-256:
+`59e76ad09adbabb7a85e0b76823a8b626fc86e5d92b9029c27e6df09e633c326`.
+The byte-identical previous 1.0.823 app is retained at
+`/Applications/.dunecity-backup-before-1.0.824-20261009-221814/dunecity.app`;
+the older 1.0.822 backup is also retained. The Desktop shortcut resolves to
+`/Applications/dunecity.app`. All 2,840 selected save/settings/map/replay and
+configuration file hashes, plus all 30,419 profile file/symlink metadata
+entries, remain unchanged. Bulk telemetry is covered by metadata comparison.
+Removed 211 duplicate generated probe apps (2,445,212,670 bytes), retaining
+logs, probe sources, the canonical native app, portable candidates and receipts.
+The earlier live JSONL snapshot was an exact prefix of the completed capture;
+its prefix hash/length and SQLite were retained before removing that duplicate.
 
 ## 2026-10-09 — local 1.0.823: Ornithopter unit raids and launcher priority
 
