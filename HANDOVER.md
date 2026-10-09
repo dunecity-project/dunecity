@@ -72,7 +72,30 @@ version uses its exact cached Workshop revision
 `c562af59913f777a4b3026e1f101490d32074f2c8566a2109aef7373d78fb241`;
 a metadata-only profile copy otherwise opens the Workshop download dialog.
 Evidence: `../outputs/launcher-live-824-20261009/`; private bundle and receipts:
-`../outputs/launcher-install-825-20261009/`. Installation pending MBA transfer and read-back. Nothing pushed or published.
+`../outputs/launcher-install-825-20261009/`. Nothing pushed or published.
+
+Local candidate verification completed from code commit
+`8540ddf686cc4b0870ebbca2bd621644e398e28b`. The portable app contains
+3,650 files/symlinks, matches all 3,515 native resources and 72 scenarios,
+and passes deep/strict signatures and bundled SDL rendering. Native SHA-256:
+`06a0ba127b3d9f635d49a774cb8be2f5bcf970cc56b94cec98454119392399dd`;
+portable SHA-256:
+`51e2aaaf75a6560e9b6a5c60ee6a3c8332783b5a6f7e0604bd5f506ea804ec39`.
+
+MBA installation remains PENDING: a fresh hostname/no-running-game check
+briefly succeeded, but stage creation and subsequent default/IPv4/IPv6 SSH
+connections timed out. No app swap or profile write occurred, and no installed
+receipt exists. The exact audited archive, expected inventory, closed-game
+backup/rollback installer and independent readback script remain prepared.
+Once the MBA is reachable, run
+`python3 ../outputs/launcher-install-825-20261009/finish-install.py`, then verify
+its receipt and readback summary before claiming installation. The installer
+requires the previously verified 1.0.824 binary hash and retains all backups.
+
+Removed 127 owned generated probe apps (1,443,700,598 bytes), preserving
+logs, injected sources, isolated profiles, the exact save, SQLite, the canonical
+native app and portable candidate. Cleanup receipt and final test/evidence
+manifests remain alongside the investigation outputs.
 
 ## 2026-10-09 — local 1.0.824: target-search cost, worker veto and launcher rescue cap
 
