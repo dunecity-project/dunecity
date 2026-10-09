@@ -108,7 +108,7 @@ ObjectInterface* TechCenter::getInterfaceContainer() {
     // Same interface shape as Palace — the bottom bar shows the
     // "production" progress (spawn timer) in place of the special
     // weapon readiness meter.
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return TechCenterInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

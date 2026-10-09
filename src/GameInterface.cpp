@@ -548,7 +548,10 @@ void GameInterface::updateObjectInterface() {
     const std::string repairText = pLocalHouse && pLocalHouse->isAutoRepairEnabled()
         ? _("Auto repair on") : _("Auto repair off");
     if (autoRepairButton.getText() != repairText) autoRepairButton.setText(repairText);
-    autoRepairButton.setVisible(selection.empty() && pLocalHouse && pLocalPlayer);
+    // Auto repair is an order about a house's credits, so it is not an observer's to give.
+    autoRepairButton.setVisible(selection.empty() && pLocalHouse && pLocalPlayer
+                                && !currentGame->isObserving());
+    // Movement paths and the city overlays only change what this machine draws.
     movementPathsButton.setVisible(selection.empty());
     movementPathsButton.setToggleState(settings.general.showMovementPaths);
     const std::string pathsText=settings.general.showMovementPaths ? _("Paths on") : _("Paths off");
@@ -583,6 +586,7 @@ void GameInterface::updateObjectInterface() {
 
             if(pObjectContainer != nullptr) {
                 objectID = newObjectID;
+                makeContainerReadOnlyWhileObserving();
 
                 windowWidget.addWidget(pObjectContainer,
                                         Point(getRendererWidth() - sideBar.getSize().x + 24, 146),
@@ -605,6 +609,7 @@ void GameInterface::updateObjectInterface() {
             }
 
             pObjectContainer = MultiUnitInterface::create();
+            makeContainerReadOnlyWhileObserving();
 
             windowWidget.addWidget(pObjectContainer,
                                     Point(getRendererWidth() - sideBar.getSize().x + 24, 146),
@@ -615,6 +620,19 @@ void GameInterface::updateObjectInterface() {
             }
         }
     }
+}
+
+void GameInterface::makeContainerReadOnlyWhileObserving() {
+    if(pObjectContainer == nullptr || !currentGame->isObserving()) {
+        return;
+    }
+    // One switch for every panel type, including the build list and the multi-unit action bar.
+    // Container::handleMouseLeft/Right return false for a disabled container without
+    // descending into it, so no child button, progress bar or build item can be clicked -
+    // while draw() still renders the owner's real figures, because that only tests
+    // isVisible(). Doing this here rather than in sixteen panel classes means a panel added
+    // later is read-only by construction instead of by remembering to gate it.
+    pObjectContainer->setEnabled(false);
 }
 
 void GameInterface::removeOldContainer() {

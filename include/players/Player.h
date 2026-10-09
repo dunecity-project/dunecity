@@ -47,6 +47,18 @@ class MCV;
 class Player {
 public:
 
+    /**
+        Reserved controller id for the detached observer UI identity (Game::setupSpectatorView).
+        Registered controllers always get (houseID << 4) | index from House::addPlayer, so the
+        highest id a real controller can ever hold is ((NUM_HOUSES-1) << 4) | 0xF. Keeping the
+        observer outside that range is what makes every command it emits fail
+        CommandAuthorization::authorizeActor() with NoIssuer on every peer: getPlayerByID() is a
+        map lookup, and this id is never registered.
+    */
+    static constexpr Uint8 OBSERVER_PLAYER_ID = 255;
+    static_assert(static_cast<unsigned>(((NUM_HOUSES - 1) << 4) | 0xF) < OBSERVER_PLAYER_ID,
+                  "OBSERVER_PLAYER_ID must stay outside the (houseID << 4) | index range");
+
     Player(House* associatedHouse, const std::string& playername);
     Player(InputStream& stream, House* associatedHouse);
     virtual ~Player() = 0;
@@ -321,6 +333,10 @@ protected:
 
 private:
     friend class House;
+    // Game::setupSpectatorView() re-stamps the detached observer identity with
+    // OBSERVER_PLAYER_ID. Narrow friendship instead of a public setter: nothing else may
+    // ever change a controller id once House::addPlayer has registered it.
+    friend class Game;
 
     House* pHouse;
     Uint8 playerID;

@@ -180,6 +180,9 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+# Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
+# map rows, and a locally edited workshop map keeps its authored mod in the filter.
+add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
 
 # Standalone network wire harness.
@@ -375,7 +378,10 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # Set test properties
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests dune2r_presentation_tests PROPERTIES
+# map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
+# it falls back to the working directory and so to the test target's POST_BUILD
+# copy of data/, which carries no dependency on the maps themselves.
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -406,6 +412,29 @@ endif()
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
+            --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
+            --selftest --force --match-seconds 10 --min-structures 4 --min-units 19)
+        set_tests_properties(save_scenario_export PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        add_test(NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
+        set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)
+        add_test(NAME web_mod_payload_tests COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/tests/test_check_web_mods.py)
+        set_tests_properties(web_mod_payload_tests PROPERTIES TIMEOUT 30)
+        add_test(NAME bundled_city_eight_slot_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-eight-slot-startup
+            --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 384x384 - new beginning.ini"
+            --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
+        set_tests_properties(bundled_city_eight_slot_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        add_test(NAME bundled_three_way_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-three-way-startup
+            --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
+            --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
+        set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         add_test(NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)
@@ -418,6 +447,44 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/network/run-command-execution-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/command-probe)
         set_tests_properties(game_command_regressions PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+        # Offline Custom Game "Spectate": two real AI factions with no observer controller or
+        # start slot, full map and radar without touching exploration, owner-specific panels for
+        # every owner, every mutation route refused while the owners' own commands still work,
+        # and observation preserved across save and reload. Separate from the menu probe so
+        # neither has to carry the other's runtime.
+        add_test(NAME local_spectator_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-probe)
+        set_tests_properties(local_spectator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        foreach(shared IN ITEMS off on)
+            set(shared_args)
+            if(shared STREQUAL "on")
+                list(APPEND shared_args --shared-house)
+            endif()
+            add_test(NAME local_spectator_worm_startup_${shared} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --eight-houses ${shared_args}
+                --map "${CMAKE_SOURCE_DIR}/tests/spectator/8P-preplaced-worms.ini"
+                --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/spectator-worm-${shared}-probe)
+            set_tests_properties(local_spectator_worm_startup_${shared} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
+        # Control case: the shared non-network local-player byte must keep its old meaning for
+        # an ordinary human single-player save, and must never read back as an observer.
+        add_test(NAME local_spectator_ordinary_round_trip COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --ordinary-round-trip
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-ordinary-probe)
+        set_tests_properties(local_spectator_ordinary_round_trip PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        # The Offline Custom Game setup row itself, against the real CustomGamePlayers widgets.
+        add_test(NAME local_spectator_setup_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-spectator-probe.py --setup
+            --map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/spectator-setup-probe)
+        set_tests_properties(local_spectator_setup_probe PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
         add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
@@ -573,6 +640,41 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/city-growth-probe)
         set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A city map with no usable spice must seed demanded R/C/I out of its
+        # starting grant, including the storage needed to bank its tax. Optional
+        # port technology and transport must leave this budget intact.
+        add_test(NAME quantbot_no_spice_city COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-spice-city-probe --repeatable
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/no-spice-city-probe)
+        set_tests_properties(quantbot_no_spice_city PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A growth-cap project (demanded Stadium/Airport, planned reactor) must enter
+        # production without its price banked and be charged in installments out of
+        # arriving tax: the reported 1.0.817 city never ordered a 3000-credit stadium
+        # in 247109 cycles. Concrete is required so the foundation budget is exercised.
+        add_test(NAME quantbot_growth_installments COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --growth-installment-probe
+            --repeatable --level 9 --mod dunecity --concrete-required
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/growth-installment-probe)
+        set_tests_properties(quantbot_growth_installments PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        add_test(NAME quantbot_civic_priority COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --civic-priority-probe
+            --repeatable --level 9 --mod dunecity --concrete-required
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/civic-priority-probe)
+        set_tests_properties(quantbot_civic_priority PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        foreach(no_spice_map IN ITEMS dunecity low-cash)
+            add_test(NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py
+                --map ${no_spice_map} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/no-spice-income-probe)
+            set_tests_properties(quantbot_no_spice_income_${no_spice_map}
+                PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        endforeach()
         foreach(starport_mod IN ITEMS vanilla dunecity)
             add_test(NAME quantbot_starport_${starport_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --starport-probe --level 9 --repeatable

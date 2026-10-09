@@ -140,7 +140,16 @@
 //     Older peers reject these values; save and observer layouts are unchanged.
 // 57: Wrap ground combat rotation after movement; older peers can generate an invalid
 //     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
-#define NETWORK_PROTOCOL_VERSION            57
+// 58: QuantBot establishes city tax income before optional spice technology on
+//     depleted maps. Older peers issue different construction and import orders
+//     from the same state. Save and runtime layouts remain unchanged.
+// 59: Needed civic buildings and nuclear power enter gradual-payment production
+//     before their full price is saved. Older peers choose different construction
+//     and spending orders. Save and runtime layouts remain unchanged.
+// 60: Required city civics and their missing prerequisites outrank optional
+//     spending, including between positive demand-clipping phases. Older peers
+//     choose different construction orders. Save and runtime layouts are unchanged.
+#define NETWORK_PROTOCOL_VERSION            60
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

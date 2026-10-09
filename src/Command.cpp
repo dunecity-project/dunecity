@@ -204,6 +204,20 @@ bool mayActOnObject(Uint8 playerID, CMDTYPE commandID, Uint32 objectID, const Ob
 } // namespace
 
 void Command::executeCommand() const {
+    // The detached observer identity (Game::setupSpectatorView) holds a reserved controller id
+    // that House::addPlayer can never mint, so it is never registered. Most commands already
+    // refuse it through mayActOnObject/executeCityCommand, which both require the issuer to
+    // resolve - but a few act on the raw id before any such check: CMD_PLAYER_PAUSE inserts
+    // whatever id it is given into pausedPlayers, and a future command could do the same. Drop
+    // the reserved id here, ahead of every mutation and every parameter check, so observation
+    // is read-only by construction rather than by each case remembering to look.
+    //
+    // Deliberately only this one reserved value: unknown or system ids are left exactly as they
+    // were, the wire format is untouched, and no AI or human controller is affected.
+    if(playerID == Player::OBSERVER_PLAYER_ID) {
+        return;
+    }
+
     // This path is replayed on every peer. AI do* helpers bypass it, so these
     // leases distinguish actual player control from old forced AI movement.
     const bool unitOrder=commandID==CMD_UNIT_MOVE2POS || commandID==CMD_UNIT_MOVE2OBJECT

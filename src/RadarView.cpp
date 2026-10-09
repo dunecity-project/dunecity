@@ -137,7 +137,15 @@ void RadarView::draw(Point position)
 }
 
 void RadarView::update() {
-    if(pLocalHouse->hasRadarOn()) {
+    // An observer's minimap is not a faction's radar installation: it must not go dark because
+    // the house the view happens to be anchored to has no radar, or lost power. This runs every
+    // frame, so forcing the mode on only at setup would be switched straight back off here.
+    // Tile::getRadarColor supplies the whole-map colours once the mode is on.
+    if(currentGame != nullptr && currentGame->isObserving()) {
+        if(currentRadarMode != RadarMode::RadarOn && currentRadarMode != RadarMode::AnimationRadarOn) {
+            switchRadarMode(true);
+        }
+    } else if(pLocalHouse->hasRadarOn()) {
         if(currentRadarMode != RadarMode::RadarOn && currentRadarMode != RadarMode::AnimationRadarOn) {
             switchRadarMode(true);
         }

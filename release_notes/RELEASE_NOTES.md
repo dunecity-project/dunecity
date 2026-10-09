@@ -1,3 +1,14 @@
+# Dune City 1.0.820
+
+Watch AI matches with the new offline **Spectate** option in Custom Game. Spectators see the full map and can inspect every faction's buildings and units. All participating houses can be QuantBots; Shared house is optional. Inspection does not grant control of another faction.
+
+- City QuantBots open an income-producing residential, industrial and commercial economy on maps without harvestable spice, instead of exhausting their credits on a useless refinery opening.
+- Required Stadiums and Airports take priority over optional expansion and protection once their real population requirements are reached. The AI resolves missing prerequisites and can begin a needed Stadium, Airport or planned Nuclear Plant with the foundation and construction-start budget, paying the remainder as income arrives.
+- Fixes the eight-house Colonists spectator startup crash and user-map filtering. Workshop metadata files no longer appear as duplicate maps; declared Neutral factions count as playable slots.
+- Bundles all eleven authored single-player scenarios, including BigCityLife, both New Beginning sizes, Colonists, Colonist and the developed 192x192 **3waysplit** world. Choose Dune City 1.002 in Custom Game. The converted 3waysplit scenario starts with its saved layout, buildings, armies, factions, alliances and whole credits; population, production queues and live orders restart.
+
+Existing saves remain loadable. Multiplayer protocol is 60: all peers must update together. Saves, settings and user maps remain in the separate user folder. This release also includes the automatic Dune2R artwork downloads from 1.0.815.
+
 # Dune City 1.0.815
 
 Dune2R now downloads and updates its remastered artwork automatically when you select it in Custom Game or continue a setup with it already selected. The first download contains six packs, approximately 384 MB, including Harkonnen Infantry Remastered.

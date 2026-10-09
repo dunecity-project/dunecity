@@ -236,7 +236,34 @@ public:
     std::string lastJoinStatus;
     std::vector<JoinSlot> availableJoinSlots() const;
     bool acceptJoinRequest(const std::string& request, const std::string& name, const JoinSlot& slot, bool spectator = false);
+    /**
+        True only for a *network* observer: this machine's simulation is driven by the host's
+        observer stream. Keep every stream, checkpoint and lockstep gate on this predicate -
+        a local observer runs the simulation itself and must not be mistaken for one.
+    */
     bool isSpectating() const;
+
+    /// True for the Offline Custom Game "Spectate" choice: all-AI match watched locally.
+    bool isLocalObserver() const { return localObserver; }
+
+    /**
+        Presentation, inspection and input predicate shared by both kinds of observer: full map
+        and radar, selection and detail panels for every owner, and no orders. Never use this for
+        simulation, stream or save-format decisions.
+    */
+    bool isObserving() const { return localObserver || isSpectating(); }
+
+    /**
+        Whether the single-player "immortal human player" option may protect pLocalHouse.
+
+        The option exists to protect the house the local *human* plays. While observing,
+        pLocalHouse is only a view anchor onto a real AI faction, so answering yes there would
+        quietly make one AI invulnerable and change the outcome of the match being watched.
+        Watching a game must not alter it. Ordinary single-player and shared-house games are
+        unaffected, and the network cases never reach these guards at all.
+    */
+    bool localHumanImmortalityApplies() const;
+
     void setupSpectatorView();
 
     /**
@@ -1005,6 +1032,9 @@ private:
     bool    bPause = false;                     ///< Is the game currently halted
     bool    bMenu = false;                      ///< Is there currently a menu shown (options or mentat menu)
     std::unique_ptr<HumanPlayer> spectatorViewPlayer; // UI identity only; never registered or saved.
+    /// Offline Custom Game observation. Set from GameInitSettings::isLocalSpectator() on a new
+    /// game and from the reserved local-player byte on load; never a network property.
+    bool localObserver = false;
     sdl2::texture_ptr spectatorLabel;
     bool    bReplay = false;                    ///< Is this game actually a replay
 

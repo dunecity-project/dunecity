@@ -1,3 +1,331 @@
+## 2026-10-09 — 1.0.820: global user scenarios and 3waysplit conversion
+
+All eleven authored single-player scenarios are bundled, including six missing
+MBA maps and the current-world 3waysplit conversion. Metropolis and the thirteen
+local laptop scenarios were already present byte for byte. Source user maps and
+save remain untouched. Catalogue-only sidecars retain Dune City dependency and
+versions without requiring the author's private cached revision. Empty hashes
+use ordinary new-game pinning; nonempty invalid hashes still fail. Declared
+Neutral factions now count as playable slots; ambient ownership alone does not.
+
+3P - 192x192 - 3waysplit contains 4,525 structures and 831 units, with Harkonnen
+team3, Sardaukar team4 and Neutral team1. All terrain, concrete, saved roads,
+health within quantization, teams and whole credits survive native reload. Five
+carried/repairing units deploy near legal positions in their own cities; 23
+Retreat orders reset to Area Guard. Normal city startup restores 1,536 frontage
+roads. 4,955 unowned substrate tiles use passive Atreides ownership with no
+selectable slot or forces, avoiding construction anchors for the active houses.
+Population, queues, cargo amounts, upgrades and live simulation restart as the
+user explicitly accepted. Save9852 and protocol60 remain unchanged.
+
+The diagnostic tools/scenarios/export-save-scenario.py uses the native save
+loader and map editor writer, then verifies in a separate engine process and
+steps sixty game seconds. Input/output/report collisions are refused and exact
+mod resolution is offline. The synthetic CTest covers damage, wall health,
+concrete+road, air over buildings, stacked and carried infantry, live Retreat,
+three factions and credits. Generic diagnostic rosters now handle all twelve
+house positions instead of truncating generic maps at six.
+
+A fresh menu check caught the new INI missing from the incremental app bundle.
+Maps and sidecars now participate in LINK_DEPENDS with CONFIGURE_DEPENDS, so
+map-only changes run the existing POST_BUILD copy. Browser payload validation
+also requires all twelve city INIs (including the existing third-party map)
+and eleven metadata sidecars. Native packaged content is byte-verified.
+
+The converted scenario is installed on the MBA as an SP User Map for the existing
+1.0.819 app. Remote readback verifies its SHA and all fifty existing maps/save
+files unchanged; the source save SHA matches the captured input. No app was
+replaced, no game was stopped/started, and no publication or push occurred.
+
+Claude delivered the bounded diagnostic implementation and initial synthetic
+checks using subscription authentication. Its native runs lacked the MBA's
+pinned cache; Codex stopped the stalled diagnostics, supplied the cache, reviewed
+and corrected faction capture, live modes, wall health, air placement, passive
+substrate ownership, offline resolution and startup road normalization. Codex
+completed integration and independent native/default-mod startup checks.
+
+Reference: docs/user-scenario-promotion.md and tools/scenarios/README.md.
+Evidence: ../outputs/scenario-promotion-20261009/ (source snapshots, reports,
+all ten original authored map startup tests, CTest logs, bundle verification,
+and MBA scenario installation receipt). Candidate checks are recorded in that
+reference document; these local checks are not public CI/deployment evidence.
+
+## 2026-10-09 — 1.0.819 civic priority fixed, tested and installed on the MBA
+
+The 1.0.818 installed binary was verified in the live MBA capture. Its installment
+funding path still lost the yard to upstream saving/investment branches, and
+missing Radar erased civic eligibility. Its earlier fixture forced a demand flag
+without reaching the simulation's real population threshold; it established
+funding mechanics, not normal scheduling progress.
+
+QuantBot now derives Stadium/Airport need from `missingDemandCivics` on real
+population and queue-inclusive counts. It walks missing mod prerequisites/legal
+yard upgrades and puts a funded required civic before optional protection saving,
+extra power, spice capacity and technology. Actual storage overflow, blackout,
+observed aircraft and selected emergency service retain their priority. Unloading
+backlog expansion can wait for the single required civic commitment; otherwise
+persistent backlog saving could starve that civic. Funding still requires the real
+foundation/start budget and continuing income, with full unpaid queues reserved.
+No serialized fields changed (save 9852); deterministic AI orders change, so
+protocol is 60 and both wire-test pins were updated.
+
+The controlled captured New Beginning map (SHA256
+`abdce857634a34b2b9da243efa1b89afdc2a906864d98a98b67416380d8b5`), seed 223970290,
+all-AI detached spectator, normal paid construction/concrete, four Brutal factions
+and map Brain teams 1/2/3/5 reaches 66 minutes. The 1.0.818 baseline built zero stadiums;
+1.0.819 built one in every house and rebuilt Neutral's destroyed stadium. Harkonnen
+also built an Airport. Stadium orders enter at 178–391 credits versus price 3,000;
+Airport at 734 versus 5,000. No grants/instant construction were used in these matches.
+These are fresh controlled matches, not an exact live-team/save replay. The map
+starts without harvestable spice but contains 12 blooms. Candidate SQLite import:
+84,365 events, zero invalid/incomplete records. Detailed timing/limits and test
+instructions: `docs/testing-1.0.819.md`.
+
+All 70 registered native CTest gates pass: core 32/32 (535.85s), AI/economy 38/38
+(417.32s), against unchanged shipping source/executable fingerprints. The two-pass
+priority regression with the actual preserved 818 AI object fails because it queues
+extra nuclear capacity instead of the Stadium; 819 orders the Stadium in one pass.
+Real paid Radar placement -> Stadium, negative valve, duplicate, foundation,
+zero-credit pause/resume/completion, aircraft, blackout and non-city checks pass.
+The synthetic optional-protection case skips because its crime 250 is a real
+emergency; it is not counted as proof. Actual whole-match Harkonnen yard 913 instead
+orders its needed Airport at cycle 196625 over its winning unurgent Rocket Turret
+candidate. Dangerous-crime urgency remains source-reviewed rather than forced.
+
+Native Release build, version/diff checks and pre/post Ninja dependency audits
+pass. The portable local ad-hoc app has 36 ARM64 Mach-O files, portable library paths,
+native/package code/string equivalence, deep/strict signature and bundled SDL
+initialization/hidden rendering. Packaged executable SHA256:
+`fbb900ce1e9dcf852aee2f820bf432e9dca201be12575d2ec1f3c167a6dd7282`.
+Artifacts/receipts: `/Users/stefan/Documents/projects/outputs/stadium-starvation-819`
+and `/Users/stefan/Documents/projects/outputs/install-819-mba`.
+
+Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app` from source
+commit `87176482aeb854df4a011954f7dcd70f8f3a4edb` after SSH connectivity returned.
+The transferred archive SHA256 matched
+`10992e36dd2aa8569f7b830c9eaf9754e0464c3eab14275663b1d85f45661ce4`.
+The guarded swap and independent readback verify the version/executable hash,
+deep/strict signature, bundled SDL initialization/hidden rendering and unchanged
+configuration and all 2,482 checked `.ini`/`.dls` profile files. The usual
+`~/Desktop/DuneCity.app` shortcut resolves to the installed app. Previous 1.0.818
+is retained at `/Applications/.dunecity-backup-before-819-20261008/dunecity.app`,
+with verified executable SHA256
+`a9b010fd7f9a95027de360d69659d2c6d9b3b55f59123c94db75b628061e9d55`.
+No running match was stopped or started. Installation receipts are
+`install-819-receipt.json` and `independent-verification.json` in the install
+artifact directory. No push, production publication or CI run occurred.
+
+## 2026-10-09 — 1.0.818 installed on the MBA
+
+On `feature/custom-game-spectator`, fixes the reported eight-house Colonists
+spectator startup crash, saved-map filtering/metadata rows, and partial-price
+funding for needed Stadium/Airport/planned Nuclear Plant. AIs whose names match
+the local profile can no longer create a null local human pair; unit deployment
+callbacks and preplaced sandworm warnings tolerate the view not being created yet.
+Shared house is optional. Exact captured Colonists map, all eight Brutal houses
+including Neutral, passes 172 observer checks with Shared house off and another
+172 with it on, including simulation, ownership, input authority and save/restart.
+These use a controlled seed/stronger fog checks, not an exact MBA session replay.
+
+Needed city infrastructure enters production on its actual foundation/start budget
+with positive ongoing income. All downstream full-price guards honour only the
+validated per-yard project; unpaid obligations still reserve the full balance.
+Foundations are booked once. Blackout recovery can queue cheap wind and foundations
+beside a pending reactor. Dedicated actual-QuantBot tests cover all three projects,
+duplicate prevention, real foundation placement, paid progress, zero-credit pause,
+resumption and bounded completion under a declared test grant; ordinary guards
+and non-city controls remain. No serialized state changed (save 9852); deterministic
+AI orders differ, so protocol is bumped 58 to 59 with its wire-test pins.
+
+The original ended MBA match was imported into SQLite: 71,382 events, zero invalid
+records, zero Stadium orders. The final 66-minute fresh-start comparison on the
+captured New Beginning map/seed 59770805 accepts four Nuclear orders at 236–704
+credits versus price 2,000, and a Stadium at 686 versus price 3,000. Final cumulative
+summary confirms four reactors and one Stadium built. Baseline 817 accepts none.
+Final import: 98,510 events, zero invalid/incomplete records. Airport is exercised
+by the dedicated cap fixture, not this match. Initial map spice is zero; later
+blooms generate spice. No claim of identical replay, all-house project timing or
+improved match balance is made.
+
+Both saved MBA maps were intact. New Beginning's Vanilla-derived category differed
+from its authored DuneCity dependency; filtering accepts either without rewriting
+content/category or weakening revision checks. BigCityLife already appears in the
+baseline scan, so its earlier absence is not assigned that same root cause. The
+editor excludes `.workshop.ini` metadata rows. Real editor and Custom Game widgets
+at all three test sizes verify the saved-map fixtures and unchanged map bytes.
+
+All 69 CTest gates have passing results: full run 68/69 in 794.84 seconds, then the
+menu gate passes in 234.79 seconds using a fully fresh generated output directory.
+The old fixture sidecars referred to removed generated cache entries; merely
+resetting its profile did not remove these outside-profile test artifacts. Earlier
+failures and generated profiles are preserved. No shipping code changed between
+the successful checks. Native Release build, pre/post Ninja dependency audits,
+version consistency and diff checks pass. The portable bundle has 36 ARM64 Mach-O
+files, portable load paths, native/package code and string equivalence, deep/strict
+ad-hoc signature and bundled SDL initialization/hidden rendering checks.
+
+Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app` from source
+commit `da777bef82dc9c79cf16577af5dbad3c8943fed0`. The guarded swap completed with no
+game running; no match was stopped or started. All 2,408 checked `.ini`/`.dls`
+profile files and the configuration are byte-identical before/after installation.
+Independent readback repeats the installed version/hash, deep/strict signature,
+bundled SDL hidden rendering and profile comparison, and confirms the usual
+`~/Desktop/DuneCity.app` shortcut resolves to the installed app. Executable SHA256:
+`a9b010fd7f9a95027de360d69659d2c6d9b3b55f59123c94db75b628061e9d55`.
+Previous 817 is retained at
+`/Applications/.dunecity-backup-before-818-20261008/dunecity.app` with its verified
+original SHA256 `1a219e75494e039b6b5dfdc831bb3133b513abc01e2890e20f0829d066cf0df0`.
+The transferred archive hash matches before extraction. Public production remains 1.0.816.
+No push, PR, public release, platform CI or notarization was performed. Test steps:
+`docs/testing-1.0.818.md`. Private receipts: `../outputs/map-visibility-818/`,
+`../outputs/stadium-ai-818/final-validated/`,
+`../outputs/spectator-colonists-crash-818/independent/` and
+`../outputs/install-818-mba/`.
+
+## 2026-10-08 — 1.0.817 installed on the MBA
+
+Installed the tested portable ARM64 candidate at `/Applications/dunecity.app` on
+`Stefans-MacBook-Air.local`, from clean source commit
+`a64c7db28c7dee49fa96cbaa734541b80eb23d9d`. It includes Offline Custom Game
+Spectate and the no-spice city income fix described below. The game was closed
+before preparation and the guarded app swap; no match was stopped or started.
+
+CMake install bundled the Homebrew dependencies, including SDL3 for sdl2-compat,
+and applied the normal local ad-hoc signature. All 36 Mach-O files have ARM64 and
+portable load paths. Native and packaged executable code/string sections match.
+Deep/strict signature verification and bundled SDL initialization/hidden rendering
+pass locally, on the MBA staging copy, on the installed app, and on a fresh
+independent verification. Installed executable SHA256:
+`1a219e75494e039b6b5dfdc831bb3133b513abc01e2890e20f0829d066cf0df0`.
+
+All 2,335 checked `.dls`/`.ini` files and the user configuration are byte-identical
+before/after installation. The usual `~/Desktop/DuneCity.app` shortcut resolves
+to the installed app. Signed public 1.0.816 is retained at
+`/Applications/.dunecity-backup-before-817-20261008/dunecity.app`, with its original
+binary SHA256 `bf7355fbea00c8b961e0964b231bdf49e786f8d7a0a144f366e50d261783cfa3`.
+Private package and independent receipts: `../outputs/install-817-mba/`.
+Production remains 1.0.816; no source push, public release or notarization was
+performed. The entries below record the earlier implementation/verification state.
+
+## 2026-10-08 — local candidate 1.0.817: no-spice city income opening
+
+Implemented on `feature/custom-game-spectator` after the completed MBA `no money`
+match. Original 1.0.816 session `1791440520505988-0` and the save's embedded
+NewBeginning 192x192 map were frozen before the user's next match. Imported all
+8,844 events into SQLite with zero invalid records. Final cumulative summaries
+show all four Brutal AIs at zero cash, zero R/I/C and zero city income. The port
+prerequisite ladder consumed the grant, then held the yard for an unaffordable
+Repair Yard. Native pre-fix 1.0.817 also reproduces the opening in three houses;
+the fourth builds one industrial lot, so this is not a byte-identical save replay.
+
+QuantBot now protects actual credit storage plus four demanded seed lots when
+the sustainable live-map spice worker target is zero. Essential power and live
+air threats keep precedence. Queue-inclusive commitments shrink only as ordinary
+orders are accepted; accepted capacity counts immediately across parallel yards.
+Optional port tech, peaceful services/coverage and imports wait for this opening.
+Factory/repair footprints no longer exclude every income plot on cramped starts
+before a viable spice field or bankable tax base exists. A port buys transport
+only for a real harvesting fleet or repair traffic. Established factories with
+bankable tax exceeding upkeep retain the ordinary protected growth/service lane
+and affordable army production; a funded new line can also run beside the seed.
+
+One Refinery is legitimately needed for storage in this mod: capacity 1,005 at
+tech 1, with the 10,000-credit Silo behind it. The opening chooses the cheapest
+legal, placeable capacity source from mod data and records `city_income_storage`.
+Without it, apparently positive gross city tax is discarded. Tests therefore
+require cumulative `city_net_applied`, rather than projected or gross income.
+
+Final source completes 18 isolated 12-minute scenarios: the captured map/seed at
+all four difficulties, three additional seeds, six zero-spice geometry/difficulty
+variants, and five normal-spice/non-city controls. All 54 active zero-spice AI
+openings bank more than 100 credits; surviving cities build at least four lots.
+One 64x64 house is defeated before its fourth lot; a prebuilt Sardaukar city uses
+its existing industrial workforce and grows demanded R/C. These are retained
+explicitly rather than counted as income failures or silently omitted.
+
+An additional 60-minute original-seed Brutal run reaches 225,000 cycles with all
+four houses alive, 43–79 R/I/C lots built per house, military production and
+14,192–40,695 cumulative banked city credits. Normal-spice controls actually refine
+8,133–16,486 credits; Vanilla/Dune2R zero-spice controls complete without acquiring
+city lots. All these games use original grants and ordinary production updates.
+
+Native Release build, pre/post Ninja dependency audits and diff checks pass.
+Three new CTest gates exercise real queue policy and ordinary banked income on
+1,500/2,000-credit maps. The final full CTest run passes all 65 gates in 894.19
+seconds, including native Catch, spectator/continuation, no-spice income,
+opening-economy, city-growth, Starport, shared-spending and credit storage checks.
+No serialized fields are added (save 9852). Network protocol is bumped 57→58,
+including its pins, because deterministic AI construction/import orders differ.
+
+Local app: `build/bin/dunecity.app`, version 1.0.817, on claw.local. The active MBA
+game/installation and public release remain 1.0.816. No install, push, PR, tag,
+platform CI, signing or publication was performed for this task. The native app
+uses local Homebrew libraries; portable release packaging is separate.
+Test selections: `docs/testing-1.0.817.md`; full receipt and invariants:
+`docs/no-spice-economy-817.md`. Captured inputs, SQLite, bounded Claude trace/patch/
+focused review outputs, parent corrections, simulations and final source hashes:
+`../outputs/no-spice-economy-817/`. Intermediate prototype results are excluded
+from the final-source receipts. Already-spent grants are not regenerated when
+loading the old zero-zone save.
+
+## 2026-10-08 — local candidate 1.0.817: Offline Custom Game spectator mode
+
+Implemented on `feature/custom-game-spectator`, based on 4b69d0eb (production 1.0.816).
+The source and tests are committed locally; no push, PR, tag or new public release. Native
+app rebuilt at `build/bin/dunecity.app`, bundle version 1.0.817. The MBA's installed
+`/Applications/dunecity.app` remains 1.0.816: process 97912 was running during final verification.
+No active game was interrupted or installation replaced. Test selections: `docs/testing-1.0.817.md`.
+
+Offline Custom Game gains **Spectate** beside **Shared house**. Turning it on replaces the
+human seat with an AI and preserves configured AI/faction/team choices. Every active house
+belongs to AI; the observer consumes no faction or start position. Whole-map and minimap
+visibility, selection of unexplored foreign buildings, and every owner's full detail panels
+are available. Panel figures and accent colours come from the selected object's owner.
+Factory lists remain scrollable for inspection while order buttons are disabled. Choosing
+Online clears/hides this offline choice; turning it off restores a human seat.
+
+`Game::isSpectating()` stays network-only for observer streams, lockstep, checkpoint loading
+and loaded city reconciliation. `Game::isObserving()` drives the shared view/input paths. The
+network-only CommandManager execution gate is unchanged: local AI city tools still execute
+through its shared command queue.
+
+Read-only authority is enforced by the detached, unregistered UI identity with reserved
+`Player::OBSERVER_PLAYER_ID = 255`, outside the real controller range (max 191). A generic
+Command execution guard rejects that issuer before any mutation, including global pause and
+city commands. Sidebar containers block action input; Repair/Destroy/Upgrade controls remain
+hidden after updates. Order cursors, radar right-click orders, city budget edits and chat
+mutation cheats are blocked. Local camera, pause, speed, save and restart remain usable.
+Viewing leaves faction exploration/fog state intact. The immortal-human option now requires a
+registered human controller, so anchoring the view to an AI never makes that AI invulnerable.
+
+Observer saves reuse the existing local-player byte (255); no saved field or wire version is
+added. The loader reconstructs the detached view and runtime-only setup choice, so **Restart
+Game after loading** also remains an all-AI observed match. Ordinary saves restore an actual
+human, with invalid saved IDs refused safely. Four continuation tests exposed a separate
+existing layout error: network-format saves omit that ID byte, but local loading interpreted
+the default value as an ID. Local opening now resolves the named human or deterministic first
+human fallback, validated with both matching and different local profile names. Network
+lobby/controller reassignment is unchanged.
+
+Verification on this arm64 Mac: version metadata agrees at 1.0.817; pre/post incremental
+Ninja dependency audits and the Release native build pass. Initial full 62-gate CTest run:
+58 passed, four continuation failures. After the loader correction and restart check, the
+nine affected/focused gates pass: native Catch suite, game command regressions, all three
+spectator gates, transport containment, unit route continuation, deviation reward and
+projectile continuation. The unchanged menu navigation gate passed in the full run. The
+spectator runtime checks cover AI progress, real radar without a powered faction radar,
+owner-specific numbers for two houses, read-only input, real-owner command positive controls,
+AI city commands through the shared queue, save/load and restart. Ordinary human and real
+setup-widget control cases pass separately. Shipping objects are linked into diagnostic
+probes; no test hook ships in the app.
+
+Actual SDL screenshots show the checked Spectate control and both owners' building details
+(including distinct power figures). Native 1.0.817 launches and the Tuono-Orac map chooser
+renders. The native physical input walkthrough did not finish; engine and setup behaviour
+were exercised by the automated probes. Logs, review notes and verification receipt:
+`../outputs/spectator-mode-817/`. No 1.0.817 platform CI, signing/notarization or browser/public
+release verification has been performed.
+
 ## 2026-10-07 — production 1.0.816 completed
 
 PRs #89/#90 are merged. Immutable tag v1.0.816 resolves to 94a5e6c62d240cc14c977b4ff5d7669eb00a5ed1. Stable CI 37595012438 passed all platform builds, native tests (10,217,948 assertions), Mac signing/notarization, signed update feeds and GitHub publication. All 13 public assets match their published hashes; three manifests and two appcasts pass Ed25519 verification. Public Mac app passes Gatekeeper as Notarized Developer ID.

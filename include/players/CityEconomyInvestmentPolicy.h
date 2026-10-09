@@ -59,6 +59,119 @@ inline bool openingRefineryInvestment(bool brutal, int workers, int target, int 
     return openingWorkersNeeded(workers,target,brutal)
         && refineries < std::max(0,target);
 }
+// A city map whose remaining spice cannot support one worker earns nothing
+// from a processing bay, a port's income ladder or an imported transport. The
+// sustainable worker target is the line, because it is already the remaining
+// field divided by the active houses and recomputed from the live map: an
+// initially rich map that later depletes crosses it without a second
+// threshold, and nothing has to be stored in the save to notice.
+inline bool spiceEconomyViable(int sustainableWorkers) { return sustainableWorkers > 0; }
+
+// The smallest city that pays its own bills: the same four 100-credit lots
+// that preferRefinery() already trades a 400-credit refinery against.
+constexpr int kBootstrapZoneSeed = 4;
+
+// Tax is only income once it can be banked. A house with no storage capacity
+// at all drops every credit its city earns on arrival, so the first capacity
+// source belongs to the opening and not to optional tech - a developed city
+// with zero capacity is the same bankruptcy as no city at all, just with a
+// larger gross figure. Queued capacity counts, so one order settles it.
+inline bool cityStorageMissing(int capacityIncludingQueued) {
+    return capacityIncludingQueued <= 0;
+}
+
+// One taxable residential lot does not fund a city opening. Keep the small
+// seed and storage ahead of optional technology; queue-inclusive commitments
+// reserve their own cost while the real simulation develops the lots.
+inline bool cityBootstrapIncomplete(bool citySim, bool spiceViable,
+                                    int zonesIncludingQueued,
+                                    int capacityIncludingQueued) {
+    if (!citySim || spiceViable) return false;
+    if (cityStorageMissing(capacityIncludingQueued)) return true;
+    return zonesIncludingQueued < kBootstrapZoneSeed;
+}
+
+// Cash the opening still needs: the uncommitted lots plus, while nothing can
+// be banked, the real price of the cheapest legal capacity source. Committed
+// orders have already charged their own price, so only the remainder is
+// withheld from optional spending.
+inline int cityBootstrapReserve(bool incomplete, int zonesIncludingQueued, int lotCost,
+                                int storageCost) {
+    if (!incomplete) return 0;
+    return std::max(0, kBootstrapZoneSeed - std::max(0, zonesIncludingQueued))
+            * std::max(0, lotCost)
+        + std::max(0, storageCost);
+}
+
+// An economic transport is an economy upgrade only when there is something to
+// carry: a working harvesting fleet, or damaged vehicles and a bay to repair
+// them in. Mirrors the capital transport lane's own usefulness gate so a port
+// import cannot buy what a factory would have refused.
+inline bool economicTransportUseful(int spiceRemaining, int workers, int refineries,
+                                    int combatVehicles, int repairYards) {
+    if (spiceRemaining > 0 && workers > 0 && refineries > 0) return true;
+    return combatVehicles > 0 && repairYards > 0;
+}
+
+// Accepting an order only puts an item into a builder's queue. Nothing is
+// charged at that moment: BuilderBase::updateProductionProgress() deducts
+// price/(buildTime*15) per tick from whatever credits the house actually has,
+// makes no progress at all while the till is empty, and resumes when income
+// arrives (src/structures/BuilderBase.cpp). Foundation slabs are ordinary
+// queued orders ahead of the building and are paid the same way; the planner's
+// reserves are bookkeeping, not credits already spent.
+//
+// A growth-cap project therefore never needed its price banked, and it does not
+// need its price covered by any short forecast window either. It needs enough
+// in hand to enter production and make real progress, and income that keeps
+// arriving. A 3000-credit stadium on 400 cash and 300 tax per minute finishes
+// in about ten minutes; gating it on a four-minute forecast would reproduce the
+// original deadlock, where the yard held back, the cheap-zone fallback spent
+// the same credits next pass, and the residential valve stayed capped at 0 for
+// a whole match.
+struct InstallmentOrder {
+    bool order = false;   ///< start now: the production start budget is in hand
+    bool reserve = false; ///< short of the start budget only; keep credits for it
+    /// Worth holding credits for. False means neither income nor cash can pay
+    /// for it at all, so nothing is withheld and the city keeps spending.
+    bool funded() const { return order || reserve; }
+};
+
+/// An integer planning approximation of what the engine charges per tick once
+/// production runs. BuilderBase works in FixPoint and charges price/(buildTime*15)
+/// per tick, which for a long build is a fraction of a credit; this rounds that
+/// down to whole credits and never below 1, so the planner asks for a credit it
+/// can actually hold rather than a fraction it cannot represent.
+inline int firstInstallment(int price, int buildTicks) {
+    if (price <= 0) return 0;
+    return std::max(1, price / std::max(1, buildTicks));
+}
+
+/// The budget an order needs in hand to enter production and progress: the
+/// foundation orders the planner will queue ahead of it, plus one installment
+/// of the building. Deliberately not a fraction of the price - the remainder is
+/// what future income is for.
+inline int productionStartBudget(int price, int foundationCost, int buildTicks) {
+    return std::max(0, foundationCost) + firstInstallment(price, buildTicks);
+}
+
+/// `continuingIncome` is bankable net income per planning horizon (tax less
+/// upkeep, plus spice receipts): strictly positive means the installments will
+/// keep being paid, however long that takes. With no income at all the project
+/// still goes ahead if the house can simply pay for it outright, and otherwise
+/// nothing is reserved, because a permanently stalled order would occupy the
+/// yard and starve the city instead of buying something it can finish.
+inline InstallmentOrder installmentOrder(int spendable, int price, int foundationCost,
+                                         int buildTicks, int continuingIncome) {
+    InstallmentOrder result;
+    if (price <= 0) return result;
+    if (continuingIncome <= 0 && spendable < price + std::max(0, foundationCost))
+        return result;
+    result.order = spendable >= productionStartBudget(price, foundationCost, buildTicks);
+    result.reserve = !result.order;
+    return result;
+}
+
 inline int demandedCivic(uint8_t blocked, int stadiumCommitted, bool stadiumAvailable,
                          int airportCommitted, bool airportAvailable) {
     if ((blocked & DuneCity::NeedStadium) && stadiumCommitted == 0 && stadiumAvailable)

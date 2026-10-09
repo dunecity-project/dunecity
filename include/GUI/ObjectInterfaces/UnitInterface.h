@@ -50,7 +50,7 @@ public:
 protected:
     explicit UnitInterface(int objectID) : DefaultObjectInterface(objectID) {
         const int buttonGap = getRendererHeight() < 540 ? 2 : 6;
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
 
         mainHBox.addWidget(HSpacer::create(4));
 

@@ -52,7 +52,7 @@ void Radar::init() {
 Radar::~Radar() = default;
 
 ObjectInterface* Radar::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         return RadarInterface::create(objectID);
     } else {
         return DefaultObjectInterface::create(objectID);

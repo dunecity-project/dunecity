@@ -61,9 +61,9 @@ TEST_CASE("Released city maps retain their playable catalogue identities", "[map
     for(const auto& expected : std::vector<Expected>{
         {"4P - 128x128 - 4 corners", "4P - 128x128 - 4 corners", 128, 4, 1},
         {"4P - 192x192 - DuneCity", "4P - 192x192 - DuneCity", 192, 4, 0},
-        {"5P - 256x256 - test", "5P - 256x256 - test", 256, 5, 0},
-        // Neutral is authored as the eighth house; it is not a selectable catalogue player.
-        {"8P - 128x128 - city seige", "8P - 128x128 - city seige", 128, 7, 0},
+        {"5P - 256x256 - test", "5P - 256x256 - test", 256, 6, 0},
+        // A declared Neutral house has a real row in CustomGamePlayers.
+        {"8P - 128x128 - city seige", "8P - 128x128 - city seige", 128, 8, 0},
         {"Alkozeltser 4 Cities", "Alkozeltser 4 Cities", 256, 6, 1},
     }) {
         CAPTURE(expected.file);
@@ -101,6 +101,18 @@ TEST_CASE("Equivalent copies of a real map share one content key", "[maps][choos
     REQUIRE(MapCatalogue::contentKey(differentTerrain(bundled)) != key);
     // Nothing identifying means nothing to merge on.
     REQUIRE(MapCatalogue::contentKey("[BASIC]\nName=Empty\n").empty());
+}
+
+TEST_CASE("Declared Neutral houses count as lobby slots but ambient owners do not", "[maps][chooser]") {
+    INIFile ini(false, std::string("slot-count regression"));
+    ini.setStringValue("Harkonnen", "Brain", "Team1");
+    ini.setStringValue("Mercenary", "Brain", "Team2");
+    ini.setStringValue("UNITS", "ID001", "Neutral,Sandworm,256,10,0,Area Guard");
+    REQUIRE(MapMetadata::countPlayers(ini) == 2);
+    ini.setStringValue("Neutral", "Brain", "Team3");
+    REQUIRE(MapMetadata::countPlayers(ini) == 3);
+    ini.removeSection("Neutral");
+    REQUIRE(MapMetadata::countPlayers(ini) == 2);
 }
 
 TEST_CASE("The chooser lists one row per distinct map copy", "[maps][chooser]") {
@@ -171,6 +183,50 @@ TEST_CASE("Map copy identity preserves BASIC gameplay rules and mod variants", "
     const std::vector<MapCatalogue::Copy> copies={
         {"Same map",key,1,"vanilla"}, {"Same map",key,1,"dunecity"}};
     REQUIRE(MapCatalogue::keptCopies(copies).size()==2);
+}
+
+TEST_CASE("A locally edited workshop map keeps its authored mod in the type filter", "[maps][chooser]") {
+    // The reported case: a DuneCity map downloaded, edited in the editor and saved.
+    // The edit removed the city buildings that name the category, so the content
+    // classifier reads it as vanilla, while the sidecar still records the exact mod
+    // revision it belongs to. Filtering on the derived category alone hid the map
+    // from the very mod it was authored for. Neither value is rewritten here: the
+    // filter accepts either, so content classification and the revision metadata
+    // both stay as they were.
+    MapMetadata edited;
+    edited.name = "4P - 192x192 - New Beginning";
+    edited.width = edited.height = 192;
+    edited.players = 4;
+    edited.mod = MapMetadata::ModVanilla;        // derived from [STRUCTURES]
+    edited.dependency = MapMetadata::ModDuneCity; // from <map>.ini.workshop.ini
+
+    REQUIRE(edited.matches("", 0, 0));
+    REQUIRE(edited.matches(MapMetadata::ModDuneCity, 0, 0));
+    REQUIRE(edited.matches(MapMetadata::ModVanilla, 0, 0));
+    REQUIRE_FALSE(edited.matches(MapMetadata::ModTornie, 0, 0));
+    // Size and player filters are unaffected by the dependency.
+    REQUIRE(edited.matches(MapMetadata::ModDuneCity, 3, 4));
+    REQUIRE_FALSE(edited.matches(MapMetadata::ModDuneCity, 2, 0));
+    REQUIRE_FALSE(edited.matches(MapMetadata::ModDuneCity, 0, 6));
+
+    // An ordinary map, bundled or downloaded, has dependency == mod (read() sets
+    // it) and so is unchanged: it never leaks into another mod's filter.
+    MapMetadata plain;
+    plain.width = plain.height = 64;
+    plain.players = 2;
+    plain.mod = plain.dependency = MapMetadata::ModVanilla;
+    REQUIRE(plain.matches(MapMetadata::ModVanilla, 0, 0));
+    REQUIRE_FALSE(plain.matches(MapMetadata::ModDuneCity, 0, 0));
+    REQUIRE_FALSE(plain.matches(MapMetadata::ModTornie, 0, 0));
+
+    // A metaserver row carries no dependency at all, and must not match everything.
+    MapMetadata remote;
+    remote.width = remote.height = 128;
+    remote.players = 4;
+    remote.mod = MapMetadata::ModDuneCity;
+    remote.dependency = "";
+    REQUIRE(remote.matches(MapMetadata::ModDuneCity, 0, 0));
+    REQUIRE_FALSE(remote.matches(MapMetadata::ModVanilla, 0, 0));
 }
 
 TEST_CASE("City stat lines are shortened to the sidebar column", "[citystats][sidebar]") {

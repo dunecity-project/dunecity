@@ -711,6 +711,11 @@ function(add_copy_mods DEST_DIR)
     endif()
 endfunction()
 
+# Map-only additions and revisions must trigger the POST_BUILD data copy too.
+# CONFIGURE_DEPENDS discovers new scenarios and their catalogue sidecars.
+file(GLOB_RECURSE DUNECITY_BUNDLED_MAP_FILES CONFIGURE_DEPENDS "${DATA_DIR}/maps/*.ini")
+set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${DUNECITY_BUNDLED_MAP_FILES})
+
 if(APPLE)
     # For macOS bundle, copy data files directly to Resources/ (not Resources/data/)
     # This matches the Xcode project structure where .PAK files are in Resources root

@@ -48,7 +48,7 @@ protected:
         // icon was laid out past the sidebar's right edge while a unit was
         // being repaired. Stacking keeps both inside the panel at every
         // supported resolution, in city and in vanilla games.
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = ownerAccentColor();
         mainHBox.addWidget(&textVBox);
         cityStats_.attachTo(textVBox, color, false, false, SIDEBARWIDTH - 25);
 

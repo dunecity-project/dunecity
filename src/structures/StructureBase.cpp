@@ -397,7 +397,7 @@ void StructureBase::blitToScreen() {
 }
 
 ObjectInterface* StructureBase::getInterfaceContainer() {
-    if((pLocalHouse == owner) || (debug == true)) {
+    if(mayShowOwnerInterface()) {
         // Non-builder structures with no specific interface (Wall, GunTurret,
         // RocketTurret, IX, NuclearPlant) get the city-sim stats panel when
         // city sim is active. Builder structures use BuilderInterface from
