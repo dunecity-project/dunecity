@@ -39,7 +39,10 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
           "[save-compat][regression]") {
     // 9852 adds the QuantBot army posture block (posture, entry cycle, attrition
     // ledger, tracked Custom wave, protected rally, recall cursor).
-    REQUIRE(SAVEGAMEVERSION == 9852);
+    // 9853 adds the Micropolis city-aircraft state: the helicopter's home pad,
+    // patrol count, report cooldown, scan cooldown, report tally and
+    // return-home flag, and the airplane's take-off frame and flight budget.
+    REQUIRE(SAVEGAMEVERSION == 9853);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

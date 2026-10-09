@@ -105,7 +105,17 @@
 //       load: the ledger is cumulative, and the posture decides whether a unit
 //       is marching home or marching out, so a save or network checkpoint taken
 //       mid-withdrawal has to carry it.
-#define SAVEGAMEVERSION     9852
+// 9853: Micropolis city aircraft. The city helicopter and airplane replaced
+//       their placeholder orbit/flyover state with the original sprite state:
+//       the helicopter carries its home pad, patrol count, report cooldown,
+//       scan cooldown, report tally and return-home flag; the airplane carries
+//       its take-off frame and remaining flight budget. None of it can be
+//       recomputed after a load — a report cooldown and a patrol count decide
+//       whether the next congested tile produces a message or silence, and a
+//       take-off frame decides which artwork is on screen. A 9852 save still
+//       loads: the old fields are read and the aircraft resumes with a fresh
+//       patrol instead of an orbit it no longer flies.
+#define SAVEGAMEVERSION     9853
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

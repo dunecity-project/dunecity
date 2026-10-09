@@ -140,7 +140,14 @@
 //     Older peers reject these values; save and observer layouts are unchanged.
 // 57: Wrap ground combat rotation after movement; older peers can generate an invalid
 //     track direction and diverge or corrupt tile memory. Save/runtime layouts are unchanged.
-#define NETWORK_PROTOCOL_VERSION            57
+// 58: Micropolis city aircraft. The Airport launches them with the original
+//     doAirport() odds from the shared simulation RNG, and both aircraft steer,
+//     report traffic and retire on the original sprite clock. A peer on 57 draws
+//     a different number of RNG values on the same cycle, flies the placeholder
+//     orbit/flyover instead, and keeps up to three aircraft per house where this
+//     build keeps one of each — so the two diverge immediately. The save layout
+//     is 9853 for the same reason.
+#define NETWORK_PROTOCOL_VERSION            58
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

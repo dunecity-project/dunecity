@@ -1,3 +1,44 @@
+## 2026-10-09 — local 1.0.817 Micropolis city aircraft
+
+The city Airport now launches the original Micropolis helicopter and airplane.
+All 19 original XPM frames are retained pixel for pixel, re-packed for the eight
+DuneCity headings and three plane takeoff rows. The helicopter patrols owned
+roads, seeks saturated traffic and reports the original heavy-traffic message
+with a cooldown before returning home. The plane uses the original takeoff,
+turning and destination rules and flies off the map. Both are civilian air units
+that real enemy anti-air can damage and destroy. Original diagonal speeds are
+preserved within the engine's fixed-point precision. One of each per owning
+house; alive, powered city airports launch them. No generic combat rules changed.
+
+Codex review fixed sparse-road sampling across traffic-cell coordinate parity,
+the visible takeoff row immediately after loading, inclusive upstream random
+bounds (plane 1/6, helicopter 1/13 conditional), portable pinned art provenance,
+and preservation of the complete upstream notices and GPL text. The unnecessary
+Tornie ObjectData change was removed to preserve its sealed mod payload.
+Save format is 9853 and multiplayer protocol 58; older peers are incompatible.
+Details and regeneration commands: docs/city-aircraft.md.
+
+Validation: fresh native app and pre/post Ninja dependency audits pass. The
+983-case Catch suite passes (three opt-in cases remain skipped). The real-engine
+city_aircraft_probe passes the 16 heading vectors, sparse congestion, operational
+and unpowered airports, per-house cap, owned-only bounded reports, takeoff and
+exit, real projectile kills and cleanup, and 300 identical frames after reloading
+a mid-takeoff save. Both original boundary failures were reproduced independently
+and pass after repair. Normal moving aircraft can be killed by actual hostile
+projectiles in both DuneCity and Dune2R; some planes escape with damage. All 19
+source frames / 40 atlas cells and all bundled art/provenance/license bytes match.
+The broad 60-target CTest run initially passed 56; its four Tornie-related failures
+were repaired and passed individually, including menus at 640/854/1280 and weapon
+reloads. Final focused checks pass. Browser/platform CI and publication were not
+requested or performed.
+
+Branch: feature/micropolis-city-aircraft, based on origin/main 4b69d0eb. Source and
+fresh app: ../dunecity-city-aircraft/build/bin/dunecity.app. Evidence is outside the
+checkout in ../outputs/city-aircraft-20261009. Claude's bounded subscription worker
+implemented the bulk of the change and hit its one-hour limit; Codex completed
+review, corrections and integration. A gitignored platform/web/node_modules
+symlink reuses the pinned SDK from dunecity-performance for this local build.
+
 ## 2026-10-07 — production 1.0.816 completed
 
 PRs #89/#90 are merged. Immutable tag v1.0.816 resolves to 94a5e6c62d240cc14c977b4ff5d7669eb00a5ed1. Stable CI 37595012438 passed all platform builds, native tests (10,217,948 assertions), Mac signing/notarization, signed update feeds and GitHub publication. All 13 public assets match their published hashes; three manifests and two appcasts pass Ed25519 verification. Public Mac app passes Gatekeeper as Notarized Developer ID.

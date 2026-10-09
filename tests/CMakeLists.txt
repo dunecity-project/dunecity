@@ -21,6 +21,7 @@ target_sources(dunelegacy_tests
         MapCatalogueTestCase.cpp
         CityTrafficPolicyTestCase.cpp
         CitySpritePolicyTestCase.cpp
+        CityAircraftPolicyTestCase.cpp
         RendererSizeTestCase.cpp
         CursorAppearanceTestCase.cpp
         GasDeviationPolicyTestCase.cpp
@@ -426,6 +427,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # long-stall rescue can be measured against the engine instead of being simulated:
         # the clock survives a queued path request and a route cleared every cycle, and the
         # rescue books exactly one free owned carrier and delivers to the unit's own goal.
+        # The Micropolis city aircraft against the real engine: the Airport's
+        # doAirport launch odds and per-house singleton, the helicopter's
+        # traffic patrol and bounded friendly-only reporting, the airplane's
+        # original take-off and off-map ending, hostile anti-air destroying
+        # both with no tile/unit/count leak, and an exact save continuation.
+        add_test(NAME city_aircraft_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-city-aircraft-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-aircraft-probe)
+        set_tests_properties(city_aircraft_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         add_test(NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)

@@ -871,7 +871,7 @@ Enabled = true
 HitPoints = 100
 Price = 0
 ViewRange = 3
-MaxSpeed = 12.8
+MaxSpeed = 10.24  # Micropolis doAirplaneSprite: 8/16 tile per 50ms sprite tick
 TurnSpeed = 0.099
 InfSpawnProp = 0
 
@@ -880,6 +880,6 @@ Enabled = true
 HitPoints = 100
 Price = 0
 ViewRange = 3
-MaxSpeed = 9.6
+MaxSpeed = 6.4  # Micropolis doCopterSprite: 5/16 tile per 50ms sprite tick
 TurnSpeed = 0.099
 InfSpawnProp = 0
