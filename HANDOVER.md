@@ -52,6 +52,19 @@ in the MBA staging folder with its bundled SDL2/SDL3 runtime. Its 1.0.821 game
 closed before installation; no game was interrupted. Installation staging
 and receipts belong in `../outputs/city-aircraft-install-822-20261009/`.
 
+MBA installation completed at 2026-10-09 05:50 UTC from source commit
+`e257433b786e65efe347635cbef7a21e65b56984` on
+`feature/micropolis-city-aircraft-822`. All 3,650 bundle files/symlinks,
+36 portable Mach-O dependency sets, original aircraft assets and 72 bundled
+scenario files (including previews) match the candidate/source. Local, staged
+and installed hidden rendering checks and deep/strict signatures pass. Binary
+SHA256 is `6851d777a76ada926d220c17ab579cbd0db02d865e82f6fbbb9477e290ca63db`. The 1.0.821 app is retained at
+`/Applications/.dunecity-backup-before-1.0.822-20261009-165055/dunecity.app` on the MBA; its version/hash are independently verified. The Desktop
+shortcut still resolves to `/Applications/dunecity.app`. All 2,624 current user
+save/settings/map files match before/after installation hashes. No running
+game or user profile was used for smoke testing. Full receipt and independent
+readback are in `verified-install-summary.json` beside the install logs.
+
 ## 2026-10-09 — local 1.0.821: Micropolis city aircraft on production 1.0.820
 
 The reviewed city-aircraft feature (branch base 4b69d0eb / local 1.0.817) was
