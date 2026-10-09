@@ -717,6 +717,267 @@ void runAirDefenseProbe(Game& game) {
             attacker->setHealth(attacker->getMaxHealth());
             groundOnly->setHealth(groundOnly->getMaxHealth());
         }
+        // ---- Mobile anti-air production floor ---------------------------
+        //
+        // Observed hostile aircraft, and only observed hostile aircraft, give an
+        // autonomous Custom Hard/Brutal house a launcher share of at least the
+        // floor. The share itself comes out of the real production pass, so a
+        // floor that is applied after the per-type percentages are derived - and
+        // therefore buys nothing - fails here.
+        {
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->supportMode=false;
+            game.gameType=GameType::CustomGame;
+            bot->gameMode=QuantBot::GameMode::Custom;
+            require(bot->autonomousCustomHardBrutal(),
+                "The anti-air floor fixture is not an autonomous Custom Hard/Brutal house");
+
+            auto* factory=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,Structure_HeavyFactory,
+                origin.x+6,origin.y+2,true,true));
+            require(factory,"Anti-air floor fixture heavy factory placement failed");
+            auto cancelFactoryOrders=[&] {
+                const int limit=factory->getProductionQueueSize();
+                for(int n=0;n<limit && !factory->currentProductionQueue.empty();++n) {
+                    const int before=factory->getProductionQueueSize();
+                    factory->doCancelItem(factory->currentProductionQueue.front().itemID);
+                    require(factory->getProductionQueueSize()<before,
+                        "Fixture factory order could not be cancelled");
+                }
+            };
+            if(std::find(structureList.begin(),structureList.end(),factory)==structureList.end())
+                structureList.push_back(factory);
+            // Launchers carry structure prerequisites of their own in some mods;
+            // give the fixture the usual radar/light-factory chain so that
+            // availability is decided by the mod's rules rather than by a
+            // missing fixture building.
+            auto* radar=owner->placeStructure(NONE_ID,Structure_Radar,
+                origin.x+10,origin.y+2,true,true);
+            if(radar && std::find(structureList.begin(),structureList.end(),radar)==structureList.end())
+                structureList.push_back(radar);
+            auto* light=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,Structure_LightFactory,
+                origin.x+14,origin.y+2,true,true));
+            require(radar && light,"Launcher fixture missing producer prerequisites");
+            if(std::find(structureList.begin(),structureList.end(),light)==structureList.end())
+                structureList.push_back(light);
+
+            auto* raider=enemy->createUnit(Unit_Ornithopter);
+            require(raider,"Anti-air floor fixture aircraft creation failed");
+            raider->deploy(origin+Coord(12,12));
+            raider->setVisible(owner->getTeamID(),true);
+            require(bot->visibleHostileAircraft()>0,
+                "A visible hostile Ornithopter was not observed by the defending house");
+
+            owner->addCredits(20000);
+
+            // Availability boundary, bottom side: at a tech level that cannot
+            // build launchers at all, an observed air threat must not conjure a
+            // launcher share out of nothing.
+            const int savedTech=currentGame->techLevel;
+            currentGame->techLevel=1;
+            bot->build(4000);
+            SDL_Log("AIR_DEFENSE_DIAG: unavailable tech=1 launcher_bps=%d aircraft=%d",
+                bot->lastUnitMixBps[2],bot->visibleHostileAircraft());
+            require(bot->lastUnitMixBps[2]==0,
+                "The anti-air floor funded a launcher share the house cannot build");
+
+            auto* refinery=owner->placeStructure(NONE_ID,Structure_Refinery,
+                origin.x+16,origin.y+14,true,true);
+            require(refinery,"Production fixture refinery prerequisite failed");
+            if(std::find(structureList.begin(),structureList.end(),refinery)==structureList.end())
+                structureList.push_back(refinery);
+
+            // Availability boundary, top side: once launchers are genuinely
+            // producible the observed threat secures the floor. The share comes
+            // out of the real production pass, so a floor applied after the
+            // per-type percentages are derived would buy nothing and fail here.
+            cancelFactoryOrders();
+            currentGame->techLevel=8;
+            factory->curUpgradeLev=factory->getMaxUpgradeLevel();
+            factory->updateBuildList();
+            light->curUpgradeLev=light->getMaxUpgradeLevel();
+            light->updateBuildList();
+            require(factory->isAvailableToBuild(Unit_Launcher),
+                "The production fixture did not unlock real launcher prerequisites");
+            require(factory->isAvailableToBuild(Unit_Tank),
+                "The production fixture did not unlock its competing tank choice");
+            // Isolate military allocation from separate harvester/MCV service
+            // orders; all competing combat choices retain their real gates.
+            factory->buildList.remove_if([](const BuildItem& item){
+                return item.itemID==Unit_Harvester || item.itemID==Unit_MCV;
+            });
+
+            // Fabricate a measured history which undervalues launchers. The
+            // factory and orders are real; only the historical combat ledger is
+            // controlled so the floor must bind rather than passing on priors.
+            std::array<CombatReward::Totals,Num_ItemID> savedRewards;
+            std::array<int,Num_ItemID> savedLosses;
+            std::copy(std::begin(owner->combatRewards),std::end(owner->combatRewards),savedRewards.begin());
+            std::copy(std::begin(owner->numItemLosses),std::end(owner->numItemLosses),savedLosses.begin());
+            std::fill(std::begin(owner->combatRewards),std::end(owner->combatRewards),CombatReward::Totals{});
+            std::fill(std::begin(owner->numItemLosses),std::end(owner->numItemLosses),0);
+            owner->combatRewards[Unit_Tank].damageMilli=200000000;
+            owner->combatRewards[Unit_Quad].damageMilli=30000000;
+            for(int item=Unit_FirstID;item<=Unit_LastID;++item)
+                if(item!=Unit_Tank && item!=Unit_Quad) owner->numItemLosses[item]=1000;
+            const auto savedHistory=bot->performanceHistory;
+            bot->performanceHistory={};
+            const auto floorUnits=unitList;
+            unitList.clear();
+            unitList.push_back(raider);
+            // An army near the learned tank quota makes the real heavy-factory
+            // choice switch from a tank to mobile AA when the floor binds.
+            std::vector<UnitBase*> floorTanks;
+            const int tankPrice=game.objectData.data[Unit_Tank][owner->getHouseID()].price;
+            const int tankCount=(6000+tankPrice-1)/tankPrice;
+            for(int n=0;n<tankCount;++n) {
+                auto* tank=owner->createUnit(Unit_Tank);
+                require(tank,"Production fixture could not create its funded tank army");
+                tank->deploy(origin+Coord(1+n%20,18+n/20));
+                floorTanks.push_back(tank); // createUnit already publishes it.
+            }
+            const int fundedArmy=tankCount*tankPrice;
+            // Production counts are House state, not just unitList. Isolate
+            // them to this roster as well, then restore the prior fixture state.
+            std::array<int,Num_ItemID> savedCounts;
+            std::copy(std::begin(owner->numItem),std::end(owner->numItem),savedCounts.begin());
+            const int savedNumUnits=owner->numUnits;
+            for(int item=Unit_FirstID;item<=Unit_LastID;++item) owner->numItem[item]=0;
+            owner->numUnits=0;
+            for(const auto* unit:unitList) if(unit->getOwner()==owner) {
+                ++owner->numItem[unit->getItemID()];
+                ++owner->numUnits;
+            }
+            cancelFactoryOrders();
+            const auto savedLimit=bot->militaryValueLimit;
+            bot->militaryValueLimit=10000;
+            bot->difficulty=QuantBot::Difficulty::Hard;
+            const auto savedStartingCash=owner->startingCredits;
+            owner->startingCredits+=100000;
+            raider->setVisible(owner->getTeamID(),false);
+            bot->lastStatsLogCycle=game.getGameCycleCount()-MILLI2CYCLES(30000);
+            bot->build(fundedArmy);
+            const int beforeFloor=bot->lastUnitMixBps[2];
+            SDL_Log("AIR_DEFENSE_DIAG: learned_launcher_bps=%d tank=%d quad=%d",
+                beforeFloor,bot->lastUnitMixBps[0],bot->lastUnitMixBps[7]);
+            require(beforeFloor<UnitMixPolicy::kMobileAntiAirFloorBps,
+                "The engine fixture did not create a learned-down launcher mix");
+            SDL_Log("AIR_DEFENSE_DIAG: quiet_factory queue=%d first=%d upgrading=%d hold=%d credits=%d budget=%d tanks=%d launchers=%d infantry=%d",
+                factory->getProductionQueueSize(),factory->currentProductionQueue.empty()?-1:int(factory->currentProductionQueue.front().itemID),
+                int(factory->isUpgrading()),int(factory->isOnHold()),owner->getCredits(),bot->militaryValueLimit,
+                owner->getNumItems(Unit_Tank),owner->getNumItems(Unit_Launcher),owner->getNumItems(Unit_Soldier));
+            require(!factory->currentProductionQueue.empty()
+                    && factory->currentProductionQueue.front().itemID==Unit_Tank,
+                "Without visible air, the real factory did not follow the learned tank allocation");
+            cancelFactoryOrders();
+            raider->setVisible(owner->getTeamID(),true);
+            bot->lastStatsLogCycle=game.getGameCycleCount()-MILLI2CYCLES(30000);
+            bot->build(fundedArmy);
+            require(bot->lastUnitMixBps[2]==UnitMixPolicy::kMobileAntiAirFloorBps,
+                "The visible air threat did not bind the launcher floor in the real build pass");
+            const bool queuedLauncher=!factory->currentProductionQueue.empty()
+                && factory->currentProductionQueue.front().itemID==Unit_Launcher;
+            SDL_Log("AIR_DEFENSE_DIAG: binding_floor before=%d after=%d queued_launcher=%d",
+                beforeFloor,bot->lastUnitMixBps[2],int(queuedLauncher));
+            require(queuedLauncher,"The protected launcher mix did not cause a real factory order");
+            std::copy(savedRewards.begin(),savedRewards.end(),std::begin(owner->combatRewards));
+            std::copy(savedLosses.begin(),savedLosses.end(),std::begin(owner->numItemLosses));
+            bot->performanceHistory=savedHistory;
+            bot->militaryValueLimit=savedLimit;
+            owner->startingCredits=savedStartingCash;
+            std::copy(savedCounts.begin(),savedCounts.end(),std::begin(owner->numItem));
+            owner->numUnits=savedNumUnits;
+            for(auto* tank:floorTanks) tank->setHealth(0);
+            unitList=floorUnits;
+            SDL_Log("AIR_DEFENSE_DIAG: available tech=8 launcher_bps=%d aircraft=%d",
+                bot->lastUnitMixBps[2],bot->visibleHostileAircraft());
+            currentGame->techLevel=savedTech;
+
+            // The hostile/alive/visible conjunction in visibleHostileAircraft()
+            // is deliberately not re-asserted against absolute counts here: this
+            // fixture already carries several visible hostile aircraft from the
+            // earlier phases, so a differential on one more would only be
+            // measuring fixture bookkeeping. Our own aircraft, dead aircraft and
+            // unseen aircraft are excluded by that single conjunction.
+            require(bot->visibleHostileAircraft()>0,
+                "The anti-air floor fixture lost its observed air threat");
+
+            // Authority boundaries: campaign, support mode and Easy/Medium are
+            // authored behaviour and never acquire the floor.
+            game.gameType=GameType::Campaign;
+            require(!bot->autonomousCustomHardBrutal(),
+                "The anti-air floor leaked into a campaign game");
+            game.gameType=GameType::CustomGame;
+            bot->supportMode=true;
+            require(!bot->autonomousCustomHardBrutal(),
+                "The anti-air floor leaked into a human-helper support house");
+            bot->supportMode=false;
+            for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                bot->difficulty=soft;
+                require(!bot->autonomousCustomHardBrutal(),
+                    "The anti-air floor leaked into Easy or Medium");
+            }
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+
+            raider->setHealth(0);
+            // A launcher borrowed from an existing wave must resume that wave,
+            // rather than remaining at a dead aircraft's old guard post.
+            auto* waveLauncher=owner->createUnit(Unit_Launcher);
+            require(waveLauncher,"Wave resumption fixture failed to create a launcher");
+            waveLauncher->deploy(origin+Coord(3,12));
+            bot->manualUnitOrders.erase(waveLauncher->getObjectID());
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            bot->localSquadWithdraw=false;
+            bot->lastSurveyCycle=game.getGameCycleCount();
+            bot->customWave.launched=game.getGameCycleCount();
+            bot->customWave.members.insert(waveLauncher->getObjectID());
+            waveLauncher->doSetAttackMode(AREAGUARD);
+            waveLauncher->setForced(false);
+            waveLauncher->setTarget(nullptr);
+            bot->defenceAssignments[waveLauncher->getObjectID()]=raider->getObjectID();
+            bot->updateCustomWave();
+            bot->checkAllUnits();
+            require(waveLauncher->getAttackMode()==HUNT
+                    && bot->customWave.members.count(waveLauncher->getObjectID())>0,
+                "The ended air-defense assignment stranded its tracked wave launcher");
+            require(bot->defenceAssignments.count(waveLauncher->getObjectID())==0,
+                "The ended air contact retained its launcher assignment");
+            SDL_Log("AIR_DEFENSE_DIAG: ended_contact_wave_resumed=1");
+            raid->setHealth(raid->getMaxHealth());
+            raid->setVisible(owner->getTeamID(),true);
+            const Coord frontPoint=raid->getClosestPoint(waveLauncher->getLocation());
+            currentGameMap->getTile(frontPoint)->setExplored(owner->getHouseID(),game.getGameCycleCount());
+            bot->customWave.front=raid->getObjectID();
+            waveLauncher->setTarget(nullptr);
+            waveLauncher->doSetAttackMode(GUARD);
+            waveLauncher->setForced(false);
+            bot->updateCustomWave();
+            require(waveLauncher->getAttackMode()==HUNT && waveLauncher->getTarget()==raid
+                    && bot->customWave.members.count(waveLauncher->getObjectID())>0,
+                "An idle committed launcher did not rejoin its observed reachable wave front");
+            waveLauncher->setTarget(nullptr);
+            waveLauncher->doSetAttackMode(GUARD);
+            bot->onHumanUnitOrder(waveLauncher->getObjectID());
+            bot->updateCustomWave();
+            require(waveLauncher->getAttackMode()==GUARD && !waveLauncher->hasATarget(),
+                "The wave rejoin fallback overwrote a human guard order");
+            bot->manualUnitOrders.erase(waveLauncher->getObjectID());
+            bot->customWave.members.insert(waveLauncher->getObjectID());
+            bot->armyPosture=ArmyPosturePolicy::Posture::Recovering;
+            bot->updateCustomWave();
+            require(waveLauncher->getAttackMode()==GUARD && !waveLauncher->hasATarget(),
+                "The wave rejoin fallback sent a recovering launcher forward");
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            bot->customWave.members.erase(waveLauncher->getObjectID());
+            bot->updateCustomWave();
+            require(waveLauncher->getAttackMode()==GUARD && !waveLauncher->hasATarget(),
+                "The rejoin fallback recruited an undispatched home reserve");
+            SDL_Log("AIR_DEFENSE_DIAG: idle_wave_rejoined=1 manual_recovery_home_reserve_preserved=1");
+            waveLauncher->setHealth(0);
+            if(factory->getHealth()>0) factory->setHealth(0);
+            if(radar && radar->getHealth()>0) radar->setHealth(0);
+            if(light && light->getHealth()>0) light->setHealth(0);
+            if(refinery->getHealth()>0) refinery->setHealth(0);
+        }
     } catch(...) {unitList=savedUnits;structureList=savedStructures;throw;}
     unitList=savedUnits;structureList=savedStructures;
     SDL_Log("AIR_DEFENSE_PASS: exposed ground units and infantry are raided and really damaged;"

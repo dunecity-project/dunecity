@@ -434,6 +434,146 @@ void runLauncherKitingProbe(Game& game) {
                 "The hunting-launcher escape leaked into support mode");
             bot->supportMode=false;
         }
+
+        // ---- Advance past an unreachable aircraft -----------------------
+        //
+        // Reproduces the stall measured on whatswrong.dls (cycle 154917,
+        // Twin Cities 256x256): a hunting launcher whose nearest attackable
+        // object is an Ornithopter it cannot reach acquires that aircraft,
+        // engageTarget() releases it in the same cycle because it is flying and
+        // beyond weapon range, and releaseTarget() re-pins the destination onto
+        // the launcher's own tile and clears the search cooldown. The launcher
+        // then repeats that every cycle and never advances with its wave.
+        //
+        // Before the fix the launcher never closes on the ground target at all;
+        // the net displacement stays zero. An aircraft INSIDE weapon range must
+        // still be selected, because that shot is what a launcher is for.
+        bot->difficulty=QuantBot::Difficulty::Brutal;
+        game.gameType=GameType::CustomGame;
+        bot->supportMode=false;
+        {
+            // The earlier phases leave retired fixture units on their tiles until
+            // the engine collects them, and a dead unit is still an attackable
+            // candidate. Stage this phase in the far corner of the cleared area so
+            // that debris cannot be the nearest object.
+            const Coord base(4,27);
+            closer->setLocation(origin+Coord(38,4));    // Parked well clear.
+            closer->doSetAttackMode(STOP);
+            closer->setTarget(nullptr);
+            closer->setForced(false);
+
+            auto* prey=spawn(enemy,Unit_Tank,base+Coord(24,0));
+            prey->doSetAttackMode(STOP);
+            prey->setTarget(nullptr);
+            prey->setForced(false);
+            hunt(launcher,origin+base);
+            const Coord start=launcher->getLocation();
+            const int preyGap=gap(launcher,prey);
+
+            // The fixture shares the live map, and a Hunt search is whole-map, so
+            // establish what the launcher would otherwise pick before introducing
+            // the aircraft. The stall only arises when the aircraft is the NEAREST
+            // attackable object, so the aircraft has to beat this distance.
+            const ObjectBase* without=launcher->findTarget();
+            const int groundGap=without
+                ? blockDistance(start,without->getClosestPoint(start)).lround() : -1;
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: ground_choice=%d item=%d gap=%d prey_gap=%d range=%d",
+                without?int(without->getObjectID()):-1,without?int(without->getItemID()):-1,
+                groundGap,preyGap,launcherRange);
+            require(without!=nullptr,
+                "The launcher fixture has no reachable ground candidate at all");
+
+            // Place the aircraft inside that distance but outside the launcher's
+            // own reach, which is exactly the geometry measured on the save.
+            const int airGapWanted=groundGap-1;
+            const bool airCanDominate=airGapWanted>launcherRange;
+            auto* raider=spawn(enemy,Unit_Ornithopter,
+                base+Coord(airCanDominate?airGapWanted:launcherRange+3,0));
+            publish();
+            const int airGap=gap(launcher,raider);
+            require(launcher->canAttack(raider),
+                "Fixture launcher cannot target aircraft at all, so the stall cannot arise");
+            require(airGap>launcherRange,
+                "Fixture aircraft is not outside the launcher's weapon range");
+
+            // The search must now offer the reachable ground target, not the
+            // aircraft the engine would throw away.
+            const ObjectBase* chosen=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: air_gap=%d prey_gap=%d range=%d chosen=%d chosen_item=%d",
+                airGap,preyGap,launcherRange,
+                chosen?int(chosen->getObjectID()):-1,chosen?int(chosen->getItemID()):-1);
+            require(chosen!=nullptr,
+                "A hunting launcher with a reachable ground target found nothing");
+            // The invariant, stated without assuming which object wins: the Hunt
+            // search never yields an aircraft this launcher cannot shoot. The
+            // fixture shares the real map, so a nearer real unit may legitimately
+            // be chosen instead of the fixture's own tank.
+            require(!chosen->isAFlyingUnit() || launcher->isInWeaponRange(chosen),
+                "A hunting launcher still selected an aircraft beyond its weapon range");
+
+            // Real cycles and real pathfinding. The stall's signature is that the
+            // launcher ends every cycle with no target, standing on its own tile,
+            // so "not stalled" means it either holds a shot it can take or it has
+            // actually travelled. Before the fix neither is ever true.
+            int moved=0, passes=0;
+            bool engaged=false;
+            for(;passes<10 && moved<=2 && !engaged;++passes) {
+                bot->checkAllUnits();
+                tick(60);
+                moved=blockDistance(start,launcher->getLocation()).lround();
+                const ObjectBase* held=launcher->getTarget();
+                engaged=held!=nullptr && launcher->isInWeaponRange(held);
+            }
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: moved=%d engaged=%d passes=%d mode=%d tracked=%d"
+                " air_gap=%d dominating=%d",
+                moved,int(engaged),passes,int(launcher->getAttackMode()),
+                int(bot->customWave.members.count(launcher->getObjectID())),
+                airGap,int(airCanDominate));
+            if(airCanDominate) {
+                require(moved>2 || engaged,
+                    "A hunting launcher held up by a distant aircraft neither advanced nor engaged");
+            } else {
+                // The live map offered a candidate closer than the launcher's own
+                // reach, so this map cannot stage the stall. The invariant above
+                // still held, which is the part this fixture owns.
+                SDL_Log("LAUNCHER_ADVANCE_DIAG: map too crowded to stage the stall;"
+                    " selection invariant checked only");
+            }
+            require(bot->customWave.members.count(launcher->getObjectID()),
+                "The advance dropped the launcher out of the tracked army");
+
+            // Anti-air is untouched: inside weapon range the aircraft is the
+            // selection, and Guard/AreaGuard posts keep their own search range.
+            // Anti-air is untouched: an aircraft right beside the launcher is
+            // nearer than anything else on this map, so it must be the selection.
+            raider->setLocation(launcher->getLocation()+Coord(1,0));
+            require(launcher->isInWeaponRange(raider),
+                "Fixture aircraft did not come inside the launcher's weapon range");
+            const ObjectBase* nowChosen=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: in_range_choice=%d item=%d",
+                nowChosen?int(nowChosen->getObjectID()):-1,
+                nowChosen?int(nowChosen->getItemID()):-1);
+            require(nowChosen==raider,
+                "A launcher refused an aircraft inside its own weapon range");
+
+            // An Area Guard post keeps its established 12-tile air search: the
+            // veto is Hunt-only, so a launcher covering a building still picks
+            // up an aircraft it is not yet in range of.
+            raider->setLocation(launcher->getLocation()+Coord(launcherRange+2,0));
+            require(!launcher->isInWeaponRange(raider),
+                "Fixture aircraft did not move back outside the launcher's reach");
+            bot->doSetAttackMode(launcher,AREAGUARD);
+            launcher->setGuardPoint(launcher->getLocation());
+            const ObjectBase* posted=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: areaguard_chosen=%d flying=%d",
+                posted?int(posted->getObjectID()):-1,
+                (posted&&posted->isAFlyingUnit())?1:0);
+            require(posted!=nullptr,
+                "An Area Guard launcher lost its own area search");
+            bot->doSetAttackMode(launcher,HUNT);
+
+            retire(raider); retire(prey);
+        }
     } catch(...) {
         cleanupStructures(); unitList=savedUnits; throw;
     }

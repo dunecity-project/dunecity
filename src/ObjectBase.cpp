@@ -17,6 +17,7 @@
  */
 
 #include <ObjectBase.h>
+#include <players/QuantBot.h>
 #include <DynastyProjectile.h>
 
 #include <globals.h>
@@ -550,12 +551,23 @@ bool isTileVisibleToSeeker(const ObjectBase& seeker, const Coord& tileCoord) {
     return tile->isExploredByTeam(teamId) && !tile->isFoggedByTeam(teamId);
 }
 
+const UnitBase* managedLauncherHunt(const ObjectBase& seeker) {
+    if (seeker.getItemID()!=Unit_Launcher && seeker.getItemID()!=Unit_EliteLauncher) return nullptr;
+    const auto* unit=dynamic_cast<const UnitBase*>(&seeker);
+    if (!unit || unit->getAttackMode()!=HUNT || !seeker.getOwner()) return nullptr;
+    for (const auto& player : seeker.getOwner()->getPlayerList())
+        if (const auto* bot=dynamic_cast<const QuantBot*>(player.get()))
+            if (bot->managesAutonomousLauncherHunt(unit)) return unit;
+    return nullptr;
+}
+
 const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
     const Coord seekerLocation = seeker.getLocation();
     if(!seekerLocation.isValid()) {
         return nullptr;
     }
 
+    const auto* launcherHunt = managedLauncherHunt(seeker);
     const int maxRadiusX = std::max(seekerLocation.x, currentGameMap->getSizeX() - 1 - seekerLocation.x);
     const int maxRadiusY = std::max(seekerLocation.y, currentGameMap->getSizeY() - 1 - seekerLocation.y);
     const int maxRadius = std::max(maxRadiusX, maxRadiusY);
@@ -578,6 +590,11 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
             }
 
             ObjectBase* candidate = tile->getObject();
+            // A remote aircraft is immediately released by the engine, which
+            // resets Hunt's destination and cooldown. Let this AI launcher find
+            // reachable ground prey; keep every aircraft it can actually shoot.
+            if(launcherHunt && candidate && candidate->isAFlyingUnit()
+                && !launcherHunt->isInWeaponRange(candidate)) return;
             if(candidate != nullptr && !isAutonomousTargetVetoed(seeker, *candidate)
                 && seeker.canAttack(candidate)
                 && currentGameMap->terrainAttackReachable(seeker,*candidate)) {
@@ -679,6 +696,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
         return nullptr;
     }
 
+    const auto* launcherHunt = huntMode ? managedLauncherHunt(seeker) : nullptr;
     const Coord centerCell = grid.clampToCell(seekerLocation);
     if(!centerCell.isValid()) {
         return nullptr;
@@ -743,6 +761,8 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
                     if(terrainRejected) *terrainRejected=true;
                     continue;
                 }
+                if(launcherHunt && candidate->isAFlyingUnit()
+                    && !launcherHunt->isInWeaponRange(candidate)) continue;
 
                 const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
                 if(!isTileVisibleToSeeker(seeker, candidatePoint)) {

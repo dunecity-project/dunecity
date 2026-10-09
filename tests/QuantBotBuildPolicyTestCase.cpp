@@ -4,6 +4,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/IMemoryStream.h>
 #include <players/UnitMixPolicy.h>
+#include <numeric>
 #include <dunecity/PowerRules.h>
 #include <dunecity/VanillaEconomy.h>
 #include <catch2/catch_test_macros.hpp>
@@ -2803,4 +2804,75 @@ TEST_CASE("Colonisation stays shut where it would be wrong", "[quantbot][colonis
     CHECK_FALSE(QuantBotColonisationPolicy::due(capped));
     capped.yardLimit = capped.yards + 1;
     CHECK(QuantBotColonisationPolicy::due(capped));
+}
+
+TEST_CASE("Mobile anti-air floor protects launcher share from damage-only learning",
+          "[quantbot][production][unitmix]") {
+    // The reviewed save: both houses had learned the launcher share down well
+    // below the floor while enemy Ornithopters were active.
+    UnitMixPolicy::Mix learned{};
+    learned[0] = 500;   // tank
+    learned[1] = 188;   // siege
+    learned[2] = 1081;  // launcher - house 0 Harkonnen, cycle 106425
+    learned[3] = 322;   // special
+    learned[4] = 3327;  // ornithopter
+    learned[5] = 1000; learned[6] = 1000; learned[7] = 2582; // light vehicles
+    const int before = std::accumulate(learned.begin(), learned.end(), 0);
+    REQUIRE(before == 10000);
+
+    const auto floored = UnitMixPolicy::applyFloor(learned, 2,
+        UnitMixPolicy::kMobileAntiAirFloorBps);
+    CHECK(floored[2] == UnitMixPolicy::kMobileAntiAirFloorBps);
+    // Total preserved, so the mix is still a share of the same budget.
+    CHECK(std::accumulate(floored.begin(), floored.end(), 0) == 10000);
+    // Funded from the others in proportion; nobody gains, nobody goes negative.
+    for(size_t i = 0; i < floored.size(); ++i) {
+        if(i == 2) continue;
+        CHECK(floored[i] <= learned[i]);
+        CHECK(floored[i] >= 0);
+    }
+    // The largest contributor pays the most.
+    CHECK(learned[4] - floored[4] > learned[0] - floored[0]);
+
+    // Deterministic: the same input always produces the same mix.
+    CHECK(UnitMixPolicy::applyFloor(learned, 2, UnitMixPolicy::kMobileAntiAirFloorBps) == floored);
+
+    // House 5 Mercenary, cycle 106395.
+    UnitMixPolicy::Mix other{};
+    other[0] = 263; other[1] = 444; other[2] = 1361; other[3] = 348;
+    other[4] = 3799; other[5] = 900; other[6] = 900; other[7] = 1985;
+    REQUIRE(std::accumulate(other.begin(), other.end(), 0) == 10000);
+    const auto otherFloored = UnitMixPolicy::applyFloor(other, 2,
+        UnitMixPolicy::kMobileAntiAirFloorBps);
+    CHECK(otherFloored[2] == UnitMixPolicy::kMobileAntiAirFloorBps);
+    CHECK(std::accumulate(otherFloored.begin(), otherFloored.end(), 0) == 10000);
+}
+
+TEST_CASE("Anti-air floor never lowers a share, invents budget or breaks the cap",
+          "[quantbot][production][unitmix]") {
+    UnitMixPolicy::Mix healthy{};
+    healthy[2] = 4800; healthy[0] = 2600; healthy[4] = 2600;
+    REQUIRE(std::accumulate(healthy.begin(), healthy.end(), 0) == 10000);
+    // Already above the floor: untouched. The floor is a floor, not a target.
+    CHECK(UnitMixPolicy::applyFloor(healthy, 2, UnitMixPolicy::kMobileAntiAirFloorBps) == healthy);
+
+    // A disabled floor is a no-op, which is what an unauthorised house uses.
+    UnitMixPolicy::Mix starved{};
+    starved[2] = 100; starved[4] = 9900;
+    CHECK(UnitMixPolicy::applyFloor(starved, 2, 0) == starved);
+
+    // Nothing to redistribute from: the mix is left alone rather than invented.
+    UnitMixPolicy::Mix only{};
+    only[2] = 10000;
+    CHECK(UnitMixPolicy::applyFloor(only, 2, UnitMixPolicy::kMobileAntiAirFloorBps) == only);
+
+    // The existing per-type upper cap still holds after flooring, because every
+    // other entry can only fall.
+    UnitMixPolicy::Mix capped{};
+    capped[2] = 0; capped[4] = 8000; capped[0] = 2000;
+    const auto cappedFloored = UnitMixPolicy::applyFloor(capped, 2,
+        UnitMixPolicy::kMobileAntiAirFloorBps);
+    CHECK(cappedFloored[4] <= 8000);
+    CHECK(cappedFloored[2] == UnitMixPolicy::kMobileAntiAirFloorBps);
+    CHECK(std::accumulate(cappedFloored.begin(), cappedFloored.end(), 0) == 10000);
 }

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 64;
+static constexpr int kWireProtocolVersion = 65;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -59,8 +59,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // diverge immediately.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    // 64 changes target refresh cadence, worker vetoes and air-rescue allocation.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 64);
+    // 65 changes autonomous launcher Hunt progress, wave handoffs and visible-air production.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 65);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

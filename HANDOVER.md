@@ -1,3 +1,79 @@
+## 2026-10-10 — local 1.0.825: launcher wave progress and observed-air production floor
+
+The user's exact `whatswrong.dls` save (SHA-256
+`e7dafe0f9d2d7a28466f13d2600a9cc23940b2537d9a1e97f7c90bc6aead09d8`)
+loads cycle 154917 of MBA 1.0.824 Twin Cities session `1791547021917585-0`,
+seed 1125867810, 256x256, Harkonnen and Mercenary Brutal bots. Read-only
+capture and isolated real-engine replays preserve the original save/profile.
+The completed capture imports 106,625 events into SQLite, quick-check OK,
+cutoff 254694, with one `game_summary` and `session_end` (user quit).
+The houses eventually built 442 and 480 launchers; the whole match was not
+launcher-starved. At the earlier reported point their learned launcher value
+shares were 1081 and 1361 basis points, versus 3327 and 3799 for Ornithopters.
+Wave telemetry confirms launchers were already dispatched, including 17 new
+and 10 already hunting Harkonnen launchers at cycle 107350.
+
+The exact-save baseline proves a target-search stall: 61 Harkonnen wave
+launchers stayed fully stationary and targetless through 1875 cycles (30
+seconds), despite being in HUNT, without defense assignments or home holds.
+Launcher 294 selects Ornithopter 3049 at 79 tiles while its weapon range is
+nine. The engine immediately releases that unreachable aircraft, re-pins its
+destination and clears the search cooldown, repeating indefinitely.
+Autonomous Custom Hard/Brutal Launcher and EliteLauncher Hunt searches now
+exclude aircraft outside the exact engine weapon range, keeping in-range AA
+and reachable ground candidates. Lookup of controller authority happens once
+per relevant search, not for every ordinary candidate. Human orders/leases,
+Easy/Medium, support houses, campaigns and other controllers retain their
+previous target behavior, independently asserted on the saved launcher.
+
+Tracked launchers retain wave membership during a live defense assignment
+and return to HUNT when the contact ends. An idle tracked launcher whose
+engine Hunt ended can rejoin its existing visible, explored, unfogged,
+reachable ground front. These transitions preserve manual orders, repair,
+retreat/recovery, local withdrawal and active defense. They do not recruit
+undispatched home reserves. The final 1.0.825 replay moves all the same 61
+stalled IDs at least five tiles, with no slow (at most two net tiles) wave
+launchers on either side. Mean movement over all launchers rises from
+1.68 to 20.55 Harkonnen tiles and 12.74 to 19.72 Mercenary tiles. This is a
+bounded exact-save progress result, not a full-match win-rate or FPS claim.
+
+Damage-based learning has no explicit mobile-AA role minimum. While active
+hostile Ornithopters are visible, autonomous Custom Hard/Brutal production
+now protects a 2000-basis-point launcher value share, funded proportionally
+from the same total budget. Existing upper caps remain intact. A living,
+active factory must actually be able to build launchers; historical producer
+availability alone cannot activate the floor. With no observed air threat the
+original learned allocation applies. Visibility is counted once at mix
+recomputation. Telemetry records demand, real production availability and
+before/after allocation. Twenty percent is a tactical heuristic.
+
+Claude performed the bounded exact-save investigation and initial patch in
+subscription-authenticated session `83d91d3c-ffb8-4ad1-89f3-c51a1cd98d39`.
+Codex narrowed controller authority and exact-range semantics, corrected the
+real-producer boundary, added wave handoffs and strengthened real-engine
+production tests. Three-mod fixtures causally switch a real heavy-factory
+order from Tank to Launcher when visible air makes the floor bind; ended
+contact and idle-front rejoin tests preserve manual/recovery/home-reserve
+boundaries. The 1.0.824 worker exclusions, target-search optimizations and
+per-building air-rescue cap remain in place.
+
+Full native verification: all 76 CTests pass across the final full run and
+focused rerun. The 1024.18-second full run passed 75; its sole failure was
+the test-only wire-version constant still pinned to 64 while production was
+65. Correcting that constant rebuilt only the test binary; the game executable
+remained byte-identical. `ctest --rerun-failed` passes the remaining test in
+1.57 seconds. No gameplay check failed or was skipped as a workaround.
+Pre/post Ninja dependency audits and diff checks pass. Native and portable
+ARM64 code/string sections match; portable deep/strict signatures and bundled
+SDL initialization/rendering pass. Protocol 64 -> 65; policy
+`launcher-wave-progress-visible-aa-floor-v93`; save version remains 9853.
+No new RNG, serialized fields or object layouts. Save replay at the new app
+version uses its exact cached Workshop revision
+`c562af59913f777a4b3026e1f101490d32074f2c8566a2109aef7373d78fb241`;
+a metadata-only profile copy otherwise opens the Workshop download dialog.
+Evidence: `../outputs/launcher-live-824-20261009/`; private bundle and receipts:
+`../outputs/launcher-install-825-20261009/`. Installation pending MBA transfer and read-back. Nothing pushed or published.
+
 ## 2026-10-09 — local 1.0.824: target-search cost, worker veto and launcher rescue cap
 
 The completed MBA 1.0.823 Twin Cities match `1791540101576215-0`

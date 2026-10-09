@@ -158,6 +158,43 @@ inline Mix allocate(const Weights& scores, const Weights& defaults, bool learnin
     if (vanilla) cap(4,2500);
     return result;
 }
+/// Minimum mobile AA value share while visible hostile aircraft justify it.
+/// This role budget is a tactical heuristic, not an optimal battle ratio.
+constexpr int kMobileAntiAirFloorBps = 2000;
+
+/// Raise one entry to a floor, funding it from the other entries in proportion
+/// to their current share. Deterministic, order-independent and total-preserving
+/// (the mix still sums to 10000). Existing upper caps are unaffected: the
+/// floored entry only rises towards the floor and every other entry only falls.
+inline Mix applyFloor(const Mix& mix, size_t index, int floorBps) {
+    if(index >= mix.size() || floorBps <= 0 || mix[index] >= floorBps) return mix;
+    int othersTotal = 0;
+    for(size_t i = 0; i < mix.size(); ++i) if(i != index) othersTotal += std::max(0, mix[i]);
+    if(othersTotal <= 0) return mix;        // Nothing to redistribute from.
+    Mix result = mix;
+    const int shortfall = floorBps - mix[index];
+    result[index] = floorBps;
+    int taken = 0;
+    for(size_t i = 0; i < result.size(); ++i) {
+        if(i == index) continue;
+        const int cut = static_cast<int>(int64_t(shortfall) * std::max(0, mix[i]) / othersTotal);
+        result[i] -= cut;
+        taken += cut;
+    }
+    // Integer division leaves at most one basis point per other entry. Hand the
+    // remainder to the largest remaining share, lowest index breaking ties, so
+    // every peer computes the identical mix.
+    for(int remaining = shortfall - taken; remaining > 0; --remaining) {
+        size_t best = index;
+        int bestShare = 0;
+        for(size_t i = 0; i < result.size(); ++i)
+            if(i != index && result[i] > bestShare) { bestShare = result[i]; best = i; }
+        if(best == index) { result[index] -= remaining; break; }
+        --result[best];
+    }
+    return result;
+}
+
 inline int64_t deficit(int targetBps, int armyValue, int currentCount, int price) {
     return int64_t(targetBps) * std::max(0, armyValue)
         - int64_t(std::max(0, currentCount)) * std::max(0, price) * 10000;

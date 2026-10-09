@@ -6042,6 +6042,7 @@ void QuantBot::build(int militaryValue) {
         static_cast<int>(ratios.siegeTank*10000), static_cast<int>(ratios.launcher*10000),
         static_cast<int>(ratios.special*10000), static_cast<int>(ratios.ornithopter*10000)};
     std::array<bool,8> available{};
+    bool launcherProductionAvailable = false;
     for (const auto* structure : getStructureList()) {
         const auto* builder = dynamic_cast<const BuilderBase*>(structure);
         if (!builder || builder->getOwner() != getHouse()
@@ -6051,7 +6052,12 @@ void QuantBot::build(int militaryValue) {
             if (i == 3) {
                 for (Uint32 special : {Unit_Devastator, Unit_SonicTank, Unit_Deviator})
                     available[i] |= campaignAvailableToBuild(builder,special);
-            } else available[i] |= campaignAvailableToBuild(builder,mixItems[i]);
+            } else {
+                const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
+                available[i] |= producible;
+                if (i == 2 && builder->getHealth() > 0 && builder->isActive())
+                    launcherProductionAvailable |= producible;
+            }
         }
     }
     // Losing a producer is a rebuilding need, not evidence that its units
@@ -6123,8 +6129,22 @@ void QuantBot::build(int militaryValue) {
     const auto allocationWeights = UnitMixPolicy::sharpenScores(scores);
     const auto rawMix = UnitMixPolicy::normalize(allocationWeights);
     const int performanceConfidenceBps = UnitMixPolicy::evidenceConfidenceBps(totalLostValue, militaryValue);
-    const auto unitMix = UnitMixPolicy::allocate(scores, defaults, learningUnitMix, vanillaEconomy,
+    auto unitMix = UnitMixPolicy::allocate(scores, defaults, learningUnitMix, vanillaEconomy,
                                                   totalLostValue, militaryValue);
+    // Damage-based learning does not value air deterrence, so protect a minimum
+    // mobile anti-air share while a visible hostile wing is active.
+    // The floor only exists while hostile aircraft are genuinely visible and
+    // launchers are genuinely producible, so it cannot become a standing tax.
+    const int observedHostileAircraft = autonomousCustomHardBrutal()
+        ? visibleHostileAircraft() : 0;
+    const bool launcherFloorAuthorised = observedHostileAircraft > 0 && available[2]
+        && launcherProductionAvailable;
+    const int launcherBpsBeforeFloor = unitMix[2];
+    const int launcherFloorBps = launcherFloorAuthorised
+        ? UnitMixPolicy::kMobileAntiAirFloorBps : 0;
+    if (launcherFloorAuthorised)
+        unitMix = UnitMixPolicy::applyFloor(unitMix, 2, launcherFloorBps);
+    const bool launcherFloorApplied = unitMix[2] > launcherBpsBeforeFloor;
     lastUnitMixBps = unitMix;
     const int rawOrnithopterBps = rawMix[4];
     const FixPoint tankPercent = FixPoint(unitMix[0])/10000;
@@ -6160,6 +6180,11 @@ void QuantBot::build(int militaryValue) {
             .set("allocation_types", 8).set("tech_level", currentGame->techLevel)
             .set("opening_light_bps", openingMix[5]+openingMix[6]+openingMix[7]).set("total_damage", totalDamage)
             .set("total_reward_milli", totalRewardMilli).set("total_lost_value", totalLostValue)
+            .set("launcher_floor_bps", launcherFloorBps)
+            .set("launcher_floor_applied", launcherFloorApplied)
+            .set("launcher_production_available", launcherProductionAvailable)
+            .set("launcher_bps_before_floor", launcherBpsBeforeFloor)
+            .set("visible_hostile_aircraft", observedHostileAircraft)
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
             .set("vehicle_plan_value",vehiclePlanValue).set("queued_military_value",queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
@@ -11016,10 +11041,29 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         .set("dispatched",dispatched));
 }
 
-bool QuantBot::wholeArmyBaseDefence() const {
+bool QuantBot::autonomousCustomHardBrutal() const {
     return !supportMode && currentGame!=nullptr && gameMode==GameMode::Custom
         && !isCampaignGameType(currentGame->gameType)
         && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+}
+
+bool QuantBot::wholeArmyBaseDefence() const {
+    return autonomousCustomHardBrutal();
+}
+
+int QuantBot::visibleHostileAircraft() const {
+    if (getHouse()==nullptr) return 0;
+    const int myTeam=getHouse()->getTeamID();
+    int seen=0;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getItemID()!=Unit_Ornithopter) continue;
+        if (unit->getHealth()<=0 || !unit->isActive()) continue;
+        if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam) continue;
+        // Observation only. An aircraft we cannot see does not justify spending.
+        if (!unit->isVisible(myTeam)) continue;
+        ++seen;
+    }
+    return seen;
 }
 
 bool QuantBot::attackingOwnedBuilding(const ObjectBase* contact) const {
@@ -11842,6 +11886,10 @@ bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
         && !supportMode && !humanControls(unit);
 }
 
+bool QuantBot::managesAutonomousLauncherHunt(const UnitBase* unit) const {
+    return currentGame && huntingLauncher(unit) && !humanControls(unit);
+}
+
 bool QuantBot::engineHuntAttack(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->isAGroundUnit()
         && unit->getAttackMode()==HUNT && !supportMode && gameMode==GameMode::Custom
@@ -12150,7 +12198,8 @@ void QuantBot::launchGroundHunt() {
         if (recoveryActive() && ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
         // The objective is used as an OBSERVATION anchor for the front strength
         // comparison below, and is recorded for telemetry and the same anchor
-        // after a load. It is never turned into a per-unit attack order.
+        // after a load. Idle committed launchers may rejoin this front after
+        // engine Hunt ends; ordinary hunters retain their own target selection.
         const UnitBase* lead=nullptr;
         for (const auto id : selected) {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
@@ -12787,12 +12836,39 @@ void QuantBot::updateCustomWave() {
     // the rest of the match. Provisional: four minutes of game time.
     const Uint32 sortieCycles = static_cast<Uint32>(MILLI2CYCLES(240000));
     const bool hadWave = !customWave.members.empty();
+    const auto* front=getObject(customWave.front);
+    const bool usableGroundFront=front && front->getHealth()>0 && front->isActive()
+        && !front->isAFlyingUnit() && front->getOwner()
+        && front->getOwner()->getTeamID()!=getHouse()->getTeamID()
+        && front->isVisible(getHouse()->getTeamID());
     for (auto it = customWave.members.begin(); it != customWave.members.end();) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(*it));
         if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0
             || !mobileCombatItem(unit->getItemID())) { it = customWave.members.erase(it); continue; }
         if (humanControls(unit) || reserveDamagedUnitForRepair(unit)) {
             it = customWave.members.erase(it); continue;
+        }
+        // Engine Hunt can end without a candidate. An idle committed launcher
+        // still belongs with this active army when its observed ground front is
+        // reachable. This fallback never recruits a new home reserve or replaces
+        // combat, a manual order, repair, a retreat or a live defense assignment.
+        if (usableGroundFront && wholeArmyBaseDefence()
+            && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
+            && !localSquadWithdraw && unit->isActive() && unit->isRespondable()
+            && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher)
+            && unit->getAttackMode()==GUARD && !unit->hasATarget()
+            && !unit->isMoving() && !unit->wasForced()
+            && defenceAssignments.count(unit->getObjectID())==0
+            && (customWave.launched==0 || now-customWave.launched<sortieCycles)
+            && unit->canAttack(front)
+            && getMap().tileExists(front->getClosestPoint(unit->getLocation()))
+            && getMap().getTile(front->getClosestPoint(unit->getLocation()))->isExploredByTeam(getHouse()->getTeamID())
+            && !getMap().getTile(front->getClosestPoint(unit->getLocation()))->isFoggedByTeam(getHouse()->getTeamID())
+            && groundAttackReachable(unit,front)) {
+            doSetAttackMode(unit,HUNT);
+            doAttackObject(unit,front,false);
+            traceDecision("launcher_wave_rejoined",AITelemetry::Record()
+                .set("unit",unit->getObjectID()).set("front",front->getObjectID()));
         }
         // Membership is commitment accounting, so it has to end when the
         // commitment does. A dispatched attacker hunts; once it is active, no
@@ -12809,7 +12885,8 @@ void QuantBot::updateCustomWave() {
         // the wave that is being brought home.
         if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
             && unit->isActive() && unit->getAttackMode() != HUNT
-            && !unit->hasATarget() && !unit->isMoving() && !unit->wasForced()) {
+            && !unit->hasATarget() && !unit->isMoving() && !unit->wasForced()
+            && defenceAssignments.count(unit->getObjectID()) == 0) {
             it = customWave.members.erase(it); continue;
         }
         if (unit->isActive() && !unit->hasATarget() && !unit->isMoving()
@@ -12821,7 +12898,7 @@ void QuantBot::updateCustomWave() {
     }
     if (hadWave || !customWave.members.empty()) customWave.lastActive = now;
     // Keep the observed front anchor only while it is still a thing we can see.
-    // It anchors the front strength comparison; it is not an order.
+    // It anchors the strength comparison and the idle-launcher rejoin fallback.
     if (customWave.front != NONE_ID) {
         const auto* objective = getObject(customWave.front);
         if (!objective || objective->getHealth() <= 0 || !objective->getOwner()
@@ -14500,6 +14577,19 @@ void QuantBot::retreatAllUnits() {
                     else const_cast<UnitBase*>(unit)->setForced(false);
                     if (huntingBaseDefence)
                         const_cast<UnitBase*>(unit)->setGuardPoint(unit->getLocation());
+                    // A temporary post borrows an already-dispatched launcher.
+                    // Restore that mission when the contact ends; newly produced
+                    // home reserves still wait for the normal readiness gate.
+                    if (wholeArmyBaseDefence() && unit->isActive() && unit->getHealth() > 0
+                        && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher)
+                        && unit->getAttackMode()==AREAGUARD
+                        && customWave.members.count(unit->getObjectID()) > 0
+                        && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
+                        && !localSquadWithdraw && !reserveDamagedUnitForRepair(unit)) {
+                        doSetAttackMode(unit,HUNT);
+                        traceDecision("launcher_wave_resumed",AITelemetry::Record()
+                            .set("unit",unit->getObjectID()).set("ended_contact",it->second));
+                    }
                 }
                 it=defenceAssignments.erase(it);
             } else if (airborne) {

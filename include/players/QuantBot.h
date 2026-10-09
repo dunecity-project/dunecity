@@ -75,6 +75,8 @@ public:
     void onHumanUnitOrder(Uint32 id);
     /// Uses the existing human-order lease to distinguish AI orders in shared houses.
     bool managesAutonomousOrnithopter(const UnitBase* unit) const;
+    /// Controller authority for autonomous launcher target searches.
+    bool managesAutonomousLauncherHunt(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
@@ -268,6 +270,15 @@ private:
     /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
     /// deliberately independent of the optional recovery policy.
     bool wholeArmyBaseDefence() const;
+    /// Is this an autonomous Custom Hard/Brutal controller? No campaign, no
+    /// support/helper house. The shared scope of the whole-army behaviours and of
+    /// the mobile anti-air floor.
+    bool autonomousCustomHardBrutal() const;
+    /// Count of hostile Ornithopters this house can actually see right now:
+    /// alive, active and visible to our team. No fog cheating, and no sticky
+    /// "was once attacked from the air" flag - the demand disappears with the
+    /// aircraft. One bounded pass, used only where the unit mix is recomputed.
+    int visibleHostileAircraft() const;
     /// Is \a contact right now shooting at a building we own? A live hostile
     /// attacker, our structure as its target, and inside weapon range of it. A dead,
     /// stopped, friendly or merely nearby enemy is not.
