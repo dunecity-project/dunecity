@@ -94,16 +94,28 @@ void Ornithopter::save(OutputStream& stream) const
     stream.writeUint32(timeLastShot);
 }
 
-bool Ornithopter::isVetoedAutonomousPrey(const ObjectBase* candidate) const {
-    if(!isHarvesterLikeObject(candidate)) return false;
-    if(!isHumanControlledHouse(owner)) return true;
+const QuantBot* Ornithopter::autonomousController() const {
+    if(owner == nullptr) return nullptr;
     // AI do* helpers bypass human command leases. A human in the same house
     // therefore does not authorize a stale AI order; an actual player order
     // does, including one restored with the existing saved lease.
     for(const auto& player : owner->getPlayerList())
         if(const auto* bot=dynamic_cast<const QuantBot*>(player.get());
-            bot && bot->managesAutonomousOrnithopter(this)) return true;
-    return false;
+            bot && bot->managesAutonomousOrnithopter(this)) return bot;
+    return nullptr;
+}
+
+bool Ornithopter::isVetoedAutonomousPrey(const ObjectBase* candidate) const {
+    if(candidate == nullptr) return false;
+    const bool worker = isHarvesterLikeObject(candidate);
+    if(worker && !isHumanControlledHouse(owner)) return true;
+    const QuantBot* bot = autonomousController();
+    if(bot == nullptr) return false;
+    if(worker) return true;
+    // The difficulty policy is enforced on the hull as well as in the planner
+    // and the target searches: a restricted house neither keeps a held order
+    // nor fires a shot at something it is not allowed to attack.
+    return !bot->authorizesAircraftTarget(this,candidate);
 }
 
 void Ornithopter::dropVetoedAutonomousPrey() {
@@ -195,6 +207,8 @@ const ObjectBase* Ornithopter::findTarget() const {
 
     const QuantBotConfig& config = getQuantBotConfig();
     const int myTeam = owner->getTeamID();
+    // Resolved once, not per candidate: this is a whole-list scan already.
+    const QuantBot* autonomous = autonomousController();
 
     const ObjectBase* bestTarget = nullptr;
     double bestScore = -1.0;
@@ -205,8 +219,13 @@ const ObjectBase* Ornithopter::findTarget() const {
         }
 
         // Autonomous acquisition never picks a worker, matching the veto the
-        // shared searches in ObjectBase::findTarget() apply to this hull.
+        // shared searches in ObjectBase::findTarget() apply to this hull, and
+        // obeys the difficulty policy when a bot is flying this hull.
         if(isHarvesterLikeObject(candidate)) {
+            return;
+        }
+
+        if(autonomous != nullptr && !autonomous->authorizesAircraftTarget(this,candidate)) {
             return;
         }
 

@@ -1141,6 +1141,17 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
         campaignAIAttackFlag = true;
     }
+    // A confirmed hit on a building or worker we own makes the attacker a legal
+    // air defence contact for a short grace, so the reload between volleys does
+    // not read as the attack having stopped. Bounded: pruned on every air pass.
+    if (!supportMode && !autonomousAircraftRaids() && damage>0
+        && pObject->getOwner()==getHouse() && pObject->getHealth()>0
+        && (pObject->isAStructure() || pObject->getItemID()==Unit_Harvester
+            || pObject->getItemID()==Unit_RebelHarvester)
+        && pDamager->getOwner()!=nullptr
+        && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID()) {
+        assetAttackerContacts[damagerID]={getGameCycleCount(),pObject->isAStructure()};
+    }
     if (pObject->isAStructure()) {
         doRepair(pObject);
         // no point scrambling to defend a missile
@@ -6153,6 +6164,18 @@ void QuantBot::build(int militaryValue) {
     // prerequisite below still decide whether anything is actually ordered.
     const bool cityAntiAirInfantryDemand = citySimEnabled && observedHostileAircraft > 0;
     lastUnitMixBps = unitMix;
+    // Observational record of exactly this pass: the same scores and the same
+    // intended shares the orders below are placed from. Reading it cannot move a
+    // unit, and nothing here recomputes anything - it only copies.
+    for (size_t i = 0; i < 8; ++i) {
+        allocationSnapshot.slots[i] = {mixItems[i], scores[i], unitMix[i], available[i]};
+    }
+    allocationSnapshot.ready = true;
+    allocationSnapshot.cycle = getGameCycleCount();
+    allocationSnapshot.learning = learningUnitMix;
+    allocationSnapshot.militaryValue = militaryValue;
+    allocationSnapshot.antiAirFloorBps = launcherFloorAuthorised ? launcherFloorBps : 0;
+    allocationSnapshot.infantryQuotaBps = infantryPercent * 100;
     const int rawOrnithopterBps = rawMix[4];
     const FixPoint tankPercent = FixPoint(unitMix[0])/10000;
     const FixPoint siegePercent = FixPoint(unitMix[1])/10000;
@@ -11530,10 +11553,24 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             && unit->isActive() && unit->getHealth()>0
             && unit->isRespondable() && !humanControls(unit)) aircraft.push_back(unit);
     ornithopterStrikeTeam.reset(); // Old saved mass-Hunt missions no longer grant permission to attack.
+    // Only this pass authorizes a structure sortie. A withdrawn or unavailable
+    // aircraft must not retain permission from a previous sortie.
+    aircraftTargetAuthority.clear();
+    for(auto it=assetAttackerContacts.begin();it!=assetAttackerContacts.end();) {
+        if(getGameCycleCount()-it->second.cycle >= MILLI2CYCLES(kAircraftDefenceGraceMs))
+            it=assetAttackerContacts.erase(it);
+        else ++it;
+    }
     if(aircraft.empty()) return false;
+    // Difficulty policy for this house, read once per pass.
+    const bool offensiveRaids=autonomousAircraftRaids();
     AITelemetry::PerformanceScope perfScope("ai.ornithopter_safe_strikes",getGameCycleCount(),getHouse()->getHouseID());
 
     AirStrikePolicy::Coverage coverage(map.getSizeX(),map.getSizeY());
+    // The strict layer exists only where a wing may not price its way in. It is
+    // filled from the same single defender walk below, so no extra scan is
+    // added, and Hard/Brutal never allocate or consult it.
+    if(!offensiveRaids) coverage.enableStrict();
     int visibleAntiAir=0;
     int visibleMobileLaunchers=0;
     // Escort candidates with their pass-constant weight and guard radius. The
@@ -11545,7 +11582,15 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
     auto addDefender=[&](const ObjectBase* defender) {
         if(!defender || !defender->isActive() || defender->getHealth()<=0
             || !defender->getOwner() || defender->getOwner()->getTeamID()==myTeam
-            || !defender->isVisible(myTeam) || !AirStrikePolicy::antiAir(defender->getItemID())) return;
+            || !defender->isVisible(myTeam)) return;
+        // The strict layer knows every weapon that actually reaches an aircraft,
+        // at the reach it actually has - a rocket turret shoots ornithopters
+        // three times further than it shoots the ground. Non-anti-air units are
+        // not in it, so an ordinary tank never blocks an undefended base.
+        if(!offensiveRaids && AirStrikePolicy::strictAntiAir(defender->getItemID()))
+            coverage.addStrict(defender->getLocation(),
+                AirStrikePolicy::antiAirSafetyRange(defender->getItemID(),defender->getWeaponRange()));
+        if(!AirStrikePolicy::antiAir(defender->getItemID())) return;
         // A temporary power outage does not make a turret district a safe sortie.
         const int range=AirStrikePolicy::safetyRange(defender->getWeaponRange());
         // Mobile rocket cover is a price, not a wall: count the overlap per tile
@@ -11598,7 +11643,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             largestAsset=std::max({largestAsset,size.x,size.y});
         }
     }
-    struct Candidate { const ObjectBase* object; Coord size; int weight; int rank; };
+    struct Candidate { const ObjectBase* object; Coord size; int weight; int rank; bool strict; };
     std::vector<Candidate> candidates;
     auto addCandidate=[&](const ObjectBase* object,const QuantBotConfig::TargetPriority& priority) {
         if(!object || !object->isActive() || object->getHealth()<=0 || !object->getOwner()
@@ -11619,11 +11664,22 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             && object->canAttack(victim)
             && blockDistance(object->getLocation(),victim->getClosestPoint(object->getLocation()))
                 <= object->getWeaponRange()+3;
-        const bool underAttack=object==emergencyAttacker || engagingAsset;
+        // A contact that hit one of our assets a moment ago is still answering
+        // for it. Only the restricted difficulties need this: they have no
+        // proximity rank, and a rocket launcher has no target of its own while
+        // it reloads, so without the grace the reload reads as the attack
+        // having stopped. The offensive difficulties keep their exact ranks.
+        const auto recentContact=assetAttackerContacts.find(object->getObjectID());
+        const bool recentlyHitAsset=!offensiveRaids
+            && recentContact!=assetAttackerContacts.end()
+            && getGameCycleCount()-recentContact->second.cycle
+                < MILLI2CYCLES(kAircraftDefenceGraceMs);
+        const bool underAttack=object==emergencyAttacker || engagingAsset || recentlyHitAsset;
         // A building of ours is the base; a worker in the field is not. The
         // damage callback reports which one it was for its own attacker.
         const bool attackingBase=engagingAsset ? victim->isAStructure()
-            : (object==emergencyAttacker && emergencyOnBase);
+            : (object==emergencyAttacker && emergencyOnBase)
+                || (recentlyHitAsset && recentContact->second.base);
         // Cover is no longer decided here. Whether a raid can be flown depends
         // on the wing that would fly it, which is per aircraft below; this pass
         // only establishes what exists and what it is worth. Turret and Deviator
@@ -11632,7 +11688,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // All undefended buildings are eligible, including zones absent from the
         // combat priority table; retain configured priorities for ranking.
         bool defensiveContact=false;
-        if(!object->isAStructure() && object->canAttack()) {
+        if(!object->isAStructure() && object->canAttack() && offensiveRaids) {
             defendedIndex.visit(object->getLocation().x,object->getLocation().y,
                 object->getWeaponRange()+3+largestAsset,[&](size_t i) {
                     if(!defensiveContact && blockDistance(object->getLocation(),
@@ -11647,9 +11703,22 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // every order issued at the end of this function is an explicit target.
         const int rank=underAttack ? AirStrikePolicy::underAttackRank(attackingBase)
             : AirStrikePolicy::targetRank(object->isAStructure(),defensiveContact,true);
-        if (rank==AirStrikePolicy::RaidRank && !diffSettings.ornithopterAttackEnabled) return;
+        // Difficulty policy. Hard and Brutal keep every rank they have today,
+        // including the configured raid flag. The remaining difficulties may
+        // only answer an attack on something we own; their one offensive option
+        // is an enemy base building whose raid area has no observed anti-air
+        // over it at all, and no wing size buys passage into that cover.
+        bool strictCover=false;
+        if(offensiveRaids) {
+            if (rank==AirStrikePolicy::RaidRank && !diffSettings.ornithopterAttackEnabled) return;
+        } else if(rank==AirStrikePolicy::RaidRank) {
+            if(!object->isAStructure() || !diffSettings.attackEnabled
+                || !AirStrikePolicy::opportunisticBaseStructure(object->getItemID())) return;
+            strictCover=true;
+        }
         if (isCampaignEnemy() && rank==AirStrikePolicy::DefenseRank && !campaignLocalContact(object)) return;
-        if(rank>0) candidates.push_back({object,size,std::max(1,priority.build+priority.target),rank});
+        if(rank>0) candidates.push_back({object,size,std::max(1,priority.build+priority.target),
+            rank,strictCover});
     };
     for(const auto* structure:getStructureList())
         addCandidate(structure,config.getStructurePriority(structure->getItemID()));
@@ -11684,6 +11753,13 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // somewhere along the route.
         auto reachable=[&](const Candidate& candidate) {
             if(AirStrikePolicy::emergencyRank(candidate.rank)) return true;
+            // Strict opportunism: the whole footprint and the direct approach
+            // must be free of every observed anti-air weapon. The local wing is
+            // not an argument here, so there is no outnumber override.
+            if(candidate.strict)
+                return coverage.strictClearFootprint(candidate.object->getLocation(),candidate.size)
+                    && coverage.strictClearApproach(unit->getLocation(),
+                        candidate.object->getClosestPoint(unit->getLocation()));
             return coverage.clearFootprint(candidate.object->getLocation(),candidate.size,localWing)
                 && coverage.clearApproach(unit->getLocation(),
                     candidate.object->getClosestPoint(unit->getLocation()),localWing);
@@ -11733,7 +11809,12 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             // on the item flag alone would march the wing past exposed prey.
             // Finish a live launcher run; a newly arrived escort can replace
             // any other prey, including a held emergency attacker.
-            if(target!=nullptr && !AirStrikePolicy::mobileLauncher(target->getItemID())) {
+            // Only the raiding difficulties promote an escort: on the others a
+            // launcher standing over the engagement is still an enemy unit that
+            // is not attacking anything of ours, so the defensive sortie keeps
+            // the contact it was sent at.
+            if(target!=nullptr && offensiveRaids
+                && !AirStrikePolicy::mobileLauncher(target->getItemID())) {
                 const Coord prey=target->getClosestPoint(unit->getLocation());
                 const ObjectBase* escort=nullptr;
                 double escortScore=-1;
@@ -11741,7 +11822,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
                     if(!unit->canAttack(launcher.object)) continue;
                     // The escort belongs to the already-authorized engagement.
                     // It remains eligible for defense when raids are disabled.
-                    const Candidate candidate{launcher.object,Coord(1,1),launcher.weight,bestRank};
+                    const Candidate candidate{launcher.object,Coord(1,1),launcher.weight,bestRank,false};
                     const Coord at=candidate.object->getClosestPoint(unit->getLocation());
                     const bool guardsPrey=blockDistance(at,prey)<=launcher.guard;
                     const bool guardsWing=blockDistance(at,unit->getLocation())
@@ -11764,6 +11845,11 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         const bool modeChanged=unit->getAttackMode()!=STOP;
         const bool hadTarget=unit->hasATarget();
         if(target) {
+            // Record the permission before the order, and on every pass that
+            // keeps the same target: the hull-side and search-side checks read
+            // this, so a legal attack run must not expire while it flies.
+            if(!offensiveRaids && target->isAStructure())
+                aircraftTargetAuthority[unit->getObjectID()]=target->getObjectID();
             const bool orderNeeded=modeChanged || unit->getTarget()!=target || !unit->wasForced();
             // STOP suppresses autonomous target acquisition; the explicit forced
             // attack still flies and fires. No follow-on Hunt after target death.
@@ -11789,6 +11875,11 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
                         : target->isAStructure() ? "exposed_building" : "exposed_unit"));
             }
         } else {
+            // Nothing this aircraft may attack. Withdrawing the permission is
+            // what makes the engine searches and the hull drop anything it is
+            // still holding, including an order from an earlier difficulty or a
+            // restored save.
+            aircraftTargetAuthority.erase(unit->getObjectID());
             if(modeChanged || hadTarget) { doSetAttackMode(unit,STOP); issued=true; }
             // Return along a clear corridor to a real owned building, not a base
             // centroid that can sit in enemy fire. Escape newly arrived AA first.
@@ -11969,6 +12060,55 @@ bool QuantBot::humanControls(const UnitBase* unit) const {
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
         && !supportMode && !humanControls(unit);
+}
+
+bool QuantBot::autonomousAircraftRaids() const {
+    // Offensive air hunts are a Hard and Brutal behaviour, by decision of the
+    // project owner. The difficulty decides, not the configured flag: a copied
+    // settings block must not be able to re-open unit raids on Easy or Medium.
+    return !supportMode
+        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+}
+
+bool QuantBot::aircraftDefenceTarget(const ObjectBase* candidate) const {
+    if(!candidate || candidate->getHealth()<=0 || !candidate->isActive()
+        || !candidate->canAttack() || !candidate->getOwner() || getHouse()==nullptr
+        || candidate->getOwner()->getTeamID()==getHouse()->getTeamID()) return false;
+    // It hit a building or worker of ours a moment ago. A rocket launcher
+    // between volleys has no target of its own for several seconds, and that
+    // gap is not the end of the attack.
+    const auto recent=assetAttackerContacts.find(candidate->getObjectID());
+    if(recent!=assetAttackerContacts.end()
+        && getGameCycleCount()-recent->second.cycle < MILLI2CYCLES(kAircraftDefenceGraceMs)) return true;
+    // Or it is standing over one right now, with that asset as its own target.
+    const auto* victim=candidate->getTarget();
+    if(!victim || victim->getHealth()<=0 || !victim->isActive()
+        || victim->getOwner()!=getHouse()) return false;
+    if(!victim->isAStructure() && victim->getItemID()!=Unit_Harvester
+        && victim->getItemID()!=Unit_RebelHarvester) return false;
+    if(!candidate->canAttack(victim)) return false;
+    return blockDistance(candidate->getLocation(),victim->getClosestPoint(candidate->getLocation()))
+        <= candidate->getWeaponRange()+3;
+}
+
+bool QuantBot::authorizesAircraftTarget(const UnitBase* aircraft, const ObjectBase* candidate) const {
+    if(!aircraft || !candidate || !getHouse() || aircraft->getOwner()!=getHouse()
+        || !candidate->getOwner() || candidate->getHealth()<=0 || !candidate->isActive()
+        || candidate->getOwner()->getTeamID()==getHouse()->getTeamID()
+        || !candidate->isVisible(getHouse()->getTeamID())) return false;
+    // The worker veto is absolute at every difficulty and every rank.
+    if(isHarvesterLikeObject(candidate)) return false;
+    // Hard and Brutal retain offensive targeting.
+    if(autonomousAircraftRaids()) return true;
+    // A past order never authorizes an unrelated unit once its attack ends.
+    // Only a current asset attack or the short confirmed-hit grace does.
+    if(aircraftDefenceTarget(candidate)) return true;
+    if(!candidate->isAStructure()) return false;
+    // The structure sortie admitted by the shared anti-air check this pass.
+    const auto authorized=aircraftTargetAuthority.find(aircraft->getObjectID());
+    if(authorized!=aircraftTargetAuthority.end()
+        && authorized->second==candidate->getObjectID()) return true;
+    return false;
 }
 
 bool QuantBot::managesAutonomousLauncherHunt(const UnitBase* unit) const {
@@ -12194,8 +12334,9 @@ void QuantBot::launchGroundHunt() {
             || (unit->getAttackMode()==HUNT && !unit->wasForced()))) continue;
         if (limited && (scriptedAssaults.count(unit->getObjectID())
             || campaignWave.members.count(unit->getObjectID()))) continue;
-        if (limited && unit->getItemID()==Unit_Ornithopter
-            && !getQuantBotConfig().getSettings(static_cast<int>(difficulty)).ornithopterAttackEnabled) continue;
+        // Campaign waves recruit aircraft only on the raiding difficulties. The
+        // air planner owns every other aircraft, including a defensive one.
+        if (limited && unit->getItemID()==Unit_Ornithopter && !autonomousAircraftRaids()) continue;
         candidates.push_back({unit->getObjectID(),price,0});
         if (launcherItem(unit)) ++launcherCandidates;
         availableValue+=price;
@@ -15293,6 +15434,25 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
     s.writeUint32(ornithopterStrikeTeam.targetId); s.writeUint32Set(ornithopterStrikeTeam.memberIds);
     s.writeUint32(harvesterSafety.size()); for(const auto& e : harvesterSafety) { s.writeUint32(e.first); s.writeUint32(e.second.nextCheck); s.writeUint32(e.second.retreatUntil); coord(e.second.lastLocation); coord(e.second.plannedDestination); s.writeBool(e.second.controlled); }
     s.writeUint32(unsafeFields.size()); for(const auto& e : unsafeFields) { coord(e.location); s.writeUint32(e.cycle); }
+    s.writeUint32(aircraftTargetAuthority.size());
+    for(const auto& e : aircraftTargetAuthority) { s.writeUint32(e.first); s.writeUint32(e.second); }
+    s.writeUint32(assetAttackerContacts.size());
+    for(const auto& e : assetAttackerContacts) { s.writeUint32(e.first); s.writeUint32(e.second.cycle); s.writeBool(e.second.base); }
+    // Observational allocation snapshot. A live checkpoint hands the observer the
+    // exact scores and shares the producing house last used, so the Stats window
+    // shows real values instead of waiting for the next production pass.
+    s.writeBool(allocationSnapshot.ready);
+    s.writeUint32(allocationSnapshot.cycle);
+    s.writeBool(allocationSnapshot.learning);
+    s.writeSint32(allocationSnapshot.militaryValue);
+    s.writeSint32(allocationSnapshot.antiAirFloorBps);
+    s.writeSint32(allocationSnapshot.infantryQuotaBps);
+    for(const auto& slot : allocationSnapshot.slots) {
+        s.writeUint32(slot.itemID);
+        s.writeSint64(slot.score);
+        s.writeSint32(slot.targetBps);
+        s.writeBool(slot.allocated);
+    }
 }
 
 void QuantBot::loadObserverRuntime(InputStream& s) {
@@ -15332,4 +15492,20 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
     ornithopterStrikeTeam.targetId=s.readUint32(); ornithopterStrikeTeam.memberIds.clear(); for(Uint32 n=count(); n; --n) ornithopterStrikeTeam.memberIds.insert(s.readUint32());
     harvesterSafety.clear(); for(Uint32 n=count(); n; --n) { auto id=s.readUint32(); auto& e=harvesterSafety[id]; e.nextCheck=s.readUint32(); e.retreatUntil=s.readUint32(); e.lastLocation=coord(); e.plannedDestination=coord(); e.controlled=s.readBool(); }
     unsafeFields.clear(); for(Uint32 n=count(); n; --n) { UnsafeField e; e.location=coord(); e.cycle=s.readUint32(); unsafeFields.push_back(e); }
+    aircraftTargetAuthority.clear();
+    for(Uint32 n=count(); n; --n) { const auto id=s.readUint32(); aircraftTargetAuthority[id]=s.readUint32(); }
+    assetAttackerContacts.clear();
+    for(Uint32 n=count(); n; --n) { const auto id=s.readUint32(); AssetContact e; e.cycle=s.readUint32(); e.base=s.readBool(); assetAttackerContacts[id]=e; }
+    allocationSnapshot.ready=s.readBool();
+    allocationSnapshot.cycle=s.readUint32();
+    allocationSnapshot.learning=s.readBool();
+    allocationSnapshot.militaryValue=s.readSint32();
+    allocationSnapshot.antiAirFloorBps=s.readSint32();
+    allocationSnapshot.infantryQuotaBps=s.readSint32();
+    for(auto& slot : allocationSnapshot.slots) {
+        slot.itemID=s.readUint32();
+        slot.score=s.readSint64();
+        slot.targetBps=s.readSint32();
+        slot.allocated=s.readBool();
+    }
 }

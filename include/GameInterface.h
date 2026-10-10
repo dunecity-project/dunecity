@@ -58,6 +58,8 @@ public:
         \param  position    Position to draw the window to. The position of the window is added to this.
     */
     void draw(Point position) override;
+    /// Draw child dialogs after the HUD, so counters cannot cover their text.
+    void drawDialogs();
 
     /**
         Checks whether the newticker currently shows a message
@@ -152,6 +154,7 @@ private:
     TextButton          landValueOverlayButton;
     TextButton          crimeOverlayButton;
     TextButton          pollutionOverlayButton;
+    TextButton          statsButton;            ///< Opens the read-only match statistics window
     SkipMissionButton   skipMissionButton;
     TextButton          ornithopterSelectButton;///< Button that selects all owned ornithopters
     TextButton          chemicalCarryallSelectButton;///< Button that selects all owned chemical carryalls

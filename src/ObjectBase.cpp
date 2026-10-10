@@ -529,13 +529,47 @@ void forEachRingOffset(int ring, Visit visit) {
 // Workers are never prey for an autonomous aircraft search. Enforced at the
 // search, which is the autonomous source: an explicit attack order does not
 // come through here, so manual control keeps targeting whatever it likes.
-bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candidate) {
+// The QuantBot flying this hull autonomously, if any. Resolved once per search
+// like managedRocketHunt() below, never per candidate: the player-list walk and
+// the dynamic casts must not enter the ring loop.
+const QuantBot* managedAutonomousAircraft(const ObjectBase& seeker) {
+    if(seeker.getItemID() != Unit_Ornithopter || seeker.getOwner() == nullptr) {
+        return nullptr;
+    }
+
+    const auto* aircraft = dynamic_cast<const UnitBase*>(&seeker);
+    if(aircraft == nullptr) {
+        return nullptr;
+    }
+
+    for(const auto& player : seeker.getOwner()->getPlayerList()) {
+        if(const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            bot != nullptr && bot->managesAutonomousOrnithopter(aircraft)) {
+            return bot;
+        }
+    }
+
+    return nullptr;
+}
+
+bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candidate,
+                              const QuantBot* autonomousAircraft) {
     if(seeker.getItemID() != Unit_Ornithopter) {
         return false;
     }
 
     const int item = candidate.getItemID();
-    return item == Unit_Harvester || item == Unit_RebelHarvester;
+    if(item == Unit_Harvester || item == Unit_RebelHarvester) {
+        return true;
+    }
+
+    // An engine search is the autonomous source of a target, so the difficulty
+    // policy applies to it: a restricted house may only acquire what its air
+    // planner authorized, or a contact that is itself attacking one of its own
+    // assets. One map lookup and the candidate's own target; no scan is added.
+    return autonomousAircraft != nullptr
+        && !autonomousAircraft->authorizesAircraftTarget(
+               static_cast<const UnitBase*>(&seeker), &candidate);
 }
 
 // 0 = normal, 1 = walls (slightly deprioritized), 2 = carryalls (heavily deprioritized)
@@ -578,6 +612,7 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
     }
 
     const auto* rocketHunt = managedRocketHunt(seeker);
+    const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
     const int maxRadiusX = std::max(seekerLocation.x, currentGameMap->getSizeX() - 1 - seekerLocation.x);
     const int maxRadiusY = std::max(seekerLocation.y, currentGameMap->getSizeY() - 1 - seekerLocation.y);
     const int maxRadius = std::max(maxRadiusX, maxRadiusY);
@@ -605,7 +640,7 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
             // reachable ground prey; keep every aircraft it can actually shoot.
             if(rocketHunt && candidate && candidate->isAFlyingUnit()
                 && !rocketHunt->isInWeaponRange(candidate)) return;
-            if(candidate != nullptr && !isAutonomousTargetVetoed(seeker, *candidate)
+            if(candidate != nullptr && !isAutonomousTargetVetoed(seeker, *candidate, autonomousAircraft)
                 && seeker.canAttack(candidate)
                 && currentGameMap->terrainAttackReachable(seeker,*candidate)) {
                 ++ObjectBase::targetSearchStats.candidatesTested;
@@ -644,6 +679,7 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
         return nullptr;
     }
 
+    const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
     ObjectBase* closestTarget = nullptr;
     auto closestDistance = FixPt_MAX;
 
@@ -674,7 +710,7 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
                 return;
             }
 
-            if(isAutonomousTargetVetoed(seeker, *candidate)) {
+            if(isAutonomousTargetVetoed(seeker, *candidate, autonomousAircraft)) {
                 return;
             }
 
@@ -707,6 +743,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
     }
 
     const auto* rocketHunt = huntMode ? managedRocketHunt(seeker) : nullptr;
+    const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
     const Coord centerCell = grid.clampToCell(seekerLocation);
     if(!centerCell.isValid()) {
         return nullptr;
@@ -759,7 +796,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
                     continue;
                 }
 
-                if(isAutonomousTargetVetoed(seeker, *candidate)) {
+                if(isAutonomousTargetVetoed(seeker, *candidate, autonomousAircraft)) {
                     continue;
                 }
 

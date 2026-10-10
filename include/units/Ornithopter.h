@@ -20,6 +20,8 @@
 
 #include <units/AirUnit.h>
 
+class QuantBot;
+
 class Ornithopter final : public AirUnit
 {
 public:
@@ -51,8 +53,11 @@ protected:
     virtual bool attack() override;
 
 private:
-    /// Releases a retained target the worker veto forbids. No saved state.
+    /// Releases a retained target the autonomous veto forbids. No saved state.
     void dropVetoedAutonomousPrey();
+    /// The bot flying this hull autonomously, if any. Resolved per call site,
+    /// never per candidate.
+    const QuantBot* autonomousController() const;
 
     Uint32 timeLastShot;
 };

@@ -82,7 +82,10 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
     require(game->saveGame(path),"Could not save army boundary");
     const std::string runtime=game->saveObserverRuntime();
     IMemoryStream header(runtime.data(),runtime.size());
-    require(header.readUint32()==7,"Unexpected observer runtime version");
+    // Supplemental runtime 8: the aircraft sortie permissions, asset-attack contacts and
+    // allocation snapshot are appended after the recovery state this checkpoint compares.
+    require(header.readUint32()==8,"Unexpected observer runtime version");
+    require(header.readUint32()==boundaryCycle,"Observer runtime header is not version then cycle");
     struct Tail { std::vector<std::string> states, armyStates, houses; bool refreshed=false; };
     auto runTail=[&](Game& world) {
         Tail tail;

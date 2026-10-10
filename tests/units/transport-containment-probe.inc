@@ -980,8 +980,10 @@ int runTransportContainmentProbe() {
             } else if(observerRuntime.empty()) {
                 observerRuntime = loaded->saveObserverRuntime();
                 IMemoryStream header(observerRuntime.data(), observerRuntime.size());
-                containmentRequire(header.readUint32() == 7,
+                containmentRequire(header.readUint32() == 8,
                                    "The observer runtime version changed");
+                containmentRequire(header.readUint32() == loaded->getGameCycleCount(),
+                                   "The observer runtime header is not version then cycle");
             }
 
             for(int i = 0; i < tail; ++i) {

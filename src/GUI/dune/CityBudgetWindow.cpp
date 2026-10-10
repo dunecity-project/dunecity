@@ -16,6 +16,7 @@
  */
 
 #include <GUI/dune/CityBudgetWindow.h>
+#include <GUI/dune/ObservedHouseSelector.h>
 
 #include <globals.h>
 #include <Game.h>
@@ -71,6 +72,18 @@ CityBudgetWindow::CityBudgetWindow()
     titleLabel.setText(_("City Budget"));titleLabel.setAlignment(Alignment_HCenter);
     titleLabel.setTextColor(MenuTheme::text,COLOR_TRANSPARENT);titleLabel.setTextFontSize(24);
     mainVBox.addWidget(&titleLabel,30);
+    // Which house this is the budget of. An observer may browse every house in
+    // the match; a participant has only their own, so the control is not shown.
+    selectedHouseID=ObservedHouse::initialSelection();
+    configureValueLabel(houseLabel);
+    houseHBox.addWidget(&houseLabel);
+    nextHouseButton.setText(_("Next house"));
+    nextHouseButton.setTooltipText(_("Show the next house in this match (observers only)."));
+    nextHouseButton.setOnClick(std::bind(&CityBudgetWindow::onNextHouse,this));
+    nextHouseButton.setVisible(ObservedHouse::mayBrowse());
+    nextHouseButton.setEnabled(ObservedHouse::mayBrowse());
+    houseHBox.addWidget(&nextHouseButton,120);
+    mainVBox.addWidget(&houseHBox,24);
     configureValueLabel(yearLabel);configureValueLabel(treasuryLabel,Alignment_Right);
     summaryHBox.addWidget(&yearLabel);summaryHBox.addWidget(&treasuryLabel);
     mainVBox.addWidget(&summaryHBox,26);mainVBox.addWidget(VSpacer::create(8));
@@ -114,8 +127,33 @@ CityBudgetWindow::CityBudgetWindow()
     // mid-edit).
     auto* citySim = currentGame ? currentGame->getCitySimulation() : nullptr;
     if (citySim && citySim->isInitialized()) {
-        pendingPolicePercent = citySim->getPoliceFundingPercent();
+        pendingPolicePercent = citySim->getPoliceFundingPercent(selectedHouseID);
         pendingTaxRate       = citySim->getCityTax();
+    }
+    // Reading another house's budget must not offer any way to change it. The
+    // adjustments and Apply are withheld, and onConfirm() refuses as well.
+    if (isReadOnly()) {
+        for (auto* button : {&taxMinus,&taxPlus,&policeMinus,&policePlus,&confirmButton}) {
+            button->setVisible(false);
+            button->setEnabled(false);
+        }
+    }
+    updateDisplay();
+}
+
+bool CityBudgetWindow::isReadOnly() const {
+    return ObservedHouse::mayBrowse();
+}
+
+void CityBudgetWindow::onNextHouse() {
+    const int next = ObservedHouse::next(selectedHouseID);
+    if (next == selectedHouseID) return;    // A participant stays on their own house.
+    selectedHouseID = next;
+    auto* citySim = currentGame ? currentGame->getCitySimulation() : nullptr;
+    if (citySim && citySim->isInitialized()) {
+        // The sliders follow the house being shown, so the readout is that
+        // house's actual funding and not the previous one's.
+        pendingPolicePercent = citySim->getPoliceFundingPercent(selectedHouseID);
     }
     updateDisplay();
 }
@@ -135,6 +173,7 @@ void CityBudgetWindow::onCancel() {
 }
 
 void CityBudgetWindow::onPoliceIncrease() {
+    if (isReadOnly()) return;
     if (pendingPolicePercent < 100) {
         pendingPolicePercent += 5;
         if (pendingPolicePercent > 100) pendingPolicePercent = 100;
@@ -143,6 +182,7 @@ void CityBudgetWindow::onPoliceIncrease() {
 }
 
 void CityBudgetWindow::onPoliceDecrease() {
+    if (isReadOnly()) return;
     if (pendingPolicePercent > 0) {
         pendingPolicePercent -= 5;
         if (pendingPolicePercent < 0) pendingPolicePercent = 0;
@@ -151,6 +191,7 @@ void CityBudgetWindow::onPoliceDecrease() {
 }
 
 void CityBudgetWindow::onTaxIncrease() {
+    if (isReadOnly()) return;
     if (pendingTaxRate < DuneCity::CitySimulation::kMaxTaxRate) {
         ++pendingTaxRate;
         updateAllocationLabels();
@@ -158,6 +199,7 @@ void CityBudgetWindow::onTaxIncrease() {
 }
 
 void CityBudgetWindow::onTaxDecrease() {
+    if (isReadOnly()) return;
     if (pendingTaxRate > DuneCity::CitySimulation::kMinTaxRate) {
         --pendingTaxRate;
         updateAllocationLabels();
@@ -165,6 +207,13 @@ void CityBudgetWindow::onTaxDecrease() {
 }
 
 void CityBudgetWindow::onConfirm() {
+    // An observer has no budget to set, and these city commands carry no acting
+    // object for an owner check to catch. Refuse here as well as hiding the
+    // button, so an injected or scripted callback still generates no command.
+    if (isReadOnly() || pLocalPlayer == nullptr || pLocalHouse == nullptr) {
+        onCancel();
+        return;
+    }
     // Route through the command system so multiplayer remains
     // deterministic. p0 reserved (legacy houseID slot for tax),
     // p1 = new tax rate.
@@ -188,21 +237,34 @@ void CityBudgetWindow::updateDisplay() {
         return;
     }
 
-    yearLabel.setText(fmt::sprintf("Year: %d", citySim->getCityYear()));
-    treasuryLabel.setText(fmt::sprintf("Treasury: %d credits", citySim->getTotalFunds()));
+    // Every readout below belongs to the house this window is showing, so an
+    // observer paging through the match sees that house's own live budget.
+    const House* house = ObservedHouse::resolve(selectedHouseID);
+    if (house != nullptr) selectedHouseID = house->getHouseID();
+    if (isReadOnly()) {
+        pendingTaxRate = citySim->getCityTax();
+        pendingPolicePercent = citySim->getPoliceFundingPercent(selectedHouseID);
+    }
+    const auto& houseState = citySim->getHouseState(selectedHouseID);
+    houseLabel.setText(fmt::sprintf("%s: %s%s", _("House"), ObservedHouse::name(house),
+                                    isReadOnly() ? std::string(" (") + _("read only") + ")" : ""));
 
-    // Projected annual revenue using the pending tax slider and land value.
-    const int taxBaseEighths = citySim->getTaxBaseEighths();
+    yearLabel.setText(fmt::sprintf("Year: %d", citySim->getCityYear()));
+    treasuryLabel.setText(fmt::sprintf("Treasury: %d credits", house ? house->getCredits() : 0));
+
+    // Projected annual revenue using the pending tax slider and this house's own
+    // tax base and land value.
+    const int taxBaseEighths = houseState.taxBaseEighths;
     const int taxRate   = pendingTaxRate;
-    const int avgLV     = citySim->getAvgLandValue();
+    const int avgLV     = houseState.avgLandValue;
     const int projected = DuneCity::computeAnnualTaxRevenue(taxBaseEighths, taxRate, avgLV);
     incomeLabel.setText(fmt::sprintf("Projected Tax: +%d/yr", projected));
 
     // Police: nominal cost is full-funded; actual paid is scaled by the
     // selected funding percentage, including pending slider changes.
-    const int stationCount = pLocalHouse ? pLocalHouse->getNumItems(Structure_PoliceStation) : 0;
-    const int rocketCount = pLocalHouse ? pLocalHouse->getNumItems(Structure_RocketTurret) : 0;
-    const int gunCount = pLocalHouse ? pLocalHouse->getNumItems(Structure_GunTurret) : 0;
+    const int stationCount = house ? house->getNumItems(Structure_PoliceStation) : 0;
+    const int rocketCount = house ? house->getNumItems(Structure_RocketTurret) : 0;
+    const int gunCount = house ? house->getNumItems(Structure_GunTurret) : 0;
     const FixPoint stationPaying = DuneCity::getPoliceAnnualCost(Structure_PoliceStation) * stationCount * pendingPolicePercent / 100;
     const FixPoint rocketPaying = DuneCity::getPoliceAnnualCost(Structure_RocketTurret) * rocketCount * pendingPolicePercent / 100;
     const FixPoint gunPaying = DuneCity::getPoliceAnnualCost(Structure_GunTurret) * gunCount * pendingPolicePercent / 100;
@@ -226,22 +288,22 @@ void CityBudgetWindow::updateDisplay() {
     // subsequent +/- clicks edit the pending copy without being clobbered.
     updateAllocationLabels();
 
-    resPopLabel.setText(fmt::sprintf("Residential: %d", citySim->getDisplayResPop()));
-    comPopLabel.setText(fmt::sprintf("Commercial: %d", citySim->getDisplayComPop()));
-    indPopLabel.setText(fmt::sprintf("Industrial: %d", citySim->getDisplayIndPop()));
-    totalPopLabel.setText(fmt::sprintf("Population: %d", citySim->getDisplayTotalPop()));
+    constexpr int popScale = DuneCity::CitySimulation::kPopDisplayMultiplier;
+    resPopLabel.setText(fmt::sprintf("Residential: %d", houseState.resPop * popScale));
+    comPopLabel.setText(fmt::sprintf("Commercial: %d", houseState.comPop * popScale));
+    indPopLabel.setText(fmt::sprintf("Industrial: %d", houseState.indPop * popScale));
+    totalPopLabel.setText(fmt::sprintf("Population: %d", houseState.getTotalPop() * popScale));
 
     // Unemployment
-    const int unemp = citySim->getUnemploymentRate();
+    const int unemp = houseState.unemploymentRate;
     unemploymentLabel.setText(fmt::sprintf("Unemployment: %d%%", unemp));
     unemploymentLabel.setTextColor(unemp > 20 ? COLOR_RGB(255,80,80) : COLOR_WHITE);
 
     // Hospital/church count (auto-created by game on residential zones)
     servicesLabel.setText(fmt::sprintf("Hospitals: %d\nChurches: %d",
-                                       citySim->getHospitalCount(), citySim->getChurchCount()));
+                                       houseState.hospitalCount, houseState.churchCount));
 
-    const auto& environment = citySim->getEnvironmentStatus(
-        pLocalHouse ? pLocalHouse->getHouseID() : 0);
+    const auto& environment = citySim->getEnvironmentStatus(selectedHouseID);
     if (environment.sampledStructures == 0) {
         environmentLabel.setText("Land Value: —\nPollution: —");
         crimeTrafficLabel.setText("Crime: —\nTraffic: —");

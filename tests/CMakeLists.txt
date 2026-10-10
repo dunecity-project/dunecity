@@ -577,6 +577,23 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Read-only Stats window, observer house browsing and the sidebar squeeze,
+        # on a real renderer at the smallest supported interface height and at
+        # native 1080. Both sizes capture screenshots into their output directory.
+        foreach(ui_viewport IN ITEMS 640x480 1920x1080)
+            add_test(NAME stats_ui_${ui_viewport} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
+                --viewport ${ui_viewport} --level 9 --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/stats-ui-${ui_viewport}-probe)
+            set_tests_properties(stats_ui_${ui_viewport} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
+        # The same window without a city economy: tax and population must read
+        # N/A rather than a fabricated zero, and Stats must still be reachable.
+        add_test(NAME stats_ui_vanilla COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
+            --viewport 1024x768 --level 9 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/stats-ui-vanilla-probe)
+        set_tests_properties(stats_ui_vanilla PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             add_test(NAME quantbot_opening-economy_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --opening-economy-probe --repeatable

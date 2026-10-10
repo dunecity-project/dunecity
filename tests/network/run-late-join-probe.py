@@ -206,7 +206,8 @@ try:
                     payload = host_runtime.read_bytes()
                     if payload != viewer_runtime.read_bytes():
                         raise RuntimeError('Transferred path continuation bytes differ')
-                    if struct.unpack_from('<I', payload)[0] != 6:
+                    # Runtime8 appends bot authority/snapshots; the queue/path prefix remains unchanged.
+                    if struct.unpack_from('<I', payload)[0] != 8:
                         raise RuntimeError('Update the suspended-path fixture for the observer runtime version')
                     offset = 24
                     targets = struct.unpack_from('<I', payload, offset)[0]

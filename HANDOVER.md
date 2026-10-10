@@ -1,3 +1,97 @@
+## 2026-10-10 — local 1.0.827: aircraft difficulty, house Stats and community maps
+
+QuantBot offensive Ornithopter unit hunts now belong to Hard and Brutal. Easy
+and Medium intercept enemies attacking a live owned building or harvester,
+including a three-second grace after a confirmed hit. Their opportunistic raids
+are limited to enemy base structures whose footprint and direct approach have
+no observed anti-air coverage. Rocket turrets use their actual triple air reach;
+Launcher/EliteLauncher/Deviator and rocket infantry are included. A large wing
+cannot override this strict lower-difficulty raid check. Hard/Brutal retain the
+existing local wing-versus-launcher policy and launcher-first engagements.
+The AI harvester-target exclusion and human-order leases remain enforced.
+
+The planner, generic target searches, held targets and the shot itself share the
+same policy. Unit permissions require a current attack/contact rather than a
+stale cached order; structure permissions are rebuilt each planner pass. There
+are no per-hull world scans. Observer checkpoints preserve both new decision
+maps. The policy applies to autonomous QuantBot, including campaign air waves;
+legacy controllers keep their separate planners. See docs/quantbot-aircraft-policy.md.
+
+The sidebar now has Stats and compact spacing. A separate House summary shows
+cumulative units produced, raw delivered/refined spice, gross tax receipts and
+that house's current city population. The existing refinery statistic is gross
+income, so the window divides by the house's fixed income multiplier to recover
+raw spice. A five-times-income fixture verifies this distinction. Vanilla tax
+and population are N/A. The unit table shows attacker-type credited kills,
+losses and actual removed HP, with paging. Nothing reads SQLite or scans the
+world in rendering; the unit ledger refresh is a bounded array walk once per
+second while the window is open.
+
+QuantBot exposes its actual production score and final target army-value share
+from the same build pass, with separate Type/Performance/Goal % columns. Special
+heavies have one grouped slot; the actual aggregate infantry cap is separate.
+Unavailable types show dashes. Ordinary loads await the next production pass;
+the supplemental observer checkpoint carries the display snapshot immediately.
+See docs/house-stats.md for exact counter and score meanings.
+
+Observers can use Next house in Stats and Budget, with names and deterministic
+wrapping through all match houses. Participant views stay on their own house.
+Spectator budget controls are hidden/disabled and callbacks cannot emit fiscal
+commands. An open read-only budget follows live funding/tax changes. House
+browsing never changes the local house/player identity. Dialogs now draw once
+after the game HUD so power/spice bars, credits and Spectating text cannot cover
+their contents at the small viewport.
+
+Save 9853 and telemetry 18 are unchanged. Network protocol is 67, supplemental
+observer runtime is 8, AI policy is ornithopter-difficulty-observer-unit-stats-v95.
+The combined candidate includes the already verified 1.0.826 victim-performance
+kill bonus, Trooper/WOR anti-air production and Native 1:1 display fix.
+
+The additional user-linked multiplayer-map task e1d30029 is integrated as six
+exact data blobs, with no unrelated 1.0.820 source/version changes. Maps are
+Reacciona rapido forro (128x128, six slots, Dune2R, v1), Alto mapa HD (512x512,
+six slots, Dune2R, v1, Cyn), and La guerra dei ricchi (448x448, eight declared
+slots, Vanilla, v2, Masterbube). Authored starting layouts are unchanged:
+Reacciona Player5 has neither yard nor MCV; La guerra has seven starting yards.
+Workshop sidecars retain canonical mod names/versions and attribution without
+private cached hash requirements. The map task's native one-minute load checks
+and provenance are retained under ../outputs/metaserver-maps-20261010/; this
+combined build independently verifies original hashes and bundled bytes.
+
+A subscription-authenticated bounded Claude worker implemented aircraft and UI
+changes. Codex independently reviewed and integrated stricter target-permission
+expiry, observer continuity, raw-spice/live-budget corrections, readable score
+columns and HUD/dialog drawing order. Strengthened real-renderer fixtures pass
+at 640x480, actual native 1920x1080 and vanilla 1024x768. They exercise real
+production availability and measured scores, five-times-income raw spice,
+ordinary House counter serialization, observer snapshot roundtrips, house
+cycling and callback command guards. The 1080 fixture uses a hidden real SDL
+window and bypasses the desktop-fit clamp only in the private test executable,
+so a headless host's smaller desktop cannot silently turn the case into 768p.
+
+Acceptance: the full 79-test run completed with 76 passing and three stale
+supplemental-runtime version expectations failing. A focused Claude repair
+updated only those three fixtures from 7 to 8, added version-then-cycle header
+checks and retained the transport/army state assertions; all three pass in the
+targeted rerun. All production inputs and compiled text/strings match the full
+run. Final map rebuild, dependency audits and both map tests pass; all six map
+and sidecar blobs match the bundled originals. Portable runtime CTest and
+strict/deep signing checks pass.
+
+Codex also updated the older suspended-path network fixture's runtime pin from
+6 to 8 (queue/path prefix unchanged). The first extra native city transfer hit
+its five-second progress assertion while portable checks ran concurrently. An
+isolated fresh-profile retry passes: host and viewer transfer identical runtime
+bytes with four suspended path jobs, catch up and match cycle-1800 state,
+then the host continues to cycle1900 after spectator departure. The failed
+first timing run remains in the evidence; no production assertion was relaxed.
+
+MBA installation: PENDING_827_INSTALLED_RECEIPT.
+Evidence and private install scripts:
+../outputs/ornithopter-difficulty-827-20261010/.
+No public push/tag/CI release is requested. Long-game FPS and full-match win-rate
+effects are not claimed by the focused fixtures.
+
 ## 2026-10-10 — local 1.0.826: victim performance, Trooper air defence and native display size
 
 Killing blows now sample the destroyed natural unit type's damage value and

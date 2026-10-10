@@ -1292,6 +1292,295 @@ void runAirDefenseProbe(Game& game) {
             unitList=cityUnits;structureList=cityStructures;
             bot->difficulty=QuantBot::Difficulty::Brutal;
         }
+
+        // === Difficulty policy for autonomous aircraft ===
+        // Offensive air hunts are Hard and Brutal. Easy and Medium may answer an
+        // attack on a building or worker of their own, and may strike an enemy
+        // base building that no observed anti-air covers. Everything below uses
+        // the shipped settings for the difficulty under test: the policy must be
+        // keyed to the difficulty itself, not to a flag a settings copy can flip.
+        {
+            auto policyUnits=unitList;auto policyStructures=structureList;
+            const auto& config=getQuantBotConfig();
+            bot->manualUnitOrders.clear();
+            bot->defenceAssignments.clear();bot->defenceResponseCycles.clear();
+            bot->aircraftTargetAuthority.clear();bot->assetAttackerContacts.clear();
+            auto* bird=air;
+            bird->setHealth(bird->getMaxHealth());
+            base->setHealth(base->getMaxHealth());
+            raid->setHealth(raid->getMaxHealth());
+            raid->setVisible(owner->getTeamID(),true);
+            // A fresh worker of ours: the fixture's original one has driven off
+            // during the earlier real-frame sections.
+            auto* asset=spawn(owner,Unit_Harvester,Coord(19,19));
+            asset->setVisible(VIS_ALL,true);
+            bot->doSetAttackMode(asset,STOP);
+            auto* wanderer=spawn(enemy,Unit_Tank,Coord(14,20));
+            wanderer->doSetAttackMode(STOP);
+            unitList.clear();structureList.clear();
+            structureList.push_back(base);structureList.push_back(raid);
+            unitList.push_back(bird);unitList.push_back(asset);unitList.push_back(wanderer);
+            // The wanderer stands close enough to our harvester that the Hard
+            // proximity rank applies to it, which is exactly what the lower
+            // difficulties must not act on.
+            require(blockDistance(wanderer->getLocation(),
+                        asset->getClosestPoint(wanderer->getLocation())).lround()
+                    <= wanderer->getWeaponRange()+3,
+                "The policy fixture's wanderer is not inside the proximity band it has to test");
+            auto flyFor=[&](QuantBot::Difficulty difficulty) {
+                bot->difficulty=difficulty;
+                bot->doSetAttackMode(bird,STOP);
+                bot->tryLaunchOrnithopterStrike(config.getSettings(static_cast<int>(difficulty)),config);
+            };
+            auto strikeAt=[&](QuantBot::Difficulty difficulty) {
+                bot->difficulty=difficulty;
+                return bot->tryLaunchOrnithopterStrike(
+                    config.getSettings(static_cast<int>(difficulty)),config);
+            };
+
+            // --- A non-threatening enemy unit near our assets: denied on Easy
+            // and Medium, still answered on Hard.
+            for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                flyFor(difficulty);
+                require(bird->getTarget()!=wanderer,
+                    "Easy/Medium attacked an enemy unit that was not attacking anything of ours");
+                require(bird->getTarget()==raid,
+                    "Easy/Medium did not take the undefended enemy base building instead");
+                require(bird->getAttackMode()==STOP && bird->wasForced(),
+                    "The lower-difficulty raid was not issued as an explicit forced order");
+                // A repeated pass with nothing changed issues no further orders.
+                require(!strikeAt(difficulty),
+                    "A repeated identical air pass re-issued orders instead of holding");
+            }
+            flyFor(QuantBot::Difficulty::Hard);
+            require(bird->getTarget()==wanderer,
+                "Hard lost its proximity defence against an enemy unit beside our harvester");
+            flyFor(QuantBot::Difficulty::Brutal);
+            require(bird->getTarget()==wanderer,
+                "Brutal lost its proximity defence against an enemy unit beside our harvester");
+
+            // --- Actual defence is legal at every difficulty: the attacker of
+            // a live harvester, and of the base, is a target on Easy.
+            wanderer->doAttackObject(asset,true);
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==wanderer,
+                "Easy refused to defend its own harvester from the unit attacking it");
+            wanderer->doSetAttackMode(STOP);wanderer->setTarget(nullptr);
+            // The same contact between volleys: the onDamage ledger keeps it
+            // legal for the grace, so a reload does not end the defence.
+            bot->assetAttackerContacts.clear();
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()!=wanderer,
+                "A contact with no target of its own stayed an Easy air target");
+            bot->onDamage(base,1,wanderer->getObjectID());
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==wanderer,
+                "A confirmed recent attacker of our base was not a legal Easy defence target");
+            game.gameCycleCount+=MILLI2CYCLES(QuantBot::kAircraftDefenceGraceMs)+1;
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()!=wanderer,
+                "The bounded onDamage defence grace never expired");
+            bot->assetAttackerContacts.clear();
+
+            // --- Defence still works under anti-air cover.
+            auto* guardTurret=enemy->placeStructure(NONE_ID,Structure_RocketTurret,
+                origin.x+16,origin.y+17,true,true);
+            require(guardTurret!=nullptr,"The policy fixture could not place its covering turret");
+            guardTurret->setVisible(owner->getTeamID(),true);
+            structureList.push_back(guardTurret);
+            wanderer->setLocation(origin.x+18,origin.y+19);
+            wanderer->doAttackObject(asset,true);
+            require(blockDistance(guardTurret->getLocation(),wanderer->getLocation()).lround()
+                    <= AirStrikePolicy::safetyRange(guardTurret->getWeaponRange()),
+                "The covering turret does not cover the attacker, so this tests nothing");
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==wanderer,
+                "Anti-air cover suppressed a legal Easy defence of our own harvester");
+            // The same turret denies the opportunistic raid, three times further
+            // out than its ground range, because that is how far it shoots
+            // aircraft. A raid is an opportunity, not a loss being answered.
+            wanderer->doSetAttackMode(STOP);wanderer->setTarget(nullptr);
+            structureList.remove(guardTurret);guardTurret->setVisible(VIS_ALL,false);
+            guardTurret->setHealth(0);
+            // A second turret outside its ground cover of the target but inside
+            // the triple range it engages aircraft at. Placed where the geometry
+            // actually holds, in a fixed search order, never moved afterwards.
+            const int turretRange=currentGame->objectData.data[Structure_RocketTurret]
+                [enemy->getHouseID()].weaponrange;
+            Coord farSpot=Coord::Invalid();
+            int turretToRaid=0;
+            for(int dy=23;dy>=12 && farSpot.isInvalid();--dy) {
+                const Coord spot(origin.x+10,origin.y+dy);
+                if(!currentGameMap->tileExists(spot)) continue;
+                const int reach=blockDistance(spot,raid->getClosestPoint(spot)).lround();
+                if(reach>AirStrikePolicy::safetyRange(turretRange)
+                    && reach<=AirStrikePolicy::antiAirSafetyRange(Structure_RocketTurret,turretRange)) {
+                    farSpot=spot;turretToRaid=reach;
+                }
+            }
+            require(farSpot.isValid(),
+                "The triple-range fixture found no tile outside ground cover but inside air reach");
+            auto* farTurret=enemy->placeStructure(NONE_ID,Structure_RocketTurret,
+                farSpot.x,farSpot.y,true,true);
+            require(farTurret!=nullptr,"The triple-range fixture could not place its turret");
+            farTurret->setVisible(owner->getTeamID(),true);
+            structureList.push_back(farTurret);
+            SDL_Log("AIR_DEFENSE_DIAG: air_policy_triple_range turret_range=%d turret_to_target=%d"
+                " ground_cover=%d air_cover=%d",
+                turretRange,turretToRaid,AirStrikePolicy::safetyRange(turretRange),
+                AirStrikePolicy::antiAirSafetyRange(Structure_RocketTurret,turretRange));
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==nullptr,
+                "An Easy raid flew at a base building inside a rocket turret's anti-air reach");
+            structureList.remove(farTurret);farTurret->setVisible(VIS_ALL,false);
+            farTurret->setHealth(0);
+
+            // --- Rocket infantry is real anti-air and denies the same raid; an
+            // ordinary tank beside the building is not and must not deny it.
+            auto* trooper=spawn(enemy,Unit_Trooper,Coord(12,7));
+            unitList.push_back(trooper);
+            require(blockDistance(trooper->getLocation(),
+                        raid->getClosestPoint(trooper->getLocation())).lround()
+                    <= AirStrikePolicy::antiAirSafetyRange(Unit_Trooper,trooper->getWeaponRange()),
+                "The rocket infantry fixture does not cover the building it guards");
+            require(trooper->canAttack(bird),
+                "The rocket infantry fixture cannot actually shoot at aircraft");
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==nullptr,
+                "An Easy raid flew at a base building guarded by rocket infantry");
+            trooper->setHealth(0);
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==raid,
+                "Clearing the guarding rocket infantry did not re-open the raid");
+            trooper->setVisible(VIS_ALL,false);unitList.remove(trooper);
+            auto* bystander=spawn(enemy,Unit_Tank,Coord(12,7));
+            unitList.push_back(bystander);
+            bystander->doSetAttackMode(STOP);
+            flyFor(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==raid,
+                "A non-anti-air enemy unit beside the building blocked an undefended raid");
+            bystander->setVisible(VIS_ALL,false);unitList.remove(bystander);
+
+            // --- No wing size buys passage on Easy: a launcher over the target
+            // denies the raid however many aircraft are local.
+            auto* guardLauncher=spawn(enemy,Unit_Launcher,Coord(12,7));
+            unitList.push_back(guardLauncher);
+            std::vector<UnitBase*> policyFleet;
+            for(int i=0;i<8;++i) {
+                auto* extra=spawn(owner,Unit_Ornithopter,Coord(9+i%4,9+i/4));
+                bot->doSetAttackMode(extra,STOP);
+                policyFleet.push_back(extra);unitList.push_back(extra);
+            }
+            auto flyWing=[&](QuantBot::Difficulty difficulty) {
+                bot->difficulty=difficulty;
+                for(auto* extra:policyFleet) bot->doSetAttackMode(extra,STOP);
+                bot->doSetAttackMode(bird,STOP);
+                bot->tryLaunchOrnithopterStrike(
+                    config.getSettings(static_cast<int>(difficulty)),config);
+            };
+            flyWing(QuantBot::Difficulty::Easy);
+            require(bird->getTarget()==nullptr,
+                "A large Easy wing priced its way into launcher cover over a base building");
+            for(auto* extra:policyFleet)
+                require(extra->getTarget()==nullptr,
+                    "A wing member raided into launcher cover on Easy");
+            // The same wing and the same launcher on Hard: the established
+            // four-aircraft-per-launcher ratio and launcher-first still apply,
+            // so this is a difficulty policy and not a disabled planner.
+            flyWing(QuantBot::Difficulty::Hard);
+            require(policyFleet[0]->getTarget()==guardLauncher,
+                "Hard's wing ratio and launcher-first no longer engage the covering launcher");
+            for(auto* extra:policyFleet) {
+                bot->doSetAttackMode(extra,STOP);
+                extra->setVisible(VIS_ALL,false);unitList.remove(extra);extra->setHealth(0);
+            }
+            guardLauncher->setVisible(VIS_ALL,false);unitList.remove(guardLauncher);
+            guardLauncher->setHealth(0);
+
+            // --- The restriction survives below the planner: a stale forced
+            // order is dropped by the hull, the engine searches never return the
+            // illegal contact, and no shot is fired.
+            wanderer->setLocation(origin.x+14,origin.y+20);
+            wanderer->doSetAttackMode(STOP);wanderer->setTarget(nullptr);
+            wanderer->setHealth(wanderer->getMaxHealth());
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            bot->aircraftTargetAuthority.clear();bot->assetAttackerContacts.clear();
+            // A spectator joining between planner passes must carry both an
+            // admitted structure sortie and a recent confirmed asset hit.
+            bot->aircraftTargetAuthority[bird->getObjectID()]=raid->getObjectID();
+            bot->assetAttackerContacts[wanderer->getObjectID()]={game.gameCycleCount,true};
+            const auto checkpoint=game.saveObserverRuntime();
+            bot->aircraftTargetAuthority.clear();bot->assetAttackerContacts.clear();
+            game.loadObserverRuntime(checkpoint);
+            require(bot->aircraftTargetAuthority.at(bird->getObjectID())==raid->getObjectID(),
+                "A spectator checkpoint lost an admitted air sortie");
+            const auto restoredContact=bot->assetAttackerContacts.find(wanderer->getObjectID());
+            require(restoredContact!=bot->assetAttackerContacts.end()
+                    && restoredContact->second.cycle==game.gameCycleCount && restoredContact->second.base,
+                "A spectator checkpoint lost a recent base-attack contact");
+            bot->assetAttackerContacts.clear();
+            // Even a stale cache entry from an earlier unit order may not keep
+            // granting permission once that unit stops attacking our assets.
+            bot->aircraftTargetAuthority[bird->getObjectID()]=wanderer->getObjectID();
+            bot->doSetAttackMode(bird,STOP);bot->doAttackObject(bird,wanderer,true);
+            require(bird->getTarget()==wanderer,"The stale-order fixture could not set its order");
+            require(static_cast<Ornithopter*>(bird)->isVetoedAutonomousPrey(wanderer),
+                "An unauthorized Easy air target bypassed the execution veto");
+            const FixPoint wandererFull=wanderer->getHealth();
+            for(int step=0;step<900;++step) {game.processObjects();++game.gameCycleCount;}
+            require(bird->getTarget()!=wanderer,
+                "A stale Easy air order survived without a planner pass");
+            require(wanderer->getHealth()>=wandererFull,
+                "An Easy aircraft fired at a contact it was not allowed to attack");
+            for(auto mode:{STOP,GUARD,AREAGUARD,AMBUSH,HUNT}) {
+                bot->doSetAttackMode(bird,mode);
+                require(bird->findTarget()!=wanderer,
+                    "An Easy autonomous air search returned a non-attacking enemy unit");
+                for(int step=0;step<300;++step) {game.processObjects();++game.gameCycleCount;}
+                require(bird->getTarget()!=wanderer,
+                    "Autonomous reacquisition below the planner picked an illegal Easy target");
+                require(wanderer->getHealth()>=wandererFull,
+                    "An Easy aircraft fired after reacquiring an illegal target");
+            }
+            bot->doSetAttackMode(bird,STOP);
+            // Hard acquires the very same contact through the same search, so
+            // this is a difficulty policy and not a broken search.
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            bot->doSetAttackMode(bird,HUNT);
+            require(bird->findTarget()==nullptr,
+                "An Easy whole-map air hunt still returned an unauthorized target");
+            bot->difficulty=QuantBot::Difficulty::Hard;
+            const ObjectBase* hardFound=bird->findTarget();
+            SDL_Log("AIR_DEFENSE_DIAG: air_policy_hard_hunt_target=%d item=%d",
+                hardFound?int(hardFound->getObjectID()):-1,
+                hardFound?int(hardFound->getItemID()):-1);
+            require(hardFound!=nullptr,
+                "Hard's own autonomous air search returned nothing where Easy was restricted");
+            bot->doSetAttackMode(bird,STOP);
+            bot->difficulty=QuantBot::Difficulty::Easy;
+
+            // --- An explicit human order keeps its authority on Easy.
+            bot->onHumanUnitOrder(bird->getObjectID());
+            bot->doAttackObject(bird,wanderer,true);
+            require(!static_cast<Ornithopter*>(bird)->isVetoedAutonomousPrey(wanderer),
+                "A human air order was classified as autonomous on Easy");
+            bool manualAirHit=false;
+            for(int step=0;step<4000 && !manualAirHit;++step) {
+                game.processObjects();++game.gameCycleCount;
+                manualAirHit=wanderer->getHealth()<wandererFull;
+            }
+            require(manualAirHit,"A human-ordered Easy aircraft never damaged its ordered target");
+            bot->manualUnitOrders.clear();
+            bot->doSetAttackMode(bird,STOP);
+
+            wanderer->setVisible(VIS_ALL,false);wanderer->setHealth(0);
+            asset->setVisible(VIS_ALL,false);asset->setHealth(0);
+            bot->aircraftTargetAuthority.clear();bot->assetAttackerContacts.clear();
+            bot->defenceAssignments.clear();bot->defenceResponseCycles.clear();
+            unitList=policyUnits;structureList=policyStructures;
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            SDL_Log("AIR_DEFENSE_DIAG: difficulty_air_policy_checked=1");
+        }
     } catch(...) {unitList=savedUnits;structureList=savedStructures;throw;}
     unitList=savedUnits;structureList=savedStructures;
     SDL_Log("AIR_DEFENSE_PASS: exposed ground units and infantry are raided and really damaged;"
@@ -1311,6 +1600,13 @@ void runAirDefenseProbe(Game& game) {
         " infantry quota that counts queued orders, out of cash its working and strategic"
         " reserves do not need, never on Easy/Medium, in support mode or in a campaign, founds"
         " the WOR only under that demand and only with real troop content, and leaves the"
-        " mobile anti-air launcher floor binding where launchers are producible");
+        " mobile anti-air launcher floor binding where launchers are producible;"
+        " autonomous air offence is Hard/Brutal only: Easy/Medium deny a non-attacking enemy"
+        " unit beside their own assets at the planner, in every engine search and at the shot,"
+        " still defend a harvester and a base under anti-air cover including across a bounded"
+        " reload grace, and may only strike an enemy base building that no observed rocket"
+        " turret at triple anti-air range, launcher or rocket infantry covers - which no wing"
+        " size overrides, which a non-anti-air bystander does not block, and which re-opens"
+        " when the guard is cleared - while Hard keeps the same contacts and human orders stand");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=air_defense outcome=passed");
 }

@@ -405,9 +405,16 @@ public:
     void onMentat();
 
     /**
-        This method opens the city budget window.
+        This method opens the city budget window. An observer gets the same window
+        in read-only form; a participant gets their own house as before.
     */
     void onCityBudget();
+    /**
+        Opens the read-only match statistics window: the house summary, the
+        per-unit-type combat ledger and any QuantBot allocation snapshot. Issues
+        no command and is available in every game mode, including while observing.
+    */
+    void onHouseStats();
     void onFeedback();
     void onSkipMission();
     void confirmSkipMission();

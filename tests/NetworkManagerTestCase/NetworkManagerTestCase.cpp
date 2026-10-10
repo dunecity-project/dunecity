@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 66;
+static constexpr int kWireProtocolVersion = 67;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -59,8 +59,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // diverge immediately.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    // 66 changes victim-performance kill rewards and reactive Trooper AA decisions.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 66);
+    // 67 restricts autonomous aircraft by difficulty and carries those sortie
+    // permissions and asset-attack contacts in observer runtime version8.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 67);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

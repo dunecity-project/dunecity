@@ -298,6 +298,13 @@ bool Window::handleTextInput(SDL_TextInputEvent& textInput) {
 }
 
 void Window::draw(Point position) {
+    drawContents(position);
+    if(pChildWindow != nullptr) {
+        pChildWindow->draw();
+    }
+}
+
+void Window::drawContents(Point position) {
     if(isVisible()) {
         if(bTransparentBackground == false) {
 
@@ -318,9 +325,6 @@ void Window::draw(Point position) {
         }
     }
 
-    if(pChildWindow != nullptr) {
-        pChildWindow->draw();
-    }
 }
 
 void Window::drawOverlay(Point position) {

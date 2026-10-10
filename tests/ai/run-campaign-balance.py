@@ -45,6 +45,10 @@ parser.add_argument('--enemy-ai', choices=('quantbot','ai-player'), default='qua
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
+parser.add_argument('--stats-ui-probe', action='store_true',
+                    help='Exercise the Stats window, observer house browsing and the sidebar layout')
+parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
+                    help='Render the UI probe at this window size (default 640x480)')
 parser.add_argument('--sourceforge-probe', action='store_true')
 parser.add_argument('--harvester-safety-probe', action='store_true')
 parser.add_argument('--city-placement-probe', action='store_true')
@@ -182,6 +186,16 @@ if main.count(needle) != 1:
     raise RuntimeError('Main-menu injection point changed.')
 main = main.replace(needle,'int menuResult = runCampaignBalanceProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
+if args.stats_ui_probe:
+    # Exercise the requested logical viewport even on a smaller/headless host.
+    # Only this private probe bypasses the ordinary desktop-fit clamp; the
+    # shipped application retains it. SDL still supplies the real renderer.
+    fit_call = 'clampWindowedSizeToDisplay(displayIndex, settings.video.physicalWidth, settings.video.physicalHeight);'
+    if main.count(fit_call) != 1:
+        raise RuntimeError('Window-size fixture hook changed.')
+    main = main.replace(fit_call, '/* Stats renderer fixture keeps its requested viewport. */')
+    main = main.replace('                              videoFlags);',
+                        '                              videoFlags | SDL_WINDOW_HIDDEN);')
 position = main.index('int main(')
 main = main[:position] + '#include "'+str(root/'tests/ai/campaign-balance-probe.inc')+'"\n' + main[position:]
 source, obj = out/'balance-main.cpp', out/'balance-main.o'
@@ -235,11 +249,19 @@ if args.custom_map:
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'
 if args.harvester_safety_probe: env['BALANCE_HARVESTER_SAFETY_PROBE'] = '1'
 if args.sourceforge_probe: env['BALANCE_SOURCEFORGE_PROBE'] = '1'
-if args.controls_probe or args.sourceforge_probe:
+if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe:
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
+    if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
+    width, height = 640, 480
+    if args.viewport:
+        width, height = (int(value) for value in args.viewport.lower().split('x'))
     profile = out/'profile'
     profile.mkdir(exist_ok=True)
-    (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\nInterface Height = 480\nFullscreen = false\n[General]\nPlay Intro = false\n')
+    interface_height = -1 if args.stats_ui_probe else height
+    if args.stats_ui_probe:
+        env['BALANCE_STATS_EXPECTED_WIDTH'] = str(width)
+        env['BALANCE_STATS_EXPECTED_HEIGHT'] = str(height)
+    (profile/'Dune City.ini').write_text(f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\nInterface Height = {interface_height}\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:

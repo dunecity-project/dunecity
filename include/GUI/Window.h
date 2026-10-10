@@ -257,6 +257,10 @@ public:
 
 protected:
 
+    /// Draw this window's background and widgets. A game HUD can finish its
+    /// own drawing before placing its child dialogs above it.
+    void drawContents(Point position);
+
     bool processChildWindowOpenCloses();
 
     int    closeChildWindowCounter;                     ///< Close the child window after processing all input?
