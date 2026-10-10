@@ -37,11 +37,30 @@ constexpr int kStatsWindowWidth = 620;
 constexpr int kStatsWindowHeight = 460;
 constexpr int kRowHeight = 18;
 constexpr int kBodyFontSize = 12;
-constexpr int kNameColumnWidth = 118;
-constexpr int kNumberColumnWidth = 52;
 constexpr int kAllocationNameWidth = 100;
 constexpr int kAllocationPerformanceWidth = 102;
 constexpr int kAllocationGoalWidth = 62;
+constexpr int kAllocationColumnsWidth =
+    kAllocationNameWidth + kAllocationPerformanceWidth + kAllocationGoalWidth;
+/// Gap kept between a column's widest content and its neighbour.
+constexpr int kColumnPadding = 8;
+/// The window's own left and right margins, and the gap between the allocation
+/// column and the unit table. Named so the table can work out what is left.
+constexpr int kSideMargin = 12;
+constexpr int kColumnsGap = 10;
+/// Narrowest the type column may become. Longer names keep their ellipsis.
+constexpr int kMinNameColumnWidth = 76;
+/// The two non-combat city aircraft and the two upgraded variants the player
+/// asked to keep out of the unit table.
+constexpr int kHiddenUnitTypes[] = {
+    Unit_AmbientAirplane, Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
+};
+
+/// True for a type the unit table never lists, whatever its counters say.
+bool isHiddenFromUnitTable(int itemID) {
+    return std::find(std::begin(kHiddenUnitTypes), std::end(kHiddenUnitTypes), itemID)
+           != std::end(kHiddenUnitTypes);
+}
 
 Uint32 centeredCoordinate(int available, int extent) {
     return static_cast<Uint32>(std::max(0, (available - extent) / 2));
@@ -84,9 +103,9 @@ HouseStatsWindow::HouseStatsWindow()
     selectedHouseID = ObservedHouse::initialSelection();
 
     setWindowWidget(&rootHBox);
-    rootHBox.addWidget(HSpacer::create(12));
+    rootHBox.addWidget(HSpacer::create(kSideMargin));
     rootHBox.addWidget(&mainVBox);
-    rootHBox.addWidget(HSpacer::create(12));
+    rootHBox.addWidget(HSpacer::create(kSideMargin));
 
     mainVBox.addWidget(VSpacer::create(8));
     titleLabel.setText(_("Stats"));
@@ -149,22 +168,24 @@ HouseStatsWindow::HouseStatsWindow()
 
     configureSectionHeading(tableHeadingLabel, _("Units"));
     tableVBox.addWidget(&tableHeadingLabel, 18);
+    measureTableColumns();
     configureValueLabel(headerName);
+    configureValueLabel(headerActive, Alignment_Right);
     configureValueLabel(headerKills, Alignment_Right);
     configureValueLabel(headerDeaths, Alignment_Right);
     configureValueLabel(headerDamage, Alignment_Right);
     headerName.setText(_("Type"));
+    headerActive.setText(_("Active"));
     headerKills.setText(_("Kills"));
     headerDeaths.setText(_("Deaths"));
     headerDamage.setText(_("Damage"));
-    headerName.setTextColor(MenuTheme::accent, COLOR_TRANSPARENT);
-    headerKills.setTextColor(MenuTheme::accent, COLOR_TRANSPARENT);
-    headerDeaths.setTextColor(MenuTheme::accent, COLOR_TRANSPARENT);
-    headerDamage.setTextColor(MenuTheme::accent, COLOR_TRANSPARENT);
-    tableHeaderHBox.addWidget(&headerName, kNameColumnWidth);
-    tableHeaderHBox.addWidget(&headerKills, kNumberColumnWidth);
-    tableHeaderHBox.addWidget(&headerDeaths, kNumberColumnWidth);
-    tableHeaderHBox.addWidget(&headerDamage, kNumberColumnWidth + 10);
+    for(auto* header : {&headerName, &headerActive, &headerKills, &headerDeaths, &headerDamage})
+        header->setTextColor(MenuTheme::accent, COLOR_TRANSPARENT);
+    tableHeaderHBox.addWidget(&headerName, nameColumnWidth);
+    tableHeaderHBox.addWidget(&headerActive, activeColumnWidth);
+    tableHeaderHBox.addWidget(&headerKills, killsColumnWidth);
+    tableHeaderHBox.addWidget(&headerDeaths, deathsColumnWidth);
+    tableHeaderHBox.addWidget(&headerDamage, damageColumnWidth);
     tableVBox.addWidget(&tableHeaderHBox, kRowHeight);
 
     // One page of rows, sized to the space this window actually has. A longer
@@ -189,7 +210,7 @@ HouseStatsWindow::HouseStatsWindow()
     tableVBox.addWidget(&pagingHBox, 24);
 
     columnsHBox.addWidget(&leftVBox);
-    columnsHBox.addWidget(HSpacer::create(10));
+    columnsHBox.addWidget(HSpacer::create(kColumnsGap));
     columnsHBox.addWidget(&tableVBox);
     mainVBox.addWidget(&columnsHBox);
 
@@ -206,6 +227,31 @@ HouseStatsWindow::HouseStatsWindow()
 
 HouseStatsWindow::~HouseStatsWindow() = default;
 
+void HouseStatsWindow::measureTableColumns() {
+    auto& style = GUIStyle::getInstance();
+    // A count column has to hold its own header and the widest number it can
+    // carry, measured in the font actually in use, so that no translated header
+    // overflows and no number ever has to be shortened.
+    auto countColumn = [&](const std::string& header, const std::string& widestNumber) {
+        return static_cast<int>(std::max(style.getTextWidth(header, kBodyFontSize),
+                                         style.getTextWidth(widestNumber, kBodyFontSize)))
+               + kColumnPadding;
+    };
+    activeColumnWidth = countColumn(_("Active"), "00000");
+    killsColumnWidth = countColumn(_("Kills"), "000000");
+    deathsColumnWidth = countColumn(_("Deaths"), "000000");
+    damageColumnWidth = countColumn(_("Damage"), "00000000");
+
+    // What the counts do not need is the type column's. The allocation column
+    // on the left keeps its own width plus one padding of slack, so a fifth
+    // count column can never squeeze it.
+    const int available = getSize().x - 2 * kSideMargin - kColumnsGap
+                          - kAllocationColumnsWidth - kColumnPadding;
+    nameColumnWidth = std::max(kMinNameColumnWidth,
+                               available - activeColumnWidth - killsColumnWidth
+                                   - deathsColumnWidth - damageColumnWidth);
+}
+
 void HouseStatsWindow::buildRows(int rowCount) {
     rowsPerPage = rowCount;
     rows.clear();
@@ -213,13 +259,13 @@ void HouseStatsWindow::buildRows(int rowCount) {
     for(int i = 0; i < rowCount; ++i) {
         auto row = std::make_unique<UnitRow>();
         configureValueLabel(row->name);
-        configureValueLabel(row->kills, Alignment_Right);
-        configureValueLabel(row->deaths, Alignment_Right);
-        configureValueLabel(row->damage, Alignment_Right);
-        row->box.addWidget(&row->name, kNameColumnWidth);
-        row->box.addWidget(&row->kills, kNumberColumnWidth);
-        row->box.addWidget(&row->deaths, kNumberColumnWidth);
-        row->box.addWidget(&row->damage, kNumberColumnWidth + 10);
+        for(auto* count : {&row->active, &row->kills, &row->deaths, &row->damage})
+            configureValueLabel(*count, Alignment_Right);
+        row->box.addWidget(&row->name, nameColumnWidth);
+        row->box.addWidget(&row->active, activeColumnWidth);
+        row->box.addWidget(&row->kills, killsColumnWidth);
+        row->box.addWidget(&row->deaths, deathsColumnWidth);
+        row->box.addWidget(&row->damage, damageColumnWidth);
         tableVBox.addWidget(&row->box, kRowHeight);
         rows.push_back(std::move(row));
     }
@@ -368,14 +414,14 @@ void HouseStatsWindow::refreshAllocation(const House* house) {
             row.performance.setText("-");
             row.goal.setText("-");
         } else {
-            row.performance.setText(std::to_string(entry.score));
+            row.performance.setText(fmt::sprintf("x%.1f", static_cast<double>(entry.score) / 1000000.0));
             row.goal.setText(fmt::sprintf("%d.%02d", entry.targetBps / 100, entry.targetBps % 100));
         }
     }
 
-    // Two short lines, so the meaning is stated without a paragraph of text in a
+    // Short notes, so the meaning is stated without a paragraph of text in a
     // narrow column. Kept free of per-cent signs: the numbers above carry those.
-    std::string note = std::string(_("Performance: production score (1x = 1000000)."))
+    std::string note = std::string(_("Performance: production score as a multiplier."))
         + "\n" + _("Goal %: intended share of total army value.")
         + fmt::sprintf("\n%s %d.%02d%%", _("Infantry cap (separate):"),
                        snapshot.infantryQuotaBps / 100, snapshot.infantryQuotaBps % 100);
@@ -392,16 +438,25 @@ void HouseStatsWindow::refreshLedger(const House* house) {
     const int houseID = house->getHouseID();
     for(int item = 0; item < Num_ItemID; ++item) {
         if(!isUnit(item)) continue;
+        // Excluded before any counter is read: these types stay out of the table
+        // even when they are enabled, owned, or carry ledger history.
+        if(isHiddenFromUnitTable(item)) continue;
         const auto& reward = house->getCombatReward(item);
         const int deaths = house->getNumLostItems(item);
+        // Registered units of this type from the existing house census.
+        // Constant time per type and no world scan, so the
+        // column costs the same whatever the army size.
+        const int active = house->getNumItems(item);
         // Kills credited to this type as the attacker, the real hit points it
         // removed, and the units of this type this house lost. getNumKilledItems()
         // counts victims of that type and is deliberately not used here.
         const int64_t damageHp = reward.hpRemovedMilli / 1000;
-        const bool anyData = reward.kills > 0 || deaths > 0 || damageHp > 0;
+        // A type with registered units stays listed even where production of
+        // it is disabled.
+        const bool anyData = active > 0 || reward.kills > 0 || deaths > 0 || damageHp > 0;
         if(!anyData && !currentGame->objectData.data[item][houseID].enabled) continue;
         ledger.push_back({static_cast<Uint32>(item), getItemNameByID(item),
-                          reward.kills, deaths, damageHp});
+                          active, reward.kills, deaths, damageHp});
     }
 }
 
@@ -413,14 +468,13 @@ void HouseStatsWindow::refreshTable() {
         const size_t index = first + i;
         auto& row = *rows[i];
         if(index >= ledger.size()) {
-            row.name.setText("");
-            row.kills.setText("");
-            row.deaths.setText("");
-            row.damage.setText("");
+            for(auto* label : {&row.name, &row.active, &row.kills, &row.deaths, &row.damage})
+                label->setText("");
             continue;
         }
         const auto& entry = ledger[index];
-        row.name.setText(fitText(entry.name, kNameColumnWidth - 4, kBodyFontSize));
+        row.name.setText(fitText(entry.name, nameColumnWidth - 4, kBodyFontSize));
+        row.active.setText(std::to_string(entry.active));
         row.kills.setText(std::to_string(entry.kills));
         row.deaths.setText(std::to_string(entry.deaths));
         row.damage.setText(std::to_string(entry.damageHp));

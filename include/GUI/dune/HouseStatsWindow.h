@@ -64,11 +64,11 @@ public:
     }
 
 private:
-    /// One row of the unit table. Four aligned columns, so nothing is clipped
+    /// One row of the unit table. Five aligned columns, so nothing is clipped
     /// and no column depends on the width of another row's text.
     struct UnitRow {
         HBox box;
-        Label name, kills, deaths, damage;
+        Label name, active, kills, deaths, damage;
     };
     struct AllocationRow {
         HBox box;
@@ -76,6 +76,9 @@ private:
     };
 
     void buildRows(int rowCount);
+    /// Measures the unit-table columns against the real font once, so neither a
+    /// header nor a long count can overflow the width it was given.
+    void measureTableColumns();
     void refresh();
     /// Rebuilds the cached list of unit types with their ledger values. Bounded:
     /// one pass over the unit item range, never over the world.
@@ -89,6 +92,10 @@ private:
     struct LedgerEntry {
         Uint32 itemID = 0;
         std::string name;
+        /// Current registered units from the house census, including passengers
+        /// and units under repair or being carried. Temporary deviation keeps
+        /// the original house accounting, as it does elsewhere in the engine.
+        int active = 0;
         uint64_t kills = 0;
         int deaths = 0;
         int64_t damageHp = 0;
@@ -117,7 +124,7 @@ private:
 
     Label tableHeadingLabel;
     HBox tableHeaderHBox;
-    Label headerName, headerKills, headerDeaths, headerDamage;
+    Label headerName, headerActive, headerKills, headerDeaths, headerDamage;
     std::vector<std::unique_ptr<UnitRow>> rows;
     Label emptyStateLabel;
 
@@ -132,6 +139,11 @@ private:
     int selectedHouseID = 0;
     int page = 0;
     int rowsPerPage = 0;
+    int nameColumnWidth = 0;
+    int activeColumnWidth = 0;
+    int killsColumnWidth = 0;
+    int deathsColumnWidth = 0;
+    int damageColumnWidth = 0;
     std::vector<LedgerEntry> ledger;
     Uint32 lastLedgerCycle = 0;
     bool ledgerSampled = false;

@@ -1,3 +1,23 @@
+## 2026-10-10 — private 1.0.828: Stats performance multipliers and Active counts
+
+Stats displayed QuantBot's internal fixed-point production score as a raw
+integer. It now shows the familiar xN.N multiplier, rounded to one decimal:
+2631248 -> x2.6 and 1347286 -> x1.3. The footer names the multiplier and omits
+the implementation scale. The unit table also gains an Active column using
+current registered per-type House counters (including repair/transport passengers).
+Ambient Airplane, Ambient Helicopter, Rocket Trike and Elite Launcher rows are
+excluded as requested, even when their counters are nonzero. The cached bounded
+in-memory ledger remains, with no world scan or SQLite query in rendering.
+The existing real-renderer allocation fixture checks
+the scaled text and its column width. Scores, allocation, simulation, protocol67
+and save9853 are unchanged. The complete827 AI/Stats/maps/display changes are
+retained. The delegated native build and Ninja dependency audits passed. All
+three real-renderer Stats CTests passed at 640x480, native 1920x1080 and vanilla,
+including Active refresh, disabled types, exclusions, paging and house browsing.
+Codex independently reviewed the patch and both resolution screenshots.
+MBA packaging and installation remain pending.
+Evidence: ../outputs/stats-performance-multiplier-828-20261010/.
+
 ## 2026-10-10 — local 1.0.827: aircraft difficulty, house Stats and community maps
 
 QuantBot offensive Ornithopter unit hunts now belong to Hard and Brutal. Easy
