@@ -159,8 +159,14 @@ void creditCommandedDetonation(const Provenance& armed, const ObjectBase& devast
     const int price = currentGame->objectData
         .data[devastator.getItemID()][devastator.getOriginalHouseID()].price;
     // Only the hit points still present are paid, so damage already booked is not paid twice.
+    // The completion is a killing blow on the Devastator's own natural type under its
+    // original owner, so it reads exactly the record an ordinary lethal hit would read.
     const auto reward = CombatReward::hit(price, int64_t(devastator.getMaxHealth())*1000,
-        (devastator.getHealth()*1000).lround(), 0, hostile, true);
+        (devastator.getHealth()*1000).lround(), 0, hostile, true,
+        hostile && devastator.getHealth() > 0
+            ? House::killBonusPermilleForVictim(devastator.getItemID(),
+                devastator.getOriginalHouseID(), price)
+            : CombatReward::kBaselineBonusPermille);
     if (reward.hits == 0) { ++counters.excluded; return; }
 
     beneficiary->addCombatReward(armed.rewardItemID, reward);

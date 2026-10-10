@@ -1,3 +1,63 @@
+## 2026-10-10 — local 1.0.826: victim performance, Trooper air defence and native display size
+
+Killing blows now sample the destroyed natural unit type's damage value and
+losses under its original house. A four-unit price prior keeps an untested type
+at the former 20% bonus; successful types raise it towards 60% and unsuccessful
+types lower it towards 5%. Damage excludes earlier completion bonuses and
+conversion estimates. The calculation is bounded portable integer arithmetic
+and a constant-time ledger lookup on hostile lethal unit hits. Attribution of
+captured attackers and commanded Devastator completion remains once-only;
+friendly, surviving and already-dead targets receive no completion bonus. No
+cash or weapon damage changes. See docs/quantbot-combat-value.md.
+
+Autonomous Custom Hard/Brutal city bots may now found a WOR and produce rocket
+Troopers while hostile aircraft are observed. Troopers supplement the existing
+20% Launcher value floor within the ordinary aggregate infantry quota (Hard
+12%, Brutal 10%), including every queued and newly accepted order. Content and
+structure prerequisites, technology, ground-unit limits, opening workers,
+current cash and protected city/economic funds govern admission. Foundation
+packages preserve those funds too. Orders stop when the observed air threat
+ends. Rocket infantry in HUNT ignore aircraft beyond their exact weapon range,
+preventing the same target-release stall repaired for Launchers in 1.0.825.
+Manual orders/leases, support controllers, campaigns and Easy/Medium bounds
+are covered. Troopers retain their existing five-tile SmallRocket; Launchers
+retain their nine-tile Rocket, spacing and wave tracking.
+
+The user-requested native display fix from ab90e02a is included: nine isolated
+source/test/config paths match that commit exactly. Display and Settings offer
+Native 1:1, restoring 1920x1080 logical rendering with 16-pixel tiles at world
+Zoom 1x. Existing presets keep their meanings and Android keeps its fixed
+interface policy. Retina retains screen-coordinate sizing with a denser backing
+surface. This combined candidate keeps the 1.0.825 gameplay and launcher fixes,
+rather than using the display task's separate main-1.0.820 build.
+
+Save version 9853 and deviation reward ledger 1 are unchanged. Deterministic
+reward/AI changes require network protocol 66. Telemetry 18 records bonus policy
+2 (baseline/min/max 200/50/600 permille, four-unit prior); AI policy is
+victim-performance-kill-bonus-trooper-aa-v94.
+
+Subscription-authenticated bounded Claude workers implemented and tested the
+AI and display patches. Codex reviewed and integrated them, tightened final
+quota/queue/prerequisite/foundation funding guards, and independently rebuilt
+the combined app and tests. Nine combined real-renderer cases pass, including
+Display/Settings persistence and reinitialization, 1080p at 1x/2x world zoom,
+720p/VGA and a hidden Retina window. VGA menu and 1080p game readbacks were
+visually checked. The portable app passes deep/strict ad-hoc signature and
+bundled SDL hidden-window startup/rendering checks.
+
+Full combined CTest passes 76/76 in 1063 seconds. Final reward fixtures record
+48 passing checks per ruleset; Trooper defence removes Ornithopter HP with a
+SmallRocket, and WOR admission covers missing troop prerequisites, invisible/no
+air, aggregate quota, cash and authority limits. The WOR-founding fixture
+reaches the rule by granting its real prerequisites and narrowing the yard
+offers; it does not prove every city reaches that point in a full match.
+Installation on the MBA is the next step; the user has authorized it.
+
+Acceptance evidence, source review, Claude reports and installation scripts:
+../outputs/performance-kill-bonus-trooper-aa-826-20261010/.
+No public push/tag/CI deployment is requested. Full-match win-rate and long-game
+FPS effects are not claimed by the focused fixtures.
+
 ## 2026-10-10 — local 1.0.825: launcher wave progress and observed-air production floor
 
 The user's exact `whatswrong.dls` save (SHA-256

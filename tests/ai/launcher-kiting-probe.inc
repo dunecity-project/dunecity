@@ -18,6 +18,12 @@
 //   3. Human orders, repair runs, carryall transit and a live defence contact
 //      keep their units. Other hunters, Deviators, Easy/Medium and campaign
 //      games are untouched.
+//   4. Rocket infantry share the same out-of-range aircraft filter - a different,
+//      shorter-range projectile with the same selection problem - and a Trooper's
+//      SmallRocket really removes Ornithopter hit points.
+#include <Bullet.h>
+#include <units/AirUnit.h>
+
 void runLauncherKitingProbe(Game& game) {
     auto require=[](bool ok,const char* why){
         if(!ok){SDL_Log("LAUNCHER_KITE_FAIL: %s",why);throw std::runtime_error(why);}
@@ -571,6 +577,140 @@ void runLauncherKitingProbe(Game& game) {
             require(posted!=nullptr,
                 "An Area Guard launcher lost its own area search");
             bot->doSetAttackMode(launcher,HUNT);
+
+            // ---- The same in-range filter for rocket infantry ---------------
+            // A Trooper fires its own SmallRocket over five tiles, not the
+            // launcher's Rocket over nine, but the engine releases any flying
+            // target beyond weapon range for both, so a distant Ornithopter
+            // stalls its Hunt in exactly the same way and the candidate filter
+            // has to cover it. The launcher's close-range spacing is not
+            // extended with it.
+            {
+                const int trooperRange=currentGame->objectData.data[Unit_Trooper]
+                    [owner->getHouseID()].weaponrange;
+                require(trooperRange>0,"Fixture Trooper has no weapon range at all");
+                auto* foot=spawn(owner,Unit_Trooper,base+Coord(0,3));
+                const Coord footStart=foot->getLocation();
+                foot->setTarget(nullptr);
+                bot->doMove2Pos(foot,foot->getX(),foot->getY(),false);
+                bot->doSetAttackMode(foot,HUNT);
+                foot->setForced(false);
+                publish();
+                require(bot->managesAutonomousRocketHunt(foot),
+                    "An autonomously hunting Trooper is not recognised as rocket anti-air");
+                require(!bot->huntingLauncher(foot)
+                        && !bot->escapeCloseThreatWhileHunting(foot,closer),
+                    "The launcher's close-range spacing was extended to rocket infantry");
+
+                const ObjectBase* footGround=foot->findTarget();
+                require(footGround!=nullptr,
+                    "The Trooper fixture has no reachable ground candidate at all");
+                const int footGroundGap=blockDistance(footStart,
+                    footGround->getClosestPoint(footStart)).lround();
+                if(footGroundGap-1>trooperRange) {
+                    raider->setLocation(footStart+Coord(footGroundGap-1,0));
+                    publish();
+                    require(foot->canAttack(raider) && !foot->isInWeaponRange(raider),
+                        "The Trooper fixture aircraft is not an unreachable candidate");
+                    const ObjectBase* footChoice=foot->findTarget();
+                    SDL_Log("LAUNCHER_ADVANCE_DIAG: trooper_range=%d ground_gap=%d chosen_item=%d",
+                        trooperRange,footGroundGap,footChoice?int(footChoice->getItemID()):-1);
+                    require(footChoice!=nullptr && (!footChoice->isAFlyingUnit()
+                            || foot->isInWeaponRange(footChoice)),
+                        "A hunting Trooper selected an aircraft beyond its weapon range");
+                } else {
+                    SDL_Log("LAUNCHER_ADVANCE_DIAG: map too crowded to stage the Trooper stall;"
+                        " selection invariant checked only");
+                }
+
+                // Inside range the aircraft is the selection, and the rocket really
+                // removes hit points. A stepped rocket detonates where it was aimed,
+                // so the Ornithopter is held on station by its own speed data - as the
+                // anti-air audit does - rather than by teleporting it back between
+                // cycles. Only the Trooper and the aircraft are live, and the launcher
+                // rocket counter must not move, so the hit points removed cannot have
+                // come from another friendly shooter.
+                auto& airSpeed=currentGame->objectData.data[Unit_Ornithopter]
+                    [enemy->getHouseID()].maxspeed;
+                const FixPoint savedAirSpeed=airSpeed;
+                airSpeed=0;
+                static_cast<AirUnit*>(raider)->currentMaxSpeed=0;
+                raider->doSetAttackMode(STOP);
+                raider->setTarget(nullptr);
+                // An aircraft-targeted SmallRocket doubles its arming delay from 3 to 6
+                // movement steps. Measure at the far edge of the Trooper's normal range
+                // so that delay has elapsed when the rocket reaches the aircraft.
+                const Coord hover=footStart+Coord(trooperRange,0);
+                raider->setLocation(hover);
+                // Drain anything already in flight with the Trooper not updating, so a
+                // shot from an earlier phase cannot be mistaken for this one.
+                unitList.clear();unitList.push_back(raider);
+                tick(120);
+                raider->setLocation(hover);
+                raider->setHealth(raider->getMaxHealth());
+                unitList.clear();unitList.push_back(foot);unitList.push_back(raider);
+                require(foot->getHealth()>0 && foot->isInWeaponRange(raider),
+                    "The Trooper fixture aircraft did not come inside rocket range");
+                require(foot->findTarget()==raider,
+                    "A Trooper refused an aircraft inside its own weapon range");
+                // The shot itself is measured from the defensive posture the air rescue
+                // actually assigns: an Area Guard post, which holds its ground and fires
+                // rather than walking the engagement distance away.
+                bot->doSetAttackMode(foot,AREAGUARD);
+                foot->setGuardPoint(footStart);
+                foot->setForced(false);
+                const FixPoint airFull=raider->getHealth();
+                const int otherRocketsBefore=game.combatStats.launcherFiresOnOrni;
+                bool removedAirHp=false, aimed=false, firedSmallRocket=false;
+                for(int cycle=0;cycle<1200 && !removedAirHp;++cycle) {
+                    foot->setHealth(foot->getMaxHealth());
+                    tick(1);
+                    for(const auto* shot:bulletList)
+                        if(shot->shooterID==foot->getObjectID()
+                            && shot->bulletID==Bullet_SmallRocket) firedSmallRocket=true;
+                    aimed=aimed || foot->getTarget()==raider;
+                    removedAirHp=raider->getHealth()<airFull;
+                }
+                airSpeed=savedAirSpeed;
+                SDL_Log("LAUNCHER_ADVANCE_DIAG: trooper_aimed=%d trooper_small_rocket=%d"
+                    " trooper_removed_air_hp=%d other_rockets=%d gap=%d range=%d",int(aimed),
+                    int(firedSmallRocket),int(removedAirHp),
+                    game.combatStats.launcherFiresOnOrni-otherRocketsBefore,
+                    gap(foot,raider),trooperRange);
+                bot->doSetAttackMode(foot,HUNT);
+                require(aimed,"The defending Trooper never acquired the aircraft in range");
+                require(firedSmallRocket,
+                    "The defending Trooper never fired a SmallRocket at the aircraft in range");
+                require(game.combatStats.launcherFiresOnOrni==otherRocketsBefore,
+                    "Another friendly rocket unit fired during the Trooper measurement");
+                require(removedAirHp,
+                    "A Trooper in range never removed any Ornithopter hit points");
+
+                // Authority boundaries for the shared filter: a human-ordered Trooper,
+                // a support helper, a campaign game and Easy/Medium keep the engine's
+                // own unfiltered search, exactly as launchers do.
+                bot->onHumanUnitOrder(foot->getObjectID());
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter overrode a human-ordered Trooper");
+                bot->manualUnitOrders.erase(foot->getObjectID());
+                bot->supportMode=true;
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter claimed a support helper's Trooper");
+                bot->supportMode=false;
+                game.gameType=GameType::Campaign;
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter leaked into a campaign game");
+                game.gameType=GameType::CustomGame;
+                for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                    bot->difficulty=soft;
+                    require(!bot->managesAutonomousRocketHunt(foot),
+                        "The rocket filter leaked into Easy or Medium");
+                }
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                require(bot->managesAutonomousRocketHunt(foot),
+                    "Restoring the autonomous Custom Hard/Brutal house lost the filter");
+                retire(foot);
+            }
 
             retire(raider); retire(prey);
         }

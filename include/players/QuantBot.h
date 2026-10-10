@@ -77,6 +77,11 @@ public:
     bool managesAutonomousOrnithopter(const UnitBase* unit) const;
     /// Controller authority for autonomous launcher target searches.
     bool managesAutonomousLauncherHunt(const UnitBase* unit) const;
+    /// Controller authority for autonomous rocket target searches: launchers and the
+    /// Troopers that answer aircraft with their own shorter-range SmallRocket. Used
+    /// only by the in-range aircraft candidate filter, which both need for the same
+    /// out-of-range release, not by launcher spacing or wave tracking.
+    bool managesAutonomousRocketHunt(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;

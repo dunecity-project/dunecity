@@ -978,6 +978,320 @@ void runAirDefenseProbe(Game& game) {
             if(light && light->getHealth()>0) light->setHealth(0);
             if(refinery->getHealth()>0) refinery->setHealth(0);
         }
+        // ---- City Troopers: the close-range part of the answer ----------
+        //
+        // A city colony's own producers are construction yards and a WOR; the
+        // launcher share only exists where a vehicle factory can make launchers.
+        // Troopers supplement that share and the rocket turrets. An observed
+        // hostile wing - and nothing else - lets a city order rocket infantry,
+        // inside the ordinary infantry quota (which counts queued orders and the
+        // order being placed) and out of cash its working reserve does not need.
+        {
+            const bool savedCitySim=game.citySimEnabled_;
+            const int savedTech=currentGame->techLevel;
+            const auto savedLimit=bot->militaryValueLimit;
+            const auto savedStored=owner->storedCredits;
+            const auto savedStarting=owner->startingCredits;
+            const auto savedCityCredits=owner->cityCredits;
+            const int savedPower=owner->producedPower;
+            auto setCityCredits=[&](int amount) {
+                owner->storedCredits=0;owner->cityCredits=0;owner->startingCredits=amount;
+            };
+            std::array<int,Num_ItemID> savedCounts;
+            std::copy(std::begin(owner->numItem),std::end(owner->numItem),savedCounts.begin());
+            const int savedNumUnits=owner->numUnits;
+            const auto cityUnits=unitList;
+            const auto cityStructures=structureList;
+            game.citySimEnabled_=true;
+            if(!game.citySimulation_) {
+                game.citySimulation_=std::make_unique<DuneCity::CitySimulation>();
+                game.citySimulation_->init(currentGameMap->getSizeX(),currentGameMap->getSizeY());
+            }
+            // This diagnostic starts from a campaign roster; enable the city-zone
+            // products alongside the city simulation, as the city cap probe does.
+            for(const Uint32 zoneItem:{Structure_ZoneResidential,Structure_ZoneCommercial,
+                                       Structure_ZoneIndustrial}) {
+                auto& zone=game.objectData.data[zoneItem][owner->getHouseID()];
+                zone.enabled=true;zone.builder=Structure_ConstructionYard;
+                zone.techLevel=1;zone.upgradeLevel=0;zone.prerequisiteStructuresSet.reset();
+            }
+            currentGame->techLevel=8;
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->supportMode=false;
+            game.gameType=GameType::CustomGame;
+            bot->gameMode=QuantBot::GameMode::Custom;
+            bot->militaryValueLimit=10000;
+            owner->producedPower=100000;
+            require(bot->autonomousCustomHardBrutal(),
+                "The city trooper fixture is not an autonomous Custom Hard/Brutal house");
+
+            auto* cityYard=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,
+                Structure_ConstructionYard,origin.x+2,origin.y+22,true,true));
+            auto* worA=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,
+                Structure_WOR,origin.x+6,origin.y+22,true,true));
+            auto* worB=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,
+                Structure_WOR,origin.x+10,origin.y+22,true,true));
+            require(cityYard && worA && worB,"City trooper fixture producer placement failed");
+            for(auto* producer:{cityYard,worA,worB}) {
+                producer->curUpgradeLev=producer->getMaxUpgradeLevel();
+                producer->upgrading=false;
+                producer->updateBuildList();
+            }
+            // Mods differ over which of the two offers a WOR carries, so the fixture
+            // takes whichever the real build list actually has. A finished
+            // Unit_Troopers order deploys three Unit_Trooper, which is why the squad
+            // price is what the quota accounts for while it is queued.
+            const int trooperValue=game.objectData.data[Unit_Trooper][owner->getHouseID()].price;
+            const int squadValue=game.objectData.data[Unit_Troopers][owner->getHouseID()].price;
+            const bool trooperOffered=worA->isAvailableToBuild(Unit_Trooper) && trooperValue>0;
+            const bool squadOffered=worA->isAvailableToBuild(Unit_Troopers) && squadValue>0;
+            SDL_Log("AIR_DEFENSE_DIAG: city_wor_offers trooper=%d/%d squad=%d/%d",
+                int(trooperOffered),trooperValue,int(squadOffered),squadValue);
+            require(trooperOffered || squadOffered,
+                "The city fixture WOR offers no rocket infantry at all, so this tests nothing");
+            // The production pass prefers the first offer while both counts are equal.
+            const int firstValue=trooperOffered ? trooperValue : squadValue;
+            const int cheapestValue=std::min(trooperOffered ? trooperValue : std::numeric_limits<int>::max(),
+                                             squadOffered ? squadValue : std::numeric_limits<int>::max());
+
+            auto* cityRaider=enemy->createUnit(Unit_Ornithopter);
+            require(cityRaider,"City trooper fixture aircraft creation failed");
+            cityRaider->deploy(origin+Coord(14,22));
+            unitList.clear();unitList.push_back(cityRaider);
+            structureList.clear();
+            structureList.push_back(cityYard);structureList.push_back(worA);structureList.push_back(worB);
+            for(int item=Unit_FirstID;item<=Unit_LastID;++item) owner->numItem[item]=0;
+            owner->numUnits=0;
+            auto clearCityQueues=[&] {
+                for(auto* producer:{cityYard,worA,worB})
+                    while(producer->getProductionQueueSize()>0)
+                        producer->doCancelItem(producer->getCurrentProducedItem());
+            };
+            auto troopOrders=[&] {
+                int orders=0;
+                for(const auto* producer:{worA,worB})
+                    for(const auto& queued:producer->currentProductionQueue)
+                        if(queued.itemID==Unit_Trooper || queued.itemID==Unit_Troopers) ++orders;
+                return orders;
+            };
+            auto cityPass=[&](int armyValue) {
+                bot->lastStatsLogCycle=game.getGameCycleCount()-MILLI2CYCLES(30000);
+                bot->clearPlacementCache();
+                bot->build(armyValue);
+            };
+            // Fixture sizing only: the smallest army value whose infantry share has
+            // room for one Trooper and no room for a second of either offer. The
+            // assertions below count actual orders, not this arithmetic.
+            const int cityInfantryPercent=10;     // Brutal
+            auto admits=[&](int64_t owned,int64_t army,int64_t value) {
+                return (owned+value)*100 <= (army+value)*cityInfantryPercent;
+            };
+            int oneTrooperArmy=0;
+            while(oneTrooperArmy<2000000 && !admits(0,oneTrooperArmy,firstValue)) ++oneTrooperArmy;
+            require(oneTrooperArmy<2000000
+                    && !admits(firstValue,oneTrooperArmy+firstValue,cheapestValue),
+                "No army value leaves room for exactly one city Trooper");
+            // Take the top of that band, not its floor. A per-producer quota that only
+            // looked at the share already owned would admit a second order here, so the
+            // single-order assertion below actually distinguishes the aggregate rule.
+            while(oneTrooperArmy+1<2000000
+                && !admits(firstValue,oneTrooperArmy+1+firstValue,cheapestValue))
+                ++oneTrooperArmy;
+            const int roomyArmy=oneTrooperArmy*4;
+            setCityCredits(200000);
+
+            // No air at all, then an aircraft the house cannot see: neither is a
+            // reason for a city to raise infantry.
+            cityRaider->setVisible(owner->getTeamID(),false);
+            require(bot->visibleHostileAircraft()==0,
+                "The invisible city fixture aircraft was still observed");
+            clearCityQueues();cityPass(roomyArmy);
+            SDL_Log("AIR_DEFENSE_DIAG: city_invisible_air_troop_orders=%d",troopOrders());
+            require(troopOrders()==0,
+                "A city raised rocket infantry for an aircraft it cannot see");
+            cityRaider->setHealth(0);
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()==0,"A city raised rocket infantry with no hostile aircraft at all");
+            cityRaider->setHealth(cityRaider->getMaxHealth());
+            cityRaider->setVisible(owner->getTeamID(),true);
+            require(bot->visibleHostileAircraft()>0,
+                "The city fixture lost its observed air threat");
+
+            // Visible air: the WOR really orders rocket infantry.
+            clearCityQueues();cityPass(roomyArmy);
+            const int roomyOrders=troopOrders();
+            SDL_Log("AIR_DEFENSE_DIAG: city_visible_air_troop_orders=%d army=%d trooper=%d squad=%d",
+                roomyOrders,roomyArmy,trooperValue,squadValue);
+            require(roomyOrders>0,
+                "An observed hostile wing did not make a city WOR produce rocket infantry");
+
+            // The quota is aggregate: a second WOR in the same pass finds it full,
+            // and a later pass still counts the order already queued.
+            clearCityQueues();cityPass(oneTrooperArmy);
+            require(troopOrders()==1,
+                "Two city WORs each claimed a full infantry share in one pass");
+            cityPass(oneTrooperArmy);
+            SDL_Log("AIR_DEFENSE_DIAG: city_quota_orders_after_second_pass=%d army=%d",
+                troopOrders(),oneTrooperArmy);
+            require(troopOrders()==1,
+                "A later city pass ignored the trooper order already queued");
+
+            // Cash: the price of a trooper alone does not buy one, because the
+            // city's working reserve and the strategic reserves come first.
+            clearCityQueues();
+            setCityCredits(firstValue+100);
+            cityPass(roomyArmy);
+            SDL_Log("AIR_DEFENSE_DIAG: city_poor_troop_orders=%d credits=%d",
+                troopOrders(),owner->getCredits());
+            require(troopOrders()==0,
+                "A city spent its working and strategic reserves on rocket infantry");
+            setCityCredits(200000);
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()>0,"Restoring the city's cash did not restore the order");
+
+            // Authority boundaries: Easy/Medium, a support helper and a campaign
+            // game are authored behaviour and never raise city infantry.
+            for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                bot->difficulty=soft;
+                clearCityQueues();cityPass(roomyArmy);
+                require(troopOrders()==0,"Easy or Medium raised city rocket infantry");
+            }
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->supportMode=true;
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()==0,"A support helper raised city rocket infantry");
+            bot->supportMode=false;
+            game.gameType=GameType::Campaign;
+            bot->gameMode=QuantBot::GameMode::Campaign;
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()==0,"A campaign game raised city rocket infantry");
+            game.gameType=GameType::CustomGame;
+            bot->gameMode=QuantBot::GameMode::Custom;
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()>0,
+                "Restoring the autonomous Custom Brutal house lost the city trooper order");
+            SDL_Log("AIR_DEFENSE_DIAG: city_trooper_bounds_checked=1");
+
+            // Troopers are complementary: where a city can also build launchers, the
+            // 20% mobile anti-air floor still binds in the same pass that orders them.
+            {
+                auto* cityFactory=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,
+                    Structure_HeavyFactory,origin.x+14,origin.y+26,true,true));
+                require(cityFactory,"City launcher-floor fixture factory placement failed");
+                for(int prereq=Structure_FirstID;prereq<=Structure_LastID;++prereq)
+                    if(game.objectData.data[Unit_Launcher][owner->getHouseID()]
+                            .prerequisiteStructuresSet[prereq] && owner->numItem[prereq]==0)
+                        owner->numItem[prereq]=1;
+                cityFactory->curUpgradeLev=cityFactory->getMaxUpgradeLevel();
+                cityFactory->upgrading=false;
+                cityFactory->updateBuildList();
+                require(cityFactory->isAvailableToBuild(Unit_Launcher),
+                    "The city fixture factory cannot build launchers, so the floor proves nothing");
+                structureList.push_back(cityFactory);
+                clearCityQueues();
+                while(cityFactory->getProductionQueueSize()>0)
+                    cityFactory->doCancelItem(cityFactory->getCurrentProducedItem());
+                cityPass(roomyArmy);
+                SDL_Log("AIR_DEFENSE_DIAG: city_launcher_floor_bps=%d troop_orders=%d",
+                    bot->lastUnitMixBps[2],troopOrders());
+                require(bot->lastUnitMixBps[2]>=UnitMixPolicy::kMobileAntiAirFloorBps,
+                    "City rocket infantry weakened the mobile anti-air launcher floor");
+                require(troopOrders()>0,
+                    "A producible launcher share replaced the city's close-range troopers");
+                while(cityFactory->getProductionQueueSize()>0)
+                    cityFactory->doCancelItem(cityFactory->getCurrentProducedItem());
+                structureList.remove(cityFactory);
+                cityFactory->setHealth(0);
+            }
+
+            // The WOR itself: a city founds the producer only under the same demand
+            // and only when its troop content is actually enabled and unlocked.
+            {
+                clearCityQueues();
+                structureList.clear();structureList.push_back(cityYard);
+                owner->numItem[Structure_WOR]=0;
+                // Isolate the rule under test from the rest of the city ladder the
+                // same way the launcher-floor fixture isolates military allocation:
+                // leave the yard only the WOR (and the slabs a foundation plan may
+                // need), and satisfy the opening worker fleet that outranks it. Every
+                // gate on the WOR rule itself is still the shipped one.
+                owner->numItem[Unit_Harvester]=8;
+                owner->numItem[Unit_Carryall]=2;
+                // The WOR's own content prerequisites differ by mod and house; grant
+                // exactly the ones its real data table names, then let the engine
+                // rebuild the offer list before it is narrowed.
+                for(int prereq=Structure_FirstID;prereq<=Structure_LastID;++prereq)
+                    if(game.objectData.data[Structure_WOR][owner->getHouseID()]
+                            .prerequisiteStructuresSet[prereq] && owner->numItem[prereq]==0)
+                        owner->numItem[prereq]=1;
+                cityYard->updateBuildList();
+                cityYard->buildList.remove_if([](const BuildItem& offer) {
+                    return offer.itemID!=Structure_WOR && offer.itemID!=Structure_Slab1
+                        && offer.itemID!=Structure_Slab4;
+                });
+                require(cityYard->isAvailableToBuild(Structure_WOR),
+                    "The city fixture yard cannot offer a WOR at all, so this tests nothing");
+                auto yardOrdersWor=[&] {
+                    for(const auto& queued:cityYard->currentProductionQueue)
+                        if(queued.itemID==Structure_WOR) return true;
+                    return false;
+                };
+                auto& trooperSpec=game.objectData.data[Unit_Trooper][owner->getHouseID()];
+                auto& squadSpec=game.objectData.data[Unit_Troopers][owner->getHouseID()];
+                const bool savedTrooperEnabled=trooperSpec.enabled;
+                const bool savedSquadEnabled=squadSpec.enabled;
+                cityRaider->setVisible(owner->getTeamID(),false);
+                clearCityQueues();cityPass(roomyArmy);
+                require(!yardOrdersWor(),"A city founded a WOR for an aircraft it cannot see");
+                cityRaider->setVisible(owner->getTeamID(),true);
+                trooperSpec.enabled=false;squadSpec.enabled=false;
+                clearCityQueues();cityPass(roomyArmy);
+                require(!yardOrdersWor(),
+                    "A city founded a WOR with no enabled troop content to make in it");
+                trooperSpec.enabled=savedTrooperEnabled;squadSpec.enabled=savedSquadEnabled;
+                const auto savedTroopPrerequisites=trooperSpec.prerequisiteStructuresSet;
+                const auto savedSquadPrerequisites=squadSpec.prerequisiteStructuresSet;
+                int missingTroopPrerequisite=-1;
+                for(int item=Structure_FirstID;item<=Structure_LastID;++item)
+                    if(item!=Structure_WOR && owner->getNumItems(item)==0) {
+                        missingTroopPrerequisite=item;break;
+                    }
+                require(missingTroopPrerequisite>=0,
+                    "The WOR fixture needs an absent troop prerequisite");
+                trooperSpec.prerequisiteStructuresSet.set(missingTroopPrerequisite);
+                squadSpec.prerequisiteStructuresSet.set(missingTroopPrerequisite);
+                clearCityQueues();cityPass(roomyArmy);
+                require(!yardOrdersWor(),
+                    "A city founded a WOR whose troops lack another required building");
+                trooperSpec.prerequisiteStructuresSet=savedTroopPrerequisites;
+                squadSpec.prerequisiteStructuresSet=savedSquadPrerequisites;
+                SDL_Log("AIR_DEFENSE_DIAG: city_wor_missing_troop_prerequisite_blocked=1");
+                clearCityQueues();
+                bool founded=false;
+                for(int pass=0;pass<6 && !founded;++pass) {
+                    cityPass(roomyArmy);
+                    founded=yardOrdersWor();
+                    if(!founded) clearCityQueues();
+                }
+                SDL_Log("AIR_DEFENSE_DIAG: city_wor_founded=%d",int(founded));
+                require(founded,
+                    "An observed hostile wing never let a city found the WOR its troopers need");
+                clearCityQueues();
+            }
+
+            cityRaider->setHealth(0);
+            for(auto* producer:{cityYard,worA,worB}) if(producer->getHealth()>0) producer->setHealth(0);
+            game.citySimEnabled_=savedCitySim;
+            currentGame->techLevel=savedTech;
+            bot->militaryValueLimit=savedLimit;
+            owner->storedCredits=savedStored;owner->startingCredits=savedStarting;
+            owner->cityCredits=savedCityCredits;
+            owner->producedPower=savedPower;
+            std::copy(savedCounts.begin(),savedCounts.end(),std::begin(owner->numItem));
+            owner->numUnits=savedNumUnits;
+            unitList=cityUnits;structureList=cityStructures;
+            bot->difficulty=QuantBot::Difficulty::Brutal;
+        }
     } catch(...) {unitList=savedUnits;structureList=savedStructures;throw;}
     unitList=savedUnits;structureList=savedStructures;
     SDL_Log("AIR_DEFENSE_PASS: exposed ground units and infantry are raided and really damaged;"
@@ -992,6 +1306,11 @@ void runAirDefenseProbe(Game& game) {
         " launchers leave a ground skirmish and a rally point for aircraft over an outlying colony,"
         " reach holdable ground covering it through threatened approaches, fire in range without"
         " being force-moved, hold across ordinary unit passes and clear when the attack ends;"
-        " deviated vehicles are not reserved for repair while our own damaged ones still are");
+        " deviated vehicles are not reserved for repair while our own damaged ones still are;"
+        " a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
+        " infantry quota that counts queued orders, out of cash its working and strategic"
+        " reserves do not need, never on Easy/Medium, in support mode or in a campaign, founds"
+        " the WOR only under that demand and only with real troop content, and leaves the"
+        " mobile anti-air launcher floor binding where launchers are producible");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=air_defense outcome=passed");
 }

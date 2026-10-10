@@ -6145,6 +6145,13 @@ void QuantBot::build(int militaryValue) {
     if (launcherFloorAuthorised)
         unitMix = UnitMixPolicy::applyFloor(unitMix, 2, launcherFloorBps);
     const bool launcherFloorApplied = unitMix[2] > launcherBpsBeforeFloor;
+    // Troopers supplement the launcher share and the rocket turrets a city already
+    // has; they are the close-range part of that answer, not the whole of it. The
+    // demand is the same observation that protects the launcher share - reused here,
+    // so no factory pass performs another army or map scan - and it adds no budget of
+    // its own: the infantry quota, the city's working reserve and every build
+    // prerequisite below still decide whether anything is actually ordered.
+    const bool cityAntiAirInfantryDemand = citySimEnabled && observedHostileAircraft > 0;
     lastUnitMixBps = unitMix;
     const int rawOrnithopterBps = rawMix[4];
     const FixPoint tankPercent = FixPoint(unitMix[0])/10000;
@@ -6166,8 +6173,41 @@ void QuantBot::build(int militaryValue) {
 	int infantryCount = itemCount[Unit_Soldier] + itemCount[Unit_Infantry]
 		+ itemCount[Unit_Trooper] + itemCount[Unit_Troopers];
 
+    // Would ordering one more of \a value still leave infantry inside their share of
+    // the army? The candidate's own value counts on both sides, so an order that would
+    // overshoot the share is refused rather than placed and then regretted. Both totals
+    // already include every queued order and this pass updates them as it accepts more,
+    // so several producers share one quota instead of each claiming a full share.
+    auto infantryQuotaAdmits = [&](int value) {
+        return value > 0 && (int64_t(infantryValue) + value) * 100
+            <= (int64_t(militaryValue) + value) * infantryPercent;
+    };
+    // A city raises infantry only as the close-range part of its anti-air answer, so
+    // nothing may rank, reserve cash for or order them once the observed wing is gone.
+    auto cityInfantryItem = [&](Uint32 item) {
+        return citySimEnabled && (item == Unit_Soldier || item == Unit_Infantry
+            || item == Unit_Trooper || item == Unit_Troopers);
+    };
+    // Check troop content and its existing prerequisites; the new WOR supplies itself.
+    // Its real build list still decides which offers can be queued once it exists.
+    auto cityTroopContentExists = [&]() {
+        for (const Uint32 troop : {Unit_Trooper, Unit_Troopers}) {
+            const auto& spec = data[troop][houseID];
+            if (!spec.enabled || spec.price <= 0 || spec.techLevel > currentGame->techLevel
+                || spec.builder != Structure_WOR || !infantryQuotaAdmits(spec.price)) continue;
+            bool prerequisites = true;
+            for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+                if (item != Structure_WOR && spec.prerequisiteStructuresSet[item]
+                    && getHouse()->getNumItems(item) == 0) prerequisites = false;
+            if (prerequisites) return true;
+        }
+        return false;
+    };
+
     const int productionCash = std::max(0, money
         - std::max(strategicReserveCost, economyReserve) - (citySimEnabled ? cityWorkingReserve : 0));
+    const int64_t cityWorCashReserve = int64_t(std::max(strategicReserveCost, economyReserve))
+        + cityWorkingReserve + std::max(0, data[Structure_ZoneResidential][houseID].price);
     const int fundedArmyValue = QuantBotBuildPolicy::fundedArmyTarget(militaryValue, militaryBudget, productionCash);
     const int vehiclePlanValue = std::max(0, fundedArmyValue - infantryValue);
     if (emitStatsLog && AITelemetry::log().enabled()) {
@@ -7031,6 +7071,11 @@ void QuantBot::build(int militaryValue) {
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
             else if (!port && (bps<=0 || deficit<=0)) reason="mix_satisfied";
+            // City infantry answer an observed wing and claim the aggregate infantry
+            // share, not a full share each. Without this a finished air raid would go
+            // on reserving cash for troops nobody is going to order.
+            else if (cityInfantryItem(item) && !cityAntiAirInfantryDemand) reason="no_observed_air";
+            else if (cityInfantryItem(item) && !infantryQuotaAdmits(value)) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && int64_t(itemCount[item]+1)*value*10000
                 > int64_t(militaryValue+value)*2000) reason="air_composition_cap";
             else if (score<=0) reason="military_limit";
@@ -7345,6 +7390,15 @@ void QuantBot::build(int militaryValue) {
                     if(itemID == Unit_MCV && yardLimit > 0
                        && itemCount[Structure_ConstructionYard] + itemCount[Unit_MCV] >= yardLimit) return false;
                     const int quotedPrice=purchasePrice(pBuilder,itemID);
+                    // Enforce reactive infantry and its funded quota at queue acceptance,
+                    // including callers outside the WOR selection branch.
+                    if (cityInfantryItem(itemID) && (!cityAntiAirInfantryDemand
+                        || !infantryQuotaAdmits(data[itemID][houseID].price)
+                        || int64_t(quotedPrice) + cityWorkingReserve > money)) return false;
+                    if (citySimEnabled && itemID == Structure_WOR
+                        && (!cityAntiAirInfantryDemand || !cityTroopContentExists()
+                            || openingWorkersNeeded()
+                            || int64_t(quotedPrice) + cityWorCashReserve > money)) return false;
                     const bool emergencyGenerator=!getHouse()->hasPower()
                         && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant
                             || (emergencyFoundationOrder
@@ -7931,24 +7985,39 @@ void QuantBot::build(int militaryValue) {
 			} break;
 
 		case Structure_WOR: {
-			if (!citySimEnabled
+			// A city raises rocket infantry only while a hostile wing is actually
+			// observed, and then only inside the ordinary infantry quota, because they
+			// supplement the launcher share and the turrets rather than replacing them.
+			// The opening bootstrap of three stays a non-city rule: a city has no
+			// standing infantry role to bootstrap.
+			if ((!citySimEnabled || cityAntiAirInfantryDemand)
 				&& !pBuilder->isUpgrading()
 				&& pBuilder->getProductionQueueSize() < 1
 				&& pBuilder->getBuildListSize() > 0
 				&& money > 450
 				&& militaryValue < militaryBudget
 				&& !getHouse()->isGroundUnitLimitReached()
-				&& (infantryCount < 3
+				&& ((!citySimEnabled && infantryCount < 3)
 					|| infantryValue * 100 < std::max(militaryValue, 1) * infantryPercent)) {
 				Uint32 itemID = NONE_ID;
+				// Budget, cash and quota decide which offers are candidates at all, so a
+				// 300-credit squad cannot shadow an affordable single Trooper. `money` is
+				// already net of the strategic, economy and capital reserves this builder
+				// protects, and the acceptance wrapper charges it for every order placed,
+				// so one pass cannot spend the same credits at several WORs; the city's
+				// own working reserve is not part of that protection and is withheld
+				// here. A finished Unit_Troopers order deploys three Unit_Trooper, so its
+				// queued squad price is what both sides of the quota account for.
 				for (Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
-					if (campaignAvailableToBuild(pBuilder,candidate)
-						&& (itemID == NONE_ID || itemCount[candidate] < itemCount[itemID])) {
-						itemID = candidate;
-					}
+					if (!campaignAvailableToBuild(pBuilder,candidate)) continue;
+					const int value = data[candidate][houseID].price;
+					if (int64_t(militaryValue)+value > militaryBudget) continue;
+					if (citySimEnabled
+						&& (purchasePrice(pBuilder,candidate) > money - cityWorkingReserve
+							|| !infantryQuotaAdmits(value))) continue;
+					if (itemID == NONE_ID || itemCount[candidate] < itemCount[itemID]) itemID = candidate;
 				}
-				if (itemID != NONE_ID && int64_t(militaryValue)+data[itemID][houseID].price<=militaryBudget
-                    && produceItemWithLogging(itemID, __LINE__)) {
+				if (itemID != NONE_ID && produceItemWithLogging(itemID, __LINE__)) {
 					itemCount[itemID]++;
 					infantryCount++;
 					infantryValue += data[itemID][houseID].price;
@@ -9719,12 +9788,24 @@ void QuantBot::build(int militaryValue) {
 					&& money > 400) {
 					itemID = Structure_Barracks; structureRule = "infantry_production";
 				}
-				if (itemID == NONE_ID && !skipRemainingStructureLogic && !isCitySim
+				// A city builds no infantry barracks for its own sake, but the producer
+				// the close-range part of its anti-air answer needs has to exist before
+				// anything can be made. An observed hostile wing - and nothing else -
+				// unblocks it, behind every economy and progression rule above, behind
+				// the opening worker fleet, and only out of cash the city's working
+				// reserve and its next zone do not need. A WOR with no enabled, unlocked
+				// troop content, or with no room left in the infantry quota, is not worth
+				// founding at all.
+				if (itemID == NONE_ID && !skipRemainingStructureLogic
                     && !(vanillaEconomy && gameMode == GameMode::Custom)
+					&& (!isCitySim || (cityAntiAirInfantryDemand && cityTroopContentExists()
+						&& !openingWorkersNeeded()
+                        && int64_t(money) >= data[Structure_WOR][houseID].price + cityWorCashReserve))
 					&& itemCount[Structure_WOR] == 0
 					&& campaignAvailableToBuild(pBuilder,Structure_WOR)
 					&& money > 600) {
-					itemID = Structure_WOR; structureRule = "infantry_production";
+					itemID = Structure_WOR;
+					structureRule = isCitySim ? "city_anti_air_infantry" : "infantry_production";
 				}
 				// 8. Repair Yard (only if starport or heavy factory exists)
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
@@ -10359,11 +10440,15 @@ void QuantBot::build(int militaryValue) {
                     ? CityEconomyInvestmentPolicy::productionStartBudget(
                           purchasePrice(pBuilder,itemID),foundationCost,cityBuildTicks(itemID))
                     : purchasePrice(pBuilder,itemID)+foundationCost;
-                if (!foundations.empty() && !emergencyGenerator && money < acceptanceFloor) {
+                const bool cityWorOrder = citySimEnabled && itemID == Structure_WOR;
+                const int64_t fundingFloor = int64_t(acceptanceFloor)
+                    + (cityWorOrder ? cityWorCashReserve : 0);
+                if ((!foundations.empty() || cityWorOrder) && !emergencyGenerator && money < fundingFloor) {
                     traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",capitalDecision)
-                        .set("builder",planningBuilder).set("item",itemID).set("reason","foundation_budget")
+                        .set("builder",planningBuilder).set("item",itemID)
+                        .set("reason",cityWorOrder ? "city_anti_air_reserve" : "foundation_budget")
                         .set("price",purchasePrice(pBuilder,itemID)).set("foundation_cost",foundationCost)
-                        .set("acceptance_floor",acceptanceFloor).set("installments",onInstallments(itemID))
+                        .set("acceptance_floor",fundingFloor).set("installments",onInstallments(itemID))
                         .set("spendable",money));
                     continue;
                 }
@@ -11888,6 +11973,19 @@ bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
 
 bool QuantBot::managesAutonomousLauncherHunt(const UnitBase* unit) const {
     return currentGame && huntingLauncher(unit) && !humanControls(unit);
+}
+
+bool QuantBot::managesAutonomousRocketHunt(const UnitBase* unit) const {
+    // A Trooper answers aircraft with its own SmallRocket over five tiles, not the
+    // launcher's Rocket over nine, so the projectile is not the same one. What is the
+    // same is the selection problem: the engine releases any flying target beyond
+    // weapon range, so a distant Ornithopter stalls a hunting Trooper exactly as it
+    // stalls a hunting launcher. They share the candidate filter for that reason and
+    // nothing else - the close-range spacing and the tracked wave stay launcher-only.
+    return currentGame && !humanControls(unit)
+        && (huntingLauncher(unit)
+            || (engineHuntAttack(unit)
+                && (unit->getItemID()==Unit_Trooper || unit->getItemID()==Unit_Troopers)));
 }
 
 bool QuantBot::engineHuntAttack(const UnitBase* unit) const {

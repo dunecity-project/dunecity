@@ -922,6 +922,28 @@ void House::addCombatReward(Uint32 itemID, const CombatReward::Totals& reward) {
     total.damageMilli += reward.damageMilli; total.killBonusMilli += reward.killBonusMilli;
     total.conversionMilli += reward.conversionMilli; total.hpRemovedMilli += reward.hpRemovedMilli; total.hits += reward.hits; total.kills += reward.kills;
 }
+int House::killBonusPermilleForOwnType(int itemID, int price) const {
+    if (itemID < 0 || itemID >= Num_ItemID || price <= 0)
+        return CombatReward::kBaselineBonusPermille;
+    // Damage value only. Kill bonuses and the conversion estimate are left out, so a
+    // bonus is never an input to the next bonus for the same type. The denominator is
+    // the same lost value combatRewardStats() reports, and a victim's own loss is not
+    // booked until the engine removes it - after the killing blow - so this stays a
+    // pre-kill sample of the type rather than of the type minus the unit just destroyed.
+    const int64_t lostCredits = int64_t(std::max(0, numItemLosses[itemID])) * price;
+    const int64_t lostMilli = lostCredits > std::numeric_limits<int64_t>::max() / 1000
+        ? std::numeric_limits<int64_t>::max() : lostCredits * 1000;
+    return CombatReward::typeBonusPermille(combatRewards[itemID].damageMilli, lostMilli, price);
+}
+
+int House::killBonusPermilleForVictim(int itemID, Sint32 originalHouseID, int price) {
+    if (currentGame == nullptr || originalHouseID < 0 || originalHouseID >= NUM_HOUSES)
+        return CombatReward::kBaselineBonusPermille;
+    const House* natural = currentGame->getHouse(originalHouseID);
+    return natural != nullptr ? natural->killBonusPermilleForOwnType(itemID, price)
+                              : CombatReward::kBaselineBonusPermille;
+}
+
 AITelemetry::Record House::combatRewardStats(const ObjectData& objectData) const {
     AITelemetry::Record stats;
     for (int i=0; i<Num_ItemID; ++i) {

@@ -325,10 +325,19 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
         // effects below stay with damagerOwner; only the ledger follows the snapshot.
         House* beneficiary = DeviationReward::beneficiaryOf(credit, damagerOwner);
         if (credit.known() && beneficiary != nullptr) {
-            const auto reward = CombatReward::hit(
-                currentGame->objectData.data[itemID][originalHouseID].price,
+            const int price = currentGame->objectData.data[itemID][originalHouseID].price;
+            const bool hostile = damage > 0 && damagerID != objectID
+                && beneficiary->getTeamID() != getOwner()->getTeamID();
+            // Destroying a type that was performing well for its owner is worth more to
+            // learn from than destroying one that was already losing. Only an actual
+            // killing blow on a unit consults that record; every other hit keeps the
+            // baseline and does no lookup at all.
+            const bool lethalUnit = hostile && isAUnit() && healthBefore > 0 && getHealth() <= 0;
+            const auto reward = CombatReward::hit(price,
                 int64_t(getMaxHealth())*1000, (healthBefore*1000).lround(), (getHealth()*1000).lround(),
-                damage > 0 && damagerID != objectID && beneficiary->getTeamID() != getOwner()->getTeamID(), isAUnit());
+                hostile, isAUnit(),
+                lethalUnit ? House::killBonusPermilleForVictim(itemID, originalHouseID, price)
+                           : CombatReward::kBaselineBonusPermille);
             // A borrowed unit's damage pays its controller's Deviator and nothing else: the
             // natural type must not be credited a second time for the same hit.
             beneficiary->addCombatReward(credit.rewardItemID, reward);
@@ -551,13 +560,14 @@ bool isTileVisibleToSeeker(const ObjectBase& seeker, const Coord& tileCoord) {
     return tile->isExploredByTeam(teamId) && !tile->isFoggedByTeam(teamId);
 }
 
-const UnitBase* managedLauncherHunt(const ObjectBase& seeker) {
-    if (seeker.getItemID()!=Unit_Launcher && seeker.getItemID()!=Unit_EliteLauncher) return nullptr;
+const UnitBase* managedRocketHunt(const ObjectBase& seeker) {
+    if (seeker.getItemID()!=Unit_Launcher && seeker.getItemID()!=Unit_EliteLauncher
+        && seeker.getItemID()!=Unit_Trooper && seeker.getItemID()!=Unit_Troopers) return nullptr;
     const auto* unit=dynamic_cast<const UnitBase*>(&seeker);
     if (!unit || unit->getAttackMode()!=HUNT || !seeker.getOwner()) return nullptr;
     for (const auto& player : seeker.getOwner()->getPlayerList())
         if (const auto* bot=dynamic_cast<const QuantBot*>(player.get()))
-            if (bot->managesAutonomousLauncherHunt(unit)) return unit;
+            if (bot->managesAutonomousRocketHunt(unit)) return unit;
     return nullptr;
 }
 
@@ -567,7 +577,7 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
         return nullptr;
     }
 
-    const auto* launcherHunt = managedLauncherHunt(seeker);
+    const auto* rocketHunt = managedRocketHunt(seeker);
     const int maxRadiusX = std::max(seekerLocation.x, currentGameMap->getSizeX() - 1 - seekerLocation.x);
     const int maxRadiusY = std::max(seekerLocation.y, currentGameMap->getSizeY() - 1 - seekerLocation.y);
     const int maxRadius = std::max(maxRadiusX, maxRadiusY);
@@ -591,10 +601,10 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
 
             ObjectBase* candidate = tile->getObject();
             // A remote aircraft is immediately released by the engine, which
-            // resets Hunt's destination and cooldown. Let this AI launcher find
+            // resets Hunt's destination and cooldown. Let this AI rocket unit find
             // reachable ground prey; keep every aircraft it can actually shoot.
-            if(launcherHunt && candidate && candidate->isAFlyingUnit()
-                && !launcherHunt->isInWeaponRange(candidate)) return;
+            if(rocketHunt && candidate && candidate->isAFlyingUnit()
+                && !rocketHunt->isInWeaponRange(candidate)) return;
             if(candidate != nullptr && !isAutonomousTargetVetoed(seeker, *candidate)
                 && seeker.canAttack(candidate)
                 && currentGameMap->terrainAttackReachable(seeker,*candidate)) {
@@ -696,7 +706,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
         return nullptr;
     }
 
-    const auto* launcherHunt = huntMode ? managedLauncherHunt(seeker) : nullptr;
+    const auto* rocketHunt = huntMode ? managedRocketHunt(seeker) : nullptr;
     const Coord centerCell = grid.clampToCell(seekerLocation);
     if(!centerCell.isValid()) {
         return nullptr;
@@ -761,8 +771,8 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
                     if(terrainRejected) *terrainRejected=true;
                     continue;
                 }
-                if(launcherHunt && candidate->isAFlyingUnit()
-                    && !launcherHunt->isInWeaponRange(candidate)) continue;
+                if(rocketHunt && candidate->isAFlyingUnit()
+                    && !rocketHunt->isInWeaponRange(candidate)) continue;
 
                 const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
                 if(!isTileVisibleToSeeker(seeker, candidatePoint)) {
