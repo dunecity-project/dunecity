@@ -63,21 +63,25 @@ DisplayMenu::DisplayMenu()
     sizeTitle.setText("INTERFACE SIZE");
     sizeTitle.setAlignment(Alignment_HCenter);
     content.addWidget(&sizeTitle, Point(left, top + 94 + aspectSection), Point(440, 24));
-    const char* labels[] = {"LARGE", "MEDIUM", "SMALL", "AUTOMATIC"};
-    const int heights[] = {480, 600, 768, 0};
-    for(int i = 0; i < 4; ++i) {
+    const char* labels[] = {"LARGE", "MEDIUM", "SMALL", "AUTOMATIC", "NATIVE 1:1"};
+    const int heights[] = {480, 600, 768, 0, INTERFACE_HEIGHT_NATIVE};
+    for(int i = 0; i < 5; ++i) {
         choices[i].setText(labels[i]);
         choices[i].setToggleButton(true);
         choices[i].setOnClick([this, height = heights[i]] { select(height); });
         if(i < 3) {
             content.addWidget(&choices[i], Point(left, top + 122 + aspectSection + i * 44), Point(440, 38));
         } else {
-            content.addWidget(&choices[i], Point(left, top + 256 + aspectSection), Point(440, 38));
+            // The two screen-sized choices share the last row.
+            content.addWidget(&choices[i], Point(left + (i - 3) * 224, top + 256 + aspectSection), Point(216, 38));
         }
     }
 #ifdef __ANDROID__
-    choices[3].setVisible(false);
-    choices[3].setEnabled(false);
+    // Android keeps a fixed logical interface across surface changes.
+    for(int i = 3; i < 5; ++i) {
+        choices[i].setVisible(false);
+        choices[i].setEnabled(false);
+    }
 #endif
     select(selectedHeight);
     cancelButton.setText("CANCEL");
@@ -90,8 +94,8 @@ DisplayMenu::DisplayMenu()
 
 void DisplayMenu::select(int height) {
     selectedHeight = height;
-    const int heights[] = {480, 600, 768, 0};
-    for(int i = 0; i < 4; ++i) choices[i].setToggleState(height == heights[i]);
+    const int heights[] = {480, 600, 768, 0, INTERFACE_HEIGHT_NATIVE};
+    for(int i = 0; i < 5; ++i) choices[i].setToggleState(height == heights[i]);
 }
 
 void DisplayMenu::selectAspect(bool widescreen) {

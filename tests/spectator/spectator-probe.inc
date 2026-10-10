@@ -13,6 +13,9 @@
 #include <RadarView.h>
 #include <ScreenBorder.h>
 #include <GameInterface.h>
+#include <GUI/dune/CityBudgetWindow.h>
+#include <GUI/dune/HouseStatsWindow.h>
+#include <GUI/dune/ObservedHouseSelector.h>
 #include <Command.h>
 #include <CommandManager.h>
 #include <GameInitSettings.h>
@@ -599,8 +602,60 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
         require(game.currentCursorMode == Game::CursorMode_Normal,
                 "An observer was allowed into an order-issuing cursor mode");
     }
-    game.onCityBudget();
-    require(!game.pInterface->hasChildWindow(), "The city budget window opened for an observer");
+    // Nothing a read-only window does may reach the command queue.
+    auto commandCount = [&]() {
+        std::size_t count = 0;
+        for(const auto& slot : game.cmdManager.timeslot) count += slot.size();
+        return count;
+    };
+    // An observer may now read any house's budget, by request: the window opens,
+    // every adjustment and the Apply button are withheld, and the confirm path
+    // refuses to generate a command even when it is invoked directly.
+    {
+        const auto commandsBefore = commandCount();
+        game.onCityBudget();
+        game.pInterface->processChildWindowOpenCloses();
+        auto* budget = dynamic_cast<CityBudgetWindow*>(game.pInterface->pChildWindow);
+        if(game.isCitySimEnabled()) {
+            require(budget != nullptr, "The read-only budget window did not open for an observer");
+            require(budget->isReadOnly(), "An observer's budget window was not read-only");
+            for(const auto* control : {&budget->confirmButton, &budget->taxPlus, &budget->taxMinus,
+                                       &budget->policePlus, &budget->policeMinus})
+                require(!control->isVisible() && !control->isEnabled(),
+                        "An observer was offered a budget adjustment or Apply");
+            const int taxBefore = budget->pendingTaxRate;
+            const int policeBefore = budget->pendingPolicePercent;
+            budget->onTaxIncrease(); budget->onPoliceIncrease();
+            require(budget->pendingTaxRate == taxBefore && budget->pendingPolicePercent == policeBefore,
+                    "An observer's budget window accepted an adjustment");
+            budget->onConfirm();
+            game.pInterface->processChildWindowOpenCloses();
+        }
+        require(commandCount() == commandsBefore,
+                "An observer's budget window generated a fiscal command");
+        if(game.pInterface->hasChildWindow()) {
+            game.pInterface->closeChildWindow();
+            game.pInterface->processChildWindowOpenCloses();
+        }
+    }
+    // The read-only statistics window is available while observing and issues
+    // nothing either.
+    {
+        const auto commandsBefore = commandCount();
+        game.onHouseStats();
+        game.pInterface->processChildWindowOpenCloses();
+        auto* stats = dynamic_cast<HouseStatsWindow*>(game.pInterface->pChildWindow);
+        require(stats != nullptr, "The statistics window did not open for an observer");
+        require(stats->nextHouseButton.isVisible(),
+                "An observer was not offered the statistics house-cycling control");
+        const int firstHouse = stats->selectedHouseID;
+        stats->onNextHouse();
+        require(stats->selectedHouseID != firstHouse || ObservedHouse::browsable().size() == 1,
+                "An observer could not browse to another house's statistics");
+        require(commandCount() == commandsBefore, "The statistics window generated a command");
+        game.pInterface->closeChildWindow();
+        game.pInterface->processChildWindowOpenCloses();
+    }
     require(!game.canSkipMission(), "An observer was offered Skip Mission");
 
     // ------------------------------- the local-only setup flag is not part of the save format

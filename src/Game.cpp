@@ -79,6 +79,7 @@ std::mutex Game::performanceLogMutex;
 #include <GUI/QstBox.h>
 #include <GUI/dune/WaitingForOtherPlayers.h>
 #include <GUI/dune/CityBudgetWindow.h>
+#include <GUI/dune/HouseStatsWindow.h>
 #include <Menu/MentatHelp.h>
 #include <Menu/BriefingMenu.h>
 #include <Menu/MapChoice.h>
@@ -943,6 +944,11 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
         .set("game_type", static_cast<int>(gameType)).set("tech", techLevel)
         .set("city_sim", isCitySimEnabled()).set("cycles_per_30_seconds", MILLI2CYCLES(30000))
         .set("deviation_reward_version", DeviationReward::kLedgerVersion)
+        .set("kill_bonus_policy_version", CombatReward::kKillBonusPolicyVersion)
+        .set("kill_bonus_baseline_permille", CombatReward::kBaselineBonusPermille)
+        .set("kill_bonus_min_permille", CombatReward::kMinBonusPermille)
+        .set("kill_bonus_max_permille", CombatReward::kMaxBonusPermille)
+        .set("kill_bonus_prior_units", CombatReward::kPerformancePriorUnits)
         .set("start_cycle", gameCycleCount)
         .set("options", AITelemetry::Record()
             .set("concrete_required", gameInitSettings.getGameOptions().concreteRequired)
@@ -2891,7 +2897,6 @@ void Game::drawScreen()
 ///////////draw game bar
     worldDrawing.reset(); // Sidebar, menus, text and cursor stay at their original UI scale.
     pInterface->draw(Point(0,0));
-    pInterface->drawOverlay(Point(0,0));
     drawCityPlacementHint();
     if(pNetworkManager && isSpectating() && pNetworkManager->observerCatchingUp()) {
         observerProgress.resize(std::min(580,sideBarPos.x-40),32);
@@ -2939,6 +2944,16 @@ void Game::drawScreen()
         SDL_RenderCopy(renderer, pFinishMessageTexture.get(), nullptr, &drawLocation);
     }
 
+    if(isObserving()) {
+        if(!spectatorLabel) spectatorLabel=pFontManager->createTextureWithText("Spectating",COLOR_WHITE,18);
+        SDL_Rect rect=calcDrawingRect(spectatorLabel.get(),sideBarPos.x/2,topBarPos.h+8,HAlign::Center,VAlign::Top);
+        SDL_RenderCopy(renderer,spectatorLabel.get(),nullptr,&rect);
+    }
+    // Child windows belong above all map and HUD readouts. In the small
+    // viewport, the sidebar bars and Spectating label otherwise cover them.
+    pInterface->drawDialogs();
+    pInterface->drawOverlay(Point(0,0));
+
     if(pWaitingForOtherPlayers != nullptr) {
         pWaitingForOtherPlayers->draw();
     }
@@ -2949,11 +2964,6 @@ void Game::drawScreen()
         pInGameMentat->draw();
     }
 
-    if(isObserving()) {
-        if(!spectatorLabel) spectatorLabel=pFontManager->createTextureWithText("Spectating",COLOR_WHITE,18);
-        SDL_Rect rect=calcDrawingRect(spectatorLabel.get(),sideBarPos.x/2,topBarPos.h+8,HAlign::Center,VAlign::Top);
-        SDL_RenderCopy(renderer,spectatorLabel.get(),nullptr,&rect);
-    }
     // Update cursor
     updateCursor();
 }
@@ -4023,59 +4033,10 @@ void Game::updateGameState() {
             }
         }
 
-        // Ambient aircraft spawning — every ~10s (625 cycles at 62.5Hz),
-        // deterministically check each Airport for spawning an airplane or
-        // helicopter.  Cap at 3 ambient units per house.
-        static constexpr Uint32 kAmbientSpawnInterval = 625;
-        if (gameCycleCount > 0 && (gameCycleCount % kAmbientSpawnInterval) == 0) {
-            for (StructureBase* pStruct : structureList) {
-                if (pStruct->getItemID() != Structure_Airport) continue;
-
-                House* pOwner = pStruct->getOwner();
-                if (!pOwner) continue;
-
-                // Count existing ambient units for this house
-                int ambientCount = pOwner->getNumItems(Unit_AmbientAirplane)
-                                 + pOwner->getNumItems(Unit_AmbientHelicopter);
-                if (ambientCount >= 3) continue;
-
-                // Deterministic "random" choice based on cycle + airport position
-                const Coord airportPos = pStruct->getLocation();
-                Uint32 seed = gameCycleCount * 7u
-                            + static_cast<Uint32>(airportPos.x) * 131u
-                            + static_cast<Uint32>(airportPos.y) * 257u;
-
-                // Only spawn ~50% of the time
-                if ((seed % 4u) < 2u) continue;
-
-                bool spawnAirplane = (seed % 3u) != 0;  // 2/3 airplanes, 1/3 helicopters
-                int unitType = spawnAirplane ? Unit_AmbientAirplane : Unit_AmbientHelicopter;
-
-                UnitBase* pUnit = pOwner->createUnit(unitType);
-                if (!pUnit) continue;
-
-                Coord center = airportPos + Coord(1, 1);  // center of 3x3 airport
-
-                if (spawnAirplane) {
-                    // Airplane: spawn at a map edge, fly across the airport, exit other side
-                    Coord edgeStart = currentGameMap->findClosestEdgePoint(center, Coord(1, 1));
-                    pUnit->deploy(edgeStart);
-                    pUnit->setDestination(center);
-                    // guardPoint set to opposite edge for exit path
-                    int exitX = currentGameMap->getSizeX() - 1 - edgeStart.x;
-                    int exitY = currentGameMap->getSizeY() - 1 - edgeStart.y;
-                    pUnit->setGuardPoint(Coord(exitX, exitY));
-                    // Face toward destination
-                    if (edgeStart.x == 0) pUnit->setAngle(RIGHT);
-                    else if (edgeStart.x == currentGameMap->getSizeX() - 1) pUnit->setAngle(LEFT);
-                    else if (edgeStart.y == 0) pUnit->setAngle(DOWN);
-                    else pUnit->setAngle(UP);
-                } else {
-                    // Helicopter: spawn at airport, orbit nearby
-                    pUnit->deploy(center);
-                }
-            }
-        }
+        // City aircraft are launched by the Airport itself, in
+        // Airport::updateCityAircraft() — the direct counterpart of Micropolis
+        // simulate.cpp::doAirport(). Keeping a second map-wide spawn loop here
+        // would give every airport two independent chances per pass.
     }
 
     if((indicatorFrame != NONE_ID) && (--indicatorTimer <= 0)) {
@@ -4622,14 +4583,23 @@ void Game::onCityBudget()
 {
     // The budget window writes tax and police funding through CMD_CITY_SET_TAX_RATE /
     // CMD_CITY_SET_BUDGET, and those city commands carry no acting object - so they are not
-    // covered by an owner check. Keep the window out of an observer's hands entirely.
-    if (isObserving()) {
-        return;
-    }
+    // covered by an owner check. An observer therefore gets the window with every
+    // adjustment and the Apply button withheld, and CityBudgetWindow::onConfirm()
+    // refuses to generate a command even if the callback is invoked directly.
     if (!citySimulation_ || !citySimulation_->isInitialized()) {
         return;
     }
     pInterface->openWindow(CityBudgetWindow::create());
+}
+
+void Game::onHouseStats()
+{
+    // Read-only: no command path, no city-mode requirement, available to an
+    // observer and to an ordinary player alike.
+    if (pInterface == nullptr) {
+        return;
+    }
+    pInterface->openWindow(HouseStatsWindow::create());
 }
 
 
@@ -7515,7 +7485,9 @@ std::string Game::saveObserverRuntime() const {
     // That clock is thirty seconds of simulation time long, so restarting it on the spectator
     // would hand every already-stalled unit a grace period the host is not giving it and the two
     // would then book transport on different cycles.
-    out.writeUint32(7); out.writeUint32(gameCycleCount);
+    // Version 8 preserves the lower-difficulty aircraft sortie permissions and
+    // recent asset-attack contacts in QuantBot's supplemental runtime.
+    out.writeUint32(8); out.writeUint32(gameCycleCount);
     out.writeUint32(negotiatedBudget); out.writeUint32(cmdManager.getNetworkCycleBuffer());
     out.writeUint32(currentGameMap->getPathingRevision());
     out.writeUint32(carryOverTokens);
@@ -7571,7 +7543,7 @@ std::string Game::saveObserverRuntime() const {
 void Game::loadObserverRuntime(const std::string& bytes) {
     IMemoryStream in(bytes.data(),bytes.size());
     const auto runtimeVersion=in.readUint32();
-    if((runtimeVersion!=7) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
+    if((runtimeVersion!=8) || in.readUint32()!=gameCycleCount) throw std::runtime_error("Invalid spectator checkpoint cycle");
     // The checkpoint replaces this instance's unit set, so the derived carrier index describes
     // units that may no longer exist. Rebuilt on first use after this.
     invalidateCarryallCandidateIds();

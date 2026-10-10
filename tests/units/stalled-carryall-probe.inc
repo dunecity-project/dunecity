@@ -620,10 +620,13 @@ int runStalledCarryallProbe() {
             stallRequire(rejected, "A stall clock from the future was accepted");
         }
 
-        // The whole-game checkpoint announces version 7.
+        // The whole-game checkpoint announces version 8: the stall clock added in 7 is still
+        // carried, and 8 appends QuantBot's aircraft permissions and asset-attack contacts.
         const std::string runtime = game->saveObserverRuntime();
         IMemoryStream header(runtime.data(), runtime.size());
-        stallRequire(header.readUint32() == 7, "The observer runtime version is not 7");
+        stallRequire(header.readUint32() == 8, "The observer runtime version is not 8");
+        stallRequire(header.readUint32() == game->gameCycleCount,
+                     "The observer runtime header does not lead with version then cycle");
 
         // An ordinary load leaves the clock at its constructed defaults, which is a fresh grace
         // period: the first update stamps "now" however long the save sat on disk.

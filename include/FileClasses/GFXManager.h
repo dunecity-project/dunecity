@@ -151,6 +151,8 @@ typedef enum {
     ObjPic_Flamepost,               ///< Tornie: dedicated Flamepost atlas
     ObjPic_Chemipost,               ///< Tornie: dedicated healing post atlas
     ObjPic_ChaosFactory,            ///< Tornie: animated 3x2 Chaos Factory atlas
+    ObjPic_CityHelicopter, ///< DuneCity: original Micropolis traffic helicopter (8 headings, 32x32)
+    ObjPic_CityAirplane,   ///< DuneCity: original Micropolis airplane (8 headings + 3 take-off rows, 48x48)
     NUM_OBJPICS
 } ObjPic_enum;
 
@@ -167,7 +169,8 @@ static const std::array<std::string, NUM_OBJPICS> ObjPicNames =  { { "Tank_Base"
     "SandDamage", "Terrain_Hidden", "Terrain_HiddenFog", "Terrain_Tracks", "Star", "RebelHarvester", "Worfinery", "TechCenter", "Scoutpost", "LoveFactory",
     "ZoneResidential", "ZoneCommercial", "ZoneIndustrial", "CityRoad", "NuclearPlant", "PoliceStation",
     "Stadium", "Airport", "Hospital", "Church", "SonicTrike", "EliteLauncherGunTornie", "RebelSonicTankGun",
-    "HarvestankGunTornie", "ChemicalCarryall", "Flamepost", "Chemipost", "ChaosFactory" } };
+    "HarvestankGunTornie", "ChemicalCarryall", "Flamepost", "Chemipost", "ChaosFactory",
+    "CityHelicopter", "CityAirplane" } };
 
 #define GROUNDUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+3)|TILE_FLIPV, (i+4)|TILE_NORMAL,(i+3)|TILE_NORMAL
 #define AIRUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+1)|TILE_ROTATE, i|TILE_FLIPH,(i+1)|TILE_FLIPH

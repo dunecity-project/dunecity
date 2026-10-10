@@ -155,16 +155,6 @@ static void printUsage() {
                     "\t         [--RelayEndpoint=HTTPS_URL] [--RelayDevEndpoint=LOOPBACK_URL] [--RelayDev]\n");
 }
 
-int getLogicalToPhysicalResolutionFactor(int physicalWidth, int physicalHeight) {
-    if(physicalWidth >= 1280*3 && physicalHeight >= 720*3) {
-        return 3;
-    } else if(physicalWidth >= 640*2 && physicalHeight >= 480*2) {
-        return 2;
-    } else {
-        return 1;
-    }
-}
-
 // Keeps a windowed size inside the usable desktop area (the display minus menu
 // bar, dock or task bar) so the whole window is visible. Units are the screen
 // coordinates SDL_CreateWindow takes.
@@ -173,19 +163,9 @@ static void clampWindowedSizeToDisplay(int displayIndex, int& width, int& height
     if(SDL_GetDisplayUsableBounds(displayIndex, &usableBounds) != 0 || usableBounds.w <= 0 || usableBounds.h <= 0) {
         return;
     }
-    width = std::min(width, usableBounds.w);
-    height = std::min(height, usableBounds.h);
-}
-
-// Logical width that gives a `height`-tall interface the same shape as a
-// presentedWidth x presentedHeight surface, so it fills the window without
-// black bars. Even, and never below the minimum width.
-static int interfaceWidthForShape(int height, int presentedWidth, int presentedHeight) {
-    if(presentedWidth <= 0 || presentedHeight <= 0) {
-        return interfaceWidthForHeight(height, false);
-    }
-    const int width = static_cast<int>(std::lround(static_cast<double>(height) * presentedWidth / presentedHeight));
-    return std::max(SCREEN_MIN_WIDTH, width & ~1);
+    const SDL_Point fitted = fitVideoWindow({width, height}, {usableBounds.w, usableBounds.h});
+    width = fitted.x;
+    height = fitted.y;
 }
 
 void setVideoMode(int displayIndex)
@@ -219,9 +199,11 @@ void setVideoMode(int displayIndex)
     settings.video.physicalHeight = std::max(settings.video.physicalHeight, SCREEN_MIN_HEIGHT);
     presentedWidth = settings.video.physicalWidth;
     presentedHeight = settings.video.physicalHeight;
-    const int factor = getLogicalToPhysicalResolutionFactor(presentedWidth, presentedHeight);
-    settings.video.width = std::max(presentedWidth / factor, SCREEN_MIN_WIDTH);
-    settings.video.height = std::max(presentedHeight / factor, SCREEN_MIN_HEIGHT);
+    {
+        const SDL_Point logical = interfaceLogicalSize(requestedInterfaceHeight, presentedWidth, presentedHeight);
+        settings.video.width = logical.x;
+        settings.video.height = logical.y;
+    }
 #else
     if(settings.video.fullscreen) {
         videoFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -240,36 +222,30 @@ void setVideoMode(int displayIndex)
     // The game never switches the display mode: fullscreen means
     // SDL_WINDOW_FULLSCREEN_DESKTOP, which covers the desktop at whatever
     // resolution it currently has, and a window may have any size. So the
-    // requested physical size is used as-is; the only adjustment is keeping a
-    // window inside the usable desktop area. Older versions snapped the request
+    // requested size remains the render choice; its presentation window is fitted
+    // inside the usable desktop area. Older versions snapped the request
     // to SDL's "closest display mode" here, which on Retina Macs turned
     // 1280x800 into 1920x1200 (SDL only considers low-density modes as
     // candidates), so changing the windowed resolution never took effect.
     settings.video.physicalWidth = std::max(settings.video.physicalWidth, SCREEN_MIN_WIDTH);
     settings.video.physicalHeight = std::max(settings.video.physicalHeight, SCREEN_MIN_HEIGHT);
-    if(!settings.video.fullscreen) {
-        clampWindowedSizeToDisplay(displayIndex, settings.video.physicalWidth, settings.video.physicalHeight);
-    }
 
     {
-        // Derive the logical (interface) size from what actually ends up on
-        // screen: for a fullscreen-desktop window that is the desktop, not the
-        // saved windowed size.
+        // Keep an HD render choice even when its presentation window is smaller.
+        // For ordinary fullscreen choices retain the existing desktop-sized UI.
         presentedWidth = settings.video.physicalWidth;
         presentedHeight = settings.video.physicalHeight;
         SDL_DisplayMode desktopDisplayMode;
         if(settings.video.fullscreen
            && SDL_GetDesktopDisplayMode(displayIndex, &desktopDisplayMode) == 0
-           && desktopDisplayMode.w > 0 && desktopDisplayMode.h > 0) {
+           && desktopDisplayMode.w > 0 && desktopDisplayMode.h > 0
+           && presentedWidth <= desktopDisplayMode.w && presentedHeight <= desktopDisplayMode.h) {
             presentedWidth = desktopDisplayMode.w;
             presentedHeight = desktopDisplayMode.h;
         }
-        int factor = getLogicalToPhysicalResolutionFactor(presentedWidth, presentedHeight);
-        if(factor <= 0) {
-            factor = 1;
-        }
-        settings.video.width = std::max(presentedWidth / factor, SCREEN_MIN_WIDTH);
-        settings.video.height = std::max(presentedHeight / factor, SCREEN_MIN_HEIGHT);
+        const SDL_Point logical = interfaceLogicalSize(requestedInterfaceHeight, presentedWidth, presentedHeight);
+        settings.video.width = logical.x;
+        settings.video.height = logical.y;
     }
 
 #ifdef __ANDROID__
@@ -291,9 +267,16 @@ void setVideoMode(int displayIndex)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // Use nearest-neighbor scaling for pixel-perfect look
     SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");       // Enable render batching for performance
 
+    int windowWidth = settings.video.physicalWidth;
+    int windowHeight = settings.video.physicalHeight;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    if(!settings.video.fullscreen) {
+        clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
+    }
+#endif
     window = SDL_CreateWindow("DuneCity",
                               SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex), SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
-                              settings.video.physicalWidth, settings.video.physicalHeight,
+                              windowWidth, windowHeight,
                               videoFlags);
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -361,9 +344,10 @@ void setVideoMode(int displayIndex)
         settings.video.width = interfaceWidthForShape(settings.video.height, presentedWidth, presentedHeight);
 #endif
     }
-    SDL_Log("Display: %dx%d physical, %dx%d logical, interface preset=%d",
+    SDL_Log("Display: %dx%d physical, %dx%d logical, interface preset=%d%s",
             settings.video.physicalWidth, settings.video.physicalHeight,
-            settings.video.width, settings.video.height, settings.video.interfaceHeight);
+            settings.video.width, settings.video.height, settings.video.interfaceHeight,
+            settings.video.interfaceHeight == INTERFACE_HEIGHT_NATIVE ? " (native 1:1)" : "");
     SDL_RenderSetLogicalSize(renderer, settings.video.width, settings.video.height);
     screenTexture = SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_TARGET, settings.video.width, settings.video.height);
 
@@ -393,7 +377,10 @@ void toogleFullscreen()
         SDL_Log("Switching to windowed mode.");
         SDL_SetWindowFullscreen(window, (SDL_GetWindowFlags(window) ^ SDL_WINDOW_FULLSCREEN_DESKTOP));
 
-        SDL_SetWindowSize(window, settings.video.physicalWidth, settings.video.physicalHeight);
+        int restoredWidth = settings.video.physicalWidth;
+        int restoredHeight = settings.video.physicalHeight;
+        clampWindowedSizeToDisplay(SDL_GetWindowDisplayIndex(window), restoredWidth, restoredHeight);
+        SDL_SetWindowSize(window, restoredWidth, restoredHeight);
         SDL_RenderSetLogicalSize(renderer, settings.video.width, settings.video.height);
     } else {
         // switch to fullscreen mode
@@ -710,7 +697,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Height = 480\n"
                                 "Physical Width = 640\n"
                                 "Physical Height = 480\n"
-                                "Interface Height = 0       # 0 = automatic; 480/600/768 = fixed UI size; Width keeps 4:3 or 16:9\n"
+                                "Interface Height = 0       # 0 = automatic; 480/600/768 = fixed UI size; -1 = native 1:1; Width keeps 4:3 or 16:9\n"
                                 "Start Menu Mode = 0        # 0 = classic; 1 = enlarged TV/tablet/accessibility layout\n"
                                 "Menu Palette = 0           # 0 = desert gold; 1 = high contrast\n"
                                 "Fullscreen = true\n"

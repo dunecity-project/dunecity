@@ -184,6 +184,7 @@ target_sources(dunecity
         GUI/dune/ChatManager.cpp
         GUI/dune/FeedbackWindow.cpp
         GUI/dune/CityBudgetWindow.cpp
+        GUI/dune/HouseStatsWindow.cpp
         GUI/dune/DuneStyle.cpp
         GUI/dune/GameOptionsWindow.cpp
         GUI/dune/LoadSaveWindow.cpp

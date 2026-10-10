@@ -217,21 +217,34 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     });
     const int autoRepairY = 146 + ornithopterButtonHeight + 4
         + (ModManager::instance().isTornieContentActive() ? chemicalCarryallButtonHeight + 4 : 0);
+    // The stacked sidebar controls are laid out from one cursor rather than from
+    // hardcoded offsets. Adding the Stats item made an eight-row city stack, so
+    // the row pitch is tightened from 40 to 38 - the buttons keep their full
+    // 36-pixel click target and the whole stack still ends above the 480-line
+    // minimum supported interface height.
+    constexpr int kSidebarRowHeight = 36;
+    constexpr int kSidebarRowPitch = 38;
+    int sidebarRowY = autoRepairY;
+    const auto nextSidebarRow = [&]() {
+        const int y = sidebarRowY;
+        sidebarRowY += kSidebarRowPitch;
+        return y;
+    };
     windowWidget.addWidget(&autoRepairButton,
-        Point(getRendererWidth() - sideBar.getSize().x + 24, autoRepairY),
-        Point(ornithopterButtonWidth, 36));
+        Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+        Point(ornithopterButtonWidth, kSidebarRowHeight));
 
     movementPathsButton.setText(_("Movement paths"));
     movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
     movementPathsButton.setToggleButton(true);
     movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
     windowWidget.addWidget(&movementPathsButton,
-        Point(getRendererWidth()-sideBar.getSize().x+24,autoRepairY+40),
-        Point(ornithopterButtonWidth,36));
+        Point(getRendererWidth()-sideBar.getSize().x+24,nextSidebarRow()),
+        Point(ornithopterButtonWidth,kSidebarRowHeight));
 
     // Local display controls: no simulation command or save-state change needed.
     auto addOverlayButton = [&](TextButton& button, const char* label,
-                                const char* tooltip, DuneCity::CityOverlayMode mode, int y) {
+                                const char* tooltip, DuneCity::CityOverlayMode mode) {
         button.setText(_(label));
         button.setTooltipText(_(tooltip));
         button.setToggleButton(true);
@@ -241,27 +254,43 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         });
         button.setVisible(currentGame->isCitySimEnabled());
         windowWidget.addWidget(&button,
-            Point(getRendererWidth() - sideBar.getSize().x + 24, y),
-            Point(ornithopterButtonWidth, 36));
+            Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+            Point(ornithopterButtonWidth, kSidebarRowHeight));
     };
-    addOverlayButton(landValueOverlayButton, "Land Value",
-        "Show land value: green is high, red is low. Click again to hide (Shift+5; Shift+1 off).",
-        DuneCity::CityOverlayMode::LandValue, autoRepairY + 80);
-    addOverlayButton(crimeOverlayButton, "Crime",
-        "Show crime: red is high, green is low. Click again to hide (Shift+6; Shift+1 off).",
-        DuneCity::CityOverlayMode::CrimeRate, autoRepairY + 120);
-    addOverlayButton(pollutionOverlayButton, "Pollution",
-        "Show pollution: green is clean, purple is polluted. Click again to hide (Shift+4; Shift+1 off).",
-        DuneCity::CityOverlayMode::Pollution, autoRepairY + 160);
+    if(currentGame->isCitySimEnabled()) {
+        addOverlayButton(landValueOverlayButton, "Land Value",
+            "Show land value: green is high, red is low. Click again to hide (Shift+5; Shift+1 off).",
+            DuneCity::CityOverlayMode::LandValue);
+        addOverlayButton(crimeOverlayButton, "Crime",
+            "Show crime: red is high, green is low. Click again to hide (Shift+6; Shift+1 off).",
+            DuneCity::CityOverlayMode::CrimeRate);
+        addOverlayButton(pollutionOverlayButton, "Pollution",
+            "Show pollution: green is clean, purple is polluted. Click again to hide (Shift+4; Shift+1 off).",
+            DuneCity::CityOverlayMode::Pollution);
+    } else {
+        // Outside city mode these three were already hidden; keep them out of the
+        // layout entirely so the rows below move up instead of leaving gaps.
+        for(auto* overlay : {&landValueOverlayButton,&crimeOverlayButton,&pollutionOverlayButton})
+            overlay->setVisible(false);
+    }
+
+    // Read-only match statistics. Available in every mode and while observing,
+    // which is why it sits with the ordinary sidebar controls rather than with
+    // the city overlays.
+    statsButton.setText(_("Stats"));
+    statsButton.setTooltipText(_("Match statistics: production, spice, kills, losses and damage."));
+    statsButton.setOnClick(std::bind(&Game::onHouseStats, currentGame));
+    windowWidget.addWidget(&statsButton,
+        Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+        Point(ornithopterButtonWidth, kSidebarRowHeight));
 
     skipMissionButton.setText(_("Skip mission"));
     skipMissionButton.setTooltipText(_("Skip this mission and continue to the next level (confirmation required)."));
     skipMissionButton.setOnClick(std::bind(&Game::onSkipMission, currentGame));
     skipMissionButton.setVisible(currentGame->canSkipMission());
     windowWidget.addWidget(&skipMissionButton,
-        Point(getRendererWidth() - sideBar.getSize().x + 24,
-              autoRepairY + (currentGame->isCitySimEnabled() ? 204 : 84)),
-        Point(ornithopterButtonWidth, 36));
+        Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
+        Point(ornithopterButtonWidth, kSidebarRowHeight));
 
     // add chat manager
     windowWidget.addWidget(&chatManager, Point(20, 60), Point(getRendererWidth() - sideBar.getSize().x, 360));
@@ -393,7 +422,7 @@ void GameInterface::draw(Point position) {
         }
     }
 
-    Window::draw(position);
+    Window::drawContents(position);
 
     // Update and draw disaster notifications (top center, stacked vertically)
     {
@@ -494,6 +523,10 @@ void GameInterface::draw(Point position) {
     }
 }
 
+void GameInterface::drawDialogs() {
+    if(pChildWindow != nullptr) pChildWindow->draw();
+}
+
 void GameInterface::updateJoinRequestButton() {
     std::string text, tooltip;
     bool pending = false;
@@ -560,6 +593,9 @@ void GameInterface::updateObjectInterface() {
     landValueOverlayButton.setVisible(showOverlayButtons);
     crimeOverlayButton.setVisible(showOverlayButtons);
     pollutionOverlayButton.setVisible(showOverlayButtons);
+    // Statistics are a readout, so an observer gets the button as well; it only
+    // yields the sidebar while something is selected, like the controls above.
+    statsButton.setVisible(selection.empty());
     skipMissionButton.setVisible(selection.empty() && currentGame->canSkipMission());
     // Keep pressed states in sync with keyboard shortcuts and other overlays.
     landValueOverlayButton.setToggleState(currentGame->getCityOverlayMode() == DuneCity::CityOverlayMode::LandValue);

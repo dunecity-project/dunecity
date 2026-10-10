@@ -18,6 +18,12 @@
 //   3. Human orders, repair runs, carryall transit and a live defence contact
 //      keep their units. Other hunters, Deviators, Easy/Medium and campaign
 //      games are untouched.
+//   4. Rocket infantry share the same out-of-range aircraft filter - a different,
+//      shorter-range projectile with the same selection problem - and a Trooper's
+//      SmallRocket really removes Ornithopter hit points.
+#include <Bullet.h>
+#include <units/AirUnit.h>
+
 void runLauncherKitingProbe(Game& game) {
     auto require=[](bool ok,const char* why){
         if(!ok){SDL_Log("LAUNCHER_KITE_FAIL: %s",why);throw std::runtime_error(why);}
@@ -433,6 +439,280 @@ void runLauncherKitingProbe(Game& game) {
             require(!bot->escapeCloseThreatWhileHunting(launcher),
                 "The hunting-launcher escape leaked into support mode");
             bot->supportMode=false;
+        }
+
+        // ---- Advance past an unreachable aircraft -----------------------
+        //
+        // Reproduces the stall measured on whatswrong.dls (cycle 154917,
+        // Twin Cities 256x256): a hunting launcher whose nearest attackable
+        // object is an Ornithopter it cannot reach acquires that aircraft,
+        // engageTarget() releases it in the same cycle because it is flying and
+        // beyond weapon range, and releaseTarget() re-pins the destination onto
+        // the launcher's own tile and clears the search cooldown. The launcher
+        // then repeats that every cycle and never advances with its wave.
+        //
+        // Before the fix the launcher never closes on the ground target at all;
+        // the net displacement stays zero. An aircraft INSIDE weapon range must
+        // still be selected, because that shot is what a launcher is for.
+        bot->difficulty=QuantBot::Difficulty::Brutal;
+        game.gameType=GameType::CustomGame;
+        bot->supportMode=false;
+        {
+            // The earlier phases leave retired fixture units on their tiles until
+            // the engine collects them, and a dead unit is still an attackable
+            // candidate. Stage this phase in the far corner of the cleared area so
+            // that debris cannot be the nearest object.
+            const Coord base(4,27);
+            closer->setLocation(origin+Coord(38,4));    // Parked well clear.
+            closer->doSetAttackMode(STOP);
+            closer->setTarget(nullptr);
+            closer->setForced(false);
+
+            auto* prey=spawn(enemy,Unit_Tank,base+Coord(24,0));
+            prey->doSetAttackMode(STOP);
+            prey->setTarget(nullptr);
+            prey->setForced(false);
+            hunt(launcher,origin+base);
+            const Coord start=launcher->getLocation();
+            const int preyGap=gap(launcher,prey);
+
+            // The fixture shares the live map, and a Hunt search is whole-map, so
+            // establish what the launcher would otherwise pick before introducing
+            // the aircraft. The stall only arises when the aircraft is the NEAREST
+            // attackable object, so the aircraft has to beat this distance.
+            const ObjectBase* without=launcher->findTarget();
+            const int groundGap=without
+                ? blockDistance(start,without->getClosestPoint(start)).lround() : -1;
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: ground_choice=%d item=%d gap=%d prey_gap=%d range=%d",
+                without?int(without->getObjectID()):-1,without?int(without->getItemID()):-1,
+                groundGap,preyGap,launcherRange);
+            require(without!=nullptr,
+                "The launcher fixture has no reachable ground candidate at all");
+
+            // Place the aircraft inside that distance but outside the launcher's
+            // own reach, which is exactly the geometry measured on the save.
+            const int airGapWanted=groundGap-1;
+            const bool airCanDominate=airGapWanted>launcherRange;
+            auto* raider=spawn(enemy,Unit_Ornithopter,
+                base+Coord(airCanDominate?airGapWanted:launcherRange+3,0));
+            publish();
+            const int airGap=gap(launcher,raider);
+            require(launcher->canAttack(raider),
+                "Fixture launcher cannot target aircraft at all, so the stall cannot arise");
+            require(airGap>launcherRange,
+                "Fixture aircraft is not outside the launcher's weapon range");
+
+            // The search must now offer the reachable ground target, not the
+            // aircraft the engine would throw away.
+            const ObjectBase* chosen=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: air_gap=%d prey_gap=%d range=%d chosen=%d chosen_item=%d",
+                airGap,preyGap,launcherRange,
+                chosen?int(chosen->getObjectID()):-1,chosen?int(chosen->getItemID()):-1);
+            require(chosen!=nullptr,
+                "A hunting launcher with a reachable ground target found nothing");
+            // The invariant, stated without assuming which object wins: the Hunt
+            // search never yields an aircraft this launcher cannot shoot. The
+            // fixture shares the real map, so a nearer real unit may legitimately
+            // be chosen instead of the fixture's own tank.
+            require(!chosen->isAFlyingUnit() || launcher->isInWeaponRange(chosen),
+                "A hunting launcher still selected an aircraft beyond its weapon range");
+
+            // Real cycles and real pathfinding. The stall's signature is that the
+            // launcher ends every cycle with no target, standing on its own tile,
+            // so "not stalled" means it either holds a shot it can take or it has
+            // actually travelled. Before the fix neither is ever true.
+            int moved=0, passes=0;
+            bool engaged=false;
+            for(;passes<10 && moved<=2 && !engaged;++passes) {
+                bot->checkAllUnits();
+                tick(60);
+                moved=blockDistance(start,launcher->getLocation()).lround();
+                const ObjectBase* held=launcher->getTarget();
+                engaged=held!=nullptr && launcher->isInWeaponRange(held);
+            }
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: moved=%d engaged=%d passes=%d mode=%d tracked=%d"
+                " air_gap=%d dominating=%d",
+                moved,int(engaged),passes,int(launcher->getAttackMode()),
+                int(bot->customWave.members.count(launcher->getObjectID())),
+                airGap,int(airCanDominate));
+            if(airCanDominate) {
+                require(moved>2 || engaged,
+                    "A hunting launcher held up by a distant aircraft neither advanced nor engaged");
+            } else {
+                // The live map offered a candidate closer than the launcher's own
+                // reach, so this map cannot stage the stall. The invariant above
+                // still held, which is the part this fixture owns.
+                SDL_Log("LAUNCHER_ADVANCE_DIAG: map too crowded to stage the stall;"
+                    " selection invariant checked only");
+            }
+            require(bot->customWave.members.count(launcher->getObjectID()),
+                "The advance dropped the launcher out of the tracked army");
+
+            // Anti-air is untouched: inside weapon range the aircraft is the
+            // selection, and Guard/AreaGuard posts keep their own search range.
+            // Anti-air is untouched: an aircraft right beside the launcher is
+            // nearer than anything else on this map, so it must be the selection.
+            raider->setLocation(launcher->getLocation()+Coord(1,0));
+            require(launcher->isInWeaponRange(raider),
+                "Fixture aircraft did not come inside the launcher's weapon range");
+            const ObjectBase* nowChosen=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: in_range_choice=%d item=%d",
+                nowChosen?int(nowChosen->getObjectID()):-1,
+                nowChosen?int(nowChosen->getItemID()):-1);
+            require(nowChosen==raider,
+                "A launcher refused an aircraft inside its own weapon range");
+
+            // An Area Guard post keeps its established 12-tile air search: the
+            // veto is Hunt-only, so a launcher covering a building still picks
+            // up an aircraft it is not yet in range of.
+            raider->setLocation(launcher->getLocation()+Coord(launcherRange+2,0));
+            require(!launcher->isInWeaponRange(raider),
+                "Fixture aircraft did not move back outside the launcher's reach");
+            bot->doSetAttackMode(launcher,AREAGUARD);
+            launcher->setGuardPoint(launcher->getLocation());
+            const ObjectBase* posted=launcher->findTarget();
+            SDL_Log("LAUNCHER_ADVANCE_DIAG: areaguard_chosen=%d flying=%d",
+                posted?int(posted->getObjectID()):-1,
+                (posted&&posted->isAFlyingUnit())?1:0);
+            require(posted!=nullptr,
+                "An Area Guard launcher lost its own area search");
+            bot->doSetAttackMode(launcher,HUNT);
+
+            // ---- The same in-range filter for rocket infantry ---------------
+            // A Trooper fires its own SmallRocket over five tiles, not the
+            // launcher's Rocket over nine, but the engine releases any flying
+            // target beyond weapon range for both, so a distant Ornithopter
+            // stalls its Hunt in exactly the same way and the candidate filter
+            // has to cover it. The launcher's close-range spacing is not
+            // extended with it.
+            {
+                const int trooperRange=currentGame->objectData.data[Unit_Trooper]
+                    [owner->getHouseID()].weaponrange;
+                require(trooperRange>0,"Fixture Trooper has no weapon range at all");
+                auto* foot=spawn(owner,Unit_Trooper,base+Coord(0,3));
+                const Coord footStart=foot->getLocation();
+                foot->setTarget(nullptr);
+                bot->doMove2Pos(foot,foot->getX(),foot->getY(),false);
+                bot->doSetAttackMode(foot,HUNT);
+                foot->setForced(false);
+                publish();
+                require(bot->managesAutonomousRocketHunt(foot),
+                    "An autonomously hunting Trooper is not recognised as rocket anti-air");
+                require(!bot->huntingLauncher(foot)
+                        && !bot->escapeCloseThreatWhileHunting(foot,closer),
+                    "The launcher's close-range spacing was extended to rocket infantry");
+
+                const ObjectBase* footGround=foot->findTarget();
+                require(footGround!=nullptr,
+                    "The Trooper fixture has no reachable ground candidate at all");
+                const int footGroundGap=blockDistance(footStart,
+                    footGround->getClosestPoint(footStart)).lround();
+                if(footGroundGap-1>trooperRange) {
+                    raider->setLocation(footStart+Coord(footGroundGap-1,0));
+                    publish();
+                    require(foot->canAttack(raider) && !foot->isInWeaponRange(raider),
+                        "The Trooper fixture aircraft is not an unreachable candidate");
+                    const ObjectBase* footChoice=foot->findTarget();
+                    SDL_Log("LAUNCHER_ADVANCE_DIAG: trooper_range=%d ground_gap=%d chosen_item=%d",
+                        trooperRange,footGroundGap,footChoice?int(footChoice->getItemID()):-1);
+                    require(footChoice!=nullptr && (!footChoice->isAFlyingUnit()
+                            || foot->isInWeaponRange(footChoice)),
+                        "A hunting Trooper selected an aircraft beyond its weapon range");
+                } else {
+                    SDL_Log("LAUNCHER_ADVANCE_DIAG: map too crowded to stage the Trooper stall;"
+                        " selection invariant checked only");
+                }
+
+                // Inside range the aircraft is the selection, and the rocket really
+                // removes hit points. A stepped rocket detonates where it was aimed,
+                // so the Ornithopter is held on station by its own speed data - as the
+                // anti-air audit does - rather than by teleporting it back between
+                // cycles. Only the Trooper and the aircraft are live, and the launcher
+                // rocket counter must not move, so the hit points removed cannot have
+                // come from another friendly shooter.
+                auto& airSpeed=currentGame->objectData.data[Unit_Ornithopter]
+                    [enemy->getHouseID()].maxspeed;
+                const FixPoint savedAirSpeed=airSpeed;
+                airSpeed=0;
+                static_cast<AirUnit*>(raider)->currentMaxSpeed=0;
+                raider->doSetAttackMode(STOP);
+                raider->setTarget(nullptr);
+                // An aircraft-targeted SmallRocket doubles its arming delay from 3 to 6
+                // movement steps. Measure at the far edge of the Trooper's normal range
+                // so that delay has elapsed when the rocket reaches the aircraft.
+                const Coord hover=footStart+Coord(trooperRange,0);
+                raider->setLocation(hover);
+                // Drain anything already in flight with the Trooper not updating, so a
+                // shot from an earlier phase cannot be mistaken for this one.
+                unitList.clear();unitList.push_back(raider);
+                tick(120);
+                raider->setLocation(hover);
+                raider->setHealth(raider->getMaxHealth());
+                unitList.clear();unitList.push_back(foot);unitList.push_back(raider);
+                require(foot->getHealth()>0 && foot->isInWeaponRange(raider),
+                    "The Trooper fixture aircraft did not come inside rocket range");
+                require(foot->findTarget()==raider,
+                    "A Trooper refused an aircraft inside its own weapon range");
+                // The shot itself is measured from the defensive posture the air rescue
+                // actually assigns: an Area Guard post, which holds its ground and fires
+                // rather than walking the engagement distance away.
+                bot->doSetAttackMode(foot,AREAGUARD);
+                foot->setGuardPoint(footStart);
+                foot->setForced(false);
+                const FixPoint airFull=raider->getHealth();
+                const int otherRocketsBefore=game.combatStats.launcherFiresOnOrni;
+                bool removedAirHp=false, aimed=false, firedSmallRocket=false;
+                for(int cycle=0;cycle<1200 && !removedAirHp;++cycle) {
+                    foot->setHealth(foot->getMaxHealth());
+                    tick(1);
+                    for(const auto* shot:bulletList)
+                        if(shot->shooterID==foot->getObjectID()
+                            && shot->bulletID==Bullet_SmallRocket) firedSmallRocket=true;
+                    aimed=aimed || foot->getTarget()==raider;
+                    removedAirHp=raider->getHealth()<airFull;
+                }
+                airSpeed=savedAirSpeed;
+                SDL_Log("LAUNCHER_ADVANCE_DIAG: trooper_aimed=%d trooper_small_rocket=%d"
+                    " trooper_removed_air_hp=%d other_rockets=%d gap=%d range=%d",int(aimed),
+                    int(firedSmallRocket),int(removedAirHp),
+                    game.combatStats.launcherFiresOnOrni-otherRocketsBefore,
+                    gap(foot,raider),trooperRange);
+                bot->doSetAttackMode(foot,HUNT);
+                require(aimed,"The defending Trooper never acquired the aircraft in range");
+                require(firedSmallRocket,
+                    "The defending Trooper never fired a SmallRocket at the aircraft in range");
+                require(game.combatStats.launcherFiresOnOrni==otherRocketsBefore,
+                    "Another friendly rocket unit fired during the Trooper measurement");
+                require(removedAirHp,
+                    "A Trooper in range never removed any Ornithopter hit points");
+
+                // Authority boundaries for the shared filter: a human-ordered Trooper,
+                // a support helper, a campaign game and Easy/Medium keep the engine's
+                // own unfiltered search, exactly as launchers do.
+                bot->onHumanUnitOrder(foot->getObjectID());
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter overrode a human-ordered Trooper");
+                bot->manualUnitOrders.erase(foot->getObjectID());
+                bot->supportMode=true;
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter claimed a support helper's Trooper");
+                bot->supportMode=false;
+                game.gameType=GameType::Campaign;
+                require(!bot->managesAutonomousRocketHunt(foot),
+                    "The rocket filter leaked into a campaign game");
+                game.gameType=GameType::CustomGame;
+                for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+                    bot->difficulty=soft;
+                    require(!bot->managesAutonomousRocketHunt(foot),
+                        "The rocket filter leaked into Easy or Medium");
+                }
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                require(bot->managesAutonomousRocketHunt(foot),
+                    "Restoring the autonomous Custom Hard/Brutal house lost the filter");
+                retire(foot);
+            }
+
+            retire(raider); retire(prey);
         }
     } catch(...) {
         cleanupStructures(); unitList=savedUnits; throw;

@@ -98,4 +98,92 @@ private:
     Uint32 sentThroughCycle = 0;        ///< exclusive upper bound of the last emitted window
 };
 
+/**
+    Suppresses only byte-identical repeats of a direct peer's rolling command window.
+
+    A direct peer emits as part of the cycle loop, but that loop also spins while the
+    simulation is held: Game's inner loop calls CommandManager::update() every iteration
+    and only advances the cycle when it is neither waiting for a peer's commands nor
+    paused. While it is waiting, the same window is therefore offered again and again as
+    fast as the loop turns, which is how an ordered data channel reaches its buffered and
+    retained-job bounds and starts refusing sends.
+
+    What makes a repeat safe to drop is that the emitted payload is a pure function of the
+    window bounds, the local player id and that player's commands inside the window. So an
+    emission is only suppressed while all three of the window start, the window end and a
+    local-command revision counter are unchanged. Any cycle movement in either direction,
+    and any newly accepted local command, emits immediately: the lead, the window and the
+    payload are exactly what they were before this class existed.
+
+    Suppression is never indefinite. After kIdleRetryMs the unchanged window goes out
+    again, so a peer that lost a packet still receives the retransmission that the rolling
+    history exists to provide, and neither side can wedge waiting for the other.
+*/
+class DirectEmissionSchedule {
+public:
+    /// Liveness floor: an unchanged window is still retransmitted this often.
+    static constexpr Uint32 kIdleRetryMs = 100;
+
+    /**
+        \param  nowMs           SDL_GetTicks() at the call, wrapping is handled
+        \param  windowStart     inclusive lower bound of the window about to be emitted
+        \param  windowEnd       exclusive upper bound of the window about to be emitted
+        \param  localRevision   counts commands accepted for the local player
+        \return true if this window has to go out now
+    */
+    bool shouldEmit(Uint32 nowMs, Uint32 windowStart, Uint32 windowEnd,
+                    Uint32 localRevision) const {
+        if(!everEmitted) {
+            return true;
+        }
+
+        // Cycle movement, forwards or backwards. Early in a match the start saturates at 0
+        // while the end still advances, so both bounds are compared rather than just one.
+        if(windowStart != lastWindowStart || windowEnd != lastWindowEnd) {
+            return true;
+        }
+
+        // A command of our own accepted at a cycle already inside this window changes the
+        // payload without moving either bound. Comparing for inequality rather than order
+        // keeps this correct across the counter's own wrap.
+        if(localRevision != lastLocalRevision) {
+            return true;
+        }
+
+        // Unsigned subtraction, so the 49.7 day wrap of SDL_GetTicks() is a normal interval
+        // and not a 49 day silence.
+        return (nowMs - lastEmissionMs) >= kIdleRetryMs;
+    }
+
+    /**
+        Records a window that has just been handed to the network manager.
+        \param  nowMs           the same clock reading shouldEmit() was asked with
+        \param  windowStart     inclusive lower bound of the window that was sent
+        \param  windowEnd       exclusive upper bound of the window that was sent
+        \param  localRevision   the revision the sent window reflects
+    */
+    void noteEmission(Uint32 nowMs, Uint32 windowStart, Uint32 windowEnd,
+                      Uint32 localRevision) {
+        everEmitted       = true;
+        lastEmissionMs    = nowMs;
+        lastWindowStart   = windowStart;
+        lastWindowEnd     = windowEnd;
+        lastLocalRevision = localRevision;
+    }
+
+    /**
+        Forgets the previous session or command history. A replay, a savegame, a checkpoint
+        rebuild or a truncation rewrites the commands inside the window without moving its
+        bounds, so inheriting this state could suppress a window whose contents changed.
+    */
+    void reset() { *this = DirectEmissionSchedule(); }
+
+private:
+    bool   everEmitted       = false;   ///< false until the first emission of this session
+    Uint32 lastEmissionMs    = 0;       ///< SDL_GetTicks() of the last emission
+    Uint32 lastWindowStart   = 0;       ///< inclusive lower bound of the last emitted window
+    Uint32 lastWindowEnd     = 0;       ///< exclusive upper bound of the last emitted window
+    Uint32 lastLocalRevision = 0;       ///< local-command revision the last window reflected
+};
+
 #endif // COMMANDEMISSIONSCHEDULE_H

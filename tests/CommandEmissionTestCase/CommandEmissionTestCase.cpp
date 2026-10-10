@@ -37,6 +37,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -571,4 +572,189 @@ TEST_CASE("Direct gameplay does not inherit the relay command cadence",
     const auto relay = run(NetworkManager::Transport::RoomRelay);
     CHECK(relay[0].cycle < 11400);
     CHECK(relay[0].discardedMs > 5000);
+}
+
+namespace {
+
+/**
+    The direct sender as Game's inner loop actually drives it. That loop calls
+    CommandManager::update() every iteration and only advances the cycle when it is neither
+    waiting for a peer's commands nor paused, so an iteration offers the window whether or
+    not anything about it changed. A real browser run reached the data channel's bounds in
+    that state: 1,400,714 buffered bytes behind 128 retained jobs on an open channel, with
+    no framing or state fault, after which the channel refused a send and the match ended.
+
+    The window this builds is the one CommandManager::update() builds, and the emission
+    decision is the real DirectEmissionSchedule.
+*/
+struct DirectSender {
+    DirectEmissionSchedule schedule;
+    Uint32 cycle          = 0;
+    Uint32 buffer         = 22;     ///< networkCycleBuffer for a direct peer
+    Uint32 localRevision  = 0;      ///< moves only for commands of our own
+    std::size_t emissions = 0;
+    Uint32 lastWindowEnd  = 0;
+    bool everEmitted      = false;
+    bool contiguous       = true;   ///< false if a cycle ever aged out of the history unsent
+
+    /// One loop iteration. \return true when the window was put on the wire.
+    bool offer(Uint32 nowMs) {
+        const Uint32 windowStart = CommandEmissionSchedule::historyStartCycle(cycle);
+        const Uint32 windowEnd   = cycle + buffer;
+        if(!schedule.shouldEmit(nowMs, windowStart, windowEnd, localRevision)) {
+            return false;
+        }
+        if(everEmitted && windowStart > lastWindowEnd) {
+            contiguous = false;
+        }
+        schedule.noteEmission(nowMs, windowStart, windowEnd, localRevision);
+        lastWindowEnd = windowEnd;
+        everEmitted   = true;
+        emissions++;
+        return true;
+    }
+
+    /// A command this peer issued: it lands in the window and changes what we send.
+    void issueLocalCommand() { ++localRevision; }
+
+    /// A command another peer sent us. It is not in our emitted payload, so it must not
+    /// cost us a send of our own.
+    void receiveRemoteCommand() { /* deliberately does not touch localRevision */ }
+};
+
+} // namespace
+
+TEST_CASE("Direct emission: the first window is immediate and any cycle change follows it",
+          "[network][command-emission][p2p][direct]") {
+    DirectSender sender;
+
+    // The clock never moves in this test, so nothing but a changed window can fire: the
+    // bounded retry can never be what sends these.
+    constexpr Uint32 frozenMs = 1000;
+
+    CHECK(sender.offer(frozenMs));              // first window of the session
+    CHECK_FALSE(sender.offer(frozenMs));        // identical repeat in the same iteration
+
+    for(Uint32 step = 0; step < 500; step++) {
+        sender.cycle++;
+        CHECK(sender.offer(frozenMs));          // forwards: always immediate
+    }
+
+    // A checkpoint rebuild can move the cycle backwards. That is a different window and has
+    // to go out too, rather than being mistaken for a repeat of the one already sent.
+    sender.cycle -= 100;
+    CHECK(sender.offer(frozenMs));
+
+    CHECK(sender.emissions == 502);
+
+    // Every advancing window met the previous one, so their union still covers every cycle
+    // and a receiver's watermark walks straight through them.
+    CHECK(sender.contiguous);
+}
+
+TEST_CASE("Direct emission: a held simulation retransmits on a bound, not on the loop rate",
+          "[network][command-emission][p2p][direct]") {
+    // 96 fps and 120 fps, each with the inner loop's ten iterations per frame: the rate the
+    // old path emitted at was this, and it is what filled the channel.
+    for(const Uint32 frameMs : {10u, 8u}) {
+        constexpr Uint32 durationMs = 30000;
+        constexpr Uint32 iterationsPerFrame = 10;
+
+        DirectSender sender;
+        std::size_t offers = 0;
+        for(Uint32 nowMs = 0; nowMs < durationMs; nowMs += frameMs) {
+            for(Uint32 iteration = 0; iteration < iterationsPerFrame; iteration++) {
+                offers++;
+                sender.offer(nowMs);        // no cycle advance: waiting or paused
+            }
+        }
+
+        // The old path sent one window per offer. The bound is wall time instead.
+        CHECK(offers >= 30000);
+        CHECK(sender.emissions <= (durationMs / DirectEmissionSchedule::kIdleRetryMs) + 2);
+
+        // And it is a floor as well as a ceiling: a peer that fell silent for thirty seconds
+        // is a peer every other one waits for, so the unchanged window still goes out. The
+        // retry can only be noticed on an iteration, so one frame of granularity is added to
+        // the interval before dividing.
+        CHECK(sender.emissions
+              >= (durationMs / (DirectEmissionSchedule::kIdleRetryMs + frameMs)) - 1);
+        CHECK(sender.contiguous);
+    }
+}
+
+TEST_CASE("Direct emission: our own command at an unchanged cycle forces a fresh window",
+          "[network][command-emission][p2p][direct]") {
+    DirectSender sender;
+    constexpr Uint32 frozenMs = 500;
+
+    REQUIRE(sender.offer(frozenMs));
+    REQUIRE_FALSE(sender.offer(frozenMs));
+
+    // Suppressing by window bounds alone would drop this: the cycle has not moved, but the
+    // payload has. A held command is a lost order and, for pause control, a wedged match.
+    sender.issueLocalCommand();
+    CHECK(sender.offer(frozenMs));
+    CHECK_FALSE(sender.offer(frozenMs));
+
+    // Several in the same iteration each change the payload again.
+    sender.issueLocalCommand();
+    sender.issueLocalCommand();
+    CHECK(sender.offer(frozenMs));
+
+    // A peer's command reaches our timeslot too, but it is not in what we emit, so it must
+    // not buy that peer an extra send from us - that is how two busy peers feed each other
+    // into the bound the real failure hit.
+    for(int i = 0; i < 100; i++) {
+        sender.receiveRemoteCommand();
+        CHECK_FALSE(sender.offer(frozenMs));
+    }
+
+    CHECK(sender.emissions == 3);
+}
+
+TEST_CASE("Direct emission: the retry bound survives the SDL_GetTicks() wrap",
+          "[network][command-emission][p2p][direct]") {
+    DirectSender sender;
+
+    // Last emission just before the wrap.
+    REQUIRE(sender.offer(0xFFFFFFFFu - 50u));
+
+    // 20 ms later in real time, which is a negative difference signed and a 49 day one if the
+    // wrap is mishandled. Neither may send, and neither may start a 49 day silence.
+    CHECK_FALSE(sender.offer(0xFFFFFFFFu - 30u));
+    CHECK_FALSE(sender.offer(10u));                 // 60 ms after, across the wrap
+
+    // Past the bound, measured across the wrap, it goes out again.
+    CHECK(sender.offer(60u));
+    CHECK(sender.emissions == 2);
+
+    // A revision counter that wraps is compared for inequality, never for order, so the
+    // emission after its wrap is not suppressed either.
+    sender.localRevision = std::numeric_limits<Uint32>::max();
+    REQUIRE(sender.offer(1000u));
+    sender.localRevision = 0;                        // ++ past the maximum
+    CHECK(sender.offer(1000u));
+}
+
+TEST_CASE("Direct emission: a rebuilt or reloaded history never inherits suppression",
+          "[network][command-emission][p2p][direct]") {
+    DirectEmissionSchedule schedule;
+
+    // A long match: the last window covered a late cycle range at a late clock reading.
+    schedule.noteEmission(5000000u, 39844u, 40000u, 1234u);
+    CHECK_FALSE(schedule.shouldEmit(5000000u, 39844u, 40000u, 1234u));
+
+    schedule.reset();
+
+    // CommandManager resets this from its constructor, setNetworkCycleBuffer(),
+    // discardCommandsFrom() and load(). Each of those either starts a match or rewrites the
+    // commands inside the window without moving its bounds, so without the reset a window
+    // whose contents had changed could be suppressed as an identical repeat.
+    CHECK(schedule.shouldEmit(5000000u, 39844u, 40000u, 1234u));
+
+    // A revision counter that happens to match a previous session's is harmless after the
+    // reset, because the first emission of a session is unconditional.
+    DirectEmissionSchedule fresh;
+    CHECK(fresh.shouldEmit(0u, 0u, 0u, 0u));
 }

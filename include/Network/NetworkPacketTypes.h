@@ -149,7 +149,21 @@
 // 60: Required city civics and their missing prerequisites outrank optional
 //     spending, including between positive demand-clipping phases. Older peers
 //     choose different construction orders. Save and runtime layouts are unchanged.
-#define NETWORK_PROTOCOL_VERSION            60
+// 61: Micropolis city aircraft. The Airport launches them with the original
+//     doAirport() odds from the shared simulation RNG, and both aircraft steer,
+//     report traffic and retire on the original sprite clock. A peer on 60 draws
+//     a different number of RNG values on the same cycle, flies the placeholder
+//     orbit/flyover instead, and keeps up to three aircraft per house where this
+//     build keeps one of each — so the two diverge immediately. The save layout
+//     is 9853 for the same reason.
+// 62: City airplanes retain off-map waypoints and fly out when their cruise
+//     budget expires, instead of disappearing over the city. Changed routes,
+//     retirement times and subsequent Airport RNG draws require matching peers.
+//     The aircraft save layout remains 9853.
+// 66: Victim-type performance changes kill completion rewards and subsequent AI
+//     allocations. Reactive city Trooper/WOR production and rocket infantry Hunt
+//     targeting also change lockstep decisions. Save and runtime layouts remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            67
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

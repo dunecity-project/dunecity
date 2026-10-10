@@ -63,7 +63,8 @@ namespace {
 bool usesSharedCityAtlas(unsigned int id) {
     return id == ObjPic_ZoneResidential || id == ObjPic_ZoneCommercial
         || id == ObjPic_ZoneIndustrial || id == ObjPic_CityRoad
-        || id == ObjPic_Stadium || id == ObjPic_Airport || id == ObjPic_NuclearPlant;
+        || id == ObjPic_Stadium || id == ObjPic_Airport || id == ObjPic_NuclearPlant
+        || id == ObjPic_CityHelicopter || id == ObjPic_CityAirplane;
 }
 
 constexpr int kEnhancedDirectionCount = 8;
@@ -254,6 +255,8 @@ static const Coord objPicTiles[] {
     { 4, 1 },   // ObjPic_Flamepost
     { 4, 1 },   // ObjPic_Chemipost
     { 4, 1 },   // ObjPic_ChaosFactory
+    { 8, 1 },   // ObjPic_CityHelicopter (one 32x32 original frame per heading)
+    { 8, 4 },   // ObjPic_CityAirplane (48x48: cruise headings + three take-off rows)
 };
 static_assert(sizeof(objPicTiles) / sizeof(objPicTiles[0]) == NUM_OBJPICS,
               "objPicTiles must have one entry per ObjPic enum value");
@@ -469,6 +472,48 @@ GFXManager::GFXManager() {
             }
             // House-independent art shares these surfaces and cached textures.
             // Do not duplicate animation sheets for each of the 18 colour slots.
+        }
+
+        // ----- Original Micropolis city aircraft -----
+        //
+        // The unmodified sprite art from micropolis-activity/images/obj2-*.xpm
+        // (helicopter) and obj3-*.xpm (airplane), re-packed by
+        // scripts/import-micropolis-aircraft.py into ANGLETYPE column order.
+        // Civilian aircraft are not house-coloured in the original, so these
+        // share one surface set like the other city atlases.
+        {
+            std::vector<std::string> aircraftDirs;
+            for (const auto& dir : searchDirs)
+                aircraftDirs.push_back(dir.substr(0, dir.size() - std::string("composites_2x2/").size()) + "aircraft/");
+            struct AircraftSpec { int id; const char* name; int cell; };
+            const AircraftSpec cityAircraft[] = {
+                {ObjPic_CityHelicopter, "city_helicopter", 2 * D2_TILESIZE},
+                {ObjPic_CityAirplane,   "city_airplane",   3 * D2_TILESIZE},
+            };
+            for (const auto& spec : cityAircraft) {
+                sdl2::surface_ptr sheet;
+                for (const auto& dir : aircraftDirs) {
+                    auto rw = sdl2::RWops_ptr{SDL_RWFromFile((dir + spec.name + ".png").c_str(), "rb")};
+                    if (rw) sheet = LoadPNG_RW(rw.get());
+                    if (sheet) break;
+                }
+                // Tracked, bundled art: fail loudly rather than sampling a
+                // different-sized sheet or flying an invisible aircraft.
+                if (!sheet || sheet->w != objPicTiles[spec.id].x * spec.cell
+                           || sheet->h != objPicTiles[spec.id].y * spec.cell)
+                    THROW(std::runtime_error, "Missing or invalid city aircraft sprite %s.png; reinstall matching game data", spec.name);
+                // Copy, never blend, while scaling: the original art is
+                // transparent-keyed and its alpha has to survive verbatim.
+                // getZoomedObjPic() then turns on texture blending because
+                // these surfaces are truecolor.
+                SDL_SetSurfaceBlendMode(sheet.get(), SDL_BLENDMODE_NONE);
+                objPic[spec.id][HOUSE_HARKONNEN][0] = std::move(sheet);
+                for (int z = 1; z < NUM_ZOOMLEVEL; ++z) {
+                    objPic[spec.id][HOUSE_HARKONNEN][z] = scaleRGBASurface(objPic[spec.id][HOUSE_HARKONNEN][0].get(), z + 1);
+                    if (!objPic[spec.id][HOUSE_HARKONNEN][z])
+                        THROW(std::runtime_error, "Unable to scale city aircraft sprite %s", spec.name);
+                }
+            }
         }
 
         // ----- DuneCity police-station sprite -----

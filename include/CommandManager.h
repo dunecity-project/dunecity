@@ -78,7 +78,13 @@ public:
         \param  stream  the stream to read from
     */
     void load(InputStream& stream);
-    void discardCommandsFrom(Uint32 cycle) { if(timeslot.size()>cycle) timeslot.resize(cycle); }
+    void discardCommandsFrom(Uint32 cycle) {
+        if(timeslot.size()>cycle) timeslot.resize(cycle);
+        // Truncation can remove local commands from inside the current window without
+        // moving its bounds, so the next direct emission must not be suppressed as an
+        // unchanged repeat of what was sent before the rewrite.
+        directSchedule.reset();
+    }
     const std::vector<Command>& commandsAt(Uint32 cycle) const {
         static const std::vector<Command> empty;
         return cycle<timeslot.size() ? timeslot[cycle] : empty;
@@ -94,6 +100,7 @@ public:
         // refers to cycles that no longer exist, and its timestamp to a clock reading from
         // before the lobby.
         emissionSchedule.reset();
+        directSchedule.reset();
     };
 
     /**
@@ -133,6 +140,13 @@ private:
     bool bReadOnly;                                 ///< true = addCommand() is a NO-OP, false = addCommand() has normal behaviour
     Uint32 networkCycleBuffer;                      ///< the number of frames a command is given in advance
     CommandEmissionSchedule emissionSchedule;       ///< paces the emissions of a relay session (see CommandEmissionSchedule.h)
+    DirectEmissionSchedule directSchedule;          ///< drops identical repeats on a direct session (see CommandEmissionSchedule.h)
+    /// Counts commands accepted for the local player. Only a change here can alter the
+    /// contents of an otherwise unchanged direct window, so it is what makes suppressing
+    /// a repeat safe. Remote insertions deliberately do not move it: another peer's
+    /// command is not in our emitted payload and must not cost us a send. Wrapping is
+    /// harmless because the schedule only ever compares it for inequality.
+    Uint32 localCommandRevision = 0;
 };
 
 #endif // COMMANDMANAGER_H

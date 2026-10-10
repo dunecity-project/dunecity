@@ -1,0 +1,186 @@
+{
+  "generator": "scripts/import-micropolis-aircraft.py",
+  "notice": "Original Micropolis sprite art, GPL-3.0-or-later. See ../NOTICE.txt.",
+  "sheets": {
+    "city_airplane.png": {
+      "cell": 48,
+      "columns": 8,
+      "frames": [
+        {
+          "angle": "RIGHT",
+          "column": 0,
+          "micropolis_frame": 3,
+          "row": 0,
+          "sha256": "ef1e9365f979a576a3fe1298b86e2632aee5c62cc8eb280f1668659fb73f71e8",
+          "source": "obj3-2.xpm"
+        },
+        {
+          "angle": "RIGHTUP",
+          "column": 1,
+          "micropolis_frame": 2,
+          "row": 0,
+          "sha256": "575275738493a8d88cde7e07eb4a34fd28d86d6fe19493bd08a95701318be6b6",
+          "source": "obj3-1.xpm"
+        },
+        {
+          "angle": "UP",
+          "column": 2,
+          "micropolis_frame": 1,
+          "row": 0,
+          "sha256": "de611c4349747edea5fd5f84b5436f37d880be788f3f01139a0dde23e1997a62",
+          "source": "obj3-0.xpm"
+        },
+        {
+          "angle": "LEFTUP",
+          "column": 3,
+          "micropolis_frame": 8,
+          "row": 0,
+          "sha256": "3a9d3864f2ad06eee95d67f34bef5a20f84de6bc804842b38ba2ac1c30908896",
+          "source": "obj3-7.xpm"
+        },
+        {
+          "angle": "LEFT",
+          "column": 4,
+          "micropolis_frame": 7,
+          "row": 0,
+          "sha256": "b7bf4c7420f56d805b762b271c0cd9c7c653212d0395fe6e29e7a9250c36c845",
+          "source": "obj3-6.xpm"
+        },
+        {
+          "angle": "LEFTDOWN",
+          "column": 5,
+          "micropolis_frame": 6,
+          "row": 0,
+          "sha256": "4bf1c9b36095e905a91922c6be7edd88c4b8f6ff33b60f2b2701048a479cccd5",
+          "source": "obj3-5.xpm"
+        },
+        {
+          "angle": "DOWN",
+          "column": 6,
+          "micropolis_frame": 5,
+          "row": 0,
+          "sha256": "4060cb3cf7677fcc4277ed70bb6d992f4ad8556e84d23cf20eef83156fb2bdb6",
+          "source": "obj3-4.xpm"
+        },
+        {
+          "angle": "RIGHTDOWN",
+          "column": 7,
+          "micropolis_frame": 4,
+          "row": 0,
+          "sha256": "cef6672e3cf5c682d1688c7214956413522b20567e435819e1d4b992f193c676",
+          "source": "obj3-3.xpm"
+        },
+        {
+          "angle": "takeoff",
+          "column": null,
+          "micropolis_frame": 9,
+          "row": 1,
+          "sha256": "b19d3d6bca8770571626d0228eb8e7122a029298daabc0b2d3481233ce0bd92a",
+          "source": "obj3-8.xpm"
+        },
+        {
+          "angle": "takeoff",
+          "column": null,
+          "micropolis_frame": 10,
+          "row": 2,
+          "sha256": "cdd2220ce43bc71cd8fcbb2b3524d32b9dd75653cb2bf534888ed771f3165f85",
+          "source": "obj3-9.xpm"
+        },
+        {
+          "angle": "takeoff",
+          "column": null,
+          "micropolis_frame": 11,
+          "row": 3,
+          "sha256": "47ae3a8507d12e23845b5abbd23f6030a5ba218220332e9bd965cd7b0335c6f8",
+          "source": "obj3-10.xpm"
+        }
+      ],
+      "rows": 4,
+      "rows_meaning": [
+        "cruise headings",
+        "take-off frame 9",
+        "take-off frame 10",
+        "take-off frame 11"
+      ],
+      "sha256": "d2944d5b3922f261d01d95bc08e8b64f1100614f4bef6919bf40c0b890fad1be"
+    },
+    "city_helicopter.png": {
+      "cell": 32,
+      "columns": 8,
+      "frames": [
+        {
+          "angle": "RIGHT",
+          "column": 0,
+          "micropolis_frame": 3,
+          "row": 0,
+          "sha256": "d1235140d7e37fa2f18d2d45c33a290c434e418f49e35d74d779243bff8e4da9",
+          "source": "obj2-2.xpm"
+        },
+        {
+          "angle": "RIGHTUP",
+          "column": 1,
+          "micropolis_frame": 2,
+          "row": 0,
+          "sha256": "212d124267f074013742c06aa1d1b9c2cac1bf550a45e811bdac1eb92b66409c",
+          "source": "obj2-1.xpm"
+        },
+        {
+          "angle": "UP",
+          "column": 2,
+          "micropolis_frame": 1,
+          "row": 0,
+          "sha256": "a2c4054c3bcd2bae546033c5929680eb2a42db03b8ba67671bd19cc257f060d1",
+          "source": "obj2-0.xpm"
+        },
+        {
+          "angle": "LEFTUP",
+          "column": 3,
+          "micropolis_frame": 8,
+          "row": 0,
+          "sha256": "f4b75692d7f7cc723e88760a338fb76d8192f019c2aeadbd8a2010bd6d6a09f7",
+          "source": "obj2-7.xpm"
+        },
+        {
+          "angle": "LEFT",
+          "column": 4,
+          "micropolis_frame": 7,
+          "row": 0,
+          "sha256": "a3dec6088934b9a50083f6ee4f0b9ab982f189e0f2a3cca6c35ebaeb5ca3dd2f",
+          "source": "obj2-6.xpm"
+        },
+        {
+          "angle": "LEFTDOWN",
+          "column": 5,
+          "micropolis_frame": 6,
+          "row": 0,
+          "sha256": "69d5c84d680deb3c18695f692ecd35c5d29b76dcb7f85dced4f56e3523b9fb36",
+          "source": "obj2-5.xpm"
+        },
+        {
+          "angle": "DOWN",
+          "column": 6,
+          "micropolis_frame": 5,
+          "row": 0,
+          "sha256": "b681e08ca6f5c5d877c178a1284d2298033f69a49ac349e2bea78f0279461cd7",
+          "source": "obj2-4.xpm"
+        },
+        {
+          "angle": "RIGHTDOWN",
+          "column": 7,
+          "micropolis_frame": 4,
+          "row": 0,
+          "sha256": "73ed2c7e8407ce51a42cbd11711660fc4e4b1dd2eac331949caf70baa8020762",
+          "source": "obj2-3.xpm"
+        }
+      ],
+      "rows": 1,
+      "rows_meaning": [
+        "cruise headings"
+      ],
+      "sha256": "dc19dc273163f486fdb6d77dd88624839a4ddea49e44ed1eba6e9d23ea1544ee"
+    }
+  },
+  "source_directory": "micropolis-activity/images",
+  "source_repository": "https://github.com/SimHacker/micropolis",
+  "source_revision": "ccc346165564a2ceec86a588861d7e7c27911714"
+}

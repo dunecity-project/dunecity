@@ -21,7 +21,7 @@ private:
     Label sizeTitle;
     std::array<TextButton, 2> layoutChoices;
     std::array<TextButton, 2> aspectChoices;
-    std::array<TextButton, 4> choices;
+    std::array<TextButton, 5> choices;
     TextButton cancelButton;
     TextButton applyButton;
     int selectedHeight;

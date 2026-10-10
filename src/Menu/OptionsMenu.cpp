@@ -196,15 +196,8 @@ OptionsMenu::OptionsMenu() : MenuBase()
 
     int i = 0;
     for(const Coord& coord : availScreenRes) {
-        int factor = getLogicalToPhysicalResolutionFactor(coord.x, coord.y);
-#ifdef __ANDROID__
-        factor = 1;
-#endif
-        if(factor > 1) {
-            resolutionDropDownBox.addEntry(fmt::sprintf("%d x %d @ %dx", coord.x, coord.y, factor), i);
-        } else {
-            resolutionDropDownBox.addEntry(fmt::sprintf("%d x %d", coord.x, coord.y), i);
-        }
+        // Interface Size controls enlargement independently of resolution.
+        resolutionDropDownBox.addEntry(fmt::sprintf("%d x %d", coord.x, coord.y), i);
         if(
 #ifdef __ANDROID__
             coord.x == settings.video.width && coord.y == settings.video.interfaceHeight
@@ -316,11 +309,12 @@ OptionsMenu::OptionsMenu() : MenuBase()
 
     interfaceHBox.addWidget(Spacer::create(), 0.5);
     interfaceHBox.addWidget(optionLabel(_("Interface Size")), 190);
-    const char* sizes[] = {"Large", "Medium", "Small", "Automatic"};
-    const int heights[] = {480, 600, 768, 0};
-    for(int size = 0; size < 4; ++size) {
+    const char* sizes[] = {"Large", "Medium", "Small", "Automatic", "Native (1:1)"};
+    const int heights[] = {480, 600, 768, 0, INTERFACE_HEIGHT_NATIVE};
+    for(int size = 0; size < 5; ++size) {
 #ifdef __ANDROID__
-        if(size == 3) continue;
+        // Android needs a fixed logical interface across surface changes.
+        if(size >= 3) continue;
 #endif
         interfaceSizeDropDownBox.addEntry(_(sizes[size]), heights[size]);
         if(heights[size] == settings.video.interfaceHeight) interfaceSizeDropDownBox.setSelectedItem(size);
@@ -599,26 +593,34 @@ void OptionsMenu::onOptionsOK() {
         return;
     }
     
-#ifndef __ANDROID__
-    int factor = getLogicalToPhysicalResolutionFactor(settings.video.physicalWidth, settings.video.physicalHeight);
-    // Prevent division by zero and ensure minimum dimensions
-    if(factor <= 0) {
-        factor = 1;
-    }
-    settings.video.width = settings.video.physicalWidth / factor;
-    settings.video.height = settings.video.physicalHeight / factor;
-    
-    // Ensure minimum dimensions
-    if(settings.video.width < SCREEN_MIN_WIDTH) settings.video.width = SCREEN_MIN_WIDTH;
-    if(settings.video.height < SCREEN_MIN_HEIGHT) settings.video.height = SCREEN_MIN_HEIGHT;
-#endif
-
     settings.video.interfaceHeight = interfaceSizeDropDownBox.getSelectedEntryIntData();
+
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
     const bool widescreen = aspectDropDownBox.getSelectedEntryIntData() == 1;
 #ifdef __EMSCRIPTEN__
+    // The backing surface takes the chosen shape before the interface size is
+    // derived from it.
     settings.video.physicalWidth = interfaceWidthForHeight(settings.video.physicalHeight, widescreen);
 #endif
+#endif
+
+#ifndef __ANDROID__
+    // The interface size decides how much the chosen resolution is enlarged:
+    // Native keeps it 1:1, Automatic applies the enlargement factor, a preset
+    // takes the shape of the window. setVideoMode() derives the same size from
+    // what actually ends up on screen.
+    {
+        const SDL_Point logical = interfaceLogicalSize(settings.video.interfaceHeight,
+                                                       settings.video.physicalWidth,
+                                                       settings.video.physicalHeight);
+        settings.video.width = logical.x;
+        settings.video.height = logical.y;
+    }
+#endif
+
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    // A fixed preset keeps its exact 4:3 or 16:9 width on the platforms where
+    // the player chooses the screen shape.
     if(settings.video.interfaceHeight > 0) {
         settings.video.width = interfaceWidthForHeight(settings.video.interfaceHeight, widescreen);
         settings.video.height = settings.video.interfaceHeight;
@@ -844,18 +846,22 @@ void OptionsMenu::determineAvailableScreenResolutions() {
         return;
     }
     
-    // Fullscreen is always desktop-sized and a window cannot be larger than the
-    // desktop, so modes beyond it (e.g. the native pixel resolution of a Retina
-    // panel, which SDL lists next to the scaled modes) can never be used.
+    // Screen coordinates differ from backing pixels on Retina displays. A
+    // fitted window can render 1080p even on a 1440x900-point desktop.
     SDL_Rect displayBounds = {0, 0, 0, 0};
     const bool haveDisplayBounds = (SDL_GetDisplayBounds(displayIndex, &displayBounds) == 0
                                     && displayBounds.w > 0 && displayBounds.h > 0);
+    SDL_Point windowSize = {0, 0}, outputSize = {0, 0};
+    SDL_GetWindowSize(window, &windowSize.x, &windowSize.y);
+    if(renderer) SDL_GetRendererOutputSize(renderer, &outputSize.x, &outputSize.y);
+    const SDL_Point renderLimit = displayVideoResolutionLimit(
+        {displayBounds.w, displayBounds.h}, windowSize, outputSize);
 
     for(int i = numDisplayModes-1; i >=0; i--) {
         if(SDL_GetDisplayMode(displayIndex, i, &displayMode) == 0) {
             Coord screenRes(displayMode.w, displayMode.h);
             const bool fitsDisplay = !haveDisplayBounds
-                                     || (screenRes.x <= displayBounds.w && screenRes.y <= displayBounds.h);
+                                     || (screenRes.x <= renderLimit.x && screenRes.y <= renderLimit.y);
             if(fitsDisplay && screenRes.x >= SCREEN_MIN_WIDTH && screenRes.y >= SCREEN_MIN_HEIGHT) {
                 if(std::find(availScreenRes.begin(), availScreenRes.end(), screenRes) == availScreenRes.end()) {
                     // not yet in the list (might happen if e.g. multiple refresh rates are reported)
@@ -863,6 +869,20 @@ void OptionsMenu::determineAvailableScreenResolutions() {
                 }
             }
         }
+    }
+
+    // Display drivers need not enumerate every useful render size. Include
+    // common choices supported by the backing pixels, independently of OS modes.
+    if(haveDisplayBounds) {
+        for(const Coord size : {Coord(1280, 720), Coord(1600, 900), Coord(1920, 1080),
+                                Coord(2560, 1440)}) {
+            if(size.x <= renderLimit.x && size.y <= renderLimit.y
+               && std::find(availScreenRes.begin(), availScreenRes.end(), size) == availScreenRes.end())
+                availScreenRes.push_back(size);
+        }
+        std::sort(availScreenRes.begin(), availScreenRes.end(), [](const Coord& a, const Coord& b) {
+            return a.x < b.x || (a.x == b.x && a.y < b.y);
+        });
     }
 
     if(availScreenRes.empty()) {

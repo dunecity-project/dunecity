@@ -33,6 +33,11 @@ CommandManager::CommandManager() {
     pStream = nullptr;
     bReadOnly = false;
     networkCycleBuffer = 0;
+    // A fresh manager belongs to a fresh match: never inherit a suppression state or an
+    // emission timestamp from whatever ran before it.
+    emissionSchedule.reset();
+    directSchedule.reset();
+    localCommandRevision = 0;
 }
 
 CommandManager::~CommandManager() = default;
@@ -115,6 +120,12 @@ void CommandManager::load(InputStream& stream) {
                     "CommandManager: replay was not read to a clean end; %zu commands loaded",
                     loadedCommands);
     }
+
+    // A replay, savegame or checkpoint rebuild has just replaced the command history. The
+    // loaded commands were added before this game had a local player, so the revision above
+    // cannot be relied on to describe them; start the direct schedule from nothing so the
+    // first window after the rebuild always goes out.
+    directSchedule.reset();
 }
 
 void CommandManager::update() {
@@ -132,19 +143,32 @@ void CommandManager::update() {
     // the relay's 1 MiB slow-consumer guard. Pace it by wall time instead; the emitted window,
     // and therefore everything CommandValidation.h checks about it, is unchanged.
     //
-    // Direct P2P and ENet sessions emit once per iteration. Their command lead is sized
-    // for the peer path, without the extra 100ms batch delay. Applying relay pacing here
-    // can make the other peer exhaust that lead and slow the lockstep simulation.
+    // ENet emits once per iteration, and a direct peer emits on every change. Their command
+    // lead is sized for the peer path, without the extra 100ms batch delay: applying relay
+    // pacing to either can make the other peer exhaust that lead and slow the simulation.
+    const Uint32 windowStart = CommandEmissionSchedule::historyStartCycle(currentCycle);
     if(pNetworkManager->usesBatchedCommands()) {
         const Uint32 nowMs = SDL_GetTicks();
         if(!emissionSchedule.shouldEmit(nowMs, currentCycle)) {
             return;
         }
         emissionSchedule.noteEmission(nowMs, windowEnd);
+    } else if(pNetworkManager->isDirectSession()) {
+        // The caller is the cycle loop, which keeps turning while the simulation is held
+        // waiting for a peer's commands or paused. Every one of those turns would offer the
+        // identical window again, which is what drives an ordered data channel into its
+        // buffered and retained-job bounds until it refuses a send and the match ends.
+        // Emit the moment anything that can change the payload changes, and otherwise fall
+        // back to a bounded retransmission so a lost packet is still replaced.
+        const Uint32 nowMs = SDL_GetTicks();
+        if(!directSchedule.shouldEmit(nowMs, windowStart, windowEnd, localCommandRevision)) {
+            return;
+        }
+        directSchedule.noteEmission(nowMs, windowStart, windowEnd, localCommandRevision);
     }
 
     CommandList commandList;
-    for(Uint32 i = CommandEmissionSchedule::historyStartCycle(currentCycle); i < windowEnd; i++) {
+    for(Uint32 i = windowStart; i < windowEnd; i++) {
         std::vector<Command> commands;
 
         if(i < timeslot.size()) {
@@ -280,6 +304,14 @@ void CommandManager::addCommand(const Command& cmd, Uint32 CycleNumber) {
                             [](const Command& cmd1, const Command& cmd2) {
                                 return (cmd1.getPlayerID() < cmd2.getPlayerID());
                             });
+
+        // Only our own commands appear in what update() emits, so only they can change an
+        // otherwise unchanged direct window. This is the same predicate update() selects
+        // with, and it is checked here rather than in the caller because remote batches and
+        // the spectator stream reach this method too and must not force a send of ours.
+        if(pLocalPlayer != nullptr && cmd.getPlayerID() == pLocalPlayer->getPlayerID()) {
+            ++localCommandRevision;
+        }
 
         if(pStream != nullptr) {
             pStream->writeUint32(CycleNumber);

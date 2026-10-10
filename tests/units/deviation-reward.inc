@@ -18,6 +18,7 @@
 #include <units/Devastator.h>
 #include <units/Tank.h>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -84,6 +85,8 @@ struct DeviationProbe {
     void saveLoadProvenance();
     void devastator();
     void quantBotArming();
+    void killBonus();
+    void killBonusAcrossSave();
     void legacyLedger();
 };
 
@@ -178,7 +181,8 @@ void DeviationProbe::outgoing() {
     amount("outgoing_damage_milli", deviatorReward.damageMilli);
     note("outgoing", "value_credited_to_deviator_only");
 
-    // The killing blow adds exactly 20% of the target's price, on actual hit points only.
+    // The killing blow adds 20% of the target's price, on actual hit points only. This
+    // victim type has no combat record of its own, which is where the scale starts.
     const int64_t remaining = siege->getHealth().lround();
     hit(tank, captor, siege, int(remaining) + 5000);           // deliberate overkill
     require(siege->getHealth() <= 0, "The lethal fixture hit did not kill");
@@ -417,8 +421,8 @@ void DeviationProbe::devastator() {
         note("devastator", reload ? "saved_fuse_single_terminal_credit" : "self_blast_no_duplicate_credit");
         game.reset(); currentGame = nullptr;
     }
-    // 6a. A completed commanded detonation pays remaining value plus one 20% bonus, and its
-    //     blast pays the same Deviator.
+    // 6a. A completed commanded detonation pays remaining value plus one bonus - 20% for a
+    //     Devastator type with no record of its own - and its blast pays the same Deviator.
     {
         auto game = newGame(21);
         auto* captor = game->getHouse(HOUSE_ATREIDES);
@@ -635,7 +639,246 @@ void DeviationProbe::quantBotArming() {
 }
 
 // ---------------------------------------------------------------------------------------
-// 8. Legacy-save handling: one coherent reset, and old streams stay in sync.
+// 8. The killing-blow bonus scales with how well the destroyed enemy TYPE was doing.
+// ---------------------------------------------------------------------------------------
+void DeviationProbe::killBonus() {
+    // --- The policy on its own, with no engine involved.
+    require(CombatReward::typeBonusPermille(0,0,300)==CombatReward::kBaselineBonusPermille,
+            "A type with no record at all is not worth the former flat bonus");
+    require(CombatReward::typeBonusPermille(5000000,5000000,300)==CombatReward::kBaselineBonusPermille,
+            "Equal damage value and lost value is not worth the baseline");
+    // Earned two unit prices and lost nothing, or lost four and earned nothing. Both points are
+    // read off the documented rule rather than recomputed from the production helper.
+    require(CombatReward::typeBonusPermille(2*300*1000,0,300)==300,
+            "A type that earned half its prior again is not worth 30%");
+    require(CombatReward::typeBonusPermille(0,4*300*1000,300)==100,
+            "A type that lost its whole prior without earning is not worth 10%");
+    note("kill_bonus","cold_start_and_parity_keep_the_flat_bonus");
+
+    constexpr int64_t hugeLedger = std::numeric_limits<int64_t>::max();
+    int previous = 0;
+    for(const int64_t damage:{int64_t(0),int64_t(1),int64_t(300000),int64_t(1200000),
+                              int64_t(600000000),hugeLedger}) {
+        const int now = CombatReward::typeBonusPermille(damage,1200000,300);
+        require(now>=previous,"More damage from the destroyed type lowered its kill bonus");
+        previous = now;
+    }
+    previous = CombatReward::kMaxBonusPermille;
+    for(const int64_t loss:{int64_t(0),int64_t(1),int64_t(1200000),int64_t(600000000),hugeLedger}) {
+        const int now = CombatReward::typeBonusPermille(600000000,loss,300);
+        require(now<=previous,"More losses by the destroyed type raised its kill bonus");
+        previous = now;
+    }
+    note("kill_bonus","monotonic_in_damage_and_in_losses");
+
+    require(CombatReward::typeBonusPermille(hugeLedger,0,300)==CombatReward::kMaxBonusPermille
+            && CombatReward::typeBonusPermille(0,hugeLedger,300)==CombatReward::kMinBonusPermille,
+            "The 5-60% bound does not hold at the extremes of the ledger");
+    require(CombatReward::typeBonusPermille(hugeLedger,hugeLedger,
+                std::numeric_limits<int>::max())==CombatReward::kBaselineBonusPermille,
+            "Saturated evidence on both sides is not parity");
+    for(const int badPrice:{0,-1,std::numeric_limits<int>::min()})
+        require(CombatReward::typeBonusPermille(600000000,0,badPrice)
+                    ==CombatReward::kBaselineBonusPermille,
+                "An invalid price did not fall back to the flat bonus");
+    note("kill_bonus","bounded_at_5_and_60_percent_and_safe_at_int64_extremes");
+
+    // --- The same scale through the real engine, on actual killing blows.
+    auto game = newGame(51);
+    auto* captor = game->getHouse(HOUSE_ATREIDES);
+    auto* hostile = game->getHouse(HOUSE_HARKONNEN);
+    const int siegePrice = price(*game, Unit_SiegeTank, hostile->getHouseID());
+    require(siegePrice > 0, "The kill-bonus fixture has no priced victim type");
+    auto* gun = spawn(captor, Unit_Tank, Coord(10, 10));
+
+    // Only the victim type's own record with its own house is controlled.
+    auto seed = [&](int64_t damageMilli, int losses) {
+        hostile->combatRewards[Unit_SiegeTank] = CombatReward::Totals();
+        hostile->combatRewards[Unit_SiegeTank].damageMilli = damageMilli;
+        hostile->numItemLosses[Unit_SiegeTank] = losses;
+    };
+    auto killOne = [&](ObjectBase* shooter, House* beneficiary, Uint32 bucket, const Coord& where) {
+        const auto before = beneficiary->getCombatReward(bucket);
+        auto* victim = spawn(hostile, Unit_SiegeTank, where);
+        hit(shooter, beneficiary, victim, int(victim->getHealth().lround()) + 5000);
+        require(victim->getHealth() <= 0, "A kill-bonus fixture hit was not lethal");
+        return beneficiary->getCombatReward(bucket).killBonusMilli - before.killBonusMilli;
+    };
+
+    // --- The House-side lookup saturates rather than overflowing: an absurd loss
+    //     count at an absurd price still lands inside the documented bound.
+    for(const int extreme:{std::numeric_limits<int>::max(), 1000000}) {
+        hostile->combatRewards[Unit_SiegeTank] = CombatReward::Totals();
+        hostile->numItemLosses[Unit_SiegeTank] = extreme;
+        require(hostile->killBonusPermilleForOwnType(Unit_SiegeTank, extreme)
+                    == CombatReward::kMinBonusPermille,
+                "An absurd loss ledger did not saturate to the 5% bound");
+        hostile->combatRewards[Unit_SiegeTank].damageMilli = std::numeric_limits<int64_t>::max();
+        require(hostile->killBonusPermilleForOwnType(Unit_SiegeTank, extreme)
+                    >= CombatReward::kBaselineBonusPermille,
+                "A saturated damage ledger scored below the neutral bonus");
+    }
+    // Negative counters, an unpriced type, an out-of-range type and an unresolvable
+    // victim house all fall back to the flat bonus instead of scoring.
+    hostile->combatRewards[Unit_SiegeTank] = CombatReward::Totals();
+    hostile->numItemLosses[Unit_SiegeTank] = -5;
+    require(hostile->killBonusPermilleForOwnType(Unit_SiegeTank, 300)
+                == CombatReward::kBaselineBonusPermille
+            && hostile->killBonusPermilleForOwnType(Unit_SiegeTank, 0)
+                == CombatReward::kBaselineBonusPermille
+            && hostile->killBonusPermilleForOwnType(Num_ItemID, 300)
+                == CombatReward::kBaselineBonusPermille
+            && House::killBonusPermilleForVictim(Unit_SiegeTank, NUM_HOUSES, 300)
+                == CombatReward::kBaselineBonusPermille,
+            "The victim-type lookup did not fall back on invalid inputs");
+    note("kill_bonus","house_lookup_saturates_and_falls_back");
+
+    seed(0, 0);
+    require(killOne(gun, captor, Unit_Tank, Coord(14,10))
+                == int64_t(siegePrice)*CombatReward::kBaselineBonusPermille,
+            "An enemy type with no record did not pay the former flat 20% through the engine");
+    seed(int64_t(2)*siegePrice*1000, 0);
+    const int64_t proven = killOne(gun, captor, Unit_Tank, Coord(18,10));
+    require(proven == int64_t(siegePrice)*300,
+            "Destroying a proven enemy type did not raise the killing-blow bonus");
+    seed(0, 4);
+    const int64_t failing = killOne(gun, captor, Unit_Tank, Coord(22,10));
+    require(failing == int64_t(siegePrice)*100,
+            "Destroying a type that keeps dying without earning did not lower the bonus");
+    require(failing < int64_t(siegePrice)*CombatReward::kBaselineBonusPermille && failing < proven,
+            "The bonus is not ordered failing type < no record < proven type");
+    amount("kill_bonus_proven_type_milli", proven);
+    amount("kill_bonus_failing_type_milli", failing);
+
+    // A bonus is never an input to the next bonus: damage value is the only evidence.
+    seed(int64_t(2)*siegePrice*1000, 0);
+    hostile->combatRewards[Unit_SiegeTank].killBonusMilli = 900000000;
+    hostile->combatRewards[Unit_SiegeTank].conversionMilli = 900000000;
+    require(killOne(gun, captor, Unit_Tank, Coord(26,10)) == proven,
+            "Kill bonuses or the conversion estimate fed back into the next bonus");
+    note("kill_bonus","engine_lethal_bonus_follows_the_victim_types_own_record");
+
+    // Every existing exclusion still holds at a raised scale.
+    seed(int64_t(2)*siegePrice*1000, 0);
+    auto* wounded = spawn(hostile, Unit_SiegeTank, Coord(10,14));
+    auto snapshot = captor->getCombatReward(Unit_Tank);
+    hit(gun, captor, wounded, 20);
+    require(wounded->getHealth() > 0 && captor->getCombatReward(Unit_Tank).killBonusMilli
+                == snapshot.killBonusMilli,
+            "A surviving target paid a kill bonus");
+    snapshot = captor->getCombatReward(Unit_Tank);
+    hit(gun, captor, wounded, int(wounded->getHealth().lround()) + 5000);
+    require(captor->getCombatReward(Unit_Tank).killBonusMilli - snapshot.killBonusMilli == proven,
+            "The killing blow on an already wounded target paid a different scale");
+    snapshot = captor->getCombatReward(Unit_Tank);
+    hit(gun, captor, wounded, 400);
+    require(captor->getCombatReward(Unit_Tank).killBonusMilli == snapshot.killBonusMilli
+                && captor->getCombatReward(Unit_Tank).kills == snapshot.kills,
+            "A repeated hit on a dead unit paid the bonus a second time");
+    auto* friendlySiege = spawn(captor, Unit_SiegeTank, Coord(14,14));
+    snapshot = captor->getCombatReward(Unit_Tank);
+    hit(gun, captor, friendlySiege, int(friendlySiege->getHealth().lround()) + 5000);
+    require(friendlySiege->getHealth() <= 0, "The friendly-fire fixture target survived");
+    require(captor->getCombatReward(Unit_Tank).killBonusMilli == snapshot.killBonusMilli,
+            "Friendly fire paid a performance kill bonus");
+    note("kill_bonus","once_only_nonlethal_and_friendly_still_excluded");
+
+    // A borrowed shooter pays its captor's Deviator, but what it destroyed is still
+    // scored from the destroyed type's own owner. The captor's Deviator is given a
+    // far better record here, so reading the captor's score instead would show up.
+    auto* deviator = spawn(captor, Unit_Deviator, Coord(18,14));
+    auto* borrowed = spawn(hostile, Unit_Tank, Coord(22,14));
+    borrowed->deviate(captor, deviator->getObjectID());
+    captor->combatRewards[Unit_Deviator].damageMilli = 900000000;
+    captor->numItemLosses[Unit_Deviator] = 0;
+    seed(int64_t(2)*siegePrice*1000, 0);
+    require(killOne(borrowed, captor, Unit_Deviator, Coord(26,14)) == proven,
+            "A captured shooter scored its victim by a different record than an ordinary one");
+    note("kill_bonus","captured_shooter_uses_the_victims_own_type_record");
+
+    // The commanded completion reads exactly the record an ordinary lethal hit reads.
+    // Its own loss is booked when the engine removes it, after this credit, so a
+    // completion scored after that loss would land on a different number.
+    const int devPrice = price(*game, Unit_Devastator, hostile->getHouseID());
+    hostile->combatRewards[Unit_Devastator] = CombatReward::Totals();
+    hostile->combatRewards[Unit_Devastator].damageMilli = int64_t(2)*devPrice*1000;
+    hostile->numItemLosses[Unit_Devastator] = 0;
+    auto* dev = static_cast<Devastator*>(spawn(hostile, Unit_Devastator, Coord(10,18)));
+    dev->deviate(captor, deviator->getObjectID());
+    dev->setHealth(FixPoint(static_cast<int>(dev->getMaxHealth()))/4);
+    dev->doStartDevastate();
+    dev->devastateTimer = 1;
+    const int64_t terminalBefore = captor->getDeviationCounters().terminalKillBonusMilli;
+    dev->update();
+    require(captor->getDeviationCounters().terminalKillBonusMilli - terminalBefore
+                == int64_t(devPrice)*300,
+            "The commanded detonation did not score the Devastator's own type record");
+    amount("kill_bonus_commanded_detonation_milli",
+           captor->getDeviationCounters().terminalKillBonusMilli - terminalBefore);
+    note("kill_bonus","commanded_completion_matches_the_ordinary_lethal_scale");
+
+    // Losing a borrowed unit is still not a killing blow for its captor, at any scale.
+    seed(int64_t(2)*siegePrice*1000, 0);
+    auto* captive = spawn(hostile, Unit_SiegeTank, Coord(14,18));
+    captive->deviate(captor, deviator->getObjectID());
+    auto* enemyGun = spawn(hostile, Unit_Tank, Coord(22,18));
+    snapshot = captor->getCombatReward(Unit_Deviator);
+    hit(enemyGun, hostile, captive, int(captive->getHealth().lround()) + 5000);
+    require(captive->getHealth() <= 0, "The absorption fixture captive survived");
+    require(captor->getCombatReward(Unit_Deviator).killBonusMilli == snapshot.killBonusMilli,
+            "A captive's own death paid its captor a performance kill bonus");
+    require(hostile->getCombatReward(Unit_Tank).killBonusMilli > 0,
+            "The shooter that destroyed the captive earned no killing blow at all");
+    note("kill_bonus","absorbed_loss_still_pays_no_kill_bonus");
+    game.reset(); currentGame = nullptr;
+}
+
+// ---------------------------------------------------------------------------------------
+// 8a. The identical bonus survives a save and reload of the ledger it is read from.
+// ---------------------------------------------------------------------------------------
+void DeviationProbe::killBonusAcrossSave() {
+    int64_t results[2] = {0, 0};
+    for(int reload = 0; reload < 2; ++reload) {
+        auto game = newGame(52);
+        auto* captor = game->getHouse(HOUSE_ATREIDES);
+        auto* hostile = game->getHouse(HOUSE_HARKONNEN);
+        const int siegePrice = price(*game, Unit_SiegeTank, hostile->getHouseID());
+        // Evidence on both sides, so the expected bonus is neither bound nor the baseline.
+        hostile->combatRewards[Unit_SiegeTank] = CombatReward::Totals();
+        hostile->combatRewards[Unit_SiegeTank].damageMilli = int64_t(2)*siegePrice*1000;
+        hostile->numItemLosses[Unit_SiegeTank] = 1;
+        auto* gun = spawn(captor, Unit_Tank, Coord(10, 24));
+        const auto gunID = gun->getObjectID();
+
+        if(reload) {
+            const std::string path = outDir + "/kill-bonus-" + mod + ".dls";
+            require(game->saveGame(path), "Could not save the seeded victim-type ledger");
+            game.reset(); currentGame = nullptr;
+            game = std::make_unique<Game>(); currentGame = game.get();
+            game->initGame(GameInitSettings(path)); game->initializeGameLoop();
+            captor = game->getHouse(HOUSE_ATREIDES);
+            hostile = game->getHouse(HOUSE_HARKONNEN);
+            require(hostile->getCombatReward(Unit_SiegeTank).damageMilli
+                        == int64_t(2)*siegePrice*1000
+                    && hostile->getNumLostItems(Unit_SiegeTank) == 1,
+                    "The seeded victim-type record did not survive the save");
+            gun = dynamic_cast<UnitBase*>(game->getObjectManager().getObject(gunID));
+            require(gun != nullptr, "The reloaded fixture lost its shooter");
+        }
+        auto* victim = spawn(hostile, Unit_SiegeTank, Coord(16, 24));
+        hit(gun, captor, victim, int(victim->getHealth().lround()) + 5000);
+        require(victim->getHealth() <= 0, "The save fixture hit was not lethal");
+        results[reload] = captor->getCombatReward(Unit_Tank).killBonusMilli;
+        game.reset(); currentGame = nullptr;
+    }
+    require(results[0] > 0 && results[0] == results[1],
+            "A save and reload changed the performance bonus of the same killing blow");
+    amount("kill_bonus_across_save_milli", results[1]);
+    note("kill_bonus","save_load_pays_the_identical_bonus");
+}
+
+// ---------------------------------------------------------------------------------------
+// 9. Legacy-save handling: one coherent reset, and old streams stay in sync.
 // ---------------------------------------------------------------------------------------
 void DeviationProbe::legacyLedger() {
     auto game = newGame(41);
@@ -812,6 +1055,8 @@ void DeviationProbe::run() {
     saveLoadProvenance();
     devastator();
     quantBotArming();
+    killBonus();
+    killBonusAcrossSave();
     legacyLedger();
     decisions.close();
     detail.close();

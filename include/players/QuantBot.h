@@ -73,6 +73,31 @@ public:
 
     void update() override;
     void onHumanUnitOrder(Uint32 id);
+    /// Uses the existing human-order lease to distinguish AI orders in shared houses.
+    bool managesAutonomousOrnithopter(const UnitBase* unit) const;
+    /**
+        Offensive air hunts are a Hard and Brutal behaviour. Every other
+        autonomous difficulty may only answer an attack on
+        something this house owns, plus a strike on an enemy base building with
+        no observed anti-air over it. Keyed to the difficulty rather than the
+        INI flag, so a settings copy cannot re-enable the restriction.
+    */
+    bool autonomousAircraftRaids() const;
+    /**
+        Is this candidate a legal target for one of our autonomous aircraft?
+        Bounded lookups: the raid permission, what the air planner
+        authorized for this hull on its last pass, and the candidate's own
+        current target. Engine target searches, held targets and the shot
+        itself all consult this, so the restriction cannot be bypassed.
+    */
+    bool authorizesAircraftTarget(const UnitBase* aircraft, const ObjectBase* candidate) const;
+    /// Controller authority for autonomous launcher target searches.
+    bool managesAutonomousLauncherHunt(const UnitBase* unit) const;
+    /// Controller authority for autonomous rocket target searches: launchers and the
+    /// Troopers that answer aircraft with their own shorter-range SmallRocket. Used
+    /// only by the in-range aircraft candidate filter, which both need for the same
+    /// out-of-range release, not by launcher spacing or wave tracking.
+    bool managesAutonomousRocketHunt(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
@@ -85,6 +110,37 @@ public:
     /// Observational data for the compact end-of-match metaserver summary.
     /// It is not saved or consulted by simulation decisions.
     const std::array<int, 8>& getLastUnitMixBps() const { return lastUnitMixBps; }
+
+    /**
+        Read-only record of the allocation the last production pass actually used: the
+        same performance scores and the same intended army-value shares that produced
+        lastUnitMixBps, taken at that pass. Purely observational - nothing in the
+        simulation reads it, and a reader must never recompute learning from it.
+        Slot order is the production mix order: Tank, Siege Tank, Launcher, the
+        grouped special heavies, Ornithopter, Trike, Raider Trike, Quad.
+    */
+    struct AllocationSnapshot {
+        struct Slot {
+            Uint32 itemID = 0;       ///< Representative item of this mix slot.
+            int64_t score = 0;       ///< UnitMixPolicy::performanceScore() as used.
+            int targetBps = 0;       ///< Intended share of army value, basis points.
+            bool allocated = false;  ///< Producible in that pass; otherwise no target exists.
+        };
+        /// Slot 3 is the grouped special heavies (Devastator/Sonic Tank/Deviator):
+        /// one score and one share for the whole group, never per variant.
+        static constexpr size_t kSpecialGroupSlot = 3;
+        std::array<Slot, 8> slots{};
+        bool ready = false;          ///< A real production pass has filled this.
+        Uint32 cycle = 0;            ///< Game cycle of that pass.
+        bool learning = false;       ///< Scores came from the measured learning window.
+        int militaryValue = 0;       ///< Army value the shares were measured against.
+        /// Mobile anti-air share protected in that pass while a hostile wing was
+        /// observed, in basis points; zero when no floor was in force.
+        int antiAirFloorBps = 0;
+        /// Aggregate infantry admission quota, separate from the eight-slot mix.
+        int infantryQuotaBps = 0;
+    };
+    const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
     /// True when the lobby selected an explicit "Maximum Number of Units Override"
@@ -167,6 +223,19 @@ private:
     UnitMixPolicy::PerformanceHistory performanceHistory;
     std::set<Uint32> groundSquad;
     std::map<Uint32, Uint32> manualUnitOrders, defenceAssignments;
+    // Air difficulty policy, both transient: what the air planner authorized
+    // for each of our aircraft on its last pass, and the hostile ids last seen
+    // actually hitting a building or worker we own. Ordinary disk saves rebuild
+    // plans; the supplemental observer checkpoint preserves these permissions
+    // so a peer joining mid-sortie makes the same immediate targeting decisions.
+    std::map<Uint32, Uint32> aircraftTargetAuthority;
+    struct AssetContact { Uint32 cycle = 0; bool base = false; };
+    std::map<Uint32, AssetContact> assetAttackerContacts;
+    /// A contact that is itself attacking a live asset of ours, or hit one
+    /// within the grace below. The grace is what stops a reload being read as
+    /// the end of an attack.
+    bool aircraftDefenceTarget(const ObjectBase* candidate) const;
+    static constexpr int kAircraftDefenceGraceMs = 3000;
     void launchGroundHunt();
     CampaignDifficultyPolicy::Wave campaignWave;
     std::set<Uint32> scriptedAssaults;
@@ -212,6 +281,9 @@ private:
     Uint32 lastCityBuildingSnapshotCycle = 0;
     uint64_t telemetryState = 0; // Runtime only; never part of save/simulation state.
     std::array<int, 8> lastUnitMixBps{};
+    /// Written once per production pass beside lastUnitMixBps, read only by the
+    /// observational Stats UI and the supplemental observer runtime.
+    AllocationSnapshot allocationSnapshot{};
     // Diagnostic de-duplication only. These must never affect a game decision,
     // save, or lockstep state.
     std::map<Uint32, uint64_t> lastKiteTrace;
@@ -266,6 +338,15 @@ private:
     /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
     /// deliberately independent of the optional recovery policy.
     bool wholeArmyBaseDefence() const;
+    /// Is this an autonomous Custom Hard/Brutal controller? No campaign, no
+    /// support/helper house. The shared scope of the whole-army behaviours and of
+    /// the mobile anti-air floor.
+    bool autonomousCustomHardBrutal() const;
+    /// Count of hostile Ornithopters this house can actually see right now:
+    /// alive, active and visible to our team. No fog cheating, and no sticky
+    /// "was once attacked from the air" flag - the demand disappears with the
+    /// aircraft. One bounded pass, used only where the unit mix is recomputed.
+    int visibleHostileAircraft() const;
     /// Is \a contact right now shooting at a building we own? A live hostile
     /// attacker, our structure as its target, and inside weapon range of it. A dead,
     /// stopped, friendly or merely nearby enemy is not.

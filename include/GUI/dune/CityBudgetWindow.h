@@ -41,6 +41,11 @@ public:
     void onPoliceIncrease();
     void onPoliceDecrease();
     void onConfirm();
+    /// Browse to the next house in the match. Observers only; a participant
+    /// stays on their own house whatever invokes this.
+    void onNextHouse();
+    /// True while this window is a read-only view of a house that is not ours.
+    bool isReadOnly() const;
 
     static CityBudgetWindow* create() {
         CityBudgetWindow* dlg = new CityBudgetWindow();
@@ -57,6 +62,10 @@ private:
     VBox forecastVBox, statusVBox;
     VBox mainVBox;
     Label titleLabel;
+
+    HBox houseHBox;
+    Label houseLabel;
+    TextButton nextHouseButton;
 
     HBox summaryHBox;
     Label yearLabel;
@@ -101,6 +110,9 @@ private:
 
     int pendingPolicePercent = 100;
     int pendingTaxRate = 7;
+    /// Which house this window is showing. Window state only: it never changes
+    /// pLocalHouse, pLocalPlayer or any control identity.
+    int selectedHouseID = 0;
 };
 
 #endif // CITYBUDGETWINDOW_H

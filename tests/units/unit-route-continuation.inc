@@ -8,6 +8,7 @@
 #include <units/GroundUnit.h>
 #include <units/InfantryBase.h>
 #include <units/Harvester.h>
+#include <units/HarvesterHelpers.h>
 #include <units/Ornithopter.h>
 #include <units/TankBase.h>
 #include <fstream>
@@ -145,5 +146,6 @@ int runUnitSpeedProbe() {
     SDL_Log("UNIT_SPEED_PROBE_PASS: %s saved routes",mod.c_str());
     game.reset();currentGame=nullptr;
     runHuntReachabilityProbe(mod);
+    runTargetSearchWorkloadProbe(mod);
     return -1;
 }

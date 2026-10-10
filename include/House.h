@@ -116,6 +116,18 @@ public:
     inline Sint32 getNumItemDamageInflicted(int itemID) const { return numItemDamageInflicted[itemID]; }
     const CombatReward::Totals& getCombatReward(int itemID) const { return combatRewards[itemID]; }
     void addCombatReward(Uint32 itemID, const CombatReward::Totals& reward);
+    /// Scale of the learning bonus for destroying one of this house's units of \a itemID,
+    /// read from this house's own measured record with that type. O(1), no scan.
+    int killBonusPermilleForOwnType(int itemID, int price) const;
+    /**
+        The single lookup both killing-blow paths use - the ordinary lethal hit and the
+        commanded Devastator completion - so the two can never disagree about one type.
+        \a itemID and \a originalHouseID are the victim's natural type and natural owner,
+        which is also how its price is keyed: a captured victim is therefore scored by the
+        record of the house whose unit it really is, never by its captor's Deviator.
+        Falls back to the flat baseline when that house or type cannot be resolved.
+    */
+    static int killBonusPermilleForVictim(int itemID, Sint32 originalHouseID, int price);
     AITelemetry::Record combatRewardStats(const ObjectData& objectData) const;
     /// Measured Deviator contribution totals. Deterministic simulation state, always maintained.
     const DeviationReward::HouseCounters& getDeviationCounters() const { return deviationCounters; }

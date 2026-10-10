@@ -21,6 +21,7 @@ target_sources(dunelegacy_tests
         MapCatalogueTestCase.cpp
         CityTrafficPolicyTestCase.cpp
         CitySpritePolicyTestCase.cpp
+        CityAircraftPolicyTestCase.cpp
         RendererSizeTestCase.cpp
         CursorAppearanceTestCase.cpp
         GasDeviationPolicyTestCase.cpp
@@ -442,7 +443,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         add_test(NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
-        set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
+        set_tests_properties(retina_resolution_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         add_test(NAME game_command_regressions COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-command-execution-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/command-probe)
@@ -493,6 +498,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # long-stall rescue can be measured against the engine instead of being simulated:
         # the clock survives a queued path request and a route cleared every cycle, and the
         # rescue books exactly one free owned carrier and delivers to the unit's own goal.
+        # The Micropolis city aircraft against the real engine: the Airport's
+        # doAirport launch odds and per-house singleton, the helicopter's
+        # traffic patrol and bounded friendly-only reporting, the airplane's
+        # original take-off and off-map ending, hostile anti-air destroying
+        # both with no tile/unit/count leak, and an exact save continuation.
+        add_test(NAME city_aircraft_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-city-aircraft-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-aircraft-probe)
+        set_tests_properties(city_aircraft_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         add_test(NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
@@ -567,6 +581,23 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Read-only Stats window, observer house browsing and the sidebar squeeze,
+        # on a real renderer at the smallest supported interface height and at
+        # native 1080. Both sizes capture screenshots into their output directory.
+        foreach(ui_viewport IN ITEMS 640x480 1920x1080)
+            add_test(NAME stats_ui_${ui_viewport} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
+                --viewport ${ui_viewport} --level 9 --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/stats-ui-${ui_viewport}-probe)
+            set_tests_properties(stats_ui_${ui_viewport} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
+        # The same window without a city economy: tax and population must read
+        # N/A rather than a fabricated zero, and Stats must still be reachable.
+        add_test(NAME stats_ui_vanilla COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-ui-probe --repeatable
+            --viewport 1024x768 --level 9 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/stats-ui-vanilla-probe)
+        set_tests_properties(stats_ui_vanilla PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             add_test(NAME quantbot_opening-economy_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --opening-economy-probe --repeatable

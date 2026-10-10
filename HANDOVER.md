@@ -1,3 +1,728 @@
+## 2026-10-10 — 1.0.829 candidate: Retina HD resolution and release balance gate
+
+The MBA reported a 1440x900-point window backed by 2880x1800 pixels. Settings
+filtered video modes against desktop points, hiding 1920x1080; startup also
+replaced a larger selection with clamped window dimensions. Settings now uses
+the backing-pixel capacity and adds supported standard render choices. The
+selected resolution remains saved while a separate presentation window fits
+usable bounds with the original aspect ratio. Native can render 1920x1080 on
+Retina, including after Apply, reopening Settings and fullscreen transitions.
+Existing smaller fullscreen choices retain the desktop-sized interface.
+Android/browser selection paths and simulation/AI code are unchanged.
+
+The dedicated real-menu Retina CTest passed with the captured MBA metrics. It
+checks the actual Settings entry, Apply/video reinitialization, saved resolution,
+reopened selection, fitted window, input mapping and fullscreen return. A new
+layout case covers backing pixels and aspect-preserving window fitting.
+Native build and both dependency audits passed. The final native suite passed
+79/80 initially; the sole failure was the menu harness's cumulative 120-second
+per-resolution deadline. A complete progressing menu run passed in 298 seconds.
+The harness now permits 420 seconds per size and 1380 seconds overall; the
+focused complete retry passed all three sizes in 745 seconds. Together all 80
+registered checks are clear. Candidate Windows, Linux, Emscripten, macOS and
+signaling/relay CI passed for the display implementation.
+
+The subscription Claude worker completed 14 bounded real games (13 correctly
+configured for their intended coverage) across Vanilla, Dune2R, Dune City,
+campaign, four difficulties and different map sizes, plus three matched public
+1.0.820 baselines. All captures ended cleanly; no crashes, no harvester targets
+among 20,815 aircraft strikes and no Easy/Medium offensive unit hunts were
+observed. The dense-city Hard pair shifts air killing-blow share from 15.1% to
+56.7%, matching the requested new capability; air remains costly (301/316 lost,
+credit ROI 1.54), launchers increase from 207 to 308, rocket turrets connect,
+ground hunts remain 16 in both and all four city economies remain healthy.
+Root accepts the bounded matrix for release. This does not certify every human
+match or establish air-only Trooper efficacy. Simulation/AI source is byte
+identical to the tested private 1.0.828 revision.
+
+The actual public WASM observer joined a native 1.0.829 match on the isolated
+preview. Its Stats house selector and simulation progressed from cycle 1700 to
+3900 through a deliberate outage of only the preview signaling endpoint.
+The initial exact-mod failure was a test-fixture omission: its pin() does not
+queue content publication. Sharing the verified exact native snapshot with the
+isolated service resolved it; no shipping source/security change was needed.
+Normal public browser/browser lobby play passed MCV deployment, movement orders,
+Windtrap production/placement and clean exit. Public browser Settings, resize to
+854x480, fullscreen at 1920x1080, input alignment and reload passed. Final
+candidate CI 38032613540 and PR CI 38032607433 passed at source 2a4bd0f7.
+Private 1.0.829 was installed on the closed MBA at 18:25 AEDT, independently
+verifying all 3619 bundle entries, a retained 1.0.828 backup, 3197 profile hashes
+and 34734 metadata entries unchanged, signature, runtime and desktop shortcut.
+This is a private candidate installation, not a signed stable publication.
+
+Production is held for an actual browser/native promotion failure. Checkpoint
+transfer and initial lockstep play work, then a direct send is rejected and the
+browser returns to MainMenu. The three-native promotion control passed on the
+same isolated public service with matching digests. A single-native/browser
+case preserves the browser error: the direct connection to Host could not take
+more game messages. Private numeric SDK diagnostics establish that an open, healthy data channel
+hit its 128 retained-job cap (1,400,714 buffered bytes, no backend error). The
+cycle loop repeatedly emitted identical command windows while waiting. A
+bounded DirectP2P schedule now sends advancing windows and accepted local
+command changes immediately and retries unchanged windows every 100ms, with
+reset/clock-wrap handling. Queue, ingress, command lead and protocol bounds are
+preserved. The native rebuild, dependency audits and 996 core cases passed
+(three optional skips). Two real local native promotion runs matched state at
+cycle 1800. A rebuilt public browser rerun and the broader native suite are
+pending.
+The native browser-promotion fixture now fails on terminal network game quit
+instead of continuing its manual update loop; native digests alone cannot
+certify browser handoff. No failed run has a browser-observed pass marker. Draft PR93 remains
+unmerged; no stable tag, SourceForge or production site/browser release exists.
+Evidence: ../outputs/balance-production-828-20261010/.
+
+## 2026-10-10 — private 1.0.828: Stats performance multipliers and Active counts
+
+Stats displayed QuantBot's internal fixed-point production score as a raw
+integer. It now shows the familiar xN.N multiplier, rounded to one decimal:
+2631248 -> x2.6 and 1347286 -> x1.3. The footer names the multiplier and omits
+the implementation scale. The unit table also gains an Active column using
+current registered per-type House counters (including repair/transport passengers).
+Ambient Airplane, Ambient Helicopter, Rocket Trike and Elite Launcher rows are
+excluded as requested, even when their counters are nonzero. The cached bounded
+in-memory ledger remains, with no world scan or SQLite query in rendering.
+The existing real-renderer allocation fixture checks
+the scaled text and its column width. Scores, allocation, simulation, protocol67
+and save9853 are unchanged. The complete827 AI/Stats/maps/display changes are
+retained. The delegated native build and Ninja dependency audits passed. All
+three real-renderer Stats CTests passed at 640x480, native 1920x1080 and vanilla,
+including Active refresh, disabled types, exclusions, paging and house browsing.
+Codex independently reviewed the patch and both resolution screenshots.
+The portable bundle passed its CTest rendering check, signature and dependency
+audits; its compiled code and strings match the native app. Installed on MBA
+at 16:15 AEDT from source 3e723fa715d69aab1e3e6aaea3ca4344d7cc3d77. A separate
+readback verified all 3656 app entries, the previous 1.0.827 backup, 3122 hashed
+profile files and all 33862 profile metadata entries unchanged. Desktop shortcut,
+installed signature and installed runtime initialization/rendering passed.
+Backup: /Applications/.dunecity-backup-before-1.0.828-20261010-161453/dunecity.app.
+Evidence: ../outputs/stats-performance-multiplier-828-20261010/.
+
+## 2026-10-10 — local 1.0.827: aircraft difficulty, house Stats and community maps
+
+QuantBot offensive Ornithopter unit hunts now belong to Hard and Brutal. Easy
+and Medium intercept enemies attacking a live owned building or harvester,
+including a three-second grace after a confirmed hit. Their opportunistic raids
+are limited to enemy base structures whose footprint and direct approach have
+no observed anti-air coverage. Rocket turrets use their actual triple air reach;
+Launcher/EliteLauncher/Deviator and rocket infantry are included. A large wing
+cannot override this strict lower-difficulty raid check. Hard/Brutal retain the
+existing local wing-versus-launcher policy and launcher-first engagements.
+The AI harvester-target exclusion and human-order leases remain enforced.
+
+The planner, generic target searches, held targets and the shot itself share the
+same policy. Unit permissions require a current attack/contact rather than a
+stale cached order; structure permissions are rebuilt each planner pass. There
+are no per-hull world scans. Observer checkpoints preserve both new decision
+maps. The policy applies to autonomous QuantBot, including campaign air waves;
+legacy controllers keep their separate planners. See docs/quantbot-aircraft-policy.md.
+
+The sidebar now has Stats and compact spacing. A separate House summary shows
+cumulative units produced, raw delivered/refined spice, gross tax receipts and
+that house's current city population. The existing refinery statistic is gross
+income, so the window divides by the house's fixed income multiplier to recover
+raw spice. A five-times-income fixture verifies this distinction. Vanilla tax
+and population are N/A. The unit table shows attacker-type credited kills,
+losses and actual removed HP, with paging. Nothing reads SQLite or scans the
+world in rendering; the unit ledger refresh is a bounded array walk once per
+second while the window is open.
+
+QuantBot exposes its actual production score and final target army-value share
+from the same build pass, with separate Type/Performance/Goal % columns. Special
+heavies have one grouped slot; the actual aggregate infantry cap is separate.
+Unavailable types show dashes. Ordinary loads await the next production pass;
+the supplemental observer checkpoint carries the display snapshot immediately.
+See docs/house-stats.md for exact counter and score meanings.
+
+Observers can use Next house in Stats and Budget, with names and deterministic
+wrapping through all match houses. Participant views stay on their own house.
+Spectator budget controls are hidden/disabled and callbacks cannot emit fiscal
+commands. An open read-only budget follows live funding/tax changes. House
+browsing never changes the local house/player identity. Dialogs now draw once
+after the game HUD so power/spice bars, credits and Spectating text cannot cover
+their contents at the small viewport.
+
+Save 9853 and telemetry 18 are unchanged. Network protocol is 67, supplemental
+observer runtime is 8, AI policy is ornithopter-difficulty-observer-unit-stats-v95.
+The combined candidate includes the already verified 1.0.826 victim-performance
+kill bonus, Trooper/WOR anti-air production and Native 1:1 display fix.
+
+The additional user-linked multiplayer-map task e1d30029 is integrated as six
+exact data blobs, with no unrelated 1.0.820 source/version changes. Maps are
+Reacciona rapido forro (128x128, six slots, Dune2R, v1), Alto mapa HD (512x512,
+six slots, Dune2R, v1, Cyn), and La guerra dei ricchi (448x448, eight declared
+slots, Vanilla, v2, Masterbube). Authored starting layouts are unchanged:
+Reacciona Player5 has neither yard nor MCV; La guerra has seven starting yards.
+Workshop sidecars retain canonical mod names/versions and attribution without
+private cached hash requirements. The map task's native one-minute load checks
+and provenance are retained under ../outputs/metaserver-maps-20261010/; this
+combined build independently verifies original hashes and bundled bytes.
+
+A subscription-authenticated bounded Claude worker implemented aircraft and UI
+changes. Codex independently reviewed and integrated stricter target-permission
+expiry, observer continuity, raw-spice/live-budget corrections, readable score
+columns and HUD/dialog drawing order. Strengthened real-renderer fixtures pass
+at 640x480, actual native 1920x1080 and vanilla 1024x768. They exercise real
+production availability and measured scores, five-times-income raw spice,
+ordinary House counter serialization, observer snapshot roundtrips, house
+cycling and callback command guards. The 1080 fixture uses a hidden real SDL
+window and bypasses the desktop-fit clamp only in the private test executable,
+so a headless host's smaller desktop cannot silently turn the case into 768p.
+
+Acceptance: the full 79-test run completed with 76 passing and three stale
+supplemental-runtime version expectations failing. A focused Claude repair
+updated only those three fixtures from 7 to 8, added version-then-cycle header
+checks and retained the transport/army state assertions; all three pass in the
+targeted rerun. All production inputs and compiled text/strings match the full
+run. Final map rebuild, dependency audits and both map tests pass; all six map
+and sidecar blobs match the bundled originals. Portable runtime CTest and
+strict/deep signing checks pass.
+
+Codex also updated the older suspended-path network fixture's runtime pin from
+6 to 8 (queue/path prefix unchanged). The first extra native city transfer hit
+its five-second progress assertion while portable checks ran concurrently. An
+isolated fresh-profile retry passes: host and viewer transfer identical runtime
+bytes with four suspended path jobs, catch up and match cycle-1800 state,
+then the host continues to cycle1900 after spectator departure. The failed
+first timing run remains in the evidence; no production assertion was relaxed.
+
+Private MBA installation and independent readback completed 2026-10-10
+15:40 AEDT (04:40:26 UTC), source b7339043f7c42fd839a749bb5a52950ac6972b5a.
+Installed /Applications/dunecity.app, Desktop shortcut unchanged. All3656
+bundle entries match the portable candidate; deep/strict signature and runtime
+initialization pass. Installed binary SHA256:
+9b4fb787c03e85b45faf7f8c12937891ecc244c0bbcca01c4e45c1e0e0a1de53.
+Retained verified826 backup:
+/Applications/.dunecity-backup-before-1.0.827-20261010-154016/dunecity.app.
+All3052 profile files hashed and33001 file/symlink metadata entries remained
+unchanged across installation and fresh verification. The game was closed;
+no unsaved game was killed. Archive SHA256:
+54d3134145fa0e943e5d53072a535cd33e06424f4ceaa83cd9b821e957d63e46.
+The receipt and independent summary are under the installation evidence folder.
+Evidence and private install scripts:
+../outputs/ornithopter-difficulty-827-20261010/.
+No public push/tag/CI release is requested. Long-game FPS and full-match win-rate
+effects are not claimed by the focused fixtures.
+
+## 2026-10-10 — local 1.0.826: victim performance, Trooper air defence and native display size
+
+Killing blows now sample the destroyed natural unit type's damage value and
+losses under its original house. A four-unit price prior keeps an untested type
+at the former 20% bonus; successful types raise it towards 60% and unsuccessful
+types lower it towards 5%. Damage excludes earlier completion bonuses and
+conversion estimates. The calculation is bounded portable integer arithmetic
+and a constant-time ledger lookup on hostile lethal unit hits. Attribution of
+captured attackers and commanded Devastator completion remains once-only;
+friendly, surviving and already-dead targets receive no completion bonus. No
+cash or weapon damage changes. See docs/quantbot-combat-value.md.
+
+Autonomous Custom Hard/Brutal city bots may now found a WOR and produce rocket
+Troopers while hostile aircraft are observed. Troopers supplement the existing
+20% Launcher value floor within the ordinary aggregate infantry quota (Hard
+12%, Brutal 10%), including every queued and newly accepted order. Content and
+structure prerequisites, technology, ground-unit limits, opening workers,
+current cash and protected city/economic funds govern admission. Foundation
+packages preserve those funds too. Orders stop when the observed air threat
+ends. Rocket infantry in HUNT ignore aircraft beyond their exact weapon range,
+preventing the same target-release stall repaired for Launchers in 1.0.825.
+Manual orders/leases, support controllers, campaigns and Easy/Medium bounds
+are covered. Troopers retain their existing five-tile SmallRocket; Launchers
+retain their nine-tile Rocket, spacing and wave tracking.
+
+The user-requested native display fix from ab90e02a is included: nine isolated
+source/test/config paths match that commit exactly. Display and Settings offer
+Native 1:1, restoring 1920x1080 logical rendering with 16-pixel tiles at world
+Zoom 1x. Existing presets keep their meanings and Android keeps its fixed
+interface policy. Retina retains screen-coordinate sizing with a denser backing
+surface. This combined candidate keeps the 1.0.825 gameplay and launcher fixes,
+rather than using the display task's separate main-1.0.820 build.
+
+Save version 9853 and deviation reward ledger 1 are unchanged. Deterministic
+reward/AI changes require network protocol 66. Telemetry 18 records bonus policy
+2 (baseline/min/max 200/50/600 permille, four-unit prior); AI policy is
+victim-performance-kill-bonus-trooper-aa-v94.
+
+Subscription-authenticated bounded Claude workers implemented and tested the
+AI and display patches. Codex reviewed and integrated them, tightened final
+quota/queue/prerequisite/foundation funding guards, and independently rebuilt
+the combined app and tests. Nine combined real-renderer cases pass, including
+Display/Settings persistence and reinitialization, 1080p at 1x/2x world zoom,
+720p/VGA and a hidden Retina window. VGA menu and 1080p game readbacks were
+visually checked. The portable app passes deep/strict ad-hoc signature and
+bundled SDL hidden-window startup/rendering checks.
+
+Full combined CTest passes 76/76 in 1063 seconds. Final reward fixtures record
+48 passing checks per ruleset. Trooper defence removes Ornithopter HP with a
+SmallRocket. Troop production fixtures cover invisible/no air, aggregate quota,
+cash and authority limits; WOR admission covers missing troop prerequisites. The WOR-founding fixture
+reaches the rule by granting its real prerequisites and narrowing the yard
+offers; it does not prove every city reaches that point in a full match.
+Installed on Stefan@Stefans-MacBook-Air.local at 2026-10-10T01:33:54.213622+00:00, from
+source commit 810fa05edfdb2ee1f3be623fef42298e2dea393a.
+Installed /Applications/dunecity.app binary SHA-256:
+da9d2b4752501d54860a863d9f8cfe4646bcf982a43616ccffc5bc833c0f7c9c.
+Independent read-back confirms all 3650 bundle entries, strict/deep signature,
+bundled SDL initialization/hidden-window rendering, the Desktop shortcut and
+unchanged profile hashes (2982 files) plus full metadata
+(32141 entries). Previous 1.0.825 app retained at:
+/Applications/.dunecity-backup-before-1.0.826-20261010-123342/dunecity.app.
+The MBA initially slept during tests; a network wake attempt restored reachability
+before installation. A temporary idle-sleep assertion covered the transfer.
+Choose Display -> Native 1:1 and Zoom 1x for unzoomed play; existing user display
+preferences were preserved.
+
+Acceptance evidence, source review, Claude reports and installation scripts:
+../outputs/performance-kill-bonus-trooper-aa-826-20261010/.
+No public push/tag/CI deployment is requested. Full-match win-rate and long-game
+FPS effects are not claimed by the focused fixtures.
+
+## 2026-10-10 — local 1.0.825: launcher wave progress and observed-air production floor
+
+The user's exact `whatswrong.dls` save (SHA-256
+`e7dafe0f9d2d7a28466f13d2600a9cc23940b2537d9a1e97f7c90bc6aead09d8`)
+loads cycle 154917 of MBA 1.0.824 Twin Cities session `1791547021917585-0`,
+seed 1125867810, 256x256, Harkonnen and Mercenary Brutal bots. Read-only
+capture and isolated real-engine replays preserve the original save/profile.
+The completed capture imports 106,625 events into SQLite, quick-check OK,
+cutoff 254694, with one `game_summary` and `session_end` (user quit).
+The houses eventually built 442 and 480 launchers; the whole match was not
+launcher-starved. At the earlier reported point their learned launcher value
+shares were 1081 and 1361 basis points, versus 3327 and 3799 for Ornithopters.
+Wave telemetry confirms launchers were already dispatched, including 17 new
+and 10 already hunting Harkonnen launchers at cycle 107350.
+
+The exact-save baseline proves a target-search stall: 61 Harkonnen wave
+launchers stayed fully stationary and targetless through 1875 cycles (30
+seconds), despite being in HUNT, without defense assignments or home holds.
+Launcher 294 selects Ornithopter 3049 at 79 tiles while its weapon range is
+nine. The engine immediately releases that unreachable aircraft, re-pins its
+destination and clears the search cooldown, repeating indefinitely.
+Autonomous Custom Hard/Brutal Launcher and EliteLauncher Hunt searches now
+exclude aircraft outside the exact engine weapon range, keeping in-range AA
+and reachable ground candidates. Lookup of controller authority happens once
+per relevant search, not for every ordinary candidate. Human orders/leases,
+Easy/Medium, support houses, campaigns and other controllers retain their
+previous target behavior, independently asserted on the saved launcher.
+
+Tracked launchers retain wave membership during a live defense assignment
+and return to HUNT when the contact ends. An idle tracked launcher whose
+engine Hunt ended can rejoin its existing visible, explored, unfogged,
+reachable ground front. These transitions preserve manual orders, repair,
+retreat/recovery, local withdrawal and active defense. They do not recruit
+undispatched home reserves. The final 1.0.825 replay moves all the same 61
+stalled IDs at least five tiles, with no slow (at most two net tiles) wave
+launchers on either side. Mean movement over all launchers rises from
+1.68 to 20.55 Harkonnen tiles and 12.74 to 19.72 Mercenary tiles. This is a
+bounded exact-save progress result, not a full-match win-rate or FPS claim.
+
+Damage-based learning has no explicit mobile-AA role minimum. While active
+hostile Ornithopters are visible, autonomous Custom Hard/Brutal production
+now protects a 2000-basis-point launcher value share, funded proportionally
+from the same total budget. Existing upper caps remain intact. A living,
+active factory must actually be able to build launchers; historical producer
+availability alone cannot activate the floor. With no observed air threat the
+original learned allocation applies. Visibility is counted once at mix
+recomputation. Telemetry records demand, real production availability and
+before/after allocation. Twenty percent is a tactical heuristic.
+
+Claude performed the bounded exact-save investigation and initial patch in
+subscription-authenticated session `83d91d3c-ffb8-4ad1-89f3-c51a1cd98d39`.
+Codex narrowed controller authority and exact-range semantics, corrected the
+real-producer boundary, added wave handoffs and strengthened real-engine
+production tests. Three-mod fixtures causally switch a real heavy-factory
+order from Tank to Launcher when visible air makes the floor bind; ended
+contact and idle-front rejoin tests preserve manual/recovery/home-reserve
+boundaries. The 1.0.824 worker exclusions, target-search optimizations and
+per-building air-rescue cap remain in place.
+
+Full native verification: all 76 CTests pass across the final full run and
+focused rerun. The 1024.18-second full run passed 75; its sole failure was
+the test-only wire-version constant still pinned to 64 while production was
+65. Correcting that constant rebuilt only the test binary; the game executable
+remained byte-identical. `ctest --rerun-failed` passes the remaining test in
+1.57 seconds. No gameplay check failed or was skipped as a workaround.
+Pre/post Ninja dependency audits and diff checks pass. Native and portable
+ARM64 code/string sections match; portable deep/strict signatures and bundled
+SDL initialization/rendering pass. Protocol 64 -> 65; policy
+`launcher-wave-progress-visible-aa-floor-v93`; save version remains 9853.
+No new RNG, serialized fields or object layouts. Save replay at the new app
+version uses its exact cached Workshop revision
+`c562af59913f777a4b3026e1f101490d32074f2c8566a2109aef7373d78fb241`;
+a metadata-only profile copy otherwise opens the Workshop download dialog.
+Evidence: `../outputs/launcher-live-824-20261009/`; private bundle and receipts:
+`../outputs/launcher-install-825-20261009/`. Nothing pushed or published.
+
+Local candidate verification completed from code commit
+`8540ddf686cc4b0870ebbca2bd621644e398e28b`. The portable app contains
+3,650 files/symlinks, matches all 3,515 native resources and 72 scenarios,
+and passes deep/strict signatures and bundled SDL rendering. Native SHA-256:
+`06a0ba127b3d9f635d49a774cb8be2f5bcf970cc56b94cec98454119392399dd`;
+portable SHA-256:
+`51e2aaaf75a6560e9b6a5c60ee6a3c8332783b5a6f7e0604bd5f506ea804ec39`.
+
+MBA installation and independent read-back completed on
+2026-10-10T10:38:37.533634+11:00 (Australia/Sydney). `/Applications/dunecity.app`
+contains the exact audited 1.0.825 bundle from code commit
+`8540ddf686cc4b0870ebbca2bd621644e398e28b`, with all 3,650 files/symlinks verified.
+The installed binary matches portable SHA-256 above. Deep/strict signatures,
+bundled SDL initialization and hidden-window rendering pass. The Desktop
+shortcut resolves to the installed app. All 2,911 selected save/settings/map/replay
+and configuration hashes, plus all 31,280 profile file/symlink metadata entries,
+remain unchanged. The previous byte-identical 1.0.824 bundle is retained at
+`/Applications/.dunecity-backup-before-1.0.825-20261010-103827/dunecity.app`;
+older backups remain. Receipt and fresh read-back summary are in
+`../outputs/launcher-install-825-20261009/`. The earlier SSH timeout blocker
+is resolved; no public release or push occurred.
+
+Removed 127 owned generated probe apps (1,443,700,598 bytes), preserving
+logs, injected sources, isolated profiles, the exact save, SQLite, the canonical
+native app and portable candidate. Cleanup receipt and final test/evidence
+manifests remain alongside the investigation outputs.
+
+## 2026-10-09 — local 1.0.824: target-search cost, worker veto and launcher rescue cap
+
+The completed MBA 1.0.823 Twin Cities match `1791540101576215-0`
+(seed 640734567, 256x256, cutoff 165339) imports 56,570 events into SQLite,
+quick-check OK, with one `game_summary` and `session_end`. It ended by user
+quit. There were 3,981 harvester strike decisions, not confirmed kills.
+A native sample attributed 1,436 of 3,357 main-thread samples (42.8%) to
+`UnitBase::targeting -> ObjectBase::findTarget`. The latest 145.695 seconds
+of performance windows attributed 53.66% of wall time to `frame.units`,
+versus 0.70% to `ai.ornithopter_safe_strikes` (worst pass 2.59 ms).
+
+All three shared target searches now visit ordered ring perimeters directly;
+the old loops traversed every ring's square and discarded its interior.
+Codex's old/new oracle matches exact traversal order in 1,548 cases through
+radius 128, including clipped rectangular boundaries. A 64-ring walk drops
+from 349,504 square-loop checks to 16,129 perimeter positions. The real-engine
+empty 128x128 Hunt probe performs 68,993 visits versus a closed-form old-loop
+count of 2,839,839 (41.2x fewer). A failed refresh while retaining a distant
+target now waits one second instead of repeating every simulation cycle:
+2 searches over the probe's 60 cycles instead of 60. Air-strike approach checks
+only run when a candidate can change the winner, and launcher score/range
+lookups are computed once per planner pass. Synchronous per-search Ornithopter
+file logging is removed. These are workload results, not a live FPS claim.
+
+Enemy Harvester and RebelHarvester units are excluded from autonomous air
+selection at every rank, engine reacquisition, retained orders and firing.
+Explicit human orders retain authority. In shared HumanPlayer/QuantBot houses,
+the existing saved human-order lease distinguishes manual orders from stale
+forced AI orders; the latter are released before any shot without waiting for
+the planner. No object layout, save format or RNG changes.
+
+Launchers were eligible for ground waves already. The final match recorded
+11 Harkonnen waves and one Atreides wave; Atreides remained in recovery until
+cycle 162904 and dispatched 229 units at 163704. Live air-defense assignments
+keep launchers out of an offensive wave. The rescue cap incorrectly applied
+three travelling responders per aircraft rather than per attacked building,
+so a wing could monopolize launchers. The cap now counts across contacts,
+including existing journeys before processing new contacts. Existing rescue
+orders stay stable; defenders already able to fire remain available for local
+AA fire. Launchers rejoin a wave after death or break-off ends their contact.
+Ground-wave logs now report launcher dispatch, availability, defense holds,
+already hunting and unavailable counts. Air-rescue logs expose the building's
+travelling-defender count and cap.
+
+| Property | Enforcement | Verification |
+| --- | --- | --- |
+| Search cost and target ties remain bounded | Ordered ring visitor; failed-search cooldown | Exact-order oracle; dense 64x64 hunter/prey and empty-map workload probes in three mods |
+| AI aircraft do not attack workers | Planner/search filters plus execution guard using human leases | All flight modes; 900 cycles with stale orders; explicit human damage |
+| One building does not claim a wing's worth of launchers | Shared victim cap, pre-counted continuing journeys | Two-aircraft cap; lower-ID arriving contact regression; preserved assignments |
+| Available launchers go with attack waves | Existing whole-army dispatch; ended-defense release | Launcher dispatch and death/break-off handoff probes |
+
+Claude implemented the bounded patch. Codex's independent shared-house worker
+and newly arriving rescue-contact regressions both failed on the initial patch,
+then passed after integration corrections. Pre/post Ninja dependency audits,
+version consistency and diff checks pass. The native and portable ARM64 game
+code/string sections match, and each runtime's initialization/rendering passes.
+All 76 final native CTests pass in 1020.71 seconds, including the three-mod
+worker veto, target-search workload, recovery, whole-army dispatch and launcher
+kiting checks. MBA installation and independent read-back verified.
+Protocol advances 63 -> 64 for changed synchronized decisions; policy is
+`ornithopter-worker-veto-target-search-v92`. Save version remains 9853.
+Evidence: `../outputs/ornithopter-perf-824-20261009/`; private bundle/receipts:
+`../outputs/ornithopter-install-824-20261009/`. Nothing pushed or published.
+
+MBA installation completed at 2026-10-09T11:18:24.970473+00:00 from code commit
+`476d7493598a4796128ba7ea852da95f048464fa`. The fresh portable candidate and installed app
+match all 3,650 files/symlinks; 3,515 native resource files and
+72 bundled scenarios match. Deep/strict signatures and bundled SDL rendering
+passed locally, staged, installed and through a fresh independent SSH read-back.
+Installed executable SHA-256:
+`59e76ad09adbabb7a85e0b76823a8b626fc86e5d92b9029c27e6df09e633c326`.
+The byte-identical previous 1.0.823 app is retained at
+`/Applications/.dunecity-backup-before-1.0.824-20261009-221814/dunecity.app`;
+the older 1.0.822 backup is also retained. The Desktop shortcut resolves to
+`/Applications/dunecity.app`. All 2,840 selected save/settings/map/replay and
+configuration file hashes, plus all 30,419 profile file/symlink metadata
+entries, remain unchanged. Bulk telemetry is covered by metadata comparison.
+Removed 211 duplicate generated probe apps (2,445,212,670 bytes), retaining
+logs, probe sources, the canonical native app, portable candidates and receipts.
+The earlier live JSONL snapshot was an exact prefix of the completed capture;
+its prefix hash/length and SQLite were retained before removing that duplicate.
+
+## 2026-10-09 — local 1.0.823: Ornithopter unit raids and launcher priority
+
+The ended MBA Twin Cities session `1791533979427273-0` (seed 391527621,
+1.0.822, cutoff cycle 185043) was copied read-only and imported into SQLite:
+68,543 records, integrity check OK, one final game summary and session end.
+It logged 1,196 `no_safe_target_or_approach` holds and 3,636 strikes. All tank
+strikes were defensive; the source assigned roaming ground units rank zero
+and treated mobile launcher coverage as an unconditional raid veto.
+
+QuantBot now admits visible enemy ground units as offensive targets. A local
+wing within 14 tiles of the issuing aircraft can enter launcher coverage with
+at least four effective aircraft per overlapping Launcher/EliteLauncher.
+Both the target footprint and every sampled approach point must satisfy the
+ratio. Nearby launcher escorts take priority over their ground prey, including
+an already-held emergency interception with offensive raids disabled. After
+the launcher dies, ordinary ground targeting resumes. Base emergencies still
+outrank remote worker rescues, and live launcher interceptions remain stable.
+Rocket turret and Deviator cover retain the existing avoidance for ordinary
+raids; the existing emergency-defense exception still permits rescue through AA.
+
+The shared coverage map stores full integer overlap counts; more than 255
+launchers cannot silently reduce the required wing. Local force counts exclude
+human orders, retreating, inactive, dead, unrespondable and badly damaged
+planes, and campaign aircraft outside the authorized wave. Damaged aircraft
+still perform emergency defense. Human Ornithopter HUNT, other AI controllers,
+RNG and save layout are unchanged. Four-to-one is a chosen tactical heuristic;
+the probes do not establish a full-match win rate.
+
+| Property | Enforcement | Verification |
+| --- | --- | --- |
+| Exposed enemy units can be attacked | Ground raid rank and per-aircraft reachability | Engine flight closes distance and damages a tank; infantry selection |
+| Launcher escorts precede ground prey | Engagement-scoped launcher substitution after held-target selection | Arrival/death and held-emergency tests; disabled offensive setting |
+| Local advantage is required across the route | Indexed eligible wing, counted coverage, footprint and approach checks | 3/4 vs one, 7/8 vs two, crossed overlap, 300-launcher count boundary |
+| Human authority and defense remain intact | Aircraft ownership/control guards and emergency ranks | Manual orders, wing exclusions, damaged-air defense and base-over-field checks |
+
+Codex independently added the held-emergency regression, which failed on the
+initial worker patch with `A held emergency target or disabled raids suppressed
+launcher escort priority`, then passed after the correction. Claude's separate
+old-object/new-probe comparison is not used as an exact-source baseline.
+Final 1.0.823 app build, version consistency, deep/strict local signature,
+pre/post Ninja dependency audits and diff checks pass. All 76 native CTest targets pass in 995.91 seconds, including the final
+Ornithopter engine probes in Vanilla, DuneCity and Dune2R.
+Protocol advances 62 -> 63 for synchronized AI decisions; telemetry policy is
+`ornithopter-local-launcher-priority-v91`, with local wing/cover and escort fields.
+Save version remains 9853. Nothing pushed or publicly published.
+The rebuilt app is `build/bin/dunecity.app` in this checkout. Evidence and the
+bounded Claude reports are in `../outputs/ornithopter-ai-20261009/`.
+Duplicate worker probe apps were removed after retaining their logs (98 MB).
+
+MBA installation completed at 2026-10-09 09:39:41 UTC from implementation
+commit `b59f07f9c579cb795c0d11ec5aaf98f99d165b77`. A fresh CMake install made
+the portable ARM64 app; all 36 Mach-O dependency sets use portable/system
+paths. The native and packaged executable code/string sections match, all
+3,515 native resource files match the package, and original aircraft art and
+72 bundled scenarios match source. Deep/strict signatures and bundled SDL
+initialization/hidden rendering passed locally, staged, installed and through
+an independent fresh SSH read-back on `Stefans-MacBook-Air.local`.
+All 3,650 installed files/symlinks match the candidate. Installed executable
+SHA-256: `ba33262e388666cebd4cc65387a0ba70e4a0bdbd7375fcbee64d0cd223935264`.
+The installer retained the byte-identical 1.0.822 app at
+`/Applications/.dunecity-backup-before-1.0.823-20261009-203934/dunecity.app`.
+The Desktop shortcut resolves to `/Applications/dunecity.app`. All 2,770
+save/settings/map/replay and configuration files selected by the receipt's
+suffix list have unchanged hashes, and all 29,559 profile file/symlink entries
+have unchanged metadata. Bulk telemetry uses the metadata comparison rather
+than a full 30 GB content hash. No running game was interrupted; runtime
+checks bypass the user profile. Receipts, package, Claude's bounded read-only
+installer audit and independent verification belong in
+`../outputs/ornithopter-install-823-20261009/`. Protocol 63 requires matching
+multiplayer peers; this installation did not publish a public release.
+
+## 2026-10-09 — local 1.0.822: airplane map exits
+
+The airplane's outside waypoints were rejected by the ordinary
+`ObjectBase::setDestination` map-tile validator. Its 6,000-sprite-tick timer
+then deleted it over the city. In isolated natural-flight replays with seeds
+1815979822 (the MBA BigCityLife seed) and 7, 7/10 flights on 192x192 BigCityLife
+and 9/10 on 384x384 Colonist expired inside. The smaller 51x31 fixture's ten
+flights crossed the boundary, which hid the larger-map failure.
+
+`AmbientAirplane::setFlightDestination` now retains outside coordinates for
+this aircraft alone, moving the engine's -1 sentinel one tile farther outside.
+Takeoff and westbound starts also use it. Budget expiry stops random retargeting
+and begins a deterministic outward departure, keeping an outside waypoint or
+choosing the nearest edge. Normal retirement happens only after the plane's
+centre crosses the map boundary. Original art, speeds, 11-10-9 takeoff, turning
+clock, Airport odds/cap/power, helicopter reports and hostile anti-air remain.
+The user explicitly chose original takeoff and exit only; there are no plane
+arrivals or landings.
+
+Version 1.0.822 is set through `scripts/bump-version.sh` in all three canonical
+files. Protocol 61 -> 62 and its wire test pin advance together because routes,
+retirement and subsequent Airport RNG draws changed. Save remains 9853: the
+plane still writes exactly two ints after AirUnit, with departure represented
+by zero remaining ticks and the inherited outside destination. Older aircraft
+saves keep their layout. Production main f8e99541 (1.0.820) remains an ancestor;
+current origin/main and live build.json still confirm that baseline. This is a
+local build, with no public release or CI claim.
+
+Verification: all 76 native CTest targets pass, with a fresh native app and
+pre/post Ninja dependency audits. Catch has 983 passing cases and three opt-in skips, with 10,237,675 assertions;
+real-engine city_aircraft_probe retains the original motion/art/traffic/combat
+checks and adds 400 retained waypoint draws, negative/sentinel corners,
+unchanged ground validation, actual movement through four edges, departure
+from the city interior, tile/spatial/unit/house cleanup, and 300 identical frames
+following an outside departure waypoint after reload. A diagnostic-only recorder
+at leaveMap, immediately before destruction, independently confirms all 20
+natural flights on BigCityLife/Colonist retire beyond the actual world bounds;
+two Colonist flights exhausted their budgets before flying out. These are
+isolated Airport flights on the source maps, not a full AI-match replay.
+An existing 1.0.817 aircraft save loads as 9853 with takeoff frame 10 and
+budget 5,991 intact, then steps 300 frames. Its exact immutable mod revision
+was copied from the old fixture into an isolated profile and resolved offline;
+no save bytes or mod identity were changed.
+Evidence: `../outputs/city-aircraft-flight-fix-20261009/`, especially
+`before-summary.json` and `exact-retirement-review/verified-retirements.json`.
+
+The bounded Claude worker implemented the repair and tests and reached its
+time budget after the complete passing native suite. Codex reviewed the patch
+and independently completed the full-flight and older-save checks. The portable
+1.0.822 app passes deep/strict signatures and hidden SDL rendering locally and
+in the MBA staging folder with its bundled SDL2/SDL3 runtime. Its 1.0.821 game
+closed before installation; no game was interrupted. Installation staging
+and receipts belong in `../outputs/city-aircraft-install-822-20261009/`.
+
+MBA installation completed at 2026-10-09 05:50 UTC from source commit
+`e257433b786e65efe347635cbef7a21e65b56984` on
+`feature/micropolis-city-aircraft-822`. All 3,650 bundle files/symlinks,
+36 portable Mach-O dependency sets, original aircraft assets and 72 bundled
+scenario files (including previews) match the candidate/source. Local, staged
+and installed hidden rendering checks and deep/strict signatures pass. Binary
+SHA256 is `6851d777a76ada926d220c17ab579cbd0db02d865e82f6fbbb9477e290ca63db`. The 1.0.821 app is retained at
+`/Applications/.dunecity-backup-before-1.0.822-20261009-165055/dunecity.app` on the MBA; its version/hash are independently verified. The Desktop
+shortcut still resolves to `/Applications/dunecity.app`. All 2,624 current user
+save/settings/map files match before/after installation hashes. No running
+game or user profile was used for smoke testing. Full receipt and independent
+readback are in `verified-install-summary.json` beside the install logs.
+
+## 2026-10-09 — local 1.0.821: Micropolis city aircraft on production 1.0.820
+
+The reviewed city-aircraft feature (branch base 4b69d0eb / local 1.0.817) was
+carried onto production main f8e99541 (1.0.820) for a local MBA installation.
+Nothing newer was downgraded: QuantBot's civic/economy priority work (protocol
+58, 59, 60), offline and crossplay spectator observation, the eleven bundled
+single-player scenarios with their sidecars, and the map chooser/scenario-export
+tests all stay as main shipped them.
+
+Version is 1.0.821 in all three source files, set with
+`scripts/bump-version.sh 1.0.821` and verified with its `--check` command.
+Multiplayer protocol is renumbered **60 → 61**: main had already spent 58, 59
+and 60 on QuantBot decisions, so the aircraft entry became 61 and both wire pins
+(`include/Network/NetworkPacketTypes.h`, `tests/NetworkManagerTestCase`) moved
+together. The protocol reason is unchanged — the Airport draws the original
+doAirport odds from the shared simulation RNG, so a peer on 60 consumes a
+different number of RNG values on the same cycle and flies the old placeholder
+motion. Save format stays **9853** (the aircraft block) over main's 9852; the
+9852 history and its loader gate are intact and older saves still load.
+
+Merge resolutions were limited to the six conflicts: the three version files,
+the two protocol pins, and this file. `src/Game.cpp`, `src/structures/Airport.cpp`
+and `tests/CMakeLists.txt` auto-merged with both sides preserved and needed no
+integration edit: Airport keeps main's spectator-safe `mayShowOwnerInterface()`
+interface gate *and* the feature's `updateCityAircraft()` launch; Game.cpp keeps
+all of main's observation work *and* the removal of the old map-wide ambient
+spawn loop; the test lists carry main's `map_chooser_tests`, scenario-export and
+bundled-startup tests alongside `CityAircraftPolicyTestCase` and
+`city_aircraft_probe`. No aircraft source, asset or test file was modified, and
+no balance value changed.
+
+`docs/city-aircraft.md` is updated to 1.0.821 and protocol 61. Note for whoever
+picks this up next: `docs/dunecity-current-architecture.md`, which AGENTS.md and
+CLAUDE.md both list as a first read, does not exist in this tree.
+
+Validation: Ninja dependency audits pass before and after
+`cmake --build build --parallel 10`, which links a fresh
+`build/bin/dunecity.app` reporting 1.0.821. `dunelegacy_tests` passes 982 of
+985 cases (three opt-in skips) with 10,235,501 assertions, including the
+renumbered wire pin, SaveCompat 9853 and `CityAircraftPolicyTestCase`. The
+real-engine `city_aircraft_probe` passes: art at every zoom and house, the 16
+heading vectors, sparse owned congestion, per-house singleton with two
+airports, the unpowered airport, eight bounded owned-only traffic reports with
+no foreign-city report, the original 11-10-9 take-off and off-map ending plus
+the eastern-edge westbound variant, hostile anti-air killing both with no tile,
+unit-list or house-count leak, and 300 bit-identical frames after reloading a
+mid-take-off save. Seven current-main regressions pass on the merged tree:
+`local_spectator_probe`, `local_spectator_ordinary_round_trip`,
+`local_spectator_setup_probe`, `quantbot_growth_installments`,
+`quantbot_civic_priority`, `quantbot_no_spice_income_dunecity` and
+`quantbot_no_spice_income_low-cash`. Logs: `../outputs/city-aircraft-install-821-20261009/`
+and `build/city-aircraft-probe/`.
+
+Codex independently checked the live production `play/build.json`: 1.0.820,
+source 8ed2e69cc6e3165d7bed7afbbd3057cf8a3e0276. The integration differs from
+main only in the intended 30 aircraft, version and documentation paths; newer
+QuantBot, spectator and bundled scenario files match main. The bounded Claude
+worker completed the integration and native checks; Codex ran the version
+script and reviewed the merge. Source commit is
+`0f617c6c3e42c982ff703eea4598ef5494d6cfbe` on
+`feature/micropolis-city-aircraft-821`; production main f8e99541 is an ancestor.
+This is a private local build; public release notes still describe production
+1.0.820.
+
+MBA installation completed at 2026-10-09 04:25 UTC. The portable app was made
+with the existing CMake install flow, which bundles dependencies and signs the
+app. All 36 Mach-O files have portable/system dependency paths; original
+aircraft assets and all 46 bundled scenario/sidecar files match source.
+Local, staged-MBA and installed-MBA hidden rendering checks pass with every
+loaded SDL library inside the app; deep/strict signatures pass. The installed
+binary SHA256 is
+`711f3242f502c22a4f6e247daaa9a330d44e34ec4b0b78adf9355000161e6c4a`.
+The existing `~/Desktop/DuneCity.app` shortcut still resolves to
+`/Applications/dunecity.app`. The previous 1.0.819 app is retained at
+`/Applications/.dunecity-backup-before-1.0.821-20261009-152459/dunecity.app`.
+No running game was interrupted. All 2,556 user save, settings and map files
+match their initial and final hashes. Existing aircraft speed overrides remain
+12.8 (plane) and 9.6 (helicopter); shipped original-motion defaults are 10.24
+and 6.4. Other custom unit settings are also retained. Installation receipts,
+portable audit and logs are in `../outputs/city-aircraft-install-821-20261009/`.
+
+The original feature-branch note is kept verbatim underneath as source history;
+its protocol 58 pin is what this integration renumbered to 61.
+
+## 2026-10-09 — local 1.0.817 Micropolis city aircraft (feature-branch source note)
+
+The city Airport now launches the original Micropolis helicopter and airplane.
+All 19 original XPM frames are retained pixel for pixel, re-packed for the eight
+DuneCity headings and three plane takeoff rows. The helicopter patrols owned
+roads, seeks saturated traffic and reports the original heavy-traffic message
+with a cooldown before returning home. The plane uses the original takeoff,
+turning and destination rules and flies off the map. Both are civilian air units
+that real enemy anti-air can damage and destroy. Original diagonal speeds are
+preserved within the engine's fixed-point precision. One of each per owning
+house; alive, powered city airports launch them. No generic combat rules changed.
+
+Codex review fixed sparse-road sampling across traffic-cell coordinate parity,
+the visible takeoff row immediately after loading, inclusive upstream random
+bounds (plane 1/6, helicopter 1/13 conditional), portable pinned art provenance,
+and preservation of the complete upstream notices and GPL text. The unnecessary
+Tornie ObjectData change was removed to preserve its sealed mod payload.
+Save format is 9853 and multiplayer protocol 58; older peers are incompatible.
+Details and regeneration commands: docs/city-aircraft.md.
+
+Validation: fresh native app and pre/post Ninja dependency audits pass. The
+983-case Catch suite passes (three opt-in cases remain skipped). The real-engine
+city_aircraft_probe passes the 16 heading vectors, sparse congestion, operational
+and unpowered airports, per-house cap, owned-only bounded reports, takeoff and
+exit, real projectile kills and cleanup, and 300 identical frames after reloading
+a mid-takeoff save. Both original boundary failures were reproduced independently
+and pass after repair. Normal moving aircraft can be killed by actual hostile
+projectiles in both DuneCity and Dune2R; some planes escape with damage. All 19
+source frames / 40 atlas cells and all bundled art/provenance/license bytes match.
+The broad 60-target CTest run initially passed 56; its four Tornie-related failures
+were repaired and passed individually, including menus at 640/854/1280 and weapon
+reloads. Final focused checks pass. Browser/platform CI and publication were not
+requested or performed.
+
+Branch: feature/micropolis-city-aircraft, based on origin/main 4b69d0eb. Source and
+fresh app: ../dunecity-city-aircraft/build/bin/dunecity.app. Evidence is outside the
+checkout in ../outputs/city-aircraft-20261009. Claude's bounded subscription worker
+implemented the bulk of the change and hit its one-hour limit; Codex completed
+review, corrections and integration. A gitignored platform/web/node_modules
+symlink reuses the pinned SDK from dunecity-performance for this local build.
+
 ## 2026-10-09 — 1.0.820 published to production
 
 PR 91 merged as 8ed2e69cc6e3165d7bed7afbbd3057cf8a3e0276 and immutable

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 60;
+static constexpr int kWireProtocolVersion = 67;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -52,9 +52,16 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // track index and rotates ground units differently from the same cycle.
     // 58 gives depleted-map city income priority over optional technology.
     // 60 changes required civic priority and prerequisite construction orders.
+    // 61 launches the Micropolis city aircraft from the Airport with the
+    // original doAirport odds, drawn from the shared simulation RNG, and flies
+    // them on the original sprite clock. A 60 peer draws a different number of
+    // RNG values on the same cycle and keeps a different fleet, so the two
+    // diverge immediately.
     // Different AI movement decisions cannot share lockstep with older peers.
     REQUIRE(NETWORK_PROTOCOL_VERSION == kWireProtocolVersion);
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 60);
+    // 67 restricts autonomous aircraft by difficulty and carries those sortie
+    // permissions and asset-attack contacts in observer runtime version8.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 67);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

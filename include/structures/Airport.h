@@ -26,6 +26,8 @@ public:
 private:
     DuneCity::AirPatrolCycle patrol{getMaxSpawnTimer()};
     void init();
+    /// Micropolis doAirport(): launch the city airplane or traffic helicopter.
+    void updateCityAircraft();
     void updateStructureSpecificStuff() override;
 };
 
