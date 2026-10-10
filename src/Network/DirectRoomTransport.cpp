@@ -1115,6 +1115,34 @@ bool DirectRoomTransport::sendGamePayload(const std::uint8_t* payload, std::size
         const Peer* peer = findPeer(peerId);
         const std::string name = peer != nullptr && !peer->name.empty()
                                      ? peer->name : std::string("another player");
+        // A refused send ends the match, and the sentence below reads the same for every
+        // cause: the backend returns a bare false whether it was at its buffered bound, had
+        // closed, or rejected the frame. Buffered bytes separate those. Local state and a
+        // fixed category only - never SDP, credentials or any remote string.
+        if(const Link* dropped = findLink(peerId)) {
+            std::string detail;
+            if(dropped->connected && dropped->connection) {
+                detail = dropped->connection->lastError();
+            }
+            const char* category = !dropped->connected ? "not_connected"
+                                   : detail.empty() ? "no_backend_reason" : "backend_error";
+            if(dropped->connected && !detail.empty()) {
+                for(const auto* known : {"ICE", "ice", "fingerprint", "queue", "backlog",
+                                         "channel", "WebRTC"}) {
+                    if(detail.find(known) != std::string::npos) { category = known; break; }
+                }
+            }
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                "Direct send refused: state=%d connected=%d buffered=%zu envelope=%zu channel=%d "
+                "directed=%d match_started=%d local_spectator=%d remote_spectator=%d "
+                "refusals=%u cause=%s",
+                dropped->connection ? static_cast<int>(dropped->connection->state()) : -1,
+                dropped->connected ? 1 : 0,
+                dropped->connection ? dropped->connection->bufferedAmount() : std::size_t{0},
+                envelope.size(), channel, recipient != 0 ? 1 : 0, matchStarted_ ? 1 : 0,
+                localSpectator_ ? 1 : 0, peer != nullptr && peer->spectator ? 1 : 0,
+                static_cast<unsigned>(dropped->refusals), category);
+        }
         dropLink(peerId, "The direct connection to " + name
                              + " could not take any more of the game's messages.");
     }

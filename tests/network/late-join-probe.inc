@@ -279,6 +279,10 @@ int runLateJoinProbe() {
         }
         const Uint32 target=std::getenv("JOIN_BROWSER") ? 30000 : (checkDeparture && !newcomer && std::filesystem::exists(out+"/Newcomer-left") ? verifyCycle+100 : verifyCycle);
         const bool waiting=game->handleNetworkUpdates();
+        // Browser admission needs the shipping client's continued participation. Do not
+        // let this manually driven native loop ignore a terminal session and certify it.
+        if(browserPromotion && game->bQuitGame && !network.lateJoinReady())
+            throw std::runtime_error("browser promotion ended the network game before verification");
         // Only the transfer stages: Ready is also lateJoinPaused(), and closes the modal
         // again before the rebuild. doInput() refuses events for anything but join progress
         // while a transfer runs, so any other modal here would be stuck and then destroyed

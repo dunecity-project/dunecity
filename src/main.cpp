@@ -163,8 +163,9 @@ static void clampWindowedSizeToDisplay(int displayIndex, int& width, int& height
     if(SDL_GetDisplayUsableBounds(displayIndex, &usableBounds) != 0 || usableBounds.w <= 0 || usableBounds.h <= 0) {
         return;
     }
-    width = std::min(width, usableBounds.w);
-    height = std::min(height, usableBounds.h);
+    const SDL_Point fitted = fitVideoWindow({width, height}, {usableBounds.w, usableBounds.h});
+    width = fitted.x;
+    height = fitted.y;
 }
 
 void setVideoMode(int displayIndex)
@@ -221,27 +222,24 @@ void setVideoMode(int displayIndex)
     // The game never switches the display mode: fullscreen means
     // SDL_WINDOW_FULLSCREEN_DESKTOP, which covers the desktop at whatever
     // resolution it currently has, and a window may have any size. So the
-    // requested physical size is used as-is; the only adjustment is keeping a
-    // window inside the usable desktop area. Older versions snapped the request
+    // requested size remains the render choice; its presentation window is fitted
+    // inside the usable desktop area. Older versions snapped the request
     // to SDL's "closest display mode" here, which on Retina Macs turned
     // 1280x800 into 1920x1200 (SDL only considers low-density modes as
     // candidates), so changing the windowed resolution never took effect.
     settings.video.physicalWidth = std::max(settings.video.physicalWidth, SCREEN_MIN_WIDTH);
     settings.video.physicalHeight = std::max(settings.video.physicalHeight, SCREEN_MIN_HEIGHT);
-    if(!settings.video.fullscreen) {
-        clampWindowedSizeToDisplay(displayIndex, settings.video.physicalWidth, settings.video.physicalHeight);
-    }
 
     {
-        // Derive the logical (interface) size from what actually ends up on
-        // screen: for a fullscreen-desktop window that is the desktop, not the
-        // saved windowed size.
+        // Keep an HD render choice even when its presentation window is smaller.
+        // For ordinary fullscreen choices retain the existing desktop-sized UI.
         presentedWidth = settings.video.physicalWidth;
         presentedHeight = settings.video.physicalHeight;
         SDL_DisplayMode desktopDisplayMode;
         if(settings.video.fullscreen
            && SDL_GetDesktopDisplayMode(displayIndex, &desktopDisplayMode) == 0
-           && desktopDisplayMode.w > 0 && desktopDisplayMode.h > 0) {
+           && desktopDisplayMode.w > 0 && desktopDisplayMode.h > 0
+           && presentedWidth <= desktopDisplayMode.w && presentedHeight <= desktopDisplayMode.h) {
             presentedWidth = desktopDisplayMode.w;
             presentedHeight = desktopDisplayMode.h;
         }
@@ -269,9 +267,16 @@ void setVideoMode(int displayIndex)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // Use nearest-neighbor scaling for pixel-perfect look
     SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");       // Enable render batching for performance
 
+    int windowWidth = settings.video.physicalWidth;
+    int windowHeight = settings.video.physicalHeight;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    if(!settings.video.fullscreen) {
+        clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
+    }
+#endif
     window = SDL_CreateWindow("DuneCity",
                               SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex), SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
-                              settings.video.physicalWidth, settings.video.physicalHeight,
+                              windowWidth, windowHeight,
                               videoFlags);
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -372,7 +377,10 @@ void toogleFullscreen()
         SDL_Log("Switching to windowed mode.");
         SDL_SetWindowFullscreen(window, (SDL_GetWindowFlags(window) ^ SDL_WINDOW_FULLSCREEN_DESKTOP));
 
-        SDL_SetWindowSize(window, settings.video.physicalWidth, settings.video.physicalHeight);
+        int restoredWidth = settings.video.physicalWidth;
+        int restoredHeight = settings.video.physicalHeight;
+        clampWindowedSizeToDisplay(SDL_GetWindowDisplayIndex(window), restoredWidth, restoredHeight);
+        SDL_SetWindowSize(window, restoredWidth, restoredHeight);
         SDL_RenderSetLogicalSize(renderer, settings.video.width, settings.video.height);
     } else {
         // switch to fullscreen mode

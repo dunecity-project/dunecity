@@ -4,6 +4,39 @@
 #include <misc/MenuPalette.h>
 #include <FileClasses/INIFile.h>
 
+TEST_CASE("Retina backing pixels support HD choices beyond desktop coordinates", "[menu][display][retina]") {
+    const auto retina = displayVideoResolutionLimit({1440,900}, {1440,900}, {2880,1800});
+    REQUIRE(retina.x == 2880);
+    REQUIRE(retina.y == 1800);
+    REQUIRE(1920 <= retina.x);
+    REQUIRE(1080 <= retina.y);
+    const auto ordinary = displayVideoResolutionLimit({1440,900}, {1440,900}, {1440,900});
+    REQUIRE(ordinary.x == 1440);
+    REQUIRE(ordinary.y == 900);
+    const auto unavailable = displayVideoResolutionLimit({1440,900}, {0,0}, {0,0});
+    REQUIRE(unavailable.x == 1440);
+    REQUIRE(unavailable.y == 900);
+}
+
+TEST_CASE("Fitting an HD window preserves its shape and selected render size", "[menu][display][retina]") {
+    const SDL_Point requested{1920,1080};
+    for(const auto available : {SDL_Point{1440,900}, SDL_Point{1440,850}, SDL_Point{1024,768}}) {
+        const auto window = fitVideoWindow(requested, available);
+        REQUIRE(window.x <= available.x);
+        REQUIRE(window.y <= available.y);
+        REQUIRE(std::abs(window.x * 1080 - window.y * 1920) <= 1920);
+        const auto logical = interfaceLogicalSize(INTERFACE_HEIGHT_NATIVE, requested.x, requested.y);
+        REQUIRE(logical.x == 1920);
+        REQUIRE(logical.y == 1080);
+    }
+    const auto unchanged = fitVideoWindow({1280,720}, {1440,900});
+    REQUIRE(unchanged.x == 1280);
+    REQUIRE(unchanged.y == 720);
+    const auto unknown = fitVideoWindow(requested, {0,0});
+    REQUIRE(unknown.x == requested.x);
+    REQUIRE(unknown.y == requested.y);
+}
+
 TEST_CASE("Start menus retain readable targets and clear artwork at supported resolutions", "[menu][display]") {
     for(const auto size : {SDL_Point{640,480}, SDL_Point{800,600}, SDL_Point{1024,768},
                            SDL_Point{960,540}, SDL_Point{1280,720}, SDL_Point{1920,1080}}) {

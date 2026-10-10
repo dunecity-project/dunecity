@@ -846,18 +846,22 @@ void OptionsMenu::determineAvailableScreenResolutions() {
         return;
     }
     
-    // Fullscreen is always desktop-sized and a window cannot be larger than the
-    // desktop, so modes beyond it (e.g. the native pixel resolution of a Retina
-    // panel, which SDL lists next to the scaled modes) can never be used.
+    // Screen coordinates differ from backing pixels on Retina displays. A
+    // fitted window can render 1080p even on a 1440x900-point desktop.
     SDL_Rect displayBounds = {0, 0, 0, 0};
     const bool haveDisplayBounds = (SDL_GetDisplayBounds(displayIndex, &displayBounds) == 0
                                     && displayBounds.w > 0 && displayBounds.h > 0);
+    SDL_Point windowSize = {0, 0}, outputSize = {0, 0};
+    SDL_GetWindowSize(window, &windowSize.x, &windowSize.y);
+    if(renderer) SDL_GetRendererOutputSize(renderer, &outputSize.x, &outputSize.y);
+    const SDL_Point renderLimit = displayVideoResolutionLimit(
+        {displayBounds.w, displayBounds.h}, windowSize, outputSize);
 
     for(int i = numDisplayModes-1; i >=0; i--) {
         if(SDL_GetDisplayMode(displayIndex, i, &displayMode) == 0) {
             Coord screenRes(displayMode.w, displayMode.h);
             const bool fitsDisplay = !haveDisplayBounds
-                                     || (screenRes.x <= displayBounds.w && screenRes.y <= displayBounds.h);
+                                     || (screenRes.x <= renderLimit.x && screenRes.y <= renderLimit.y);
             if(fitsDisplay && screenRes.x >= SCREEN_MIN_WIDTH && screenRes.y >= SCREEN_MIN_HEIGHT) {
                 if(std::find(availScreenRes.begin(), availScreenRes.end(), screenRes) == availScreenRes.end()) {
                     // not yet in the list (might happen if e.g. multiple refresh rates are reported)
@@ -865,6 +869,20 @@ void OptionsMenu::determineAvailableScreenResolutions() {
                 }
             }
         }
+    }
+
+    // Display drivers need not enumerate every useful render size. Include
+    // common choices supported by the backing pixels, independently of OS modes.
+    if(haveDisplayBounds) {
+        for(const Coord size : {Coord(1280, 720), Coord(1600, 900), Coord(1920, 1080),
+                                Coord(2560, 1440)}) {
+            if(size.x <= renderLimit.x && size.y <= renderLimit.y
+               && std::find(availScreenRes.begin(), availScreenRes.end(), size) == availScreenRes.end())
+                availScreenRes.push_back(size);
+        }
+        std::sort(availScreenRes.begin(), availScreenRes.end(), [](const Coord& a, const Coord& b) {
+            return a.x < b.x || (a.x == b.x && a.y < b.y);
+        });
     }
 
     if(availScreenRes.empty()) {

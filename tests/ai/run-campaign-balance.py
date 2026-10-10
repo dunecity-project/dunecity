@@ -190,7 +190,7 @@ if args.stats_ui_probe:
     # Exercise the requested logical viewport even on a smaller/headless host.
     # Only this private probe bypasses the ordinary desktop-fit clamp; the
     # shipped application retains it. SDL still supplies the real renderer.
-    fit_call = 'clampWindowedSizeToDisplay(displayIndex, settings.video.physicalWidth, settings.video.physicalHeight);'
+    fit_call = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
     if main.count(fit_call) != 1:
         raise RuntimeError('Window-size fixture hook changed.')
     main = main.replace(fit_call, '/* Stats renderer fixture keeps its requested viewport. */')

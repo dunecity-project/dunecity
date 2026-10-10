@@ -87,8 +87,82 @@ int runLiveMapCatalogueProbe() {
     return MENU_QUIT_DEFAULT;
 }
 
+// Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
+extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
+    *bounds = {0,0,1440,900};
+    return 0;
+}
+extern "C" void SDLCALL retinaProbeWindowSize(SDL_Window*, int* width, int* height) {
+    if(width) *width=1440;
+    if(height) *height=900;
+}
+extern "C" int SDLCALL retinaProbeOutputSize(SDL_Renderer*, int* width, int* height) {
+    if(width) *width=2880;
+    if(height) *height=1800;
+    return 0;
+}
+
+int runRetinaResolutionProbe() {
+    static int stage=0;
+    OptionsMenu options;
+    options.showPage(1);
+    int hd=-1;
+    for(size_t i=0;i<options.availScreenRes.size();++i)
+        if(options.availScreenRes[i]==Coord(1920,1080)) hd=static_cast<int>(i);
+    menuRequire(hd>=0,"The Retina settings menu has no 1920x1080 choice");
+    if(stage++==0) {
+        options.resolutionDropDownBox.setSelectedItem(hd);
+        options.interfaceSizeDropDownBox.setSelectedItem(4);
+        menuRequire(options.interfaceSizeDropDownBox.getSelectedEntryIntData()==INTERFACE_HEIGHT_NATIVE,
+                    "The Native interface choice is missing");
+        menuCapture(options,"retina-hd-selected");
+        options.onOptionsOK();
+        menuRequire(options.retVal==MENU_QUIT_REINITIALIZE,"HD Apply did not request video reinitialization");
+        return MENU_QUIT_REINITIALIZE;
+    }
+    menuRequire(settings.video.physicalWidth==1920 && settings.video.physicalHeight==1080,
+                "Video reinitialization silently reduced the selected HD resolution");
+    menuRequire(getRendererWidth()==1920 && getRendererHeight()==1080,
+                "Native did not retain the 1920x1080 logical render surface");
+    INIFile saved(getConfigFilepath());
+    menuRequire(saved.getIntValue("Video","Physical Width",0)==1920
+                && saved.getIntValue("Video","Physical Height",0)==1080
+                && saved.getIntValue("Video","Interface Height",0)==INTERFACE_HEIGHT_NATIVE,
+                "Apply did not persist HD and Native in the isolated profile");
+    menuRequire(options.resolutionDropDownBox.getSelectedEntryIntData()==hd,
+                "Reopening Settings lost the selected HD resolution");
+    int width=0,height=0;
+    SDL_GetWindowSize(window,&width,&height);
+    SDL_Rect usable{};
+    menuRequire(SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window),&usable)==0,
+                "The fixture has no usable desktop bounds");
+    menuRequire(width<=usable.w && height<=usable.h
+                && std::abs(width*1080-height*1920)<=1920,
+                "The HD presentation window is offscreen or stretched");
+    float logicalX=0,logicalY=0;
+    SDL_RenderWindowToLogical(renderer,width/2,height/2,&logicalX,&logicalY);
+    menuRequire(std::abs(logicalX-960.0f)<=2 && std::abs(logicalY-540.0f)<=2,
+                "HD mouse coordinates do not map to the logical render surface");
+    menuCapture(options,"retina-hd-reopened");
+    toogleFullscreen();
+    menuRequire((SDL_GetWindowFlags(window)&SDL_WINDOW_FULLSCREEN_DESKTOP)!=0,
+                "The HD fullscreen transition failed");
+    toogleFullscreen();
+    menuRequire((SDL_GetWindowFlags(window)&SDL_WINDOW_FULLSCREEN_DESKTOP)==0,
+                "The HD return to windowed mode failed");
+    SDL_GetWindowSize(window,&width,&height);
+    menuRequire(width<=usable.w && height<=usable.h
+                && settings.video.physicalWidth==1920 && settings.video.physicalHeight==1080,
+                "Fullscreen return lost HD or created an offscreen window");
+    SDL_Log("MENU_PROBE_PASS: captured Retina display metrics expose 1920x1080; real Settings Apply"
+            " and video reinitialization retain HD/Native, saved settings and reopening; the fitted"
+            " window preserves aspect and mouse mapping, and fullscreen returns without losing HD");
+    return MENU_QUIT_DEFAULT;
+}
+
 int runMenuProbe() {
     if(std::getenv("MENU_LIVE_MAPS"))return runLiveMapCatalogueProbe();
+    if(std::getenv("MENU_RETINA_RESOLUTION"))return runRetinaResolutionProbe();
     menuRequire(getRendererWidth()==std::atoi(std::getenv("MENU_PROBE_WIDTH"))
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
                 "Probe did not render at the requested dimensions");

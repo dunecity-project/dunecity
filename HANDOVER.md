@@ -1,3 +1,76 @@
+## 2026-10-10 — 1.0.829 candidate: Retina HD resolution and release balance gate
+
+The MBA reported a 1440x900-point window backed by 2880x1800 pixels. Settings
+filtered video modes against desktop points, hiding 1920x1080; startup also
+replaced a larger selection with clamped window dimensions. Settings now uses
+the backing-pixel capacity and adds supported standard render choices. The
+selected resolution remains saved while a separate presentation window fits
+usable bounds with the original aspect ratio. Native can render 1920x1080 on
+Retina, including after Apply, reopening Settings and fullscreen transitions.
+Existing smaller fullscreen choices retain the desktop-sized interface.
+Android/browser selection paths and simulation/AI code are unchanged.
+
+The dedicated real-menu Retina CTest passed with the captured MBA metrics. It
+checks the actual Settings entry, Apply/video reinitialization, saved resolution,
+reopened selection, fitted window, input mapping and fullscreen return. A new
+layout case covers backing pixels and aspect-preserving window fitting.
+Native build and both dependency audits passed. The final native suite passed
+79/80 initially; the sole failure was the menu harness's cumulative 120-second
+per-resolution deadline. A complete progressing menu run passed in 298 seconds.
+The harness now permits 420 seconds per size and 1380 seconds overall; the
+focused complete retry passed all three sizes in 745 seconds. Together all 80
+registered checks are clear. Candidate Windows, Linux, Emscripten, macOS and
+signaling/relay CI passed for the display implementation.
+
+The subscription Claude worker completed 14 bounded real games (13 correctly
+configured for their intended coverage) across Vanilla, Dune2R, Dune City,
+campaign, four difficulties and different map sizes, plus three matched public
+1.0.820 baselines. All captures ended cleanly; no crashes, no harvester targets
+among 20,815 aircraft strikes and no Easy/Medium offensive unit hunts were
+observed. The dense-city Hard pair shifts air killing-blow share from 15.1% to
+56.7%, matching the requested new capability; air remains costly (301/316 lost,
+credit ROI 1.54), launchers increase from 207 to 308, rocket turrets connect,
+ground hunts remain 16 in both and all four city economies remain healthy.
+Root accepts the bounded matrix for release. This does not certify every human
+match or establish air-only Trooper efficacy. Simulation/AI source is byte
+identical to the tested private 1.0.828 revision.
+
+The actual public WASM observer joined a native 1.0.829 match on the isolated
+preview. Its Stats house selector and simulation progressed from cycle 1700 to
+3900 through a deliberate outage of only the preview signaling endpoint.
+The initial exact-mod failure was a test-fixture omission: its pin() does not
+queue content publication. Sharing the verified exact native snapshot with the
+isolated service resolved it; no shipping source/security change was needed.
+Normal public browser/browser lobby play passed MCV deployment, movement orders,
+Windtrap production/placement and clean exit. Public browser Settings, resize to
+854x480, fullscreen at 1920x1080, input alignment and reload passed. Final
+candidate CI 38032613540 and PR CI 38032607433 passed at source 2a4bd0f7.
+Private 1.0.829 was installed on the closed MBA at 18:25 AEDT, independently
+verifying all 3619 bundle entries, a retained 1.0.828 backup, 3197 profile hashes
+and 34734 metadata entries unchanged, signature, runtime and desktop shortcut.
+This is a private candidate installation, not a signed stable publication.
+
+Production is held for an actual browser/native promotion failure. Checkpoint
+transfer and initial lockstep play work, then a direct send is rejected and the
+browser returns to MainMenu. The three-native promotion control passed on the
+same isolated public service with matching digests. A single-native/browser
+case preserves the browser error: the direct connection to Host could not take
+more game messages. Private numeric SDK diagnostics establish that an open, healthy data channel
+hit its 128 retained-job cap (1,400,714 buffered bytes, no backend error). The
+cycle loop repeatedly emitted identical command windows while waiting. A
+bounded DirectP2P schedule now sends advancing windows and accepted local
+command changes immediately and retries unchanged windows every 100ms, with
+reset/clock-wrap handling. Queue, ingress, command lead and protocol bounds are
+preserved. The native rebuild, dependency audits and 996 core cases passed
+(three optional skips). Two real local native promotion runs matched state at
+cycle 1800. A rebuilt public browser rerun and the broader native suite are
+pending.
+The native browser-promotion fixture now fails on terminal network game quit
+instead of continuing its manual update loop; native digests alone cannot
+certify browser handoff. No failed run has a browser-observed pass marker. Draft PR93 remains
+unmerged; no stable tag, SourceForge or production site/browser release exists.
+Evidence: ../outputs/balance-production-828-20261010/.
+
 ## 2026-10-10 — private 1.0.828: Stats performance multipliers and Active counts
 
 Stats displayed QuantBot's internal fixed-point production score as a raw

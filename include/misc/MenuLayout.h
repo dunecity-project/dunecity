@@ -6,6 +6,29 @@
 #include <SDL.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+
+// SDL desktop bounds are screen coordinates. Retina windows have a denser
+// backing surface, which can support render resolutions beyond those bounds.
+inline SDL_Point displayVideoResolutionLimit(SDL_Point desktop, SDL_Point windowSize,
+                                             SDL_Point outputSize) {
+    if(desktop.x <= 0 || desktop.y <= 0) return desktop;
+    if(windowSize.x <= 0 || windowSize.y <= 0 || outputSize.x <= 0 || outputSize.y <= 0)
+        return desktop;
+    return {std::max(desktop.x, static_cast<int>(int64_t(desktop.x) * outputSize.x / windowSize.x)),
+            std::max(desktop.y, static_cast<int>(int64_t(desktop.y) * outputSize.y / windowSize.y))};
+}
+
+// Fit the presentation window without changing the selected render resolution
+// or stretching its aspect ratio. The renderer maps input to its logical size.
+inline SDL_Point fitVideoWindow(SDL_Point requested, SDL_Point available) {
+    if(requested.x <= 0 || requested.y <= 0 || available.x <= 0 || available.y <= 0)
+        return requested;
+    const double scale = std::min({1.0, static_cast<double>(available.x) / requested.x,
+                                  static_cast<double>(available.y) / requested.y});
+    return {std::max(1, static_cast<int>(std::floor(requested.x * scale))),
+            std::max(1, static_cast<int>(std::floor(requested.y * scale)))};
+}
 
 /// Interface Size choice meaning "logical size = what is on screen", i.e. one
 /// interface pixel per screen pixel. 0 is automatic, 480/600/768 are the fixed
