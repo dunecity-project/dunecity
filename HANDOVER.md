@@ -1,3 +1,41 @@
+## 2026-10-10 — 1.0.829 published and signed production installed on MBA
+
+PR93 merged the reviewed candidate d37b5fed. Tag v1.0.829 points to
+29a89e31ef7447294f35a05653b8576917ad6ac7, whose runtime sources are byte
+identical to that tested candidate. Stable CI 38039131176 passed all desktop,
+Emscripten, core, relay and signaling gates. All 13 published assets matched
+GitHub SHA256/size; three update manifests and two appcasts passed Ed25519
+verification. Both Mac app and DMG passed stapling and Notarized Developer ID
+acceptance. Published assets were not replaced.
+
+SourceForge 38040243218 verified seven packages plus notes/checksums, matching
+source branch/tag and Windows/macOS/Linux defaults. Website 2376966035c1083844a4caa3b52fd1f0ac371e95
+reused the exact stable Emscripten artifact and matching PHP source snapshot;
+redundant browser rebuild 38040243199 was cancelled. Deploy 38040388911 and
+website security CI 38040388940 passed. Both live download pages describe 829,
+and all eight live browser artifacts match the tagged-source manifest.
+
+Actual production browser play on developed 192x192 3waysplit explicitly used
+Dune City 1.002 with city simulation On, one Hard and two Easy QuantBots, and
+Spectate. Live combat and city growth progressed; Stats showed xN.N, Active,
+per-house production/tax/population and distinct named house data. Page two
+contained Trike, Raider Trike and Trooper, with all four requested exclusions
+absent. Budget house switching remained read only. The test game exited cleanly.
+This supplements the 14 bounded candidate games, three matched 820 baselines
+and actual public browser/native promotion gate; it is not universal balance
+certification. Candidate source remains unchanged after that evidence.
+
+The closed MBA received the signed stable app at 20:09 AEDT. Independent
+read-back verified all 3620 bundle entries, signing team 34X7AYJZ93, packaged
+runtime, desktop shortcut, retained private-829 backup and unchanged 3197 profile
+hashes plus 34734 metadata entries. Installed binary SHA256:
+c0dcac6138afe98edfbf06bfce4b23a36288525c34031b428488b852b79b99f0.
+Backup: /Applications/.dunecity-backup-before-1.0.829-20261010-200951/dunecity.app.
+Retina 1920x1080 Settings, persistence, fitted window/input mapping and fullscreen
+are covered by the real-menu fixture using captured MBA display metrics; no
+actual MBA GUI screenshot is claimed. Selected user settings were preserved.
+Evidence: ../outputs/balance-production-828-20261010/.
+
 ## 2026-10-10 — 1.0.829 candidate: Retina HD resolution and release balance gate
 
 The MBA reported a 1440x900-point window backed by 2880x1800 pixels. Settings
@@ -50,7 +88,7 @@ verifying all 3619 bundle entries, a retained 1.0.828 backup, 3197 profile hashe
 and 34734 metadata entries unchanged, signature, runtime and desktop shortcut.
 This is a private candidate installation, not a signed stable publication.
 
-Production is held for an actual browser/native promotion failure. Checkpoint
+Publication was held for an actual browser/native promotion failure. Checkpoint
 transfer and initial lockstep play work, then a direct send is rejected and the
 browser returns to MainMenu. The three-native promotion control passed on the
 same isolated public service with matching digests. A single-native/browser
@@ -63,12 +101,16 @@ command changes immediately and retries unchanged windows every 100ms, with
 reset/clock-wrap handling. Queue, ingress, command lead and protocol bounds are
 preserved. The native rebuild, dependency audits and 996 core cases passed
 (three optional skips). Two real local native promotion runs matched state at
-cycle 1800. A rebuilt public browser rerun and the broader native suite are
-pending.
+cycle 1800. The rebuilt shipping-SDK public browser promotion rerun passed: matching
+native state, over six minutes of continued browser play, a minute-long pause,
+queued orders and resumed unit movement. Fresh three-size menu coverage passed
+in 254.60 seconds without source or deadline changes. An earlier duplicate broad
+run was stopped after six passing checks and a menu timeout under heavy host
+contention; it is not claimed as a complete passing current-revision suite.
 The native browser-promotion fixture now fails on terminal network game quit
 instead of continuing its manual update loop; native digests alone cannot
-certify browser handoff. No failed run has a browser-observed pass marker. Draft PR93 remains
-unmerged; no stable tag, SourceForge or production site/browser release exists.
+certify browser handoff. No failed run has a browser-observed pass marker. PR93 subsequently merged and stable publication completed; see the verified
+production entry above.
 Evidence: ../outputs/balance-production-828-20261010/.
 
 ## 2026-10-10 — private 1.0.828: Stats performance multipliers and Active counts
