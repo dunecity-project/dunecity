@@ -46,12 +46,24 @@ visually checked. The portable app passes deep/strict ad-hoc signature and
 bundled SDL hidden-window startup/rendering checks.
 
 Full combined CTest passes 76/76 in 1063 seconds. Final reward fixtures record
-48 passing checks per ruleset; Trooper defence removes Ornithopter HP with a
-SmallRocket, and WOR admission covers missing troop prerequisites, invisible/no
-air, aggregate quota, cash and authority limits. The WOR-founding fixture
+48 passing checks per ruleset. Trooper defence removes Ornithopter HP with a
+SmallRocket. Troop production fixtures cover invisible/no air, aggregate quota,
+cash and authority limits; WOR admission covers missing troop prerequisites. The WOR-founding fixture
 reaches the rule by granting its real prerequisites and narrowing the yard
 offers; it does not prove every city reaches that point in a full match.
-Installation on the MBA is the next step; the user has authorized it.
+Installed on Stefan@Stefans-MacBook-Air.local at 2026-10-10T01:33:54.213622+00:00, from
+source commit 810fa05edfdb2ee1f3be623fef42298e2dea393a.
+Installed /Applications/dunecity.app binary SHA-256:
+da9d2b4752501d54860a863d9f8cfe4646bcf982a43616ccffc5bc833c0f7c9c.
+Independent read-back confirms all 3650 bundle entries, strict/deep signature,
+bundled SDL initialization/hidden-window rendering, the Desktop shortcut and
+unchanged profile hashes (2982 files) plus full metadata
+(32141 entries). Previous 1.0.825 app retained at:
+/Applications/.dunecity-backup-before-1.0.826-20261010-123342/dunecity.app.
+The MBA initially slept during tests; a network wake attempt restored reachability
+before installation. A temporary idle-sleep assertion covered the transfer.
+Choose Display -> Native 1:1 and Zoom 1x for unzoomed play; existing user display
+preferences were preserved.
 
 Acceptance evidence, source review, Claude reports and installation scripts:
 ../outputs/performance-kill-bonus-trooper-aa-826-20261010/.
