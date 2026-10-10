@@ -15,7 +15,13 @@ retained. The delegated native build and Ninja dependency audits passed. All
 three real-renderer Stats CTests passed at 640x480, native 1920x1080 and vanilla,
 including Active refresh, disabled types, exclusions, paging and house browsing.
 Codex independently reviewed the patch and both resolution screenshots.
-MBA packaging and installation remain pending.
+The portable bundle passed its CTest rendering check, signature and dependency
+audits; its compiled code and strings match the native app. Installed on MBA
+at 16:15 AEDT from source 3e723fa715d69aab1e3e6aaea3ca4344d7cc3d77. A separate
+readback verified all 3656 app entries, the previous 1.0.827 backup, 3122 hashed
+profile files and all 33862 profile metadata entries unchanged. Desktop shortcut,
+installed signature and installed runtime initialization/rendering passed.
+Backup: /Applications/.dunecity-backup-before-1.0.828-20261010-161453/dunecity.app.
 Evidence: ../outputs/stats-performance-multiplier-828-20261010/.
 
 ## 2026-10-10 — local 1.0.827: aircraft difficulty, house Stats and community maps
