@@ -86,7 +86,19 @@ bytes with four suspended path jobs, catch up and match cycle-1800 state,
 then the host continues to cycle1900 after spectator departure. The failed
 first timing run remains in the evidence; no production assertion was relaxed.
 
-MBA installation: PENDING_827_INSTALLED_RECEIPT.
+Private MBA installation and independent readback completed 2026-10-10
+15:40 AEDT (04:40:26 UTC), source b7339043f7c42fd839a749bb5a52950ac6972b5a.
+Installed /Applications/dunecity.app, Desktop shortcut unchanged. All3656
+bundle entries match the portable candidate; deep/strict signature and runtime
+initialization pass. Installed binary SHA256:
+9b4fb787c03e85b45faf7f8c12937891ecc244c0bbcca01c4e45c1e0e0a1de53.
+Retained verified826 backup:
+/Applications/.dunecity-backup-before-1.0.827-20261010-154016/dunecity.app.
+All3052 profile files hashed and33001 file/symlink metadata entries remained
+unchanged across installation and fresh verification. The game was closed;
+no unsaved game was killed. Archive SHA256:
+54d3134145fa0e943e5d53072a535cd33e06424f4ceaa83cd9b821e957d63e46.
+The receipt and independent summary are under the installation evidence folder.
 Evidence and private install scripts:
 ../outputs/ornithopter-difficulty-827-20261010/.
 No public push/tag/CI release is requested. Long-game FPS and full-match win-rate
