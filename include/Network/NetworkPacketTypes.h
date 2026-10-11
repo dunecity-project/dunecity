@@ -163,7 +163,11 @@
 // 66: Victim-type performance changes kill completion rewards and subsequent AI
 //     allocations. Reactive city Trooper/WOR production and rocket infantry Hunt
 //     targeting also change lockstep decisions. Save and runtime layouts remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            67
+// 68: QuantBot MCVs reach through diagonal gaps, settle new rock once a formation
+//     holds two yards without waiting for rocket cover, travel with an escort,
+//     and production MCVs stop at that share. MCV, escort and purchase orders
+//     change lockstep decisions. Save and runtime layouts remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            68
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -1738,6 +1738,26 @@ TEST_CASE("MCVs choose nearby usable rock without chasing distant space or clear
 
 }
 
+TEST_CASE("An MCV boxed in on four sides still reaches new rock through a diagonal", "[quantbot][expansion][regression]") {
+    // The reported Mercenary MCV left its factory onto a tile with the factory
+    // above, a yard below and rocket turrets either side. The engine drives it
+    // out diagonally; a four-way survey called it stranded for half an hour.
+    using namespace RockExpansionPolicy;
+    constexpr int w=60,h=40;
+    std::vector<Tile> tiles(w*h);
+    for(auto& tile:tiles){tile.walkable=true;tile.free=true;}
+    auto rock=[&](int x0,int y0,int x1,int y1){for(int y=y0;y<y1;++y)for(int x=x0;x<x1;++x)tiles[y*w+x].rock=true;};
+    rock(2,2,20,20); rock(40,10,55,25);
+    tiles[3*w+3].owned=true;
+    const int start=10*w+10;
+    for(int i:{start-1,start+1,start-w,start+w}){tiles[i].walkable=false;tiles[i].free=false;}
+    const auto site=choose(w,h,tiles,{start},{},{});
+    REQUIRE(site.valid());CHECK(site.x>=40);
+    // Every diagonal closed as well: genuinely walled in, so no trip is offered.
+    for(int i:{start-w-1,start-w+1,start+w-1,start+w+1}){tiles[i].walkable=false;tiles[i].free=false;}
+    CHECK_FALSE(choose(w,h,tiles,{start},{},{}).valid());
+}
+
 TEST_CASE("Campaign opening follows authored trigger with independent bounded delays", "[quantbot][campaign]") {
     using namespace CampaignDifficultyPolicy;
     std::set<uint32_t> offsets;
@@ -2612,6 +2632,15 @@ TEST_CASE("An MCV walled in gets no destination rather than an unreachable one",
     CHECK_FALSE(map.choose(20,20).valid());
 }
 
+TEST_CASE("An MCV boxed in on four sides leaves through an open diagonal", "[quantbot][mcv][regression]") {
+    LocalDeployFixture map;
+    for(const auto& step : {Coord(-1,0),Coord(1,0),Coord(0,-1),Coord(0,1)}) map.structure(20+step.x,20+step.y);
+    const auto site = map.choose(20,20);
+    REQUIRE(site.valid());
+    CHECK(site.distance > 0);
+    CHECK(site.x < 30);
+}
+
 TEST_CASE("A cramped home formation still gives the MCV a site", "[quantbot][mcv]") {
     LocalDeployFixture map;
     for(auto& tile : map.tiles) { tile = McvDeployPolicy::Tile(); tile.passable = true; }
@@ -2804,6 +2833,41 @@ TEST_CASE("Colonisation stays shut where it would be wrong", "[quantbot][colonis
     CHECK_FALSE(QuantBotColonisationPolicy::due(capped));
     capped.yardLimit = capped.yards + 1;
     CHECK(QuantBotColonisationPolicy::due(capped));
+}
+
+TEST_CASE("Further MCVs settle new rock once a formation runs its share of yards", "[quantbot][colonisation]") {
+    // A base with room to build is not built out, so only the formation's own
+    // yard count can send an MCV away.
+    auto roomy = builtOutCity();
+    roomy.freeFootprints = QuantBotColonisationPolicy::kCrampedFootprints;
+    roomy.yards = 2;
+    roomy.yardsOnFormation = QuantBotColonisationPolicy::kYardsPerFormation - 1;
+    CHECK_FALSE(QuantBotColonisationPolicy::missionDue(roomy));
+    roomy.yardsOnFormation = QuantBotColonisationPolicy::kYardsPerFormation;
+    CHECK(QuantBotColonisationPolicy::missionDue(roomy));
+    // A built-out base sends it whatever the formation holds.
+    auto builtOut = builtOutCity();
+    builtOut.yardsOnFormation = 1;
+    CHECK(QuantBotColonisationPolicy::missionDue(builtOut));
+
+    // Without a destination the MCV stays a local yard rather than waiting.
+    auto nowhere = roomy;
+    nowhere.siteAvailable = false;
+    CHECK_FALSE(QuantBotColonisationPolicy::missionDue(nowhere));
+    // An MCV already in hand is the colonist: holding it never blocks its trip.
+    auto holding = roomy;
+    holding.mcvsIncludingQueued = 1;
+    CHECK(QuantBotColonisationPolicy::missionDue(holding));
+    // The yard ceiling and the campaign/helper boundary still apply.
+    auto capped = roomy;
+    capped.yardLimit = capped.yards;
+    CHECK_FALSE(QuantBotColonisationPolicy::missionDue(capped));
+    auto campaign = roomy;
+    campaign.campaignGame = true;
+    CHECK_FALSE(QuantBotColonisationPolicy::missionDue(campaign));
+    auto helper = roomy;
+    helper.supportMode = true;
+    CHECK_FALSE(QuantBotColonisationPolicy::missionDue(helper));
 }
 
 TEST_CASE("Mobile anti-air floor protects launcher share from damage-only learning",

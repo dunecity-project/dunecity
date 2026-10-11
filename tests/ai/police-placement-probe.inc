@@ -145,19 +145,19 @@ void runPolicePlacementProbe(Game& game) {
                 if(planned<3)bot->reservedStructures[yard->getObjectID()+400+planned]={Structure_RocketTurret,site};
             }
         }
-        // Plans stop duplicate orders but cannot release another MCV until
-        // the three emplacements actually exist.
+        // Planned and finished covers both still go up beside the expansion,
+        // but neither holds back the next colonist: rock without turrets is
+        // exactly where a colony starts, and its own yard builds the cover.
         std::vector<std::pair<Uint32,int>> coreCounts;
         for(Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard}) {
             coreCounts.push_back({item,house->numItem[item]});house->numItem[item]=std::max(1,house->numItem[item]);
         }
-        require(!bot->expansionDefenceReady(),"Planned turrets prematurely released another expansion");
+        require(bot->expansionDefenceReady(),"An uncovered expansion held back the next colonist");
         for(int n=0;n<3;++n) {
             const auto site=bot->reservedStructures.at(yard->getObjectID()+400+n).location;
             auto* turret=house->placeStructure(NONE_ID,Structure_RocketTurret,site.x,site.y,true,true);
             require(turret,"Could not finish expansion turret fixture");saved.push_back(turret);
-            require(bot->expansionDefenceReady()==(n==2),
-                "Expansion sequencing did not wait for exactly three completed turrets");
+            require(bot->expansionDefenceReady(),"A partly covered expansion held back the next colonist");
         }
         for(const auto& count:coreCounts)house->numItem[count.first]=count.second;
         bot->planningBuilder=yard->getObjectID();

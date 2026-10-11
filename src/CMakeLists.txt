@@ -253,6 +253,13 @@ target_sources(dunecity
         players/AIDecisionLog.cpp
         players/DeviationReward.cpp
         players/QuantBot.cpp
+        players/QuantBotSaveLoad.cpp
+        players/QuantBotColonisation.cpp
+        players/QuantBotBuild.cpp
+        players/QuantBotPlacement.cpp
+        players/QuantBotArmy.cpp
+        players/QuantBotAir.cpp
+        players/QuantBotHarvesters.cpp
         players/QuantBotCampaign.cpp
         players/Mentat.cpp
         players/MentatBuildOrderMentat.cpp

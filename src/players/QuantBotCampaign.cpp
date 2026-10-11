@@ -379,7 +379,7 @@ void QuantBot::updateCampaignWave() {
     for(auto it=scriptedAssaults.begin();it!=scriptedAssaults.end();) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(*it));
         if (!campaignCombatUnit(unit)) it=scriptedAssaults.erase(it);
-        else if (reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT) {
+        else if (unitRole(unit, {UnitRole::Repair}) != UnitRole::Free || unit->getAttackMode()==RETREAT) {
             holdCampaignUnit(unit);it=scriptedAssaults.erase(it);
         } else ++it;
     }
@@ -387,7 +387,7 @@ void QuantBot::updateCampaignWave() {
     for (auto it=campaignWave.members.begin();it!=campaignWave.members.end();) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(*it));
         if (!campaignCombatUnit(unit)) {it=campaignWave.members.erase(it);continue;}
-        if (reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT
+        if (unitRole(unit, {UnitRole::Repair}) != UnitRole::Free || unit->getAttackMode()==RETREAT
             || (unit->isActive() && !unit->hasATarget() && !unit->isMoving()
                 && now-campaignWave.launched>=MILLI2CYCLES(profile.sortieMs))) {
             holdCampaignUnit(unit); it=campaignWave.members.erase(it); continue;
@@ -428,8 +428,8 @@ bool QuantBot::scoutCampaignFront(const UnitBase* unit) {
     // refuse to chase. Explore terrain when there is no visible base instead
     // of treating HUNT alone as an exploration order. No hidden objects are read.
     if (!unit->isAGroundUnit() || !unit->isActive() || !unit->isRespondable()
-        || unit->isMoving() || unit->hasATarget() || reserveDamagedUnitForRepair(unit)
-        || unit->getAttackMode()==RETREAT || humanControls(unit)) return false;
+        || unit->isMoving() || unit->hasATarget() || unit->getAttackMode()==RETREAT
+        || unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free) return false;
     Coord destination=Coord::Invalid();int best=-1;
     for (int y=0;y<getMap().getSizeY();++y) for (int x=0;x<getMap().getSizeX();++x) {
         if (getMap().getTile(x,y)->isExploredByTeam(getHouse()->getTeamID()) || !unit->canPass(x,y)) continue;
@@ -450,8 +450,8 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
         // Only an already dispatched helper attacker can scout. Home guards,
         // economy-only support and manual orders keep their existing roles.
         if (isCampaignGameType(currentGame->gameType) && !supportMode
-            && unit->isActive() && unit->isRespondable() && !reserveDamagedUnitForRepair(unit)
-            && !humanControls(unit) && unit->getAttackMode()==HUNT
+            && unit->isActive() && unit->isRespondable()
+            && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()==HUNT
             && !unit->isMoving() && !unit->hasATarget()) {
             if (const auto* objective=campaignObjective(unit,0)) {
                 doAttackObject(unit,objective,true);
@@ -465,7 +465,7 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
         if (!campaignDefensiveContact(unit,unit->getTarget())) {holdCampaignUnit(unit);return true;}
         return false; // Defenders retain combat micro.
     }
-    if (!unit->isActive() || !unit->isRespondable() || reserveDamagedUnitForRepair(unit)) return true;
+    if (!unit->isActive() || !unit->isRespondable() || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) return true;
     // Ordinary combat micro may respond to close threats. Only redirect idle
     // survivors; never override an evasive move or a repair order.
     if (unit->isAGroundUnit() && !unit->hasATarget() && !unit->isMoving()) {

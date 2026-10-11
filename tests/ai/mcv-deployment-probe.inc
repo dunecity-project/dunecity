@@ -452,7 +452,7 @@ void runMcvDeploymentProbe(Game& game) {
             " the room measurement, not the fixture, is what failed here");
         require(!bot->baseBuiltOut(),"A base with open rock reported itself built out");
         require(!bot->colonisationMcvDue(0,0),"A base with room ordered a colonist");
-        require(!bot->colonyMissionDue(),"A base with room sent its MCVs away");
+        require(!bot->colonyMissionDue(nullptr),"A base with room sent its MCVs away");
         require(queuedMcvs()==0,"A base with room bought an MCV to colonise with");
         {
             // The fast local path is untouched while the base has room: an MCV
@@ -462,9 +462,75 @@ void runMcvDeploymentProbe(Game& game) {
             local->deploy(at(7,9));
             require(bot->findLocalDeploySite(local).isValid(),
                 "Local deployment stopped offering sites on a roomy base");
-            require(!bot->colonyMissionDue(),"A roomy base turned a local MCV into a colonist");
+            require(!bot->colonyMissionDue(local),"A roomy base turned a local MCV into a colonist");
             local->setVisible(VIS_ALL,false);local->destroy();
             game.processObjects();
+        }
+
+        // 7a2. Room at home, but the formation already runs its share of
+        //      yards. The next MCV settles the far formation rather than add a
+        //      third yard beside the other two, and while there is nowhere to
+        //      send one, no further production MCV is bought to stack there.
+        {
+            const int yardsBefore=house->getNumItems(Structure_ConstructionYard);
+            auto* second=house->placeStructure(NONE_ID,Structure_ConstructionYard,at(1,7).x,at(1,7).y,true,true);
+            require(second!=nullptr,"Colonisation fixture could not build its second yard");
+            // No rocket turret covers the second yard, and the new rock has none
+            // either: neither is a reason to hold the colonist back.
+            bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+            bot->refreshTacticalDanger();
+            survey();
+            require(!bot->baseBuiltOut(),"A second yard built out the roomy base");
+            require(bot->rockExpansionSite.isValid(),
+                "The far formation left the survey once the base held two yards");
+            require(bot->colonySiteOpen(),"An expansion yard without rocket cover held back the next colonist");
+            require(queuedMcvs()==0,"A satisfied production target bought an MCV");
+
+            auto* spare=static_cast<MCV*>(house->createUnit(Unit_MCV,true));
+            require(spare!=nullptr,"Colonisation fixture could not create an MCV");
+            spare->deploy(at(7,9));
+            const Uint32 spareID=spare->getObjectID();
+            require(bot->yardsOnFormation(spare->getLocation())==QuantBotColonisationPolicy::kYardsPerFormation,
+                "The fixture formation must hold exactly its share of yards");
+            require(bot->findLocalDeploySite(spare).isValid(),
+                "The home rock must still offer a yard footprint, or staying home is not the alternative");
+            require(bot->colonyMissionDue(spare),"A formation holding its share of yards kept another MCV at home");
+            bot->manageMcv(spare);
+            require(game.getObjectManager().getObject(spareID)!=nullptr,"The spare MCV deployed on the full formation");
+            const auto sent=bot->mcvExpansionSites.find(spareID);
+            require(sent!=bot->mcvExpansionSites.end() && sent->second.x>=ground.x+36 && sent->second.x<ground.x+48,
+                "An MCV on a formation holding its share of yards was not sent to the new formation");
+            bot->mcvExpansionSites.erase(spareID);bot->mcvSurveyCycles.erase(spareID);bot->lastMcvTrace.erase(spareID);
+            spare->setVisible(VIS_ALL,false);spare->destroy();
+            game.processObjects();
+
+            // Live demand asks for more builders than one formation hosts.
+            // Yards from the earlier sections are out of the AI's view but
+            // still on the house counter, so count just the two standing here.
+            // With a destination, one MCV is bought: the colonist.
+            const int heldYards=house->numItem[Structure_ConstructionYard];
+            house->numItem[Structure_ConstructionYard]=2;
+            state.resValve=1000;
+            survey();
+            require(queuedMcvs()==1,"Demand for builders bought no colonist while new rock was open");
+            // New rock still lies there, but no colonist may set out while the
+            // advanced core is unfinished. The same demand buys nothing to
+            // stack beside the two yards already standing.
+            clearQueues();
+            house->numItem[Structure_RepairYard]=0;
+            survey();
+            require(bot->rockExpansionSite.isValid() && !bot->colonySiteOpen(),
+                "An unfinished core must leave new rock surveyed but closed to colonists");
+            require(queuedMcvs()==0,"A formation holding its share of yards bought another MCV to stack on it");
+            house->numItem[Structure_RepairYard]=1;
+            state.resValve=0;
+            house->numItem[Structure_ConstructionYard]=heldYards;
+            clearQueues();
+
+            second->destroy();
+            game.processObjects();
+            bot->recentStructureLosses.clear();
+            require(house->getNumItems(Structure_ConstructionYard)==yardsBefore,"The second fixture yard survived");
         }
 
         // 7b. The base builds out. Loose rock is deliberately left behind —
@@ -531,7 +597,7 @@ void runMcvDeploymentProbe(Game& game) {
             "Rock cleared of its enemy stayed refused: an availability decision outlived the threat");
         require(bot->colonisationMcvDue(0,0),
             "A built-out city with safe reachable rock still refused to colonise it");
-        require(bot->colonyMissionDue(),"A built-out city did not treat its MCVs as colonists");
+        require(bot->colonyMissionDue(nullptr),"A built-out city did not treat its MCVs as colonists");
         require(bot->availableBaseRock>=48 && house->getNumItems(Structure_ConstructionYard)
                 >= QuantBotBuildPolicy::cityConstructionYardTarget(house->getCredits(),0,0,0),
             "The order below must be attributable to colonisation alone: free rock and the"
@@ -650,6 +716,42 @@ void runMcvDeploymentProbe(Game& game) {
             clearQueues();
         }
 
+        // 7e3. Colonists that die on the way are not replaced one by one. The
+        //      reported Ordos sent five MCVs, each killed on the same route;
+        //      after two, colonisation waits until the losses age out.
+        {
+            const Coord destination=bot->rockExpansionSite;
+            require(destination.isValid(),"The colonisation survey lost its site before the losses");
+            for(int lost=0;lost<QuantBot::kRepeatedYardLossLimit;++lost) {
+                auto* doomed=static_cast<MCV*>(house->createUnit(Unit_MCV,true));
+                require(doomed!=nullptr,"Colonisation fixture could not create a doomed colonist");
+                doomed->deploy(at(7,9));
+                const Uint32 doomedID=doomed->getObjectID();
+                bot->manageMcv(doomed);
+                const auto sent=bot->mcvExpansionSites.find(doomedID);
+                require(sent!=bot->mcvExpansionSites.end() && sent->second.x>=ground.x+36,
+                    "The doomed colonist was not sent to the far formation");
+                doomed->setVisible(VIS_ALL,false);doomed->destroy();
+                game.processObjects();
+                // One survey between the losses: the first alone must not stop colonisation.
+                survey();
+                if(lost+1<QuantBot::kRepeatedYardLossLimit)
+                    require(bot->colonySiteOpen() && queuedMcvs()==1,
+                        "A single lost colonist stopped colonisation");
+            }
+            require(bot->colonistsLost()==QuantBot::kRepeatedYardLossLimit,
+                "Colonists killed on the way were not remembered");
+            require(!bot->colonySiteOpen(),"Colonists may still set out after two were lost on the way");
+            require(!bot->colonisationMcvDue(0,0),"A city ordered another colonist after losing two on the way");
+            require(queuedMcvs()==0,"An MCV was bought to follow two lost colonists");
+            // The losses age out with the rest of the retained history.
+            bot->recentStructureLosses.clear();
+            survey();
+            require(bot->rockExpansionSite==destination && bot->colonySiteOpen(),
+                "Colonisation did not resume once the losses aged out");
+            clearQueues();
+        }
+
         // 7f. One colonist, not a stream of them: an MCV already bought is the
         //     answer to the same survey.
         auto* colonist=static_cast<MCV*>(house->createUnit(Unit_MCV,true));
@@ -684,7 +786,7 @@ void runMcvDeploymentProbe(Game& game) {
         bot->mcvExpansionSites.erase(colonistID);
         bot->mcvSurveyCycles.erase(colonistID);
         colonist->setForced(false);
-        require(!bot->baseBuiltOut() && !bot->colonyMissionDue(),
+        require(!bot->baseBuiltOut() && !bot->colonyMissionDue(colonist),
             "The measured base must report room again, or the stalled delivery is not reproduced");
         require(!bot->expansionDefenceReady(),
             "The missing advanced core must close the ordinary expansion gate, or nothing is waived");
@@ -700,19 +802,62 @@ void runMcvDeploymentProbe(Game& game) {
         require(target.x>=ground.x+36 && target.x<ground.x+48
             && target.y>=ground.y+3 && target.y<ground.y+15,
             "The colonist was kept on the built-out base instead of the free formation");
-        const Uint32 deadline=game.getGameCycleCount()+MILLI2CYCLES(240000);
+        // 7h. The colonist needs an escort. With no combat vehicle at all it
+        //     stays on its home rock instead of setting out alone.
+        const Coord home=colonist->getLocation();
+        require(bot->colonistEscortCount(colonist)==0,"Escorts were invented for a house with no army");
+        for(int pass=0;pass<4;++pass) {
+            for(int i=0;i<MILLI2CYCLES(6000);++i) { game.processObjects();++game.gameCycleCount; }
+            bot->manageMcv(colonist);
+        }
+        require(game.getObjectManager().getObject(colonistID)!=nullptr && colonist->getLocation()==home
+            && !colonist->isMoving(),"A colonist set out without an escort");
+        // Two tanks at the far edge of the home rock become its escort. The
+        // colonist waits for both to gather beside it, then all of them drive
+        // to the new rock together, on real engine frames.
+        std::vector<UnitBase*> escorts;
+        for(Coord spot:{Coord(20,15),Coord(22,15)}) {
+            auto* tank=house->createUnit(Unit_Tank,true);
+            require(tank!=nullptr,"Colonisation fixture could not create an escort tank");
+            tank->deploy(at(spot.x,spot.y));
+            escorts.push_back(tank);
+        }
+        ++game.gameCycleCount;   // The escort set is derived once per cycle.
+        bool gathered=true;
+        require(bot->colonistEscortCount(colonist,&gathered)==2 && !gathered,
+            "The nearest free tanks were not assigned to escort the colonist");
+        for(auto* tank:escorts)
+            require(bot->colonistEscorts().count(tank->getObjectID()),"A free tank was left out of the escort");
+        const Uint32 deadline=game.getGameCycleCount()+MILLI2CYCLES(300000);
         Coord arrived=colonist->getLocation();
+        bool leftHome=false, leftAlone=false;
+        int furthestEscort=0;
         while(game.getObjectManager().getObject(colonistID)!=nullptr && game.getGameCycleCount()<deadline) {
             game.processObjects();++game.gameCycleCount;
             if(game.getObjectManager().getObject(colonistID)==nullptr) break;
             arrived=colonist->getLocation();
-            if(game.getGameCycleCount()%50<1) bot->manageMcv(colonist);
+            if(!leftHome && arrived!=home) {
+                leftHome=true;
+                for(auto* tank:escorts)
+                    if(blockDistance(tank->getLocation(),home).lround()>QuantBot::kEscortAssemblyRadius) leftAlone=true;
+            }
+            if(game.getGameCycleCount()%50<1) {
+                bot->manageMcv(colonist);
+                for(auto* tank:escorts) bot->escortColonist(tank);
+            }
         }
+        for(auto* tank:escorts)
+            furthestEscort=std::max(furthestEscort,blockDistance(tank->getLocation(),target).lround());
+        require(leftHome && !leftAlone,"The colonist left before its escort had gathered beside it");
         require(game.getObjectManager().getObject(colonistID)==nullptr,
             "The colonist never arrived and founded its city");
         require(currentGameMap->getTile(target)->hasAStructure(),
             "No construction yard stands on the settled formation");
         require(arrived.x>=ground.x+36,"The colonist deployed before reaching the new formation");
+        require(furthestEscort<=8,"The escort did not travel with the colonist to the new rock");
+        SDL_Log("MCV_DEPLOYMENT_NOTE: escorted colony at %d,%d, furthest escort %d tiles",target.x,target.y,furthestEscort);
+        for(auto* tank:escorts) { tank->setVisible(VIS_ALL,false);tank->destroy(); }
+        game.processObjects();
         house->numItem[Structure_HeavyFactory]=heldHeavy;
         house->numItem[Structure_HighTechFactory]=heldHighTech;
         house->numItem[Structure_RepairYard]=heldRepair;

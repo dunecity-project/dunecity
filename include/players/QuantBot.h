@@ -25,6 +25,7 @@
 #include <players/CombatReward.h>
 #include <players/GroundAccessPolicy.h>
 #include <players/UnitMixPolicy.h>
+#include <players/QuantBotColonisationPolicy.h>
 #include <units/MCV.h>
 class Harvester;
 #include <players/QuantBotConfig.h>
@@ -267,6 +268,39 @@ private:
     void releaseLegacyGroundSquad();
     std::map<Uint32,Uint32> defenceResponseCycles;
     bool humanControls(const UnitBase* unit) const;
+    /// Who holds a unit's orders. Each claim keeps its own registry - human
+    /// orders (manualUnitOrders), the repair reservation, defenceAssignments,
+    /// customWave.members and the per-cycle colonistEscorts() and
+    /// colonyGuardPosts() - and unitRole() is the one place controllers ask
+    /// whether a unit holds one. Only the controller that grants a claim
+    /// iterates, updates or releases its registry. Listed by authority, highest
+    /// first; when a unit holds several of the claims asked for, unitRole()
+    /// reports the first. The three defence roles are different readings of one
+    /// defenceAssignments entry.
+    enum class UnitRole : Uint8 {
+        Human,       ///< A recent human order (humanControls()).
+        Repair,      ///< Held back for the repair yard (reserveDamagedUnitForRepair()).
+        BaseDefence, ///< Hunting an attacker of a building we own (baseDefenceAssignment()).
+        LiveDefence, ///< Answering a live emergency or anti-air contact (activeDefenceAssignment()).
+        Defence,     ///< Booked by base or air defence, live or not (a defenceAssignments entry).
+        Wave,        ///< A member of the Custom Hard/Brutal offensive (customWave.members).
+        Escort,      ///< Escorting a colonist (colonistEscorts()).
+        ColonyGuard, ///< Holding a colony while recovery is active (colonyGuardPosts()).
+        Free,
+    };
+    /// The claims a controller defers to.
+    struct UnitRoles {
+        constexpr UnitRoles(std::initializer_list<UnitRole> roles) {
+            for (const UnitRole role : roles) bits |= 1u << static_cast<unsigned>(role);
+        }
+        constexpr bool contains(UnitRole role) const { return (bits >> static_cast<unsigned>(role)) & 1u; }
+        unsigned bits = 0;
+    };
+    /// The highest-authority claim in \a among that \a unit holds, or Free.
+    /// Only the claims in \a among are evaluated. Escorts and colony guards are
+    /// derived on first use in each game cycle, so asking for them fixes them
+    /// for the rest of that cycle: ask only for the claims a controller defers to.
+    UnitRole unitRole(const UnitBase* unit, UnitRoles among) const;
     Coord squadRallyLocation = Coord::Invalid();
     Uint32 rallySelectedCycle = std::numeric_limits<Uint32>::max();
     Uint32 nonServiceConstructionOrders = 3; // Respond immediately to a new crime emergency.
@@ -399,9 +433,20 @@ private:
     /// \a mcvsIncludingQueued counts MCVs alive, paid for and queued, and
     /// \a yardLimit is the game-option ceiling (0 = none).
     bool colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const;
+    /// Inputs shared by the colonist purchase and the per-MCV mission decision.
+    QuantBotColonisationPolicy::Demand colonisationDemand(int mcvsIncludingQueued, int yardLimit) const;
+    /// May a colonist set out for the surveyed new rock now? rockExpansionSite
+    /// is where new rock lies; this adds the expansion defence gate and the
+    /// colonists already lost on the way.
+    bool colonySiteOpen() const;
     /// Is this MCV's job settling another formation rather than growing the
-    /// base? Only a built-out base with a surveyed destination sends one away.
-    bool colonyMissionDue() const;
+    /// base? A built-out base, or a formation already running its share of
+    /// yards, sends it to a surveyed destination when one exists.
+    bool colonyMissionDue(const MCV* pMCV) const;
+    /// Our construction yards on the rock formation containing \a at.
+    int yardsOnFormation(Coord at) const;
+    /// Distinct rock formations holding at least one of our yards.
+    int yardFormations() const;
     Uint32 rockSurveyCycle = std::numeric_limits<Uint32>::max();
     Coord rockExpansionSite = Coord::Invalid();
     int availableBaseRock = 0;
@@ -659,10 +704,11 @@ private:
     };
     /// The house's oldest surviving construction yard: the main base anchor.
     Uint32 mainConstructionYardID() const;
-    /// \a needsLocalSpace waives the core prerequisite (heavy factory, high
-    /// tech factory, repair yard) exactly as a measured built-out base does,
-    /// for a caller that has already established there is no usable site at
-    /// home. Defence cover, threat and recent-loss checks are unaffected.
+    /// May a colonist set out at all: the core (heavy factory, high tech
+    /// factory, repair yard) stands. Rocket cover is not required; the colony
+    /// yard orders its own. \a needsLocalSpace waives the core exactly as a
+    /// measured built-out base does, for a caller that has already established
+    /// there is no usable site at home.
     bool expansionDefenceReady(bool needsLocalSpace = false) const;
     int expansionTurretsMissing(const StructureBase* yard, bool planned = true) const;
     /// The owner-invariant inputs of an expansion cover test: the main base
@@ -687,6 +733,13 @@ private:
     /// again while the loss is still remembered.
     static constexpr int kRepeatedYardLossLimit = 2;
     static constexpr int kRepeatedYardLossRadius = 6;
+    /// Colonists that died on the way to another formation, remembered in the
+    /// retained loss history beside lost yards. kRepeatedYardLossLimit of them
+    /// suspend colonisation until the history ages out, so MCVs are not fed
+    /// one by one to an enemy holding the route.
+    int colonistsLost() const;
+    /// Remembers undeployed MCVs that vanished on a trip to another formation.
+    void recordLostColonists();
     Uint32 planningBuilder = NONE_ID;
     bool overlapsReservedStructure(int x, int y, int width, int height) const;
     OrnithopterStrikeTeam ornithopterStrikeTeam;
@@ -961,6 +1014,23 @@ private:
     /// Finite reserve. A raided colony gets real help; it can never become a
     /// second army that starves the offensive.
     static constexpr int kColonyGuardMax = 4;
+    /// Ground units escorting each colonist (an MCV whose remembered site lies
+    /// on another formation), keyed by unit and valued by MCV. Derived from
+    /// live state and cached for the current cycle only, for the same reason
+    /// as colonyGuardPosts(): the colonist's site is saved, and the escort is
+    /// always the nearest free vehicles to it. Escorts take precedence over
+    /// colony guards, attacks and regrouping.
+    const std::map<Uint32,Uint32>& colonistEscorts() const;
+    mutable std::map<Uint32,Uint32> colonistEscortSet;
+    mutable Uint32 colonistEscortCycle = std::numeric_limits<Uint32>::max();
+    static constexpr int kColonistEscortSize = 3;
+    /// An escort within this many tiles has gathered beside its colonist.
+    static constexpr int kEscortAssemblyRadius = 5;
+    /// Keeps an escort guarding beside its colonist. True when \a unit is one,
+    /// so no other controller orders it this pass.
+    bool escortColonist(const UnitBase* unit);
+    /// Escorts assigned to this colonist, and whether all of them have gathered.
+    int colonistEscortCount(const UnitBase* mcv, bool* gathered = nullptr) const;
     /// Runtime-only exterior staging cache. Recomputed whenever the cycle
     /// changes, exactly like lastSurvey, so it is never carried across a save
     /// and a reload reproduces it from live state rather than restoring it.

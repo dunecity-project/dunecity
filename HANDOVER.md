@@ -1,3 +1,132 @@
+## 2026-10-11 — QuantBot split and unit roles (no behaviour change, still 1.0.830)
+
+Branch refactor/quantbot-split from eba797da, built and tested on the Mac mini
+(~/Documents/projects/dunecity-quantbot-split). QuantBot.cpp is now eight files of
+one class: QuantBot.cpp (construction, update, events, danger, telemetry),
+QuantBotSaveLoad, QuantBotColonisation, QuantBotBuild, QuantBotPlacement,
+QuantBotArmy (defence, waves, posture, squads, checkAllUnits), QuantBotAir and
+QuantBotHarvesters; QuantBotInternal.h holds the shared includes and four
+cross-file helpers. Bodies moved verbatim. Controllers no longer read
+manualUnitOrders, the repair reservation, defenceAssignments,
+customWave.members, colonistEscorts() or colonyGuardPosts() to decide whether
+a unit is theirs: they ask QuantBot::unitRole(unit, {claims...}), which
+evaluates only the named claims in authority order (Human, Repair,
+BaseDefence, LiveDefence, Defence, Wave, ColonyGuard, Escort). Only the
+controller that grants a claim still reads and writes its registry.
+run-campaign-balance.py --quantbot-object now takes one or more objects and
+replaces all eight.
+
+Proof, per commit: Sihaya-Ferryman seed 968751410, Ordos Brutal vs Mercenary
+Brutal, local spectator, concrete off, powered turrets, 50 minutes. Two runs of
+eba797da give identical AI decision log, run log and summary once session id,
+wall-clock timings, the wall-scheduled telemetry flush metric and menu music
+are ignored; every step matched that baseline. The only other difference is
+the __LINE__ recorded with 17 production calls, each mapping one-to-one to the
+same moved line. Full ctest 80/80 after every step. The comparator
+(compare.py) and runner are in ../outputs/quantbot-split/. No version,
+protocol, save or telemetry change. Not pushed.
+Installed on the MBA at 20:52 AEDT from e516f82e (built on the mini, `cmake --install`
+staging: 36 Mach-O files with portable references, deep/strict signature verified
+before and after the swap). Still reports 1.0.830; executable SHA256
+f8ee54cbdbdfcccb3efaa81a42b071f319092b3d0b6a9a5940f9569b47191587. The game was not
+running. The previous 1.0.830 (258a64f2…) is at
+/Applications/.dunecity-backup-before-quantbot-split-20261011-205216/dunecity.app.
+
+## 2026-10-11 — local 1.0.830: QuantBot MCVs settle new rock instead of stacking
+
+Live MBA 1.0.829 session 1791686870982076-0, Sihaya-Ferryman 128x128, seed
+968751410, Ordos Brutal vs Mercenary Brutal spectated, tech 8, concrete off,
+powered rocket turrets. Ordos deployed three capacity MCVs beside its first
+yard (four yards on one formation), then sent five colonists to (12,17);
+Mercenary units killed every one in the western spice corridor (y 74-109).
+Mercenary deployed two capacity yards at home; MCV 240 then left its Heavy
+Factory onto (96,120), with that factory above, a yard below and rocket
+turrets either side, and stood there from minute 14.7 to the capture at
+41.7. Its only exits were diagonal. Both the colony survey and the local
+deployment search flooded four-connected reach, so it never got a
+destination, and as an existing MCV it also blocked every colonist purchase.
+
+Drivable reach in RockExpansionPolicy and McvDeployPolicy is now eight-way,
+matching the engine path search (no corner rule) and preservesGroundAccess'
+exit ring; formations stay edge-connected. An MCV in hand settles new rock when
+its base is built out or its formation already holds two yards
+(QuantBotColonisationPolicy::kYardsPerFormation), whenever a colonist may set
+out; otherwise it deploys locally as before. A trip to another formation is
+kept after the MCV leaves the full one. rockExpansionSite now records where
+new rock lies even while colonising it is blocked; colonySiteOpen() adds the
+core prerequisite (heavy and high tech factory, repair yard) and lost
+colonists. Rocket cover is no longer a prerequisite: expansionDefenceReady()
+used to demand three finished rocket turrets over every non-anchor yard, home
+production yards included, before any colonist could leave, although new rock
+never has turrets until a yard stands on it. Each colony yard still orders its
+own three covers (expansionTurretsMissing()). While new rock exists, or the
+base is built out, the capacity yard target stops at two home yards plus each
+colony's founding yard, and one colonist more once those stand and one may set
+out. A roomy base with no other rock on the map keeps the old capacity target.
+Campaign, helper and vanilla rules are unchanged.
+
+Colonists travel with an escort. colonistEscorts() gives each MCV on a trip to
+another formation its three nearest free ground vehicles (no infantry, wave
+member, defence assignment, Hunt, retreat, repair run or human order), derived
+per cycle from the saved trip like colonyGuardPosts(), so the save layout is
+unchanged. The colonist waits on its home rock until all of them are within
+five tiles, and never sets out without one; once off the home rock it keeps
+going. Escorts Area Guard around the MCV and follow it, attack whatever damages
+it, and are excluded from attack selection, colony guards and regrouping. They
+are released when the yard deploys. A damaged MCV is no longer stopped in
+place. A yard lost at the new rock is acceptable: the rock is free again.
+
+An undeployed MCV whose remembered remote site outlives it was a colonist lost
+on the way. It is added to the retained structure-loss history (item Unit_MCV,
+at its target, 15-minute retention) and two suspend new colonists until they
+age out. An MCV already bought with no home footprint still takes the waived
+remote trip rather than wait. Telemetry adds mcv_deployment formation_yards and
+colonist_lost / colonist_escort events and state colonists_lost.
+
+Version 830, network protocol 68, policy colony-escort-uncovered-expansion-v97.
+Save 9853, telemetry 18 and observer runtime 8 are unchanged.
+
+New unit cases cover the four-side box with an open diagonal in both policies
+and the per-MCV mission rule. The real-engine MCV probe adds: a formation with
+two uncovered yards and home room sends the next MCV to the far formation; live
+demand then buys exactly one colonist, and none while the core is unfinished;
+two colonists destroyed en route stop colonisation until the losses clear; a
+colonist with no army stays home; with two tanks it waits until both gather,
+then drives 30+ tiles with them and deploys, escort within 5 tiles. The police
+probe now requires an uncovered expansion not to hold colonists back. Reverting
+the reach, mission, cap, gate-cap, loss, departure or escort-order rule alone
+fails the matching check.
+
+Fresh matches from minute 0, Sihaya-Ferryman, both Brutal, local spectator,
+concrete off, powered turrets, 50 game minutes in the balance harness:
+
+| Seed | House | Colonies (minute) | Colonists lost | MCVs undeployed at end |
+|---|---|---|---|---|
+| 968751410 | Ordos | 15.8, 18.5, 20.3 | 0 | 0 |
+| 968751410 | Mercenary | 17.5, 24.1, 47.1 | 0 | 0 |
+| 12345 | Ordos | 19.7 | 2 (one at the new rock) | 0 |
+| 12345 | Mercenary | 17.2, 21.8, 41.8 | 0 | 0 |
+| 777001 | Ordos | 17.0, 22.0, 38.2 | 0 | 0 |
+| 777001 | Mercenary | 17.1, 19.2, 21.2 | 1 | 0 |
+
+Eighteen of 20 departures had three escorts and one had one; an Ordos MCV produced off its
+home rock (seed 777001, minute 31.7) left with none, since only departures from
+the home rock wait. The same seed under 829 founded no Ordos colony and one
+Mercenary colony in 50 minutes, with an idle Mercenary MCV.
+Once every free formation is taken, a colonist bought while rock was still open
+falls back to a home yard (seed 968751410 Ordos reached four home yards at 24
+minutes). Not pushed or released.
+
+Installed on the MBA at 16:29 AEDT from source 18a32c1f through `cmake --install`
+staging: 36 bundled Mach-O files with no Homebrew or workstation library paths,
+deep/strict ad-hoc signature verified before and after replacement, version
+1.0.830, installed binary SHA256
+258a64f2816bb193fdc4bd9abe45529c33dfa56c3b9afed7060c22c26b2f270a, identical to
+the staged bundle. The game was not running and was not launched; no profile or
+save was touched. Signed 1.0.829 backup:
+/Applications/.dunecity-backup-before-830-20261011-162922/dunecity.app.
+Evidence: ../outputs/quantbot-spread-colonies-830/.
+
 ## 2026-10-10 — 1.0.829 published and signed production installed on MBA
 
 PR93 merged the reviewed candidate d37b5fed. Tag v1.0.829 points to

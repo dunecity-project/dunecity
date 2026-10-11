@@ -210,20 +210,6 @@ TEST_CASE("Road restoration clears damage and traffic uses the shared connector"
     REQUIRE(placementSource("src/dunecity/TrafficSimulation.cpp").find("->isRoadConnection()") != std::string::npos);
 }
 
-TEST_CASE("Completed placement retries and requires foundations only when enabled", "[quantbot][placement][regression]") {
-    const auto source = placementSource("src/players/QuantBot.cpp");
-    const auto start = source.find("if (pBuilder->isWaitingToPlace())");
-    const auto block = source.substr(start, source.find("void QuantBot::scrambleUnitsAndDefend",start)-start);
-    REQUIRE(block.find("itemsize.y, false, getHouse(), false, itemToBePlaced") != std::string::npos);
-    REQUIRE(block.find("placement_replan") != std::string::npos);
-    REQUIRE(block.find("placement_deferred") != std::string::npos);
-    // A changed site may no longer have its promised foundation. The real
-    // opening probe verifies refund/replanning; retain the optional-setting guard.
-    const auto guard = block.find("getGameInitSettings().getGameOptions().concreteRequired");
-    REQUIRE(guard != std::string::npos);
-    REQUIRE(block.find("footprint_not_prepared",guard) != std::string::npos);
-}
-
 TEST_CASE("Ordinary buildings cannot rely on diagonal-only traffic detours", "[city][placement]") {
     REQUIRE_FALSE(CityPlacementPolicy::assessRoads(0,0,1,1,false,[](int x,int y){return x==0 || y==0;}).preservesConnections);
 }

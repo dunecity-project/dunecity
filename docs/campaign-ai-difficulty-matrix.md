@@ -248,7 +248,8 @@ and that attack-slot state survives save/load deterministically. Keep separate
 results for assisted and unassisted humans.
 
 Source locations: `src/players/QuantBot.cpp` (constructor role selection, update,
-onDamage, attack, launchGroundHunt, build and checkAllUnits),
+onDamage), `src/players/QuantBotBuild.cpp` (build), `src/players/QuantBotArmy.cpp`
+(attack, launchGroundHunt and checkAllUnits),
 `src/players/QuantBotConfig.cpp`, `config/QuantBot Config.ini.default`,
 `include/dunecity/VanillaEconomy.h`, `include/dunecity/PowerRules.h`,
 `src/House.cpp`, `src/structures/BuilderBase.cpp`,
