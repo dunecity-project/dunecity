@@ -958,6 +958,25 @@ void DeviationProbe::legacyLedger() {
         [&]{ tank->deviationEpisode = DeviationReward::Episode(); },
         [&]{ tank->deviationEpisode = distinctiveEpisode; });
     require(unitBytes.second == 17, "The control-interval record is not the expected 17 bytes");
+    // 9854 appended the hunt-toward goal and retry count after the 9844 Dynasty fields,
+    // which follow the control interval. A pre-9849 record has neither, so drop them too.
+    {
+        auto baselineHunt = [&]{ tank->huntTowardGoal = Coord::Invalid(); tank->huntTowardRetries = 0; };
+        baselineHunt();
+        OMemoryStream a; a.open(); tank->save(a);
+        const std::string before(a.getData(), a.getDataLength());
+        tank->huntTowardGoal = Coord(0x41424344, 0x45464748); tank->huntTowardRetries = 0x49;
+        OMemoryStream b; b.open(); tank->save(b);
+        const std::string after(b.getData(), b.getDataLength());
+        baselineHunt();
+        size_t first = 0;
+        while(first < before.size() && before[first] == after[first]) ++first;
+        size_t last = before.size();
+        while(last > first && before[last-1] == after[last-1]) --last;
+        require(last - first == 9, "The hunt-toward record is not the expected 9 bytes");
+        require(first >= unitBytes.second, "The hunt-toward record does not follow the control interval");
+        unitBytes.first.erase(first - unitBytes.second, last - first);
+    }
 
     game->loadedSavegameVersion = 9848;
     {

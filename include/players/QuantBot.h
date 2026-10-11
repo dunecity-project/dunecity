@@ -385,21 +385,24 @@ private:
     /// attacker, our structure as its target, and inside weapon range of it. A dead,
     /// stopped, friendly or merely nearby enemy is not.
     bool attackingOwnedBuilding(const ObjectBase* contact) const;
-    /// Is this unit's defence contact such an attack? Those contacts are hunted
-    /// rather than guarded, so the troop keeps the engine's attacking behaviour.
+    /// Was this unit scrambled to an attacked building and is it still on that
+    /// job (walking there or fighting)? Such a unit is not scrambled again.
     bool baseDefenceAssignment(const UnitBase* unit) const;
-    /// Every available ground combat troop, wherever on the map it stands, onto
-    /// one attack on a building we own: the main base or an outlying colony,
-    /// including an R/C/I zone. No response radius, no proportional quota and no
-    /// posture, strength or assembly condition - those bound fresh offence, not
-    /// a house being attacked at home. Human orders, repair runs, booked
-    /// carryall pickups, workers, builders, transports and the air planner's
-    /// aircraft keep their units, and a hunting launcher stays a hunter so its
-    /// close-range escape keeps working.
-    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const Coord& contact);
-    /// How close to the contact a troop's own fight already counts as this
-    /// battle. Those troops keep their orders, so repeated scans never restart
-    /// an order or a path that is already taking a unit into the same fight.
+    /// Custom Hard/Brutal answer to an attack on a building we own - the main
+    /// base or an outlying colony, including an R/C/I zone. The free ground
+    /// combat troops nearest to \a building, within the threat-scaled
+    /// emergencyResponseRadius() band, are sent to it with a Hunt order, nearest
+    /// first, until together with the troops already in that fight they outweigh
+    /// the local threat (SimpleArmyPolicy::reinforcements). They walk there with
+    /// UnitBase::doHuntToward, so Hunt overrides the move: they attack any enemy
+    /// they meet on the way. A unit already under a forced order (a spacing
+    /// step, a transit) is not moved, and a scrambled unit is not scrambled
+    /// again until it has finished: not walking, not fighting, and no enemy left
+    /// at its building. Human orders, repair runs, booked carryall pickups,
+    /// workers, builders, transports and aircraft keep their units.
+    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building);
+    /// How close to the attacked building a troop's own fight, or the enemy
+    /// strength it faces, counts as this battle.
     static constexpr int kBaseScrambleContactTiles = 8;
 
 

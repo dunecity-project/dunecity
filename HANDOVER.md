@@ -1,3 +1,45 @@
+## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
+
+User save wtf.dls (3waysplit, 1.0.831, Sardaukar Brutal vs one house, no
+Harkonnen): Sardaukar launchers marched forward and back and barely fired.
+Cause, since 1.0.807: every attack on any Sardaukar building ran
+scrambleWholeArmyToDefend, which gave every ground unit on the map a FORCED
+attack on that attacker; the defence upkeep re-forced it every pass, and a unit
+was only left alone while its attacker was hitting a building at that instant.
+With colonies attacked at once the army was re-targeted across the map
+(median 77 tiles), and forced units do not shoot on the way. Two minutes of the
+save on 1.0.831: 50 launchers fired 7 shots; 1,021 of 2,138 launcher orders
+were forced.
+
+Now (Custom Hard/Brutal): the free ground troops nearest the attacked building,
+within the threat-scaled emergencyResponseRadius band (12-40 tiles), are sent
+until with the troops already fighting there they reach 1.25x the threat
+(SimpleArmyPolicy::reinforcements). They walk with the new engine order
+UnitBase::doHuntToward: an unforced move in Hunt that attacks any enemy within
+max(weapon, view) range on the way, ignores the nearest enemy elsewhere on the
+map, resumes the walk up to three times if the engine drops it for want of a
+path, and becomes ordinary Hunt on arrival. A unit under a forced order is not
+moved. The assignment records the building; the unit is not scrambled again
+while it walks there, fights what it met, takes a spacing step, or enemies
+remain at that building. Nothing re-issues orders to it. Same save, same two
+minutes: 38 of 48 launchers fired 296 shots; 542 orders, 188 forced (spacing
+steps and the district response); 35 hunt-toward sends, median 10 tiles.
+Not changed, and still visible in the save: launchers that are not hunting kite
+from whatever hits them (onDamage), and damaged non-hunting units are pulled
+back to the squad when below 80% health without a repair run.
+
+Version 1.0.832, network protocol 69, save 9854 (UnitBase hunt-toward goal and
+retry count; 9853 saves load with none), policy nearest-hunt-base-scramble-v98.
+Whole-army probe rewritten for the new rules (nearest, enough, banded, Hunt,
+forced units kept, no re-scramble, real-cycle combat and release, Hunt meets an
+enemy on the way but not one off-route); its fixture now drops units killed in
+real combat, which Guard Malloc showed it reused. Recovery probe checks the
+hunt-toward order; the deviation probe strips the 9854 bytes from its pre-9849
+unit record. ctest 81/81. Sihaya-Ferryman seed 968751410 Brutal vs Brutal, 50
+minutes, no crash: Ordos (raided) lost 566 units against 680 on eba797da and
+dealt 134k damage value against 129k; Mercenary launched 14 waves against 12
+and lost no buildings. Not pushed or released.
+
 ## 2026-10-12 — 1.0.831: spectated startup crash on unplaceable scenario units
 
 The MBA (local 830 refactor build) crashed starting a spectated custom game:

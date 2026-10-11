@@ -266,6 +266,12 @@ protected:
     void doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const;
 
     /**
+        Sends pUnit towards x,y in Hunt mode: it attacks any enemy it meets on
+        the way and hunts normally once there (UnitBase::doHuntToward).
+    */
+    void doHuntToward(const UnitBase* pUnit, int x, int y) const;
+
+    /**
         Moves the unit pUnit to x,y.
         \param  pUnit           the unit to move
         \param  pTargetObject   the object to move to

@@ -167,7 +167,12 @@
 //     holds two yards without waiting for rocket cover, travel with an escort,
 //     and production MCVs stop at that share. MCV, escort and purchase orders
 //     change lockstep decisions. Save and runtime layouts remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            68
+// 69: QuantBot answers an attack on its building with the nearest free troops
+//     instead of forcing the whole army across the map, sends them with a
+//     hunt-toward order (UnitBase::doHuntToward) that attacks enemies met on the
+//     way, and never re-scrambles a scrambled unit. New engine targeting and
+//     save 9854.
+#define NETWORK_PROTOCOL_VERSION            69
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

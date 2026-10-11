@@ -42,7 +42,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9853 adds the Micropolis city-aircraft state: the helicopter's home pad,
     // patrol count, report cooldown, scan cooldown, report tally and
     // return-home flag, and the airplane's take-off frame and flight budget.
-    REQUIRE(SAVEGAMEVERSION == 9853);
+    // 9854 adds the unit hunt-toward flag (UnitBase::doHuntToward).
+    REQUIRE(SAVEGAMEVERSION == 9854);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 
