@@ -25,6 +25,12 @@ the __LINE__ recorded with 17 production calls, each mapping one-to-one to the
 same moved line. Full ctest 80/80 after every step. The comparator
 (compare.py) and runner are in ../outputs/quantbot-split/. No version,
 protocol, save or telemetry change. Not pushed.
+Installed on the MBA at 20:52 AEDT from e516f82e (built on the mini, `cmake --install`
+staging: 36 Mach-O files with portable references, deep/strict signature verified
+before and after the swap). Still reports 1.0.830; executable SHA256
+f8ee54cbdbdfcccb3efaa81a42b071f319092b3d0b6a9a5940f9569b47191587. The game was not
+running. The previous 1.0.830 (258a64f2…) is at
+/Applications/.dunecity-backup-before-quantbot-split-20261011-205216/dunecity.app.
 
 ## 2026-10-11 — local 1.0.830: QuantBot MCVs settle new rock instead of stacking
 
