@@ -49,7 +49,7 @@ bool QuantBot::availableAirDefender(const UnitBase* unit, const UnitBase* aircra
     // A human order, an explicit retreat and a trip to the repair yard all
     // outrank the rescue. An ordinary attack, raid or rally order does not:
     // interrupting those is the whole point.
-    return !humanControls(unit) && !reserveDamagedUnitForRepair(unit)
+    return unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free
         && unit->getAttackMode()!=RETREAT;
 }
 
@@ -292,7 +292,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
     for(const auto* unit:getUnitList())
         if(unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
             && unit->isActive() && unit->getHealth()>0
-            && unit->isRespondable() && !humanControls(unit)) aircraft.push_back(unit);
+            && unit->isRespondable() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free) aircraft.push_back(unit);
     ornithopterStrikeTeam.reset(); // Old saved mass-Hunt missions no longer grant permission to attack.
     // Only this pass authorizes a structure sortie. A withdrawn or unavailable
     // aircraft must not retain permission from a previous sortie.
@@ -511,7 +511,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             if(score!=bestSoFar) return score>bestSoFar;
             return id<incumbent->getObjectID();
         };
-        if(!reserveDamagedUnitForRepair(unit) && unit->getAttackMode()!=RETREAT) {
+        if(unitRole(unit, {UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()!=RETREAT) {
             for(const auto& candidate:candidates) {
                 if (isCampaignEnemy() && candidate.rank==AirStrikePolicy::RaidRank
                     && !campaignWave.members.count(unit->getObjectID())) continue;
@@ -659,7 +659,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
 
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
-        && !supportMode && !humanControls(unit);
+        && !supportMode && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 bool QuantBot::autonomousAircraftRaids() const {
