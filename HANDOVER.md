@@ -1,3 +1,31 @@
+## 2026-10-11 — QuantBot split and unit roles (no behaviour change, still 1.0.830)
+
+Branch refactor/quantbot-split from eba797da, built and tested on the Mac mini
+(~/Documents/projects/dunecity-quantbot-split). QuantBot.cpp is now eight files of
+one class: QuantBot.cpp (construction, update, events, danger, telemetry),
+QuantBotSaveLoad, QuantBotColonisation, QuantBotBuild, QuantBotPlacement,
+QuantBotArmy (defence, waves, posture, squads, checkAllUnits), QuantBotAir and
+QuantBotHarvesters; QuantBotInternal.h holds the shared includes and four
+cross-file helpers. Bodies moved verbatim. Controllers no longer read
+manualUnitOrders, the repair reservation, defenceAssignments,
+customWave.members, colonistEscorts() or colonyGuardPosts() to decide whether
+a unit is theirs: they ask QuantBot::unitRole(unit, {claims...}), which
+evaluates only the named claims in authority order (Human, Repair,
+BaseDefence, LiveDefence, Defence, Wave, ColonyGuard, Escort). Only the
+controller that grants a claim still reads and writes its registry.
+run-campaign-balance.py --quantbot-object now takes one or more objects and
+replaces all eight.
+
+Proof, per commit: Sihaya-Ferryman seed 968751410, Ordos Brutal vs Mercenary
+Brutal, local spectator, concrete off, powered turrets, 50 minutes. Two runs of
+eba797da give identical AI decision log, run log and summary once session id,
+wall-clock timings, the wall-scheduled telemetry flush metric and menu music
+are ignored; every step matched that baseline. The only other difference is
+the __LINE__ recorded with 17 production calls, each mapping one-to-one to the
+same moved line. Full ctest 80/80 after every step. The comparator
+(compare.py) and runner are in ../outputs/quantbot-split/. No version,
+protocol, save or telemetry change. Not pushed.
+
 ## 2026-10-11 — local 1.0.830: QuantBot MCVs settle new rock instead of stacking
 
 Live MBA 1.0.829 session 1791686870982076-0, Sihaya-Ferryman 128x128, seed
