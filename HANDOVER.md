@@ -81,7 +81,16 @@ the home rock wait. The same seed under 829 founded no Ordos colony and one
 Mercenary colony in 50 minutes, with an idle Mercenary MCV.
 Once every free formation is taken, a colonist bought while rock was still open
 falls back to a home yard (seed 968751410 Ordos reached four home yards at 24
-minutes). Not installed, pushed or released.
+minutes). Not pushed or released.
+
+Installed on the MBA at 16:29 AEDT from source 18a32c1f through `cmake --install`
+staging: 36 bundled Mach-O files with no Homebrew or workstation library paths,
+deep/strict ad-hoc signature verified before and after replacement, version
+1.0.830, installed binary SHA256
+258a64f2816bb193fdc4bd9abe45529c33dfa56c3b9afed7060c22c26b2f270a, identical to
+the staged bundle. The game was not running and was not launched; no profile or
+save was touched. Signed 1.0.829 backup:
+/Applications/.dunecity-backup-before-830-20261011-162922/dunecity.app.
 Evidence: ../outputs/quantbot-spread-colonies-830/.
 
 ## 2026-10-10 — 1.0.829 published and signed production installed on MBA
