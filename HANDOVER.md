@@ -39,6 +39,12 @@ unit record. ctest 81/81. Sihaya-Ferryman seed 968751410 Brutal vs Brutal, 50
 minutes, no crash: Ordos (raided) lost 566 units against 680 on eba797da and
 dealt 134k damage value against 129k; Mercenary launched 14 waves against 12
 and lost no buildings. Not pushed or released.
+Installed on the MBA at 03:48 AEDT from 636507f2 (built on the mini, `cmake
+--install` staging, 36 Mach-O files with portable references, deep/strict
+signature verified before and after the swap): version 1.0.832, executable
+SHA256 19871fbe68a7b11a61ef65f2569b239bca39f32b70dc51e7105e91bfbe71847a. The
+game was not running. The signed production 1.0.831 (c9148cc5...) is at
+/Applications/.dunecity-backup-before-1.0.832-20261012-034835/dunecity.app.
 
 ## 2026-10-12 — 1.0.831: spectated startup crash on unplaceable scenario units
 
