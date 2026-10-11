@@ -114,8 +114,8 @@ inline bool missionDue(const Demand& demand) {
 // built at home, and a built-out base has no footprint left for one at all.
 // Once the standing yards fill that, one more MCV is worth buying, as the
 // colonist, and only while one may set out. Granting it any earlier buys an
-// MCV that arrives to find its formation full and the newest yard not yet
-// defended, and it then stacks on the home rock or stands idle.
+// MCV that arrives while its formation's share is still filling and then
+// stacks on the home rock or stands idle.
 inline int productionYardCeiling(int heldFormations, int standingYards, bool siteAvailable, bool builtOut) {
     int share = kYardsPerFormation + (heldFormations > 1 ? heldFormations - 1 : 0);
     if(builtOut && standingYards < share) share = standingYards;

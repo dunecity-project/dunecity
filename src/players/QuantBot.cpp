@@ -1168,8 +1168,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		}
 
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
-		// Stop him dead in his tracks if he's going to rally point
-		if (!autonomousAttack && !humanControls(pGroundUnit) && pGroundUnit->wasForced() && (pGroundUnit->getItemID() != Unit_Harvester)) {
+		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
+		// driving: a colonist halted under fire is the one that does not arrive.
+		if (!autonomousAttack && !humanControls(pGroundUnit) && pGroundUnit->wasForced()
+			&& pGroundUnit->getItemID() != Unit_Harvester && pGroundUnit->getItemID() != Unit_MCV) {
 			doMove2Pos(pGroundUnit,
 				pGroundUnit->getLocation().x,
 				pGroundUnit->getLocation().y,
@@ -1211,6 +1213,15 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
                 dangerUpdated = std::numeric_limits<Uint32>::max();
                 refreshTacticalDanger();
                 manageHarvesterSafety(pHarvester);
+			}
+		}
+		else if (pGroundUnit->getItemID() == Unit_MCV) {
+			// A colonist under fire: its escort turns on the attacker.
+			for (const auto& entry : colonistEscorts()) {
+				if (entry.second != pGroundUnit->getObjectID()) continue;
+				const auto* escort = dynamic_cast<const UnitBase*>(getObject(entry.first));
+				if (escort && !humanControls(escort) && escort->canAttack(pDamager) && escort->getTarget() != pDamager)
+					doAttackObject(escort, pDamager, false);
 			}
 		}
 		else if (autonomousAttack && (pGroundUnit->getItemID() == Unit_Launcher
@@ -1407,8 +1418,8 @@ bool QuantBot::baseBuiltOut() const {
 
 bool QuantBot::colonySiteOpen() const {
     // The survey's destination says where new rock lies. Whether a colonist
-    // may set out for it now is decided against the current base: its core
-    // and expansion cover, and colonists already lost on the way.
+    // may set out for it now is decided against the current base: its core,
+    // and colonists already lost on the way.
     return rockExpansionSite.isValid() && colonistsLost()<kRepeatedYardLossLimit && expansionDefenceReady();
 }
 
@@ -1831,8 +1842,21 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         const Coord pos=findMcvPlaceLocation(pMCV);
         if(pos.isValid()) doMove2Pos(pMCV,pos.x,pos.y,true);
     } else if(target.isValid()&&!atTarget&&surveyedNow) {
+        // A colonist leaves its home rock only with its escort gathered beside
+        // it; the escort is ordered to it in checkAllUnits meanwhile. Once off
+        // the home rock it keeps going, escort or not: turning back would
+        // strand it between the two formations.
+        bool awaitingEscort=false;
+        if(expansion&&!onOwnRockFormation(target)) {
+            bool gathered=true;
+            const int escorts=colonistEscortCount(pMCV,&gathered);
+            awaitingEscort=(escorts==0||!gathered)&&onOwnRockFormation(location);
+            traceDecision("colonist_escort",AITelemetry::Record().set("mcv",id)
+                .set("x",location.x).set("y",location.y).set("target_x",target.x).set("target_y",target.y)
+                .set("escorts",escorts).set("gathered",gathered).set("departing",!awaitingEscort));
+        }
         // Reissue only at the retry cadence or after a permanent obstruction.
-        doMove2Pos(pMCV,target.x,target.y,true);
+        if(!awaitingEscort) doMove2Pos(pMCV,target.x,target.y,true);
     }
 
     if(report) {
@@ -2452,7 +2476,6 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
     // core where it stands: the missing factory is the very thing the colony
     // has to make room for. Waive that prerequisite only once the survey has
     // measured the base as built out, so the gate cannot close on itself.
-    // Turret cover for existing expansions below is unaffected.
     //
     // A caller that has just failed to find any site at home knows the same
     // thing first-hand, and more recently than the survey: the reported
@@ -2460,20 +2483,15 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
     // reported room again while its rock held no legal footprint at all.
     const bool builtOut = needsLocalSpace
         || (rockSurveyCycle != std::numeric_limits<Uint32>::max() && baseBuiltOut());
-    // Complete the core first, then secure each expansion before committing
-    // another MCV to an outlying site. Recovery of the only yard is exempt.
+    // Complete the core first. Rocket cover is not a prerequisite: the new
+    // rock has no turrets until a yard stands on it, and the yard is what
+    // builds them there (expansionTurretsMissing() orders its three covers).
+    // The escort protects the trip; a yard lost before its covers stand
+    // leaves the rock free for the next one. Recovery of the only yard is exempt.
     if (!builtOut)
         for (Uint32 item : {Structure_HeavyFactory, Structure_HighTechFactory, Structure_RepairYard})
             if (data[item][house].enabled && data[item][house].techLevel <= currentGame->techLevel
                 && getHouse()->getNumItems(item) == 0) return false;
-    if (!data[Structure_RocketTurret][house].enabled
-        || data[Structure_RocketTurret][house].techLevel > currentGame->techLevel) return true;
-    // The anchor and the turret set are the same for every candidate in this
-    // reduction, so they are collected once instead of per structure. The
-    // per-yard predicate and the short-circuit order are unchanged.
-    const ExpansionCoverFacts facts = collectExpansionCoverFacts();
-    for (const auto* yard:getStructureList())
-        if (expansionTurretsMissing(yard,false,facts)>0) return false;
     return true;
 }
 
@@ -5441,7 +5459,7 @@ void QuantBot::build(int militaryValue) {
     // While new rock exists, production yards stop at the home formation's
     // share plus each colony's founding yard. Another MCV beyond that is worth
     // buying only as a colonist, so only while one may set out, and one at a
-    // time; a colony blocked for now (turret cover, lost colonists) waits
+    // time; a colony blocked for now (unfinished core, lost colonists) waits
     // rather than turning into a further yard at home. A built-out base buys
     // no production yard at all: there is no footprint left to deploy one on.
     // A roomy base on a map with no other rock keeps the plain capacity
@@ -12428,6 +12446,8 @@ void QuantBot::launchGroundHunt() {
                 if (launcherItem(unit)) ++launchersAlreadyHunting;
                 continue;
             }
+            // An escort stays with its colonist until the colony stands.
+            if (colonistEscorts().count(unit->getObjectID())) continue;
             candidates.push_back({unit->getObjectID(),price,0});
             if (launcherItem(unit)) ++launcherCandidates;
             availableValue+=price;
@@ -12439,7 +12459,8 @@ void QuantBot::launchGroundHunt() {
         }
         const bool free=!reserveDamagedUnitForRepair(unit) && unit->getAttackMode()!=RETREAT
             && !unit->hasATarget() && !defenceAssignments.count(unit->getObjectID())
-            && (!recoveryActive() || !colonyGuardPosts().count(unit->getObjectID()));
+            && (!recoveryActive() || !colonyGuardPosts().count(unit->getObjectID()))
+            && !colonistEscorts().count(unit->getObjectID());
         // Every existing hunter counts, including forced moves and busy targets.
         // Never select it again or silently drop it from the pressure budget.
         // Tracked members also count while a withdrawal or base-defence order
@@ -13969,6 +13990,7 @@ const std::map<Uint32,Coord>& QuantBot::colonyGuardPosts() const {
         if (reserveDamagedUnitForRepair(unit)) continue;
         if (customWave.members.count(unit->getObjectID())) continue;
         if (defenceAssignments.count(unit->getObjectID())) continue;
+        if (colonistEscorts().count(unit->getObjectID())) continue;   // Escorting a colonist.
         if (unit->getAttackMode() == HUNT) continue;   // Already attacking: leave it attacking.
         picks.push_back({unit->getObjectID(), blockDistance(post, unit->getLocation()).lround()});
     }
@@ -14008,6 +14030,91 @@ void QuantBot::assignColonyGuards(int& orderBudget) {
         .set("x", reported.x).set("y", reported.y)
         .set("assigned", int(posts.size())).set("issued", issued)
         .set("reserve_cap", kColonyGuardMax));
+}
+
+const std::map<Uint32,Uint32>& QuantBot::colonistEscorts() const {
+    const Uint32 now = getGameCycleCount();
+    if (colonistEscortCycle == now) return colonistEscortSet;
+    colonistEscortCycle = now;
+    colonistEscortSet.clear();
+    if (currentGame == nullptr || supportMode || gameMode != GameMode::Custom
+        || !currentGame->isCitySimEnabled()) return colonistEscortSet;
+    // A colonist is an MCV on its way to another formation: its saved site
+    // says so. In id order, so every peer gives escorts out the same way.
+    std::vector<const UnitBase*> colonists;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || unit->getItemID() != Unit_MCV || unit->getHealth() <= 0) continue;
+        const auto site = mcvExpansionSites.find(unit->getObjectID());
+        if (site == mcvExpansionSites.end() || site->second.isInvalid() || onOwnRockFormation(site->second)) continue;
+        colonists.push_back(unit);
+    }
+    if (colonists.empty()) return colonistEscortSet;
+    std::sort(colonists.begin(), colonists.end(),
+        [](const UnitBase* a, const UnitBase* b) { return a->getObjectID() < b->getObjectID(); });
+    // Free vehicles only: never an attacker already committed, an emergency
+    // defender, a repair run or a human order. Infantry cannot keep pace.
+    std::vector<const UnitBase*> pool;
+    for (const auto* unit : getUnitList()) {
+        if (!orderableCombatUnit(unit) || !unit->isAGroundUnit() || unit->isInfantry()) continue;
+        if (reserveDamagedUnitForRepair(unit)) continue;
+        if (customWave.members.count(unit->getObjectID())) continue;
+        if (defenceAssignments.count(unit->getObjectID())) continue;
+        if (unit->getAttackMode() == HUNT || unit->getAttackMode() == RETREAT) continue;
+        pool.push_back(unit);
+    }
+    std::vector<bool> taken(pool.size(), false);
+    for (const auto* colonist : colonists) {
+        struct Pick { size_t index; int distance; Uint32 id; };
+        std::vector<Pick> picks;
+        for (size_t i = 0; i < pool.size(); ++i)
+            if (!taken[i]) picks.push_back({i, blockDistance(colonist->getLocation(), pool[i]->getLocation()).lround(),
+                pool[i]->getObjectID()});
+        std::sort(picks.begin(), picks.end(), [](const Pick& a, const Pick& b) {
+            return a.distance != b.distance ? a.distance < b.distance : a.id < b.id;
+        });
+        for (size_t i = 0; i < picks.size() && i < size_t(kColonistEscortSize); ++i) {
+            taken[picks[i].index] = true;
+            colonistEscortSet[picks[i].id] = colonist->getObjectID();
+        }
+    }
+    return colonistEscortSet;
+}
+
+int QuantBot::colonistEscortCount(const UnitBase* mcv, bool* gathered) const {
+    if (gathered) *gathered = true;
+    if (mcv == nullptr) return 0;
+    int escorts = 0;
+    for (const auto& entry : colonistEscorts()) {
+        if (entry.second != mcv->getObjectID()) continue;
+        ++escorts;
+        const auto* unit = getObject(entry.first);
+        if (gathered && (!unit || blockDistance(unit->getLocation(), mcv->getLocation()).lround() > kEscortAssemblyRadius))
+            *gathered = false;
+    }
+    return escorts;
+}
+
+bool QuantBot::escortColonist(const UnitBase* unit) {
+    if (unit == nullptr || unit->getOwner() != getHouse()) return false;
+    const auto& escorts = colonistEscorts();
+    const auto entry = escorts.find(unit->getObjectID());
+    if (entry == escorts.end()) return false;
+    const auto* colonist = getObject(entry->second);
+    if (colonist == nullptr) return false;
+    const Coord at = colonist->getLocation();
+    // Area Guard around the colonist, never a forced march: the escort turns
+    // on whatever comes near it on the way and at the new rock.
+    const_cast<UnitBase*>(unit)->setGuardPoint(at);
+    if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+    if (unit->hasATarget()) return true;
+    if (blockDistance(unit->getLocation(), at).lround() <= 2) return true;
+    // Keep a path in progress that already ends beside the colonist instead of
+    // replanning it on every pass.
+    const Coord destination = unit->getDestination();
+    if (unit->isMoving() && destination.isValid() && blockDistance(destination, at).lround() <= 2) return true;
+    if (currentGame->getPathRequestQueueSize() > 150) return true;
+    doMove2Pos(unit, at.x, at.y, false);
+    return true;
 }
 
 ArmyPosturePolicy::DispatchGate QuantBot::offensiveDispatchGate(const ArmySurvey& survey) const {
@@ -14773,6 +14880,8 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // derived from current world state, so this is stable without remembering
     // an assignment across passes.
     if (recoveryActive() && colonyGuardPosts().count(unit->getObjectID())) return;
+    // An escort follows its colonist, not the house assembly.
+    if (colonistEscorts().count(unit->getObjectID())) return;
     // Easy and Medium keep their reserve at home, as they always have.
     //
     // Custom Hard/Brutal anchors the uncommitted reserve: a freshly built tank
@@ -15075,6 +15184,10 @@ void QuantBot::retreatAllUnits() {
                     continue;
                 }
             }
+
+            // Colonist escorts stay beside their MCV, ahead of rally, raids,
+            // prey assignment and every other role below.
+            if (!supportMode && escortColonist(pUnit)) continue;
 
             if (campaignControlsUnit(pUnit)) continue;
 

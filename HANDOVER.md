@@ -20,49 +20,68 @@ its base is built out or its formation already holds two yards
 out; otherwise it deploys locally as before. A trip to another formation is
 kept after the MCV leaves the full one. rockExpansionSite now records where
 new rock lies even while colonising it is blocked; colonySiteOpen() adds the
-expansion defence gate and lost colonists. While new rock exists, or the base
-is built out, the capacity yard target stops at two home yards plus each
+core prerequisite (heavy and high tech factory, repair yard) and lost
+colonists. Rocket cover is no longer a prerequisite: expansionDefenceReady()
+used to demand three finished rocket turrets over every non-anchor yard, home
+production yards included, before any colonist could leave, although new rock
+never has turrets until a yard stands on it. Each colony yard still orders its
+own three covers (expansionTurretsMissing()). While new rock exists, or the
+base is built out, the capacity yard target stops at two home yards plus each
 colony's founding yard, and one colonist more once those stand and one may set
 out. A roomy base with no other rock on the map keeps the old capacity target.
 Campaign, helper and vanilla rules are unchanged.
+
+Colonists travel with an escort. colonistEscorts() gives each MCV on a trip to
+another formation its three nearest free ground vehicles (no infantry, wave
+member, defence assignment, Hunt, retreat, repair run or human order), derived
+per cycle from the saved trip like colonyGuardPosts(), so the save layout is
+unchanged. The colonist waits on its home rock until all of them are within
+five tiles, and never sets out without one; once off the home rock it keeps
+going. Escorts Area Guard around the MCV and follow it, attack whatever damages
+it, and are excluded from attack selection, colony guards and regrouping. They
+are released when the yard deploys. A damaged MCV is no longer stopped in
+place. A yard lost at the new rock is acceptable: the rock is free again.
 
 An undeployed MCV whose remembered remote site outlives it was a colonist lost
 on the way. It is added to the retained structure-loss history (item Unit_MCV,
 at its target, 15-minute retention) and two suspend new colonists until they
 age out. An MCV already bought with no home footprint still takes the waived
-remote trip rather than wait. Save layout is unchanged. Telemetry adds
-mcv_deployment formation_yards, a colonist_lost event and state colonists_lost.
+remote trip rather than wait. Telemetry adds mcv_deployment formation_yards and
+colonist_lost / colonist_escort events and state colonists_lost.
 
-Version 830, network protocol 68, policy spread-colonies-diagonal-reach-v96.
+Version 830, network protocol 68, policy colony-escort-uncovered-expansion-v97.
 Save 9853, telemetry 18 and observer runtime 8 are unchanged.
 
 New unit cases cover the four-side box with an open diagonal in both policies
 and the per-MCV mission rule. The real-engine MCV probe adds: a formation with
-two covered yards and home room sends the next MCV to the far formation; live
+two uncovered yards and home room sends the next MCV to the far formation; live
 demand then buys exactly one colonist, and none while the core is unfinished;
-two colonists destroyed en route stop colonisation, which resumes once the
-losses are cleared. Reverting each of the reach, mission, cap, gate-cap and
-loss rules alone fails the matching check.
+two colonists destroyed en route stop colonisation until the losses clear; a
+colonist with no army stays home; with two tanks it waits until both gather,
+then drives 30+ tiles with them and deploys, escort within 5 tiles. The police
+probe now requires an uncovered expansion not to hold colonists back. Reverting
+the reach, mission, cap, gate-cap, loss, departure or escort-order rule alone
+fails the matching check.
 
-Same map, seed and settings, first 50 game minutes in the balance harness
-(local spectator, both Brutal). It does not replay the live trajectory:
+Fresh matches from minute 0, Sihaya-Ferryman, both Brutal, local spectator,
+concrete off, powered turrets, 50 game minutes in the balance harness:
 
-| | 829 Ordos | 830 Ordos | 829 Mercenary | 830 Mercenary |
+| Seed | House | Colonies (minute) | Colonists lost | MCVs undeployed at end |
 |---|---|---|---|---|
-| MCVs produced | 7 | 5 | 5 | 4 |
-| MCVs killed | 4 | 3 | 0 | 0 |
-| Most yards on one formation | 4 | 3 | 4 | 2 |
-| Colonies founded | 0 | 0 | 1 | 3 |
-| Idle MCV | none | none | 578 from 22.8 min | none |
+| 968751410 | Ordos | 15.8, 18.5, 20.3 | 0 | 0 |
+| 968751410 | Mercenary | 17.5, 24.1, 47.1 | 0 | 0 |
+| 12345 | Ordos | 19.7 | 2 (one at the new rock) | 0 |
+| 12345 | Mercenary | 17.2, 21.8, 41.8 | 0 | 0 |
+| 777001 | Ordos | 17.0, 22.0, 38.2 | 0 | 0 |
+| 777001 | Mercenary | 17.1, 19.2, 21.2 | 1 | 0 |
 
-Ordos still loses two colonists on the same corridor before the hold; the
-third Ordos yard is an MCV bought just before the second loss. Colonists
-still travel unescorted. Every non-anchor yard, home ones included, still needs
-three covering rocket turrets before any colonist leaves (isExpansionYard);
-those turrets are what boxed MCV 240 in. In a 65-minute extension, after every
-free formation was settled, Mercenary bought one capacity MCV at 54 minutes
-whose 20-tile local search found no footprint although the base survey still
-counted room; it waited. Not installed, pushed or released.
+Eighteen of 20 departures had three escorts and one had one; an Ordos MCV produced off its
+home rock (seed 777001, minute 31.7) left with none, since only departures from
+the home rock wait. The same seed under 829 founded no Ordos colony and one
+Mercenary colony in 50 minutes, with an idle Mercenary MCV.
+Once every free formation is taken, a colonist bought while rock was still open
+falls back to a home yard (seed 968751410 Ordos reached four home yards at 24
+minutes). Not installed, pushed or released.
 Evidence: ../outputs/quantbot-spread-colonies-830/.
 
 ## 2026-10-10 — 1.0.829 published and signed production installed on MBA

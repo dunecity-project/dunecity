@@ -671,10 +671,11 @@ private:
     };
     /// The house's oldest surviving construction yard: the main base anchor.
     Uint32 mainConstructionYardID() const;
-    /// \a needsLocalSpace waives the core prerequisite (heavy factory, high
-    /// tech factory, repair yard) exactly as a measured built-out base does,
-    /// for a caller that has already established there is no usable site at
-    /// home. Defence cover, threat and recent-loss checks are unaffected.
+    /// May a colonist set out at all: the core (heavy factory, high tech
+    /// factory, repair yard) stands. Rocket cover is not required; the colony
+    /// yard orders its own. \a needsLocalSpace waives the core exactly as a
+    /// measured built-out base does, for a caller that has already established
+    /// there is no usable site at home.
     bool expansionDefenceReady(bool needsLocalSpace = false) const;
     int expansionTurretsMissing(const StructureBase* yard, bool planned = true) const;
     /// The owner-invariant inputs of an expansion cover test: the main base
@@ -980,6 +981,23 @@ private:
     /// Finite reserve. A raided colony gets real help; it can never become a
     /// second army that starves the offensive.
     static constexpr int kColonyGuardMax = 4;
+    /// Ground units escorting each colonist (an MCV whose remembered site lies
+    /// on another formation), keyed by unit and valued by MCV. Derived from
+    /// live state and cached for the current cycle only, for the same reason
+    /// as colonyGuardPosts(): the colonist's site is saved, and the escort is
+    /// always the nearest free vehicles to it. Escorts take precedence over
+    /// colony guards, attacks and regrouping.
+    const std::map<Uint32,Uint32>& colonistEscorts() const;
+    mutable std::map<Uint32,Uint32> colonistEscortSet;
+    mutable Uint32 colonistEscortCycle = std::numeric_limits<Uint32>::max();
+    static constexpr int kColonistEscortSize = 3;
+    /// An escort within this many tiles has gathered beside its colonist.
+    static constexpr int kEscortAssemblyRadius = 5;
+    /// Keeps an escort guarding beside its colonist. True when \a unit is one,
+    /// so no other controller orders it this pass.
+    bool escortColonist(const UnitBase* unit);
+    /// Escorts assigned to this colonist, and whether all of them have gathered.
+    int colonistEscortCount(const UnitBase* mcv, bool* gathered = nullptr) const;
     /// Runtime-only exterior staging cache. Recomputed whenever the cycle
     /// changes, exactly like lastSurvey, so it is never carried across a save
     /// and a reload reproduces it from live state rather than restoring it.
