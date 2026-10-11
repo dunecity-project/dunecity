@@ -26,9 +26,19 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
     std::vector<int> component(n,-1),distance(n,-1),freeCount;
     std::vector<bool> occupied;
     std::vector<int> queue; queue.reserve(n);
+    // Formations are edge-connected rock: a building needs contiguous ground.
     auto neighbours=[&](int i,auto visit) {
         if(i%w) visit(i-1); if(i%w+1<w) visit(i+1);
         if(i>=w) visit(i-w); if(i+w<n) visit(i+w);
+    };
+    // Ground units drive in eight directions and the engine's path search has
+    // no corner rule, so a vehicle squeezes diagonally between two buildings.
+    // Reachability has to match, or an MCV boxed in on its four sides reads as
+    // stranded and is never sent anywhere while its diagonal is open.
+    auto driveNeighbours=[&](int i,auto visit) {
+        const int x=i%w,y=i/w;
+        for(int dy=-1;dy<=1;++dy) for(int dx=-1;dx<=1;++dx)
+            if((dx||dy)&&x+dx>=0&&x+dx<w&&y+dy>=0&&y+dy<h) visit(i+dy*w+dx);
     };
     for(int i=0;i<n;++i) if(tiles[i].rock && component[i]<0) {
         const int id=int(freeCount.size()); freeCount.push_back(0);occupied.push_back(false);
@@ -43,7 +53,7 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
     for(int i:starts) if(i>=0&&i<n&&tiles[i].walkable&&!tiles[i].unsafe&&distance[i]<0){distance[i]=0;queue.push_back(i);}
     for(size_t j=0;j<queue.size();++j) {
         const int at=queue[j];
-        neighbours(at,[&](int next){if(tiles[next].walkable&&!tiles[next].unsafe&&distance[next]<0){distance[next]=distance[at]+1;queue.push_back(next);}});
+        driveNeighbours(at,[&](int next){if(tiles[next].walkable&&!tiles[next].unsafe&&distance[next]<0){distance[next]=distance[at]+1;queue.push_back(next);}});
     }
     std::vector<int> sum((w+1)*(h+1));
     for(int y=0;y<h;++y) for(int x=0;x<w;++x) {

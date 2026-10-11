@@ -25,6 +25,7 @@
 #include <players/CombatReward.h>
 #include <players/GroundAccessPolicy.h>
 #include <players/UnitMixPolicy.h>
+#include <players/QuantBotColonisationPolicy.h>
 #include <units/MCV.h>
 class Harvester;
 #include <players/QuantBotConfig.h>
@@ -399,9 +400,20 @@ private:
     /// \a mcvsIncludingQueued counts MCVs alive, paid for and queued, and
     /// \a yardLimit is the game-option ceiling (0 = none).
     bool colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const;
+    /// Inputs shared by the colonist purchase and the per-MCV mission decision.
+    QuantBotColonisationPolicy::Demand colonisationDemand(int mcvsIncludingQueued, int yardLimit) const;
+    /// May a colonist set out for the surveyed new rock now? rockExpansionSite
+    /// is where new rock lies; this adds the expansion defence gate and the
+    /// colonists already lost on the way.
+    bool colonySiteOpen() const;
     /// Is this MCV's job settling another formation rather than growing the
-    /// base? Only a built-out base with a surveyed destination sends one away.
-    bool colonyMissionDue() const;
+    /// base? A built-out base, or a formation already running its share of
+    /// yards, sends it to a surveyed destination when one exists.
+    bool colonyMissionDue(const MCV* pMCV) const;
+    /// Our construction yards on the rock formation containing \a at.
+    int yardsOnFormation(Coord at) const;
+    /// Distinct rock formations holding at least one of our yards.
+    int yardFormations() const;
     Uint32 rockSurveyCycle = std::numeric_limits<Uint32>::max();
     Coord rockExpansionSite = Coord::Invalid();
     int availableBaseRock = 0;
@@ -687,6 +699,13 @@ private:
     /// again while the loss is still remembered.
     static constexpr int kRepeatedYardLossLimit = 2;
     static constexpr int kRepeatedYardLossRadius = 6;
+    /// Colonists that died on the way to another formation, remembered in the
+    /// retained loss history beside lost yards. kRepeatedYardLossLimit of them
+    /// suspend colonisation until the history ages out, so MCVs are not fed
+    /// one by one to an enemy holding the route.
+    int colonistsLost() const;
+    /// Remembers undeployed MCVs that vanished on a trip to another formation.
+    void recordLostColonists();
     Uint32 planningBuilder = NONE_ID;
     bool overlapsReservedStructure(int x, int y, int width, int height) const;
     OrnithopterStrikeTeam ornithopterStrikeTeam;

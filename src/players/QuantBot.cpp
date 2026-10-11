@@ -1282,12 +1282,23 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 }
 
 Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
-    const bool defenceReady=expansionDefenceReady(needsLocalSpace);
-    // A per-MCV query has nothing to measure, so the shut gate still costs
-    // nothing. The base survey runs first and reports how much room the base
-    // has left even while colonisation itself is blocked: that measurement is
-    // what tells production the city has nowhere left to build.
-    if(!defenceReady && mcv) return Coord::Invalid();
+    // The base survey notices colonists that died on the way since it last
+    // ran; colonySiteOpen() holds further ones back while that is remembered.
+    if(!mcv) recordLostColonists();
+    // A per-MCV query is a trip about to start, so the shut gates refuse it
+    // before the survey costs anything. The lost-colonist hold stops new
+    // colonists, not one already bought that has no footprint at home
+    // (needsLocalSpace): parking that MCV until the losses age out is the
+    // idle MCV this rule must never create. The base survey always runs to
+    // the end: it measures how much room the base has left, which tells
+    // production the city has nowhere left to build, and it reports whether
+    // new rock exists at all while colonising it is blocked, which keeps
+    // production yards from stacking on the home rock in the meantime.
+    // Whether a colonist may set out for that rock is colonySiteOpen()'s
+    // decision.
+    if(mcv && ((!needsLocalSpace && colonistsLost()>=kRepeatedYardLossLimit)
+            || !expansionDefenceReady(needsLocalSpace)))
+        return Coord::Invalid();
     AITelemetry::PerformanceScope survey("ai.rock_survey.anchor_field",
         getGameCycleCount(), getHouse()->getHouseID());
     const int w=getMap().getSizeX(),h=getMap().getSizeY();
@@ -1337,12 +1348,6 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
         availableBaseFootprints=QuantBotColonisationPolicy::freeFootprints(w,h,buildable,2,2,
             QuantBotColonisationPolicy::kCrampedFootprints);
     }
-    // Re-evaluate after measuring this survey, not the previous base layout.
-    // This second gate is deliberate: the survey above has just changed
-    // availableBaseRock/availableBaseFootprints, so baseBuiltOut() must be
-    // reconsidered against the measurement rather than the previous layout.
-    survey.next("ai.rock_survey.defence_gate");
-    if(!expansionDefenceReady(needsLocalSpace)) return Coord::Invalid();
     if(mcv && mcv->getLocation().isValid()) starts.push_back(mcv->getY()*w+mcv->getX());
     if(!mcv && starts.empty()) {
         // A base with no free rock left still stands somewhere. Start the route
@@ -1400,7 +1405,14 @@ bool QuantBot::baseBuiltOut() const {
     return QuantBotColonisationPolicy::builtOut(demand);
 }
 
-bool QuantBot::colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const {
+bool QuantBot::colonySiteOpen() const {
+    // The survey's destination says where new rock lies. Whether a colonist
+    // may set out for it now is decided against the current base: its core
+    // and expansion cover, and colonists already lost on the way.
+    return rockExpansionSite.isValid() && colonistsLost()<kRepeatedYardLossLimit && expansionDefenceReady();
+}
+
+QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludingQueued, int yardLimit) const {
     QuantBotColonisationPolicy::Demand demand;
     demand.citySim=currentGame->isCitySimEnabled();
     demand.customGame=gameMode==GameMode::Custom;
@@ -1408,24 +1420,32 @@ bool QuantBot::colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const 
     // helper bot runs in. Colonisation is a custom-game rule only.
     demand.campaignGame=isCampaignGameType(currentGame->gameType);
     demand.supportMode=supportMode;
-    demand.siteAvailable=rockExpansionSite.isValid();
+    demand.siteAvailable=colonySiteOpen();
     demand.productionRoomBlocked=baseProductionRoomBlocked;
     demand.freeFootprints=availableBaseFootprints;
     demand.yards=getHouse()->getNumItems(Structure_ConstructionYard);
     demand.mcvsIncludingQueued=mcvsIncludingQueued;
     demand.yardLimit=yardLimit;
-    return QuantBotColonisationPolicy::due(demand);
+    return demand;
 }
 
-bool QuantBot::colonyMissionDue() const {
+bool QuantBot::colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const {
+    return QuantBotColonisationPolicy::due(colonisationDemand(mcvsIncludingQueued,yardLimit));
+}
+
+bool QuantBot::colonyMissionDue(const MCV* pMCV) const {
     // The MCV in hand may have been bought for anything; what decides its job
-    // is the base it is standing in. While the base still has room, the fast
-    // local deployment path keeps every MCV, which is what the production
-    // yards depend on. Only a built-out base with a surveyed destination
-    // sends one across the map — and only under exactly the rules that would
-    // have bought a colonist in the first place, so campaigns, helpers and
-    // capped games keep the behaviour they had.
-    return colonisationMcvDue(0,getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride);
+    // is the base it stands in. A built-out base sends it away, and so does a
+    // formation that already runs its share of yards: stacking every yard on
+    // one rock leaves the rest of the map unsettled. Only a surveyed
+    // destination ever sends one across the map, under exactly the rules that
+    // would have bought a colonist, so campaigns, helpers and capped games
+    // keep the behaviour they had.
+    auto demand=colonisationDemand(0,getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride);
+    // The formation flood only runs for an MCV that could actually leave.
+    if(!QuantBotColonisationPolicy::colonisationAllowed(demand)||!demand.siteAvailable) return false;
+    if(pMCV&&pMCV->getLocation().isValid()) demand.yardsOnFormation=yardsOnFormation(pMCV->getLocation());
+    return QuantBotColonisationPolicy::missionDue(demand);
 }
 
 // The opening search, for an MCV that is not growing an existing city base:
@@ -1566,6 +1586,62 @@ bool QuantBot::onOwnRockFormation(Coord site) const {
     return false;
 }
 
+namespace {
+// Marks the rock formation containing \a start in \a seen and returns whether
+// \a start is buildable rock at all. Formations are edge-connected rock
+// without mountains, exactly as onOwnRockFormation() reads them.
+bool markFormation(const Map& map, int start, std::vector<char>& seen) {
+    const int w=map.getSizeX();
+    const auto* first=map.getTile(start%w,start/w);
+    if(!first||!first->isRock()||first->isMountain()) return false;
+    std::vector<int> queue{start};
+    seen[start]=1;
+    for(size_t at=0;at<queue.size();++at) {
+        const int x=queue[at]%w,y=queue[at]/w;
+        const int steps[4][2]={{-1,0},{1,0},{0,-1},{0,1}};
+        for(const auto& step:steps) {
+            const int nx=x+step[0],ny=y+step[1];
+            if(!map.tileExists(nx,ny)||seen[ny*w+nx]) continue;
+            const auto* next=map.getTile(nx,ny);
+            if(!next->isRock()||next->isMountain()) continue;
+            seen[ny*w+nx]=1;queue.push_back(ny*w+nx);
+        }
+    }
+    return true;
+}
+}
+
+int QuantBot::yardsOnFormation(Coord at) const {
+    const auto& map=getMap();
+    if(at.isInvalid()||!map.tileExists(at.x,at.y)) return 0;
+    const int w=map.getSizeX();
+    std::vector<char> seen(static_cast<size_t>(w)*map.getSizeY(),0);
+    if(!markFormation(map,at.y*w+at.x,seen)) return 0;
+    int yards=0;
+    for(const auto* structure:getStructureList()) {
+        if(structure->getOwner()!=getHouse()||structure->getItemID()!=Structure_ConstructionYard
+            ||structure->getHealth()<=0) continue;
+        const Coord pos=structure->getLocation();
+        if(map.tileExists(pos.x,pos.y)&&seen[pos.y*w+pos.x]) ++yards;
+    }
+    return yards;
+}
+
+int QuantBot::yardFormations() const {
+    const auto& map=getMap();
+    const int w=map.getSizeX();
+    std::vector<char> seen(static_cast<size_t>(w)*map.getSizeY(),0);
+    int formations=0;
+    for(const auto* structure:getStructureList()) {
+        if(structure->getOwner()!=getHouse()||structure->getItemID()!=Structure_ConstructionYard
+            ||structure->getHealth()<=0) continue;
+        const Coord pos=structure->getLocation();
+        if(!map.tileExists(pos.x,pos.y)||seen[pos.y*w+pos.x]) continue;
+        if(markFormation(map,pos.y*w+pos.x,seen)) ++formations;
+    }
+    return formations;
+}
+
 bool QuantBot::mcvSiteUsable(const MCV* pMCV, Coord site) const {
     if(site.isInvalid()) return false;
     for(int dy=0;dy<2;++dy) for(int dx=0;dx<2;++dx) {
@@ -1680,23 +1756,25 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         mcvSurveyCycles[id]=cycle;
         surveyedNow=true;
         // Grow on the formation the base already stands on first; only when it
-        // has no room left does colonising a new one apply, under its own
-        // gates. A stalled trip can use the nearest clear footprint; moving
-        // MCVs retain their assignments above.
+        // has no room left, or already runs its share of yards, does
+        // colonising a new one apply, under its own gates. A stalled trip can
+        // use the nearest clear footprint; moving MCVs retain their
+        // assignments above.
         //
-        // A base that is out of room reverses the order: the last cramped
-        // corner of home rock is not worth another yard when the city needs a
-        // new formation, so the colony is offered first and the local search
-        // stays as the fallback. Everywhere else the local path is untouched,
-        // so extra production yards still deploy on the spot.
-        const bool colonise=colonyMissionDue();
-        // A colony trip already under way is kept while its site is still a
-        // legal footprint. The survey re-runs every five seconds and ranks
-        // formations by distance from the main base, so without this an MCV
-        // could be sent between two equally good formations for ever.
-        const bool onTrip=colonise&&target.isValid()&&mcvSiteUsable(pMCV,target)
-            &&!onOwnRockFormation(target);
-        Coord site=!colonise ? Coord::Invalid() : onTrip ? target : findRockExpansionSite(pMCV);
+        // Either of those reverses the order: the colony is offered first and
+        // the local search stays as the fallback, so an MCV with nowhere safe
+        // to go still becomes a yard where it stands instead of waiting. The
+        // first production yard on a formation still deploys on the spot.
+        //
+        // A trip already under way to a remote formation is kept while its
+        // site is still a legal footprint. The survey re-runs every five
+        // seconds and ranks formations by distance from the main base, and an
+        // MCV that has left its home rock no longer stands on a full
+        // formation, so without this it could be sent between two equally good
+        // formations, or back home, for ever.
+        const bool onTrip=target.isValid()&&mcvSiteUsable(pMCV,target)&&!onOwnRockFormation(target);
+        const bool colonise=onTrip||colonyMissionDue(pMCV);
+        Coord site=onTrip ? target : colonise ? findRockExpansionSite(pMCV) : Coord::Invalid();
         choice=site.isValid() ? "colony" : "local";
         if(!site.isValid()) {
             site=findLocalDeploySite(pMCV,(deployableHere||stale) ? Coord::Invalid() : target);
@@ -1712,13 +1790,9 @@ void QuantBot::manageMcv(const MCV* pMCV) {
                 // the remote survey runs once more with that prerequisite
                 // waived. The delivered colonist in the reported match waited a
                 // minute here because the base briefly reported room again.
-                //
-                // A trip already under way to a legal remote footprint is kept
-                // rather than re-ranked: the survey runs every five seconds and
-                // orders formations by distance, so without this an MCV could
-                // be sent between two equally good ones for ever.
-                site=(target.isValid()&&mcvSiteUsable(pMCV,target)&&!onOwnRockFormation(target))
-                    ? target : findRockExpansionSite(pMCV,true);
+                // A trip already under way never reaches this point: it was
+                // kept above.
+                site=findRockExpansionSite(pMCV,true);
                 if(site.isValid()) choice="expansion_no_local";
             }
         }
@@ -1735,8 +1809,8 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     const bool atTarget=target.isValid()&&target==location;
     const bool ready=(!expansion||atTarget)&&deployableHere;
     // Read what the trace needs while the MCV still exists: a successful
-    // deployment destroys it. The formation check is only worth its flood fill
-    // when a stalled MCV is actually being reported.
+    // deployment destroys it. The formation checks are only worth their flood
+    // fills when a stalled MCV is actually being reported.
     const uint64_t signature=(static_cast<uint64_t>(target.isValid()?target.x+1:0)<<40)
         ^(static_cast<uint64_t>(target.isValid()?target.y+1:0)<<24)
         ^(static_cast<uint64_t>(ready?1:0)<<16)^(static_cast<uint64_t>(atTarget?1:0)<<8)
@@ -1744,6 +1818,8 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     const bool report=ready||lastMcvTrace[id]!=signature;
     const bool couldDeploy=pMCV->canDeploy();
     const bool ownFormation=report&&expansion&&onOwnRockFormation(location);
+    const int formationYards=report&&expansion ? yardsOnFormation(location) : 0;
+    const bool colonyMission=report&&colonyMissionDue(pMCV);
     const bool deployed=ready&&doDeploy(pMCV);
     if(deployed) {
         mcvExpansionSites.erase(id);
@@ -1767,7 +1843,8 @@ void QuantBot::manageMcv(const MCV* pMCV) {
             .set("site",choice).set("expansion",expansion).set("deployed",deployed)
             .set("at_target",atTarget).set("can_deploy",couldDeploy)
             .set("own_formation",ownFormation)
-            .set("colony_mission",colonyMissionDue())
+            .set("formation_yards",formationYards)
+            .set("colony_mission",colonyMission)
             .set("base_free_footprints",availableBaseFootprints)
             .set("base_production_room_blocked",baseProductionRoomBlocked)
             .set("danger",dangerAt(location,Coord(2,2)))
@@ -2415,6 +2492,35 @@ int QuantBot::lostYardsNear(int x, int y, int radius) const {
         if (loss.item == Structure_ConstructionYard
             && std::max(std::abs(loss.location.x-x),std::abs(loss.location.y-y)) <= radius) ++lost;
     return lost;
+}
+
+int QuantBot::colonistsLost() const {
+    return static_cast<int>(std::count_if(recentStructureLosses.begin(),recentStructureLosses.end(),
+        [](const auto& loss) { return loss.item == Unit_MCV; }));
+}
+
+void QuantBot::recordLostColonists() {
+    // Deployment erases an MCV's remembered site, so a site whose MCV no
+    // longer exists belongs to one that never arrived. One bound for another
+    // formation was a colonist lost on the way; it joins the retained loss
+    // history (and ages out with it) at the site it was sent to, which keeps
+    // the saved layout unchanged. Ids are handled in order so every peer
+    // records the same history whatever its hash map iteration order.
+    std::vector<Uint32> vanished;
+    for (const auto& entry : mcvExpansionSites)
+        if (currentGame->getObjectManager().getObject(entry.first) == nullptr) vanished.push_back(entry.first);
+    std::sort(vanished.begin(), vanished.end());
+    for (Uint32 id : vanished) {
+        const Coord site = mcvExpansionSites[id];
+        if (site.isValid() && !onOwnRockFormation(site)) {
+            recentStructureLosses.push_back({site, Coord(2,2), getGameCycleCount(), static_cast<Uint32>(Unit_MCV)});
+            traceDecision("colonist_lost", AITelemetry::Record().set("mcv", id).set("x", site.x).set("y", site.y)
+                .set("colonists_lost", colonistsLost()));
+        }
+        mcvExpansionSites.erase(id);
+        mcvSurveyCycles.erase(id);
+        lastMcvTrace.erase(id);
+    }
 }
 
 bool QuantBot::nearRecentStructureLoss(int x, int y, int width, int height) const {
@@ -5238,7 +5344,7 @@ void QuantBot::build(int militaryValue) {
         rockSurveyCycle=getGameCycleCount();
         rockExpansionSite=findRockExpansionSite();
     }
-    const bool rockExpansionNeeded=citySimEnabled&&rockExpansionSite.isValid()
+    const bool rockExpansionNeeded=citySimEnabled&&colonySiteOpen()
         && (availableBaseRock<48 || (unloadingBacklog&&!findPlaceLocation(Structure_Refinery).isValid()));
     const int cityWorkingReserve = data[Unit_Tank][houseID].price
         + (itemCount[Unit_Harvester] < fundedHarvesterTarget ? data[Unit_Harvester][houseID].price : 0)
@@ -5332,6 +5438,23 @@ void QuantBot::build(int militaryValue) {
         && nuclearBuildAvailable && findPlaceLocation(Structure_NuclearPlant).isValid();
     int cityYardTarget = citySimEnabled ? QuantBotBuildPolicy::cityConstructionYardTarget(
         money, ownResValve, ownComValve, ownIndValve) : 0;
+    // While new rock exists, production yards stop at the home formation's
+    // share plus each colony's founding yard. Another MCV beyond that is worth
+    // buying only as a colonist, so only while one may set out, and one at a
+    // time; a colony blocked for now (turret cover, lost colonists) waits
+    // rather than turning into a further yard at home. A built-out base buys
+    // no production yard at all: there is no footprint left to deploy one on.
+    // A roomy base on a map with no other rock keeps the plain capacity
+    // target: there is nowhere else to grow. The cap changes a decision only
+    // when the target asks for more than the yards and MCVs already held, so
+    // the formation flood runs only then. Campaigns and helpers never
+    // colonise and keep the target they had.
+    const bool builtOut=baseBuiltOut();
+    if((rockExpansionSite.isValid()||builtOut)
+        && cityYardTarget>itemCount[Structure_ConstructionYard]+itemCount[Unit_MCV]
+        && QuantBotColonisationPolicy::colonisationAllowed(colonisationDemand(0,0)))
+        cityYardTarget=std::min(cityYardTarget,QuantBotColonisationPolicy::productionYardCeiling(
+            yardFormations(),getHouse()->getNumItems(Structure_ConstructionYard),colonySiteOpen(),builtOut));
     if(rockExpansionNeeded)cityYardTarget=std::max(cityYardTarget,getHouse()->getNumItems(Structure_ConstructionYard)+1);
     const int yardLimit = getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride;
     if(yardLimit > 0) cityYardTarget = std::min(cityYardTarget, yardLimit);
@@ -5400,7 +5523,7 @@ void QuantBot::build(int militaryValue) {
             .set("base_free_footprints",availableBaseFootprints)
             .set("base_production_room_blocked",baseProductionRoomBlocked)
             .set("base_built_out",baseBuiltOut())
-            .set("colonisation_due",colonisationNeeded)
+            .set("colonisation_due",colonisationNeeded).set("colonists_lost",colonistsLost())
             .set("economy_reserve", economyReserve).set("queued_production_cost", queuedProductionCost).set("queued_military_value", queuedMilitaryValue)
             .set("power_produced", getHouse()->getProducedPower()).set("power_required", getHouse()->getPowerRequirement())
             .set("zone_power_current",currentZonePower).set("zone_power_mature",matureZonePower)

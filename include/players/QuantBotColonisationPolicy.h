@@ -3,9 +3,10 @@
 #include <vector>
 
 // When a city has built out the rock it stands on, growth can only continue
-// somewhere else. This policy answers one question: should another MCV be
+// somewhere else. This policy answers two questions: should another MCV be
 // ordered so that safe, reachable free rock can be settled, whatever the
-// production-yard target already says?
+// production-yard target already says; and should an MCV already in hand
+// settle a new formation rather than add one more yard where it stands?
 //
 // It deliberately owns nothing else. Where a colony goes stays with
 // RockExpansionPolicy, growing on the formation the base already holds stays
@@ -14,6 +15,12 @@
 // every custom difficulty, and the campaign is excluded outright so scripted
 // missions cannot start expanding.
 namespace QuantBotColonisationPolicy {
+
+// Yards one rock formation hosts before further MCVs move on. The founding
+// yard plus one production yard keeps a base's build capacity; every MCV after
+// that settles new rock while a safe destination exists, so the city spreads
+// across the map instead of stacking all of its yards on one formation.
+inline constexpr int kYardsPerFormation = 2;
 
 // Building slots the base must still hold before it counts as built out. Four
 // is "there is room for another corner of the city"; below it the yards own
@@ -53,12 +60,13 @@ struct Demand {
     bool customGame = false;            ///< Campaign bots keep their scripted base.
     bool campaignGame = false;          ///< Campaign game type, even in custom mode.
     bool supportMode = false;           ///< A helper on someone else's house does not colonise.
-    bool siteAvailable = false;         ///< A safe, reachable, roomy destination exists right now.
+    bool siteAvailable = false;         ///< A colonist may set out for safe, reachable, roomy rock right now.
     bool productionRoomBlocked = false; ///< The placement search finds no site for another factory.
     int freeFootprints = 0;             ///< Building slots left on the base's own rock.
     int yards = 0;                      ///< Construction yards standing.
     int mcvsIncludingQueued = 0;        ///< MCVs alive, paid for or queued.
     int yardLimit = 0;                  ///< Game option ceiling; 0 means no ceiling.
+    int yardsOnFormation = 0;           ///< Our yards on the formation an MCV stands on.
 };
 
 // Out of usable building rock: either the base cannot host another production
@@ -67,14 +75,20 @@ inline bool builtOut(const Demand& demand) {
     return demand.productionRoomBlocked || demand.freeFootprints < kCrampedFootprints;
 }
 
+// The custom-game boundary every colonist shares: campaigns, helpers and
+// vanilla rules never colonise, and nothing expands from a lost base.
+inline bool colonisationAllowed(const Demand& demand) {
+    if(!demand.citySim || !demand.customGame || demand.campaignGame || demand.supportMode) return false;
+    // No yard means recovery, not colonisation: the opening path owns that.
+    return demand.yards > 0;
+}
+
 // One colonist at a time, only from a standing base, only where the map and
 // the game options allow another yard, and only towards a destination the
 // survey has just confirmed. Affordability stays with the surrounding capital
 // allocation, which already holds the forecast and the working reserve.
 inline bool due(const Demand& demand) {
-    if(!demand.citySim || !demand.customGame || demand.campaignGame || demand.supportMode) return false;
-    // No yard means recovery, not colonisation: the opening path owns that.
-    if(demand.yards <= 0) return false;
+    if(!colonisationAllowed(demand)) return false;
     // An MCV already bought is the colonist; ordering a second one duplicates it.
     if(demand.mcvsIncludingQueued > 0) return false;
     if(demand.yardLimit > 0 && demand.yards + demand.mcvsIncludingQueued >= demand.yardLimit) return false;
@@ -82,6 +96,30 @@ inline bool due(const Demand& demand) {
     // while an enemy held it becomes eligible again once that enemy is gone.
     if(!demand.siteAvailable) return false;
     return builtOut(demand);
+}
+
+// An MCV in hand settles new rock when its base is built out, or when the
+// formation it stands on already runs its share of yards. Without a confirmed
+// destination it stays a local yard: placing on the current rock is the
+// fallback, never a reason to leave an MCV idle.
+inline bool missionDue(const Demand& demand) {
+    if(!colonisationAllowed(demand) || !demand.siteAvailable) return false;
+    if(demand.yardLimit > 0 && demand.yards >= demand.yardLimit) return false;
+    return builtOut(demand) || demand.yardsOnFormation >= kYardsPerFormation;
+}
+
+// Production yards the capacity target may ask for: the home formation's
+// kYardsPerFormation and the founding yard of each colony. Capacity MCVs come
+// out of the home factories, so a share counted for a colony would only be
+// built at home, and a built-out base has no footprint left for one at all.
+// Once the standing yards fill that, one more MCV is worth buying, as the
+// colonist, and only while one may set out. Granting it any earlier buys an
+// MCV that arrives to find its formation full and the newest yard not yet
+// defended, and it then stacks on the home rock or stands idle.
+inline int productionYardCeiling(int heldFormations, int standingYards, bool siteAvailable, bool builtOut) {
+    int share = kYardsPerFormation + (heldFormations > 1 ? heldFormations - 1 : 0);
+    if(builtOut && standingYards < share) share = standingYards;
+    return share + (siteAvailable && standingYards >= share ? 1 : 0);
 }
 
 }

@@ -52,11 +52,20 @@ inline Site choose(int w, int h, const std::vector<Tile>& tiles, int start, int 
     std::vector<int> component(n, -1), distance(n, -1), queue;
     std::vector<bool> occupied;
     queue.reserve(n);
+    // Formations are edge-connected rock: a building needs contiguous ground.
     auto neighbours = [&](int i, auto visit) {
         if(i % w) visit(i - 1);
         if(i % w + 1 < w) visit(i + 1);
         if(i >= w) visit(i - w);
         if(i + w < n) visit(i + w);
+    };
+    // Driving is eight-directional with no corner rule in the engine's path
+    // search, so an MCV can leave between two buildings that touch only at a
+    // corner. A four-way flood would strand it beside an open diagonal.
+    auto driveNeighbours = [&](int i, auto visit) {
+        const int x = i % w, y = i / w;
+        for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx)
+            if((dx || dy) && x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h) visit(i + dy * w + dx);
     };
 
     // Rock formations, and which of them already carry one of our structures.
@@ -81,7 +90,7 @@ inline Site choose(int w, int h, const std::vector<Tile>& tiles, int start, int 
     if(tiles[start].passable) { distance[start] = 0; queue.push_back(start); }
     for(size_t j = 0; j < queue.size(); ++j) {
         const int at = queue[j];
-        neighbours(at, [&](int next) {
+        driveNeighbours(at, [&](int next) {
             if(tiles[next].passable && distance[next] < 0) { distance[next] = distance[at] + 1; queue.push_back(next); }
         });
     }
