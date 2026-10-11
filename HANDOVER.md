@@ -14,6 +14,19 @@ new ctest observed_startup_unplaceable_unit covers it. The 1.0.830 tag build was
 cancelled before publication and that tag deleted; 831 carries the 830 changes,
 the QuantBot split and this fix. Protocol 68 and save 9853 unchanged.
 
+Published 2026-10-12. PR94 (830 + split) and PR95 (this fix) merged; tag
+v1.0.831 -> 655dc7a8. Stable CI 38143890822 passed every job; all 13 assets
+match GitHub SHA256; DMG and app are Notarized Developer ID (34X7AYJZ93),
+stapled; app executable SHA256
+c9148cc5659894c63c30cd0840c5c72388b9c8b8e05df59e9c234dd88f92e8a9. SourceForge
+38145300822 verified seven packages, source tag/branch and all three OS
+defaults. Browser build (Publish browser build 38145300751) is live: play/build.json
+1.0.831 at 655dc7a8, all 8 artifacts hash-match. Website c831897 plus prose
+cf37bbe deployed (Deploy to Droplet 38148278182); both pages show 1.0.831
+downloads and the 1.0.831 description. The main-push build 38143881024 failed
+only on a Chocolatey 504 installing NSIS and was re-run. The MBA install of the
+signed app is pending: the game was running, so the app was not replaced.
+
 ## 2026-10-11 — QuantBot split and unit roles (no behaviour change, still 1.0.830)
 
 Branch refactor/quantbot-split from eba797da, built and tested on the Mac mini
