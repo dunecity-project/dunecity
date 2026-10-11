@@ -806,7 +806,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
 		// driving: a colonist halted under fire is the one that does not arrive.
-		if (!autonomousAttack && !humanControls(pGroundUnit) && pGroundUnit->wasForced()
+		if (!autonomousAttack && unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free && pGroundUnit->wasForced()
 			&& pGroundUnit->getItemID() != Unit_Harvester && pGroundUnit->getItemID() != Unit_MCV) {
 			doMove2Pos(pGroundUnit,
 				pGroundUnit->getLocation().x,
@@ -815,7 +815,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		}
 
         if (isCampaignEnemy() && damage>0 && campaignCombatUnit(pGroundUnit)
-            && pGroundUnit->canAttack(pDamager) && !reserveDamagedUnitForRepair(pGroundUnit)
+            && pGroundUnit->canAttack(pDamager) && unitRole(pGroundUnit, {UnitRole::Repair}) == UnitRole::Free
             && pGroundUnit->getAttackMode()!=RETREAT) {
             // GUARD only searches its own weapon range, so a tank otherwise
             // remains idle while an outranging launcher kills it. Retaliation
@@ -856,7 +856,8 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			for (const auto& entry : colonistEscorts()) {
 				if (entry.second != pGroundUnit->getObjectID()) continue;
 				const auto* escort = dynamic_cast<const UnitBase*>(getObject(entry.first));
-				if (escort && !humanControls(escort) && escort->canAttack(pDamager) && escort->getTarget() != pDamager)
+				if (escort && unitRole(escort, {UnitRole::Human}) == UnitRole::Free && escort->canAttack(pDamager)
+					&& escort->getTarget() != pDamager)
 					doAttackObject(escort, pDamager, false);
 			}
 		}
@@ -1038,6 +1039,23 @@ bool QuantBot::humanControls(const UnitBase* unit) const {
     const auto it = manualUnitOrders.find(unit->getObjectID());
     return it != manualUnitOrders.end() && (getGameCycleCount()-it->second < MILLI2CYCLES(120000)
         || unit->wasForced() || unit->isMoving() || unit->hasATarget());
+}
+
+QuantBot::UnitRole QuantBot::unitRole(const UnitBase* unit, UnitRoles among) const {
+    const Uint32 id = unit->getObjectID();
+    if (among.contains(UnitRole::Human) && humanControls(unit)) return UnitRole::Human;
+    if (among.contains(UnitRole::Repair) && reserveDamagedUnitForRepair(unit)) return UnitRole::Repair;
+    if (among.contains(UnitRole::BaseDefence) && baseDefenceAssignment(unit)) return UnitRole::BaseDefence;
+    if (among.contains(UnitRole::LiveDefence) && activeDefenceAssignment(unit)) return UnitRole::LiveDefence;
+    if (among.contains(UnitRole::Defence) && defenceAssignments.count(id)) return UnitRole::Defence;
+    if (among.contains(UnitRole::Wave) && customWave.members.count(id)) return UnitRole::Wave;
+    // Guards are picked from units that are not escorts in the same cycle, so the
+    // two never overlap and this order cannot change the answer. Guards come
+    // first because that is the order the controllers derive the two caches in.
+    if (among.contains(UnitRole::ColonyGuard) && recoveryActive() && colonyGuardPosts().count(id))
+        return UnitRole::ColonyGuard;
+    if (among.contains(UnitRole::Escort) && colonistEscorts().count(id)) return UnitRole::Escort;
+    return UnitRole::Free;
 }
 
 void QuantBot::resetLearningForMeasuredScoring() {

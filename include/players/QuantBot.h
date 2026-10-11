@@ -268,6 +268,36 @@ private:
     void releaseLegacyGroundSquad();
     std::map<Uint32,Uint32> defenceResponseCycles;
     bool humanControls(const UnitBase* unit) const;
+    /// Who holds a unit's orders. Each claim keeps its own registry - human
+    /// orders (manualUnitOrders), the repair reservation, defenceAssignments,
+    /// customWave.members and the per-cycle colonistEscorts() and
+    /// colonyGuardPosts() - and unitRole() is the one place controllers read
+    /// them. Listed by authority, highest first: a claim is only granted to a
+    /// unit that holds none of the claims above it at the time.
+    enum class UnitRole : Uint8 {
+        Human,       ///< A recent human order (humanControls()).
+        Repair,      ///< Held back for the repair yard (reserveDamagedUnitForRepair()).
+        BaseDefence, ///< Hunting an attacker of a building we own (baseDefenceAssignment()).
+        LiveDefence, ///< Answering a live emergency or anti-air contact (activeDefenceAssignment()).
+        Defence,     ///< Booked by base or air defence, live or not (a defenceAssignments entry).
+        Wave,        ///< A member of the Custom Hard/Brutal offensive (customWave.members).
+        Escort,      ///< Escorting a colonist (colonistEscorts()).
+        ColonyGuard, ///< Holding a colony while recovery is active (colonyGuardPosts()).
+        Free,
+    };
+    /// The claims a controller defers to.
+    struct UnitRoles {
+        constexpr UnitRoles(std::initializer_list<UnitRole> roles) {
+            for (const UnitRole role : roles) bits |= 1u << static_cast<unsigned>(role);
+        }
+        constexpr bool contains(UnitRole role) const { return (bits >> static_cast<unsigned>(role)) & 1u; }
+        unsigned bits = 0;
+    };
+    /// The highest-authority claim in \a among that \a unit holds, or Free.
+    /// Only the claims in \a among are evaluated. Escorts and colony guards are
+    /// derived on first use in each game cycle, so asking for them fixes them
+    /// for the rest of that cycle: ask only for the claims a controller defers to.
+    UnitRole unitRole(const UnitBase* unit, UnitRoles among) const;
     Coord squadRallyLocation = Coord::Invalid();
     Uint32 rallySelectedCycle = std::numeric_limits<Uint32>::max();
     Uint32 nonServiceConstructionOrders = 3; // Respond immediately to a new crime emergency.
