@@ -125,6 +125,27 @@ public:
     virtual void doMove2Pos(const Coord& coord, bool bForced);
 
     /**
+        Hunt on the way to (xPos,yPos). The unit walks there with an ordinary,
+        unforced move in Hunt mode, and Hunt takes over from the move: any enemy
+        that comes within huntTowardRange() on the way is attacked. Once the
+        unit is within that range of the destination it is an ordinary hunter.
+        Unlike setting Hunt directly, this does not start a map-wide target
+        search that would send the unit to the nearest enemy anywhere instead.
+        Any later order ends it. If the engine drops the walk because it found
+        no path, it is resumed up to kHuntTowardRetries times before the unit
+        becomes an ordinary hunter.
+    */
+    void doHuntToward(int xPos, int yPos);
+
+    /// Still walking a doHuntToward() route?
+    bool isHuntingToward() const { return huntTowardGoal.isValid(); }
+
+    /// How close an enemy has to be for a unit hunting on its way to stop for it:
+    /// the farther of its weapon range and its view range.
+    int huntTowardRange() const;
+    static constexpr int kHuntTowardRetries = 3;
+
+    /**
         This method is called when an unit should move to another unit/structure
         \param  TargetObjectID  the ID of the other unit/structure
     */
@@ -548,6 +569,8 @@ protected:
     bool     goingToRepairYard;      ///< Are we currently going to a repair yard?
     bool     pickedUp;               ///< Were we picked up by a carryall?
     bool     bFollow;                ///< Do we currently follow some other unit (specified by target)?
+    Coord    huntTowardGoal;         ///< Where a doHuntToward() walk goes; invalid when none (SAVEGAMEVERSION 9854)
+    Uint8    huntTowardRetries;      ///< Times that walk was resumed after the engine dropped it
 
 
     bool     moving;                 ///< Are we currently moving?

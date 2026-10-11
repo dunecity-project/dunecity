@@ -59,6 +59,8 @@ UnitBase::UnitBase(House* newOwner) : ObjectBase(newOwner) {
     goingToRepairYard = false;
     pickedUp = false;
     bFollow = false;
+    huntTowardGoal = Coord::Invalid();
+    huntTowardRetries = 0;
     guardPoint = Coord::Invalid();
     attackPos = Coord::Invalid();
 
@@ -154,6 +156,11 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         dynastyStepStart=stream.readUint64(); dynastyStepEnd=stream.readUint64();
         dynastyStartX=stream.readFixPoint(); dynastyStartY=stream.readFixPoint();
         dynastyEndpoint.x=stream.readSint32(); dynastyEndpoint.y=stream.readSint32();
+    }
+    if(currentGame->getLoadedSavegameVersion() >= 9854) {
+        huntTowardGoal.x = stream.readSint32();
+        huntTowardGoal.y = stream.readSint32();
+        huntTowardRetries = stream.readUint8();
     }
 
 
@@ -252,6 +259,9 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeUint64(dynastyStepStart); stream.writeUint64(dynastyStepEnd);
     stream.writeFixPoint(dynastyStartX); stream.writeFixPoint(dynastyStartY);
     stream.writeSint32(dynastyEndpoint.x); stream.writeSint32(dynastyEndpoint.y);
+    stream.writeSint32(huntTowardGoal.x);
+    stream.writeSint32(huntTowardGoal.y);
+    stream.writeUint8(huntTowardRetries);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -1262,6 +1272,7 @@ void UnitBase::handleRequestCarryallDropClick(int xPos, int yPos) {
 
 
 void UnitBase::doMove2Pos(int xPos, int yPos, bool bForced) {
+    huntTowardGoal.invalidate();
     if(attackMode == CAPTURE || attackMode == HUNT) {
         doSetAttackMode(GUARD);
     }
@@ -1288,10 +1299,26 @@ void UnitBase::doMove2Pos(const Coord& coord, bool bForced) {
     doMove2Pos(coord.x, coord.y, bForced);
 }
 
+void UnitBase::doHuntToward(int xPos, int yPos) {
+    doMove2Pos(xPos, yPos, false);
+    // Hunt without doSetAttackMode(): that queues a map-wide target search, and
+    // the nearest enemy anywhere would replace the walk to this destination.
+    // targeting() picks up enemies met on the way instead.
+    attackMode = HUNT;
+    if(currentGameMap->tileExists(xPos, yPos)) huntTowardGoal = Coord(xPos, yPos);
+    huntTowardRetries = 0;
+    findTargetTimer = 0;
+}
+
+int UnitBase::huntTowardRange() const {
+    return std::max(getWeaponRange(), getViewRange());
+}
+
 void UnitBase::doMove2Object(const ObjectBase* pTargetObject) {
     if(pTargetObject->getObjectID() == getObjectID()) {
         return;
     }
+    huntTowardGoal.invalidate();
 
     if(attackMode == CAPTURE || attackMode == HUNT) {
         doSetAttackMode(GUARD);
@@ -1321,6 +1348,7 @@ void UnitBase::doAttackPos(int xPos, int yPos, bool bForced) {
     if(!currentGameMap->tileExists(xPos, yPos)) {
         return;
     }
+    huntTowardGoal.invalidate();
 
     if(attackMode == CAPTURE) {
         doSetAttackMode(GUARD);
@@ -1340,6 +1368,7 @@ void UnitBase::doAttackObject(const ObjectBase* pTargetObject, bool bForced) {
     if(pTargetObject->getObjectID() == getObjectID() || (!canAttack() && !isHarvesterLikeUnit(getItemID()))) {
         return;
     }
+    huntTowardGoal.invalidate();
 
     if(attackMode == CAPTURE) {
         doSetAttackMode(GUARD);
@@ -1375,6 +1404,7 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
     if((newAttackMode >= 0) && (newAttackMode < ATTACKMODE_MAX)) {
         attackMode = newAttackMode;
     }
+    huntTowardGoal.invalidate();
 
     if(attackMode == STOP) {
         // Stop means stop, including an outstanding transport booking: previously the implied
@@ -1760,6 +1790,38 @@ void UnitBase::enqueuePathRequest() {
 void UnitBase::targeting() {
     if(findTargetTimer == 0) {
         if(attackMode != STOP && attackMode != CARRYALLREQUESTED) {
+            // Hunting on the way somewhere (doHuntToward): Hunt takes over from
+            // the walk for any enemy the unit meets, but a map-wide Hunt search
+            // must not replace the walk with the nearest enemy anywhere. The
+            // ordinary acquisition below cannot be used for this: it only runs
+            // between path steps, and then accepts any Hunt target on the map.
+            if(huntTowardGoal.isValid()) {
+                if(attackMode != HUNT || target || attackPos || forced) {
+                    huntTowardGoal.invalidate();
+                } else if(blockDistance(location, huntTowardGoal) <= huntTowardRange()) {
+                    huntTowardGoal.invalidate();    // Arrived: an ordinary hunter from here on.
+                } else if(!(destination == huntTowardGoal) && ++huntTowardRetries > kHuntTowardRetries) {
+                    huntTowardGoal.invalidate();    // No way there: an ordinary hunter.
+                } else {
+                    if(!(destination == huntTowardGoal)) {
+                        // The engine dropped the walk after failing to find a path.
+                        // Resume it: a blocked route usually clears.
+                        setDestination(huntTowardGoal);
+                        clearPath();
+                        noCloserPointCount = 0;
+                    }
+                    const ObjectBase* pNewTarget = findTarget();
+                    if(pNewTarget != nullptr
+                       && blockDistance(location, pNewTarget->getClosestPoint(location)) <= huntTowardRange()) {
+                        // Saboteurs need forced=true to pathfind onto occupied tiles
+                        doAttackObject(pNewTarget, getItemID() == Unit_Saboteur);
+                    }
+                    findTargetTimer = MILLI2CYCLES(1*1000);
+                    engageTarget();
+                    return;
+                }
+            }
+
             
             // Refresh target if current one is out of weapon range
             if(target && !attackPos && !forced && 
@@ -1838,6 +1900,12 @@ void UnitBase::resolvePendingTargetRequest() {
     }
 
     if(request == TargetRequestKind::None || currentGame == nullptr) {
+        return;
+    }
+
+    // A search queued before a doHuntToward() order would pick the nearest enemy
+    // on the whole map. targeting() applies the hunt-toward rule instead.
+    if(huntTowardGoal.isValid()) {
         return;
     }
 

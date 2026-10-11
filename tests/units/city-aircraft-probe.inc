@@ -1001,7 +1001,7 @@ void checkSaveContinuation() {
 /// A plane following a waypoint outside the map, in its departure phase, has to
 /// come back from a save on exactly that route. Nothing new is written: the
 /// waypoint lives in the inherited destination fields and the phase is read off
-/// the flight budget, so the record is still the 9853 one.
+/// the flight budget, so the aircraft record is the one 9853 introduced.
 void checkDepartureSaveContinuation() {
     auto game = newCityGame(1809);
     auto* owner = game->getHouse(HOUSE_ATREIDES);
@@ -1060,8 +1060,8 @@ void checkDepartureSaveContinuation() {
     currentGame = game.get();
     game->initGame(GameInitSettings(path));
     game->initializeGameLoop();
-    cityRequire(currentGame->getLoadedSavegameVersion() == 9853,
-                "the departure save is not a 9853 record");
+    cityRequire(currentGame->getLoadedSavegameVersion() == SAVEGAMEVERSION,
+                "the departure save is not a current record");
     auto* loaded = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
     cityRequire(loaded != nullptr, "the departing airplane did not come back");
     cityRequire(loaded->getRemainingTicks() == savedBudget, "the departing airplane lost its budget");
@@ -1079,7 +1079,7 @@ void checkDepartureSaveContinuation() {
     }
     record("continuation", "departure_exact_frames=300 waypoint="
                          + std::to_string(savedWaypoint.x) + ',' + std::to_string(savedWaypoint.y)
-                         + " savegame_version=9853");
+                         + " savegame_version=" + std::to_string(SAVEGAMEVERSION));
     game.reset();
     currentGame = nullptr;
 }

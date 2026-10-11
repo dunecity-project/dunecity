@@ -318,6 +318,15 @@ void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const
     }
 }
 
+void Player::doHuntToward(const UnitBase* pUnit, int x, int y) const {
+    if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->doHuntToward(x, y);
+    } else {
+        logWarn("The player '%s' tries to send a unit he doesn't own or that is inactive to hunt!\n", playername.c_str());
+        return;
+    }
+}
+
 void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
         const_cast<UnitBase*>(pUnit)->doMove2Object(pTargetObject);

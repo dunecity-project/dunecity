@@ -115,7 +115,11 @@
 //       take-off frame decides which artwork is on screen. A 9852 save still
 //       loads: the old fields are read and the aircraft resumes with a fresh
 //       patrol instead of an orbit it no longer flies.
-#define SAVEGAMEVERSION     9853
+// 9854: UnitBase hunt-toward goal and retry count. A unit sent to an attacked
+//       building with doHuntToward() walks there in Hunt and attacks only enemies
+//       it meets on the way; a save taken mid-walk has to keep that rule. A 9853
+//       save loads with no unit hunting toward anything.
+#define SAVEGAMEVERSION     9854
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
