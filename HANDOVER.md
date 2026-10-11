@@ -46,6 +46,18 @@ SHA256 19871fbe68a7b11a61ef65f2569b239bca39f32b70dc51e7105e91bfbe71847a. The
 game was not running. The signed production 1.0.831 (c9148cc5...) is at
 /Applications/.dunecity-backup-before-1.0.832-20261012-034835/dunecity.app.
 
+Published 2026-10-12. PR96 merged; tag v1.0.832 -> 2d1976e1. Stable CI
+38159893994 passed every job; all 13 assets match GitHub SHA256; DMG and app
+are Notarized Developer ID, stapled; app executable SHA256
+d16ccd6e34b30bd54c0985898d23fdeccebb1c07b5c94a3b46cc90a49f5fc367. SourceForge
+38161077064 verified seven packages, source tag/branch and all three OS
+defaults. Publish browser build 38161076963 succeeded: play/build.json 1.0.832 at
+2d1976e1, all 8 artifacts hash-match live. Website 2295c4f/4d46a24 plus prose
+0749741 deployed (Deploy to Droplet 38161774755); both pages show 1.0.832
+downloads, protocol 69 and the 1.0.832 description. The MBA still runs the
+local 1.0.832 build (19871fbe...): it was unreachable over SSH when the signed
+app was to be installed.
+
 ## 2026-10-12 — 1.0.831: spectated startup crash on unplaceable scenario units
 
 The MBA (local 830 refactor build) crashed starting a spectated custom game:
