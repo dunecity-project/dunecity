@@ -763,9 +763,7 @@ const std::map<Uint32,Uint32>& QuantBot::colonistEscorts() const {
     std::vector<const UnitBase*> pool;
     for (const auto* unit : getUnitList()) {
         if (!orderableCombatUnit(unit) || !unit->isAGroundUnit() || unit->isInfantry()) continue;
-        if (reserveDamagedUnitForRepair(unit)) continue;
-        if (customWave.members.count(unit->getObjectID())) continue;
-        if (defenceAssignments.count(unit->getObjectID())) continue;
+        if (unitRole(unit, {UnitRole::Repair, UnitRole::Defence, UnitRole::Wave}) != UnitRole::Free) continue;
         if (unit->getAttackMode() == HUNT || unit->getAttackMode() == RETREAT) continue;
         pool.push_back(unit);
     }

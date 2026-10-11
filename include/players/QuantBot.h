@@ -271,9 +271,12 @@ private:
     /// Who holds a unit's orders. Each claim keeps its own registry - human
     /// orders (manualUnitOrders), the repair reservation, defenceAssignments,
     /// customWave.members and the per-cycle colonistEscorts() and
-    /// colonyGuardPosts() - and unitRole() is the one place controllers read
-    /// them. Listed by authority, highest first: a claim is only granted to a
-    /// unit that holds none of the claims above it at the time.
+    /// colonyGuardPosts() - and unitRole() is the one place controllers ask
+    /// whether a unit holds one. Only the controller that grants a claim
+    /// iterates, updates or releases its registry. Listed by authority, highest
+    /// first; when a unit holds several of the claims asked for, unitRole()
+    /// reports the first. The three defence roles are different readings of one
+    /// defenceAssignments entry.
     enum class UnitRole : Uint8 {
         Human,       ///< A recent human order (humanControls()).
         Repair,      ///< Held back for the repair yard (reserveDamagedUnitForRepair()).
