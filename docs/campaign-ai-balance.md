@@ -278,8 +278,8 @@ are loaded but not referenced by the current QuantBot implementation. No further
 difficulty tuning was made during this audit.
 
 Sources: `config/QuantBot Config.ini.default`, `src/players/QuantBotConfig.cpp`,
-`src/players/QuantBot.cpp` initialization/update, build, onDamage, attack and
-launchGroundHunt; `include/dunecity/VanillaEconomy.h`.
+`src/players/QuantBot.cpp` initialization, update and onDamage, `QuantBotBuild.cpp`
+build, `QuantBotArmy.cpp` attack and launchGroundHunt; `include/dunecity/VanillaEconomy.h`.
 
 ## Human difficulty proposal — not implemented
 

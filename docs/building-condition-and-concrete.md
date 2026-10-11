@@ -112,7 +112,7 @@ expense or latency is incurred.
 
 Relevant implementation: `WindTrap.cpp`, `AdvancedWindTrap.cpp`,
 `StructureBase.cpp`, `BuilderBase.cpp`, `House.cpp`, `CityEffectsRuntime.cpp`,
-`CityEffects.h`, `QuantBot.cpp`, and `QuantBotBuildPolicy.h`.
+`CityEffects.h`, `QuantBotBuild.cpp`, `QuantBotPlacement.cpp`, and `QuantBotBuildPolicy.h`.
 
 ## QuantBot decisions
 

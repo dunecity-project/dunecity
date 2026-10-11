@@ -128,12 +128,13 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && unit->isVisible(getHouse()->getTeamID())
             && unit->isAFlyingUnit() == intruder->isAFlyingUnit()
             && blockDistance(contact,unit->getLocation()) <= 8) threatValue += value(unit);
-        if (unit->getOwner()!=getHouse() || !unit->isRespondable() || humanControls(unit)
-            || !unit->canAttack(intruder) || reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT
+        if (unit->getOwner()!=getHouse() || !unit->isRespondable()
+            || !unit->canAttack(intruder) || unit->getAttackMode()==RETREAT
             || unit->getItemID()==Unit_Saboteur || unit->getItemID()==Unit_Harvester
             || unit->getItemID()==Unit_Ornithopter) continue; // Air planner prioritizes active base/worker attackers.
-        // A worker raid cannot cancel an ongoing whole-army base response.
-        if (baseDefenceAssignment(unit)) continue;
+        // A human order and a repair run outrank the scramble, and a worker raid
+        // cannot cancel an ongoing whole-army base response.
+        if (unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::BaseDefence}) != UnitRole::Free) continue;
         if (clearingSpice && blockDistance(contact,unit->getLocation())>clearingRadius) continue;
         const auto* target=unit->getTarget();
         const auto assignment=defenceAssignments.find(unit->getObjectID());
@@ -255,7 +256,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Coord
         // scramble: a human order, a trip to the repair yard and a booked
         // carryall pickup stay with their owner. Damage on its own does not -
         // a wounded tank that is not actually reserved for repair still fights.
-        if (humanControls(unit) || reserveDamagedUnitForRepair(unit)
+        if (unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free
             || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()) { ++held; continue; }
         // An anti-air rescue in progress is the air planner's contact.
         const auto assignment=defenceAssignments.find(unit->getObjectID());
@@ -459,7 +460,7 @@ void QuantBot::attack(int militaryValue) {
 }
 
 bool QuantBot::managesAutonomousLauncherHunt(const UnitBase* unit) const {
-    return currentGame && huntingLauncher(unit) && !humanControls(unit);
+    return currentGame && huntingLauncher(unit) && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 bool QuantBot::managesAutonomousRocketHunt(const UnitBase* unit) const {
@@ -469,7 +470,7 @@ bool QuantBot::managesAutonomousRocketHunt(const UnitBase* unit) const {
     // weapon range, so a distant Ornithopter stalls a hunting Trooper exactly as it
     // stalls a hunting launcher. They share the candidate filter for that reason and
     // nothing else - the close-range spacing and the tracked wave stay launcher-only.
-    return currentGame && !humanControls(unit)
+    return currentGame && unitRole(unit, {UnitRole::Human}) == UnitRole::Free
         && (huntingLauncher(unit)
             || (engineHuntAttack(unit)
                 && (unit->getItemID()==Unit_Trooper || unit->getItemID()==Unit_Troopers)));
@@ -522,8 +523,9 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     // launcher hunting an attack on a building we own: that contact is answered
     // by hunting it, so the launcher keeps its spacing step and resumes firing
     // across the gap instead of dying at point-blank range in its own base.
-    if (humanControls(launcher) || reserveDamagedUnitForRepair(launcher)
-        || (activeDefenceAssignment(launcher) && !baseDefenceAssignment(launcher))) return false;
+    const UnitRole role = unitRole(launcher, {UnitRole::Human, UnitRole::Repair,
+                                              UnitRole::BaseDefence, UnitRole::LiveDefence});
+    if (role == UnitRole::Human || role == UnitRole::Repair || role == UnitRole::LiveDefence) return false;
     if (static_cast<const GroundUnit*>(launcher)->isAwaitingPickup()) return false;
     const ObjectBase* threat = nullptr;
     int desiredRange = 0;
@@ -571,7 +573,7 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     // The established spacing helper, which issues one forced step and restores
     // Hunt after it. No Area Guard, no new target, no change to the tracked
     // army: this stays a hunter that is opening a firing gap.
-    const bool baseHunter=baseDefenceAssignment(launcher);
+    const bool baseHunter=unitRole(launcher, {UnitRole::BaseDefence}) == UnitRole::BaseDefence;
     kiteAwayFromThreat(launcher,threat,desiredRange);
     // The spacing move sets a guard point; the base hunter still has no post.
     if (baseHunter) const_cast<UnitBase*>(launcher)->setGuardPoint(Coord::Invalid());
@@ -618,9 +620,10 @@ void QuantBot::launchGroundHunt() {
     for (const auto* unit : getUnitList()) {
         if (unit->getOwner()==getHouse() && launcherItem(unit)
             && (unit->getHealth()<=0 || !unit->isActive() || !unit->isRespondable()
-                || humanControls(unit))) ++launchersUnavailable;
+                || unitRole(unit, {UnitRole::Human}) != UnitRole::Free)) ++launchersUnavailable;
         if (unit->getOwner()!=getHouse() || unit->getHealth()<=0 || !unit->isActive() || !unit->isRespondable()
-            || !unit->canAttack() || unit->getItemID()==Unit_Saboteur || humanControls(unit)
+            || !unit->canAttack() || unit->getItemID()==Unit_Saboteur
+            || unitRole(unit, {UnitRole::Human}) != UnitRole::Free
             || unit->getItemID()==Unit_Harvester || unit->getItemID()==Unit_Sandworm) continue;
         // Summoned/scripted troops can have zero purchase price. They still
         // consume combat pressure rather than being effectively free attackers.
@@ -631,7 +634,7 @@ void QuantBot::launchGroundHunt() {
         if (ground) groundArmyValue+=price;
         if (wholeArmy) {
             if (ground && (unit->getAttackMode()==HUNT
-                || customWave.members.count(unit->getObjectID())>0)) {
+                || unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave)) {
                 ++groundCommittedUnits; groundCommittedValue+=price;
             }
             // Aircraft keep their own planner, workers and transports cannot
@@ -639,11 +642,12 @@ void QuantBot::launchGroundHunt() {
             // emergency on one of our own assets - including an anti-air rescue
             // - stays on that job. Everything else is available.
             if (!ground) continue;
-            if (reserveDamagedUnitForRepair(unit)) {
+            const UnitRole role=unitRole(unit, {UnitRole::Repair, UnitRole::LiveDefence});
+            if (role==UnitRole::Repair) {
                 if (launcherItem(unit)) ++launchersUnavailable;
                 continue;
             }
-            if (activeDefenceAssignment(unit)) {
+            if (role==UnitRole::LiveDefence) {
                 if (launcherItem(unit)) ++launchersHeldByDefence;
                 continue;
             }
@@ -653,20 +657,19 @@ void QuantBot::launchGroundHunt() {
                 continue;
             }
             // An escort stays with its colonist until the colony stands.
-            if (colonistEscorts().count(unit->getObjectID())) continue;
+            if (unitRole(unit, {UnitRole::Escort}) == UnitRole::Escort) continue;
             candidates.push_back({unit->getObjectID(),price,0});
             if (launcherItem(unit)) ++launcherCandidates;
             availableValue+=price;
             continue;
         }
         if (launcherItem(unit)) {
-            if (defenceAssignments.count(unit->getObjectID())) ++launchersHeldByDefence;
+            if (unitRole(unit, {UnitRole::Defence}) == UnitRole::Defence) ++launchersHeldByDefence;
             else if (unit->getAttackMode()==HUNT) ++launchersAlreadyHunting;
         }
-        const bool free=!reserveDamagedUnitForRepair(unit) && unit->getAttackMode()!=RETREAT
-            && !unit->hasATarget() && !defenceAssignments.count(unit->getObjectID())
-            && (!recoveryActive() || !colonyGuardPosts().count(unit->getObjectID()))
-            && !colonistEscorts().count(unit->getObjectID());
+        const bool free=unit->getAttackMode()!=RETREAT && !unit->hasATarget()
+            && unitRole(unit, {UnitRole::Repair, UnitRole::Defence, UnitRole::ColonyGuard,
+                               UnitRole::Escort}) == UnitRole::Free;
         // Every existing hunter counts, including forced moves and busy targets.
         // Never select it again or silently drop it from the pressure budget.
         // Tracked members also count while a withdrawal or base-defence order
@@ -674,7 +677,7 @@ void QuantBot::launchGroundHunt() {
         // configured share a second time.
         // updateCustomWave() releases a member that has genuinely stopped
         // attacking, so this cannot accumulate phantom commitment.
-        const bool trackedMember=recoveryActive() && customWave.members.count(unit->getObjectID())>0;
+        const bool trackedMember=recoveryActive() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave;
         if (ground && (unit->getAttackMode()==HUNT || trackedMember)) {
             ++groundCommittedUnits; groundCommittedValue+=price;
         }
@@ -954,7 +957,7 @@ bool QuantBot::orderableCombatUnit(const UnitBase* unit) const {
     // neither deployable strength nor available for an order.
     if (!unit->isActive() || !unit->isRespondable()) return false;
     if (!mobileCombatItem(unit->getItemID()) || !unit->canAttack()) return false;
-    return !humanControls(unit);
+    return unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
@@ -976,7 +979,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
         const UnitBase* lead=nullptr;
         for (const auto* unit : getUnitList()) {
             if (!orderableCombatUnit(unit) || !unit->isAGroundUnit()
-                || reserveDamagedUnitForRepair(unit) || unit->hasATarget()) continue;
+                || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free || unit->hasATarget()) continue;
             if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
         }
         if (const auto* objective=customWaveObjective(lead))
@@ -1105,8 +1108,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
         }
         if (!orderableCombatUnit(unit)) continue;
         // A unit held back for repair is not deployable strength.
-        const bool repairing = reserveDamagedUnitForRepair(unit);
-        if (repairing) continue;
+        if (unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) continue;
         if (flying) { survey.deployable.addAir(power, canHitAir); survey.allied.addAir(power, canHitAir); }
         else { survey.deployable.addGround(power, canHitAir); survey.allied.addGround(power, canHitAir); }
         // Credit value over the same combat population the configured
@@ -1124,7 +1126,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
                 && offensiveAssemblySlot(unit->getLocation()))
                 survey.assembledPower += power;
         }
-        if (customWave.members.count(unit->getObjectID())) {
+        if (unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave) {
             if (flying) survey.squad.addAir(power, canHitAir);
             else {
                 survey.squad.addGround(power, canHitAir);
@@ -1182,7 +1184,7 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
     // colony never count as the defence of another.
     if (!attackedCores.empty()) {
         for (const auto* unit : getUnitList()) {
-            if (!orderableCombatUnit(unit) || reserveDamagedUnitForRepair(unit)) continue;
+            if (!orderableCombatUnit(unit) || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) continue;
             const int price = data[unit->getItemID()][unit->getOriginalHouseID()].price;
             const int64_t power = CombatPowerPolicy::unitPower(price,
                 unit->getHealth().lround(), unit->getMaxHealth());
@@ -1434,7 +1436,7 @@ void QuantBot::updateCustomWave() {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(*it));
         if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0
             || !mobileCombatItem(unit->getItemID())) { it = customWave.members.erase(it); continue; }
-        if (humanControls(unit) || reserveDamagedUnitForRepair(unit)) {
+        if (unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free) {
             it = customWave.members.erase(it); continue;
         }
         // Engine Hunt can end without a candidate. An idle committed launcher
@@ -1447,7 +1449,7 @@ void QuantBot::updateCustomWave() {
             && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher)
             && unit->getAttackMode()==GUARD && !unit->hasATarget()
             && !unit->isMoving() && !unit->wasForced()
-            && defenceAssignments.count(unit->getObjectID())==0
+            && unitRole(unit, {UnitRole::Defence}) == UnitRole::Free
             && (customWave.launched==0 || now-customWave.launched<sortieCycles)
             && unit->canAttack(front)
             && getMap().tileExists(front->getClosestPoint(unit->getLocation()))
@@ -1475,7 +1477,7 @@ void QuantBot::updateCustomWave() {
         if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
             && unit->isActive() && unit->getAttackMode() != HUNT
             && !unit->hasATarget() && !unit->isMoving() && !unit->wasForced()
-            && defenceAssignments.count(unit->getObjectID()) == 0) {
+            && unitRole(unit, {UnitRole::Defence}) == UnitRole::Free) {
             it = customWave.members.erase(it); continue;
         }
         if (unit->isActive() && !unit->hasATarget() && !unit->isMoving()
@@ -1545,7 +1547,7 @@ void QuantBot::adoptLegacyHuntersIntoWave() {
     for (const auto* unit : getUnitList()) {
         if (!orderableCombatUnit(unit) || !unit->isAGroundUnit()) continue;
         if (unit->getAttackMode() != HUNT) continue;
-        if (reserveDamagedUnitForRepair(unit)) continue;
+        if (unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) continue;
         if (customWave.members.insert(unit->getObjectID()).second) ++adopted;
     }
     if (adopted) {
@@ -1905,7 +1907,7 @@ int QuantBot::assemblyForceSize() const {
     int count=0;
     for (const auto* unit : getUnitList())
         if (orderableCombatUnit(unit) && unit->isAGroundUnit()
-            && !reserveDamagedUnitForRepair(unit)) ++count;
+            && unitRole(unit, {UnitRole::Repair}) == UnitRole::Free) ++count;
     return count;
 }
 
@@ -2046,7 +2048,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             && (unit->wasForced() || unit->isMoving());
         if (headingHome) continue;
         // Emergency base defence outranks the withdrawal and keeps its unit.
-        if (defenceAssignments.count(id)) continue;
+        if (unitRole(unit, {UnitRole::Defence}) == UnitRole::Defence) continue;
         pending.push_back({id, dangerAt(unit->getLocation())});
     }
     if (pending.empty()) return;
@@ -2152,7 +2154,7 @@ const std::map<Uint32,Coord>& QuantBot::colonyGuardPosts() const {
             unit->getHealth().lround(), unit->getMaxHealth());
         const bool enemy = unit->getOwner()->getTeamID() != myTeam;
         if (enemy && !unit->isVisible(myTeam)) continue;       // Observed enemies only.
-        const bool mine = orderableCombatUnit(unit) && !reserveDamagedUnitForRepair(unit);
+        const bool mine = orderableCombatUnit(unit) && unitRole(unit, {UnitRole::Repair}) == UnitRole::Free;
         if (mine && unit->isAGroundUnit()) ++orderableGround;
         if (!enemy && !mine) continue;
         for (size_t i = 0; i < colonies.size(); ++i) {
@@ -2193,10 +2195,9 @@ const std::map<Uint32,Coord>& QuantBot::colonyGuardPosts() const {
     std::vector<Pick> picks;
     for (const auto* unit : getUnitList()) {
         if (!orderableCombatUnit(unit) || !unit->isAGroundUnit()) continue;
-        if (reserveDamagedUnitForRepair(unit)) continue;
-        if (customWave.members.count(unit->getObjectID())) continue;
-        if (defenceAssignments.count(unit->getObjectID())) continue;
-        if (colonistEscorts().count(unit->getObjectID())) continue;   // Escorting a colonist.
+        // Never a repair run, a defender, a wave member or a colonist's escort.
+        if (unitRole(unit, {UnitRole::Repair, UnitRole::Defence, UnitRole::Wave,
+                            UnitRole::Escort}) != UnitRole::Free) continue;
         if (unit->getAttackMode() == HUNT) continue;   // Already attacking: leave it attacking.
         picks.push_back({unit->getObjectID(), blockDistance(post, unit->getLocation()).lround()});
     }
@@ -2223,8 +2224,8 @@ void QuantBot::assignColonyGuards(int& orderBudget) {
         // The cached chooser is advisory. Revalidate authority at execution,
         // since a defence assignment or dispatch can occur in this same cycle.
         if (!orderableCombatUnit(unit) || !unit->isAGroundUnit()
-            || reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==HUNT
-            || defenceAssignments.count(entry.first) || customWave.members.count(entry.first)) continue;
+            || unitRole(unit, {UnitRole::Repair, UnitRole::Defence, UnitRole::Wave}) != UnitRole::Free
+            || unit->getAttackMode()==HUNT) continue;
         reported = entry.second;
         // Same order shape the withdrawal uses: Area Guard so the unit can
         // still shoot, plus a committed move. Already-there units are left
@@ -2294,7 +2295,8 @@ void QuantBot::releaseLegacyGroundSquad() {
     if (!groundSquadPhase && groundSquad.empty()) return;
     for (const auto id:groundSquad) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
-        if (!unit || unit->getOwner()!=getHouse() || humanControls(unit) || unit->getItemID()==Unit_Saboteur) continue;
+        if (!unit || unit->getOwner()!=getHouse() || unitRole(unit, {UnitRole::Human}) != UnitRole::Free
+            || unit->getItemID()==Unit_Saboteur) continue;
         doSetAttackMode(unit,GUARD);
         doSetAttackMode(unit,groundSquadPhase==2 ? HUNT : AREAGUARD);
     }
@@ -2423,7 +2425,7 @@ void QuantBot::applyOpeningSpaceDispersal() {
         const Uint32 item=unit->getItemID();
         if (item==Unit_MCV || item==Unit_Harvester || item==Unit_Carryall || item==Unit_Frigate
             || item==Unit_Saboteur || item==Unit_Sandworm) continue;
-        if (humanControls(unit) || unit->wasForced() || unit->hasATarget()
+        if (unitRole(unit, {UnitRole::Human}) != UnitRole::Free || unit->wasForced() || unit->hasATarget()
             || unit->getAttackMode()==HUNT || unit->getAttackMode()==RETREAT) continue;
         if (!getMap().tileExists(unit->getLocation())) continue;
         // A unit already standing off the rock costs the base nothing.
@@ -2598,7 +2600,7 @@ Coord QuantBot::findSquadCenter(int houseID, bool preferHunting) {
         if (!unit || !unit->getOwner() || unit->getOwner()->getHouseID()!=houseID
             || !unit->isActive() || !unit->isRespondable() || !unit->isAGroundUnit()
             || !unit->canAttack() || unit->getItemID()==Unit_Saboteur || unit->getItemID()==Unit_Sandworm
-            || unit->getAttackMode()==RETREAT || reserveDamagedUnitForRepair(unit)) continue;
+            || unit->getAttackMode()==RETREAT || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free) continue;
         ++count; x+=unit->getX(); y+=unit->getY();
         if (unit->getAttackMode()==HUNT) {
             ++huntingCount; huntingX+=unit->getX(); huntingY+=unit->getY();
@@ -2751,8 +2753,8 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
  * @param squadRadius The acceptable radius around either position (unit won't move if within this radius)
  */
 void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius, int* orderBudget) {
-    if (!unit || unit->getItemID()==Unit_Saboteur || !unit->isRespondable() || humanControls(unit) || unit->hasATarget()
-        || defenceAssignments.count(unit->getObjectID())
+    if (!unit || unit->getItemID()==Unit_Saboteur || !unit->isRespondable() || unit->hasATarget()
+        || unitRole(unit, {UnitRole::Human, UnitRole::Defence}) != UnitRole::Free
         || unit->wasForced() || unit->isMoving() || unit->getAttackMode()==HUNT) return;
     // A unit that has just been stepped off the home rock stays off it for the
     // opening window, instead of being regrouped straight back onto the ground
@@ -2765,15 +2767,14 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // back to the house assembly point is exactly how a dispatched wave ended
     // up standing in its own base instead of attacking.
     const bool trackedMember = recoveryActive()
-        && customWave.members.count(unit->getObjectID()) > 0;
+        && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave;
     if (trackedMember && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
         && !localSquadWithdraw) return;
-    // A unit holding a threatened colony keeps holding it. The guard set is
-    // derived from current world state, so this is stable without remembering
-    // an assignment across passes.
-    if (recoveryActive() && colonyGuardPosts().count(unit->getObjectID())) return;
-    // An escort follows its colonist, not the house assembly.
-    if (colonistEscorts().count(unit->getObjectID())) return;
+    // A unit holding a threatened colony keeps holding it, and an escort
+    // follows its colonist, not the house assembly. The guard set is derived
+    // from current world state, so this is stable without remembering an
+    // assignment across passes.
+    if (unitRole(unit, {UnitRole::ColonyGuard, UnitRole::Escort}) != UnitRole::Free) return;
     // Easy and Medium keep their reserve at home, as they always have.
     //
     // Custom Hard/Brutal anchors the uncommitted reserve: a freshly built tank
@@ -2920,17 +2921,17 @@ void QuantBot::retreatAllUnits() {
                 it=defenceAssignments.erase(it);
                 continue;
             }
-            if (!unit || unit->getOwner()!=getHouse() || humanControls(unit)
+            if (!unit || unit->getOwner()!=getHouse() || unitRole(unit, {UnitRole::Human}) != UnitRole::Free
                 || unit->getItemID()==Unit_Ornithopter
                 || !target || target->getHealth()<=0 || !target->isActive()
                 || target->getOwner()->getTeamID()==getHouse()->getTeamID()
-                || reserveDamagedUnitForRepair(unit) || unit->getAttackMode()==RETREAT
+                || unitRole(unit, {UnitRole::Repair}) != UnitRole::Free || unit->getAttackMode()==RETREAT
                 || (airborne ? !airAttackContinues(unit,target)
                     : huntingBaseDefence ? !attackingOwnedBuilding(target)
                     : !campaignDefensiveContact(unit,target))) {
-                if (unit && unit->getOwner()==getHouse() && !humanControls(unit)
+                if (unit && unit->getOwner()==getHouse() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free
                     && (unit->getAttackMode()==AREAGUARD || huntingBaseDefence)) {
-                    if (airborne && !reserveDamagedUnitForRepair(unit)
+                    if (airborne && unitRole(unit, {UnitRole::Repair}) == UnitRole::Free
                         && unit->getAttackMode()==AREAGUARD)
                         doMove2Pos(unit,unit->getX(),unit->getY(),false);
                     // The emergency is over. Dropping the forced order hands
@@ -2946,9 +2947,9 @@ void QuantBot::retreatAllUnits() {
                     if (wholeArmyBaseDefence() && unit->isActive() && unit->getHealth() > 0
                         && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher)
                         && unit->getAttackMode()==AREAGUARD
-                        && customWave.members.count(unit->getObjectID()) > 0
+                        && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave
                         && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
-                        && !localSquadWithdraw && !reserveDamagedUnitForRepair(unit)) {
+                        && !localSquadWithdraw && unitRole(unit, {UnitRole::Repair}) == UnitRole::Free) {
                         doSetAttackMode(unit,HUNT);
                         traceDecision("launcher_wave_resumed",AITelemetry::Record()
                             .set("unit",unit->getObjectID()).set("ended_contact",it->second));
@@ -3032,7 +3033,7 @@ void QuantBot::retreatAllUnits() {
             // Palace saboteurs already hunt autonomously. No tactical or army
             // controller may replace their orders, including forced orders.
             if (pUnit->getItemID()==Unit_Saboteur) continue;
-            if (pUnit->getOwner()==getHouse() && humanControls(pUnit)) continue;
+            if (pUnit->getOwner()==getHouse() && unitRole(pUnit, {UnitRole::Human}) != UnitRole::Free) continue;
             // A captured Devastator is worth exactly one thing, so arm it at the first scan
             // that sees it - ahead of kiting, campaign holds, rally, escort and every other
             // role early return that would otherwise keep deferring the order. Support mode
@@ -3062,7 +3063,7 @@ void QuantBot::retreatAllUnits() {
             // Dispatched Custom attackers belong to engine Hunt. Ordinary
             // scans cannot kite them, assign prey, crush targets or regroup them.
             // Repair and emergency defence were handled before this point.
-            if (engineHuntAttack(pUnit) && !reserveDamagedUnitForRepair(pUnit)) continue;
+            if (engineHuntAttack(pUnit) && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free) continue;
             // Combat spacing applies to defenders and escorts too, before their
             // strategic-role early return. Guard orders already leave targets alone.
             if (!supportMode && pUnit->getOwner() == getHouse()
@@ -3113,7 +3114,7 @@ void QuantBot::retreatAllUnits() {
             if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
-                && !reserveDamagedUnitForRepair(pUnit) && !pUnit->hasATarget() && !pUnit->wasForced()
+                && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
                 && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT
                 && squadRallyLocation.isValid()) {
                 moveToOptimalSquadPosition(pUnit,rallyRadius,&rallyOrdersRemaining);
