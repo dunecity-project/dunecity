@@ -436,6 +436,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
         set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
+        # cannot be placed and is destroyed while an observed game's map loads,
+        # before any local player exists; that crashed 1.0.830 at startup.
+        add_test(NAME observed_startup_unplaceable_unit COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/observed-startup-unplaceable-unit
+            --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 51x31 - 2v2 - Sihaya-Phonics.ini"
+            --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
+        set_tests_properties(observed_startup_unplaceable_unit PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
         add_test(NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)

@@ -147,8 +147,11 @@ StructureBase::~StructureBase() {
 
         removeFromSelectionLists();
 
-        for(int i=0; i < NUMSELECTEDLISTS; i++) {
-            pLocalPlayer->getGroupList(i).erase(getObjectID());
+        // No local player exists while an observed game's map is still loading.
+        if(pLocalPlayer != nullptr) {
+            for(int i=0; i < NUMSELECTEDLISTS; i++) {
+                pLocalPlayer->getGroupList(i).erase(getObjectID());
+            }
         }
     } catch(std::exception& e) {
         SDL_Log("StructureBase::~StructureBase(): %s", e.what());

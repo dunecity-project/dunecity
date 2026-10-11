@@ -194,8 +194,13 @@ UnitBase::~UnitBase() {
     pathList.clear();
     removeFromSelectionLists();
 
-    for(int i=0; i < NUMSELECTEDLISTS; i++) {
-        pLocalPlayer->getGroupList(i).erase(objectID);
+    // An observed game has no local player while INIMapLoader places scenario
+    // units, and a unit that cannot stand where the map puts it is destroyed
+    // right there. Group lists only exist for a local player.
+    if(pLocalPlayer != nullptr) {
+        for(int i=0; i < NUMSELECTEDLISTS; i++) {
+            pLocalPlayer->getGroupList(i).erase(objectID);
+        }
     }
 
     currentGame->getObjectManager().removeObject(objectID);

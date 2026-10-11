@@ -464,7 +464,10 @@ public:
         if(pInterface) {
             pInterface->updateObjectInterface();
         }
-        pLocalPlayer->onSelectionChanged(selectedList);
+        // An observed game has no local player while its map is loading.
+        if(pLocalPlayer != nullptr) {
+            pLocalPlayer->onSelectionChanged(selectedList);
+        }
     };
 
 

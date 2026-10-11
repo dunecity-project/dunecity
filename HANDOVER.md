@@ -1,3 +1,19 @@
+## 2026-10-12 — 1.0.831: spectated startup crash on unplaceable scenario units
+
+The MBA (local 830 refactor build) crashed starting a spectated custom game:
+SIGSEGV in UnitBase::~UnitBase via Sandworm destroy, House::placeUnit and
+INIMapLoader::loadUnits. A scenario unit that cannot stand where the map puts it
+(here a second sandworm on an occupied tile) is destroyed during map load. In an
+observed game no local player exists yet (Game::setupSpectatorView runs after
+the load), and Game::selectionChanged plus the UnitBase and StructureBase
+destructors dereferenced pLocalPlayer. All three now skip the local player's
+lists when there is none. Pre-existing since the import; human games set the
+local player before units load. Reproduced on bundled Sihaya-Phonics (two
+worms on tile 790), crash before, 5-minute match after with the worm skipped;
+new ctest observed_startup_unplaceable_unit covers it. The 1.0.830 tag build was
+cancelled before publication and that tag deleted; 831 carries the 830 changes,
+the QuantBot split and this fix. Protocol 68 and save 9853 unchanged.
+
 ## 2026-10-11 — QuantBot split and unit roles (no behaviour change, still 1.0.830)
 
 Branch refactor/quantbot-split from eba797da, built and tested on the Mac mini
