@@ -1506,8 +1506,8 @@ void runArmyRecoveryProbe(Game& game) {
                 currentGame->isCitySimEnabled()?1:0,site.x,site.y);
             if(currentGame->isCitySimEnabled()) {
                 // In city mode the battery still has to be a legal city
-                // placement. The zone-landlock rule lives in an anonymous
-                // namespace in QuantBot.cpp, so it is enforced inside the
+                // placement. The zone-landlock rule is private to the QuantBot
+                // implementation files (QuantBotInternal.h), so it is enforced inside the
                 // search rather than re-evaluated here; what is checked here is
                 // that the site the search returns really is placeable and does
                 // not sit on a city zone.

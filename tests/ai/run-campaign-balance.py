@@ -22,8 +22,9 @@ root = Path(__file__).resolve().parents[2]
 house_names = ('harkonnen','atreides','ordos','fremen','sardaukar','mercenary','neutral','rebels','custom','wildspade','kleshmersh','tharpique')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
-parser.add_argument('--quantbot-object', type=Path,
-                    help='Diagnostic-only policy comparison: link a preserved QuantBot object')
+parser.add_argument('--quantbot-object', type=Path, nargs='+',
+                    help='Diagnostic-only policy comparison: link preserved QuantBot object(s) in place of '
+                         'QuantBot.cpp and its subsystem files')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--repeatable', action='store_true', help='Keep each CTest run in a fresh subdirectory')
 parser.add_argument('--custom-map', type=Path, help='Run all occupied slots of a custom map instead of the campaign')
@@ -116,8 +117,8 @@ if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
 if args.local_spectator and not args.custom_map:
     parser.error('--local-spectator requires --custom-map.')
-if args.quantbot_object and not args.quantbot_object.is_file():
-    parser.error('--quantbot-object must name an existing object file.')
+if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
+    parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if not args.custom_map and (args.roster or args.house not in house_names[:3]):
@@ -221,12 +222,19 @@ link[link.index('-o')+1] = str(binary)
 link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
 policy_comparison = None
 if args.quantbot_object:
-    preserved = args.quantbot_object.resolve()
-    if sum(arg.endswith('/players/QuantBot.cpp.o') for arg in link) != 1:
-        raise RuntimeError('Expected one QuantBot object in the diagnostic link.')
-    link = [str(preserved) if arg.endswith('/players/QuantBot.cpp.o') else arg for arg in link]
-    policy_comparison = {'object': str(preserved),
-                         'sha256': hashlib.sha256(preserved.read_bytes()).hexdigest()}
+    # QuantBot.cpp and its subsystem files implement one class. The preserved
+    # object(s), from a build before or after that split, replace all of them.
+    split = [f'/players/QuantBot{part}.cpp.o' for part in
+             ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Air', 'Harvesters')]
+    present = [arg for arg in link if any(arg.endswith(name) for name in split)]
+    if len(present) != len(split):
+        raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')
+    preserved = [path.resolve() for path in args.quantbot_object]
+    position = link.index(present[0])
+    link = [arg for arg in link if arg not in present]
+    link[position:position] = [str(path) for path in preserved]
+    policy_comparison = [{'object': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                         for path in preserved]
 with (out/'build.log').open('w') as log:
     subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
     subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
