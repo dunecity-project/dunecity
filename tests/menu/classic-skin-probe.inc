@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -86,6 +87,133 @@ struct ClassicUISkinProbe {
             }
         }
         return count;
+    }
+
+    static Uint32 rgbaPixel(SDL_Surface* surface, int x, int y) {
+        SDL_Color pixel{};
+        SDL_GetRGBA(getPixel(surface, x, y), surface->format,
+                    &pixel.r, &pixel.g, &pixel.b, &pixel.a);
+        return COLOR_RGBA(pixel.r, pixel.g, pixel.b, pixel.a);
+    }
+
+    static void checkButtonInterior(SDL_Surface* surface, bool classic, bool pressed) {
+        require(surface != nullptr, "A diagnostic button surface is missing");
+        sdl2::surface_lock lock{surface};
+        std::set<Uint32> interior;
+        const auto modern = MenuTheme::themeForUISkin(0);
+        for(int y = 0; y < surface->h; ++y) {
+            for(int x = 0; x < surface->w; ++x) {
+                const auto color = rgbaPixel(surface, x, y);
+                require(RGBA2SDL(color).a == 255, "Button decoration leaves a transparent pixel");
+                if(x >= 6 && y >= 6 && x < surface->w - 6 && y < surface->h - 6) {
+                    interior.insert(color);
+                    if(!classic)
+                        require(color == (pressed ? modern.pressed : modern.control),
+                                "The Modern button interior is no longer its original flat color");
+                }
+            }
+        }
+        require(classic ? interior.size() >= 8 : interior.size() == 1,
+                "Classic button interior is flat or Modern acquired desert decoration");
+    }
+
+    static void checkButtonLabel(SDL_Surface* blank, SDL_Surface* labeled,
+                                 Uint32 foreground, Uint32 emboss, bool classic) {
+        require(blank && labeled && blank->w == labeled->w && blank->h == labeled->h,
+                "Labeled button geometry differs from its empty-label surface");
+        sdl2::surface_lock blankLock{blank};
+        sdl2::surface_lock labeledLock{labeled};
+        int foregroundPixels = 0;
+        int embossPixels = 0;
+        int changedPixels = 0;
+        for(int y = 0; y < labeled->h; ++y) {
+            for(int x = 0; x < labeled->w; ++x) {
+                const auto color = rgbaPixel(labeled, x, y);
+                if(color == rgbaPixel(blank, x, y)) continue;
+                ++changedPixels;
+                // The text-safe grain region itself follows label width. Only
+                // exact ink/emboss pixels identify glyph bounds; other changes
+                // against an empty button are background, not escaped text.
+                if(color == foreground || (classic && color == emboss)) {
+                    require(x >= 3 && y >= 3 && x < labeled->w - 3 && y < labeled->h - 3,
+                            "A button label or its emboss overlaps the carved border");
+                    if(color == foreground) ++foregroundPixels;
+                    if(classic && color == emboss) ++embossPixels;
+                }
+            }
+        }
+        require(changedPixels > 0 && foregroundPixels > 0,
+                "The real font produced no visible button foreground glyphs");
+        if(classic)
+            require(embossPixels > 0, "Classic typography lost its pale-gold emboss");
+    }
+
+    static void checkButtonDecoration() {
+        require(pFontManager && pGFXManager,
+                "Button checks require actual game fonts and original desert artwork");
+        const int activeSkin = MenuTheme::uiSkin;
+        const auto activeBackground = MenuTheme::background;
+        auto sheet = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0, 640, 240, 32, SCREEN_FORMAT)};
+        require(sheet != nullptr, "Creating the diagnostic button state sheet failed");
+        // Every sample below comes from production DuneStyle. The sheet simply
+        // places the returned surfaces side by side; it is not a UI mockup.
+        for(int skin : {0, 1}) {
+            DuneStyle standard(0, skin);
+            auto backdrop = standard.createBackground(320, 240);
+            require(backdrop != nullptr, "Creating the actual button backdrop failed");
+            SDL_Rect destination{skin * 320, 0, 320, 240};
+            require(SDL_BlitSurface(backdrop.get(), nullptr, sheet.get(), &destination) == 0,
+                    "Placing the diagnostic backdrop failed");
+            auto heading = standard.createLabelSurface(300, 24,
+                {skin ? "Classic Desert" : "Modern"}, 14,
+                static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
+            require(heading != nullptr, "Rendering the button state sheet heading failed");
+            destination = {skin * 320 + 10, 0, 300, 24};
+            require(SDL_BlitSurface(heading.get(), nullptr, sheet.get(), &destination) == 0,
+                    "Placing the diagnostic heading failed");
+            for(int palette : {0, 1}) {
+                DuneStyle style(palette, skin);
+                for(int state = 0; state < 3; ++state) {
+                    const bool pressed = state == 1;
+                    const bool focused = state == 2;
+                    const auto typography = buttonPalette(palette, skin, pressed);
+                    for(int compact : {0, 1}) {
+                        const int width = compact ? 70 : 280;
+                        const int height = compact ? 22 : 34;
+                        const std::string text = compact ? "Apply" : "Play Online";
+                        auto blank = style.createButtonSurface(width, height, "", pressed, focused);
+                        auto labeled = style.createButtonSurface(width, height, text, pressed, focused);
+                        require(blank && labeled, "Rendering an actual button state failed");
+                        require(blank->w == width && blank->h == height,
+                                "Button decoration changed its requested hitbox dimensions");
+                        checkButtonInterior(blank.get(), skin == 1, pressed);
+                        checkButtonLabel(blank.get(), labeled.get(), typography.foreground,
+                                         typography.shadow, skin == 1);
+                        if(palette == 0) {
+                            destination = {skin * 320 + (compact ? 125 : 20),
+                                           28 + state * 70 + (compact ? 39 : 0), width, height};
+                            require(SDL_BlitSurface(labeled.get(), nullptr, sheet.get(), &destination) == 0,
+                                    "Placing an actual button state on the evidence sheet failed");
+                        }
+                    }
+                }
+                auto normal = style.createButtonSurface(280, 34, "", false, false);
+                auto pressed = style.createButtonSurface(280, 34, "", true, false);
+                auto focused = style.createButtonSurface(280, 34, "", false, true);
+                require(normal && pressed && focused, "Rendering the button state comparison failed");
+                require(rgbaPixel(normal.get(), 0, 0) != rgbaPixel(focused.get(), 0, 0),
+                        "Focused button no longer has a distinct outer border");
+                require(rgbaPixel(normal.get(), 140, 10) != rgbaPixel(pressed.get(), 140, 10),
+                        "Pressed button no longer has a distinct interior relief");
+            }
+        }
+        require(MenuTheme::uiSkin == activeSkin && MenuTheme::background == activeBackground,
+                "Button previews mutated the active menu/HUD theme");
+        const auto path = capturePath("buttons-modern-classic-states").string();
+        require(SavePNG(sheet.get(), path.c_str()) == 0, "Saving button-state pixel evidence failed");
+        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors and embossed glyphs;"
+                " normal/pressed/focused at 280x34 and 70x22; unchanged flat Modern interiors;"
+                " bounds, both text palettes and preview isolation");
     }
 
     static void checkArtworkLabelContrast() {
@@ -345,6 +473,7 @@ struct ClassicUISkinProbe {
 
         if(stage < 2) {
             checkArtworkLabelContrast();
+            checkButtonDecoration();
             MainMenu mainMenu;
             capture(mainMenu, "main");
             OptionsMenu options;

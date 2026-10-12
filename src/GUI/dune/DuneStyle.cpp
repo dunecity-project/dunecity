@@ -26,8 +26,37 @@
 
 #include <algorithm>
 
-void DuneStyle::drawControlFrame(SDL_Surface* surface, bool pressed, bool activated) const {
-    SDL_FillRect(surface, nullptr, pressed ? theme.pressed : theme.control);
+void DuneStyle::drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
+                                 const SDL_Rect& labelRect) const {
+    // Reuse the original FAME sand pattern, dyed into a carved brass control.
+    // Only this owned RGB surface changes, never the shared artwork seed.
+    auto* artwork = classicTexture;
+    if(!artwork && pGFXManager) artwork = pGFXManager->getBackgroundSurface();
+    const bool hasArtwork = artwork && artwork->w > 0 && artwork->h > 0;
+    fillClassicBackground(surface);
+    {
+        sdl2::surface_lock lock(surface);
+        for(int y = 0; y < surface->h; ++y) {
+            const int relief = surface->h > 1 ? 8 - (16*y)/(surface->h-1) : 0;
+            for(int x = 0; x < surface->w; ++x) {
+                const auto sand = RGBA2SDL(getPixel(surface, x, y));
+                const int grain = hasArtwork
+                    ? (299*sand.r + 587*sand.g + 114*sand.b)/1000 - 155
+                    : ((x*17 + y*23 + (x*y)%19)%31) - 15;
+                // Softer grain under the label protects its contrast without
+                // introducing a flat rectangle in the textured button face.
+                const bool underLabel = x >= labelRect.x-6
+                    && x < labelRect.x+labelRect.w+6;
+                const int variation = underLabel ? std::clamp(grain/6, -8, 8)
+                                                 : std::clamp(grain/2, -22, 22);
+                const int red = (pressed ? 211 : 230) + relief + variation;
+                const int green = (pressed ? 161 : 182) + relief + variation;
+                const int blue = (pressed ? 51 : 68) + relief/2 + variation/2;
+                putPixel(surface, x, y, COLOR_RGB(std::clamp(red, 0, 255),
+                    std::clamp(green, 0, 255), std::clamp(blue, 0, 255)));
+            }
+        }
+    }
     drawRect(surface, 0, 0, surface->w-1, surface->h-1, activated ? theme.accent : theme.border);
     if(surface->w < 4 || surface->h < 4) return;
     const auto upper = pressed ? theme.edgeDark : theme.edgeLight;
@@ -36,6 +65,36 @@ void DuneStyle::drawControlFrame(SDL_Surface* surface, bool pressed, bool activa
     drawVLine(surface, 1, 1, surface->h-2, upper);
     drawHLine(surface, 1, surface->h-2, surface->w-2, lower);
     drawVLine(surface, surface->w-2, 1, surface->h-2, lower);
+    if(surface->w < 8 || surface->h < 8) return;
+    // Three carved bands stay within the existing control and hit-test bounds.
+    drawHLine(surface, 2, 2, surface->w-3, upper);
+    drawVLine(surface, 2, 2, surface->h-3, upper);
+    drawHLine(surface, 2, surface->h-3, surface->w-3, lower);
+    drawVLine(surface, surface->w-3, 2, surface->h-3, lower);
+    drawRect(surface, 3, 3, surface->w-4, surface->h-4,
+             pressed ? theme.edgeDark : COLOR_RGB(189,126,28));
+
+    // End fittings belong only on roomy buttons, never on long translated
+    // labels or small controls. The font size and text position do not change.
+    if(surface->w >= 120 && surface->h >= 28
+       && labelRect.x >= 30 && labelRect.x+labelRect.w <= surface->w-30) {
+        const int centerY = surface->h/2 + (pressed ? 1 : 0);
+        const Uint32 cut = pressed ? theme.border : COLOR_RGB(138,81,15);
+        const Uint32 glint = pressed ? theme.control : theme.edgeLight;
+        sdl2::surface_lock lock(surface);
+        for(const int centerX : {13, surface->w-14}) {
+            for(int dy = -3; dy <= 3; ++dy) {
+                const int reach = 3-std::abs(dy);
+                drawHLineNoLock(surface, centerX-reach, centerY+dy,
+                                centerX+reach, dy < 0 ? glint : cut);
+            }
+            putPixel(surface, centerX, centerY, activated ? theme.accent : theme.edgeDark);
+            drawVLineNoLock(surface, centerX-6, centerY-5, centerY+5, cut);
+            drawVLineNoLock(surface, centerX+6, centerY-5, centerY+5, cut);
+            drawVLineNoLock(surface, centerX-5, centerY-4, centerY+4, glint);
+            drawVLineNoLock(surface, centerX+7, centerY-4, centerY+4, glint);
+        }
+    }
 }
 
 void DuneStyle::fillClassicBackground(SDL_Surface* surface) const {
@@ -331,17 +390,24 @@ Point DuneStyle::getMinimumButtonSize(const std::string& text) {
 sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, const std::string& text, bool pressed, bool activated, Uint32, Uint32) {
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
+    int fontsize = height >= 48 ? 22 : height >= 38 ? 20 : height >= 30 ? 18 : height >= 24 ? 16 : 14;
+    while(fontsize>8 && (width < getTextWidth(text,fontsize)+12 || height < getTextHeight(fontsize)+4)) --fontsize;
+    const auto lettering = uiSkin == 1
+        ? (pressed ? pressedButtonTextPalette : buttonTextPalette) : textPalette;
+    auto label=createSurfaceWithText(text,lettering.foreground,fontsize);
+    SDL_Rect rect=calcDrawingRect(label.get(),width/2+(pressed ? 1 : 0),height/2+(pressed ? 1 : 0),HAlign::Center,VAlign::Center);
     if(uiSkin == 1) {
-        drawControlFrame(surface.get(), pressed, activated);
+        drawControlFrame(surface.get(), pressed, activated, rect);
+        auto emboss = createSurfaceWithText(text, lettering.shadow, fontsize);
+        SDL_Rect embossRect = rect;
+        ++embossRect.x;
+        ++embossRect.y;
+        SDL_BlitSurface(emboss.get(), nullptr, surface.get(), &embossRect);
     } else {
         // Modern remains byte-for-byte visually equivalent to its prior style.
         SDL_FillRect(surface.get(),nullptr,pressed ? theme.pressed : theme.control);
         drawRect(surface.get(),0,0,width-1,height-1,activated ? theme.accent : theme.border);
     }
-    int fontsize = height >= 48 ? 22 : height >= 38 ? 20 : height >= 30 ? 18 : height >= 24 ? 16 : 14;
-    while(fontsize>8 && (width < getTextWidth(text,fontsize)+12 || height < getTextHeight(fontsize)+4)) --fontsize;
-    auto label=createSurfaceWithText(text,textPalette.foreground,fontsize);
-    SDL_Rect rect=calcDrawingRect(label.get(),width/2+(pressed ? 1 : 0),height/2+(pressed ? 1 : 0),HAlign::Center,VAlign::Center);
     SDL_BlitSurface(label.get(),nullptr,surface.get(),&rect);
     return surface;
 }

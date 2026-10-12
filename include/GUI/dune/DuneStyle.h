@@ -27,7 +27,9 @@ public:
     explicit DuneStyle(int palette = 0, int skin = MenuTheme::uiSkin,
                        SDL_Surface* classicTexture = nullptr)
         : GUIStyle(), uiSkin(validatedUISkin(skin)), theme(MenuTheme::themeForUISkin(skin)),
-          textPalette(menuPalette(palette, skin)), classicTexture(classicTexture) {
+          textPalette(menuPalette(palette, skin)),
+          buttonTextPalette(buttonPalette(palette, skin)),
+          pressedButtonTextPalette(buttonPalette(palette, skin, true)), classicTexture(classicTexture) {
     }
 
     /// destructor
@@ -270,11 +272,14 @@ private:
     const int uiSkin;
     const MenuTheme::Theme theme;
     const MenuPalette textPalette;
+    const MenuPalette buttonTextPalette;
+    const MenuPalette pressedButtonTextPalette;
     // Optional constructor-time artwork; the local graphics-loading style is
     // destroyed before its PictureFactory seed. Persistent styles use GFXManager.
     SDL_Surface* const classicTexture;
 
-    void drawControlFrame(SDL_Surface* surface, bool pressed, bool activated) const;
+    void drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
+                          const SDL_Rect& labelRect) const;
     void fillClassicBackground(SDL_Surface* surface) const;
 
     /**

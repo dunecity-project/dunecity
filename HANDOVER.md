@@ -1,3 +1,42 @@
+## 2026-10-12 — local 1.0.834: textured Classic Desert buttons
+
+The user approved the desert background but found the flat controls and lettering
+bland. Classic buttons now reuse the original FAME grain tinted into brass-gold
+faces, with raised/recessed carved borders and small end fittings on roomy
+controls. The grain is quieter beneath each label. Standard lettering restores
+the original dark red with a pale-gold one-pixel relief; pressed controls use
+deeper red to preserve contrast. High Contrast keeps dark ink. Small controls
+and long translated labels omit end fittings when space is insufficient.
+
+The original background, Modern rendering, fonts, button geometry/hitboxes,
+world artwork, zoom, interface resolution and Dune2R scaling remain unchanged.
+This is another local play-test candidate on the same production 1.0.832 base,
+not a published release. The official version helper sets all three version
+files to 1.0.834. The full Visual Studio Release build passes. All 11 Windows
+CTests pass (core: 1004 passed, four opt-in cases skipped, 10,238,824 assertions;
+Classic theme: seven cases and 337 assertions). Actual SDL Modern → Classic →
+Modern rendering, preview/Back, Apply/reinitialization/persistence and static
+construction-yard build sidebar/HUD/pause checks pass at 640×480, 854×480,
+1280×720 and Native 1920×1080. Both text palettes pass the normal/pressed/focused
+button checks at 280×34 and 70×22: opaque textured Classic interiors, bounded
+real ink/emboss pixels, distinct pressed/focused states and unchanged flat
+Modern interiors. The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-834/captures` tree. This is static
+software-renderer/component evidence, not a live gameplay certification.
+
+The first full-build asset-copy step met a Windows PAK sharing violation while
+the renderer probe was open. After that diagnostic exited, an incremental
+full-build retry and all CTests passed. Run the diagnostic after all asset-copy
+targets have finished, not concurrently with them. No production workaround or
+gameplay change was needed.
+
+The separate `build-windows-portable-834` install passes its desktop runtime
+check (exit 0). Its executable matches the rebuilt target: SHA256
+`1805A2A1FD6822EBE46A35F7C69780D49FF2EC95CF913A25CFBEA56885D24C66`.
+The source/build/portable configuration templates match. Previous local portable
+builds are preserved. The user requested local play-testing, so no push, PR,
+tag, device installation or publication has been performed.
+
 ## 2026-10-11 — Classic Desert carried onto production 1.0.832 as local 1.0.833
 
 Fetched main at 1496ff4 after the first UI candidate was finished. The published

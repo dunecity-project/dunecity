@@ -12,9 +12,14 @@ Modern remains the default for existing and new profiles. A missing or invalid
 The small Dune City sample previews both the chosen skin and Colors setting
 without changing the live menus before Apply.
 
-Classic Desert reuses the original FAME/SCREEN desert artwork, gold beveled
-controls and dark, readable lettering. The pause window and selected-building
-sidebar follow the choice. Black radar and portrait regions remain intentional;
+Classic Desert reuses the original FAME/SCREEN desert artwork. Its buttons have
+sand-grained brass-gold faces, carved raised/recessed borders and small end
+fittings when enough label space is available. Standard button lettering uses
+the original dark red with a pale-gold relief; High Contrast retains dark ink.
+Smaller controls keep their existing font sizing and hitboxes, and long labels
+omit the end fittings rather than overlapping them. Other labels retain their
+contrast-safe colors. The pause window and selected-building sidebar follow
+the choice. Black radar and portrait regions remain intentional;
 building images and world sprites are not recolored. This is an interface style,
 not a flattened mockup or a replacement pack of generated world assets.
 
@@ -49,7 +54,11 @@ the cached UI rather than leaving old-theme widgets behind.
 
 The `classic_desert_ui_tests` CTest covers theme defaults, invalid values,
 Modern palette preservation, Classic contrast, preview isolation, preference
-storage and independence from interface/world scaling.
+storage and independence from interface/world scaling. Button palette checks
+also cover red/gold lettering, the deeper pressed-state ink, High Contrast and
+unchanged Modern colors. The renderer fixture checks opaque textured Classic
+button faces, real glyph/emboss bounds and normal/pressed/focused states at
+280×34 and 70×22 in both text palettes; Modern interiors remain flat.
 
 For Windows visual diagnostics, `tests/menu/run-classic-skin-probe-windows.py`
 links a private entry point against a completed Visual Studio Release build.
@@ -64,6 +73,9 @@ object; the latter redirects user-file requests to a mandatory test directory.
 The production Windows profile resolver and the player's existing settings are
 not modified. Its dummy-display fixture holds each requested logical size for
 layout verification; it is not an assertion of an interactive monitor capture.
+Wait for the entire game build, including its asset-copy targets, to finish
+before running this probe. On Windows the probe holds runtime PAK files open;
+overlapping it with `copy_data` can fail the copy with a sharing violation.
 
 The 1.0.830 Windows candidate passed all 11 CTest suites. The actual SDL
 menu-rendering matrix passed at 640×480, 854×480, 1280×720 and 1920×1080, each
@@ -85,3 +97,12 @@ again against the refreshed game executable. The complete Windows Release build
 and all 11 CTest suites pass on that integration, and the separate portable
 install passes its runtime check. These local candidates are not published
 releases; broader evidence and the play-test handoff are recorded in HANDOVER.md.
+
+Local 1.0.834 adds the textured brass buttons and red/gold typography described
+above without altering the approved background. The full Windows Release build
+and all 11 CTest suites pass; the Classic theme subset now has seven cases and
+337 assertions. The actual four-size SDL skin-switch/HUD/pause matrix and the
+new button-pixel checks pass, including compact controls, both text palettes,
+and normal/pressed/focused states. Its separate portable install passes the
+desktop runtime check. It remains a local play-test candidate, not a published
+release.

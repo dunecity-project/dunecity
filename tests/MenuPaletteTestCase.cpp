@@ -175,6 +175,55 @@ TEST_CASE("Classic colored labels remain readable on gold surfaces", "[menu][ui-
     CHECK(c.b == 0);
 }
 
+TEST_CASE("Classic button typography restores oxblood and gold emboss without changing general labels",
+          "[menu][ui-skin][buttons][accessibility]") {
+    constexpr auto standard = buttonPalette(0, 1);
+    constexpr auto pressed = buttonPalette(0, 1, true);
+    static_assert(standard.foreground == COLOR_RGB(125,0,0));
+    static_assert(standard.shadow == COLOR_RGB(255,235,176));
+    static_assert(pressed.foreground == COLOR_RGB(88,10,4));
+    static_assert(pressed.shadow == COLOR_RGB(255,220,128));
+    const auto classic = MenuTheme::themeForUISkin(1);
+    CHECK(contrastRatio(standard.foreground, classic.control) >= 4.5);
+    CHECK(contrastRatio(standard.foreground, classic.background) >= 4.5);
+    CHECK(contrastRatio(pressed.foreground, classic.pressed) >= 4.5);
+    CHECK(standard.foreground != menuPalette(0, 1).foreground);
+    CHECK(menuPalette(0, 1).shadow == COLOR_TRANSPARENT);
+    for(int palette : {0, 1}) {
+        for(bool down : {false, true}) {
+            const auto modern = buttonPalette(palette, 0, down);
+            CHECK(modern.foreground == menuPalette(palette, 0).foreground);
+            CHECK(modern.shadow == menuPalette(palette, 0).shadow);
+            const auto colors = buttonPalette(palette, 1, down);
+            CHECK(RGBA2SDL(colors.foreground).a == 255);
+            CHECK(RGBA2SDL(colors.shadow).a == 255);
+            CHECK(contrastRatio(colors.foreground, down ? classic.pressed : classic.control) >= 4.5);
+        }
+    }
+    for(bool down : {false, true}) {
+        const auto highContrast = buttonPalette(1, 1, down);
+        CHECK(highContrast.foreground == menuPalette(1, 1).foreground);
+        CHECK(contrastRatio(highContrast.foreground, down ? classic.pressed : classic.control) >= 4.5);
+        for(int invalid : {-1, 2, 100}) {
+            const auto fallback = buttonPalette(invalid, 1, down);
+            CHECK(fallback.foreground == buttonPalette(0, 1, down).foreground);
+            CHECK(fallback.shadow == buttonPalette(0, 1, down).shadow);
+            CHECK(buttonPalette(0, invalid, down).foreground == menuPalette(0, 0).foreground);
+            CHECK(buttonPalette(0, invalid, down).shadow == COLOR_TRANSPARENT);
+        }
+    }
+    RestoreUISkin restore;
+    for(int skin : {0, 1, 0}) {
+        MenuTheme::setUISkin(skin);
+        CHECK(buttonPalette(0).foreground == buttonPalette(0, skin).foreground);
+        CHECK(buttonPalette(1).shadow == buttonPalette(1, skin).shadow);
+        const auto preview = buttonPalette(0, 1 - skin, true);
+        CHECK(preview.foreground == buttonPalette(0, 1 - skin, true).foreground);
+        CHECK(MenuTheme::uiSkin == skin);
+        checkActiveTheme(MenuTheme::themeForUISkin(skin));
+    }
+}
+
 TEST_CASE("UI skin never changes interface resolution or Dune2R world presentation", "[menu][ui-skin][display]") {
     RestoreUISkin restore;
     for(int skin : {0, 1, 0}) {

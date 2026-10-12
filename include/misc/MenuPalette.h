@@ -120,4 +120,16 @@ inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin
                       COLOR_TRANSPARENT};
 }
 
+// Classic button lettering reprises the original red-and-gold relief without
+// changing labels over menus, Mentat artwork or the game world. The recessed
+// pressed face uses deeper ink to retain contrast on its darker gold surface.
+inline constexpr MenuPalette buttonPalette(int value, int skin = MenuTheme::uiSkin,
+                                           bool pressed = false) {
+    return validatedUISkin(skin) == 1
+        ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
+                      : pressed ? COLOR_RGB(88,10,4) : COLOR_RGB(125,0,0),
+                      pressed ? COLOR_RGB(255,220,128) : COLOR_RGB(255,235,176)}
+        : menuPalette(value, skin);
+}
+
 #endif
