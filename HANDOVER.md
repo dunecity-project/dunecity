@@ -51,7 +51,14 @@ loses most of its base: the Rebels field ~1,000 troops against it.
 Version 1.0.833, protocol 70, policy forced-nearest-defence-scramble-v99.
 Whole-army probe updated (forced nearest attacker, nearby rule, batch ceiling,
 lock, leash, en-route target, harvester scramble, wave march taken / short
-forced step kept); recovery probe checks the forced defender keeps its target. Not pushed or released.
+forced step kept); recovery probe checks the forced defender keeps its target.
+
+Installed on the MBA at 01:53 AEDT 2026-10-13 from 8c8b2b2f (built on the mini,
+`cmake --install` staging, deep/strict signature verified before and after the
+swap, desktop runtime check passed): version 1.0.833, executable SHA256
+877b8576d4fa211a196fa3e2ed0cd3975ab06e3d199de2115417a4eb48593e11. The game was
+not running; saves untouched. Local 1.0.832 is at
+/Applications/.dunecity-backup-before-1.0.833-20261013-015302/dunecity.app. Not pushed or released.
 Evidence: ../outputs/defence-scramble/.
 
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
