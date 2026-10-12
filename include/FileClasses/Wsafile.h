@@ -71,7 +71,7 @@ public:
     bool isAnimationLooped() const noexcept { return looped; };
 
 private:
-    void decodeFrames(const unsigned char* pFiledata, Uint32* index, int numberOfFrames, unsigned char* pDecodedFrames, int x, int y) const;
+    void decodeFrames(const unsigned char* pFiledata, const unsigned char* index, int numberOfFrames, unsigned char* pDecodedFrames, int x, int y) const;
     std::unique_ptr<unsigned char[]> readfile(SDL_RWops* rwop, int* filesize) const;
     void readdata(std::initializer_list<SDL_RWops*> files);
     std::vector<unsigned char> decodedFrames;

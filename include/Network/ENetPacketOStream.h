@@ -107,21 +107,24 @@ public:
     void writeUint16(Uint16 x) override
     {
         ensureBufferSize(currentPos + sizeof(Uint16));
-        *((Uint16*) (packet->data + currentPos)) = SDL_SwapLE16(x);
+        x = SDL_SwapLE16(x);
+        memcpy(packet->data + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint16);
     }
 
     void writeUint32(Uint32 x) override
     {
         ensureBufferSize(currentPos + sizeof(Uint32));
-        *((Uint32*) (packet->data + currentPos)) = SDL_SwapLE32(x);
+        x = SDL_SwapLE32(x);
+        memcpy(packet->data + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint32);
     }
 
     void writeUint64(Uint64 x) override
     {
         ensureBufferSize(currentPos + sizeof(Uint64));
-        *((Uint64*) (packet->data + currentPos)) = SDL_SwapLE64(x);
+        x = SDL_SwapLE64(x);
+        memcpy(packet->data + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint64);
     }
 

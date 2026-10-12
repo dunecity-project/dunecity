@@ -173,7 +173,9 @@ void HumanPlayer::setGroupList(int groupListIndex, const std::set<Uint32>& newGr
 }
 
 void HumanPlayer::triggerStructureTutorialHint(Uint32 itemID) {
-    if(alreadyShownTutorialHints & (1 << itemID)) {
+    // One flag bit per structure hint. Items past bit 31 have no hint, and shifting by 32 or
+    // more is undefined.
+    if(itemID >= 32 || (alreadyShownTutorialHints & (1u << itemID))) {
         return;
     }
 
@@ -257,7 +259,7 @@ void HumanPlayer::triggerStructureTutorialHint(Uint32 itemID) {
         } break;
     }
 
-    alreadyShownTutorialHints |= (1 << itemID);
+    alreadyShownTutorialHints |= (1u << itemID);
 }
 
 bool HumanPlayer::hasConcreteOfSize(const Coord& concreteSize) const {

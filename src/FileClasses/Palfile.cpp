@@ -46,17 +46,17 @@ Palette LoadPalette_RW(SDL_RWops* rwop)
         if(SDL_RWread(rwop,&buf,1,1) != 1) {
             THROW(std::runtime_error, "Palfile::Palfile(): SDL_RWread failed!");
         }
-        palette[i].r = (char) (((double) buf)*255.0/63.0);
+        palette[i].r = static_cast<Uint8>(static_cast<int>(((double) buf)*255.0/63.0));
 
         if(SDL_RWread(rwop,&buf,1,1) != 1) {
             THROW(std::runtime_error, "Palfile::Palfile(): SDL_RWread failed!");
         }
-        palette[i].g = (char) (((double) buf)*255.0/63.0);
+        palette[i].g = static_cast<Uint8>(static_cast<int>(((double) buf)*255.0/63.0));
 
         if(SDL_RWread(rwop,&buf,1,1) != 1) {
             THROW(std::runtime_error, "Palfile::Palfile(): SDL_RWread failed!");
         }
-        palette[i].b = (char) (((double) buf)*255.0/63.0);
+        palette[i].b = static_cast<Uint8>(static_cast<int>(((double) buf)*255.0/63.0));
         palette[i].a = 0xFF;
     }
 

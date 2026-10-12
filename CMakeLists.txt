@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
-project(DuneCity VERSION 1.0.832 LANGUAGES C CXX)
+project(DuneCity VERSION 1.0.833 LANGUAGES C CXX)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -204,6 +204,36 @@ else()
     add_compile_options(-Wall -Wextra -pedantic)
     add_compile_options(-Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unknown-pragmas) # FIXME These should be cleaned up.
     add_compile_options(-Wno-expansion-to-defined)  # Silences "define FMT_HAS_FEATURE(x) __has_feature(x) may not be portable" warnings.
+endif()
+
+# Runtime sanitizers. Native Debug builds with GCC or Clang get AddressSanitizer and
+# UndefinedBehaviorSanitizer by default; Release builds (everything that ships), MSVC,
+# MinGW, Android and Emscripten get none. Override with -DDUNECITY_SANITIZE=<list>, or turn
+# it off with -DDUNECITY_SANITIZE=OFF. Every finding aborts the process
+# (-fno-sanitize-recover), so a sanitized test run fails on the first report instead of
+# printing it and carrying on. Third-party code fetched above (libdatachannel) is configured
+# before this and stays uninstrumented.
+set(DUNECITY_SANITIZE_DEFAULT "")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"
+   AND NOT WIN32 AND NOT ANDROID AND NOT EMSCRIPTEN)
+    set(DUNECITY_SANITIZE_DEFAULT "address,undefined")
+endif()
+set(DUNECITY_SANITIZE "${DUNECITY_SANITIZE_DEFAULT}" CACHE STRING
+    "Comma-separated -fsanitize= list (GCC/Clang only); OFF disables")
+if(DUNECITY_SANITIZE)
+    if(MSVC OR EMSCRIPTEN)
+        message(FATAL_ERROR "DUNECITY_SANITIZE is supported for native GCC/Clang builds only")
+    endif()
+    add_compile_options(-fsanitize=${DUNECITY_SANITIZE} -fno-sanitize-recover=all
+                        -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=${DUNECITY_SANITIZE})
+    if(DUNECITY_SANITIZE MATCHES "undefined")
+        # The vptr check makes every object file reference the typeinfo of the polymorphic
+        # classes it touches. Test executables link only the sources they test, so with GCC
+        # they fail to link (typeinfo for Player/House from CitySimulation.cpp).
+        add_compile_options(-fno-sanitize=vptr)
+    endif()
+    message(STATUS "Sanitizers enabled: ${DUNECITY_SANITIZE}")
 endif()
 
 # The p2pkit Emscripten SDK (C++ headers under emscripten/include/p2pkit-wasm/

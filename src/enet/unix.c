@@ -116,8 +116,14 @@ enet_address_set_host (ENetAddress * address, const char * name)
     hostEntry = gethostbyname (name);
 #endif
 
+    /* macOS libc can hand back a hostent, and an h_addr_list array, that are not pointer-aligned,
+       so nothing it returns is dereferenced as a typed value: everything is copied out bytewise. */
+    struct hostent entry;
+    if (hostEntry != NULL)
+        memcpy (& entry, hostEntry, sizeof (entry));
+
     if (hostEntry == NULL ||
-        hostEntry -> h_addrtype != AF_INET)
+        entry.h_addrtype != AF_INET)
     {
 #ifdef HAS_INET_PTON
         if (! inet_pton (AF_INET, name, & address -> host))
@@ -128,7 +134,12 @@ enet_address_set_host (ENetAddress * address, const char * name)
         return 0;
     }
 
-    address -> host = * (enet_uint32 *) hostEntry -> h_addr_list [0];
+    {
+        const char * addressList = (const char *) entry.h_addr_list;
+        char * firstAddress;
+        memcpy (& firstAddress, addressList, sizeof (firstAddress));
+        memcpy (& address -> host, firstAddress, sizeof (address -> host));
+    }
 
     return 0;
 }

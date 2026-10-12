@@ -73,7 +73,7 @@ inline std::array<int64_t, kSpecials> exploredScores(const Candidates& candidate
         const int64_t evidence = std::max<int64_t>(0, candidates[i].rewardMilli)
                                + std::max<int64_t>(0, candidates[i].lossMilli);
         const int64_t uncertainty = int64_t(std::max(1, candidates[i].price)) * 1000 * 4;
-        result[i] = (scores[i] * evidence + prior * uncertainty) / (evidence + uncertainty);
+        result[i] = UnitMixPolicy::blendWithPrior(scores[i], evidence, prior, uncertainty);
     }
     return result;
 }

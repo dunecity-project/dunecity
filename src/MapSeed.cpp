@@ -101,7 +101,7 @@ static const Sint8 sinus[256] = {
     \return The 1-dimensional coordinate
 */
 static Sint16 MapArray2DToMapArray1D(Sint16 Xcoord,Sint16 Ycoord) {
-    return Xcoord | (Ycoord << 6);
+    return Xcoord | (Ycoord * 64);  // Ycoord can be negative; "<< 6" would be undefined there.
 }
 
 /**
@@ -379,8 +379,10 @@ void createMapWithSeed(Uint32 Para_Seed,Uint16 *pResultMap)
 
                 randNum3 = SeedRand() & 0xFF;
 
-                point.x = point.x + (((sinus[randNum3] * randNum2) >> 7) << 4);
-                point.y = point.y + ((((-1) * sinus[(randNum3+64) % 256] * randNum2) >> 7) << 4);
+                // "* 16" rather than "<< 4": the products are negative half the time, and a left
+                // shift of a negative value is undefined. The results are the same bits.
+                point.x = point.x + (((sinus[randNum3] * randNum2) >> 7) * 16);
+                point.y = point.y + ((((-1) * sinus[(randNum3+64) % 256] * randNum2) >> 7) * 16);
 
 
                 if(/*(point.x < 0) || */(point.x > 0x4000) || /*(point.y < 0) ||*/ (point.y > 0x4000)) {

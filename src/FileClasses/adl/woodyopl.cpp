@@ -187,7 +187,9 @@ void processcell_off(celltype* /*ctc*/, fltype /*modulator*/, fltype /*vib*/, fl
 // output level is sustained, mode changes only when cell is turned off (->release)
 // or when the keep-sustained bit is turned off (->sustain_nokeep)
 void processcell_sustain(celltype* ctc, fltype modulator, fltype vib, fltype trem) {
-    Bitu i = (Bitu)(ctc->t+modulator);
+    // Through Bits first: the phase goes negative with negative modulation, and converting a
+    // negative double straight to an unsigned type is undefined (x86 wraps, ARM clamps to 0).
+    Bitu i = (Bitu)(Bits)(ctc->t+modulator);
     ctc->t += (ctc->tinc*vib);      // advance waveform time
     ctc->lastval = ctc->val;
 
@@ -214,7 +216,7 @@ void processcell_release(celltype* ctc, fltype modulator, fltype vib, fltype tre
         ctc->step_amp = 0.0;
     }
 
-    Bitu i = (Bitu)(ctc->t+modulator);
+    Bitu i = (Bitu)(Bits)(ctc->t+modulator);
     ctc->t += (ctc->tinc*vib);      // advance waveform time
     ctc->lastval = ctc->val;
 
@@ -251,7 +253,7 @@ void processcell_decay(celltype* ctc, fltype modulator, fltype vib, fltype trem)
         }
     }
 
-    Bitu i = (Bitu)(ctc->t+modulator);
+    Bitu i = (Bitu)(Bits)(ctc->t+modulator);
     ctc->t += (ctc->tinc*vib);      // advance waveform time
     ctc->lastval = ctc->val;
 
@@ -278,7 +280,7 @@ void processcell_attack(celltype* ctc, fltype modulator, fltype vib, fltype trem
         ctc->step_amp = 1.0;
     }
 
-    Bitu i = (Bitu)(ctc->t+modulator);
+    Bitu i = (Bitu)(Bits)(ctc->t+modulator);
     ctc->t += (ctc->tinc*vib);      // advance waveform time
     ctc->lastval = ctc->val;
 
@@ -840,7 +842,7 @@ void adlib_reg_write(Bitu oplnum, Bitu port, Bit8u val) {
 static void clipit16(fltype f, Bit16s* a) {
     if (f>32766.5) *a=32767;
     else if (f<-32767.5) *a=-32768;
-    else *a=(Bit16u)f;
+    else *a=(Bit16s)f;
 }
 
 // be careful with this

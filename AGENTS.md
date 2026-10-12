@@ -37,6 +37,16 @@ obsolete offsets. A successful incremental link alone did not detect this.
 Baseline test result: 362 passed, 2 failed, 3 skipped. The two failures are pre-existing
 (`parseDouble` accepts `"nan"`); see `HANDOVER.md` §1.
 
+Sanitizers: a native Debug build with GCC or Clang compiles with AddressSanitizer and
+UndefinedBehaviorSanitizer by default (`-DDUNECITY_SANITIZE=OFF` turns them off; any other
+value is the `-fsanitize=` list). Release builds, which is everything that ships, never get
+them. Every report aborts the process, so a ctest run fails at the first one. CI's
+`test-linux` job runs the unit tests and network harnesses this way. The cache keeps the
+value from the first configure, so reuse a Debug tree only for Debug. On macOS the tests run
+with `detect_container_overflow=0`, because Homebrew's Catch2 is not instrumented and libc++
+then reports false overflows inside it; set the same `ASAN_OPTIONS` when running a sanitized
+binary outside ctest.
+
 ## Runtime paths
 
 - Config: `~/Library/Application Support/Dune City/Dune City.ini`

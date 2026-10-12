@@ -172,7 +172,11 @@
 //     hunt-toward order (UnitBase::doHuntToward) that attacks enemies met on the
 //     way, and never re-scrambles a scrambled unit. New engine targeting and
 //     save 9854.
-#define NETWORK_PROTOCOL_VERSION            69
+// 70: The special-unit and unit-mix score blend no longer overflows int64 with large
+//     lifetime combat evidence (it scales both weights down instead of wrapping), so
+//     QuantBot production choices differ from 69 once that evidence is large.
+//     Save and runtime layouts remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            70
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
