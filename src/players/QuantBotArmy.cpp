@@ -78,24 +78,27 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         return;
     }
     // A building we own - the main base or an outlying colony, including an
-    // R/C/I zone - is actually being attacked. In Custom Hard/Brutal the
-    // nearest free troops hunt their way to that building
-    // (scrambleWholeArmyToDefend), which replaces the district response
-    // below. Workers and ordinary contacts keep that established local path.
+    // R/C/I zone - or a harvester is actually being attacked. In Custom
+    // Hard/Brutal the nearest free troops are scrambled at the attackers there
+    // (scrambleWholeArmyToDefend), which replaces the district response below.
     //
     // "Actually" is the damage event itself, or an attacker standing in weapon
-    // range of the building it has targeted. An idle enemy across the map, an
-    // attacker that has stopped, a dead contact and a worker raid are none of
-    // those, and none of them scrambles the house.
-    const ObjectBase* attackedBuilding = nullptr;
+    // range of the asset it has targeted. An idle enemy across the map, an
+    // attacker that has stopped and a dead contact are none of those, and
+    // none of them scrambles the house. Aircraft on a harvester stay with the
+    // district response: ground troops cannot chase them.
+    const ObjectBase* attackedAsset = nullptr;
     if (!clearingSpice && intruder->getItemID()!=Unit_Sandworm) {
-        if (protectedAsset && protectedAsset->isAStructure()
-            && protectedAsset->getOwner()==getHouse() && protectedAsset->getHealth()>0)
-            attackedBuilding = protectedAsset;
-        else if (attackingOwnedBuilding(intruder)) attackedBuilding = intruder->getTarget();
+        if (defendedAsset(protectedAsset)
+            && (protectedAsset->isAStructure() || !intruder->isAFlyingUnit()))
+            attackedAsset = protectedAsset;
+        else if (attackingOwnedBuilding(intruder)) attackedAsset = intruder->getTarget();
+        else if (!intruder->isAFlyingUnit() && defendedAsset(victim) && !victim->isAStructure()
+                 && static_cast<const UnitBase*>(intruder)->isInWeaponRange(victim))
+            attackedAsset = victim;
     }
-    if (attackedBuilding && wholeArmyBaseDefence()) {
-        scrambleWholeArmyToDefend(intruder,attackedBuilding);
+    if (attackedAsset && wholeArmyBaseDefence()) {
+        scrambleWholeArmyToDefend(intruder,attackedAsset);
         return;
     }
     // One of our own buildings or workers is being shot at. This is the event
@@ -224,63 +227,117 @@ bool QuantBot::attackingOwnedBuilding(const ObjectBase* contact) const {
                 <= contact->getWeaponRange());
 }
 
+bool QuantBot::defendedAsset(const ObjectBase* object) const {
+    return object && object->getOwner()==getHouse() && object->getHealth()>0
+        && (object->isAStructure() || isHarvesterLikeUnit(object->getItemID()));
+}
+
 bool QuantBot::baseDefenceAssignment(const UnitBase* unit) const {
-    // A scramble records the building the unit was sent to; every other defence
-    // assignment records a hostile contact. The upkeep in checkAllUnits() ends
-    // the scramble once the unit is neither walking there nor fighting.
+    // A scramble records the building or harvester the unit defends; every
+    // other defence assignment records a hostile contact. The upkeep in
+    // checkAllUnits() ends the scramble once no attacker is left there.
     if (!unit || !wholeArmyBaseDefence()) return false;
     const auto assignment=defenceAssignments.find(unit->getObjectID());
     if (assignment==defenceAssignments.end()) return false;
-    const auto* assigned=getObject(assignment->second);
-    return assigned && assigned->isAStructure() && assigned->getOwner()==getHouse();
+    return defendedAsset(getObject(assignment->second));
 }
 
-void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building) {
+const ObjectBase* QuantBot::nearestAttackerAt(const UnitBase* unit, const ObjectBase* asset,
+                                              const ObjectBase* fallback) const {
+    if (!unit || !asset) return nullptr;
+    const int myTeam=getHouse()->getTeamID();
+    const ObjectBase* best=nullptr;
+    FixPoint bestDistance=FixPt_MAX;
+    for (const auto* enemy : getUnitList()) {
+        if (!enemy->getOwner() || enemy->getOwner()->getTeamID()==myTeam || enemy->getHealth()<=0
+            || !enemy->isActive() || !enemy->canAttack() || enemy->isAFlyingUnit()
+            || !enemy->isVisible(myTeam) || !unit->canAttack(enemy)) continue;
+        if (blockDistance(enemy->getLocation(),asset->getClosestPoint(enemy->getLocation())).lround()
+            > kBaseScrambleContactTiles) continue;
+        const FixPoint distance=blockDistance(unit->getLocation(),enemy->getLocation());
+        if (!best || distance<bestDistance
+            || (distance==bestDistance && enemy->getObjectID()<best->getObjectID())) {
+            best=enemy; bestDistance=distance;
+        }
+    }
+    if (!best && fallback && fallback->getHealth()>0 && fallback->isActive()
+        && fallback->getOwner() && fallback->getOwner()->getTeamID()!=myTeam
+        && unit->canAttack(fallback)) best=fallback;
+    return best;
+}
+
+const ObjectBase* QuantBot::nearestHostileInWeaponRange(const UnitBase* unit) const {
+    if (!unit) return nullptr;
+    const int myTeam=getHouse()->getTeamID();
+    const ObjectBase* best=nullptr;
+    FixPoint bestDistance=FixPt_MAX;
+    for (const auto* enemy : getUnitList()) {
+        if (!enemy->getOwner() || enemy->getOwner()->getTeamID()==myTeam || enemy->getHealth()<=0
+            || !enemy->isActive() || !enemy->canAttack() || enemy->isAFlyingUnit()
+            || !enemy->isVisible(myTeam) || !unit->canAttack(enemy) || !unit->isInWeaponRange(enemy)) continue;
+        const FixPoint distance=blockDistance(unit->getLocation(),enemy->getLocation());
+        if (!best || distance<bestDistance
+            || (distance==bestDistance && enemy->getObjectID()<best->getObjectID())) {
+            best=enemy; bestDistance=distance;
+        }
+    }
+    return best;
+}
+
+const ObjectBase* QuantBot::nextDefenceTarget(const UnitBase* unit, const ObjectBase* asset,
+                                             const ObjectBase* fallback) const {
+    if (const auto* close=nearestHostileInWeaponRange(unit)) return close;
+    return nearestAttackerAt(unit,asset,fallback);
+}
+
+void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* asset) {
     AITelemetry::PerformanceScope perfScope("ai.scrambleWholeArmyToDefend",
         getGameCycleCount(), getHouse()->getHouseID());
     if (!intruder || intruder->getHealth()<=0 || !intruder->getOwner()
         || intruder->getOwner()->getTeamID()==getHouse()->getTeamID()
-        || !building || building->getHealth()<=0) return;
+        || !defendedAsset(asset)) return;
     const int myTeam=getHouse()->getTeamID();
-    auto distanceToBuilding=[&](Coord from) {
-        return blockDistance(from,building->getClosestPoint(from)).lround();
+    auto distanceToAsset=[&](Coord from) {
+        return blockDistance(from,asset->getClosestPoint(from)).lround();
     };
-    auto atBuilding=[&](Coord from) {
-        return from.isValid() && distanceToBuilding(from)<=kBaseScrambleContactTiles;
+    auto atAsset=[&](Coord from) {
+        return from.isValid() && distanceToAsset(from)<=kBaseScrambleContactTiles;
     };
     auto value=[&](const ObjectBase* object) {
         const int price=currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
     };
+    auto hostileAlive=[&](const ObjectBase* object) {
+        return object && object->getHealth()>0 && object->getOwner()
+            && object->getOwner()->getTeamID()!=myTeam;
+    };
     int threat=value(intruder), committed=0;
-    int held=0, forcedKept=0, alreadyScrambled=0, retuned=0;
-    std::vector<SimpleArmyPolicy::Responder> candidates;
+    int held=0, forcedKept=0, marchesTaken=0, alreadyScrambled=0, fightingElsewhere=0;
+    struct Candidate { const UnitBase* unit; int distance; };
+    std::vector<Candidate> candidates;
     for (const auto* unit : getUnitList()) {
         if (unit->getHealth()<=0 || !unit->isActive() || !unit->getOwner()) continue;
-        // The local threat: every visible enemy ground fighter at the building.
+        // The local threat: every visible enemy ground fighter at the asset.
         if (unit->getOwner()->getTeamID()!=myTeam) {
             if (unit!=intruder && unit->canAttack() && !unit->isAFlyingUnit()
-                && unit->isVisible(myTeam) && atBuilding(unit->getLocation())) threat+=value(unit);
+                && unit->isVisible(myTeam) && atAsset(unit->getLocation())) threat+=value(unit);
             continue;
         }
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()) continue;
         // Ground combat troops only. Workers, builders, transports, saboteurs,
         // worms and ambient traffic are not an army, and the aircraft answering
         // this house's air threats belong to the strike/rescue planner.
-        if (!unit->isAGroundUnit() || !mobileCombatItem(unit->getItemID())
-            || !unit->canAttack() || !unit->canAttack(intruder)) continue;
+        if (!unit->isAGroundUnit() || !mobileCombatItem(unit->getItemID()) || !unit->canAttack()) continue;
         // A human order, a trip to the repair yard and a booked carryall pickup
         // stay with their owner.
         if (unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free
             || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()) { ++held; continue; }
         const Uint32 id=unit->getObjectID();
         // A scrambled unit is never scrambled again while it is on that job. If
-        // that job is this building, it already counts towards the answer.
+        // that job is this asset, it already counts towards the answer.
         if (unitRole(unit, {UnitRole::BaseDefence}) == UnitRole::BaseDefence) {
             ++alreadyScrambled;
-            const auto* target=unit->getTarget();
-            if (defenceAssignments.at(id)==building->getObjectID()
-                || (target && atBuilding(target->getLocation()))) committed+=value(unit);
+            if (defenceAssignments.at(id)==asset->getObjectID()) committed+=value(unit);
             continue;
         }
         // An anti-air rescue in progress is the air planner's contact.
@@ -292,48 +349,69 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             }
         }
         // A unit under a forced order - a launcher's spacing step, a transit -
-        // is not moved.
-        if (unit->wasForced()) { ++forcedKept; continue; }
-        // Already fighting at this building: it keeps its fight as a hunter and
-        // counts towards the answer.
+        // is not moved. A wave member on a forced march (a recall or sortie
+        // walk, no target, still far from its destination) is the exception:
+        // forced, it fires at nothing, so it would walk blind past the attack
+        // on its own base. Defence outranks the recall, which leaves it alone.
+        if (unit->wasForced()) {
+            const Coord destination=unit->getDestination();
+            const bool waveMarch=!unit->getTarget() && destination.isValid()
+                && blockDistance(unit->getLocation(),destination).lround()>kDefenceMarchMinTiles
+                && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave;
+            if (!waveMarch) { ++forcedKept; continue; }
+            ++marchesTaken;
+        }
+        // Already shooting at an enemy: it keeps that fight. At this asset it
+        // counts towards the answer; elsewhere it is not pulled out of it.
         const auto* target=unit->getTarget();
-        if (target && target->getHealth()>0 && target->getOwner()
-            && target->getOwner()->getTeamID()!=myTeam && !target->isAFlyingUnit()
-            && atBuilding(target->getLocation())) {
-            if (unit->getAttackMode()!=HUNT) { doSetAttackMode(unit,HUNT); ++retuned; }
-            defenceAssignments[id]=building->getObjectID();
-            groundSquad.erase(id);
-            committed+=value(unit);
+        if (hostileAlive(target)
+            && blockDistance(unit->getLocation(),target->getClosestPoint(unit->getLocation())).lround()
+                <= unit->getWeaponRange()+1) {
+            if (atAsset(target->getLocation())) committed+=value(unit);
+            else ++fightingElsewhere;
             continue;
         }
-        candidates.push_back({id,value(unit),distanceToBuilding(unit->getLocation())});
+        const int distance=distanceToAsset(unit->getLocation());
+        if (distance<=kDefenceScrambleRadius) candidates.push_back({unit,distance});
     }
-    // "Closest" is bounded: the same threat-scaled band (12-40 tiles) that
-    // limits every other emergency response, so one raid cannot pull troops
-    // from the far side of the map.
-    const int band=emergencyResponseRadius(threat);
-    candidates.erase(std::remove_if(candidates.begin(),candidates.end(),
-        [&](const SimpleArmyPolicy::Responder& candidate) { return candidate.distance>band; }),
-        candidates.end());
-    // The nearest troops, until together with those already in the fight they
-    // outweigh the threat at the building.
-    const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
-    for (const auto id : response) {
-        const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
-        if (!unit) continue;
-        const Coord at=building->getClosestPoint(unit->getLocation());
-        doHuntToward(unit,at.x,at.y);
-        defenceAssignments[id]=building->getObjectID();
-        groundSquad.erase(id);
+    // Nearest first, ties by object id: deterministic on every peer.
+    std::sort(candidates.begin(),candidates.end(),[](const Candidate& a, const Candidate& b) {
+        return a.distance!=b.distance ? a.distance<b.distance
+            : a.unit->getObjectID()<b.unit->getObjectID();
+    });
+    // Every hit sends at least the next batch, and more - up to the per-hit
+    // ceiling - until the troops in this fight outweigh the attackers twice
+    // over. Repeated hits keep adding troops for as long as the attack lasts;
+    // a fight that is already won twice over takes nobody new.
+    const int required=SimpleArmyPolicy::responseValue(threat);
+    const int enough=2*required;
+    int sent=0, sentValue=0;
+    for (const auto& candidate : candidates) {
+        // Troops standing beside the asset always join: nobody watches it burn.
+        if (candidate.distance>kDefenceNearbyTiles) {
+            if (committed+sentValue>=enough && sent>=kDefenceScrambleBatch) break;
+            if (committed>=enough || sent>=kDefenceScrambleBatchMax) break;
+        }
+        const auto* unit=candidate.unit;
+        // The attacker nearest to this unit, not necessarily the one that fired.
+        const auto* target=nextDefenceTarget(unit,asset,intruder);
+        if (!target) continue;
+        groundSquad.erase(unit->getObjectID());
+        doAttackObject(unit,target,true);
+        defenceAssignments[unit->getObjectID()]=asset->getObjectID();
+        sentValue+=value(unit);
+        ++sent;
     }
     const Coord contact=intruder->getLocation();
-    if (!response.empty() || committed>0) traceDecision("base_scramble",AITelemetry::Record()
-        .set("target",intruder->getObjectID()).set("building",building->getObjectID())
+    if (sent>0 || committed>0) traceDecision("base_scramble",AITelemetry::Record()
+        .set("target",intruder->getObjectID()).set("building",asset->getObjectID())
+        .set("harvester",!asset->isAStructure())
         .set("x",contact.x).set("y",contact.y)
-        .set("threat_value",threat).set("required_value",SimpleArmyPolicy::responseValue(threat))
+        .set("threat_value",threat).set("required_value",required)
         .set("committed_value",committed).set("candidates",int(candidates.size()))
-        .set("sent",int(response.size())).set("already_scrambled",alreadyScrambled)
-        .set("forced_kept",forcedKept).set("mission_corrected",retuned).set("held",held)
+        .set("sent",sent).set("sent_value",sentValue).set("already_scrambled",alreadyScrambled)
+        .set("forced_kept",forcedKept).set("wave_marches",marchesTaken)
+        .set("fighting_elsewhere",fightingElsewhere).set("held",held)
         .set("posture",ArmyPosturePolicy::postureName(armyPosture)));
 }
 
@@ -2920,23 +2998,6 @@ void QuantBot::retreatAllUnits() {
         defendStructuresFromAircraft();
         // Defence is sized on contact. No fixed reserve owns troops or prevents
         // the main body helping when a city/harvester is under attack.
-        // Per building, once per pass: is any visible enemy fighter still at it?
-        std::map<Uint32,bool> buildingContested;
-        auto contested=[&](const ObjectBase* building) {
-            const auto found=buildingContested.find(building->getObjectID());
-            if (found!=buildingContested.end()) return found->second;
-            const int myTeam=getHouse()->getTeamID();
-            bool any=false;
-            for (const auto* enemy : getUnitList()) {
-                if (!enemy->getOwner() || enemy->getOwner()->getTeamID()==myTeam || enemy->getHealth()<=0
-                    || !enemy->isActive() || !enemy->canAttack() || enemy->isAFlyingUnit()
-                    || !enemy->isVisible(myTeam)) continue;
-                if (blockDistance(enemy->getLocation(),building->getClosestPoint(enemy->getLocation())).lround()
-                    <= kBaseScrambleContactTiles) { any=true; break; }
-            }
-            buildingContested[building->getObjectID()]=any;
-            return any;
-        };
         for (auto it=defenceAssignments.begin();it!=defenceAssignments.end();) {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(it->first));
             const auto* target=getObject(it->second);
@@ -2949,25 +3010,55 @@ void QuantBot::retreatAllUnits() {
                 it=defenceAssignments.erase(it);
                 continue;
             }
-            // Scrambled to one of our buildings (scrambleWholeArmyToDefend). The
-            // unit hunts; nothing here re-issues an order. It stays scrambled -
-            // and so cannot be scrambled to another building - while it walks
-            // there, during a launcher's spacing step, while it fights an enemy
-            // it has met, and while enemies remain at that building. After that
-            // it is an ordinary hunter, free to answer the next attack.
-            if (target && target->isAStructure() && target->getOwner()==getHouse()) {
-                const auto* fighting=unit ? unit->getTarget() : nullptr;
-                const bool onJob=unit && unit->getOwner()==getHouse() && unit->getHealth()>0
-                    && wholeArmyBaseDefence() && unit->getAttackMode()==HUNT
-                    && target->getHealth()>0
-                    && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free
-                    && (unit->isHuntingToward() || unit->wasForced()
-                        || (fighting && fighting->getHealth()>0
-                            && blockDistance(unit->getLocation(),fighting->getClosestPoint(unit->getLocation())).lround()
-                                <= unit->huntTowardRange())
-                        || contested(target));
-                if (onJob) ++it;
-                else it=defenceAssignments.erase(it);
+            // Scrambled to one of our buildings or harvesters
+            // (scrambleWholeArmyToDefend). While its forced attack runs the unit
+            // is locked: nothing re-issues or re-scrambles it. A launcher's
+            // spacing step is left to finish. When its target is gone it takes
+            // the attacker at that asset nearest to itself, and is released
+            // once none remain - free to answer the next attack.
+            if (defendedAsset(target)) {
+                const bool keep=unit && unit->getOwner()==getHouse() && unit->getHealth()>0
+                    && unit->isActive() && wholeArmyBaseDefence()
+                    && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free;
+                if (!keep) { it=defenceAssignments.erase(it); continue; }
+                const auto* enemy=unit->getTarget();
+                const bool attacking=unit->wasForced() && enemy && enemy->getHealth()>0
+                    && enemy->getOwner() && enemy->getOwner()->getTeamID()!=getHouse()->getTeamID();
+                const bool spacingStep=unit->wasForced() && !enemy && unit->getDestination().isValid();
+                if (spacingStep) { ++it; continue; }
+                if (attacking) {
+                    if (!unit->isInWeaponRange(enemy)) {
+                        // Still closing in. An enemy already inside weapon range
+                        // on the way is now the nearest target: fight it rather
+                        // than walk past it under fire.
+                        if (const auto* close=nearestHostileInWeaponRange(unit)) {
+                            doAttackObject(unit,close,true);
+                            ++it;
+                            continue;
+                        }
+                        // Leashed to the asset: an attacker that has left it is
+                        // not chased across the map.
+                        if (blockDistance(enemy->getLocation(),target->getClosestPoint(enemy->getLocation())).lround()
+                                > kBaseScrambleContactTiles+kDefenceLeashSlackTiles) {
+                            if (const auto* next=nextDefenceTarget(unit,target)) doAttackObject(unit,next,true);
+                            else {
+                                const_cast<UnitBase*>(unit)->setForced(false);
+                                const_cast<UnitBase*>(unit)->setTarget(nullptr);
+                                it=defenceAssignments.erase(it);
+                                continue;
+                            }
+                        }
+                    }
+                    ++it;
+                    continue;
+                }
+                if (const auto* next=nextDefenceTarget(unit,target)) {
+                    doAttackObject(unit,next,true);
+                    ++it;
+                    continue;
+                }
+                if (unit->wasForced()) const_cast<UnitBase*>(unit)->setForced(false);
+                it=defenceAssignments.erase(it);
                 continue;
             }
             if (!unit || unit->getOwner()!=getHouse() || unitRole(unit, {UnitRole::Human}) != UnitRole::Free

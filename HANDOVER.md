@@ -1,3 +1,66 @@
+## 2026-10-13 — local 1.0.833: forced nearest-attacker defence scramble
+
+User save "units asleep.dls" (MBA, 1.0.832, 4P New Beginning 192x192, four
+Brutal QuantBots, Atreides watched): Atreides sat ~95 idle ground troops in its
+base while buildings were hit. Cause: the 1.0.832 scramble only searched the
+threat-scaled 12-40 tile band (about 18 tiles for a raid) and stopped at 1.25x
+the threat; the idle army stood 20-40 tiles from the attacked buildings, so
+base_scramble logged candidates=0 on almost every hit. Replay of 2 minutes:
+118.7 free troops, 1.6 fighting, 22 walking while under attack.
+
+Now (Custom Hard/Brutal), every hit on a building - base, colony, R/C/I lot - or
+a harvester (debounced per 8x8 district, plus the checkAllUnits recheck)
+scrambles the nearest free ground troops: every one within 20 tiles
+(kDefenceNearbyTiles), then at least 8 more (kDefenceScrambleBatch) from up to
+64 tiles, and more while the troops in that fight are below 2x the threat value,
+up to 24 from afar per hit. Each gets a FORCED attack on nextDefenceTarget():
+an enemy already inside its weapon range, else the attacker at the asset nearest
+to itself (not necessarily the one that fired). While the forced attack runs the
+unit is locked (never re-scrambled). A wave member on a forced march (recall or
+sortie walk: no target, destination over 8 tiles away) is taken too - see
+sleepy2 below. Upkeep (every AI pass): an enemy that comes
+inside weapon range on the way becomes its target; an attacker that leaves the
+asset (more than 12 tiles) is let go; when its target dies it takes the next
+nearest attacker there, and is released when none remain. Launcher spacing
+steps, other forced orders, troops already fighting, human orders, repair runs,
+pickups, workers, transports and aircraft are left alone. No save change.
+
+Evidence: new diagnostic tests/ai/run-save-defence-probe.py plays a real save
+headless and samples each QuantBot's defence. 10 game-minutes on seven MBA saves
+(units asleep, sleepy2, wtf, whatswrong, 3waysplit, 1, ornitest; 13 attacked
+house-runs), 1.0.832 vs final 1.0.833: buildings lost 2,596 -> 2,039, building
+damage 531k -> 465k, enemies killed near assets 5,533 -> 5,761, own army lost
+6,557 -> 6,561, troops fighting during attacks 166 -> 208. units asleep alone:
+lost 44 -> 43, damage 10,458 -> 9,597, troops fighting 7.1 -> 14.2, idle beside
+an attack 6.3 -> 3.5. Rejected along the
+way (same battery): forced attack without leash/en-route rule wiped the
+Atreides army (95 -> 7) chasing a lone raider; Hunt-walk scramble with the same
+sizing lost more army (5,951); forced batches without the 20-tile rule left more
+troops idle than 1.0.832. Chaotic single runs differ (wtf alone is close).
+
+Second save sleepy2.dls (same map, later, two enemies): Neutral (Brutal, ~470
+ground troops, 20-30 buildings under fire, 120-150 enemies at them) had 5-13
+troops fighting. ~215 were wave members on the posture recall's forced march
+home - Area Guard, forced, no target, mostly jammed - and a forced unit fires at
+nothing, while every scramble (1.0.832 and the first 1.0.833 cut) skipped forced
+units. Taking forced wave marches, 10 game-minutes: buildings lost 1,104 (832)
+-> 1,033, damage 160k -> 144k, kills 993 -> 1,106, troops fighting 9.8 -> 13.6,
+idle beside an attack 17.1 -> 8.9, own army lost 767 -> 877. Neutral still
+loses most of its base: the Rebels field ~1,000 troops against it.
+
+Version 1.0.833, protocol 70, policy forced-nearest-defence-scramble-v99.
+Whole-army probe updated (forced nearest attacker, nearby rule, batch ceiling,
+lock, leash, en-route target, harvester scramble, wave march taken / short
+forced step kept); recovery probe checks the forced defender keeps its target.
+
+Installed on the MBA at 01:53 AEDT 2026-10-13 from 8c8b2b2f (built on the mini,
+`cmake --install` staging, deep/strict signature verified before and after the
+swap, desktop runtime check passed): version 1.0.833, executable SHA256
+877b8576d4fa211a196fa3e2ed0cd3975ab06e3d199de2115417a4eb48593e11. The game was
+not running; saves untouched. Local 1.0.832 is at
+/Applications/.dunecity-backup-before-1.0.833-20261013-015302/dunecity.app. Not pushed or released.
+Evidence: ../outputs/defence-scramble/.
+
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
 
 User save wtf.dls (3waysplit, 1.0.831, Sardaukar Brutal vs one house, no

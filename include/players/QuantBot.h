@@ -385,25 +385,60 @@ private:
     /// attacker, our structure as its target, and inside weapon range of it. A dead,
     /// stopped, friendly or merely nearby enemy is not.
     bool attackingOwnedBuilding(const ObjectBase* contact) const;
-    /// Was this unit scrambled to an attacked building and is it still on that
-    /// job (walking there or fighting)? Such a unit is not scrambled again.
+    /// Was this unit scrambled to an attacked building or harvester and is it
+    /// still on that job? Such a unit is not scrambled again.
     bool baseDefenceAssignment(const UnitBase* unit) const;
-    /// Custom Hard/Brutal answer to an attack on a building we own - the main
-    /// base or an outlying colony, including an R/C/I zone. The free ground
-    /// combat troops nearest to \a building, within the threat-scaled
-    /// emergencyResponseRadius() band, are sent to it with a Hunt order, nearest
-    /// first, until together with the troops already in that fight they outweigh
-    /// the local threat (SimpleArmyPolicy::reinforcements). They walk there with
-    /// UnitBase::doHuntToward, so Hunt overrides the move: they attack any enemy
-    /// they meet on the way. A unit already under a forced order (a spacing
-    /// step, a transit) is not moved, and a scrambled unit is not scrambled
-    /// again until it has finished: not walking, not fighting, and no enemy left
-    /// at its building. Human orders, repair runs, booked carryall pickups,
-    /// workers, builders, transports and aircraft keep their units.
-    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building);
-    /// How close to the attacked building a troop's own fight, or the enemy
-    /// strength it faces, counts as this battle.
+    /// A building (main base, colony, R/C/I zone) or harvester of ours that
+    /// is alive: what the Custom Hard/Brutal scramble defends.
+    bool defendedAsset(const ObjectBase* object) const;
+    /// The visible enemy ground fighter at \a asset (within
+    /// kBaseScrambleContactTiles of it) nearest to \a unit that \a unit can
+    /// attack; \a fallback, if attackable, when there is none.
+    const ObjectBase* nearestAttackerAt(const UnitBase* unit, const ObjectBase* asset,
+                                        const ObjectBase* fallback = nullptr) const;
+    /// The visible enemy ground fighter nearest to \a unit inside its weapon
+    /// range that it can attack, or nullptr.
+    const ObjectBase* nearestHostileInWeaponRange(const UnitBase* unit) const;
+    /// What a defender of \a asset attacks next: an enemy already inside its
+    /// weapon range, else nearestAttackerAt().
+    const ObjectBase* nextDefenceTarget(const UnitBase* unit, const ObjectBase* asset,
+                                        const ObjectBase* fallback = nullptr) const;
+    /// Custom Hard/Brutal answer to a hit on a building or harvester we own -
+    /// the main base, an outlying colony, an R/C/I zone or a worker. Every hit
+    /// (debounced per district by scrambleUnitsAndDefend) scrambles the free
+    /// ground combat troops nearest to \a asset: all of them within
+    /// kDefenceNearbyTiles, then at least kDefenceScrambleBatch more from up to
+    /// kDefenceScrambleRadius, and more while the troops in that fight do not
+    /// outweigh the attackers twice over, up to kDefenceScrambleBatchMax from
+    /// afar per hit. Each gets a forced attack on nextDefenceTarget() - the
+    /// enemy nearest to itself, not necessarily the one that fired. A unit is
+    /// locked while that forced attack runs and is never re-scrambled. The
+    /// upkeep in checkAllUnits() turns it on an enemy that comes inside its
+    /// weapon range on the way, lets go of an attacker that leaves the asset,
+    /// gives it the next target when its own dies, and releases it when no
+    /// attacker remains. A wave member on a forced march (a recall or sortie
+    /// walk) is taken; units already fighting, under another forced order
+    /// (a spacing step, a transit), human orders, repair runs, booked carryall
+    /// pickups, workers, builders, transports and aircraft keep their units.
+    void scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* asset);
+    /// How close to the attacked asset an enemy counts as one of its attackers,
+    /// and a troop's own fight as this battle.
     static constexpr int kBaseScrambleContactTiles = 8;
+    /// How far from the attacked asset troops are scrambled from. Wide enough
+    /// to cover a sprawling city base from its own interior.
+    static constexpr int kDefenceScrambleRadius = 64;
+    /// Troops scrambled per hit, and at most per hit when outweighed.
+    static constexpr int kDefenceScrambleBatch = 8;
+    /// Free troops this close to the attacked asset join on every hit,
+    /// whatever the batch and threat sizing say.
+    static constexpr int kDefenceNearbyTiles = 20;
+    /// A forced wave walk at least this far from its destination is a march
+    /// the scramble may take; anything shorter is a spacing step.
+    static constexpr int kDefenceMarchMinTiles = 8;
+    /// How far past the asset's contact ring a defender's target may go before
+    /// the defender lets it go.
+    static constexpr int kDefenceLeashSlackTiles = 4;
+    static constexpr int kDefenceScrambleBatchMax = 24;
 
 
     Coord findMcvPlaceLocation(const MCV* pMCV);
