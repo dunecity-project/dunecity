@@ -172,7 +172,11 @@
 //     hunt-toward order (UnitBase::doHuntToward) that attacks enemies met on the
 //     way, and never re-scrambles a scrambled unit. New engine targeting and
 //     save 9854.
-#define NETWORK_PROTOCOL_VERSION            69
+// 70: QuantBot answers every hit on a building or harvester by scrambling the
+//     nearest free troops - all within 20 tiles, then batches from up to 64 -
+//     each with a forced attack on the enemy nearest to it, locked while that
+//     attack runs and leashed to the asset. No save format change.
+#define NETWORK_PROTOCOL_VERSION            70
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

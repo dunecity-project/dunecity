@@ -557,28 +557,27 @@ void runArmyRecoveryProbe(Game& game) {
             bot->defenceResponseCycles.clear();
             bot->dangerUpdated=std::numeric_limits<Uint32>::max();
             bot->scrambleUnitsAndDefend(raider,false,victim);
-            // Scrambled defenders hunt their way to the building: Hunt, a walk
-            // to it, and the building recorded as their job.
+            // Scrambled defenders get a forced attack on an attacker, with the
+            // building recorded as their job.
             bool defended=false;
             for(auto* unit:homeUnits)
                 if(bot->defenceAssignments.count(unit->getObjectID())
                     && bot->defenceAssignments[unit->getObjectID()]==victim->getObjectID()
-                    && unit->getAttackMode()==HUNT
-                    && (unit->isHuntingToward() || unit->getTarget()==raider))
+                    && unit->wasForced() && unit->getTarget()==raider)
                     defended=true;
             require(defended,"Emergency base defence was blocked by the recovery posture");
             // And the recall must not steal an assigned defender back.
-            std::map<Uint32,Coord> sent;
+            std::map<Uint32,const ObjectBase*> sent;
             for(auto* unit:homeUnits)
                 if(bot->defenceAssignments.count(unit->getObjectID())) {
                     bot->customWave.members.insert(unit->getObjectID());
-                    sent[unit->getObjectID()]=unit->getDestination();
+                    sent[unit->getObjectID()]=unit->getTarget();
                 }
             int budget=getQuantBotConfig().recovery.recallOrdersPerPass;
             bot->applyArmyPosture(budget);
             for(auto* unit:homeUnits)
                 if(sent.count(unit->getObjectID()))
-                    require(unit->getAttackMode()==HUNT && unit->getDestination()==sent[unit->getObjectID()]
+                    require(unit->wasForced() && unit->getTarget()==sent[unit->getObjectID()]
                         && bot->defenceAssignments.count(unit->getObjectID()),
                         "The recall pulled an assigned base defender off an active attack");
             for(auto* unit:homeUnits) bot->customWave.members.erase(unit->getObjectID());
