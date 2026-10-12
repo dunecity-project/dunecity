@@ -27,6 +27,7 @@
 #include <GUI/TextBox.h>
 #include <GUI/Checkbox.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/PictureLabel.h>
 #include <DataTypes.h>
 #include <misc/SDL2pp.h>
 
@@ -38,6 +39,7 @@
 
 class OptionsMenu : public MenuBase
 {
+    friend struct ClassicUISkinProbe;
 public:
     OptionsMenu();
     virtual ~OptionsMenu();
@@ -115,7 +117,9 @@ private:
     HBox        paletteHBox;
     DropDownBox startMenuModeDropDownBox;
     DropDownBox paletteDropDownBox;
-    TextButton  palettePreview;
+    HBox        uiSkinHBox;
+    DropDownBox uiSkinDropDownBox;
+    PictureLabel palettePreview;
 
     HBox        audioHBox;
     Checkbox    playSFXCheckbox;

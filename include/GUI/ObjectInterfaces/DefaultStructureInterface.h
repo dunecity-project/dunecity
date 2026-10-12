@@ -63,7 +63,10 @@ protected:
     void draw(Point position) override {
         if(!isVisible()) return;
         SDL_Rect panel{position.x, position.y, getSize().x, getSize().y};
-        renderFillRect(renderer, &panel, MenuTheme::background);
+        // The classic sidebar already supplies the original sand texture.
+        // Do not cover it with a solid rectangle behind building properties.
+        if(!MenuTheme::isClassicDesert())
+            renderFillRect(renderer, &panel, MenuTheme::background);
         DefaultObjectInterface::draw(position);
     }
 

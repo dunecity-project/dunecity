@@ -33,6 +33,7 @@
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/InGameSettingsMenu.h>
 #include <GUI/dune/LoadSaveWindow.h>
+#include <misc/MenuPalette.h>
 
 
 Point InGameMenuButton::getMinimumSize() const {
@@ -47,9 +48,11 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     const int buttons = ((canJoin || canRequest) ? 4 : 3) + (bMultiplayer ? 2 : 3) + (canSkip ? 1 : 0);
     const int width = std::min(440,getRendererWidth()-32);
     const int height = 92 + buttons*40 + (buttons-1)*6;
-    sdl2::surface_ptr background{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
-    SDL_FillRect(background.get(),nullptr,COLOR_RGB(20,24,32));
-    drawRect(background.get(),0,0,width-1,height-1,COLOR_RGB(190,153,77));
+    auto background = GUIStyle::getInstance().createBackground(width, height);
+    // Retain the Modern menu's existing outline. Classic uses the selected
+    // style's authentic sand texture and raised gold frame.
+    if(!MenuTheme::isClassicDesert())
+        drawRect(background.get(),0,0,width-1,height-1,COLOR_RGB(190,153,77));
     setBackground(std::move(background));
     setCurrentPosition((getRendererWidth()-width)/2,(getRendererHeight()-height)/2,width,height);
     setWindowWidget(&mainHBox);
@@ -59,10 +62,10 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     mainVBox.addWidget(VSpacer::create(12));
     title.setText("Dune City");
     title.setTextFontSize(24);
-    title.setTextColor(COLOR_RGB(250,248,240),COLOR_TRANSPARENT);
+    title.setTextColor(MenuTheme::text,COLOR_TRANSPARENT);
     title.setAlignment(static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
     mainVBox.addWidget(&title,32);
-    onlineNotice.setTextColor(COLOR_RGB(197,204,217),COLOR_TRANSPARENT);
+    onlineNotice.setTextColor(MenuTheme::muted,COLOR_TRANSPARENT);
     onlineNotice.setTextFontSize(14);
     onlineNotice.setAlignment(static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
     mainVBox.addWidget(&onlineNotice,20);

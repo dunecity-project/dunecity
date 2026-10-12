@@ -2413,8 +2413,14 @@ GFXManager::GFXManager() {
     uiGraphic[UI_GreyPlace_Zoomlevel0][HOUSE_HARKONNEN] = PicFactory->createPlacingGrid(16, PALCOLOR_LIGHTGREY);
     uiGraphic[UI_GreyPlace_Zoomlevel1][HOUSE_HARKONNEN] = PicFactory->createPlacingGrid(32, PALCOLOR_LIGHTGREY);
     uiGraphic[UI_GreyPlace_Zoomlevel2][HOUSE_HARKONNEN] = PicFactory->createPlacingGrid(48, PALCOLOR_LIGHTGREY);
-    DuneStyle menuStyle(settings.video.menuPalette);
-    uiGraphic[UI_MenuBackground][HOUSE_HARKONNEN] = menuStyle.createBackground(getRendererWidth(),getRendererHeight());
+    // Use the original FAME.CPS sand artwork while the graphics manager is
+    // still being constructed (the global manager is not available yet).
+    auto classicMenuTexture = PicFactory->createBackground();
+    DuneStyle menuStyle(settings.video.menuPalette, settings.video.uiSkin,
+                        classicMenuTexture.get());
+    uiGraphic[UI_MenuBackground][HOUSE_HARKONNEN] = MenuTheme::isClassicDesert()
+        ? PicFactory->createMainBackground()
+        : menuStyle.createBackground(getRendererWidth(),getRendererHeight());
     uiGraphic[UI_GameStatsBackground][HOUSE_HARKONNEN] = PicFactory->createGameStatsBackground(HOUSE_HARKONNEN);
     uiGraphic[UI_GameStatsBackground][HOUSE_ATREIDES] = PicFactory->createGameStatsBackground(HOUSE_ATREIDES);
     uiGraphic[UI_GameStatsBackground][HOUSE_ORDOS] = PicFactory->createGameStatsBackground(HOUSE_ORDOS);
@@ -2490,7 +2496,9 @@ GFXManager::GFXManager() {
         const int width=uiGraphic[UI_DuneLegacy][HOUSE_HARKONNEN]->w;
         const int height=uiGraphic[UI_DuneLegacy][HOUSE_HARKONNEN]->h;
         auto banner=menuStyle.createBackground(width,height);
-        auto title=pFontManager->createSurfaceWithText("Dune City",COLOR_WHITE,std::max(16,height-16));
+        auto title=pFontManager->createSurfaceWithText("Dune City",
+            MenuTheme::isClassicDesert() ? MenuTheme::text : COLOR_WHITE,
+            std::max(16,height-16));
         auto rect=calcDrawingRect(title.get(),width/2,height/2,HAlign::Center,VAlign::Center);
         SDL_BlitSurface(title.get(),nullptr,banner.get(),&rect);
         uiGraphic[UI_DuneLegacy][HOUSE_HARKONNEN]=std::move(banner);

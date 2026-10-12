@@ -1,3 +1,27 @@
+## 2026-10-11 — Classic Desert carried onto production 1.0.832 as local 1.0.833
+
+Fetched main at 1496ff4 after the first UI candidate was finished. The published
+release is now 1.0.832; our earlier local 1.0.830 number must not be released.
+The 1.0.830 UI branch and portable directory remain intact as local evidence.
+Only the Classic Desert feature is carried onto the newer production source;
+all upstream gameplay, protocol/save and QuantBot updates are retained.
+No upstream changes overlapped the production UI files. Shared test registrations
+were combined; history entries were retained; the official version helper sets
+all three version files to 1.0.833.
+
+Integration verification is complete: the full Visual Studio Release build
+passes, including refreshed standalone harnesses; all 11 Windows CTests pass
+(core: 1003 passed, four opt-in cases skipped; Classic theme: six cases and 245
+assertions). The actual SDL four-size Modern → Classic → Modern matrix passes
+again, including static construction-yard build sidebar/HUD and pause rendering
+at each size. This remains software-renderer/component evidence, not live
+gameplay or general building-properties-panel certification. There are 76 PNG
+captures under the ignored build tree. The separate 1.0.833 portable install
+passes its runtime check (exit 0); its executable matches the rebuilt target.
+Native 1:1, mod-specific scale and all newer upstream gameplay/protocol/save
+code remain unchanged by the UI feature. The user requested local play-testing,
+so no push, PR, tag, device install or publication has been performed.
+
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
 
 User save wtf.dls (3waysplit, 1.0.831, Sardaukar Brutal vs one house, no
@@ -215,6 +239,31 @@ the staged bundle. The game was not running and was not launched; no profile or
 save was touched. Signed 1.0.829 backup:
 /Applications/.dunecity-backup-before-830-20261011-162922/dunecity.app.
 Evidence: ../outputs/quantbot-spread-colonies-830/.
+
+## 2026-10-11 — 1.0.830 local candidate: selectable Classic Desert UI
+
+Based on current main (1.0.829), preserving its Native 1:1 and Retina resolution
+fixes. Settings → Graphics now has an independent UI Skin choice: Modern
+(unchanged default) or Classic Desert. Classic Desert uses the original desert
+texture, gold beveled controls and dark lettering. Pause/sidebar styling follows
+the selected theme; radar/portrait regions and all world artwork remain separate.
+The preview is isolated; Back discards it and Apply saves the preference and
+reinitializes graphics. No simulation, network, mod-scale or zoom code changed.
+
+Documentation: docs/ui-skins.md. The complete Visual Studio Release build and
+all 11 Windows CTests pass (core: 1001 cases passed, four opt-in cases skipped;
+Classic theme: six cases and 245 assertions). A separate local 1.0.830 Windows
+portable directory has been installed successfully; its runtime check exits 0.
+The isolated SDL menu-rendering matrix passes at 640×480, 854×480, 1280×720 and
+1920×1080 (Native 1:1), round-tripping both skins with saved selection, preview/
+Back isolation, layout bounds, unchanged display/world/mod settings and actual
+font-pixel/Mentat-artwork checks. Static selected-construction-yard build sidebar
+and pause-overlay rendering also pass in both skins at 640×480 and 1920×1080.
+The fixture uses real game components without entering the simulation loop;
+this is software-renderer evidence, not an interactive GPU/gameplay capture or
+a general building-properties-panel certification. This candidate has not been
+pushed, published or installed on a device; the older Windows candidate remains
+available unchanged.
 
 ## 2026-10-10 — 1.0.829 published and signed production installed on MBA
 

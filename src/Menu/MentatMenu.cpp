@@ -23,6 +23,7 @@
 
 #include <mmath.h>
 #include <mod/ModManager.h>
+#include <misc/MenuPalette.h>
 
 #include <algorithm>
 #include <regex>
@@ -136,7 +137,9 @@ MentatMenu::MentatMenu(int newHouse)
             }
         }
     }
-    textLabel.setTextColor(COLOR_WHITE, COLOR_TRANSPARENT);
+    // Narration is drawn over the original Mentat artwork, not a gold panel.
+    textLabel.setTextColor(COLOR_WHITE,
+        MenuTheme::isClassicDesert() ? COLOR_BLACK : COLOR_TRANSPARENT);
     textLabel.setAlignment((Alignment_Enum) (Alignment_Left | Alignment_Top));
     textLabel.setVisible(false);
 }

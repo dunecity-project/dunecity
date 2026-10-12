@@ -23,6 +23,7 @@
 #include <GUI/Label.h>
 #include <GUI/Spacer.h>
 #include <GUI/dune/GameOptionsWindow.h>
+#include <GUI/dune/DuneStyle.h>
 #include <GUI/MsgBox.h>
 
 #include <main.h>
@@ -291,7 +292,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     startMenuModeDropDownBox.setOnSelectionChange(std::bind(&OptionsMenu::onChangeOption, this, std::placeholders::_1));
     paletteHBox.addWidget(&startMenuModeDropDownBox, 120);
     paletteHBox.addWidget(optionLabel(_("Colors")), 70);
-    paletteDropDownBox.addEntry(_("Dark"), 0);
+    paletteDropDownBox.addEntry(_("Standard"), 0);
     paletteDropDownBox.addEntry(_("High Contrast"), 1);
     paletteDropDownBox.setSelectedItem(validatedMenuPalette(settings.video.menuPalette));
     paletteDropDownBox.setOnSelectionChange([this](bool interactive) {
@@ -302,10 +303,23 @@ OptionsMenu::OptionsMenu() : MenuBase()
     paletteHBox.addWidget(Spacer::create(), 0.5);
     pages[1].addWidget(&paletteHBox, 32);
     pages[1].addWidget(VSpacer::create(6));
-    palettePreview.setText("Dune City");
-    palettePreview.setEnabled(false);
+    uiSkinHBox.addWidget(Spacer::create(), 0.5);
+    uiSkinHBox.addWidget(optionLabel(_("UI Skin")), 190);
+    uiSkinDropDownBox.addEntry(_("Modern"), 0);
+    uiSkinDropDownBox.addEntry(_("Classic Desert"), 1);
+    uiSkinDropDownBox.setSelectedItem(validatedUISkin(settings.video.uiSkin));
+    uiSkinDropDownBox.setOnSelectionChange([this](bool interactive) {
+        updatePalettePreview();
+        onChangeOption(interactive);
+    });
+    uiSkinHBox.addWidget(&uiSkinDropDownBox, 170);
+    uiSkinHBox.addWidget(Spacer::create(), 10);
+    palettePreview.setFitToSize(true);
+    uiSkinHBox.addWidget(&palettePreview, 110);
+    uiSkinHBox.addWidget(Spacer::create(), 0.5);
     updatePalettePreview();
-    pages[1].addWidget(&palettePreview, 24);
+    pages[1].addWidget(&uiSkinHBox, 32);
+    pages[1].addWidget(VSpacer::create(6));
 
     interfaceHBox.addWidget(Spacer::create(), 0.5);
     interfaceHBox.addWidget(optionLabel(_("Interface Size")), 190);
@@ -475,8 +489,13 @@ void OptionsMenu::showPage(int page) {
 }
 
 void OptionsMenu::updatePalettePreview() {
-    const auto colors = menuPalette(paletteDropDownBox.getSelectedEntryIntData());
-    palettePreview.setTextColor(colors.foreground, colors.shadow);
+    // Render a sample without touching the active global theme or cached UI.
+    // Back leaves the game exactly as it was; Apply rebuilds it through the
+    // existing main-menu reinitialization path after saving the selection.
+    DuneStyle previewStyle(paletteDropDownBox.getSelectedEntryIntData(),
+                           uiSkinDropDownBox.getSelectedEntryIntData());
+    palettePreview.setSurface(previewStyle.createButtonSurface(110, 32,
+        _("Dune City"), false, false));
 }
 
 void OptionsMenu::onChangeOption(bool bInteractive) {
@@ -522,6 +541,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= (settings.video.cursorVisibility != cursorVisibilityDropDownBox.getSelectedEntryIntData());
     bChanged |= (settings.video.cursorScale != cursorScaleDropDownBox.getSelectedEntryIntData());
     bChanged |= (settings.video.menuPalette != paletteDropDownBox.getSelectedEntryIntData());
+    bChanged |= (settings.video.uiSkin != uiSkinDropDownBox.getSelectedEntryIntData());
     bChanged |= (settings.video.startMenuMode != startMenuModeDropDownBox.getSelectedEntryIntData());
 
     bChanged |= (settings.audio.playSFX != playSFXCheckbox.isChecked());
@@ -634,6 +654,7 @@ void OptionsMenu::onOptionsOK() {
     settings.video.cursorVisibility = cursorVisibilityDropDownBox.getSelectedEntryIntData();
     settings.video.cursorScale = cursorScaleDropDownBox.getSelectedEntryIntData();
     settings.video.menuPalette = validatedMenuPalette(paletteDropDownBox.getSelectedEntryIntData());
+    settings.video.uiSkin = validatedUISkin(uiSkinDropDownBox.getSelectedEntryIntData());
     settings.video.startMenuMode = validatedStartMenuMode(startMenuModeDropDownBox.getSelectedEntryIntData());
 
     settings.audio.playSFX = playSFXCheckbox.isChecked();
@@ -748,6 +769,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Video","Cursor Visibility",settings.video.cursorVisibility);
     myINIFile.setIntValue("Video","Cursor Scale",settings.video.cursorScale);
     myINIFile.setIntValue("Video","Menu Palette",settings.video.menuPalette);
+    myINIFile.setIntValue("Video","UI Skin",settings.video.uiSkin);
     myINIFile.setIntValue("Video","Start Menu Mode",settings.video.startMenuMode);
 
     myINIFile.setStringValue("General","Player Name",settings.general.playerName);
