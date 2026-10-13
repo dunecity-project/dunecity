@@ -289,7 +289,8 @@ private:
         \param  fontsize    the size of the text
         \return the new created surface (the caller of this method is responsible of freeing it)
     */
-    sdl2::surface_ptr createSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontsize);
+    sdl2::surface_ptr createSurfaceWithText(const std::string& text, Uint32 color,
+                                           unsigned int fontsize, bool allowDisplay = true);
 
     Uint32 brightenUp(Uint32 color) {
         Uint32 r = (color & RMASK) >> RSHIFT;

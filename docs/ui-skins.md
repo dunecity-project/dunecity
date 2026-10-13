@@ -15,8 +15,11 @@ without changing the live menus before Apply.
 Classic Desert reuses the original FAME/SCREEN desert artwork. Its buttons have
 sand-grained brass-gold faces, carved raised/recessed borders and small end
 fittings when enough label space is available. Standard button lettering uses
-the original dark red with a pale-gold relief; High Contrast retains dark ink.
-Smaller controls keep their existing font sizing and hitboxes, and long labels
+solid warm copper and a tight one-pixel dark shadow, without an outline or
+hollow face. High Contrast retains dark foreground ink. Roomy buttons and large
+headings use an arched Art Deco display face inspired by the approved Lapis
+mockup; small controls/body text retain the original font. Button hitboxes stay
+unchanged, and long labels
 omit the end fittings rather than overlapping them. Other labels retain their
 contrast-safe colors. The pause window and selected-building sidebar follow
 the choice. Black radar and portrait regions remain intentional;
@@ -43,6 +46,33 @@ For the classic unscaled 1080p view, choose **1920×1080**, **Native (1:1)**
 Interface Size and **Zoom 1x** separately. Choosing Classic Desert by itself
 does not alter any of those display choices or Dune2R's mod-specific scale.
 
+## Classic display lettering
+
+The shipped face is unmodified **Righteous Regular**, rendered at 80% horizontal
+width for the taller proportions of the Lapis-inspired mockup. This is a real
+font, not text baked into button images. Only the display face uses light
+hinting/antialiasing and a transparent, straight-alpha compression intermediate;
+the default font's existing rendering path stays unchanged. Classic buttons uppercase ASCII while
+leaving UTF-8 byte sequences intact. Buttons at least 28 pixels high use the
+display face with measured fitting; labels at least 22 pixels use it for large
+headings. Small body text and black-outlined labels over world/Mentat artwork
+keep Philosopher. Modern keeps its existing font and colors.
+
+Display/default faces have separate caches. If Righteous lacks any character,
+the entire label uses Philosopher, with matching fallback metrics. Missing or
+damaged optional font files also fall back rather than preventing startup.
+Standard copper is a decorative palette; its face alone does not meet a 4.5:1
+contrast target. The tight dark shadow provides separation. Use **Colors →
+High Contrast** for dark foreground lettering with stronger contrast.
+
+The 43,104-byte `data/Righteous-Regular.ttf` comes from
+[Google Fonts revision 90abd17](https://github.com/google/fonts/blob/90abd17b4f97671435798b6147b698aa9087612f/ofl/righteous/Righteous-Regular.ttf).
+Its SHA256 is
+`2FFB3FE5C27D7E6571210B800448C4E234E651B46C6B4426C1BB567E5341348A`.
+The complete copyright and SIL Open Font License 1.1 accompany it in
+`data/Righteous-OFL.txt`; the font binary/name are unchanged. Windows install
+rules explicitly include both loose files, since neither is a LEGACY.PAK entry.
+
 ## Implementation and verification
 
 `MenuPalette.h` defines validated themes and contrast-safe label colors.
@@ -55,10 +85,13 @@ the cached UI rather than leaving old-theme widgets behind.
 The `classic_desert_ui_tests` CTest covers theme defaults, invalid values,
 Modern palette preservation, Classic contrast, preview isolation, preference
 storage and independence from interface/world scaling. Button palette checks
-also cover red/gold lettering, the deeper pressed-state ink, High Contrast and
+also cover copper/dark-shadow colors, the deeper pressed-state ink, High Contrast and
 unchanged Modern colors. The renderer fixture checks opaque textured Classic
-button faces, real glyph/emboss bounds and normal/pressed/focused states at
-280×34 and 70×22 in both text palettes; Modern interiors remain flat.
+button faces, real glyph/shadow bounds and normal/pressed/focused states at
+280×34 and 70×22 in both text palettes; Modern interiors remain flat. Font checks
+verify the bundled typeface actually loads, display/default measurement and
+rendering agree, their caches stay separate, and Cyrillic uses a whole-label
+fallback with the original pixels.
 
 For Windows visual diagnostics, `tests/menu/run-classic-skin-probe-windows.py`
 links a private entry point against a completed Visual Studio Release build.
@@ -98,11 +131,20 @@ and all 11 CTest suites pass on that integration, and the separate portable
 install passes its runtime check. These local candidates are not published
 releases; broader evidence and the play-test handoff are recorded in HANDOVER.md.
 
-Local 1.0.834 adds the textured brass buttons and red/gold typography described
-above without altering the approved background. The full Windows Release build
+Local 1.0.834 introduced textured brass buttons and the earlier red/gold
+typography without altering the approved background. The full Windows Release build
 and all 11 CTest suites pass; the Classic theme subset now has seven cases and
 337 assertions. The actual four-size SDL skin-switch/HUD/pause matrix and the
 new button-pixel checks pass, including compact controls, both text palettes,
 and normal/pressed/focused states. Its separate portable install passes the
 desktop runtime check. It remains a local play-test candidate, not a published
 release.
+
+Local 1.0.835 adds the copper Art Deco display treatment. The complete Windows
+Release build and all 11 CTest suites pass; the Classic subset has seven cases
+and 346 assertions. The four-resolution SDL matrix passes again, including
+static HUD/pause rendering and checks of the real display font, accented Latin,
+invalid UTF-8, whole-label fallback, isolated caches and unchanged Modern/world
+labels. The separate portable installation passes its desktop runtime check;
+its executable, font, license and configuration template match the build/source
+copies. This is a local play-test candidate, not a published release.

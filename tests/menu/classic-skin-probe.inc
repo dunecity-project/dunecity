@@ -5,6 +5,8 @@
 #include <Menu/MentatMenu.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
+#include <FileClasses/FontManager.h>
+#include <FileClasses/TTFFont.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/dune/DuneStyle.h>
 #include <GUI/dune/InGameMenu.h>
@@ -96,6 +98,81 @@ struct ClassicUISkinProbe {
         return COLOR_RGBA(pixel.r, pixel.g, pixel.b, pixel.a);
     }
 
+    static bool sameSurfacePixels(SDL_Surface* first, SDL_Surface* second) {
+        if(!first || !second || first->w != second->w || first->h != second->h) return false;
+        sdl2::surface_lock firstLock{first};
+        sdl2::surface_lock secondLock{second};
+        for(int y = 0; y < first->h; ++y)
+            for(int x = 0; x < first->w; ++x)
+                if(rgbaPixel(first, x, y) != rgbaPixel(second, x, y)) return false;
+        return true;
+    }
+
+    static void checkDisplayTypography() {
+        require(pFontManager && pFileManager,
+                "Display font checks require the actual runtime font and file managers");
+        const int activeSkin = MenuTheme::uiSkin;
+        const auto activeBackground = MenuTheme::background;
+        auto fontFile = pFileManager->openFile("Righteous-Regular.ttf");
+        require(fontFile && SDL_RWsize(fontFile.get()) > 1024,
+                "The selected Classic display typeface is absent from runtime assets");
+        TTFFont coverage(std::move(fontFile), 18, 80);
+        require(coverage.canRenderText(u8"CAMPAIGN ÉDITEURS"),
+                "The display face lost basic or accented Latin glyph coverage");
+        require(!coverage.canRenderText(u8"\u041a\u0410\u041c\u041f\u0410\u041d\u0418\u042f"),
+                "The expected unsupported-script fallback no longer exercises a missing glyph");
+        for(const auto& invalid : std::vector<std::string>{
+            "\xC0\xAF", "\xED\xA0\x80", "\xF4\x90\x80\x80", "\x80", "\xC2", std::string("A\0B", 3)})
+            require(!coverage.canRenderText(invalid),
+                    "Display glyph coverage accepted malformed, overlong, surrogate or NUL text");
+        DuneStyle modern(0, 0);
+        auto modernBefore = modern.createButtonSurface(280, 34, "Play Online", false, false);
+        const std::string sample = "CAMPAIGN WWW";
+        for(unsigned int size : {14u, 18u, 24u}) {
+            const int defaultWidth = pFontManager->getTextWidth(sample, size);
+            const int defaultHeight = pFontManager->getTextHeight(size);
+            auto defaultBefore = pFontManager->createSurfaceWithText(sample, COLOR_WHITE, size);
+            const int displayWidth = pFontManager->getDisplayTextWidth(sample, size);
+            const int displayHeight = pFontManager->getDisplayTextHeight(sample, size);
+            auto displayBefore = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
+            require(defaultBefore && displayBefore, "Rendering the actual display font failed");
+            require(displayWidth > 0 && displayHeight > 0 && displayWidth != defaultWidth,
+                    "Classic display metrics silently fell back to the default typeface");
+            require(displayBefore->w == displayWidth && displayBefore->h == displayHeight,
+                    "Classic display measurement and rendering disagree");
+            require(defaultBefore->w == defaultWidth && defaultBefore->h == defaultHeight,
+                    "Default font measurement and rendering disagree");
+            require(!sameSurfacePixels(defaultBefore.get(), displayBefore.get()),
+                    "The actual Classic display glyphs still use the original font");
+            auto defaultAfter = pFontManager->createSurfaceWithText(sample, COLOR_WHITE, size);
+            auto displayAfter = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
+            require(pFontManager->getTextWidth(sample, size) == defaultWidth
+                    && pFontManager->getTextHeight(size) == defaultHeight
+                    && sameSurfacePixels(defaultBefore.get(), defaultAfter.get())
+                    && sameSurfacePixels(displayBefore.get(), displayAfter.get()),
+                    "Display and default typefaces share a contaminated size/render cache");
+
+            // Righteous has no Cyrillic. A whole-label fallback must preserve
+            // both metrics and pixels, not mix faces or emit missing boxes.
+            const std::string unsupported = u8"\u041a\u0410\u041c\u041f\u0410\u041d\u0418\u042f";
+            auto fallback = pFontManager->createDisplaySurfaceWithText(unsupported, COLOR_WHITE, size);
+            auto original = pFontManager->createSurfaceWithText(unsupported, COLOR_WHITE, size);
+            require(pFontManager->getDisplayTextWidth(unsupported, size)
+                        == pFontManager->getTextWidth(unsupported, size)
+                    && pFontManager->getDisplayTextHeight(unsupported, size)
+                        == pFontManager->getTextHeight(size)
+                    && sameSurfacePixels(fallback.get(), original.get()),
+                    "Unsupported translations no longer retain the complete original-font label");
+        }
+        auto modernAfter = modern.createButtonSurface(280, 34, "Play Online", false, false);
+        require(sameSurfacePixels(modernBefore.get(), modernAfter.get()),
+                "Loading the Classic display typeface changes an existing Modern control");
+        require(MenuTheme::uiSkin == activeSkin && MenuTheme::background == activeBackground,
+                "Resolving display fonts mutated the active UI theme");
+        SDL_Log("CLASSIC_UI_DISPLAY_FONT_PASS: runtime Righteous asset, strict UTF-8/Latin coverage, distinct actual metrics/glyphs;"
+                " independent default/display caches; complete Cyrillic fallback; unchanged Modern");
+    }
+
     static void checkButtonInterior(SDL_Surface* surface, bool classic, bool pressed) {
         require(surface != nullptr, "A diagnostic button surface is missing");
         sdl2::surface_lock lock{surface};
@@ -118,13 +195,13 @@ struct ClassicUISkinProbe {
     }
 
     static void checkButtonLabel(SDL_Surface* blank, SDL_Surface* labeled,
-                                 Uint32 foreground, Uint32 emboss, bool classic) {
+                                 Uint32 foreground, Uint32 shadow, bool classic) {
         require(blank && labeled && blank->w == labeled->w && blank->h == labeled->h,
                 "Labeled button geometry differs from its empty-label surface");
         sdl2::surface_lock blankLock{blank};
         sdl2::surface_lock labeledLock{labeled};
         int foregroundPixels = 0;
-        int embossPixels = 0;
+        int shadowPixels = 0;
         int changedPixels = 0;
         for(int y = 0; y < labeled->h; ++y) {
             for(int x = 0; x < labeled->w; ++x) {
@@ -132,20 +209,62 @@ struct ClassicUISkinProbe {
                 if(color == rgbaPixel(blank, x, y)) continue;
                 ++changedPixels;
                 // The text-safe grain region itself follows label width. Only
-                // exact ink/emboss pixels identify glyph bounds; other changes
+                // exact ink/shadow pixels identify glyph bounds; other changes
                 // against an empty button are background, not escaped text.
-                if(color == foreground || (classic && color == emboss)) {
+                if(color == foreground || (classic && color == shadow)) {
                     require(x >= 3 && y >= 3 && x < labeled->w - 3 && y < labeled->h - 3,
-                            "A button label or its emboss overlaps the carved border");
+                            "A button label or its shadow overlaps the carved border");
                     if(color == foreground) ++foregroundPixels;
-                    if(classic && color == emboss) ++embossPixels;
+                    if(classic && color == shadow) ++shadowPixels;
                 }
             }
         }
         require(changedPixels > 0 && foregroundPixels > 0,
                 "The real font produced no visible button foreground glyphs");
         if(classic)
-            require(embossPixels > 0, "Classic typography lost its pale-gold emboss");
+            require(shadowPixels > 0, "Classic copper typography lost its dark offset shadow");
+    }
+
+    static void checkButtonTypeface(SDL_Surface* button, const std::string& text,
+                                    bool classic, bool pressed, Uint32 foreground) {
+        std::string label = text;
+        if(classic)
+            for(char& character : label)
+                if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
+        const bool display = classic && button->h >= 28;
+        int size = button->h >= 48 ? 22 : button->h >= 38 ? 20
+            : button->h >= 30 ? 18 : button->h >= 24 ? 16 : 14;
+        if(display) size += 4;
+        const auto width = [&](int value) {
+            return display ? pFontManager->getDisplayTextWidth(label, value)
+                           : pFontManager->getTextWidth(label, value);
+        };
+        const auto height = [&](int value) {
+            return display ? pFontManager->getDisplayTextHeight(label, value)
+                           : pFontManager->getTextHeight(value);
+        };
+        while(size > 8 && (button->w < width(size) + 12 || button->h < height(size) + 4)) --size;
+        auto expected = display
+            ? pFontManager->createDisplaySurfaceWithText(label, foreground, size)
+            : pFontManager->createSurfaceWithText(label, foreground, size);
+        require(expected != nullptr, "Rendering the independently measured button glyphs failed");
+        const auto position = calcDrawingRect(expected.get(), button->w / 2 + (pressed ? 1 : 0),
+            button->h / 2 + (pressed ? 1 : 0), HAlign::Center, VAlign::Center);
+        int matchingPixels = 0;
+        sdl2::surface_lock expectedLock{expected.get()};
+        sdl2::surface_lock buttonLock{button};
+        for(int y = 0; y < expected->h; ++y) {
+            for(int x = 0; x < expected->w; ++x) {
+                if(rgbaPixel(expected.get(), x, y) != foreground) continue;
+                require(position.x + x >= 0 && position.y + y >= 0
+                        && position.x + x < button->w && position.y + y < button->h,
+                        "Measured button glyphs extend outside the actual control");
+                require(rgbaPixel(button, position.x + x, position.y + y) == foreground,
+                        "Actual button uses the wrong typeface, casing, metrics or foreground");
+                ++matchingPixels;
+            }
+        }
+        require(matchingPixels > 0, "The measured button typeface contains no solid foreground pixels");
     }
 
     static void checkButtonDecoration() {
@@ -189,6 +308,8 @@ struct ClassicUISkinProbe {
                         checkButtonInterior(blank.get(), skin == 1, pressed);
                         checkButtonLabel(blank.get(), labeled.get(), typography.foreground,
                                          typography.shadow, skin == 1);
+                        checkButtonTypeface(labeled.get(), text, skin == 1, pressed,
+                                            typography.foreground);
                         if(palette == 0) {
                             destination = {skin * 320 + (compact ? 125 : 20),
                                            28 + state * 70 + (compact ? 39 : 0), width, height};
@@ -211,7 +332,7 @@ struct ClassicUISkinProbe {
                 "Button previews mutated the active menu/HUD theme");
         const auto path = capturePath("buttons-modern-classic-states").string();
         require(SavePNG(sheet.get(), path.c_str()) == 0, "Saving button-state pixel evidence failed");
-        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors and embossed glyphs;"
+        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors, copper glyphs and dark shadow;"
                 " normal/pressed/focused at 280x34 and 70x22; unchanged flat Modern interiors;"
                 " bounds, both text palettes and preview isolation");
     }
@@ -472,6 +593,7 @@ struct ClassicUISkinProbe {
                 "Apply did not persist the UI skin in the isolated profile");
 
         if(stage < 2) {
+            checkDisplayTypography();
             checkArtworkLabelContrast();
             checkButtonDecoration();
             MainMenu mainMenu;

@@ -112,8 +112,11 @@ void DuneStyle::fillClassicBackground(SDL_Surface* surface) const {
     }
 }
 
-sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontsize) {
+sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint32 color,
+                                                 unsigned int fontsize, bool allowDisplay) {
     if(pFontManager) {
+        if(allowDisplay && uiSkin == 1 && fontsize >= 22)
+            return pFontManager->createDisplaySurfaceWithText(text, color, fontsize);
         return pFontManager->createSurfaceWithText(text, color, fontsize);
     } else {
         // create dummy surface
@@ -130,6 +133,9 @@ sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint
 
 unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
     if(pFontManager) {
+        if(uiSkin == 1 && FontNum >= 22)
+            return std::max(pFontManager->getTextHeight(FontNum),
+                            pFontManager->getDisplayTextHeight("", FontNum));
         return pFontManager->getTextHeight(FontNum);
     } else {
         return 12;
@@ -138,6 +144,8 @@ unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
 
 unsigned int DuneStyle::getTextWidth(const std::string& text, unsigned int FontNum)  {
     if(pFontManager) {
+        if(uiSkin == 1 && FontNum >= 22)
+            return pFontManager->getDisplayTextWidth(text, FontNum);
         return pFontManager->getTextWidth(text,FontNum);
     } else {
         return text.length()*10;
@@ -146,7 +154,12 @@ unsigned int DuneStyle::getTextWidth(const std::string& text, unsigned int FontN
 
 
 Point DuneStyle::getMinimumLabelSize(const std::string& text, int fontSize) {
-    return Point(getTextWidth(text,fontSize) + 12,getTextHeight(fontSize) + 4);
+    auto width = getTextWidth(text, fontSize);
+    // Explicitly outlined labels over world/Mentat artwork retain Philosopher.
+    // Reserve enough room for either face when callers request auto sizing.
+    if(uiSkin == 1 && fontSize >= 22 && pFontManager)
+        width = std::max(width, static_cast<unsigned int>(pFontManager->getTextWidth(text, fontSize)));
+    return Point(width + 12, getTextHeight(fontSize) + 4);
 }
 
 sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, const std::vector<std::string>& textLines, int fontSize, Alignment_Enum alignment, Uint32 textcolor, Uint32 textshadowcolor, Uint32 backgroundcolor) {
@@ -168,7 +181,10 @@ sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, con
         textcolor = MenuTheme::readableText(textcolor, uiSkin);
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
 
-    int fontheight = getTextHeight(fontSize);
+    const bool allowDisplay = !(uiSkin == 1 && backgroundcolor == COLOR_TRANSPARENT
+                                && textshadowcolor == COLOR_BLACK);
+    int fontheight = !allowDisplay && pFontManager ? pFontManager->getTextHeight(fontSize)
+                                                  : getTextHeight(fontSize);
     int spacing = 2;
 
     int textpos_y;
@@ -185,8 +201,8 @@ sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, con
     }
 
     for (const std::string& textLine : textLines) {
-        sdl2::surface_ptr textSurface1 = createSurfaceWithText(textLine, textshadowcolor, fontSize);
-        sdl2::surface_ptr textSurface2 = createSurfaceWithText(textLine, textcolor, fontSize);
+        sdl2::surface_ptr textSurface1 = createSurfaceWithText(textLine, textshadowcolor, fontSize, allowDisplay);
+        sdl2::surface_ptr textSurface2 = createSurfaceWithText(textLine, textcolor, fontSize, allowDisplay);
 
         SDL_Rect textRect1 = calcDrawingRect(textSurface1.get(), 0, textpos_y + 4);
         SDL_Rect textRect2 = calcDrawingRect(textSurface2.get(), 0, textpos_y + 3);
@@ -390,19 +406,42 @@ Point DuneStyle::getMinimumButtonSize(const std::string& text) {
 sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, const std::string& text, bool pressed, bool activated, Uint32, Uint32) {
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
+    std::string labelText = text;
+    if(uiSkin == 1) {
+        // ASCII casing only: never feed individual UTF-8 bytes to std::toupper.
+        for(char& character : labelText)
+            if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
+    }
+    const bool display = uiSkin == 1 && height >= 28 && pFontManager;
     int fontsize = height >= 48 ? 22 : height >= 38 ? 20 : height >= 30 ? 18 : height >= 24 ? 16 : 14;
-    while(fontsize>8 && (width < getTextWidth(text,fontsize)+12 || height < getTextHeight(fontsize)+4)) --fontsize;
+    if(display) fontsize += 4;
+    const auto textWidth = [&](int size) {
+        return display ? pFontManager->getDisplayTextWidth(labelText, size)
+                       : static_cast<int>(getTextWidth(labelText, size));
+    };
+    const auto textHeight = [&](int size) {
+        return display ? pFontManager->getDisplayTextHeight(labelText, size)
+                       : static_cast<int>(getTextHeight(size));
+    };
+    while(fontsize>8 && (width < static_cast<Uint32>(textWidth(fontsize)+12)
+                         || height < static_cast<Uint32>(textHeight(fontsize)+4))) --fontsize;
     const auto lettering = uiSkin == 1
         ? (pressed ? pressedButtonTextPalette : buttonTextPalette) : textPalette;
-    auto label=createSurfaceWithText(text,lettering.foreground,fontsize);
+    const auto textSurface = [&](Uint32 color) {
+        return display ? pFontManager->createDisplaySurfaceWithText(labelText, color, fontsize)
+                       : createSurfaceWithText(labelText, color, fontsize);
+    };
+    auto label = textSurface(lettering.foreground);
+    if(!label) return nullptr;
     SDL_Rect rect=calcDrawingRect(label.get(),width/2+(pressed ? 1 : 0),height/2+(pressed ? 1 : 0),HAlign::Center,VAlign::Center);
     if(uiSkin == 1) {
         drawControlFrame(surface.get(), pressed, activated, rect);
-        auto emboss = createSurfaceWithText(text, lettering.shadow, fontsize);
-        SDL_Rect embossRect = rect;
-        ++embossRect.x;
-        ++embossRect.y;
-        SDL_BlitSurface(emboss.get(), nullptr, surface.get(), &embossRect);
+        auto shadow = textSurface(lettering.shadow);
+        if(!shadow) return nullptr;
+        SDL_Rect shadowRect = rect;
+        ++shadowRect.x;
+        ++shadowRect.y;
+        SDL_BlitSurface(shadow.get(), nullptr, surface.get(), &shadowRect);
     } else {
         // Modern remains byte-for-byte visually equivalent to its prior style.
         SDL_FillRect(surface.get(),nullptr,pressed ? theme.pressed : theme.control);

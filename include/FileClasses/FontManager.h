@@ -42,6 +42,12 @@ public:
     sdl2::texture_ptr createTextureWithText(const std::string& text, Uint32 color, unsigned int fontSize);
     sdl2::surface_ptr createSurfaceWithMultilineText(const std::string& text, Uint32 color, unsigned int fontSize, bool bCentered = false);
     sdl2::texture_ptr createTextureWithMultilineText(const std::string& text, Uint32 color, unsigned int fontSize, bool bCentered = false);
+
+    // Optional Classic Desert display lettering. Each method chooses one font
+    // for the whole string, falling back to the normal face for missing glyphs.
+    int getDisplayTextWidth(const std::string& text, unsigned int fontSize);
+    int getDisplayTextHeight(const std::string& text, unsigned int fontSize);
+    sdl2::surface_ptr createDisplaySurfaceWithText(const std::string& text, Uint32 color, unsigned int fontSize);
 private:
     inline Font* getFont(unsigned int fontSize) {
         auto iter = fonts.find(fontSize);
@@ -54,8 +60,11 @@ private:
     }
 
     std::unique_ptr<Font> loadFont(unsigned int fontSize);
+    Font* getDisplayFont(const std::string& text, unsigned int fontSize);
 
     std::map<unsigned int, std::unique_ptr<Font>> fonts;
+    std::map<unsigned int, std::unique_ptr<Font>> displayFonts;
+    bool displayFontUnavailable = false;
 
 };
 

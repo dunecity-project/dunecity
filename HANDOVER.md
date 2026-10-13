@@ -1,3 +1,50 @@
+## 2026-10-13 — local 1.0.835: copper Lapis-inspired display lettering
+
+The user selected the Lapis Enamel mockup's arched Art Deco letterforms and
+approved the final solid copper treatment with a subtle shadow, rejecting the
+earlier outlined/hollow color samples. Classic Desert now uses solid copper
+button faces with a tight one-pixel dark shadow. The approved sand/brass button
+decoration and desert background remain unchanged. High Contrast retains dark
+foreground lettering; the decorative copper face alone is not a 4.5:1 contrast
+palette.
+
+The real display face is unmodified Righteous Regular, bundled with its complete
+SIL OFL copyright/license in data. Its arched A/double-arched M approximate the
+approved mockup; it is Lapis-inspired, not an exact generated-font reproduction.
+Runtime rendering narrows it to 80% width, with matching metrics and antialiased
+edges copied through a transparent intermediate without colored fringes. Roomy Classic
+buttons use measured fitting and ASCII uppercase; large headings use the same
+face. Small body/control text and black-outlined world/Mentat labels keep
+Philosopher. Separate caches preserve Modern/default rendering. Unsupported
+glyphs fall back as a whole label; an absent/corrupt optional face warns once
+and falls back. Older accepted SDL_ttf SDKs use the BMP glyph query rather than
+requiring a newer library for this optional skin.
+
+This candidate remains on the same production 1.0.832 base. No gameplay, world
+sprites, zoom, Dune2R scale, save/protocol or network code changed. The official
+helper synchronizes all three version files to 1.0.835. The complete Windows
+Visual Studio Release build passes. All 11 CTest suites pass (core: 1004 passed,
+four opt-in cases skipped, 10,238,833 assertions; Classic theme: seven cases,
+346 assertions). The actual SDL Modern → Classic → Modern matrix passes at
+640×480, 854×480, 1280×720 and Native 1920×1080, including preview/Back,
+Apply/reinitialization/persistence and static construction-yard HUD/pause checks.
+The font checks exercise the real bundled face, accented Latin, invalid UTF-8,
+whole-label Cyrillic fallback, cache separation, measured button fitting and
+unchanged Modern/world-label pixels. Both palettes and normal/pressed/focused
+states pass at 280×34 and 70×22. The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-835/captures` tree. This remains static
+software-renderer/component evidence, not live gameplay certification.
+
+The first portable installation omitted the optional loose font because Windows
+uses an explicit data-file install list. The install rules now ship the font and
+complete OFL notice; source, development output and portable copies match.
+The separate `build-windows-portable-835` install passes its desktop runtime
+check (exit 0), and its executable matches the rebuilt target: SHA256
+`FCFE785C24E5F1ADC19198CC02397055136527E29BF28410E7A07199D3492B09`.
+Configuration templates also match. Previous portable candidates remain intact.
+The user authorized a local test build only: no push, PR, tag, device installation
+or publication has been performed.
+
 ## 2026-10-12 — local 1.0.834: textured Classic Desert buttons
 
 The user approved the desert background but found the flat controls and lettering

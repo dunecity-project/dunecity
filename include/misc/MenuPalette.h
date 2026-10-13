@@ -120,15 +120,15 @@ inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin
                       COLOR_TRANSPARENT};
 }
 
-// Classic button lettering reprises the original red-and-gold relief without
-// changing labels over menus, Mentat artwork or the game world. The recessed
-// pressed face uses deeper ink to retain contrast on its darker gold surface.
+// The standard Classic display treatment is solid copper with a tight dark
+// shadow, never an outline/hollow face. High Contrast retains dark foreground
+// ink; the decorative copper face itself is not a 4.5:1 accessibility palette.
 inline constexpr MenuPalette buttonPalette(int value, int skin = MenuTheme::uiSkin,
                                            bool pressed = false) {
     return validatedUISkin(skin) == 1
         ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
-                      : pressed ? COLOR_RGB(88,10,4) : COLOR_RGB(125,0,0),
-                      pressed ? COLOR_RGB(255,220,128) : COLOR_RGB(255,235,176)}
+                      : pressed ? COLOR_RGB(137,77,41) : COLOR_RGB(151,91,50),
+                      pressed ? COLOR_RGB(45,25,12) : COLOR_RGB(65,37,18)}
         : menuPalette(value, skin);
 }
 

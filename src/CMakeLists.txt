@@ -889,6 +889,14 @@ if(WIN32)
         FILES "${DATA_DIR}/cacert.pem"
         DESTINATION data
     )
+
+    # The optional Classic Desert face is loose data, not a LEGACY.PAK entry.
+    # Ship its unchanged binary and full OFL notice in portable/installer builds
+    # as well as development outputs, otherwise only packaged users fall back.
+    install(
+        FILES "${DATA_DIR}/Righteous-Regular.ttf" "${DATA_DIR}/Righteous-OFL.txt"
+        DESTINATION data
+    )
 elseif(NOT APPLE)
     # Linux: use FHS structure
     install(
