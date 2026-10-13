@@ -2,23 +2,32 @@
 // Skirmish screen and the real CustomGame start/load path with an isolated profile.
 #include <Menu/RandomSkirmishMenu.h>
 #include <MapEditor/SkirmishGenerator.h>
+#include <MapEditor/MapGenerator.h>
 #include <FileClasses/INIFile.h>
+#include <FileClasses/LoadSavePNG.h>
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
+#include <ScreenBorder.h>
 #include <Tile.h>
+#include <players/Player.h>
 #include <structures/StructureBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
 #include <dunecity/CitySimulation.h>
+#include <dunecity/CityConstants.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
+#include <misc/IMemoryStream.h>
+#include <misc/draw_util.h>
 #include <misc/fnkdat.h>
 #include <sand.h>
 
 #include <cstdlib>
+#include <deque>
 #include <fstream>
 #include <map>
+#include <sstream>
 
 namespace {
 
@@ -65,6 +74,23 @@ Params caseParams(const std::string& name) {
         p.mapSize = 192; p.allies = 1; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
         p.allySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
         p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
+    } else if(name == "stefan-128") {
+        // Stefan's played configuration (testskirmish.dls, its [RANDOMSKIRMISH] section).
+        p.mapSize = 128; p.seed = 488631365; p.house = HOUSE_REBELS; p.allies = 2; p.enemies = 2; p.enemiesAllied = true;
+        p.techLevel = 9; p.mod = "dunecity"; p.mode = Mode::DuneCity;
+        p.allySide = Side{"qBotMedium", BaseSize::Medium, 3, 4};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 4};
+        p.playerSide = Side{"", BaseSize::None, 0, 0};
+    } else if(name == "partner-support") {
+        // The player's own Medium base, 5,000-credit army and 5,000-people city, with a
+        // support AI sharing the house.
+        p.mapSize = 128; p.allies = 0; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
+        p.playerSide = Side{"qBotSupportMedium", BaseSize::Medium, 3, 2};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 2};
+    } else if(name == "partner-quantbot") {
+        p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
+        p.playerSide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
     } else {
         skirmishRequire(false, "Unknown probe case " + name);
     }
@@ -87,6 +113,23 @@ void endMatch(std::unique_ptr<Game>& game) {
     pLocalPlayer = nullptr;
     pLocalHouse = nullptr;
 }
+
+/// The game view centred on @a tile, drawn by the real renderer, as a PNG.
+void captureGame(Game& game, const std::string& name, Coord tile) {
+    screenborder->setNewScreenCenter(Coord(tile.x * TILESIZE + TILESIZE / 2, tile.y * TILESIZE + TILESIZE / 2));
+    SDL_SetRenderTarget(renderer, screenTexture);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    game.drawScreen();
+    auto image = renderReadSurface(renderer);
+    SDL_SetRenderTarget(renderer, nullptr);
+    skirmishRequire(image != nullptr, "Could not read back the game view");
+    const std::string path = probeOut(name + ".png");
+    skirmishRequire(SavePNG(image.get(), path.c_str()) == 0, "Could not write " + path);
+    SDL_Log("SKIRMISH_PROBE: screenshot %s", path.c_str());
+}
+
+#include "skirmish-render.inc"
 
 /// Houses, teams, buildings, armies and power of a freshly loaded generated match.
 void checkLoaded(Game& game, const Result& result, const Params& params) {
@@ -114,14 +157,29 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
         for(const auto& [item, count] : wantUnits)
             skirmishRequire(haveUnits[item] == count, "House " + std::to_string(setup.house) + " has "
                 + std::to_string(haveUnits[item]) + " of unit " + std::to_string(item) + ", generated " + std::to_string(count));
-        skirmishRequire(armyValue == setup.armySpent, "Army value differs from the generated spend");
-        if(setup.role != Role::Human) {
-            if(setup.armyBudget > 0) {
-                skirmishRequire(armyValue <= setup.armyBudget && armyValue * 10 >= setup.armyBudget * 9,
-                                "Army value outside 90-100% of its budget");
-            }
+        if(setup.armyBudget > 0 && (setup.role != Role::Human || setup.base != BaseSize::None)) {
+            skirmishRequire(armyValue <= setup.armyBudget && armyValue * 10 >= setup.armyBudget * 9,
+                            "Army value outside 90-100% of its budget");
+        }
+        if(setup.base != BaseSize::None) {
+            // Every generated base, the player's own included, starts at its yard on positive power.
+            skirmishRequire(haveStructures[Structure_ConstructionYard] == 1, "Generated base has no Construction Yard");
             skirmishRequire(house->getProducedPower() > house->getPowerRequirement(), "Generated base runs on negative power");
         }
+        // The player's house holds the player plus the chosen AI partner, nobody else.
+        std::vector<std::string> classes;
+        for(const auto& player : house->getPlayerList()) classes.push_back(player->getPlayerclass());
+        if(setup.role == Role::Human) {
+            std::vector<std::string> expected{HUMANPLAYERCLASS};
+            if(!setup.partnerClass.empty()) expected.push_back(setup.partnerClass);
+            skirmishRequire(classes == expected, "The player's house holds " + std::to_string(classes.size()) + " players, not the player and the chosen partner");
+        } else {
+            skirmishRequire(classes.size() == 1, "An AI house holds more than one player");
+        }
+        std::string roster;
+        for(const std::string& c : classes) roster += (roster.empty() ? "" : "+") + c;
+        SDL_Log("SKIRMISH_PROBE: house=%d players=%s nuclear=%d windtraps=%d", setup.house, roster.c_str(),
+                haveStructures[Structure_NuclearPlant], haveStructures[Structure_WindTrap]);
         int structures = 0;
         for(const auto& [item, count] : haveStructures) structures += count;
         SDL_Log("SKIRMISH_PROBE: house=%d team=%d role=%d class=%s structures=%d army=%d/%d power=%d/%d",
@@ -144,6 +202,17 @@ void runMatch(const std::string& name, bool smoke) {
     init.randomSeed = params.seed;    // Test-only access, provided by -fno-access-control.
     auto game = startMatch(init);
     checkLoaded(*game, result, params);
+    renderPicture(pictureOfGame(), "loaded-" + name);   // the whole map as the engine loaded it
+    if(name == "partner-support") {
+        // The player's own generated base and zoned city, drawn by the game itself.
+        for(const Placement& s : result.structures)
+            if(s.house == result.houses[0].house && s.item == Structure_ConstructionYard)
+                captureGame(*game, "ingame-player-base", Coord(s.x + 1, s.y + 1));
+        int zones = 0, sx = 0, sy = 0;
+        for(const Placement& s : result.structures)
+            if(s.house == result.houses[0].house && DuneCity::isCityZoneStructure(s.item)) { ++zones; sx += s.x; sy += s.y; }
+        if(zones > 0) captureGame(*game, "ingame-player-city", Coord(sx / zones, sy / zones));
+    }
 
     if(params.mode == Mode::DuneCity) {
         // Two complete city days: the first scan tallies the placed lots, the second has
@@ -165,6 +234,7 @@ void runMatch(const std::string& name, bool smoke) {
         const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(60 * 1000);
         while(!game->finished && game->getGameCycleCount() < end) game->updateGameState();
         SDL_Log("SKIRMISH_SMOKE_END: cycle=%u finished=%d", game->getGameCycleCount(), game->finished ? 1 : 0);
+        renderPicture(pictureOfGame(), "played-" + name);
         skirmishRequire(!game->finished, "Generated match ended inside its first minute");
         for(const HouseSetup& h : result.houses) {
             const House* house = game->getHouse(h.house);
@@ -294,6 +364,7 @@ int runSkirmishProbe() {
     const std::string kind = std::getenv("SKIRMISH_PROBE_CASE") ? std::getenv("SKIRMISH_PROBE_CASE") : "";
     if(kind == "menu") runMenu();
     else if(kind == "legacy-map") runLegacyMap();
+    else if(kind == "render") runRender();
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());
     return MENU_QUIT_DEFAULT;

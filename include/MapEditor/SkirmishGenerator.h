@@ -53,6 +53,16 @@ enum class Role { Human, Ally, Enemy };
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
 /// Target share (percent) of rock + mountain terrain per Rock choice.
 constexpr std::array<int, 4> kRockPercent{15, 25, 35, 50};
+/// Target share (percent) of spice terrain (thick spice and blooms included) per Spice choice.
+/// Very high matches the map editor's default random map (7 fields, about 24%).
+constexpr std::array<int, 5> kSpicePercent{0, 6, 12, 18, 24};
+/// Every start's clean core of rock grows an irregular rim between these widths (tiles).
+constexpr int kRimMin = 2;
+constexpr int kRimMax = 7;
+/// Tiles kept between every Industrial lot and every Residential lot of a city.
+constexpr int kIndustrialBuffer = 5;
+/// Wind traps that top up nuclear power at most; a larger remainder takes another reactor.
+constexpr int kMaxTopUpTraps = 4;
 /// Army budgets in credits; index kArmyRandom draws uniformly from [kArmyRandomMin, kArmyRandomMax].
 constexpr std::array<int, 6> kArmyBudgets{0, 1000, 2500, 5000, 10000, 20000};
 constexpr int kArmyRandom = 6;
@@ -185,8 +195,10 @@ Result generate(const Params& params, const Catalogue& catalogue);
 
 /// Buildings of a base tier for @a house at @a techLevel, power plants not included.
 std::vector<int> baseTemplate(BaseSize size, int house, int techLevel, const Catalogue& catalogue);
-/// Add enough Windtraps to @a items for production to exceed requirement (+ @a extraDraw).
-void addPower(std::vector<int>& items, int house, int extraDraw, const Catalogue& catalogue);
+/// Add power plants to @a items until production exceeds requirement (+ @a extraDraw) by a
+/// tenth: nuclear plants plus at most kMaxTopUpTraps wind traps where @a house can build
+/// reactors at @a techLevel, wind traps alone otherwise.
+void addPower(std::vector<int>& items, int house, int techLevel, int extraDraw, const Catalogue& catalogue);
 /// Produced minus required power of @a items (+ @a extraDraw required).
 int powerBalance(const std::vector<int>& items, int house, int extraDraw, const Catalogue& catalogue);
 /// Ground combat units @a house can field at @a techLevel, cheapest first.

@@ -3,7 +3,9 @@
 #include <FileClasses/INIFile.h>
 #include <INIMap/ZoneStartLevel.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/CityEffects.h>
 #include <dunecity/ZonePower.h>
+#include <players/TacticalSafetyPolicy.h>
 #include <misc/Random.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,7 +42,7 @@ const ItemSpec kItems[] = {
     {Structure_ZoneCommercial, "Commercial Zone", "Commercial Zone", {2,2}},
     {Structure_ZoneIndustrial, "Industrial Zone", "Industrial Zone", {2,2}}, {Structure_Road, "Road", "Road", {1,1}},
     {Structure_PoliceStation, "Police Station", "Police Station", {2,2}}, {Structure_Stadium, "Stadium", "Stadium", {3,3}},
-    {Structure_Airport, "Airport", "Airport", {3,3}},
+    {Structure_Airport, "Airport", "Airport", {3,3}}, {Structure_NuclearPlant, "Nuclear Plant", "Nuclear", {3,3}},
     {Unit_Soldier, "Soldier", "Soldier", {1,1}}, {Unit_Trooper, "Trooper", "Trooper", {1,1}}, {Unit_Trike, "Trike", "Trike", {1,1}},
     {Unit_RaiderTrike, "Raider Trike", "Raider Trike", {1,1}}, {Unit_Quad, "Quad", "Quad", {1,1}}, {Unit_Tank, "Tank", "Tank", {1,1}},
     {Unit_Launcher, "Launcher", "Launcher", {1,1}}, {Unit_SiegeTank, "Siege Tank", "Siege Tank", {1,1}},
@@ -220,7 +222,7 @@ TEST_CASE("Random skirmish: base templates follow tech level, faction and power"
                 INFO("tier " << tier << " tech " << tech << " house " << house << " item " << c.itemNames[item]);
                 REQUIRE(c.available(item, house, tech));
             }
-            addPower(items, house, 0, c);
+            addPower(items, house, tech, 0, c);
             if(!items.empty() && std::any_of(items.begin(), items.end(), [&](int i) { return c.rule(i, house).power > 0; }))
                 REQUIRE(powerBalance(items, house, 0, c) > 0);
         }
@@ -254,7 +256,7 @@ TEST_CASE("Random skirmish: base templates follow tech level, faction and power"
                 else items.push_back(s.item);
             }
             INFO("house " << h.house);
-            if(h.role != Role::Human) REQUIRE(powerBalance(items, h.house, zoneDraw, cat) > 0);
+            if(!items.empty()) REQUIRE(powerBalance(items, h.house, zoneDraw, cat) > 0);    // the player's own base too
         }
     }
 }
@@ -471,4 +473,344 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     REQUIRE(fallback.techLevel == 9);
     REQUIRE(fallback.rock == Rock::VeryHigh);
     REQUIRE(fallback.seed == Params().seed);
+}
+
+namespace {
+
+bool rockLike(TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Mountain; }
+
+/// Stefan's played configuration (testskirmish.dls): 128, 2 allies + 2 enemies, tech 9, Medium
+/// bases, 5,000-credit armies, 40,000-people cities, seed 488631365.
+Params stefanParams() {
+    Params p = params(128, 2, 2, Mode::DuneCity, 9, 488631365u);
+    p.house = HOUSE_REBELS;
+    p.allySide = p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 4};
+    p.playerSide = Side{"", BaseSize::None, 0, 0};
+    return p;
+}
+
+/// Longest straight piece of rock outline along one row or column boundary.
+int longestStraightOutline(const MapData& map) {
+    const int s = map.getSizeX();
+    int longest = 0;
+    for(int pass = 0; pass < 2; ++pass) for(int a = 0; a + 1 < s; ++a) {
+        int run = 0, side = 0;
+        for(int b = 0; b < s; ++b) {
+            const bool here = pass == 0 ? rockLike(map(b, a)) : rockLike(map(a, b));
+            const bool next = pass == 0 ? rockLike(map(b, a + 1)) : rockLike(map(a + 1, b));
+            const int edge = here != next ? (here ? 1 : 2) : 0;
+            run = edge != 0 && edge == side ? run + 1 : edge != 0;
+            side = edge;
+            longest = std::max(longest, run);
+        }
+    }
+    return longest;
+}
+
+/// How far rock reaches beyond a start's clean core, along every side not at the map edge.
+struct RimProfile { int minReach = 1 << 20; int changes = 0; int samples = 0; };
+RimProfile rimProfile(const MapData& map, const Rect& core) {
+    RimProfile out;
+    const int size = map.getSizeX(), limit = kRimMax + 2;
+    struct Side { int x0, y0, stepX, stepY, length, dx, dy; bool usable; };
+    const Side sides[] = {
+        {core.x, core.y, 1, 0, core.w, 0, -1, core.y - limit >= 0},
+        {core.x, core.y + core.h - 1, 1, 0, core.w, 0, 1, core.y + core.h + limit <= size},
+        {core.x, core.y, 0, 1, core.h, -1, 0, core.x - limit >= 0},
+        {core.x + core.w - 1, core.y, 0, 1, core.h, 1, 0, core.x + core.w + limit <= size},
+    };
+    for(const Side& s : sides) {
+        if(!s.usable) continue;
+        int previous = -1;
+        for(int i = 0; i < s.length; ++i) {
+            const int x = s.x0 + s.stepX * i, y = s.y0 + s.stepY * i;
+            int reach = 0;
+            while(reach < limit && rockLike(map(x + s.dx * (reach + 1), y + s.dy * (reach + 1)))) ++reach;
+            out.minReach = std::min(out.minReach, reach);
+            out.changes += previous >= 0 && reach != previous;
+            previous = reach;
+            ++out.samples;
+        }
+    }
+    return out;
+}
+
+int lotGap(const Placement& a, const Placement& b) {
+    return std::max({0, b.x - (a.x + 2), a.x - (b.x + 2), b.y - (a.y + 2), a.y - (b.y + 2)});
+}
+
+/**
+    The city simulation's trip (TrafficSimulation): the first road on the lot's 12-tile ring
+    (top row, bottom row, left column, right column), then at most 20 orthogonal road steps to
+    a road tile beside a structure of the wanted role. -1 = no road on the ring, -2 = no trip.
+*/
+int tripLength(const Result& r, const Catalogue& c, const Placement& lot, DuneCity::CityRole want) {
+    const int size = r.map.getSizeX();
+    std::vector<char> road(size * size, 0), target(size * size, 0);
+    for(const Placement& t : r.tiles) if(t.item == Structure_Road) road[t.y * size + t.x] = 1;
+    for(const Placement& s : r.structures) {
+        if(s.house != lot.house || DuneCity::getStructureCityRole(s.item) != want) continue;
+        const Coord d = c.sizes[s.item];
+        for(int dy = 0; dy < d.y; ++dy) for(int dx = 0; dx < d.x; ++dx) target[(s.y + dy) * size + s.x + dx] = 1;
+    }
+    std::vector<Coord> ring;
+    for(int dx = -1; dx <= 2; ++dx) ring.emplace_back(lot.x + dx, lot.y - 1);
+    for(int dx = -1; dx <= 2; ++dx) ring.emplace_back(lot.x + dx, lot.y + 2);
+    for(int dy = 0; dy <= 1; ++dy) ring.emplace_back(lot.x - 1, lot.y + dy);
+    for(int dy = 0; dy <= 1; ++dy) ring.emplace_back(lot.x + 2, lot.y + dy);
+    auto inside = [&](int x, int y) { return x >= 0 && y >= 0 && x < size && y < size; };
+    const auto start = std::find_if(ring.begin(), ring.end(), [&](const Coord& p) { return inside(p.x, p.y) && road[p.y * size + p.x]; });
+    if(start == ring.end()) return -1;
+    std::vector<int> distance(size * size, -1);
+    std::vector<Coord> queue{*start};
+    distance[start->y * size + start->x] = 0;
+    for(size_t i = 0; i < queue.size(); ++i) {
+        const Coord p = queue[i];
+        const int d = distance[p.y * size + p.x];
+        for(const Coord& n : {Coord(1,0), Coord(-1,0), Coord(0,1), Coord(0,-1)})
+            if(inside(p.x + n.x, p.y + n.y) && target[(p.y + n.y) * size + p.x + n.x]) return d;
+        if(d >= 20) continue;
+        for(const Coord& n : {Coord(1,0), Coord(-1,0), Coord(0,1), Coord(0,-1)}) {
+            const int nx = p.x + n.x, ny = p.y + n.y;
+            if(!inside(nx, ny) || !road[ny * size + nx] || distance[ny * size + nx] >= 0) continue;
+            distance[ny * size + nx] = d + 1;
+            queue.emplace_back(nx, ny);
+        }
+    }
+    return -2;
+}
+
+int countOf(const Result& r, int house, int item) {
+    return static_cast<int>(std::count_if(r.structures.begin(), r.structures.end(),
+                                          [&](const Placement& s) { return s.house == house && s.item == item; }));
+}
+
+}
+
+TEST_CASE("Random skirmish: terrain looks like the map editor's random map", "[skirmish][generator][terrain]") {
+    // Organic outlines: no long straight rock edge anywhere (the old rectangular plateaus had
+    // 57-tile edges; editor random maps measure 11-12), and every start's clean core is
+    // hidden inside a rim of irregular width.
+    struct Case { Params p; const Catalogue* c; };
+    std::vector<Case> cases{{stefanParams(), &city()}, {params(128, 1, 2, Mode::Vanilla, 8, 488631365u), &vanilla()},
+                            {params(192, 1, 1, Mode::DuneCity, 8, 20261013u), &city()}, {params(64, 0, 1, Mode::Vanilla, 8, 9), &vanilla()}};
+    cases[2].p.allySide.city = cases[2].p.enemySide.city = 3;
+    for(uint32_t seed : {1u, 2u, 3u}) {
+        Params p = params(128, 1, 2, Mode::Vanilla, 8, seed);
+        p.symmetric = seed == 2;
+        cases.push_back({p, &vanilla()});
+    }
+    for(const Case& k : cases) {
+        const Result r = generate(k.p, *k.c);
+        INFO("size " << k.p.mapSize << " seed " << k.p.seed);
+        REQUIRE(longestStraightOutline(r.map) <= 16);
+        int mountains = 0, dunes = 0;
+        for(int y = 0; y < r.map.getSizeY(); ++y) for(int x = 0; x < r.map.getSizeX(); ++x) {
+            mountains += r.map(x, y) == Terrain_Mountain;
+            dunes += r.map(x, y) == Terrain_Dunes;
+        }
+        REQUIRE(mountains > 0);
+        REQUIRE(dunes > 0);
+        for(const HouseSetup& h : r.houses) {
+            const RimProfile rim = rimProfile(r.map, h.plateau);
+            INFO("house " << h.house << " rim samples " << rim.samples << " changes " << rim.changes << " min reach " << rim.minReach);
+            if(rim.samples == 0) continue;
+            REQUIRE(rim.minReach >= kRimMin);
+            REQUIRE(rim.changes * 8 >= rim.samples);
+            // The clean core stays clean: rock only, no mountain, no spice.
+            for(int y = h.plateau.y; y < h.plateau.y + h.plateau.h; ++y)
+                for(int x = h.plateau.x; x < h.plateau.x + h.plateau.w; ++x) REQUIRE(r.map(x, y) == Terrain_Rock);
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: spice share follows the Spice setting", "[skirmish][generator][terrain]") {
+    for(uint32_t seed : {1u, 2u, 3u}) {
+        int previous = -1;
+        for(int spice = 1; spice <= 4; ++spice) {
+            Params p = params(128, 1, 2, Mode::Vanilla, 8, seed);
+            p.spice = static_cast<Spice>(spice);
+            const Result r = generate(p, vanilla());
+            int tiles = 0, thick = 0;
+            for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) {
+                const TERRAINTYPE t = r.map(x, y);
+                tiles += t == Terrain_Spice || t == Terrain_ThickSpice || t == Terrain_SpiceBloom || t == Terrain_SpecialBloom;
+                thick += t == Terrain_ThickSpice;
+            }
+            const int percent = tiles * 100 / (128 * 128);
+            INFO("seed " << seed << " spice preset " << spice << " share " << percent << "% thick " << thick);
+            REQUIRE(std::abs(percent - kSpicePercent[spice]) <= 3);
+            REQUIRE(thick > 0);
+            REQUIRE(percent > previous);
+            previous = percent;
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: cities are zoned into districts the simulation can serve", "[skirmish][generator][city]") {
+    std::vector<Params> cases{stefanParams()};
+    for(int preset : {1, 2, 3}) {
+        Params p = params(192, 1, 1, Mode::DuneCity, 8, 700 + preset);
+        p.allySide.city = p.enemySide.city = p.playerSide.city = preset;
+        cases.push_back(p);
+    }
+    for(const Params& p : cases) {
+        const Result r = generate(p, city());
+        for(const HouseSetup& h : r.houses) {
+            std::vector<Placement> industrial, residential, commercial, police;
+            for(const Placement& s : r.structures) if(s.house == h.house) {
+                if(s.item == Structure_ZoneIndustrial) industrial.push_back(s);
+                if(s.item == Structure_ZoneResidential) residential.push_back(s);
+                if(s.item == Structure_ZoneCommercial) commercial.push_back(s);
+                if(s.item == Structure_PoliceStation) police.push_back(s);
+            }
+            if(industrial.empty() && residential.empty()) continue;
+            INFO("seed " << p.seed << " house " << h.house << " R/C/I " << residential.size() << "/" << commercial.size() << "/" << industrial.size());
+            REQUIRE(h.skipped == 0);
+            // Industrial never beside Residential: at least kIndustrialBuffer tiles apart.
+            for(const Placement& i : industrial) for(const Placement& res : residential) REQUIRE(lotGap(i, res) >= kIndustrialBuffer);
+            // One Industrial district: every lot reachable from the first through lots at most
+            // one road apart.
+            std::vector<char> joined(industrial.size(), 0);
+            std::vector<size_t> stack{0};
+            joined[0] = 1;
+            while(!stack.empty()) {
+                const size_t at = stack.back(); stack.pop_back();
+                for(size_t j = 0; j < industrial.size(); ++j)
+                    if(!joined[j] && lotGap(industrial[at], industrial[j]) <= 1) { joined[j] = 1; stack.push_back(j); }
+            }
+            REQUIRE(std::count(joined.begin(), joined.end(), 1) == static_cast<long>(industrial.size()));
+            // Every trip the simulation makes finds its destination by road within 20 steps.
+            auto trips = [&](const std::vector<Placement>& lots, DuneCity::CityRole want) {
+                for(const Placement& z : lots) {
+                    INFO("lot at " << z.x << "," << z.y << " item " << z.item);
+                    REQUIRE(tripLength(r, city(), z, want) >= 0);
+                }
+            };
+            trips(residential, DuneCity::CityRole::Commercial);
+            trips(commercial, DuneCity::CityRole::Industrial);
+            trips(industrial, DuneCity::CityRole::Residential);
+            // Police cover the whole city: every R/C lot within reach of a station.
+            if(!police.empty()) for(const auto* group : {&residential, &commercial}) for(const Placement& z : *group) {
+                int nearest = 1 << 20;
+                for(const Placement& s : police) nearest = std::min(nearest, std::abs(s.x - z.x) + std::abs(s.y - z.y));
+                REQUIRE(nearest <= 23);
+            }
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: nuclear plants power large needs where the house can build them", "[skirmish][generator][power]") {
+    // A 5,000-people city plus a Medium base: reactors and a handful of wind traps at most.
+    for(int tech : {6, 8, 9}) for(int house = 0; house < 8; ++house) {
+        std::vector<int> items = baseTemplate(BaseSize::Medium, house, tech, city());
+        addPower(items, house, tech, 600, city());
+        INFO("tech " << tech << " house " << house);
+        if(!city().available(Structure_NuclearPlant, house, tech)) continue;
+        REQUIRE(std::count(items.begin(), items.end(), Structure_NuclearPlant) >= 1);
+        REQUIRE(std::count(items.begin(), items.end(), Structure_WindTrap) <= kMaxTopUpTraps);
+        REQUIRE(powerBalance(items, house, 600, city()) > 0);
+    }
+    // Before tech 6, and in vanilla matches, wind traps only.
+    std::vector<int> early = baseTemplate(BaseSize::Medium, HOUSE_ATREIDES, 5, city());
+    addPower(early, HOUSE_ATREIDES, 5, 600, city());
+    REQUIRE(std::count(early.begin(), early.end(), Structure_NuclearPlant) == 0);
+    REQUIRE(powerBalance(early, HOUSE_ATREIDES, 600, city()) > 0);
+    std::vector<int> plain = baseTemplate(BaseSize::Medium, HOUSE_ATREIDES, 9, vanilla());
+    addPower(plain, HOUSE_ATREIDES, 9, 600, vanilla());
+    REQUIRE(std::count(plain.begin(), plain.end(), Structure_NuclearPlant) == 0);
+    REQUIRE(powerBalance(plain, HOUSE_ATREIDES, 600, vanilla()) > 0);
+
+    // Whole generated matches: Stefan's 40,000-people cities and 5,000-people cities with the
+    // player's own Medium base.
+    Params small = params(128, 1, 1, Mode::DuneCity, 8, 4242);
+    small.allySide.city = small.enemySide.city = small.playerSide.city = 2;
+    for(const Params& p : {stefanParams(), small}) {
+        const Result r = generate(p, city());
+        for(const HouseSetup& h : r.houses) {
+            std::vector<int> items;
+            int zoneDraw = 0;
+            for(const Placement& s : r.structures) if(s.house == h.house) {
+                if(isZoneItem(s.item)) zoneDraw += DuneCity::getZonePower(s.item, s.level);
+                else items.push_back(s.item);
+            }
+            if(items.empty()) continue;
+            INFO("seed " << p.seed << " house " << h.house << " reactors " << countOf(r, h.house, Structure_NuclearPlant)
+                 << " wind traps " << countOf(r, h.house, Structure_WindTrap));
+            REQUIRE(powerBalance(items, h.house, zoneDraw, city()) > 0);
+            // A need beyond a handful of wind traps takes a reactor (Stefan's 40,000-people
+            // cities used 19 wind traps each before).
+            int required = zoneDraw;
+            for(int item : items) required += std::max(0, city().rule(item, h.house).power);
+            if(required > kMaxTopUpTraps * -city().rule(Structure_WindTrap, h.house).power)
+                REQUIRE(countOf(r, h.house, Structure_NuclearPlant) >= 1);
+            if(p.seed == stefanParams().seed) REQUIRE(countOf(r, h.house, Structure_NuclearPlant) >= 1);
+            REQUIRE(countOf(r, h.house, Structure_WindTrap) <= kMaxTopUpTraps);
+            // Reactors keep their blast distance from the buildings the AI protects.
+            for(const Placement& reactor : r.structures) {
+                if(reactor.house != h.house || reactor.item != Structure_NuclearPlant) continue;
+                for(const Placement& s : r.structures)
+                    if(&s != &reactor && s.house == h.house && TacticalSafetyPolicy::protectedReactorNeighbour(s.item))
+                        REQUIRE(TacticalSafetyPolicy::blastClearance(reactor.x, reactor.y, 3, 3, s.x, s.y,
+                                                                     city().sizes[s.item].x, city().sizes[s.item].y));
+            }
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: bases grow around the Construction Yard", "[skirmish][generator][base]") {
+    for(const Params& p : {stefanParams(), params(128, 1, 2, Mode::Vanilla, 8, 488631365u)}) {
+        const Catalogue& c = p.mode == Mode::DuneCity ? city() : vanilla();
+        const Result r = generate(p, c);
+        requireLegal(r, c);
+        for(const HouseSetup& h : r.houses) {
+            const auto yard = std::find_if(r.structures.begin(), r.structures.end(), [&](const Placement& s) {
+                return s.house == h.house && s.item == Structure_ConstructionYard; });
+            if(yard == r.structures.end()) continue;
+            // The yard is the heart: closer to the centroid of the base than any other building.
+            int n = 0, cx = 0, cy = 0;
+            std::set<int> rows, columns;
+            for(const Placement& s : r.structures) if(s.house == h.house && !isZoneItem(s.item) && s.item != Structure_PoliceStation) {
+                cx += 2 * s.x + c.sizes[s.item].x; cy += 2 * s.y + c.sizes[s.item].y; ++n;
+                rows.insert(s.y); columns.insert(s.x);
+            }
+            cx /= n; cy /= n;
+            const int yardDistance = std::abs(2 * yard->x + 2 - cx) + std::abs(2 * yard->y + 2 - cy);
+            int closer = 0;
+            for(const Placement& s : r.structures) if(s.house == h.house && !isZoneItem(s.item) && s.item != Structure_PoliceStation)
+                closer += std::abs(2 * s.x + c.sizes[s.item].x - cx) + std::abs(2 * s.y + c.sizes[s.item].y - cy) < yardDistance;
+            INFO("house " << h.house << " buildings " << n << " closer than the yard " << closer
+                 << " distinct rows " << rows.size() << " columns " << columns.size());
+            REQUIRE(closer * 4 <= n);
+            // Not a grid: building positions spread over many distinct rows and columns.
+            REQUIRE(static_cast<int>(rows.size() + columns.size()) * 2 >= n);
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: random configurations stay legal, connected and keep their mountains", "[skirmish][generator][terrain]") {
+    // 150 seeded configurations over every size, mode, mirror, rock, spice, base, army and city
+    // choice. Crowded small maps may skip items (counted in HouseSetup::skipped); they must
+    // never place anything illegally, cut a start off, or need the mountains levelled.
+    Random random(99);
+    for(int i = 0; i < 150; ++i) {
+        Params p = params(kMapSizes[random.rand(0, 5)], random.rand(0, 3), random.rand(1, 4),
+                          random.rand(0, 1) ? Mode::DuneCity : Mode::Vanilla, random.rand(1, 9), random.rand());
+        p.symmetric = random.rand(0, 1);
+        p.rock = static_cast<Rock>(random.rand(0, 3));
+        p.spice = static_cast<Spice>(random.rand(0, 4));
+        for(Side* side : {&p.allySide, &p.enemySide, &p.playerSide}) {
+            side->base = static_cast<BaseSize>(random.rand(0, 5));
+            side->city = random.rand(0, 5);
+            side->army = random.rand(0, 6);
+        }
+        const Catalogue& c = p.mode == Mode::DuneCity ? city() : vanilla();
+        const Result r = generate(p, c);
+        INFO("configuration " << i << " size " << p.mapSize << " houses " << r.houses.size() << " mirrored " << p.symmetric);
+        requireLegal(r, c);
+        REQUIRE_FALSE(r.flattenedMountains);
+        std::vector<Coord> starts;
+        for(const auto& h : r.houses) starts.push_back(h.start);
+        REQUIRE(groundConnected(r.map, starts));
+    }
 }

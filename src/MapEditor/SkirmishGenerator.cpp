@@ -25,6 +25,7 @@
 #include <dunecity/CityEffects.h>
 #include <dunecity/ZonePower.h>
 #include <players/QuantBotCityPolicy.h>
+#include <players/TacticalSafetyPolicy.h>
 #include <misc/Random.h>
 
 #include <algorithm>
@@ -41,16 +42,25 @@ constexpr int kUnitTypes[] = {
     Unit_Soldier, Unit_Trooper, Unit_Trike, Unit_RaiderTrike, Unit_Quad, Unit_Tank,
     Unit_Launcher, Unit_SiegeTank, Unit_SonicTank, Unit_Deviator, Unit_Devastator
 };
-constexpr int kSpiceFieldsPer128[] = {0, 2, 4, 6, 9};
-constexpr int kSpiceBlobRadius[] = {0, 3, 4, 5, 7};
 constexpr int kThickSpicePercent[] = {0, 10, 25, 40, 55};
-constexpr int kMargin = 2;          ///< tiles kept between a plateau and the map edge
+constexpr int kMargin = 2;          ///< tiles kept between a start's clean core and the map edge
 constexpr int kCityBlock = 5;       ///< 4x4 block of four 2x2 lots plus one road line
 constexpr int kZonesPerPolice = 16;
-constexpr int kMountainDepth = 4;   ///< rock this far from any other terrain becomes mountain
+constexpr int kMaxCityRows = 8;     ///< city blocks across the base-to-edge axis
+constexpr int kNoiseCell = 6;       ///< lattice spacing of the rim noise
+constexpr int kCoreClearance = 2;   ///< no mountain this close to a start's clean core
+constexpr int kMassifDepth = 5;     ///< rock this deep inside a rock field becomes a mountain massif
+constexpr int kRidgeEvery = 60;     ///< one mountain ridge per this many rock tiles outside the cores
+constexpr int kOutcropsPerStart = 6;  ///< rim outcrops per 40 tiles of core width + height
+constexpr int kBlastGap = 5;        ///< footprint distance a reactor keeps from protected buildings
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
 int isqrt(int value) { int r = 0; while((r + 1) * (r + 1) <= value) ++r; return r; }
+/// Octagonal distance: integer, no square root, within 8% of Euclidean.
+int octagonal(int dx, int dy) {
+    dx = std::abs(dx); dy = std::abs(dy);
+    return std::max(dx, dy) + std::min(dx, dy) / 2;
+}
 
 uint32_t mix(uint32_t a, uint32_t b) {
     uint32_t h = a * 0x9E3779B1u ^ (b + 0x7F4A7C15u + (a << 6) + (a >> 2));
@@ -70,6 +80,8 @@ int snapTo(int value, const int* begin, const int* end) {
 bool isZone(int item) {
     return item == Structure_ZoneResidential || item == Structure_ZoneCommercial || item == Structure_ZoneIndustrial;
 }
+
+bool isTurret(int item) { return item == Structure_GunTurret || item == Structure_RocketTurret; }
 
 bool isBuildable(TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Slab; }
 
@@ -105,11 +117,16 @@ const char* baseName(BaseSize size) {
     return names[indexOf(size)];
 }
 
+/// Tiles strictly between two footprints (0 when they touch, also diagonally).
+int footprintGap(int ax, int ay, Coord ad, int bx, int by, Coord bd) {
+    return std::max({0, bx - (ax + ad.x), ax - (bx + bd.x), by - (ay + ad.y), ay - (by + bd.y)});
+}
+
 /// Everything decided about one house before terrain exists.
 struct Plan {
     HouseSetup setup;
-    std::vector<int> base;          ///< buildings packed on the base side of the plateau
-    std::vector<Placement> lots;    ///< city-grid contents (zones with level, police, windtraps)
+    std::vector<int> base;          ///< buildings, turrets and power plants of the base
+    std::vector<Placement> lots;    ///< city lots, x/y relative to the city rect with the base on its right
     std::vector<int> army;
     bool mcv = false;
     int wallsPerSide = 0;
@@ -122,7 +139,7 @@ struct Plan {
 // ---- City planning ----------------------------------------------------------------------
 
 /// R/C/I zones at the highest level that still fits @a need (internal population), in the
-/// R,C,R,I pattern that keeps jobs close to one per eight residents.
+/// R,C,R,I proportions that keep jobs close to one per eight residents.
 std::vector<Placement> composeZones(int need, int house) {
     static constexpr int pattern[] = {Structure_ZoneResidential, Structure_ZoneCommercial,
                                       Structure_ZoneResidential, Structure_ZoneIndustrial};
@@ -142,13 +159,94 @@ std::vector<Placement> composeZones(int need, int house) {
     return zones;
 }
 
-int zonePowerDraw(const std::vector<Placement>& lots, int house, const Catalogue& catalogue) {
+int cityPowerDraw(const std::vector<Placement>& lots, int house, const Catalogue& catalogue) {
     int draw = 0;
-    for(const auto& lot : lots) {
-        if(isZone(lot.item)) draw += DuneCity::getZonePower(lot.item, lot.level);
-        else if(lot.item != Structure_WindTrap) draw += std::max(0, catalogue.rule(lot.item, house).power);
-    }
+    for(const auto& lot : lots)
+        draw += isZone(lot.item) ? DuneCity::getZonePower(lot.item, lot.level) : std::max(0, catalogue.rule(lot.item, house).power);
     return draw;
+}
+
+/// City-local top-left of lot @a index in block column @a column (0 = the base side, the
+/// right edge) of a grid @a blocksX wide: top to bottom, base-side lot of each pair first.
+Coord citySlot(int blocksX, int column, int index) {
+    const int block = index / 4, q = index % 4;
+    return Coord(1 + kCityBlock * (blocksX - 1 - column) + (q % 2 == 0 ? 2 : 0), 1 + kCityBlock * block + 2 * (q / 2));
+}
+
+/**
+    Districts in whole columns of blocks (four 2x2 lots each, roads on every fifth line),
+    from the base side outwards: Industrial, Commercial, Residential. A Commercial column always
+    separates Industrial from Residential, so they stay at least kIndustrialBuffer tiles apart.
+    Industrial is packed into one block-connected district, centred along its column;
+    Commercial and Residential are spread evenly along theirs, so every lot has its trip
+    destination a column away (the simulation drives at most 20 road tiles). Police stations
+    take the empty lots that cover the most homes and shops.
+*/
+void arrangeCity(Plan& plan, const std::vector<Placement>& zones, int stations) {
+    std::vector<Placement> districts[3];       // Industrial, Commercial, Residential
+    for(const Placement& zone : zones)
+        districts[zone.item == Structure_ZoneIndustrial ? 0 : zone.item == Structure_ZoneCommercial ? 1 : 2].push_back(zone);
+    const int blocks = ceilDiv(static_cast<int>(zones.size()) + stations, 4);
+    // Each of Industrial and Commercial fits one column where possible: then every trip
+    // crosses at most a column or two, and a short Industrial district never sits far from
+    // the far end of a tall Commercial column.
+    const int tallest = std::max(ceilDiv(static_cast<int>(districts[0].size()), 4), ceilDiv(static_cast<int>(districts[1].size()), 4));
+    const int rows = std::clamp(std::max(isqrt(blocks - 1) + 1, tallest), 1, std::max(1, std::min(kMaxCityRows, tallest + 2)));
+    const int capacity = 4 * rows;
+    std::vector<int> columns[3];
+    int blocksX = 0;
+    for(int d = 0; d < 3; ++d) {
+        int count = ceilDiv(static_cast<int>(districts[d].size()), capacity);
+        if(d == 1 && count == 0 && !districts[0].empty() && !districts[2].empty()) count = 1;
+        for(int c = 0; c < count; ++c) columns[d].push_back(blocksX++);
+    }
+    // Room for the police: an empty column on the far side if the districts leave too few lots.
+    if(blocksX * capacity - static_cast<int>(zones.size()) < stations) ++blocksX;
+
+    plan.lots.clear();
+    for(int d = 0; d < 3; ++d) {
+        const int n = static_cast<int>(districts[d].size());
+        for(size_t c = 0; c < columns[d].size(); ++c) {
+            const int first = static_cast<int>(c) * capacity, inColumn = std::min(capacity, n - first);
+            for(int i = 0; i < inColumn; ++i) {
+                const int index = d == 0 ? ((capacity - inColumn) / 2 & ~1) + i : (2 * i + 1) * capacity / (2 * inColumn);
+                Placement lot = districts[d][first + i];
+                const Coord at = citySlot(blocksX, columns[d][c], index);
+                lot.x = at.x; lot.y = at.y;
+                plan.lots.push_back(lot);
+            }
+        }
+    }
+
+    std::vector<Coord> free;
+    for(int column = 0; column < blocksX && stations > 0; ++column) for(int index = 0; index < capacity; ++index) {
+        const Coord at = citySlot(blocksX, column, index);
+        if(std::none_of(plan.lots.begin(), plan.lots.end(), [&](const Placement& p) { return p.x == at.x && p.y == at.y; }))
+            free.push_back(at);
+    }
+    std::vector<char> covered(plan.lots.size(), 0);
+    std::vector<Placement> placedStations;
+    for(int s = 0; s < stations && !free.empty(); ++s) {
+        int best = 0, bestScore = -1;
+        for(size_t f = 0; f < free.size(); ++f) {
+            int cover = 0, spread = 999;
+            for(size_t l = 0; l < plan.lots.size(); ++l)
+                cover += !covered[l] && plan.lots[l].item != Structure_ZoneIndustrial
+                    && std::abs(plan.lots[l].x - free[f].x) + std::abs(plan.lots[l].y - free[f].y) <= 18;
+            for(const Placement& p : placedStations) spread = std::min(spread, std::abs(p.x - free[f].x) + std::abs(p.y - free[f].y));
+            const int score = cover * 1000 + spread;
+            if(score > bestScore) { bestScore = score; best = static_cast<int>(f); }
+        }
+        Placement police; police.house = plan.setup.house; police.item = Structure_PoliceStation;
+        police.x = free[best].x; police.y = free[best].y;
+        for(size_t l = 0; l < plan.lots.size(); ++l)
+            if(std::abs(plan.lots[l].x - police.x) + std::abs(plan.lots[l].y - police.y) <= 18) covered[l] = 1;
+        placedStations.push_back(police);
+        free.erase(free.begin() + best);
+    }
+    plan.lots.insert(plan.lots.end(), placedStations.begin(), placedStations.end());
+    plan.blocksX = blocksX;
+    plan.blocksY = rows;
 }
 
 void planCity(Plan& plan, int techLevel, const Catalogue& catalogue) {
@@ -189,18 +287,11 @@ void planCity(Plan& plan, int techLevel, const Catalogue& catalogue) {
         require(ind > 70, Structure_StarPort);
         if(!added) break;
     }
+    if(zones.empty()) return;
 
     const int stations = catalogue.available(Structure_PoliceStation, house, techLevel)
         ? ceilDiv(static_cast<int>(zones.size()), kZonesPerPolice) : 0;
-    int placedStations = 0;
-    for(size_t i = 0; i < zones.size(); ++i) {
-        if(i % kZonesPerPolice == 0 && placedStations < stations) {
-            Placement police; police.house = house; police.item = Structure_PoliceStation;
-            plan.lots.push_back(police);
-            ++placedStations;
-        }
-        plan.lots.push_back(zones[i]);
-    }
+    arrangeCity(plan, zones, stations);
 }
 
 // ---- Army ---------------------------------------------------------------------------------
@@ -245,16 +336,9 @@ struct TerrainSpec {
     Rock rock = Rock::Medium;
     Spice spice = Spice::Medium;
     MirrorMode mirror = MirrorModeNone;
-    std::vector<Rect> plateaus;
-    std::vector<Coord> centers;     ///< plateau centres in ring order
+    std::vector<Rect> cores;        ///< every start's clean rock, mirror images included
+    std::vector<Coord> centers;     ///< start centres in ring order
 };
-
-void carve(MapData& map, const std::vector<Rect>& plateaus) {
-    for(const Rect& r : plateaus)
-        for(int y = std::max(0, r.y); y < std::min(map.getSizeY(), r.y + r.h); ++y)
-            for(int x = std::max(0, r.x); x < std::min(map.getSizeX(), r.x + r.w); ++x)
-                map(x, y) = Terrain_Rock;
-}
 
 int rockPercent(const MapData& map) {
     int rock = 0;
@@ -262,6 +346,13 @@ int rockPercent(const MapData& map) {
         for(int x = 0; x < map.getSizeX(); ++x)
             if(map(x, y) == Terrain_Rock || map(x, y) == Terrain_Mountain) ++rock;
     return rock * 100 / (map.getSizeX() * map.getSizeY());
+}
+
+int spiceTiles(const MapData& map) {
+    int spice = 0;
+    for(int y = 0; y < map.getSizeY(); ++y)
+        for(int x = 0; x < map.getSizeX(); ++x) spice += isSpiceTerrain(map(x, y));
+    return spice;
 }
 
 /// Apply @a type at (x,y) and at every mirror image, so post-processing keeps symmetry.
@@ -283,67 +374,87 @@ int canonicalIndex(const MapMirror& mirror, int size, int x, int y) {
     return best;
 }
 
-MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
-    const int size = spec.size;
-    const int area = size * size;
-    const int spiceIndex = indexOf(spec.spice);
-    const int spiceFields = spiceIndex == 0 ? 0 : std::max(1, area * kSpiceFieldsPer128[spiceIndex] / 16384);
-    auto make = [&](int rockFields) {
-        MapData map = generateRandomMap(size, size, static_cast<int>(mapSeed), rockFields, spiceFields, spec.mirror);
-        carve(map, spec.plateaus);
-        return map;
+/// Seeded value noise, bilinear between lattice points kNoiseCell apart; the result lies in
+/// [lo, hi] scaled by kNoiseCell^2. Integer only.
+int valueNoise(uint32_t seed, int x, int y, int lo, int hi) {
+    const int c = kNoiseCell, gx = x / c, gy = y / c, fx = x % c, fy = y % c;
+    auto lattice = [&](int i, int j) {
+        return lo + static_cast<int>(mix(seed, static_cast<uint32_t>(i) * 40503u + static_cast<uint32_t>(j) * 9973u + 1u)
+                                     % static_cast<uint32_t>(hi - lo + 1));
     };
+    return lattice(gx, gy) * (c - fx) * (c - fy) + lattice(gx + 1, gy) * fx * (c - fy)
+         + lattice(gx, gy + 1) * (c - fx) * fy + lattice(gx + 1, gy + 1) * fx * fy;
+}
 
-    // Smallest rock-field count that reaches the requested rock share.
-    const int target = kRockPercent[indexOf(spec.rock)];
-    int lo = 0, hi = 64;
-    if(rockPercent(make(hi)) < target) lo = hi;
-    while(lo < hi) {
-        const int mid = (lo + hi) / 2;
-        if(rockPercent(make(mid)) >= target) hi = mid; else lo = mid + 1;
-    }
-    MapData map = make(lo);
-    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
-    auto onSand = [](TERRAINTYPE t) { return t == Terrain_Sand || t == Terrain_Dunes || t == Terrain_Spice; };
+/// Squared distance from (x,y) to the nearest tile of @a r (0 inside).
+int distanceToRect2(const Rect& r, int x, int y) {
+    const int dx = std::max({r.x - x, 0, x - (r.x + r.w - 1)});
+    const int dy = std::max({r.y - y, 0, y - (r.y + r.h - 1)});
+    return dx * dx + dy * dy;
+}
 
-    if(spec.spice == Spice::None) {
-        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
-            if(isSpiceTerrain(map(x, y))) map(x, y) = Terrain_Sand;
-    } else {
-        // A field between every pair of neighbouring starts, so expansion is contested.
-        const int radius = std::max(2, kSpiceBlobRadius[spiceIndex] * size / 128);
-        const size_t n = spec.centers.size();
-        for(size_t i = 0; i < n && n > 1; ++i) {
-            if(n == 2 && i == 1) break;
-            const Coord a = spec.centers[i], b = spec.centers[(i + 1) % n];
-            const Coord mid((a.x + b.x) / 2, (a.y + b.y) / 2);
-            for(int dy = -radius; dy <= radius; ++dy) for(int dx = -radius; dx <= radius; ++dx) {
-                const int d = std::abs(dx) + std::abs(dy);
-                if(d > radius) continue;
-                paintMirrored(map, *mirror, mid.x + dx, mid.y + dy,
-                              d <= radius / 2 ? Terrain_ThickSpice : Terrain_Spice, onSand);
-            }
+/// The map editor's spot walk: @a steps random unit steps from @a at, clamped to the map.
+template<class Visit>
+void walk(Random& random, int size, Coord at, int steps, Visit visit) {
+    int x = std::clamp(at.x, 0, size - 1), y = std::clamp(at.y, 0, size - 1);
+    for(int i = 0; i < steps; ++i) {
+        switch(random.rand(0, 3)) {
+            case 0: --x; break;
+            case 1: ++x; break;
+            case 2: --y; break;
+            default: ++y; break;
         }
-        // Thick spice share: interior spice tiles, chosen by a mirror-invariant hash.
-        const int percent = kThickSpicePercent[spiceIndex];
-        MapData before = map;
-        for(int y = 1; y < size - 1; ++y) for(int x = 1; x < size - 1; ++x) {
-            if(before(x, y) != Terrain_Spice) continue;
-            bool interior = true;
-            for(const Coord& d : {Coord(1,0), Coord(-1,0), Coord(0,1), Coord(0,-1)}) {
-                const TERRAINTYPE t = before(x + d.x, y + d.y);
-                interior = interior && (t == Terrain_Spice || t == Terrain_ThickSpice);
-            }
-            if(interior && static_cast<int>(mix(mapSeed, canonicalIndex(*mirror, size, x, y)) % 100) < percent)
-                map(x, y) = Terrain_ThickSpice;
-        }
+        x = std::clamp(x, 0, size - 1);
+        y = std::clamp(y, 0, size - 1);
+        visit(x, y);
     }
+}
 
-    // Mountain cores deep inside large rock fields, never on or next to a plateau.
-    std::vector<int> depth(area, INT_MAX);
+int side4(const MapData& map, int x, int y, bool (*match)(TERRAINTYPE)) {
+    int n = 0;
+    for(const Coord& d : {Coord(1,0), Coord(-1,0), Coord(0,1), Coord(0,-1)}) {
+        const int nx = std::clamp(x + d.x, 0, map.getSizeX() - 1), ny = std::clamp(y + d.y, 0, map.getSizeY() - 1);
+        n += match(map(nx, ny));
+    }
+    return n;
+}
+
+bool isRockTile(TERRAINTYPE t) { return t == Terrain_Rock; }
+bool isSandTile(TERRAINTYPE t) { return t == Terrain_Sand || t == Terrain_Dunes; }
+bool isThinSpice(TERRAINTYPE t) { return t == Terrain_Spice; }
+bool isFieldSpice(TERRAINTYPE t) { return t == Terrain_Spice || t == Terrain_ThickSpice; }
+bool isThickSpice(TERRAINTYPE t) { return t == Terrain_ThickSpice; }
+
+/**
+    The map editor's fill-in pass (thickSpots / thickThickSpiceSpots): a tile with three
+    matching neighbours joins, one with two joins on a coin flip. Decided on a snapshot with a
+    coin keyed to the mirror-canonical tile, so mirrored maps stay mirrored.
+*/
+template<class Eligible>
+void fillIn(MapData& map, const MapMirror& mirror, uint32_t seed, TERRAINTYPE type, bool (*match)(TERRAINTYPE), Eligible eligible) {
+    const int size = map.getSizeX();
+    const MapData before = map;
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+        if(before(x, y) == type || !eligible(x, y, before(x, y))) continue;
+        const int n = side4(before, x, y, match);
+        if(n >= 3 || (n == 2 && (mix(seed, static_cast<uint32_t>(canonicalIndex(mirror, size, x, y))) & 1u)))
+            map(x, y) = type;
+    }
+}
+
+/// Distance (8-neighbour steps) from every rock tile to the nearest tile that is not rock; the
+/// map border counts as an edge of the rock, so massifs never run along it.
+std::vector<int> rockDepth(const MapData& map) {
+    const int size = map.getSizeX();
+    std::vector<int> depth(size * size, INT_MAX);
     std::deque<int> queue;
     for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
         if(map(x, y) != Terrain_Rock) { depth[y * size + x] = 0; queue.push_back(y * size + x); }
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
+        if(map(x, y) == Terrain_Rock && (x == 0 || y == 0 || x == size - 1 || y == size - 1)) {
+            depth[y * size + x] = 1;
+            queue.push_back(y * size + x);
+        }
     while(!queue.empty()) {
         const int at = queue.front(); queue.pop_front();
         const int x = at % size, y = at / size;
@@ -354,13 +465,223 @@ MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
             queue.push_back(ny * size + nx);
         }
     }
-    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
-        if(depth[y * size + x] < kMountainDepth || depth[y * size + x] == INT_MAX) continue;
-        bool nearPlateau = false;
-        for(const Rect& r : spec.plateaus)
-            nearPlateau = nearPlateau || Rect{r.x - 5, r.y - 5, r.w + 10, r.h + 10}.contains(x, y);
-        if(!nearPlateau) map(x, y) = Terrain_Mountain;
+    return depth;
+}
+
+/**
+    Rock and mountains, no spice yet. The map editor's random map with @a rockFields rock
+    fields (organic fields, dunes, rock bits) as the base; then scattered rock islands; then
+    every start's clean core with an irregular rim grown around it (noise between kRimMin and
+    kRimMax tiles, smoothed with the editor's fill-in rule); then mountains: massifs deep inside
+    large rock fields, wandering ridges through rock, and a few outcrops on every start's rim.
+    No mountain comes within kCoreClearance tiles of a core.
+*/
+MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
+    const int size = spec.size, area = size * size;
+    MapData map = generateRandomMap(size, size, static_cast<int>(mapSeed), rockFields, 0, spec.mirror);
+    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
+    Random random(mix(mapSeed, 0x2F6B1u));
+    auto onSand = [](TERRAINTYPE t) { return isSandTile(t); };
+    auto onRock = [](TERRAINTYPE t) { return t == Terrain_Rock; };
+
+    // Rock islands scattered over the sand.
+    const int islands = std::max(2, area / 2048);
+    for(int i = 0; i < islands; ++i) {
+        const Coord at(random.rand(0, size - 1), random.rand(0, size - 1));
+        const int steps = static_cast<int>(random.rand(15, 70)) * size / 128 + 8;
+        walk(random, size, at, steps, [&](int x, int y) { paintMirrored(map, *mirror, x, y, Terrain_Rock, onSand); });
     }
+
+    // Start plateaus: the clean core, then a rim of irregular width around it.
+    std::vector<char> nearCore(area, 0), rimZone(area, 0);
+    const uint32_t rimSeed = mix(mapSeed, 0x7A11u);
+    const int c2 = kNoiseCell * kNoiseCell;
+    for(const Rect& r : spec.cores) {
+        for(int y = std::max(0, r.y - kRimMax - 1); y < std::min(size, r.y + r.h + kRimMax + 1); ++y)
+            for(int x = std::max(0, r.x - kRimMax - 1); x < std::min(size, r.x + r.w + kRimMax + 1); ++x) {
+                const int d2 = distanceToRect2(r, x, y);
+                const int canonical = canonicalIndex(*mirror, size, x, y);
+                // Smooth noise for the shape, a tile of per-tile jitter for a ragged edge.
+                const int jitter = static_cast<int>(mix(rimSeed ^ 0x51u, static_cast<uint32_t>(canonical)) % 3) - 1;
+                const int rim = std::max(kRimMin * c2, valueNoise(rimSeed, canonical % size, canonical / size, kRimMin, kRimMax)
+                                                        + jitter * c2);
+                rimZone[y * size + x] = 1;
+                if(d2 <= kCoreClearance * kCoreClearance * 2) nearCore[y * size + x] = 1;
+                if(d2 * c2 * c2 <= rim * rim) map(x, y) = Terrain_Rock;
+            }
+    }
+    for(int pass = 0; pass < 2; ++pass)
+        fillIn(map, *mirror, mix(rimSeed, pass), Terrain_Rock, isRockTile,
+               [&](int x, int y, TERRAINTYPE t) { return rimZone[y * size + x] && isSandTile(t); });
+    // Lobes: editor-style rock walks out from beyond every rim, so no start is a rounded box.
+    for(const Rect& r : spec.cores) {
+        for(int lobe = 0; lobe < 3; ++lobe) {
+            const int along = static_cast<int>(random.rand(0, 2 * (r.w + r.h) - 1));
+            const int reach = kRimMax - 1;
+            Coord at = along < r.w ? Coord(r.x + along, r.y - reach)
+                     : along < 2 * r.w ? Coord(r.x + along - r.w, r.y + r.h - 1 + reach)
+                     : along < 2 * r.w + r.h ? Coord(r.x - reach, r.y + along - 2 * r.w)
+                     : Coord(r.x + r.w - 1 + reach, r.y + along - 2 * r.w - r.h);
+            walk(random, size, at, (r.w + r.h) * 2, [&](int x, int y) { paintMirrored(map, *mirror, x, y, Terrain_Rock, onSand); });
+        }
+    }
+
+    // Mountains: massifs deep inside rock fields away from every start, wandering ridges, and
+    // outcrops on the start rims. The cores stay clean.
+    const std::vector<int> depth = rockDepth(map);
+    auto mountainOk = [&](int x, int y) {
+        return map.isInsideMap(x, y) && map(x, y) == Terrain_Rock && !nearCore[y * size + x];
+    };
+    int outer = 0;      // rock outside every clean core
+    const uint32_t massifSeed = mix(mapSeed, 0x3A55u);
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) {
+        const int d = depth[y * size + x];
+        if(!mountainOk(x, y)) continue;
+        // Massifs keep a ragged berth of 10-16 tiles from every start's core.
+        const int canonical = canonicalIndex(*mirror, size, x, y);
+        const int berth = valueNoise(massifSeed, canonical % size, canonical / size, kRimMax + 3, kRimMax + 9);
+        bool open = !rimZone[y * size + x];
+        for(const Rect& r : spec.cores) open = open && distanceToRect2(r, x, y) * c2 * c2 > berth * berth;
+        if(d >= kMassifDepth && open) map(x, y) = Terrain_Mountain;
+        else ++outer;
+    }
+    // Ridges wander through rock fields at least two tiles in from the sand, outside the start
+    // rims (whose edges get outcrops instead), so they never trace an outline.
+    auto ridgeOk = [&](int x, int y) { return mountainOk(x, y) && depth[y * size + x] >= 2 && !rimZone[y * size + x]; };
+    auto ridge = [&](Coord at, int length) {
+        int dir = static_cast<int>(random.rand(0, 3));
+        static const Coord steps[] = {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)};
+        for(int i = 0; i < length; ++i) {
+            paintMirrored(map, *mirror, at.x, at.y, Terrain_Mountain, onRock);
+            if(random.rand(0, 1) == 0) {
+                const Coord side = steps[(dir + 1) % 4];
+                if(ridgeOk(at.x + side.x, at.y + side.y))
+                    paintMirrored(map, *mirror, at.x + side.x, at.y + side.y, Terrain_Mountain, onRock);
+            }
+            if(random.rand(0, 1) == 0) dir = (dir + (random.rand(0, 1) ? 1 : 3)) % 4;
+            // Wander on through rock; a ridge ends only where every way on is blocked.
+            bool moved = false;
+            for(int turn : {0, 1, 3, 2}) {
+                const int d = (dir + turn) % 4;
+                const Coord next(at.x + steps[d].x, at.y + steps[d].y);
+                if(!ridgeOk(next.x, next.y)) continue;
+                dir = d; at = next; moved = true;
+                break;
+            }
+            if(!moved) return;
+        }
+    };
+    const int ridges = outer / kRidgeEvery;
+    for(int i = 0, tries = 0; i < ridges && tries < ridges * 20; ++tries) {
+        const int x = static_cast<int>(random.rand(0, size - 1)), y = static_cast<int>(random.rand(0, size - 1));
+        if(!ridgeOk(x, y)) continue;
+        ridge(Coord(x, y), static_cast<int>(random.rand(8, 12 + size / 8)));
+        ++i;
+    }
+    // Outcrops on the rims, where a plateau meets the sand: clumps like the editor's spots, more
+    // of them along a longer outline.
+    // Every outcrop is painted at each mirror image, so a mirrored map draws fewer per core.
+    // They stay within three tiles of the sand: inside a crowded rock plain they would wall
+    // starts off from each other.
+    auto outcropOk = [&](const Rect& r, int x, int y) {
+        return mountainOk(x, y) && distanceToRect2(r, x, y) >= 9 && depth[y * size + x] <= 3;
+    };
+    for(const Rect& r : spec.cores) {
+        const int outcrops = std::max(1, kOutcropsPerStart * (r.w + r.h) / 40 / mirror->getSize());
+        for(int i = 0, tries = 0; i < outcrops && tries < 400; ++tries) {
+            const int x = r.x - kRimMax + static_cast<int>(random.rand(0, r.w + 2 * kRimMax));
+            const int y = r.y - kRimMax + static_cast<int>(random.rand(0, r.h + 2 * kRimMax));
+            if(!outcropOk(r, x, y)) continue;
+            walk(random, size, Coord(x, y), static_cast<int>(random.rand(15, 40)), [&](int wx, int wy) {
+                if(outcropOk(r, wx, wy)) paintMirrored(map, *mirror, wx, wy, Terrain_Mountain, onRock);
+            });
+            ++i;
+        }
+    }
+    return map;
+}
+
+/**
+    Spice fields grown like the map editor's (random walks that thicken where they cross
+    themselves, then the editor's fill-in for spice and thick spice) until the spice share
+    reaches the Spice setting. The first fields go beside every start, then between
+    neighbouring starts, then anywhere on the sand.
+*/
+void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
+    const int size = spec.size, area = size * size;
+    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
+    const int spiceIndex = indexOf(spec.spice);
+    if(spec.spice == Spice::None) {
+        for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x)
+            if(isSpiceTerrain(map(x, y))) map(x, y) = Terrain_Sand;
+        return;
+    }
+    Random random(mix(mapSeed, 0x5B1CEu));
+    const int target = kSpicePercent[spiceIndex] * area / 100;
+    // Walks stop a little short of the target: the fill-in passes grow every field a bit.
+    const int walkTarget = target * 85 / 100;
+    const int spotSize = 640 * area / 4096;     // the editor's walk length
+
+    std::vector<Coord> seeds;
+    const Coord middle(size / 2, size / 2);
+    for(size_t i = 0; i < spec.centers.size(); ++i) {
+        const Coord s = spec.centers[i];
+        const int dx = middle.x - s.x, dy = middle.y - s.y, length = std::max(1, octagonal(dx, dy));
+        int reach = 0;
+        for(const Rect& r : spec.cores)
+            if(r.contains(s.x, s.y)) reach = std::max(reach, (r.w + r.h) / 4 + kRimMax + 6);
+        reach = std::min(reach, length);
+        seeds.emplace_back(s.x + dx * reach / length, s.y + dy * reach / length);
+    }
+    const size_t n = spec.centers.size();
+    for(size_t i = 0; i < n && n > 1; ++i) {
+        if(n == 2 && i == 1) break;
+        const Coord a = spec.centers[i], b = spec.centers[(i + 1) % n];
+        seeds.emplace_back((a.x + b.x) / 2, (a.y + b.y) / 2);
+    }
+
+    auto onSand = [](TERRAINTYPE t) { return isSandTile(t); };
+    auto onThin = [](TERRAINTYPE t) { return t == Terrain_Spice; };
+    int spice = spiceTiles(map);
+    for(size_t field = 0; spice < walkTarget && field < 96; ++field) {
+        const Coord at = field < seeds.size() ? seeds[field]
+                                              : Coord(random.rand(0, size - 1), random.rand(0, size - 1));
+        const int steps = spotSize * static_cast<int>(random.rand(2, 5)) / 8;
+        walk(random, size, at, steps, [&](int x, int y) {
+            if(isSandTile(map(x, y))) paintMirrored(map, *mirror, x, y, Terrain_Spice, onSand);
+            else if(map(x, y) == Terrain_Spice && side4(map, x, y, isFieldSpice) >= 4)
+                paintMirrored(map, *mirror, x, y, Terrain_ThickSpice, onThin);
+        });
+        spice = spiceTiles(map);
+    }
+    for(int pass = 0; pass < 2; ++pass)
+        fillIn(map, *mirror, mix(mapSeed, 0x51CE0u + pass), Terrain_Spice, isThinSpice,
+               [](int, int, TERRAINTYPE t) { return isSandTile(t); });
+    for(int pass = 0; pass < 2; ++pass)
+        fillIn(map, *mirror, mix(mapSeed, 0x7C1CEu + pass), Terrain_ThickSpice, isThickSpice,
+               [&](int x, int y, TERRAINTYPE t) { return t == Terrain_Spice && side4(map, x, y, isFieldSpice) >= 4; });
+
+    // Thick spice share: interior spice tiles, chosen by a mirror-invariant hash.
+    const int percent = kThickSpicePercent[spiceIndex];
+    const MapData before = map;
+    for(int y = 1; y < size - 1; ++y) for(int x = 1; x < size - 1; ++x) {
+        if(before(x, y) != Terrain_Spice || side4(before, x, y, isFieldSpice) < 4) continue;
+        if(static_cast<int>(mix(mapSeed, canonicalIndex(*mirror, size, x, y)) % 100) < percent)
+            map(x, y) = Terrain_ThickSpice;
+    }
+}
+
+/// Smallest editor rock-field count whose terrain reaches the Rock setting, then spice.
+MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
+    const int target = kRockPercent[indexOf(spec.rock)];
+    int lo = 0, hi = 64;
+    if(rockPercent(shapeRock(spec, mapSeed, hi)) < target) lo = hi;
+    while(lo < hi) {
+        const int mid = (lo + hi) / 2;
+        if(rockPercent(shapeRock(spec, mapSeed, mid)) >= target) hi = mid; else lo = mid + 1;
+    }
+    MapData map = shapeRock(spec, mapSeed, lo);
+    addSpice(map, spec, mapSeed);
     return map;
 }
 
@@ -373,7 +694,7 @@ struct Layout {
     const MapData& map;
     int size;
     std::vector<char> occupied;
-    std::vector<int> owner;     ///< plateau owner (index into plans) or -1
+    std::vector<int> owner;     ///< start owner (index into plans) or -1
     Result& result;
 
     Layout(const Catalogue& c, const MapData& m, Result& r)
@@ -381,20 +702,23 @@ struct Layout {
 
     bool inside(int x, int y) const { return x >= 0 && y >= 0 && x < size && y < size; }
     char& at(int x, int y) { return occupied[y * size + x]; }
+    bool ownable(int x, int y, int planIndex) const { return owner[y * size + x] < 0 || owner[y * size + x] == planIndex; }
 
     void tile(int house, int item, int x, int y) {
         Placement p; p.house = house; p.item = item; p.x = x; p.y = y;
         result.tiles.push_back(p);
     }
 
-    bool fits(const Rect& region, int x, int y, Coord dim) {
+    /// Footprint on free buildable rock of this start, with a one-tile lane around it.
+    bool fits(const Rect& region, int planIndex, int x, int y, Coord dim) {
         for(int dy = -1; dy <= dim.y; ++dy) for(int dx = -1; dx <= dim.x; ++dx) {
             const int tx = x + dx, ty = y + dy;
             const bool footprint = dx >= 0 && dy >= 0 && dx < dim.x && dy < dim.y;
             if(footprint) {
-                if(!region.contains(tx, ty) || !inside(tx, ty) || !isBuildable(map(tx, ty)) || at(tx, ty) != Free) return false;
+                if(!region.contains(tx, ty) || !inside(tx, ty) || !isBuildable(map(tx, ty)) || at(tx, ty) != Free
+                   || !ownable(tx, ty, planIndex)) return false;
             } else if(inside(tx, ty) && (at(tx, ty) == Building || at(tx, ty) == WallTile)) {
-                return false;   // keep a one-tile lane around every building
+                return false;
             }
         }
         return true;
@@ -410,108 +734,171 @@ struct Layout {
         result.structures.push_back(p);
     }
 
-    /// Nearest legal spot to @a anchor (top-left of a centred footprint), spiral order.
-    bool place(int house, int item, const Rect& region, Coord anchor, bool concrete) {
-        const Coord dim = catalogue.sizes[item];
-        const int ax = anchor.x - dim.x / 2, ay = anchor.y - dim.y / 2;
-        const int reach = std::max(region.w, region.h);
-        for(int r = 0; r <= reach; ++r) {
-            // Ring r around the anchor: top and bottom rows, then the left and right columns.
-            for(int k = 0; k < 8 * r || (r == 0 && k == 0); ++k) {
-                int dx, dy;
-                if(r == 0) { dx = 0; dy = 0; }
-                else if(k < 2 * r + 1) { dx = k - r; dy = -r; }
-                else if(k < 4 * r + 2) { dx = k - (2 * r + 1) - r; dy = r; }
-                else if(k < 6 * r + 1) { dx = -r; dy = k - (4 * r + 2) - r + 1; }
-                else { dx = r; dy = k - (6 * r + 1) - r + 1; }
-                if(fits(region, ax + dx, ay + dy, dim)) { build(house, item, ax + dx, ay + dy, concrete); return true; }
-            }
-        }
-        return false;
-    }
-
-    void layoutCity(Plan& plan, const Rect& city) {
+    /// The city's road grid and its lots; @a flip mirrors the plan when the base is on the left.
+    /// On a crowded map the city only takes tiles nobody else has built on or owns.
+    void layoutCity(Plan& plan, int planIndex, const Rect& city, bool flip) {
         const int house = plan.setup.house;
+        std::vector<char> mine(size * size, 0);
         for(int y = city.y; y < city.y + city.h; ++y) for(int x = city.x; x < city.x + city.w; ++x) {
-            if(!inside(x, y)) continue;
+            if(!inside(x, y) || at(x, y) != Free || !ownable(x, y, planIndex)) continue;
             const bool road = (x - city.x) % kCityBlock == 0 || (y - city.y) % kCityBlock == 0;
             at(x, y) = City;
+            mine[y * size + x] = 1;
             if(road && isBuildable(map(x, y))) tile(house, Structure_Road, x, y);
         }
-        size_t next = 0;
-        for(int by = 0; by < plan.blocksY; ++by) for(int bx = 0; bx < plan.blocksX; ++bx) for(int q = 0; q < 4; ++q) {
-            if(next >= plan.lots.size()) return;
-            const int x = city.x + 1 + kCityBlock * bx + 2 * (q % 2);
-            const int y = city.y + 1 + kCityBlock * by + 2 * (q / 2);
+        for(const Placement& lot : plan.lots) {
+            const int x = city.x + (flip ? city.w - lot.x - 2 : lot.x), y = city.y + lot.y;
             bool ok = true;
             for(int dy = 0; dy < 2; ++dy) for(int dx = 0; dx < 2; ++dx)
-                ok = ok && inside(x + dx, y + dy) && isBuildable(map(x + dx, y + dy));
-            if(!ok) continue;
-            const Placement& lot = plan.lots[next++];
+                ok = ok && inside(x + dx, y + dy) && city.contains(x + dx, y + dy) && mine[(y + dy) * size + x + dx]
+                     && isBuildable(map(x + dx, y + dy));
+            if(!ok) { ++plan.setup.skipped; continue; }
             Placement p = lot; p.x = x; p.y = y;
             result.structures.push_back(p);
             for(int dy = 0; dy < 2; ++dy) for(int dx = 0; dx < 2; ++dx) at(x + dx, y + dy) = Building;
         }
-        plan.setup.skipped += static_cast<int>(plan.lots.size() - next);
     }
 
-    /// Turrets evenly spaced on a ring two tiles outside the packed base, walls beside them.
-    void layoutTurrets(Plan& plan, const Rect& region, const std::vector<int>& turrets, Rect bounds) {
+    /**
+        A base grown around its Construction Yard: every building takes the free spot with the
+        best score (close to the yard, refineries toward the nearest spice, silos beside
+        refineries, factories toward the enemy, power plants behind, reactors blast-spaced from
+        protected buildings) plus seeded jitter, so spacing and outline vary. Turrets then take
+        spots just outside the buildings, spread along the side facing the enemy, with wall runs
+        across the approach.
+    */
+    void layoutBase(Plan& plan, int planIndex, const Rect& region, Coord heart, Coord approach, Coord spice, uint32_t seed) {
         const int house = plan.setup.house;
-        if(turrets.empty()) return;
-        const Rect ring{bounds.x - 2, bounds.y - 2, bounds.w + 4, bounds.h + 4};
-        std::vector<Coord> path;
-        for(int x = ring.x; x < ring.x + ring.w; ++x) path.emplace_back(x, ring.y);
-        for(int y = ring.y + 1; y < ring.y + ring.h; ++y) path.emplace_back(ring.x + ring.w - 1, y);
-        for(int x = ring.x + ring.w - 2; x >= ring.x; --x) path.emplace_back(x, ring.y + ring.h - 1);
-        for(int y = ring.y + ring.h - 2; y > ring.y; --y) path.emplace_back(ring.x, y);
-        const int n = static_cast<int>(path.size());
-        auto freeRock = [&](const Coord& c) {
-            return region.contains(c.x, c.y) && inside(c.x, c.y) && isBuildable(map(c.x, c.y)) && at(c.x, c.y) == Free;
+        std::vector<int> buildings, turrets;
+        for(int item : plan.base) (isTurret(item) ? turrets : buildings).push_back(item);
+        auto rank = [](int item) {
+            switch(item) {
+                case Structure_ConstructionYard: return 0;
+                case Structure_Refinery:         return 2;
+                case Structure_Silo:             return 3;
+                case Structure_WindTrap:         return 4;
+                case Structure_NuclearPlant:     return 5;
+                default:                         return 1;
+            }
         };
-        for(size_t t = 0; t < turrets.size(); ++t) {
-            const int start = static_cast<int>(t) * n / static_cast<int>(turrets.size());
-            int chosen = -1;
-            for(int k = 0; k < n / static_cast<int>(turrets.size()) && chosen < 0; ++k)
-                if(freeRock(path[(start + k) % n])) chosen = (start + k) % n;
-            if(chosen < 0) { ++plan.setup.skipped; continue; }
-            build(house, turrets[t], path[chosen].x, path[chosen].y, true);
+        std::stable_sort(buildings.begin(), buildings.end(), [&](int a, int b) {
+            if(rank(a) != rank(b)) return rank(a) < rank(b);
+            const Coord da = catalogue.sizes[a], db = catalogue.sizes[b];
+            return da.x * da.y > db.x * db.y;
+        });
+        const int alen = std::max(1, octagonal(approach.x, approach.y));
+        int hx = 2 * heart.x, hy = 2 * heart.y;     // doubled coordinates: footprint centres are exact
+        std::vector<Placement> placed;
+        auto score = [&](int item, int x, int y, Coord dim) {
+            const int cx = 2 * x + dim.x, cy = 2 * y + dim.y;
+            const int dist = octagonal(cx - hx, cy - hy);
+            const int along = ((cx - hx) * approach.x + (cy - hy) * approach.y) / alen;
+            int nearest = INT_MAX;
+            for(const Placement& p : placed) if(p.item == Structure_Refinery) {
+                const Coord d = catalogue.sizes[p.item];
+                nearest = std::min(nearest, octagonal(cx - 2 * p.x - d.x, cy - 2 * p.y - d.y));
+            }
+            int s = 0;
+            switch(item) {
+                case Structure_ConstructionYard: s = dist; break;
+                case Structure_Refinery:
+                    s = 3 * dist + (spice.x >= 0 ? octagonal(cx - 2 * spice.x, cy - 2 * spice.y) : -along); break;
+                case Structure_Silo:         s = 3 * dist + (nearest == INT_MAX ? 0 : 2 * nearest); break;
+                case Structure_WindTrap:     s = 3 * dist + along; break;
+                case Structure_NuclearPlant: s = 3 * dist + 2 * along; break;
+                case Structure_LightFactory: case Structure_HeavyFactory: case Structure_HighTechFactory:
+                case Structure_Barracks: case Structure_WOR: case Structure_RepairYard:
+                    s = 3 * dist - along; break;
+                default: s = 3 * dist; break;
+            }
+            // Seeded jitter of up to two tiles keeps the packing irregular.
+            return s + 3 * static_cast<int>(mix(seed, static_cast<uint32_t>((y * size + x) * 64 + item)) % 5);
+        };
+        auto blastSpaced = [&](int item, int x, int y, Coord dim) {
+            const auto critical = TacticalSafetyPolicy::protectedReactorNeighbour;
+            if(!critical(item)) return true;
+            for(const Placement& p : placed) {
+                if(!((item == Structure_NuclearPlant && critical(p.item)) || (p.item == Structure_NuclearPlant && critical(item)))) continue;
+                const Coord d = catalogue.sizes[p.item];
+                if(footprintGap(x, y, dim, p.x, p.y, d) + 1 < kBlastGap) return false;
+            }
+            return true;
+        };
+        for(int item : buildings) {
+            const Coord dim = catalogue.sizes[item];
+            int bestScore = INT_MAX, bestX = 0, bestY = 0;
+            for(bool spaced : {true, false}) {
+                for(int y = region.y; y + dim.y <= region.y + region.h; ++y)
+                    for(int x = region.x; x + dim.x <= region.x + region.w; ++x) {
+                        if(!fits(region, planIndex, x, y, dim) || (spaced && !blastSpaced(item, x, y, dim))) continue;
+                        const int s = score(item, x, y, dim);
+                        if(s < bestScore) { bestScore = s; bestX = x; bestY = y; }
+                    }
+                if(bestScore != INT_MAX) break;
+            }
+            if(bestScore == INT_MAX) { ++plan.setup.skipped; continue; }
+            build(house, item, bestX, bestY, true);
+            placed.push_back(result.structures.back());
+            if(item == Structure_ConstructionYard) { hx = 2 * bestX + dim.x; hy = 2 * bestY + dim.y; }
+        }
+        layoutTurrets(plan, planIndex, region, turrets, Coord(hx / 2, hy / 2), approach, seed);
+    }
+
+    void layoutTurrets(Plan& plan, int planIndex, const Rect& region, const std::vector<int>& turrets,
+                       Coord heart, Coord approach, uint32_t seed) {
+        if(turrets.empty()) return;
+        const int house = plan.setup.house;
+        // Chebyshev distance from every tile to the nearest building, up to five.
+        std::vector<int> reach(size * size, INT_MAX);
+        std::deque<int> queue;
+        for(int i = 0; i < size * size; ++i) if(occupied[i] == Building) { reach[i] = 0; queue.push_back(i); }
+        while(!queue.empty()) {
+            const int at = queue.front(); queue.pop_front();
+            if(reach[at] >= 5) continue;
+            for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx) {
+                const int nx = at % size + dx, ny = at / size + dy;
+                if(!inside(nx, ny) || reach[ny * size + nx] <= reach[at] + 1) continue;
+                reach[ny * size + nx] = reach[at] + 1;
+                queue.push_back(ny * size + nx);
+            }
+        }
+        const int alen = std::max(1, octagonal(approach.x, approach.y));
+        const Coord across = std::abs(approach.x) >= std::abs(approach.y) ? Coord(0, 1) : Coord(1, 0);
+        std::vector<Coord> placedTurrets;
+        auto freeRock = [&](int x, int y) {
+            return region.contains(x, y) && inside(x, y) && isBuildable(map(x, y)) && at(x, y) == Free && ownable(x, y, planIndex);
+        };
+        for(int item : turrets) {
+            int bestScore = INT_MAX;
+            Coord best(-1, -1);
+            // Just outside the buildings and three apart; a crowded base relaxes both.
+            for(const auto [farthest, apart] : {std::pair<int, int>{3, 3}, {5, 2}}) {
+                if(best.x >= 0) break;
+                for(int y = region.y; y < region.y + region.h; ++y) for(int x = region.x; x < region.x + region.w; ++x) {
+                    if(!inside(x, y) || reach[y * size + x] < 2 || reach[y * size + x] > farthest
+                       || !fits(region, planIndex, x, y, Coord(1, 1))) continue;
+                    int spacing = 8;
+                    for(const Coord& t : placedTurrets) spacing = std::min(spacing, std::max(std::abs(t.x - x), std::abs(t.y - y)));
+                    if(spacing < apart) continue;
+                    const int along = ((x - heart.x) * approach.x + (y - heart.y) * approach.y) / alen;
+                    const int s = -4 * along - 3 * spacing + static_cast<int>(mix(seed, static_cast<uint32_t>(y * size + x)) % 5);
+                    if(s < bestScore) { bestScore = s; best = Coord(x, y); }
+                }
+            }
+            if(best.x < 0) { ++plan.setup.skipped; continue; }
+            build(house, item, best.x, best.y, true);
+            placedTurrets.push_back(best);
             for(int side : {-1, 1}) for(int w = 1; w <= plan.wallsPerSide; ++w) {
-                const Coord c = path[((chosen + side * w) % n + n) % n];
-                if(!freeRock(c)) break;
-                at(c.x, c.y) = WallTile;
-                tile(house, Structure_Wall, c.x, c.y);
+                const int x = best.x + side * w * across.x, y = best.y + side * w * across.y;
+                if(!freeRock(x, y) || reach[y * size + x] < 2) break;
+                at(x, y) = WallTile;
+                tile(house, Structure_Wall, x, y);
             }
         }
     }
 
-    void layoutBase(Plan& plan, const Rect& region) {
-        const int house = plan.setup.house;
-        const Coord anchor(region.x + region.w / 2, region.y + region.h / 2);
-        std::vector<int> buildings, turrets;
-        for(int item : plan.base)
-            (item == Structure_GunTurret || item == Structure_RocketTurret ? turrets : buildings).push_back(item);
-        // Construction Yard in the middle, then the largest footprints first.
-        std::stable_sort(buildings.begin(), buildings.end(), [&](int a, int b) {
-            if((a == Structure_ConstructionYard) != (b == Structure_ConstructionYard)) return a == Structure_ConstructionYard;
-            const Coord da = catalogue.sizes[a], db = catalogue.sizes[b];
-            return da.x * da.y > db.x * db.y;
-        });
-        Rect bounds{anchor.x, anchor.y, 1, 1};
-        for(int item : buildings) {
-            const size_t before = result.structures.size();
-            if(!place(house, item, region, anchor, true)) { ++plan.setup.skipped; continue; }
-            const Placement& p = result.structures[before];
-            const Coord dim = catalogue.sizes[item];
-            const int x0 = std::min(bounds.x, p.x), y0 = std::min(bounds.y, p.y);
-            const int x1 = std::max(bounds.x + bounds.w, p.x + dim.x), y1 = std::max(bounds.y + bounds.h, p.y + dim.y);
-            bounds = Rect{x0, y0, x1 - x0, y1 - y0};
-        }
-        layoutTurrets(plan, region, turrets, bounds);
-    }
-
-    /// Ground units on the nearest open tiles around the base, never touching a building,
-    /// a road or another house's plateau.
+    /// Ground units on the nearest open tiles to @a from, never touching a building, a road or
+    /// another house's start.
     void layoutUnits(Plan& plan, int planIndex, Coord from, const std::vector<int>& items) {
         if(items.empty()) return;
         const int house = plan.setup.house;
@@ -520,8 +907,7 @@ struct Layout {
         seen[from.y * size + from.x] = 1;
         size_t next = 0;
         auto clear = [&](int x, int y) {
-            if(at(x, y) != Free || map(x, y) == Terrain_Mountain) return false;
-            if(owner[y * size + x] >= 0 && owner[y * size + x] != planIndex) return false;
+            if(at(x, y) != Free || map(x, y) == Terrain_Mountain || !ownable(x, y, planIndex)) return false;
             for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx)
                 if(inside(x + dx, y + dy) && (at(x + dx, y + dy) == Building || at(x + dx, y + dy) == WallTile
                                               || at(x + dx, y + dy) == City)) return false;
@@ -544,6 +930,25 @@ struct Layout {
         plan.setup.skipped += static_cast<int>(items.size() - next);
     }
 };
+
+/// Nearest spice tile to @a from by ground, or (-1,-1).
+Coord nearestSpice(const MapData& map, Coord from) {
+    const int size = map.getSizeX();
+    std::vector<char> seen(size * size, 0);
+    std::deque<Coord> queue{from};
+    seen[from.y * size + from.x] = 1;
+    while(!queue.empty()) {
+        const Coord c = queue.front(); queue.pop_front();
+        if(isSpiceTerrain(map(c.x, c.y))) return c;
+        for(const Coord& d : {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)}) {
+            const int nx = c.x + d.x, ny = c.y + d.y;
+            if(!map.isInsideMap(nx, ny) || seen[ny * size + nx] || map(nx, ny) == Terrain_Mountain) continue;
+            seen[ny * size + nx] = 1;
+            queue.emplace_back(nx, ny);
+        }
+    }
+    return Coord(-1, -1);
+}
 
 std::string writeIni(const Result& result, const Params& params, const Catalogue& catalogue) {
     std::string out;
@@ -784,13 +1189,31 @@ int powerBalance(const std::vector<int>& items, int house, int extraDraw, const 
     return balance;
 }
 
-void addPower(std::vector<int>& items, int house, int extraDraw, const Catalogue& catalogue) {
-    const ItemRule& trap = catalogue.rule(Structure_WindTrap, house);
-    if(!trap.enabled || trap.power >= 0) return;
+void addPower(std::vector<int>& items, int house, int techLevel, int extraDraw, const Catalogue& catalogue) {
     int required = extraDraw;
     for(int item : items) required += std::max(0, catalogue.rule(item, house).power);
-    if(required <= 0) return;
-    while(powerBalance(items, house, extraDraw, catalogue) <= 0) items.push_back(Structure_WindTrap);
+    // A tenth spare, the buffer the AI's own city-power rule keeps (MentatBuildOrder), so the
+    // first growth does not black the city out.
+    const int deficit = 1 + std::max(0, required) / 10 - powerBalance(items, house, extraDraw, catalogue);
+    if(required <= 0 || deficit <= 0) return;
+    const ItemRule& trap = catalogue.rule(Structure_WindTrap, house);
+    const ItemRule& reactor = catalogue.rule(Structure_NuclearPlant, house);
+    const int trapOutput = trap.enabled && trap.power < 0 ? -trap.power : 0;
+    const int reactorOutput = reactor.power < 0 && catalogue.available(Structure_NuclearPlant, house, techLevel) ? -reactor.power : 0;
+    int reactors = 0, traps = 0;
+    if(reactorOutput > 0) {
+        // Reactors carry the load; a few wind traps top up the remainder.
+        reactors = deficit / reactorOutput;
+        const int rest = deficit - reactors * reactorOutput;
+        traps = trapOutput > 0 ? ceilDiv(rest, trapOutput) : 0;
+        if(trapOutput > 0 ? traps > kMaxTopUpTraps : rest > 0) { ++reactors; traps = 0; }
+        // One wind trap stays: the reactor's prerequisite, so the base can rebuild either.
+        if(reactors > 0 && trapOutput > 0) traps = std::max(traps, 1);
+    } else if(trapOutput > 0) {
+        traps = ceilDiv(deficit, trapOutput);
+    }
+    items.insert(items.end(), reactors, Structure_NuclearPlant);
+    items.insert(items.end(), traps, Structure_WindTrap);
 }
 
 std::vector<int> armyTypes(int house, int techLevel, const Catalogue& catalogue) {
@@ -910,33 +1333,19 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         if(!catalogue.available(Structure_Wall, house, params.techLevel)) plan.wallsPerSide = 0;
         planCity(plan, params.techLevel, catalogue);
         plan.army = buyArmy(plan.setup.armyBudget, house, params.techLevel, catalogue, own);
-        // Power: the base's own Windtraps on the base side, the city's in its grid.
-        std::vector<int> baseOnly = plan.base;
-        addPower(baseOnly, house, 0, catalogue);
-        std::vector<int> all = plan.base;
-        addPower(all, house, zonePowerDraw(plan.lots, house, catalogue), catalogue);
-        const int cityTraps = static_cast<int>(all.size() - baseOnly.size());
-        plan.base = baseOnly;
-        for(int i = 0; i < cityTraps; ++i) {
-            Placement trap; trap.house = house; trap.item = Structure_WindTrap;
-            plan.lots.push_back(trap);
-        }
+        // Power for base and city together, all of it on the base side: reactors where the
+        // house can build them, wind traps otherwise and as top-ups.
+        addPower(plan.base, house, params.techLevel, cityPowerDraw(plan.lots, house, catalogue), catalogue);
 
-        // Footprint: packed base (with slack and a turret ring) beside the city grid.
+        // Footprint: the base with slack, a turret ring and blast spacing, beside the city grid.
         int area = 0;
         bool turrets = false;
         for(int item : plan.base) {
             const Coord d = catalogue.sizes[item];
-            area += (d.x + 1) * (d.y + 1);
-            turrets = turrets || item == Structure_GunTurret || item == Structure_RocketTurret;
+            area += (d.x + 1) * (d.y + 1) + (item == Structure_NuclearPlant ? 40 : 0);
+            turrets = turrets || isTurret(item);
         }
         plan.baseSide = std::max(8, isqrt(area * 16 / 10) + 3 + (turrets ? 6 : 0));
-        if(!plan.lots.empty()) {
-            const int blocks = ceilDiv(static_cast<int>(plan.lots.size()), 4);
-            plan.blocksX = std::max(1, isqrt(blocks));
-            if(plan.blocksX * plan.blocksX < blocks) ++plan.blocksX;
-            plan.blocksY = ceilDiv(blocks, plan.blocksX);
-        }
         const int cityW = plan.blocksX ? kCityBlock * plan.blocksX + 1 : 0;
         const int cityH = plan.blocksY ? kCityBlock * plan.blocksY + 1 : 0;
         plan.width = plan.baseSide + cityW;
@@ -1022,10 +1431,10 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         for(const Rect& r : plateaus)
             for(int m = 0; m < images->getSize(); ++m) {
                 const Coord c = images->getCoord(Coord(r.x, r.y), m, Coord(r.w, r.h));
-                spec.plateaus.push_back(Rect{c.x, c.y, r.w, r.h});
+                spec.cores.push_back(Rect{c.x, c.y, r.w, r.h});
             }
     } else {
-        spec.plateaus = plateaus;
+        spec.cores = plateaus;
     }
 
     std::vector<Coord> starts;
@@ -1044,28 +1453,54 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
     }
 
     Layout layout(catalogue, result.map, result);
-    for(int i = 0; i < houses; ++i) {
+    // Each start owns its core, then two tiles around it where no other core lies: nobody else
+    // builds or parks there.
+    for(int margin : {0, 2}) for(int i = 0; i < houses; ++i) {
         const Rect& r = plateaus[i];
-        for(int y = r.y; y < r.y + r.h; ++y) for(int x = r.x; x < r.x + r.w; ++x)
-            if(layout.owner[y * size + x] < 0) layout.owner[y * size + x] = i;
+        for(int y = std::max(0, r.y - margin); y < std::min(size, r.y + r.h + margin); ++y)
+            for(int x = std::max(0, r.x - margin); x < std::min(size, r.x + r.w + margin); ++x)
+                if(layout.owner[y * size + x] < 0) layout.owner[y * size + x] = i;
     }
     for(int i = 0; i < houses; ++i) {
         Plan& plan = plans[i];
         const Rect& p = plateaus[i];
         const int cityW = plan.blocksX ? std::min(p.w, kCityBlock * plan.blocksX + 1) : 0;
         const int cityH = plan.blocksY ? std::min(p.h, kCityBlock * plan.blocksY + 1) : 0;
-        // The city sits on the map-edge side of the plateau, behind the base.
+        // The city sits on the map-edge side of the start, behind the base, its Industrial
+        // district facing the base.
         const bool cityLeft = plan.setup.start.x < size / 2;
         Rect base = p, city{0, 0, 0, 0};
+        // The base may spread onto the rim, but not around the city.
+        Rect region{p.x - kRimMax, p.y - kRimMax, p.w + 2 * kRimMax, p.h + 2 * kRimMax};
         if(cityW > 0) {
             city = Rect{cityLeft ? p.x : p.x + p.w - cityW, p.y + (p.h - cityH) / 2, cityW, cityH};
             base = Rect{cityLeft ? p.x + cityW : p.x, p.y, p.w - cityW, p.h};
-            layout.layoutCity(plan, city);
+            region = Rect{cityLeft ? base.x : base.x - kRimMax, base.y - kRimMax, base.w + kRimMax, base.h + 2 * kRimMax};
+            layout.layoutCity(plan, i, city, !cityLeft);
         }
-        layout.layoutBase(plan, base);
+        const Coord heart(base.x + base.w / 2, base.y + base.h / 2);
+        // The likely approach: toward the nearest start of another team (the map centre if none).
+        Coord approach(size / 2 - heart.x, size / 2 - heart.y);
+        int nearest = INT_MAX;
+        for(const Plan& other : plans) {
+            if(other.setup.team == plan.setup.team) continue;
+            const int d = octagonal(other.setup.start.x - heart.x, other.setup.start.y - heart.y);
+            if(d < nearest) { nearest = d; approach = Coord(other.setup.start.x - heart.x, other.setup.start.y - heart.y); }
+        }
+        if(approach.x == 0 && approach.y == 0) approach = Coord(1, 0);
+        layout.layoutBase(plan, i, region, heart, approach, nearestSpice(result.map, heart),
+                          mix(result.mapSeed, static_cast<uint32_t>(plan.setup.house) + 17u));
         std::vector<int> units = plan.army;
         if(plan.mcv) units.insert(units.begin(), Unit_MCV);
-        layout.layoutUnits(plan, i, Coord(base.x + base.w / 2, base.y + base.h / 2), units);
+        // The army waits in front of the base, between it and the approach.
+        Coord muster = heart;
+        if(!plan.base.empty()) {
+            const int reach = std::max(base.w, base.h) / 2 + 3, length = std::max(1, octagonal(approach.x, approach.y));
+            muster = Coord(std::clamp(heart.x + approach.x * reach / length, 0, size - 1),
+                           std::clamp(heart.y + approach.y * reach / length, 0, size - 1));
+            if(result.map(muster.x, muster.y) == Terrain_Mountain) muster = heart;
+        }
+        layout.layoutUnits(plan, i, muster, units);
         // The army is what actually found a tile, at the prices the match uses.
         plan.setup.armySpent = 0;
         for(const Placement& u : result.units)
