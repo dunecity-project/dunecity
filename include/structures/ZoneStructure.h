@@ -53,6 +53,9 @@ public:
 
     int getResidentialPopulation() const;
     void setResidentialPopulation(int population);
+    /// Pre-developed lot from a map's optional zone level (INIMap/ZoneStartLevel.h):
+    /// density @a level 0..3; a residential lot gets the matching apartment population.
+    void setStartingLevel(int level);
 
     ObjectInterface* getInterfaceContainer() override;
 

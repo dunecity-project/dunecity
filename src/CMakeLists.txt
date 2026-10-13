@@ -203,6 +203,7 @@ target_sources(dunecity
         Menu/DisplayMenu.cpp
         Menu/SinglePlayerMenu.cpp
         Menu/SinglePlayerSkirmishMenu.cpp
+        Menu/RandomSkirmishMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
         Menu/CustomGameStatsMenu.cpp
@@ -368,6 +369,8 @@ target_sources(dunecity
         MapEditor/MapSettingsWindow.cpp
         MapEditor/MapMirror.cpp
         MapEditor/NewMapWindow.cpp
+        MapEditor/SkirmishGenerator.cpp
+        MapEditor/SkirmishCatalogue.cpp
         MapEditor/LoadMapWindow.cpp
         MapEditor/PlayerSettingsWindow.cpp
         MapEditor/ReinforcementsWindow.cpp

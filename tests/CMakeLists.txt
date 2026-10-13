@@ -12,6 +12,11 @@ target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
         MapCollectionTestCase.cpp
+        # Random Skirmish generator: the pure generator over the real map generator/mirror.
+        SkirmishGeneratorTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
@@ -190,6 +195,7 @@ add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
+add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
 
 # Standalone network wire harness.
 #
@@ -387,7 +393,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -458,6 +464,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        # Random Skirmish on the real engine: the screen (house cap, persistence, Save map,
+        # screenshots), a pre-zone-level city map loading unchanged, and three generated
+        # matches (vanilla 1v1, 2v3 vs allied Large bases with 10k armies, DuneCity 192 with
+        # 15k cities at tech 8) checked against the generator's plan, measured city
+        # population, a one-minute played smoke with a clean log and a save/load round trip.
+        add_test(NAME skirmish_generator_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skirmish-probe)
+        set_tests_properties(skirmish_generator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
