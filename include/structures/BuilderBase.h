@@ -19,6 +19,7 @@
 #define BUILDERBASE_H
 
 #include <structures/StructureBase.h>
+#include <structures/ProductionRepeat.h>
 
 #include <data.h>
 
@@ -135,6 +136,7 @@ public:
     virtual void handleProduceItemClick(Uint32 itemID, bool multipleMode = false);
     virtual void handleCancelItemClick(Uint32 itemID, bool multipleMode = false);
     virtual void handleSetOnHoldClick(bool OnHold);
+    void handleSetRepeatClick(Uint32 itemID, bool enabled);
 
 
 
@@ -163,6 +165,20 @@ public:
         \param  bOnHold         true = hold production; false = resume production
     */
     inline void doSetOnHold(bool bOnHold) { bCurrentItemOnHold = bOnHold; }
+
+    /**
+        Turns repeat production of a unit on or off (docs/rts-controls.md). Turning it on queues
+        one copy when none is queued, so the loop has something to repeat.
+        \param  itemID  the unit to repeat
+        \param  enabled true = keep producing it; false = stop repeating
+    */
+    void doSetRepeat(Uint32 itemID, bool enabled);
+
+    /// Can \a itemID be set to repeat in this builder right now?
+    bool supportsRepeat(Uint32 itemID) const;
+
+    /// Is \a itemID set to repeat?
+    bool isRepeating(Uint32 itemID) const { return repeatItems.contains(itemID); }
 
     /**
         Start building a random item in this builder.
@@ -260,6 +276,9 @@ protected:
 
     std::list<ProductionQueueItem>  currentProductionQueue;     ///< This list is the production queue (It contains the item IDs of the units/structures to produce)
     std::list<BuildItem>            buildList;                  ///< This list contains all the things that can be produced by this builder
+
+    /// Units that are produced again whenever one leaves (SAVEGAMEVERSION 9855, docs/rts-controls.md).
+    ProductionRepeat::RepeatSet     repeatItems;
 };
 
 #endif //BUILDERBASE_H

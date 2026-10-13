@@ -975,7 +975,11 @@ void DeviationProbe::legacyLedger() {
         while(last > first && before[last-1] == after[last-1]) --last;
         require(last - first == 9, "The hunt-toward record is not the expected 9 bytes");
         require(first >= unitBytes.second, "The hunt-toward record does not follow the control interval");
-        unitBytes.first.erase(first - unitBytes.second, last - first);
+        // 9855 appended the player order queue right after the hunt-toward record: an empty
+        // queue count, the dispatched flag, the walk retries and the break-off point.
+        require(tank->getOrderQueue().empty(), "The legacy fixture unit carries queued orders");
+        constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
+        unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
     }
 
     game->loadedSavegameVersion = 9848;

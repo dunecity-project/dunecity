@@ -72,6 +72,12 @@ typedef enum {
 
     CMD_MATCH_PAUSE,                  ///< MATCH_PAUSE(), any active human; freezes after this tick
 
+    // Modern RTS controls (docs/rts-controls.md)
+    CMD_UNIT_ATTACKMOVE,              ///< UNIT_ATTACKMOVE(OBJECT_ID, X, Y, B_QUEUE)
+    CMD_UNIT_PATROL,                  ///< UNIT_PATROL(OBJECT_ID, X, Y, B_QUEUE)
+    CMD_UNIT_QUEUEORDER,              ///< UNIT_QUEUEORDER(OBJECT_ID, ORDER_TYPE, X_OR_TARGET_ID, Y) Shift-queued order
+    CMD_BUILDER_SETREPEAT,            ///< BUILDER_SETREPEAT(OBJECT_ID, ITEM_ID, B_ENABLED)
+
     CMD_MAX
 } CMDTYPE;
 

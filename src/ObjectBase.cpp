@@ -930,7 +930,8 @@ const ObjectBase* ObjectBase::findTarget() const {
     bool huntMode = false;
 
     switch(attackMode) {
-        case GUARD: {
+        case GUARD:
+        case HOLD: {
             checkRange = getWeaponRange();
         } break;
 

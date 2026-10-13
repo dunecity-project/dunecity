@@ -45,6 +45,7 @@
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/GroundUnit.h>
+#include <units/InfantryBase.h>
 
 #define SMOKEDELAY 30
 #define UNITIDLETIMER (GAMESPEED_DEFAULT *  315)  // about every 5s
@@ -162,7 +163,13 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         huntTowardGoal.y = stream.readSint32();
         huntTowardRetries = stream.readUint8();
     }
-
+    if(currentGame->getLoadedSavegameVersion() >= 9855) {
+        orderQueue.load(stream);
+        orderDispatched = stream.readBool();
+        orderWalkRetries = stream.readUint8();
+        attackMoveBreakOff.x = stream.readSint32();
+        attackMoveBreakOff.y = stream.readSint32();
+    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -262,6 +269,11 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(huntTowardGoal.x);
     stream.writeSint32(huntTowardGoal.y);
     stream.writeUint8(huntTowardRetries);
+    orderQueue.save(stream);
+    stream.writeBool(orderDispatched);
+    stream.writeUint8(orderWalkRetries);
+    stream.writeSint32(attackMoveBreakOff.x);
+    stream.writeSint32(attackMoveBreakOff.y);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -657,6 +669,7 @@ void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
         return;
     } else {
         removeFromSelectionLists();
+        clearOrderQueue();      // orders from the old owner do not carry over
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);
@@ -815,9 +828,10 @@ void UnitBase::engageTarget() {
         }
 
         if(targetDistance > getWeaponRange()) {
-            // we are not in attack range
-            if(target.getObjPointer()->isAFlyingUnit()) {
-                // we are not following this air unit
+            // we are not in attack range: nobody follows an air unit, and a holding unit
+            // follows nothing
+            if(UnitOrderPolicy::outOfRangeResponse(attackMode, target.getObjPointer()->isAFlyingUnit())
+               == UnitOrderPolicy::OutOfRange::Release) {
                 releaseTarget();
                 return;
             } else {
@@ -1314,6 +1328,271 @@ int UnitBase::huntTowardRange() const {
     return std::max(getWeaponRange(), getViewRange());
 }
 
+// ---- Player order queue (docs/rts-controls.md) -------------------------------------------
+
+bool UnitBase::fightsOnAttackMove() const {
+    if(!canAttack() || isHarvesterLikeUnit(itemID)) {
+        return false;
+    }
+    switch(itemID) {
+        case Unit_MCV:
+        case Unit_Carryall:
+        case Unit_ChemicalCarryall:
+        case Unit_Frigate:
+        case Unit_Saboteur:     // keeps its own demolition rules
+        case Unit_Sandworm:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool UnitBase::isAttackMoving() const {
+    if(orderQueue.empty() || !orderDispatched) {
+        return false;
+    }
+    const UnitOrderType type = orderQueue.front().type;
+    return (type == UnitOrderType::AttackMove || type == UnitOrderType::Patrol) && fightsOnAttackMove();
+}
+
+void UnitBase::leaveHoldForOrder() {
+    if(attackMode == HOLD) {
+        doSetAttackMode(AREAGUARD);
+    }
+}
+
+void UnitBase::clearOrderQueue() {
+    orderQueue.clear();
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+}
+
+void UnitBase::recordPlayerOrder(const UnitOrder& order) {
+    orderQueue.replace(order);
+    orderDispatched = true;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+}
+
+void UnitBase::doIssueOrder(const UnitOrder& order, bool queued) {
+    if(order.type == UnitOrderType::Patrol || order.type >= UnitOrderType::Count) {
+        return;
+    }
+    if(!queued || orderQueue.empty()) {
+        orderQueue.replace(order);
+        dispatchFrontOrder();
+    } else {
+        orderQueue.append(order);   // refused silently once 16 orders are waiting
+    }
+}
+
+void UnitBase::doIssuePatrol(const Coord& point, bool queued) {
+    if(!currentGameMap->tileExists(point)) {
+        return;
+    }
+    if(!queued || orderQueue.empty()) {
+        if(orderQueue.startPatrol(point, location)) {
+            dispatchFrontOrder();
+        }
+    } else {
+        orderQueue.extendPatrol(point, location);
+    }
+}
+
+bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
+    switch(order.type) {
+        case UnitOrderType::Move:
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol:
+            return currentGameMap->tileExists(order.pos);
+
+        case UnitOrderType::MoveToObject: {
+            const ObjectBase* pObject = currentGame->getObjectManager().getObject(order.targetID);
+            return pObject != nullptr && pObject != this;
+        }
+
+        case UnitOrderType::AttackObject: {
+            const ObjectBase* pObject = currentGame->getObjectManager().getObject(order.targetID);
+            return pObject != nullptr && pObject != this && (canAttack() || isHarvesterLikeUnit(itemID));
+        }
+
+        case UnitOrderType::Capture: {
+            const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
+            return dynamic_cast<const InfantryBase*>(this) != nullptr && pStructure != nullptr
+                && pStructure->canBeCaptured() && pStructure->getOwner()->getTeamID() != owner->getTeamID();
+        }
+
+        case UnitOrderType::HarvesterReturn:
+            return isHarvesterLikeUnit(itemID);
+
+        case UnitOrderType::Count:
+        default:
+            return false;
+    }
+}
+
+bool UnitBase::isIdleForOrders() const {
+    if(target || attackPos.isValid()) {
+        return false;
+    }
+    if(isAFlyingUnit()) {
+        // Aircraft never stop moving; an Ornithopter drops its destination two tiles out.
+        return destination.isInvalid() || blockDistance(location, destination) <= 2;
+    }
+    return !moving && !justStoppedMoving && (destination.isInvalid() || destination == location);
+}
+
+void UnitBase::dispatchFrontOrder() {
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+    orderQueue.skipInvalid([this](const UnitOrder& order) { return isOrderExecutable(order); });
+    if(orderQueue.empty()) {
+        return;
+    }
+
+    const UnitOrder order = orderQueue.front();
+    leaveHoldForOrder();
+    if(order.type != UnitOrderType::HarvesterReturn) {
+        cancelCarryallPickup();     // an explicit order replaces any outstanding lift
+    }
+
+    switch(order.type) {
+        case UnitOrderType::Move: {
+            doMove2Pos(order.pos.x, order.pos.y, true);
+        } break;
+
+        case UnitOrderType::MoveToObject: {
+            doMove2Object(order.targetID);
+        } break;
+
+        case UnitOrderType::AttackObject: {
+            doAttackObject(order.targetID, true);
+        } break;
+
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol: {
+            if(fightsOnAttackMove()) {
+                // An unforced walk in Area Guard: targeting() stops it for enemies met on the
+                // way, and Area Guard is also the mode the unit keeps at the destination.
+                doMove2Pos(order.pos.x, order.pos.y, false);
+                attackMode = AREAGUARD;
+            } else {
+                doMove2Pos(order.pos.x, order.pos.y, true);
+            }
+        } break;
+
+        case UnitOrderType::Capture: {
+            static_cast<InfantryBase*>(this)->doCaptureStructure(order.targetID);
+        } break;
+
+        case UnitOrderType::HarvesterReturn: {
+            harvesterDoReturn(this);
+        } break;
+
+        case UnitOrderType::Count:
+        default:
+            break;
+    }
+
+    orderDispatched = true;
+    noteExplicitPlayerOrder();
+}
+
+void UnitBase::finishFrontOrder() {
+    const UnitOrderType done = orderQueue.front().type;
+    const bool walkedAttackMove = (done == UnitOrderType::AttackMove || done == UnitOrderType::Patrol)
+        && fightsOnAttackMove();
+    orderQueue.advance();
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+    if(!orderQueue.empty()) {
+        dispatchFrontOrder();
+    } else if(walkedAttackMove) {
+        // Arrived: guard the destination in Area Guard (not Hunt).
+        setGuardPoint(location);
+        attackMode = AREAGUARD;
+    }
+}
+
+void UnitBase::updateOrderQueue() {
+    if(!orderDispatched) {
+        dispatchFrontOrder();
+        return;
+    }
+
+    const UnitOrder order = orderQueue.front();
+    switch(order.type) {
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol: {
+            if(goingToRepairYard) {
+                // The engine sent the unit for repairs; the walk does not survive that trip.
+                clearOrderQueue();
+                return;
+            }
+            const bool fights = fightsOnAttackMove();
+            if(fights && target) {
+                if(attackMoveBreakOff.isInvalid()) {
+                    attackMoveBreakOff = location;
+                }
+                if(UnitOrderPolicy::attackMoveLeashBroken(attackMoveBreakOff, location)) {
+                    // Chased too far from the route: drop the target and walk on.
+                    attackMoveBreakOff.invalidate();
+                    doMove2Pos(order.pos.x, order.pos.y, false);
+                }
+                return;
+            }
+            if(fights && attackMoveBreakOff.isValid()) {
+                // The fight is over: back onto the walk.
+                attackMoveBreakOff.invalidate();
+                doMove2Pos(order.pos.x, order.pos.y, false);
+                return;
+            }
+            switch(UnitOrderPolicy::walkProgress(isIdleForOrders(), location, order.pos, orderWalkRetries)) {
+                case UnitOrderPolicy::WalkProgress::Walking:
+                    return;
+                case UnitOrderPolicy::WalkProgress::Resume:
+                    // The engine dropped the walk (no path); a blocked route usually clears.
+                    ++orderWalkRetries;
+                    doMove2Pos(order.pos.x, order.pos.y, !fights);
+                    return;
+                case UnitOrderPolicy::WalkProgress::Arrived:
+                case UnitOrderPolicy::WalkProgress::GiveUp:
+                    break;
+            }
+        } break;
+
+        case UnitOrderType::Move: {
+            if(!isIdleForOrders()) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::MoveToObject:
+        case UnitOrderType::AttackObject:
+        case UnitOrderType::Capture: {
+            // Done once the target is gone (or captured), or the engine let go of it.
+            if(isOrderExecutable(order) && target.getObjectID() == order.targetID) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::HarvesterReturn: {
+            if(harvesterIsReturning(this)) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::Count:
+        default:
+            break;
+    }
+
+    finishFrontOrder();
+}
+
 void UnitBase::doMove2Object(const ObjectBase* pTargetObject) {
     if(pTargetObject->getObjectID() == getObjectID()) {
         return;
@@ -1415,7 +1694,7 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
         cancelCarryallPickup();
     }
 
-    if(attackMode == GUARD || attackMode == STOP) {
+    if(attackMode == GUARD || attackMode == STOP || attackMode == HOLD) {
         if(moving && !justStoppedMoving) {
             doMove2Pos(nextSpot, false);
         } else {
@@ -1462,7 +1741,8 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
         
         // Reset target timer when damaged so units can immediately look for their attacker
         // Without this, GUARD units wait up to 2 seconds before noticing they're being shot
-        if(damage > 0 && canAttack(pDamager) && (attackMode == GUARD || attackMode == AREAGUARD || attackMode == HUNT)) {
+        if(damage > 0 && canAttack(pDamager)
+           && (attackMode == GUARD || attackMode == AREAGUARD || attackMode == HUNT || attackMode == HOLD)) {
             findTargetTimer = 0;  // Allow immediate target search on next update
         }
     }
@@ -1499,6 +1779,11 @@ bool UnitBase::isInGuardRange(const ObjectBase* pObject) const  {
 
         case RETREAT: {
             return false;
+        } break;
+
+        case HOLD: {
+            // Only what the weapon reaches from where the unit stands.
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1545,6 +1830,10 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
 
         case RETREAT: {
             return false;
+        } break;
+
+        case HOLD: {
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1822,7 +2111,24 @@ void UnitBase::targeting() {
                 }
             }
 
-            
+            // Attack-move/patrol walk: stop only for an enemy within max(weapon, view) range
+            // of the unit, never for the nearest enemy anywhere (the Area Guard acquisition
+            // below would). The fight itself runs on the ordinary targeting rules; the order
+            // queue resumes the walk afterwards and enforces the leash.
+            if(isAttackMoving() && !target && !attackPos && !forced) {
+                const ObjectBase* pNewTarget = findTarget();
+                if(pNewTarget != nullptr
+                   && UnitOrderPolicy::attackMoveEngages(
+                        blockDistance(location, pNewTarget->getClosestPoint(location)).lround(),
+                        getWeaponRange(), getViewRange())) {
+                    attackMoveBreakOff = location;
+                    doAttackObject(pNewTarget, false);
+                }
+                findTargetTimer = MILLI2CYCLES(500);
+                engageTarget();
+                return;
+            }
+
             // Refresh target if current one is out of weapon range
             if(target && !attackPos && !forced && 
                (attackMode == GUARD || attackMode == AREAGUARD || attackMode == AMBUSH || attackMode == HUNT)) {
@@ -1866,8 +2172,9 @@ void UnitBase::targeting() {
                     }
                     
                     if(inRange) {
-                        // Saboteurs need forced=true to pathfind onto occupied tiles
-                        bool forceAttack = (getItemID() == Unit_Saboteur);
+                        // Saboteurs need forced=true to pathfind onto occupied tiles; a holding
+                        // Saboteur waits for a target to come to it instead.
+                        bool forceAttack = (getItemID() == Unit_Saboteur) && attackMode != HOLD;
                         doAttackObject(pNewTarget, forceAttack);
                         
                         // Sandworms switch to HUNT after acquiring target
@@ -2346,6 +2653,7 @@ void UnitBase::quitDeviation() {
     if(wasDeviated()) {
         // revert back to real owner
         removeFromSelectionLists();
+        clearOrderQueue();      // the borrowing house's orders end with its control
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);
@@ -2362,6 +2670,10 @@ void UnitBase::quitDeviation() {
 
 bool UnitBase::update() {
     if(active) {
+        // Player orders first, so a finished order hands over to the next one before this
+        // cycle's targeting decides what the unit does.
+        if(!orderQueue.empty() && !pickedUp) updateOrderQueue();
+
         // Time targeting
         Uint64 targetStart = SDL_GetPerformanceCounter();
         targeting();

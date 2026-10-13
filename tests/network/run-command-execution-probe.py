@@ -69,7 +69,7 @@ with (out / 'run.log').open('w') as log:
 text = (out / 'run.log').read_text()
 if 'SIDEBAR_SKIP_PROBE_PASS:' not in text:
     raise RuntimeError('Missing sidebar mission confirmation result')
-for marker in ('SANDWORM_TARGET_PROBE_PASS:', 'OWNERSHIP_PROBE_PASS:', 'COMMAND_BATCH_PROBE_PASS:', 'RELAY_PAUSE_PROBE_PASS:', 'CAMPAIGN_SKIP_PROBE_PASS:', 'FEEDBACK_EDITOR_PROBE_PASS:', 'MAP_INPUT_PROBE_PASS:', 'FEEDBACK_SUBMISSION_PROBE_PASS:', 'UNIT_SELECTION_PROBE_PASS:', 'AI_PARTNER_PROBE_PASS:', 'BUILDING_SELECTION_PROBE_PASS:'):
+for marker in ('SANDWORM_TARGET_PROBE_PASS:', 'OWNERSHIP_PROBE_PASS:', 'COMMAND_BATCH_PROBE_PASS:', 'RTS_COMMAND_PROBE_PASS:', 'RELAY_PAUSE_PROBE_PASS:', 'CAMPAIGN_SKIP_PROBE_PASS:', 'FEEDBACK_EDITOR_PROBE_PASS:', 'MAP_INPUT_PROBE_PASS:', 'FEEDBACK_SUBMISSION_PROBE_PASS:', 'UNIT_SELECTION_PROBE_PASS:', 'AI_PARTNER_PROBE_PASS:', 'BUILDING_SELECTION_PROBE_PASS:'):
     if marker not in text:
         raise RuntimeError('Missing completion marker: ' + marker)
 # Exercise the repaired sidebar at the minimum supported window as well.

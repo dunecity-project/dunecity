@@ -136,6 +136,7 @@ typedef enum {
     CAPTURE = 7,    ///< Capture is only used for infantry units when ordered to capture a building
     CARRYALLREQUESTED = 8, ///< This allows a unit to keep requesting a carryall even if one isn't available right now
     RETREAT = 9,           ///< Ignore other units
+    HOLD = 10,             ///< Player order: never move on its own; fire at enemies within weapon range (docs/rts-controls.md)
     ATTACKMODE_MAX
 } ATTACKMODE;
 

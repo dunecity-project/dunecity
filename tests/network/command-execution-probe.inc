@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iterator>
 #include "../units/sandworm-target-probe.inc"
+#include "rts-command-probe.inc"
 int runOwnershipProbe() {
     settings.general.playerName = "Host";
     settings.network.metaServer = "http://127.0.0.1:1/";
@@ -152,6 +153,8 @@ int runOwnershipProbe() {
     batches.addCommandList("Host", complete);
     if(static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle != 3) throw std::runtime_error("duplicate changed watermark");
     SDL_Log("COMMAND_BATCH_PROBE_PASS: mixed batch atomic, gap held, contiguous retransmission recovered, duplicate ignored");
+    runRtsCommandProbe(*owner, *hostPlayer, *coopPlayer, *enemyPlayer, batches,
+                       static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle);
     Command(hostPlayer->getPlayerID(), CMD_CAMPAIGN_SKIP).executeCommand();
     if(game->isGameFinished()) throw std::runtime_error("skip finished a non-campaign game");
     // Exercise the real Game entry points used by Options and Mentat, not a duplicate policy.

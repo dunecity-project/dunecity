@@ -710,6 +710,26 @@ private:
     */
     bool handleSelectedObjectsActionClick(int xPos, int yPos);
 
+    /**
+        Performs a patrol click (Q) for the currently selected units.
+        \param  xPos    x-coordinate in map coordinates
+        \param  yPos    y-coordinate in map coordinates
+        \return true if any unit took the order
+    */
+    bool handleSelectedObjectsPatrolClick(int xPos, int yPos);
+
+    /// The local player's respondable units in the selection.
+    std::vector<UnitBase*> selectedOrderableUnits() const;
+
+    /// Selects every own unit of the selected units' types, on screen or on the whole map (T, double-click).
+    void selectSameUnitTypes(bool wholeMap);
+
+    /// Selects every own combat unit on the map: no workers, transports, frigates, worms or structures (Ctrl+A).
+    void selectAllCombatUnits();
+
+    /// Draws queued waypoints for the local player's selected units (docs/rts-controls.md).
+    void drawQueuedOrders();
+
 
     /**
         Selects the next structure of any of the types specified in itemIDs. If none of this type is currently selected the first one is selected.
@@ -746,8 +766,25 @@ public:
         CursorMode_CarryallDrop,
         CursorMode_Placing,
         CursorMode_CityZone,
-        CursorMode_CityRoad
+        CursorMode_CityRoad,
+        CursorMode_Patrol
     };
+
+    /// Player position orders that go through issuePositionOrder().
+    enum class PositionOrder { Move, AttackMove, Patrol };
+
+    /**
+        The single place that turns a player position order for a group of units into
+        commands (docs/rts-controls.md): attack-move, patrol and Shift-queued waypoints.
+        Every unit currently gets \a target itself; a formation planner computes per-unit
+        destinations here. Units must be the local player's respondable units.
+        \param  kind    move, attack-move or patrol
+        \param  units   the units to order
+        \param  target  the clicked map tile
+        \param  queued  true when Shift appends the order instead of replacing the queue
+        \return the unit that should confirm the order, or nullptr when no unit took it
+    */
+    UnitBase* issuePositionOrder(PositionOrder kind, const std::vector<UnitBase*>& units, const Coord& target, bool queued);
 
     int         currentCursorMode = CursorMode_Normal;
     int         lastRoadTileX = -1;
