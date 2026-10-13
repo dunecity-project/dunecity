@@ -95,6 +95,9 @@ struct Params {
     bool enemiesAllied = true;
     Side allySide;
     Side enemySide;
+    /// The player's own start: base, army and city like any side. Its playerClass is the AI
+    /// partner sharing the player's house ("" = none, e.g. "qBotSupportMedium" or "qBotHard").
+    Side playerSide{"", BaseSize::Medium, 3, 0};
     Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 8;
@@ -152,6 +155,7 @@ struct HouseSetup {
     int team = 1;
     Role role = Role::Enemy;
     std::string playerClass;
+    std::string partnerClass;   ///< AI sharing the player's house ("" = none; Human only)
     BaseSize base = BaseSize::None;
     int armyBudget = 0;
     int armySpent = 0;

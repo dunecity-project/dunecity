@@ -60,11 +60,19 @@ Catalogue loadCatalogue(Mode mode) {
 }
 
 GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules) {
-    GameInitSettings init(result.name, result.ini, false, rules);
+    // A partner AI shares the player's house, as a Custom Game's second player slot does.
+    bool sharedHouse = false;
+    for(const HouseSetup& house : result.houses)
+        sharedHouse = sharedHouse || (house.role == Role::Human && PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr);
+    GameInitSettings init(result.name, result.ini, sharedHouse, rules);
     for(const HouseSetup& house : result.houses) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(house.house), house.team);
         if(house.role == Role::Human) {
             info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
+            if(PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr) {
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(getHouseNameByNumber(static_cast<HOUSETYPE>(house.house)),
+                                                                house.partnerClass));
+            }
         } else {
             const auto* player = PlayerFactory::getByPlayerClass(house.playerClass);
             info.addPlayerInfo(GameInitSettings::PlayerInfo(getHouseNameByNumber(static_cast<HOUSETYPE>(house.house)),
@@ -91,8 +99,12 @@ std::string saveMap(const Result& result) {
 
 namespace {
 
-constexpr int kRowHeight = 22;
 constexpr int kRowGap = 3;
+constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (5) + You start with (5)
+
+/// AI that may share the player's house: the co-op partner list of Custom Game.
+const char* const kPartnerClasses[] = {"qBotSupportEasy", "qBotSupportMedium", "qBotSupportHard", "qBotSupportBrutal",
+                                       "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend"};
 constexpr int kMaxContentWidth = 800;
 
 /// Two columns of label + control rows, centred and capped on wide screens.
@@ -155,6 +167,8 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     for(int h = 0; h < NUM_HOUSES; ++h) houseCount += isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h)) ? 1 : 0;
 
     const int width = getSize().x, height = getSize().y;
+    // Rows fit between the title and the status line, however short the window.
+    rowPitch = std::clamp((height - 44 - 70) / kLeftColumnRows, 18, 25);
     title.setText(_("Random Skirmish"));
     title.setTextFontSize(22);
     title.setAlignment(Alignment_HCenter);
@@ -187,6 +201,12 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     fillAI(enemyAIBox);
     fillSide(allyBaseBox, allyArmyBox, allyCityBox);
     fillSide(enemyBaseBox, enemyArmyBox, enemyCityBox);
+    fillSide(playerBaseBox, playerArmyBox, playerCityBox);
+    partnerBox.addEntry(_("None"), -1);
+    for(const char* playerClass : kPartnerClasses) {
+        const int index = PlayerFactory::getIndexByPlayerClass(playerClass);
+        if(index >= 0) partnerBox.addEntry(PlayerFactory::getByIndex(index)->getName(), index);
+    }
 
     int row = 0;
     addHeader(0, row++, _("Map"));
@@ -201,6 +221,12 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addRow(0, row++, _("Your house"), &houseBox);
     addRow(0, row++, _("Credits"), &creditsBox);
     addRow(0, row++, _("Tech level"), &techBox);
+    addHeader(0, row++, _("You start with"));
+    addRow(0, row++, _("AI partner"), &partnerBox);
+    addRow(0, row++, _("Base"), &playerBaseBox);
+    addRow(0, row++, _("Army"), &playerArmyBox);
+    addRow(0, row++, _("City"), &playerCityBox);
+    playerCityCaption = &captions[usedCaptions - 1];
 
     row = 0;
     addHeader(1, row++, _("Players"));
@@ -225,9 +251,9 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     const int controlX = columnX(width, 0) + columnWidth * 2 / 5;
     const int seedRow = 5;
     const int top = 44;
-    windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * (kRowHeight + kRowGap)),
-                                   Point(columnWidth - columnWidth * 2 / 5 - 64, kRowHeight));
-    windowWidget.addWidget(&newSeedButton, Point(columnX(width, 0) + columnWidth - 58, top + seedRow * (kRowHeight + kRowGap)), Point(58, kRowHeight));
+    windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * rowPitch),
+                                   Point(columnWidth - columnWidth * 2 / 5 - 64, rowPitch - kRowGap));
+    windowWidget.addWidget(&newSeedButton, Point(columnX(width, 0) + columnWidth - 58, top + seedRow * rowPitch), Point(58, rowPitch - kRowGap));
 
     statusLabel.setTextFontSize(12);
     statusLabel.setAlignment(Alignment_HCenter);
@@ -262,22 +288,22 @@ void RandomSkirmishMenu::addHeader(int column, int row, const std::string& capti
     label.setText(caption);
     label.setTextFontSize(16);
     const int columnWidth = columnSpan(getSize().x);
-    windowWidget.addWidget(&label, Point(columnX(getSize().x, column), 44 + row * (kRowHeight + kRowGap)),
-                           Point(columnWidth, kRowHeight));
+    windowWidget.addWidget(&label, Point(columnX(getSize().x, column), 44 + row * rowPitch),
+                           Point(columnWidth, rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption, Widget* control) {
     const int columnWidth = columnSpan(getSize().x);
     const int x = columnX(getSize().x, column);
-    const int y = 44 + row * (kRowHeight + kRowGap);
+    const int y = 44 + row * rowPitch;
     const int captionWidth = columnWidth * 2 / 5;
     if(!caption.empty() && usedCaptions < static_cast<int>(captions.size())) {
         Label& label = captions[usedCaptions++];
         label.setText(caption);
         label.setTextFontSize(13);
-        windowWidget.addWidget(&label, Point(x + 8, y), Point(captionWidth - 8, kRowHeight));
+        windowWidget.addWidget(&label, Point(x + 8, y), Point(captionWidth - 8, rowPitch - kRowGap));
     }
-    windowWidget.addWidget(control, Point(x + captionWidth, y), Point(columnWidth - captionWidth, kRowHeight));
+    windowWidget.addWidget(control, Point(x + captionWidth, y), Point(columnWidth - captionWidth, rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::showParams(const Params& params) {
@@ -307,6 +333,11 @@ void RandomSkirmishMenu::showParams(const Params& params) {
         selectData(*army, side->army);
         selectData(*city, side->city);
     }
+    // The player's own start; "None" (-1) is selected when no partner is chosen or listed.
+    selectData(partnerBox, params.playerSide.playerClass.empty() ? -1 : PlayerFactory::getIndexByPlayerClass(params.playerSide.playerClass));
+    selectData(playerBaseBox, static_cast<int>(params.playerSide.base));
+    selectData(playerArmyBox, params.playerSide.army);
+    selectData(playerCityBox, params.playerSide.city);
     alliesBox.clearAllEntries();
     for(int i = 0; i <= std::min(kMaxAllies, houseCount - 2); ++i) alliesBox.addEntry(std::to_string(i), i);
     selectData(alliesBox, params.allies);
@@ -339,10 +370,12 @@ std::string RandomSkirmishMenu::selectedMod() const {
 void RandomSkirmishMenu::onModChanged() {
     // City size exists only for a mod that runs the city simulation; other mods hide the rows.
     const bool city = RandomSkirmish::modeForMod(selectedMod()) == Mode::DuneCity;
-    for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, allyCityCaption, enemyCityCaption})
+    for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox,
+                                                        allyCityCaption, enemyCityCaption, playerCityCaption})
         if(widget != nullptr) widget->setVisible(city);
     allyCityBox.setEnabled(city && alliesBox.getSelectedEntryIntData() > 0);
     enemyCityBox.setEnabled(city);
+    playerCityBox.setEnabled(city);
 }
 
 void RandomSkirmishMenu::onNewSeed() {
@@ -377,6 +410,11 @@ Params RandomSkirmishMenu::readParams() const {
         side->army = army->getSelectedEntryIntData();
         side->city = city->getSelectedEntryIntData();
     }
+    const auto* partner = PlayerFactory::getByIndex(partnerBox.getSelectedEntryIntData());
+    params.playerSide.playerClass = partnerBox.getSelectedEntryIntData() >= 0 && partner ? partner->getPlayerClass() : std::string();
+    params.playerSide.base = static_cast<BaseSize>(playerBaseBox.getSelectedEntryIntData());
+    params.playerSide.army = playerArmyBox.getSelectedEntryIntData();
+    params.playerSide.city = playerCityBox.getSelectedEntryIntData();
     params.clamp(houseCount);
     return params;
 }

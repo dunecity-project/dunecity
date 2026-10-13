@@ -620,7 +620,8 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line(std::string("EnemiesAllied=") + (params.enemiesAllied ? "true" : "false"));
     for(const HouseSetup& h : result.houses) {
         line(house(h.house) + "=" + (h.role == Role::Human ? "Human" : h.role == Role::Ally ? "Ally" : "Enemy")
-             + ",Team" + std::to_string(h.team) + "," + h.playerClass + "," + baseName(h.base)
+             + ",Team" + std::to_string(h.team) + "," + h.playerClass
+             + (h.partnerClass.empty() ? "" : "+" + h.partnerClass) + "," + baseName(h.base)
              + ",Army" + std::to_string(h.armySpent) + "/" + std::to_string(h.armyBudget)
              + ",City" + std::to_string(h.cityEstimate) + "/" + std::to_string(h.cityTarget)
              + (h.skipped ? ",Skipped" + std::to_string(h.skipped) : ""));
@@ -640,11 +641,11 @@ void Params::clamp(int houseCount) {
     mode = static_cast<Mode>(std::clamp(indexOf(mode), 0, indexOf(Mode::DuneCity)));
     credits = snapTo(credits, kCreditPresets.data(), kCreditPresets.data() + kCreditPresets.size());
     techLevel = std::clamp(techLevel, 1, 9);
-    for(Side* side : {&allySide, &enemySide}) {
+    for(Side* side : {&allySide, &enemySide, &playerSide}) {
         side->base = static_cast<BaseSize>(std::clamp(indexOf(side->base), 0, indexOf(BaseSize::Fortress)));
         side->army = std::clamp(side->army, 0, kArmyRandom);
         side->city = std::clamp(side->city, 0, kCityRandom);
-        if(side->playerClass.empty()) side->playerClass = "qBotMedium";
+        if(side->playerClass.empty() && side != &playerSide) side->playerClass = "qBotMedium";
     }
     allies = std::clamp(allies, 0, kMaxAllies);
     enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
@@ -677,7 +678,7 @@ void Params::load(const INIFile& config) {
     // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
     mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
-    for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}}) {
+    for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         side->playerClass = config.getStringValue(kSection, prefix + "AI", side->playerClass);
         side->base = static_cast<BaseSize>(config.getIntValue(kSection, prefix + "Base", indexOf(side->base)));
         side->army = config.getIntValue(kSection, prefix + "Army", side->army);
@@ -700,7 +701,7 @@ void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Mode", indexOf(mode));
     config.setStringValue(kSection, "Mod", mod);
     config.setIntValue(kSection, "Tech Level", techLevel);
-    for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}}) {
+    for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         config.setStringValue(kSection, prefix + "AI", side->playerClass);
         config.setIntValue(kSection, prefix + "Base", indexOf(side->base));
         config.setIntValue(kSection, prefix + "Army", side->army);
@@ -889,24 +890,26 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         plan.setup.role = role;
         plan.setup.team = team;
         Random own(mix(params.seed, static_cast<uint32_t>(house) + 1));
+        // Every house, the player's included, starts with its side's base, army and city.
+        const Side& start = role == Role::Human ? params.playerSide : *side;
         if(role == Role::Human) {
             plan.setup.playerClass = "HumanPlayer";
-            plan.base = {Structure_ConstructionYard};
+            plan.setup.partnerClass = start.playerClass;
         } else {
-            plan.setup.playerClass = side->playerClass;
-            plan.setup.base = side->base;
-            plan.setup.armyBudget = side->army == kArmyRandom
-                ? own.rand(kArmyRandomMin / 100, kArmyRandomMax / 100) * 100 : kArmyBudgets[side->army];
-            if(params.mode == Mode::DuneCity)
-                plan.setup.cityTarget = side->city == kCityRandom
-                    ? own.rand(kCityRandomMin / 1000, kCityRandomMax / 1000) * 1000 : kCityTargets[side->city];
-            plan.base = baseTemplate(side->base, house, params.techLevel, catalogue);
-            plan.mcv = side->base == BaseSize::None && catalogue.rule(Unit_MCV, house).enabled;
-            plan.wallsPerSide = side->base == BaseSize::Fortress ? 2 : side->base == BaseSize::Large ? 1 : 0;
-            if(!catalogue.available(Structure_Wall, house, params.techLevel)) plan.wallsPerSide = 0;
-            planCity(plan, params.techLevel, catalogue);
-            plan.army = buyArmy(plan.setup.armyBudget, house, params.techLevel, catalogue, own);
+            plan.setup.playerClass = start.playerClass;
         }
+        plan.setup.base = start.base;
+        plan.setup.armyBudget = start.army == kArmyRandom
+            ? own.rand(kArmyRandomMin / 100, kArmyRandomMax / 100) * 100 : kArmyBudgets[start.army];
+        if(params.mode == Mode::DuneCity)
+            plan.setup.cityTarget = start.city == kCityRandom
+                ? own.rand(kCityRandomMin / 1000, kCityRandomMax / 1000) * 1000 : kCityTargets[start.city];
+        plan.base = baseTemplate(start.base, house, params.techLevel, catalogue);
+        plan.mcv = start.base == BaseSize::None && catalogue.rule(Unit_MCV, house).enabled;
+        plan.wallsPerSide = start.base == BaseSize::Fortress ? 2 : start.base == BaseSize::Large ? 1 : 0;
+        if(!catalogue.available(Structure_Wall, house, params.techLevel)) plan.wallsPerSide = 0;
+        planCity(plan, params.techLevel, catalogue);
+        plan.army = buyArmy(plan.setup.armyBudget, house, params.techLevel, catalogue, own);
         // Power: the base's own Windtraps on the base side, the city's in its grid.
         std::vector<int> baseOnly = plan.base;
         addPower(baseOnly, house, 0, catalogue);
@@ -946,8 +949,7 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         addPlan(pool[allies + i], Role::Enemy, params.enemiesAllied ? 2 : 2 + i, &params.enemySide);
     const int houses = static_cast<int>(plans.size());
 
-    // The player builds a base from a Construction Yard alone: give them as much rock as the
-    // largest opponent start, so the human start is never the cramped one.
+    // The player's start is never the cramped one: as much rock as the largest start.
     for(const Plan& plan : plans) {
         plans[0].width = std::max(plans[0].width, plan.width);
         plans[0].height = std::max(plans[0].height, plan.height);

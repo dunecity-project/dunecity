@@ -78,10 +78,12 @@ private:
     StaticContainer windowWidget;
     Label title;
     Label statusLabel;
-    std::array<Label, 24> captions;
+    std::array<Label, 30> captions;
     int usedCaptions = 0;
+    int rowPitch = 25;                       ///< row height + gap; shrinks on short screens
     Label* allyCityCaption = nullptr;
     Label* enemyCityCaption = nullptr;
+    Label* playerCityCaption = nullptr;
 
     DropDownBox sizeBox, rockBox, spiceBox;
     Checkbox symmetricBox;
@@ -94,6 +96,7 @@ private:
     DropDownBox alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;
 
+    DropDownBox partnerBox, playerBaseBox, playerArmyBox, playerCityBox;
     DropDownBox allyAIBox, allyBaseBox, allyArmyBox, allyCityBox;
     DropDownBox enemyAIBox, enemyBaseBox, enemyArmyBox, enemyCityBox;
 
