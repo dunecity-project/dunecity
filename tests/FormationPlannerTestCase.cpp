@@ -134,10 +134,15 @@ TEST_CASE("The plan is identical whatever order the members are listed in", "[fo
         [](const Slot& a, const Slot& b) { return a.objectID < b.objectID; }));
 }
 
-TEST_CASE("The group speed is the slowest member's", "[formation]") {
+TEST_CASE("The group speed is the slowest vehicle's; infantry set it only on their own", "[formation]") {
     Terrain terrain;
+    // The soldier (0.56) and trooper are slower, but the devastator is the slowest vehicle.
     const auto result = plan(mixedArmy(), Coord(40, 20), kMapSize, kMapSize, terrain.query(), kInfantryPerTile);
-    REQUIRE(result.groupSpeed == 0.56_fix);
+    REQUIRE(result.groupSpeed == 0.72_fix);
+    REQUIRE(groupPace(mixedArmy()) == 0.72_fix);
+    const std::vector<Member> squad = {makeMember(1, Unit_Trooper, 1, 1, 1.12_fix), makeMember(2, Unit_Soldier, 2, 1, 0.56_fix)};
+    REQUIRE(groupPace(squad) == 0.56_fix);
+    REQUIRE(groupPace({}) == 0);
 }
 
 TEST_CASE("A coherent group keeps its shape, compressed to at most two tiles of spacing", "[formation]") {

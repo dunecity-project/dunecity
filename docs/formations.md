@@ -17,8 +17,8 @@ these inputs:
 - a `CanStand(member, tile)` query (terrain and structures, never units);
 - the infantry capacity per tile (`NUM_INFANTRY_PER_TILE` = 5).
 
-It returns one slot per member, sorted by object id, plus the group speed (the slowest
-member's reference speed).
+It returns one slot per member, sorted by object id, plus the group speed: `groupPace()`, the slowest
+*vehicle's* reference speed (infantry set it only for an all-infantry group).
 
 - **Member order:** members are sorted by object id before any other step, so the plan does not
   depend on the order the caller lists them in.
@@ -140,8 +140,8 @@ nothing changes.
 | Caller | What changed |
 |---|---|
 | QuantBot `launchGroundHunt` (custom Hunt waves, campaign waves incl. flanking) | `doFormUp(wave)` after the unchanged dispatch loop |
-| QuantBot `scrambleWholeArmyToDefend` (1.0.832 nearest-hunt) | ≥3 responders: `doFormationHuntToward` to slots around the building's point nearest their centroid; <3: unchanged per-unit walk |
-| QuantBot `scrambleUnitsAndDefend` (district defence) | `doFormUp(ground responders)` after the unchanged attack orders |
+| QuantBot `scrambleWholeArmyToDefend` (1.0.832 nearest-hunt) | unchanged: no slots, no pace (defence is never slowed) |
+| QuantBot `scrambleUnitsAndDefend` (district defence) | unchanged: no pace (defence is never slowed); a defence order on a wave member ends its membership |
 | QuantBot `applyArmyPosture` (army gathering / recall) | `doFormUp(units recalled this pass)`; each keeps its own assembly slot |
 | `CampaignAIPlayer` attack team | `doFormUp(wave)` after HUNT + forced attack |
 | `AIPlayer::attack` | `doFormationMove` to the wave destination, then HUNT, then `doFormUp` |
@@ -192,34 +192,48 @@ passed and 3 were skipped.
 ### AI wave measurement
 
 Setup: `tests/ai/run-campaign-balance.py --formation-measure --local-spectator`, QuantBot Hard
-against QuantBot Hard, vanilla mod, seed 486409243, 30 game minutes.
+against QuantBot Hard, vanilla mod, 30 game minutes. Three seeds (486409243, 1841712204,
+41562270) on each of three maps.
 
 - A wave is a new `customWave` dispatch with at least 3 ground members that are not already in
   the target area.
 - A member arrives when it is within 10 tiles of a live enemy building.
-- Shots are the members' primary shots in the 30 s after the wave's first arrival.
+- Spread is the time from the first to the last member arriving. Shots are the members' primary
+  shots in the 30 s after the wave's first arrival.
+- Only waves where at least 3 members arrived are counted.
 
-The before numbers are from the base build 40f4e7a8. The after numbers are from this branch.
+The before numbers are from the base build 40f4e7a8. The after numbers are from this branch,
+with defence uncapped and the pace set by the slowest vehicle.
 
-| Map | Waves measured (before → after) | Mean arrival spread | Mean shots in first 30 s of contact |
-|---|---|---|---|
-| 2P 64x64 Face Off | 5 → 2 | 64.2 s → 45.0 s | 29.2 → 34.5 |
-| 2P 128x128 Habbanya-Penny | 3 → 2 | 78.6 s → 83.4 s | 63.3 → 97.5 |
-| 2P 128x64 Ergun-Sahij | 4 → 6 | 161.2 s → 109.0 s | 61.0 → 16.8 |
-| All waves | 12 → 10 | 100.2 s → 91.1 s | 48.3 → 36.5 |
+| Map | Waves (before → after) | Spread mean (before → after) | Spread median (before → after) | Shots mean (before → after) | Shots median (before → after) |
+|---|---|---|---|---|---|
+| 2P 64x64 Face Off | 11 → 15 | 86.1 → 129.4 s | 50.5 → 112.5 s | 43.7 → 39.5 | 48 → 35 |
+| 2P 128x128 Habbanya-Penny | 4 → 1 | 62.2 → 40.1 s | 38.6 → 40.1 s | 61.5 → 58.0 | 60 → 58 |
+| 2P 128x64 Ergun-Sahij | 14 → 17 | 114.2 → 101.5 s | 109.7 → 92.5 s | 58.9 → 51.4 | 60 → 40 |
+| All | 29 → 33 | 96.4 → 112.3 s | 78.1 → 100.8 s | 53.5 → 46.2 | 56 → 36 |
 
-How to read this:
+Total first-contact shots summed over all measured waves went from 1552 to 1524 (−2%). The
+per-wave mean falls by 14% because the after runs split into more, smaller waves. The noise
+between seeds is large: Ergun-Sahij seed 41562270 went from 293 to 82 shots, while seed
+1841712204 on the same map went from 288 to 493.
 
-- The matches diverge before the first wave, because defence responses already use formations.
-  So individual waves are not like-for-like, and with one seed the noise is large.
-- Arrival spread went down overall and on two of three maps.
-- Shots in the first 30 s went up on two maps. On Ergun-Sahij they fell sharply: several of the
-  after waves were small or late reinforcements that arrived one at a time. Across all waves
-  the mean fell by 24%.
-- **This does not yet meet the acceptance criterion that shots must not go down materially.**
-  Integration should run the measurement on more seeds and maps before merging. If the drop
-  holds up, the place to look first is the defence-response `doFormUp`, which slows fast
-  responders to the slowest one.
+There are two intermediate results:
+
+1. **Slowest member, including infantry, sets the pace; defence also slowed.** Mean shots fell
+   from 53.5 to 38.9 (−27%). The cause was holding mixed waves to the soldier's pace (0.24,
+   against 0.80 for a tank). This is why the pace now comes from the slowest vehicle.
+2. **First single-seed run (initial commit).** Mean shots fell from 48.3 to 36.5.
+
+**Conclusion:**
+
+- After these fixes, the shots drop per wave is within the seed-to-seed noise, and total shots
+  are level.
+- Pacing engine-Hunt waves does not narrow the arrival spread on this metric. Hunt picks each
+  member's own target, so a wave spreads out by target rather than by speed.
+- Pacing is still worth keeping where units share a destination: the player path and
+  `AIPlayer` waves. The 12-unit real-engine probe shows the spread going from 31.2 s to 16.4 s.
+- Whether to keep `doFormUp` on QuantBot Hunt waves at all is an integration decision. Removing
+  it is a one-line change in `launchGroundHunt`.
 
 ## Spec deviations and limits
 
@@ -231,10 +245,14 @@ How to read this:
   move orders walked waves back into base. These waves therefore get formation membership and
   the speed cap only. Slots are used where the AI already issues position moves: the base
   scramble, `AIPlayer` waves and the player path.
-- **What "slowest" means:** slowest is measured on open sand (reference speed). The cap is set
+- **What "slowest" means:** the pace is the slowest *vehicle* measured on open sand (reference
+  speed). Infantry set it only for an all-infantry group, because waiting for infantry measurably
+  cost mixed waves their first-contact fire. The cap is set
   when the order is given and is not raised when the slowest member dies.
 - **Catch-up lag:** "slot-relative progress" is the member's remaining tiles minus the smallest
   remaining distance in the group.
+- **Defence moves are never slowed:** this applies to the base scramble and district defence,
+  as decided by the integration owner after the first measurement.
 - **Contact ends membership:** contact, meaning an enemy target within `huntTowardRange()`,
   ends membership. The fight is not speed-capped.
 - **Token reuse:** a token repeats after about 4.6 game hours, and at the 16th group ordered by

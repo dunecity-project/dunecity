@@ -65,7 +65,7 @@ struct Slot {
 
 struct Plan {
     std::vector<Slot> slots;    ///< one per member, sorted by objectID
-    FixPoint groupSpeed = 0;    ///< speed of the slowest member
+    FixPoint groupSpeed = 0;    ///< groupPace(): the slowest vehicle's speed
     bool formation = false;     ///< false for fewer than two members: plain move to the target
 
     /// Destination of objectID, or Coord::Invalid() if it is not a member.
@@ -111,6 +111,14 @@ Coord facing(const Coord& from, const Coord& to);
 */
 Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
           const CanStand& canStand, int infantryPerTile);
+
+/**
+    The pace a formation keeps: its slowest vehicle's reference speed. Infantry walk far
+    slower than any vehicle (a soldier sets 0.24 against a tank's 0.80) and holding a mixed
+    wave to that crawl was measured to cost it a quarter of its first-contact fire, so
+    infantry set the pace only for an all-infantry group. 0 for no members.
+*/
+FixPoint groupPace(const std::vector<Member>& members);
 
 /**
     Nearest tile to 'wanted' that is inside the map and on which the member may stand, by a

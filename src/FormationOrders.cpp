@@ -81,18 +81,15 @@ Coord revalidatedSlot(const UnitBase* unit, const Coord& slot) {
 void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots) {
     if(groupID == 0 || units.empty()) return;
     const House* owner = units.front()->getOwner();
-    FixPoint cap = 0;
-    bool haveCap = false;
-    for(size_t i = 0; i < units.size(); ++i) {
+    for(size_t i = 0; i < units.size(); ++i)
         units[i]->joinFormation(groupID, i < slots.size() ? slots[i] : Coord::Invalid());
-        if(!haveCap || units[i]->getFormationSpeedCap() < cap) cap = units[i]->getFormationSpeedCap();
-        haveCap = true;
-    }
-    // Members that joined earlier (one formation command per unit) already carry the slowest
-    // pace among themselves; the group's pace is the slowest of everyone.
+    // The group's pace is its slowest vehicle's; infantry set it only for an all-infantry
+    // group (see FormationPlanner::groupPace). Members that joined earlier through their
+    // own formation commands count as well.
+    std::vector<FormationPlanner::Member> members;
     for(const UnitBase* unit : unitList)
-        if(unit->getFormationGroup() == groupID && unit->getOwner() == owner && unit->getFormationSpeedCap() < cap)
-            cap = unit->getFormationSpeedCap();
+        if(unit->getFormationGroup() == groupID && unit->getOwner() == owner) members.push_back(memberOf(unit));
+    const FixPoint cap = FormationPlanner::groupPace(members);
     for(UnitBase* unit : unitList)
         if(unit->getFormationGroup() == groupID && unit->getOwner() == owner) unit->setFormationSpeedCap(cap);
 }

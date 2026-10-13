@@ -176,7 +176,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
-    std::vector<const UnitBase*> responders;
+    // Defence is never slowed to a formation pace (docs/formations.md).
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -188,14 +188,8 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         doSetAttackMode(unit,AREAGUARD);
         doAttackObject(unit,intruder,!unit->isInAttackRange(intruder));
         defenceAssignments[id] = intruder->getObjectID();
-        responders.push_back(unit);
         ++dispatched;
     }
-    // The responders close in together at the slowest one's pace (docs/formations.md);
-    // each keeps its attack on the intruder and leaves the formation at contact.
-    std::vector<const UnitBase*> groundResponders;
-    for (const auto* unit : responders) if (unit->isAGroundUnit()) groundResponders.push_back(unit);
-    doFormUp(groundResponders);
     if (dispatched) traceDecision("defence_response",AITelemetry::Record().set("target",intruder->getObjectID())
         .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
         .set("already_committed_value",committed).set("required_value",SimpleArmyPolicy::responseValue(threatValue))
@@ -327,29 +321,15 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // The nearest troops, until together with those already in the fight they
     // outweigh the threat at the building.
     const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
-    std::vector<const UnitBase*> responders;
+    // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
+    // to the building's point nearest to itself at its own speed.
     for (const auto id : response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
-        responders.push_back(unit);
+        const Coord at=building->getClosestPoint(unit->getLocation());
+        doHuntToward(unit,at.x,at.y);
         defenceAssignments[id]=building->getObjectID();
         groundSquad.erase(id);
-    }
-    // Three or more walk there as one formation (docs/formations.md): each hunts its way to
-    // its own slot around the building's point nearest to them, at the slowest one's pace.
-    // Fewer keep the individual walk to the building's nearest point. Either way it is the
-    // same unforced hunt-toward order to the same building.
-    if (static_cast<int>(responders.size()) >= FormationOrders::kMinAIGroup) {
-        int sumX=0, sumY=0;
-        for (const auto* unit : responders) { sumX+=unit->getLocation().x; sumY+=unit->getLocation().y; }
-        const int n=static_cast<int>(responders.size());
-        const Coord at=building->getClosestPoint(Coord(sumX/n,sumY/n));
-        doFormationHuntToward(responders,at.x,at.y);
-    } else {
-        for (const auto* unit : responders) {
-            const Coord at=building->getClosestPoint(unit->getLocation());
-            doHuntToward(unit,at.x,at.y);
-        }
     }
     const Coord contact=intruder->getLocation();
     if (!response.empty() || committed>0) traceDecision("base_scramble",AITelemetry::Record()

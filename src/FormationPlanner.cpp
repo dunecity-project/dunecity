@@ -188,8 +188,7 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
               [](const Member& a, const Member& b) { return a.objectID < b.objectID; });
     if (members.empty()) return result;
 
-    result.groupSpeed = members.front().speed;
-    for (const auto& member : members) result.groupSpeed = std::min(result.groupSpeed, member.speed);
+    result.groupSpeed = groupPace(members);
 
     const int count = static_cast<int>(members.size());
     if (count < 2) {
@@ -314,6 +313,19 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
 
     for (size_t i = 0; i < members.size(); ++i) result.slots.push_back({members[i].objectID, assigned[i]});
     return result;
+}
+
+FixPoint groupPace(const std::vector<Member>& members) {
+    bool anyVehicle = false;
+    for (const auto& member : members) anyVehicle = anyVehicle || !member.infantry;
+    bool found = false;
+    FixPoint pace = 0;
+    for (const auto& member : members) {
+        if (anyVehicle && member.infantry) continue;
+        if (!found || member.speed < pace) pace = member.speed;
+        found = true;
+    }
+    return pace;
 }
 
 bool runsAtFullSpeed(int lagTiles, int centroidDistance) {
