@@ -24,6 +24,8 @@
 #include <structures/BuilderBase.h>
 #include <units/UnitBase.h>
 #include <units/UnitOrderQueue.h>
+#include <FormationOrders.h>
+#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -188,6 +190,61 @@ int runRtsControlsProbe() {
         }
         for(Uint32 id : column) retire(id);
         SDL_Log("RTS_CONTROLS_ATTACKMOVE_PASS: three tanks fought the trike on route and arrived in Area Guard after %d cycles", cycles);
+    }
+
+    // ---- 1b. Group position orders take formation slots (Game::issuePositionOrder) ---------
+    {
+        const Coord goal = O + Coord(22, 15);
+        const Coord waypoint = O + Coord(26, 18);
+        std::vector<Uint32> ids = {spawn(owner, Unit_Tank, Coord(2,14)), spawn(owner, Unit_Tank, Coord(2,15)),
+                                   spawn(owner, Unit_Tank, Coord(2,16)), spawn(owner, Unit_Tank, Coord(3,15))};
+        std::vector<UnitBase*> units;
+        std::vector<const UnitBase*> members;
+        for(Uint32 id : ids) { units.push_back(unitOf(id)); members.push_back(unitOf(id)); }
+        const bool formationSetting = settings.general.formationMoves;
+        auto fronts = [&](size_t queueSize) {
+            std::vector<std::vector<Coord>> legs(queueSize);
+            for(int i = 0; i < 30; ++i) {
+                bool ready = true;
+                for(Uint32 id : ids) ready = ready && unitOf(id)->getOrderQueue().size() == queueSize;
+                if(ready) break;
+                step(1);
+            }
+            for(Uint32 id : ids) {
+                const UnitOrderQueue& queue = unitOf(id)->getOrderQueue();
+                rtsRequire(queue.size() == queueSize, "A group order did not reach every unit's queue");
+                size_t leg = 0;
+                for(const UnitOrder& order : queue) legs[leg++].push_back(order.pos);
+            }
+            return legs;
+        };
+        auto distinct = [](std::vector<Coord> tiles) {
+            std::sort(tiles.begin(), tiles.end(), [](const Coord& a, const Coord& b) { return a.y != b.y ? a.y < b.y : a.x < b.x; });
+            return std::adjacent_find(tiles.begin(), tiles.end()) == tiles.end();
+        };
+
+        settings.general.formationMoves = true;
+        const FormationPlanner::Plan plan = FormationOrders::planGroup(members, goal);
+        rtsRequire(plan.formation, "Four tanks did not form a formation plan");
+        rtsRequire(game->issuePositionOrder(Game::PositionOrder::AttackMove, units, goal, false) != nullptr,
+                   "The group attack-move was not issued");
+        rtsRequire(game->issuePositionOrder(Game::PositionOrder::Move, units, waypoint, true) != nullptr,
+                   "The queued group waypoint was not issued");
+        const auto legs = fronts(2);
+        rtsRequire(distinct(legs[0]) && distinct(legs[1]), "Group orders sent two tanks to the same tile");
+        for(size_t i = 0; i < ids.size(); ++i)
+            rtsRequire(legs[0][i] == plan.slotFor(ids[i]), "An attack-move destination is not the unit's formation slot");
+        rtsRequire(unitOf(ids[0])->getOrderQueue().front().type == UnitOrderType::AttackMove,
+                   "The group attack-move is not at the front of the queue");
+
+        settings.general.formationMoves = false;
+        rtsRequire(game->issuePositionOrder(Game::PositionOrder::AttackMove, units, goal, false) != nullptr,
+                   "The plain group attack-move was not issued");
+        const auto plainLegs = fronts(1);
+        for(const Coord& tile : plainLegs[0]) rtsRequire(tile == goal, "With formations off a unit did not get the clicked tile");
+        settings.general.formationMoves = formationSetting;
+        for(Uint32 id : ids) retire(id);
+        SDL_Log("RTS_CONTROLS_FORMATION_ORDERS_PASS: group attack-move and queued waypoint use distinct formation slots; off keeps the clicked tile");
     }
 
     // ---- 2. Holding launcher under fire ---------------------------------------------------

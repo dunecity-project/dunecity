@@ -139,13 +139,19 @@ nothing changes.
 
 | Caller | What changed |
 |---|---|
-| QuantBot `launchGroundHunt` (custom Hunt waves, campaign waves incl. flanking) | `doFormUp(wave)` after the unchanged dispatch loop |
+| QuantBot `launchGroundHunt` (custom Hunt waves, campaign waves incl. flanking) | unchanged: no pace (integration decision, see below) |
 | QuantBot `scrambleWholeArmyToDefend` (1.0.832 nearest-hunt) | unchanged: no slots, no pace (defence is never slowed) |
 | QuantBot `scrambleUnitsAndDefend` (district defence) | unchanged: no pace (defence is never slowed); a defence order on a wave member ends its membership |
 | QuantBot `applyArmyPosture` (army gathering / recall) | `doFormUp(units recalled this pass)`; each keeps its own assembly slot |
 | `CampaignAIPlayer` attack team | `doFormUp(wave)` after HUNT + forced attack |
 | `AIPlayer::attack` | `doFormationMove` to the wave destination, then HUNT, then `doFormUp` |
-| `SmartBot::attack` | `doFormUp(hunters)` |
+| `SmartBot::attack` | unchanged: no pace (pure Hunt wave, same reason) |
+
+Player orders from the parallel RTS-controls work also use the planner: `Game::issuePositionOrder`
+gives every unit its own formation slot for attack-move, patrol and Shift-queued waypoints when
+"Move groups in formation" is on. Those orders carry no group pace; only a plain group move
+(`CMD_UNIT_FORMATION_MOVE`) does. A Shift right-click therefore queues slot moves instead of
+starting a formation march.
 
 ## Verification (Mac mini, Release, `--parallel 3`)
 
@@ -232,19 +238,21 @@ There are two intermediate results:
   member's own target, so a wave spreads out by target rather than by speed.
 - Pacing is still worth keeping where units share a destination: the player path and
   `AIPlayer` waves. The 12-unit real-engine probe shows the spread going from 31.2 s to 16.4 s.
-- Whether to keep `doFormUp` on QuantBot Hunt waves at all is an integration decision. Removing
-  it is a one-line change in `launchGroundHunt`.
+- **Integration decision:** pace was removed from pure engine-Hunt waves (QuantBot
+  `launchGroundHunt` and `SmartBot::attack`), since it widened QuantBot's measured arrival spread
+  (96.4 → 112.3 s) without a shared destination to converge on. These waves behave as in
+  1.0.833. Waves with a shared destination keep it: `CampaignAIPlayer` (one attack target) and
+  `AIPlayer` (formation move to the wave destination), plus army recall.
 
 ## Spec deviations and limits
 
 - **No group command:** commands carry at most 4 parameters (`CommandValidation`), so the group
   is sent as one command per unit with a shared token, as the spec's alternative allows. The
   speed cap is computed by the executor from the members rather than sent.
-- **Hunt waves get no slots:** QuantBot custom and Hard/Brutal waves are engine Hunt. Since
-  1.0.804/1.0.832 the settled decision is that the engine picks each hunter's target; per-unit
-  move orders walked waves back into base. These waves therefore get formation membership and
-  the speed cap only. Slots are used where the AI already issues position moves: the base
-  scramble, `AIPlayer` waves and the player path.
+- **Hunt waves get no slots and no pace:** QuantBot custom and Hard/Brutal waves are engine
+  Hunt. Since 1.0.804/1.0.832 the settled decision is that the engine picks each hunter's target;
+  per-unit move orders walked waves back into base. After integration they are not formed up at
+  all. Slots are used where units share a destination: `AIPlayer` waves and the player path.
 - **What "slowest" means:** the pace is the slowest *vehicle* measured on open sand (reference
   speed). Infantry set it only for an all-infantry group, because waiting for infantry measurably
   cost mixed waves their first-contact fire. The cap is set
@@ -258,6 +266,6 @@ There are two intermediate results:
 - **Token reuse:** a token repeats after about 4.6 game hours, and at the 16th group ordered by
   one controller in the same cycle. A clash with a still-live group would merge the two
   deterministically.
-- **SmartBot:** only `doFormUp` was added there.
+- **SmartBot:** unchanged after integration (see the integration decision above).
 - **Not built (non-goals):** a shape picker, air or naval formations, and changes to the
   pathfinder.

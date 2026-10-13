@@ -271,6 +271,10 @@ int runFormationProbe() {
         Tank* tank = nullptr;
         for(UnitBase* unit : unitList) if(unit->getItemID() == Unit_Tank) { tank = static_cast<Tank*>(unit); break; }
         require(tank != nullptr, "No tank for the old-record fixture");
+        // The 9855 order-queue block sits right before the formation record; an empty queue
+        // writes a fixed 11 bytes (count, dispatched flag, walk retries, break-off point).
+        tank->clearOrderQueue();
+        constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
         FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)});
         OMemoryStream withFormation; withFormation.open(); tank->save(withFormation);
         const std::string current(withFormation.getData(), withFormation.getDataLength());
@@ -281,9 +285,10 @@ int runFormationProbe() {
         while(first < current.size() && current[first] == plain[first]) ++first;
         size_t last = current.size();
         while(last > first && current[last - 1] == plain[last - 1]) --last;
-        require(last - first <= 20 && first + 20 <= current.size(), "The formation record is not where expected");
-        // Remove the whole 20-byte record that starts at the group id.
-        const std::string old9854 = current.substr(0, first) + current.substr(first + 20);
+        require(last - first <= 20 && first + 20 <= current.size() && first >= kEmptyOrderQueueBlock,
+                "The formation record is not where expected");
+        // Remove the whole 20-byte record that starts at the group id, and the order queue before it.
+        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock) + current.substr(first + 20);
         game->loadedSavegameVersion = 9854;
         {
             IMemoryStream in(old9854.data(), old9854.size());

@@ -30,13 +30,17 @@
 #include <DataTypes.h>
 #include <GameInitSettings.h>
 #include <MapEditor/SkirmishGenerator.h>
+#include <mod/ModInfo.h>
 
 #include <array>
+#include <vector>
 
 /// The steps behind the Random Skirmish screen, shared with its real-engine probe.
 namespace RandomSkirmish {
-/// Activate the mod a mode plays with (vanilla / dunecity) and refresh effectiveGameOptions.
-bool activateMode(SkirmishGenerator::Mode mode);
+/// Activate the chosen mod and refresh effectiveGameOptions; false if it cannot be activated.
+bool activateMod(const std::string& modName);
+/// The generator mode a mod plays: DuneCity when the mod runs the city simulation.
+SkirmishGenerator::Mode modeForMod(const std::string& modName);
 /// Prices, power and availability from the active mod's ObjectData.
 SkirmishGenerator::Catalogue loadCatalogue(SkirmishGenerator::Mode mode);
 /// The CustomGame start: the generated map text plus the generated roster.
@@ -57,7 +61,9 @@ private:
     void onCancel();
     void onNewSeed();
     void onPlayersChanged();
-    void onModeChanged();
+    void onModChanged();
+    /// The mod selected in the Mod box, or "" when none is listed.
+    std::string selectedMod() const;
 
     SkirmishGenerator::Params readParams() const;
     void showParams(const SkirmishGenerator::Params& params);
@@ -74,6 +80,8 @@ private:
     Label statusLabel;
     std::array<Label, 24> captions;
     int usedCaptions = 0;
+    Label* allyCityCaption = nullptr;
+    Label* enemyCityCaption = nullptr;
 
     DropDownBox sizeBox, rockBox, spiceBox;
     Checkbox symmetricBox;
@@ -81,7 +89,8 @@ private:
     TextButton newSeedButton;
     Checkbox fixedSeedBox;
 
-    DropDownBox houseBox, creditsBox, modeBox, techBox;
+    DropDownBox houseBox, creditsBox, modBox, techBox;
+    std::vector<ModInfo> availableMods;      ///< Mod box entries; entry data is the index
     DropDownBox alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;
 

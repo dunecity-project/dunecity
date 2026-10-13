@@ -6368,10 +6368,8 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
         pYard->handleReservePlacementClick(planItem, xPos, yPos);
         pendingReservations.push_back({pYard->getObjectID(), planItem, xPos, yPos, gameCycleCount});
         soundPlayer->playSound(Sound_PlaceStructure);
-        // Shift keeps the planning cursor for another copy of the same building.
-        if(!(SDL_GetModState() & KMOD_SHIFT)) {
-            setCursorMode(CursorMode_Normal);
-        }
+        // The planning cursor stays on this building so further copies need one click each;
+        // Esc, right-click or clicking its sidebar icon again ends planning.
         return true;
     }
 

@@ -55,14 +55,14 @@ Params caseParams(const std::string& name) {
     p.seed = 20261013;
     p.techLevel = 8;
     if(name == "vanilla-1v1") {
-        p.mapSize = 64; p.allies = 0; p.enemies = 1; p.mode = Mode::Vanilla;
+        p.mapSize = 64; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
         p.enemySide = Side{"qBotMedium", BaseSize::Small, 2, 0};
     } else if(name == "allied-2v3") {
-        p.mapSize = 128; p.allies = 1; p.enemies = 3; p.enemiesAllied = true; p.mode = Mode::Vanilla;
+        p.mapSize = 128; p.allies = 1; p.enemies = 3; p.enemiesAllied = true; p.mod = "Tornie"; p.mode = Mode::Vanilla;
         p.allySide = Side{"qBotMedium", BaseSize::Large, 4, 0};
         p.enemySide = Side{"qBotMedium", BaseSize::Large, 4, 0};
     } else if(name == "city-192") {
-        p.mapSize = 192; p.allies = 1; p.enemies = 1; p.mode = Mode::DuneCity;
+        p.mapSize = 192; p.allies = 1; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
         p.allySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
         p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
     } else {
@@ -132,7 +132,8 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
 
 void runMatch(const std::string& name, bool smoke) {
     const Params params = caseParams(name);
-    skirmishRequire(RandomSkirmish::activateMode(params.mode), "Mode mod did not activate");
+    skirmishRequire(RandomSkirmish::modeForMod(params.mod) == params.mode, "Case mode does not match its mod's city flag");
+    skirmishRequire(RandomSkirmish::activateMod(params.mod), "Case mod did not activate");
     const Result result = SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode));
     for(const HouseSetup& h : result.houses) skirmishRequire(h.skipped == 0, "Generator could not place everything");
     // The same seed and choices produce the same map through the real catalogue as well.
@@ -198,7 +199,7 @@ void runMatch(const std::string& name, bool smoke) {
 
 /// A bundled city map written before the zone-level field: every lot still starts empty.
 void runLegacyMap() {
-    skirmishRequire(RandomSkirmish::activateMode(Mode::DuneCity), "dunecity mod did not activate");
+    skirmishRequire(RandomSkirmish::activateMod("dunecity"), "dunecity mod did not activate");
     const std::string path = getDuneLegacyDataDir() + "/maps/multiplayer/4P - 192x192 - Metropolis.ini";
     const std::string fallback = std::string(std::getenv("SKIRMISH_SOURCE_DIR")) + "/data/maps/multiplayer/4P - 192x192 - Metropolis.ini";
     const std::string mapPath = existsFile(path) ? path : fallback;
@@ -238,8 +239,22 @@ void runMenu() {
         menu.onPlayersChanged();
         probeSelect(menu.enemiesBox, 3);
         probeSelect(menu.sizeBox, 96);
-        probeSelect(menu.modeBox, static_cast<int>(Mode::DuneCity));
-        menu.onModeChanged();
+        // The Mod box lists every installed mod; City rows appear only for a city-sim mod.
+        auto chooseMod = [&](const std::string& name) {
+            for(size_t i = 0; i < menu.availableMods.size(); ++i)
+                if(menu.availableMods[i].name == name) { menu.modBox.setSelectedItem(static_cast<int>(i)); menu.onModChanged(); return; }
+            skirmishRequire(false, "Mod box does not list " + name);
+        };
+        skirmishRequire(menu.modBox.getNumEntries() == static_cast<int>(ModManager::instance().listModChoices().size()),
+                        "Mod box does not list every installed mod");
+        for(const char* name : {"vanilla", "Tornie"}) {
+            chooseMod(name);
+            skirmishRequire(!menu.enemyCityBox.isVisible() && !menu.allyCityBox.isVisible() && !menu.enemyCityCaption->isVisible(),
+                            std::string("City rows shown for non-city mod ") + name);
+        }
+        chooseMod("dunecity");
+        skirmishRequire(menu.enemyCityBox.isVisible() && menu.enemyCityCaption->isVisible() && menu.enemyCityBox.isEnabled(),
+                        "City rows hidden for the DuneCity mod");
         probeSelect(menu.enemyCityBox, 2);
         probeSelect(menu.techBox, 7);
         menu.seedBox.setText("123456789");
@@ -263,7 +278,7 @@ void runMenu() {
         // Last-used parameters come back on the next visit, seed included when kept.
         RandomSkirmishMenu again;
         const Params p = again.readParams();
-        skirmishRequire(p.mapSize == 96 && p.allies == 1 && p.enemies == 3 && p.mode == Mode::DuneCity
+        skirmishRequire(p.mapSize == 96 && p.allies == 1 && p.enemies == 3 && p.mod == "dunecity" && p.mode == Mode::DuneCity
                         && p.enemySide.city == 2 && p.techLevel == 7 && p.seed == 123456789u && p.fixedSeed,
                         "Last-used parameters were not restored");
         skirmishCapture(again, "random-skirmish-restored");

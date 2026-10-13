@@ -141,8 +141,8 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
                 ConstructionYard* pYard = dynamic_cast<ConstructionYard*>(pBuilder);
                 if(clickedItem != ItemID_Invalid && pYard != nullptr && settings.general.chooseBuildingLocation
                    && ConstructionYard::isReservableItem(clickedItem)) {
-                    // Pre-placement: pick the plot first; the map click orders it. Shift keeps
-                    // planning on the map, so it has no x5 meaning here.
+                    // Pre-placement: pick the plot first; the map click orders it. Planning stays
+                    // on the building after each plot, so Shift has no x5 meaning here.
                     if(currentGame->getPlanningItemID() == static_cast<Uint32>(clickedItem)) {
                         soundPlayer->playSound(Sound_ButtonClick);
                         currentGame->setCursorMode(Game::CursorMode_Normal);

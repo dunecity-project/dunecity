@@ -12,9 +12,9 @@ places each finished building on its planned plot automatically.
   production; it enters the placing cursor for that item (same footprint ghost and colouring as
   ordinary placement; units are ignored, earlier reservations count for build range and overlapping
   one shows red). Clicking the same item again leaves planning.
-- Left-click on the map reserves the plot and queues the item (one command). Hold **Shift** while
-  clicking the map to keep planning more copies. **Esc** or right-click leaves planning without
-  ordering.
+- Left-click on the map reserves the plot and queues the item (one command). The building stays
+  selected, so every further click plans another copy; **Esc**, right-click or clicking its
+  sidebar icon again leaves planning without ordering more.
 - All structures go through this flow (vanilla, slabs, R/C/I zones, Police, Stadium, Airport,
   Nuclear Plant). **Road and Power Line** keep the old flow (they build instantly).
 - Alt is not used here (reserved for the controls slice's repeat toggle). Only Construction Yard
@@ -71,7 +71,7 @@ places each finished building on its planned plot automatically.
   → 5/5 passed (unit tests incl. `[preplace]`: chained range, overlap, completion/fallback, cancel
   refund, mixed ordering, ids; updated protocol/enum/save-version tests).
 - `preplace_queue_probe` (`run-campaign-balance.py --preplace-probe --mod dunecity`) passed: sidebar
-  ON = planning / OFF = Shift ×5; Shift keeps planning, pending overlap refused, Esc leaves; 5
+  ON = planning / OFF = Shift ×5; planning stays on the building after a plot, pending overlap refused, Esc leaves; 5
   reservations (2 chained) + 6 refused (overlap, range, off-map, item, hostile coords, enemy player);
   save→load round trip identical; WindTrap, Barracks (chained), Silo (after moving a parked Quad)
   and a Residential zone placed exactly on plan with no placement command; 5th plot blocked by a

@@ -95,7 +95,8 @@ struct Params {
     bool enemiesAllied = true;
     Side allySide;
     Side enemySide;
-    Mode mode = Mode::Vanilla;
+    Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
+    std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 8;
 
     /// Clamp every field to its legal range; @a houseCount is the number of houses the

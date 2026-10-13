@@ -1,3 +1,34 @@
+## 2026-10-13 — local integration: RTS controls, pre-placement, formations, Random Skirmish
+
+Branch `integrate/feature-batch` (worktree `~/Documents/projects/dunecity-feature-batch`,
+build tree `build-int`) merges four branches cut from 40f4e7a8 and built in parallel:
+`feat/rts-controls`, `feat/preplace-queue`, `feat/formations`, `feat/skirmish-generator`.
+Each feature's behaviour, deviations from its spec and evidence are in
+`docs/rts-controls.md`, `docs/preplace-queue.md`, `docs/formations.md` and
+`docs/skirmish-generator.md` (force-added; `docs/*` is gitignored).
+
+- RTS controls: attack-move (A on ground; Ctrl keeps forced fire), Hold (H, attack mode
+  HOLD = 10), Shift-queued orders up to 16 with waypoint lines, Patrol (Q), Alt+click repeat
+  production, Alt+number adds to a group, double-click / Ctrl+A selection, hotkeys in tooltips.
+- Pre-placement: with "Choose building location when ordering" (General, default on) a
+  Construction Yard item is placed first and built after; the simulation places it on its plot
+  or falls back to ready-to-place with a ticker message.
+- Formations: right-click/M moves of 2+ ground units use `FormationPlanner` slots (armour front,
+  ranged behind) at the slowest vehicle's pace; Ctrl+F / Options toggle. Integration also gives
+  attack-move, patrol and Shift-queued waypoints formation slots (`Game::issuePositionOrder`,
+  no pace). AI: `AIPlayer` waves, campaign attack teams and QuantBot army recall are formed up;
+  defence (1.0.832 scramble, district defence) and pure Hunt waves (QuantBot `launchGroundHunt`,
+  SmartBot) are unchanged, because pacing Hunt waves widened measured arrival spread.
+- Random Skirmish (main menu): seeded map size/rock/spice/symmetry, 0-3 allies, 1-5 enemies,
+  enemies-allied toggle, tech level, vanilla base tiers and credit armies, DuneCity cities by
+  population. Zone entries in map INI may end in `,Level` (0-3); old maps load unchanged.
+
+Command ids appended after CMD_MATCH_PAUSE in this order: UNIT_ATTACKMOVE, UNIT_PATROL,
+UNIT_QUEUEORDER, BUILDER_SETREPEAT, BUILDER_RESERVE_PLACEMENT, BUILDER_CANCEL_RESERVATION,
+UNIT_FORMATION_MOVE. Network protocol 71. Save 9857 with separate gates: 9855 unit order queue
+and builder repeat set, 9856 placement reservations, 9857 unit formation membership; a 9854
+save loads with none of them. Not pushed, no PR, no release.
+
 ## 2026-10-13 — 1.0.833: sanitizers on by default for Debug, and what they found
 
 `-DDUNECITY_SANITIZE` (CMakeLists.txt) defaults to `address,undefined` for native

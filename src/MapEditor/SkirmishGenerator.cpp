@@ -566,7 +566,10 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line("WinPicture=WIN2.WSA");
     line("BriefPicture=SARDUKAR.WSA");
     line("TimeOut=0");
-    line(std::string("Mod=") + (params.mode == Mode::DuneCity ? MapMetadata::ModDuneCity : MapMetadata::ModVanilla));
+    // The map's content category: city zones make it a DuneCity map; otherwise the chosen mod's
+    // category (Tornie or plain vanilla content).
+    line(std::string("Mod=") + (params.mode == Mode::DuneCity ? std::string(MapMetadata::ModDuneCity)
+                                                              : MapMetadata::canonicalCategory(params.mod)));
     line("");
     line("[MAP]");
     line("SizeX=" + std::to_string(size));
@@ -671,6 +674,8 @@ void Params::load(const INIFile& config) {
     enemies = config.getIntValue(kSection, "Enemies", enemies);
     enemiesAllied = config.getBoolValue(kSection, "Enemies Allied", enemiesAllied);
     mode = static_cast<Mode>(config.getIntValue(kSection, "Mode", indexOf(mode)));
+    // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
+    mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}}) {
         side->playerClass = config.getStringValue(kSection, prefix + "AI", side->playerClass);
@@ -693,6 +698,7 @@ void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Enemies", enemies);
     config.setBoolValue(kSection, "Enemies Allied", enemiesAllied);
     config.setIntValue(kSection, "Mode", indexOf(mode));
+    config.setStringValue(kSection, "Mod", mod);
     config.setIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}}) {
         config.setStringValue(kSection, prefix + "AI", side->playerClass);

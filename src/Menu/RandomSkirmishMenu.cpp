@@ -21,6 +21,7 @@
 #include <FileClasses/INIFile.h>
 #include <FileClasses/TextManager.h>
 #include <GUI/MsgBox.h>
+#include <Menu/Dune2RReadinessMenu.h>
 #include <ObjectData.h>
 #include <mod/ModManager.h>
 #include <players/PlayerFactory.h>
@@ -38,13 +39,18 @@ using namespace SkirmishGenerator;
 
 namespace RandomSkirmish {
 
-bool activateMode(Mode mode) {
+bool activateMod(const std::string& modName) {
     auto& mods = ModManager::instance();
-    const std::string wanted = mode == Mode::DuneCity ? "dunecity" : "vanilla";
-    if(mods.getActiveModName() != wanted && !mods.setActiveMod(wanted)) return false;
+    if(modName.empty() || !mods.modExists(modName)) return false;
+    if(mods.getActiveModName() != modName && !mods.setActiveMod(modName)) return false;
     // A new game takes its rules from its own mod, like a new Custom Game.
     effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
-    return mods.getActiveModName() == wanted;
+    return mods.getActiveModName() == modName;
+}
+
+Mode modeForMod(const std::string& modName) {
+    const auto& mods = ModManager::instance();
+    return mods.modExists(modName) && mods.getModInfo(modName).enablesCityMode ? Mode::DuneCity : Mode::Vanilla;
 }
 
 Catalogue loadCatalogue(Mode mode) {
@@ -168,9 +174,10 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     for(int h = 0; h < NUM_HOUSES; ++h)
         if(isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h))) houseBox.addEntry(getHouseNameByNumber(static_cast<HOUSETYPE>(h)), h);
     for(int credits : kCreditPresets) creditsBox.addEntry(withThousands(credits), credits);
-    modeBox.addEntry(_("Vanilla"), static_cast<int>(Mode::Vanilla));
-    if(ModManager::instance().modExists("dunecity")) modeBox.addEntry(_("DuneCity"), static_cast<int>(Mode::DuneCity));
-    modeBox.setOnSelectionChange([this](bool) { onModeChanged(); });
+    // Every installed mod, as in Custom Game. City size only applies to a mod that runs the city sim.
+    availableMods = ModManager::instance().listModChoices();
+    for(size_t i = 0; i < availableMods.size(); ++i) modBox.addEntry(availableMods[i].selectionLabel(), static_cast<int>(i));
+    modBox.setOnSelectionChange([this](bool) { onModChanged(); });
     for(int level = 1; level <= 9; ++level) techBox.addEntry(std::to_string(level), level);
     alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(); });
     enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(); });
@@ -190,9 +197,9 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addRow(0, row++, _("Seed"), &seedBox);
     addRow(0, row++, "", &fixedSeedBox);
     addHeader(0, row++, _("Game"));
+    addRow(0, row++, _("Mod"), &modBox);
     addRow(0, row++, _("Your house"), &houseBox);
     addRow(0, row++, _("Credits"), &creditsBox);
-    addRow(0, row++, _("Mode"), &modeBox);
     addRow(0, row++, _("Tech level"), &techBox);
 
     row = 0;
@@ -205,11 +212,13 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addRow(1, row++, _("Base"), &allyBaseBox);
     addRow(1, row++, _("Army"), &allyArmyBox);
     addRow(1, row++, _("City"), &allyCityBox);
+    allyCityCaption = &captions[usedCaptions - 1];
     addHeader(1, row++, _("Enemies start with"));
     addRow(1, row++, _("AI"), &enemyAIBox);
     addRow(1, row++, _("Base"), &enemyBaseBox);
     addRow(1, row++, _("Army"), &enemyArmyBox);
     addRow(1, row++, _("City"), &enemyCityBox);
+    enemyCityCaption = &captions[usedCaptions - 1];
 
     // The seed field shares its row with the "New" button.
     const int columnWidth = columnSpan(width);
@@ -280,7 +289,14 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     fixedSeedBox.setChecked(params.fixedSeed);
     selectData(houseBox, params.house);
     selectData(creditsBox, params.credits);
-    selectData(modeBox, static_cast<int>(params.mode));
+    // The last-used mod, else the active one, else the first listed.
+    int modIndex = -1;
+    for(const std::string& wanted : {params.mod, ModManager::instance().getActiveModName()}) {
+        for(size_t i = 0; i < availableMods.size() && modIndex < 0; ++i)
+            if(availableMods[i].matchesSelectionName(wanted)) modIndex = static_cast<int>(i);
+    }
+    if(modIndex < 0 && !availableMods.empty()) modIndex = 0;
+    if(modIndex >= 0) modBox.setSelectedItem(modIndex);
     selectData(techBox, params.techLevel);
     enemiesAlliedBox.setChecked(params.enemiesAllied);
     for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAIBox, &allyBaseBox, &allyArmyBox, &allyCityBox},
@@ -296,7 +312,7 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(alliesBox, params.allies);
     onPlayersChanged();
     selectData(enemiesBox, params.enemies);
-    onModeChanged();
+    onModChanged();
 }
 
 void RandomSkirmishMenu::onPlayersChanged() {
@@ -312,11 +328,19 @@ void RandomSkirmishMenu::onPlayersChanged() {
     enemiesAlliedBox.setEnabled(enemiesBox.getSelectedEntryIntData() > 1);
     const bool anyAllies = allies > 0;
     for(DropDownBox* box : {&allyAIBox, &allyBaseBox, &allyArmyBox}) box->setEnabled(anyAllies);
-    onModeChanged();
+    onModChanged();
 }
 
-void RandomSkirmishMenu::onModeChanged() {
-    const bool city = modeBox.getSelectedEntryIntData() == static_cast<int>(Mode::DuneCity);
+std::string RandomSkirmishMenu::selectedMod() const {
+    const int index = modBox.getSelectedEntryIntData();
+    return index >= 0 && index < static_cast<int>(availableMods.size()) ? availableMods[index].name : std::string();
+}
+
+void RandomSkirmishMenu::onModChanged() {
+    // City size exists only for a mod that runs the city simulation; other mods hide the rows.
+    const bool city = RandomSkirmish::modeForMod(selectedMod()) == Mode::DuneCity;
+    for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, allyCityCaption, enemyCityCaption})
+        if(widget != nullptr) widget->setVisible(city);
     allyCityBox.setEnabled(city && alliesBox.getSelectedEntryIntData() > 0);
     enemyCityBox.setEnabled(city);
 }
@@ -339,7 +363,8 @@ Params RandomSkirmishMenu::readParams() const {
     params.fixedSeed = fixedSeedBox.isChecked();
     params.house = houseBox.getSelectedEntryIntData();
     params.credits = creditsBox.getSelectedEntryIntData();
-    params.mode = static_cast<Mode>(modeBox.getSelectedEntryIntData());
+    params.mod = selectedMod();
+    params.mode = RandomSkirmish::modeForMod(params.mod);
     params.techLevel = techBox.getSelectedEntryIntData();
     params.allies = alliesBox.getSelectedEntryIntData();
     params.enemies = enemiesBox.getSelectedEntryIntData();
@@ -369,8 +394,14 @@ void RandomSkirmishMenu::remember(const Params& params) const {
 bool RandomSkirmishMenu::generate(Params& params, Result& result) {
     params = readParams();
     remember(params);
-    if(!RandomSkirmish::activateMode(params.mode)) {
-        openWindow(MsgBox::create(_("The mod for this game mode could not be activated.")));
+    if(!RandomSkirmish::activateMod(params.mod)) {
+        openWindow(MsgBox::create(_("The chosen mod could not be activated.")));
+        return false;
+    }
+    // The Dune II remaster needs its artwork ready, exactly as when Custom Game picks it.
+    const auto gate = ensureDune2RArtworkReady(params.mod);
+    if(!gate.ready) {
+        if(!gate.message.empty()) openWindow(MsgBox::create(gate.message));
         return false;
     }
     result = SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode));

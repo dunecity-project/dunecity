@@ -182,15 +182,16 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     settings.general.chooseBuildingLocation = true;
     SDL_Log("PREPLACE_PROBE: sidebar setting on=planning off=x5 order");
 
-    // ---- Planning cursor: Shift keeps it, overlap with a pending plot is refused, Esc leaves. ----
+    // ---- Planning cursor: it stays on the building after a plot, overlap with a pending plot is
+    // refused, Esc leaves. ----
     require(fixtureYard->checkReservationPlot(Structure_Barracks, at(4,0).x, at(4,0).y) == PlacementReservation::Verdict::OutOfRange,
         "The chained plot must be out of the yard's own range");
     clickItem(Structure_WindTrap, KMOD_NONE);
-    SDL_SetModState(KMOD_SHIFT);
-    require(game->handlePlacementClick(at(2,0).x, at(2,0).y), "Planning click on a valid plot failed");
-    require(game->isPlanningPlacement(), "Shift must keep planning");
-    require(!game->handlePlacementClick(at(3,1).x, at(3,1).y), "A plot overlapping a just-ordered one was accepted");
     SDL_SetModState(KMOD_NONE);
+    require(game->handlePlacementClick(at(2,0).x, at(2,0).y), "Planning click on a valid plot failed");
+    require(game->isPlanningPlacement() && game->getPlanningItemID() == Structure_WindTrap,
+            "A plain click must keep the same building selected for the next plot");
+    require(!game->handlePlacementClick(at(3,1).x, at(3,1).y), "A plot overlapping a just-ordered one was accepted");
     SDL_KeyboardEvent esc{}; esc.type = SDL_KEYDOWN; esc.keysym.sym = SDLK_ESCAPE;
     game->handleKeyInput(esc);
     require(!game->isPlanningPlacement() && game->pInGameMenu == nullptr, "Esc must leave planning without opening the menu");
