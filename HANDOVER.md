@@ -15,7 +15,17 @@ into Residential/Commercial, and power was dozens of wind traps.
   Commercial, then Residential, with road reach checked per lot; nuclear plants power DuneCity
   bases from tech 6 with at most 4 wind traps. Measurements in `docs/skirmish-generator.md`.
 
-Save 9857 and protocol 71 unchanged; only the app version moved.
+Save 9857 and protocol 71 unchanged; only the app version moved. Full CTest 92/92 passed on the
+merged tree (before the version bump); after the bump `dunelegacy_tests`,
+`skirmish_generator_tests` and `skirmish_generator_probe` passed again. The probe now covers
+Stefan's configuration (`stefan-128`) and AI partners (`partner-support`, `partner-quantbot`).
+
+Installed on the MBA at 00:17 AEDT 2026-10-14 from 3c72cea4 (same procedure as 1.0.834; no
+Homebrew/workstation library references, signature and desktop runtime check passed on both
+machines): version 1.0.835, executable SHA256
+45e3cace3b400e75738607479a8ead309f8b7a7761e2d8cecc1caf790bcf1261. Game not running; saves
+untouched. Local 1.0.834 is at
+/Applications/.dunecity-backup-before-1.0.835-20261014-001736/dunecity.app.
 
 ## 2026-10-13 — local 1.0.834: RTS controls, pre-placement, formations, Random Skirmish, build grid
 
