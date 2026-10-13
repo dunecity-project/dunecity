@@ -9,10 +9,18 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
   vanilla-1v1  small vanilla 1v1
   allied-2v3   2v3 against allied enemies, Large bases, 10k armies, plus a one-minute smoke run
   city-192     DuneCity 192x192, 15k cities at tech 8, measured population, smoke run, save/load
+  stefan-128   Stefan's played configuration (128, 2 allies + 2 enemies, tech 9, Medium bases,
+               5k armies, 40k cities, seed 488631365): measured population, smoke run, save/load
+  partner-support  the player's own Medium base, 5k army and 5k city with a qBotSupportMedium
+               partner in the house: two players, base on positive power, in-game screenshots,
+               smoke run
+  partner-quantbot a full qBotMedium partner in the player's house loads
+  render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
+               maps and of generated maps; --render-save adds the map a saved match started from
 
-Every match case asserts houses/teams, structure and unit counts, army value and power against
-the generator's own plan. A smoke run fails on any error, invalid entry or occupied position the
-engine logs while it plays.
+Every match case asserts houses/teams, players per house, structure and unit counts, army value
+and power against the generator's own plan, and draws the loaded (and played) map. A smoke run
+fails on any error, invalid entry or occupied position the engine logs while it plays.
 """
 import argparse
 import os
@@ -27,8 +35,11 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--cases', default='menu,legacy-map,vanilla-1v1,allied-2v3,city-192')
+parser.add_argument('--cases', default='menu,legacy-map,vanilla-1v1,allied-2v3,city-192,stefan-128,'
+                                       'partner-support,partner-quantbot,render')
 parser.add_argument('--keep', action='store_true', help='Keep profiles and saves (screenshots are always kept)')
+parser.add_argument('--render-save', type=Path, help='render: also draw the map this saved match (.dls) started from')
+parser.add_argument('--render-tag', default='current', help='render: file-name prefix of the generated maps')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -92,8 +103,12 @@ for case in args.cases.split(','):
             f'Interface Height = {height}\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Skirmish tester\n')
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                    SKIRMISH_PROBE_OUT=str(out), SKIRMISH_PROBE_CASE=case, SKIRMISH_SOURCE_DIR=str(root))
-        if case in ('allied-2v3', 'city-192'):
+        if case in ('allied-2v3', 'city-192', 'stefan-128', 'partner-support'):
             env['SKIRMISH_PROBE_SMOKE'] = '1'
+        if case == 'render':
+            env['SKIRMISH_RENDER_TAG'] = args.render_tag
+            if args.render_save:
+                env['SKIRMISH_RENDER_SAVE'] = str(args.render_save.resolve())
         logpath = out / f'run-{label}.log'
         with logpath.open('w') as log:
             subprocess.run([str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=log,
@@ -113,6 +128,7 @@ for case in args.cases.split(','):
             raise RuntimeError(f'{label}: map load warnings, first: {map_warnings[0]}')
         summary += [line[line.index('SKIRMISH_PROBE'):] for line in text.splitlines() if 'SKIRMISH_PROBE' in line]
         summary += [line[line.index('SKIRMISH_SMOKE'):] for line in text.splitlines() if 'SKIRMISH_SMOKE' in line]
+        summary += [line[line.index('SKIRMISH_RENDER'):] for line in text.splitlines() if 'SKIRMISH_RENDER' in line]
 
 (out / 'summary.txt').write_text('\n'.join(summary) + '\n')
 print('\n'.join(summary))

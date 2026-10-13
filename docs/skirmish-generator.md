@@ -27,9 +27,11 @@ All of these are saved as last-used values in the configuration file, section `[
 - **Map**
   - Size: 64, 96, 128, 160, 192 or 256. Default 128.
   - Rock: Low 15%, Medium 25%, High 35%, Very high 50%. This is the target share of rock plus
-    mountain.
-  - Spice: None, Low, Medium, High, Very high. This sets the number of fields, a field between
-    neighbouring starts, and the share of thick spice (0/10/25/40/55%).
+    mountain. Starts are always clean rock, so a crowded map (many houses, large cities on a
+    small map) ends above its target: Stefan's 128x128 5-house 40,000-people match measures 67%.
+  - Spice: None, Low 6%, Medium 12%, High 18%, Very high 24% of the map (spice, thick spice and
+    blooms; Very high matches the map editor's default random map). Thick spice share inside the
+    fields 0/10/25/40/55%.
   - "Mirrored starts".
   - Seed. It is shown and editable, and "New" rolls a fresh one. "Keep this seed" stops a new seed
     from being rolled on each visit. This checkbox is an addition, because "random by default" and
@@ -66,20 +68,38 @@ All of these are saved as last-used values in the configuration file, section `[
   the largest opponent's.
 
 ## Generation
-- **Terrain**
-  - Built on `generateRandomMap`. A binary search finds the smallest rock-field count that reaches
-    the rock target, with the start plateaus already carved.
-  - Rock lying at least 4 tiles from any other terrain, and outside every plateau's 5-tile margin,
-    becomes mountain.
-  - Every start is checked for ground connection (only mountains block). If a start is cut off, the
-    generator retries with seed+1, up to 8 attempts. If all fail, it levels the mountains, which
-    always connects the starts, and logs that it did.
+- **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
+  (`generateRandomMap`, which itself is unchanged):
+  - The base layer is the editor's random map itself (organic rock fields, dunes, rock bits,
+    blooms) with no spice. A binary search picks the smallest editor rock-field count that reaches
+    the rock target with everything below in place.
+  - Scattered rock islands (one per 2,048 tiles, editor-style random walks).
+  - Every start's clean core (the rectangle its base and city need) is rock, grown by a rim of
+    irregular width: smooth value noise between 2 and 7 tiles, plus a tile of per-tile jitter,
+    smoothed with the editor's fill-in rule, plus three editor-style rock lobes walked out from
+    beyond the rim. The core is never the outline.
+  - Mountains, never within about 3 tiles of a core: massifs in rock at least 5 tiles from the
+    sand and a ragged 10–16 tiles from every core, wandering ridges (one per 60 rock tiles
+    outside the cores) through rock fields away from the rims, and clumps of outcrops on the rims
+    within 3 tiles of the sand. The map border counts as an edge of the rock.
+  - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
+    they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
+    spice target is reached. The first field goes beside every start (toward the map centre),
+    then between neighbouring starts, then anywhere.
+  - Mirrored maps paint every change at every mirror image and key all noise and coin flips to
+    the mirror-canonical tile, so they stay exactly symmetric.
+  - Every start is checked for ground connection. Up to 8 seeds are tried, then mountains are
+    levelled. In the unit test's 150-configuration random sweep no map needs levelling.
+  - Measured (`render` probe case, 128x128): editor random maps have their longest straight rock
+    edge at 11–12 tiles and 45–47 outline corners per 100 outline edges; the old generator had 57
+    and 3 on Stefan's map (rectangular plateaus) and 23 and 37 on a vanilla 2v2; the new generator
+    has 12 and 53 on Stefan's configuration and 10 and 56 on the vanilla 2v2.
 - **Start positions**
   - Mirrored mode: point mirroring for 2 houses; otherwise both axes, from the corner and edge slots.
-    The terrain is post-processed through `MapMirror`, so it is exactly symmetric, and every mirror
-    image of a start is carved too.
   - Normal mode: an evenly spaced square ring with a seeded offset.
   - The player takes slot 0, allies the nearest slots, and enemies the rest.
+  - Each start owns its core and two tiles around it (cores first): no other house builds,
+    zones or parks there.
 - **Base templates** (each item is included only if the house can field it at the chosen tech
   level, counting the item's own tech level, its builder and its prerequisites):
   - Outpost: Construction Yard, Refinery, Radar.
@@ -89,18 +109,31 @@ All of these are saved as last-used values in the configuration file, section `[
     beside the turrets.
   - Fortress: 3 Refineries, 3 Silos, 2 Heavy Factories, Palace, 4 Gun and 8 Rocket Turrets, and
     longer wall runs.
-  - Windtraps are added until power produced is greater than power required, including the city's
-    draw.
-  - Buildings are packed on concrete, on rock, with a one-tile lane between them. Turrets go on a
-    ring two tiles outside the packed base.
+- **Power** (`addPower`): base and city together, all on the base side, production at least a
+  tenth above requirement (the buffer the AI's city-power rule keeps). Where the house can build
+  `Structure_NuclearPlant` (DuneCity, tech 6+, the Catalogue's real power value, 2,000), reactors
+  carry the load and at most 4 wind traps top up; a larger remainder takes another reactor, and
+  one wind trap always stays (the reactor's prerequisite). Vanilla and tech 1–5 use wind traps
+  only. Stefan's 40,000-people cities with Medium bases went from 19 wind traps each to 1 reactor
+  and 1 wind trap (power 2,100 / 1,895 in the engine).
+- **Base layout** (`layoutBase`): the Construction Yard at the heart of the base area, then every
+  building takes the free spot with the best score: close to the yard, refineries toward the
+  nearest spice, silos beside refineries, factories toward the nearest enemy start, wind traps
+  and reactors behind; seeded jitter of up to two tiles keeps spacing irregular. Every building
+  stands on concrete and keeps a one-tile lane; the base may spread onto its rim but never around
+  the city. Reactors keep the AI's blast spacing (footprint distance 5) from the Construction
+  Yard, factories, refineries and the other buildings `TacticalSafetyPolicy` protects, where the
+  base has room. Turrets take spots 2–3 tiles outside the buildings, at least 3 apart, on the side
+  facing the enemy (relaxed to 2–5 and 2 apart in a crowded base), with wall runs across the
+  approach.
 - **Armies**
   - Bought at the house's ObjectData prices from the ground combat units it can field.
   - Half the budget is spent on seeded random picks. The rest is filled exactly by a bounded
     knapsack.
   - No unit type may take more than 40% of the budget. When fewer than 3 types are available the cap
     rises to 100/n%, otherwise the budget could not be spent.
-  - Units are placed on the nearest open tiles around the base in Area Guard, never touching a
-    building or road and never on another house's plateau.
+  - Units wait in Area Guard on the nearest open tiles in front of the base, toward the enemy,
+    never touching a building or road and never on another house's start.
 - **Cities**
   - The generator works from the target population divided by the display multiplier (20).
     Population from the base's own city-role buildings is subtracted first.
@@ -108,8 +141,16 @@ All of these are saved as last-used values in the configuration file, section `[
   - A Stadium, Airport or Starport is added when residential, commercial or industrial population
     would pass the engine's civic thresholds (500 / 100 / 70).
   - One Police Station is added per 16 zones.
-  - Lots sit in a road grid of 4-zone blocks on the map-edge side of the plateau. City Windtraps sit
-    in the grid.
+  - Districts (`arrangeCity`) in whole columns of road-grid blocks (four 2x2 lots, roads on every
+    fifth line) from the base side outwards: Industrial, Commercial, Residential. Industrial is
+    packed into one block-connected district centred along its column; Commercial and Residential
+    are spread evenly along theirs. A Commercial column always separates Industrial from
+    Residential (6 tiles apart on Stefan's configuration; the unit test requires at least 5;
+    his old map had I lots touching R lots). Columns are as tall as the Industrial or Commercial
+    district needs (at most 8 blocks), so every simulation trip (R→C, C→I, I→R from the first ring
+    road, at most 20 road steps) finds its destination; the unit test replays that rule for every
+    lot. Police take the empty lots that cover the most homes and shops. On a crowded map a city
+    only uses tiles nobody else owns.
 - **Map extension:** an `ID` entry may carry a fifth field, `...,Position,Level`, giving a zone's
   starting level (0–3). A residential lot gets the matching population (16 / 24 / 40).
   - Entries without the field load exactly as before, as empty lots.
@@ -143,12 +184,25 @@ All of these are saved as last-used values in the configuration file, section `[
     and power is positive, city draw included.
   - Armies: 90–100% of budget and the per-type cap, for 5 budgets × 9 tech levels × 8 houses.
   - Every structure, tile entry and unit sits on a legal tile, with no overlaps and unique `GEN`
-    keys, across six configurations from 64 to 256.
+    keys, across six configurations from 64 to 256, Stefan's configuration, and a 150-configuration
+    seeded sweep over every choice (which also requires connected starts and no levelled mountains).
   - Ground connectivity, including a negative case.
-  - Rock share is monotonic and within +12 points of its target.
+  - Rock share is monotonic and within +12 points of its target; spice share within 3 points of
+    its target for every preset over three seeds, monotonic, with thick spice.
+  - Terrain looks like the editor's: longest straight rock edge at most 16 tiles, mountains and
+    dunes present, every start's rim reaches at least 2 tiles past its core and changes width at
+    least once per 8 edge tiles, and the core stays clean rock.
   - Mirror symmetry.
   - Spice "None" leaves no spice.
   - Every city preset × 5 base sizes × tech 4 and 8 lands within ±25% (one exception, above).
+  - Zoning: Industrial lots at least 5 tiles from every Residential lot, one connected Industrial
+    district per city, every R/C/I trip reaches its destination by road within 20 steps (the
+    simulation's rule replayed), every R/C lot within 23 tiles of a police station.
+  - Power: reactors where available (tech 6, 8, 9, all houses), at most 4 wind traps, wind traps
+    only before tech 6 and in vanilla, positive power for every generated base including the
+    player's; reactors blast-spaced from protected buildings.
+  - Bases: the Construction Yard is among the most central buildings, and positions spread over
+    many rows and columns.
   - Zone-level parsing: bundled maps parse as "no level", and malformed fields are rejected.
   - Last-used parameters round-trip through the config file, and corrupt values are clamped.
 - `ctest --test-dir build -R skirmish_generator_probe` (`tests/skirmish/run-skirmish-probe.py`, real
@@ -157,10 +211,26 @@ All of these are saved as last-used values in the configuration file, section `[
     reopening, and that Save map writes the file. Screenshots are saved as
     `build/skirmish-probe/random-skirmish*.bmp`.
   - **legacy-map:** Metropolis loads with all 2,478 zones at level 0.
-  - **vanilla-1v1** (64): 7 enemy structures, army 2500/2500, power 100/95.
+  - **vanilla-1v1** (64): 8 enemy structures, army 2500/2500, power 200/95 (a tenth spare means
+    2 wind traps). Every case also checks players per house and the player's own base.
   - **allied-2v3** (128, Large, 10k): 5 houses with the right teams, 36–37 structures each,
     army 10000/10000 each, positive power. A one-minute played smoke had no problem lines, and a
     save/load round trip kept every structure and team.
-  - **city-192** (DuneCity, 15k, tech 8): 59 structures and army 5000/5000 per AI house. Measured
-    population after two city days was 13,080 and 13,440 (within 25%). A one-minute smoke had a
-    clean log, and save/load passed.
+  - **city-192** (DuneCity, 15k, tech 8): 52 structures, 1 reactor and 1 wind trap, power
+    2,100/878, army 5000/5000 per AI house. Measured population after two city days was 14,720
+    and 14,360 (within 25%). A one-minute smoke had a clean log, and save/load passed.
+  - **stefan-128** (Stefan's played configuration, 40k cities): 111 structures, 1 reactor and 1
+    wind trap, power 2,100/1,895 per AI house. Population after two city days 37,720 / 38,600 /
+    38,280 / 38,880 (target 40,000). Clean one-minute smoke, save/load passed.
+  - **partner-support** (player Medium base, 5k army, 5k city, qBotSupportMedium partner): the
+    player's house holds exactly HumanPlayer + qBotSupportMedium, 25 structures with the
+    Construction Yard, power 2,100/396, army 5000/5000; population 5,000 and 4,680 after two
+    days; clean one-minute smoke and save/load. In-game screenshots
+    `build/skirmish-probe/ingame-player-base.png` and `ingame-player-city.png`.
+  - **partner-quantbot** (vanilla 96, qBotMedium partner): loads with HumanPlayer + qBotMedium in
+    the player's house, power 300/200.
+  - **render:** whole-map PNGs (4 px per tile) and measurements of two editor random maps and
+    the generated Stefan and vanilla 2v2 maps; every match case also writes `loaded-<case>.png`
+    and, after its smoke run, `played-<case>.png`. `--render-save <file.dls>` draws the map a
+    saved match started from (the save itself needs its exact mod revision, which an isolated
+    profile cannot fetch).
