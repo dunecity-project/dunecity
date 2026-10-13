@@ -52,11 +52,19 @@ places each finished building on its planned plot automatically.
   reservation of the house.
 - Completion runs in `ConstructionYard::update()` in the tick: valid on the real map → placed via
   `House::placeStructure` (the `CMD_PLACE_STRUCTURE` path: same cost, one-palace rule, city hooks,
-  "Construction complete"). Only units in the way → own units are ordered off (forced move,
-  cycle-seeded RNG) once a second for up to 5 s game time. Still blocked, or a structure/lost
-  adjacency → falls back: ready to place, red ghost, ticker "`<Building> could not be placed at the
-  planned site`". While a reservation is pending the order is not "ready to place", so neither the
-  player nor a partner AI can place it elsewhere.
+  "Construction complete").
+- Units never cancel a plan. Only units in the way → the finished building **waits as long as it
+  takes**: own units are ordered off (forced move, cycle-seeded RNG) once a second; another house's
+  units are waited out, with a one-time ticker "`<Building> is waiting: enemy units are on the
+  planned site`". The ghost turns amber with "waiting", the sidebar button shows **BLOCKED**, and
+  the player may place the building elsewhere by hand (click the item or press P, then click; the
+  `CMD_PLACE_STRUCTURE` executor allows a blocked reserved order). AI players never place a
+  blocked order (`isWaitingToPlace()` stays false). As soon as the plot clears it is placed on plan.
+- A structure on the plot or lost build range → falls back: ready to place, red ghost, ticker
+  "`<Building> could not be placed at the planned site`".
+- Planned plots are kept clear before completion too: once a second (staggered per yard) own units
+  that have stopped on any planned plot of the yard are moved off it. Units walking through, or in
+  Hold, are left alone.
 - Yard destroyed or captured (capture recreates the structure): its queue and reservations vanish;
   money is handled exactly as for any dying builder today (progress lost, unstarted orders cost
   nothing). An owner change via `setOwner` also clears reservations.

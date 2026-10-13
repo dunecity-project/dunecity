@@ -35,15 +35,20 @@ public:
         Places the just produced structure at x,y.
         \param  x           the x coordinate (in tile coordinates)
         \param  y           the y coordinate (in tile coordinates)
+        \param  byPlayer    a player's CMD_PLACE_STRUCTURE: may also place a finished reserved
+                            order whose plot is blocked by units somewhere else
         \return true if placement was successful, false otherwise
     */
-    bool doPlaceStructure(int x, int y);
+    bool doPlaceStructure(int x, int y, bool byPlayer = false);
     void updateStructureSpecificStuff() override;
 
     bool update() override;
 
-    /// Units are given this long (game time) to clear a finished reservation's plot.
-    static Uint32 reservedPlacementUnitWaitCycles();
+    /// The finished reserved front order is waiting for units to leave its plot.
+    bool isReservedPlacementBlocked() const;
+
+    /// A player may place the finished front order by hand: ready to place, or blocked by units.
+    bool mayPlaceByHand() const override { return isWaitingToPlace() || isReservedPlacementBlocked(); }
 
     /// Structures that go through the pre-placement flow (everything but instant Roads).
     static bool isReservableItem(Uint32 itemID);
@@ -86,8 +91,18 @@ private:
     /// Places, waits for units, or falls back, once the reserved front order is finished.
     void updateReservedPlacement();
 
-    /// Ask this house's units standing on the plot to move off it (deterministic).
-    void moveOwnUnitsOffPlot(Uint32 itemID, int x, int y);
+    /**
+        Ask this house's units standing on the plot to move off it (deterministic).
+        \param  idleOnly    only units that are standing still and not holding position; units
+                            walking through or holding are left alone
+    */
+    void moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly);
+
+    /// Once a second, own idle units are moved off every planned plot of this yard.
+    void keepPlannedPlotsClear();
+
+    /// Does a unit of another house stand on the plot?
+    bool foreignUnitsOnPlot(Uint32 itemID, int x, int y) const;
 };
 
 

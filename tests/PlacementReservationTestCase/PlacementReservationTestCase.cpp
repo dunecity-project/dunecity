@@ -73,19 +73,12 @@ TEST_CASE("Pre-placement: reserved plots never overlap", "[preplace][validity][o
 
 TEST_CASE("Pre-placement: a finished reservation places, waits for units, or falls back",
           "[preplace][completion]") {
-    const std::uint32_t wait = 5000 / 16;   // MILLI2CYCLES(5000) at GAMESPEED_DEFAULT 16
-    REQUIRE(decideCompletion(true, false, 0, wait) == Completion::Place);
-    // A plot that becomes valid during the wait is placed at once.
-    REQUIRE(decideCompletion(true, true, wait - 1, wait) == Completion::Place);
-
-    // Only units in the way: keep asking them to move for the whole budget...
-    REQUIRE(decideCompletion(false, true, 0, wait) == Completion::WaitForUnits);
-    REQUIRE(decideCompletion(false, true, wait - 1, wait) == Completion::WaitForUnits);
-    // ...and not one cycle longer.
-    REQUIRE(decideCompletion(false, true, wait, wait) == Completion::Fallback);
-
-    // A structure on the plot, or lost adjacency, falls back without waiting.
-    REQUIRE(decideCompletion(false, false, 0, wait) == Completion::Fallback);
+    REQUIRE(decideCompletion(true, false) == Completion::Place);
+    REQUIRE(decideCompletion(true, true) == Completion::Place);
+    // Only units in the way: wait (own units move off, enemies are waited out), never give up.
+    REQUIRE(decideCompletion(false, true) == Completion::WaitForUnits);
+    // A structure on the plot, or lost build range, falls back.
+    REQUIRE(decideCompletion(false, false) == Completion::Fallback);
 }
 
 TEST_CASE("Pre-placement: cancelling refunds only the order under construction", "[preplace][cancel][refund]") {

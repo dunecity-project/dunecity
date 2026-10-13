@@ -248,6 +248,11 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     game->initializeGameLoop();
     game->bPause = false;
     house = pLocalHouse;
+    // The reload replaced every player object; the old enemy pointer is gone with the old game.
+    enemyPlayer = nullptr;
+    for(int h = 0; h < NUM_HOUSES && !enemyPlayer; ++h)
+        if(House* other = game->getHouse(h); other && other != house && !other->getPlayerList().empty()) enemyPlayer = other->getPlayerList().front().get();
+    require(enemyPlayer != nullptr, "No enemy player after reload");
     fixtureYard = yard(*game, yardID);
     require(fixtureYard != nullptr && game->getLoadedSavegameVersion() == SAVEGAMEVERSION, "Yard lost across reload");
     std::vector<Saved> after;
@@ -325,6 +330,96 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(advanceUntil(*game, 400, [&] { return structureAt(house, Structure_WindTrap, pAfter) != nullptr; }),
         "The reserved order behind the placed one was not built on plan");
     SDL_Log("PREPLACE_PROBE: mixed queue kept order (unreserved waited for the player, reserved followed on plan)");
+
+    // ---- Units and planned plots. ----
+    {
+        House* enemyHouse = game->getHouse(enemyPlayer->getHouse()->getHouseID());
+        require(enemyHouse != nullptr && enemyHouse != house, "No enemy house fixture");
+        const Coord pNudge = at(2,4), pEnemy = at(0,4), pElsewhere = at(4,4);
+
+        // An own unit that stops on a planned plot is sent off it before the building is done.
+        reserve(*game, yardID, Structure_WindTrap, pNudge);
+        advance(*game, 2);
+        require(fixtureYard->getProductionQueueSize() == 1, "Nudge plot was not reserved");
+        fixtureYard->doSetOnHold(true);
+        UnitBase* loiterer = house->createUnit(Unit_Quad);
+        loiterer->deploy(Coord(pNudge.x + 1, pNudge.y + 1));
+        // Checked once a second; then the unit needs a moment to drive off the tile.
+        require(advanceUntil(*game, MILLI2CYCLES(1000) + 300, [&] {
+            const Coord here = loiterer->getLocation();
+            return !(here.x >= pNudge.x && here.x < pNudge.x + 2 && here.y >= pNudge.y && here.y < pNudge.y + 2);
+        }), "An own unit standing on a planned plot was not moved off it");
+        Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, yardID,
+                fixtureYard->getProductionQueue().front().reservationID).executeCommand();
+        fixtureYard->doSetOnHold(false);
+        require(fixtureYard->getProductionQueueSize() == 0, "Nudge fixture cleanup failed");
+        SDL_Log("PREPLACE_PROBE: an idle own unit on a planned plot was moved off it");
+
+        // An enemy unit on the plot: the finished building waits, however long, without falling back.
+        // Our own fixture units would shoot it, so they leave the field first.
+        std::vector<UnitBase*> shooters;
+        for(UnitBase* unit : unitList) if(unit->getOwner() == house && unit->canAttack()) shooters.push_back(unit);
+        for(UnitBase* unit : shooters) unit->setHealth(0);
+        advance(*game, 2);
+        UnitBase* created = enemyHouse->createUnit(Unit_Quad);
+        require(created != nullptr, "Enemy fixture unit missing");
+        created->deploy(Coord(pEnemy.x + 1, pEnemy.y + 1));
+        // Held in place and out of its AI's orders, so the probe decides when it leaves.
+        created->doSetAttackMode(HOLD);
+        created->setRespondable(false);
+        const Uint32 squatterID = created->getObjectID();
+        const auto squatterUnit = [&] { return dynamic_cast<UnitBase*>(game->getObjectManager().getObject(squatterID)); };
+        const auto squatterOnPlot = [&] {
+            const UnitBase* unit = squatterUnit();
+            if(unit == nullptr) return false;
+            const Coord here = unit->getLocation();
+            return here.x >= pEnemy.x && here.x < pEnemy.x + 2 && here.y >= pEnemy.y && here.y < pEnemy.y + 2;
+        };
+        reserve(*game, yardID, Structure_WindTrap, pEnemy);
+        const bool blockedInTime = advanceUntil(*game, 600, [&] { return fixtureYard->isReservedPlacementBlocked(); });
+        SDL_Log("PREPLACE_DIAG: queue=%d awaiting=%d progress=%d placed=%d squatter_alive=%d on_plot=%d credits=%d",
+                fixtureYard->getProductionQueueSize(), int(fixtureYard->isAwaitingReservedPlacement()),
+                fixtureYard->getProductionProgress().lround(), int(structureAt(house, Structure_WindTrap, pEnemy) != nullptr),
+                int(squatterUnit() != nullptr), int(squatterOnPlot()), house->getCredits());
+        require(blockedInTime, "The finished building did not wait for the enemy unit");
+        const std::string waitingMessage = resolveItemName(Structure_WindTrap) + " is waiting: enemy units are on the planned site";
+        require(tickerHas(*game, waitingMessage), "The waiting ticker message is missing");
+        capture("preplace-waiting.png");
+        SDL_Log("PREPLACE_SCREENSHOT: preplace-waiting.png (amber ghost waiting for the enemy unit)");
+        // While the enemy stands there (at least the old 5 s budget, up to 10 s), the building
+        // neither falls back nor lands under it.
+        int waited = 0;
+        for(; waited < static_cast<int>(MILLI2CYCLES(10000)) && squatterOnPlot(); ++waited) {
+            advance(*game, 1);
+            require(fixtureYard->isReservedPlacementBlocked() && !fixtureYard->getProductionQueue().front().reservationFailed
+                    && !structureAt(house, Structure_WindTrap, pEnemy), "The blocked building gave up or was placed under the enemy");
+        }
+        SDL_Log("PREPLACE_PROBE: waited %d cycles with the enemy on the plot (still there: %d)", waited, int(squatterOnPlot()));
+        require(waited > static_cast<int>(MILLI2CYCLES(5000)), "The enemy fixture left the plot too early to show the wait");
+        require(squatterOnPlot(), "The enemy fixture did not stay on the plot");
+        require(fixtureYard->mayPlaceByHand() && !fixtureYard->isWaitingToPlace(),
+            "A blocked building must be placeable by the player but not by an AI");
+
+        // The player may put it somewhere else meanwhile.
+        game->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_PLACE_STRUCTURE, yardID,
+            static_cast<Uint32>(pElsewhere.x), static_cast<Uint32>(pElsewhere.y)));
+        advance(*game, 3);
+        require(structureAt(house, Structure_WindTrap, pElsewhere) && fixtureYard->getProductionQueueSize() == 0,
+            "The player could not place the blocked building elsewhere");
+        SDL_Log("PREPLACE_PROBE: enemy on the plot: building waited %d cycles without falling back, then placed elsewhere by hand", waited);
+
+        // Or it waits until the enemy leaves, then lands on its plot by itself.
+        reserve(*game, yardID, Structure_WindTrap, pEnemy);
+        require(advanceUntil(*game, 600, [&] { return fixtureYard->isReservedPlacementBlocked(); }),
+            "The second building did not wait for the enemy unit");
+        require(squatterUnit() != nullptr && squatterOnPlot(), "The enemy fixture is no longer on the plot");
+        squatterUnit()->setRespondable(true);
+        squatterUnit()->doMove2Pos(at(13,8).x, at(13,8).y, true);
+        require(advanceUntil(*game, 2000, [&] { return structureAt(house, Structure_WindTrap, pEnemy) != nullptr; }),
+            "The building was not placed on its plot after the enemy left");
+        require(fixtureYard->getProductionQueueSize() == 0, "The placed order is still queued");
+        SDL_Log("PREPLACE_PROBE: enemy left the plot and the waiting building was placed on plan");
+    }
 
     // ---- Cancel and refund. ----
     const Coord pCancelA = at(10,2), pCancelB = at(10,4);

@@ -84,25 +84,23 @@ Verdict validate(const Footprint& plot, bool tilesOk, OwnRange ownRange,
 /// What the simulation does with a finished, reserved building this cycle.
 enum class Completion {
     Place,          ///< the plot is valid on the real map: place it now
-    WaitForUnits,   ///< only units are in the way: ask them to move and check again
-    Fallback        ///< give up: the order becomes an ordinary ready-to-place building
+    WaitForUnits,   ///< only units are in the way: own units are moved off, others are waited for
+    Fallback        ///< the plot itself is unusable: the order becomes ordinary ready-to-place
 };
 
 /**
+    Units never cancel a plan: a plot blocked only by units waits, however long, until it clears
+    (own units are moved off, enemy units are waited out) or the player places the building
+    elsewhere by hand. Only a plot that is unusable without any units - a structure on it, or
+    lost build range - falls back.
     \param  placeableNow            the plot passes the normal placement rules right now
     \param  placeableIgnoringUnits  it would pass if no unit stood on it (range included)
-    \param  waitedCycles            cycles already spent waiting for units
-    \param  maxWaitCycles           the wait budget
 */
-inline Completion decideCompletion(bool placeableNow, bool placeableIgnoringUnits,
-                                   std::uint32_t waitedCycles, std::uint32_t maxWaitCycles) {
+inline Completion decideCompletion(bool placeableNow, bool placeableIgnoringUnits) {
     if(placeableNow) {
         return Completion::Place;
     }
-    if(placeableIgnoringUnits && waitedCycles < maxWaitCycles) {
-        return Completion::WaitForUnits;
-    }
-    return Completion::Fallback;
+    return placeableIgnoringUnits ? Completion::WaitForUnits : Completion::Fallback;
 }
 
 /// Result of removing one reservation from a production queue.

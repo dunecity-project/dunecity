@@ -3491,11 +3491,16 @@ void Game::drawReservationGhosts()
                 }
             }
             SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
-            renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : COLOR_WHITE);
+            // Finished but blocked by units: amber, "waiting" until the plot clears or the player
+            // places the building elsewhere.
+            const bool waiting = ghost.inProduction && !ghost.failed && yard->isReservedPlacementBlocked();
+            renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : (waiting ? COLOR_RGB(255,190,40) : COLOR_WHITE));
 
             // Queue number on top; the plot under construction adds its progress below.
             std::vector<std::string> lines = { std::to_string(ghost.number) + (ghost.failed ? " !" : "") };
-            if(ghost.inProduction && !ghost.failed) {
+            if(waiting) {
+                lines.push_back(_("waiting"));
+            } else if(ghost.inProduction && !ghost.failed) {
                 const BuildItem* buildItem = nullptr;
                 for(const BuildItem& item : yard->getBuildList()) {
                     if(item.itemID == ghost.itemID) buildItem = &item;
@@ -6243,7 +6248,7 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
                     if(pConstructionYard != nullptr) {
                         if(currentCursorMode == CursorMode_Placing) {
                             setCursorMode(CursorMode_Normal);
-                        } else if(pConstructionYard->isWaitingToPlace()) {
+                        } else if(pConstructionYard->mayPlaceByHand()) {
                             setCursorMode(CursorMode_Placing);
                         }
                     }
@@ -6388,7 +6393,7 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
     }
 
     int placeItem = pBuilder->getCurrentProducedItem();
-    if(!pBuilder->isWaitingToPlace() || placeItem == ItemID_Invalid || !isStructure(placeItem)) {
+    if(!pBuilder->mayPlaceByHand() || placeItem == ItemID_Invalid || !isStructure(placeItem)) {
         setCursorMode(CursorMode_Normal);
         soundPlayer->playSound(Sound_InvalidAction);
         return false;

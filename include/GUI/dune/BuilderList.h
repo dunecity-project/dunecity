@@ -154,6 +154,7 @@ private:
     sdl2::texture_ptr    pSoldOutTextTexture;
     sdl2::texture_ptr    pAlreadyBuiltTextTexture;
     sdl2::texture_ptr    pPlaceItTextTexture;
+    sdl2::texture_ptr    pBlockedTextTexture;   ///< planned plot blocked by units
     sdl2::texture_ptr    pOnHoldTextTexture;
     sdl2::texture_ptr    pUnitLimitReachedTextTexture;
     sdl2::texture_ptr    pHarvesterLimitReachedTextTexture;

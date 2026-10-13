@@ -257,7 +257,8 @@ void Command::executeCommand() const {
             if(!mayActOnObject(playerID, commandID, parameter[0], pConstYard)) {
                 return;
             }
-            pConstYard->doPlaceStructure((int) parameter[1], (int) parameter[2]);
+            // A player may also move a finished planned building whose plot units are blocking.
+            pConstYard->doPlaceStructure((int) parameter[1], (int) parameter[2], true);
         } break;
 
 

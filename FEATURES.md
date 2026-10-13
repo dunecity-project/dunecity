@@ -91,7 +91,8 @@
 ## Phase 10: Modern RTS controls & skirmish (local, see HANDOVER 2026-10-13)
 - [x] Attack-move, Hold, Patrol, Shift-queued orders with waypoint lines (docs/rts-controls.md)
 - [x] Repeat production, Alt+number group add, double-click / Ctrl+A selection, hotkeys in tooltips
-- [x] Construction Yard pre-placement queue (docs/preplace-queue.md)
+- [x] Construction Yard pre-placement queue, spread over all yards (docs/preplace-queue.md)
+- [x] Two-column build list grid (docs/sidebar-grid.md)
 - [x] Formation movement for players and AI (docs/formations.md)
 - [x] Random Skirmish generator: map, teams, bases, armies, cities, tech level (docs/skirmish-generator.md)
 

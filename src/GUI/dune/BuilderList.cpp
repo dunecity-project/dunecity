@@ -161,6 +161,7 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     pSoldOutTextTexture = createFittedOverlayText(_("SOLD OUT"));
     pAlreadyBuiltTextTexture = createFittedOverlayText(_("ALREADY\nBUILT"));
     pPlaceItTextTexture = createFittedOverlayText(_("PLACE IT"));
+    pBlockedTextTexture = createFittedOverlayText(_("BLOCKED"));
     pOnHoldTextTexture = createFittedOverlayText(_("ON HOLD"));
     pUnitLimitReachedTextTexture = createFittedOverlayText(_("UNIT\nLIMIT"));
     pHarvesterLimitReachedTextTexture = createFittedOverlayText(_("HARVESTER\nLIMIT"));
@@ -217,7 +218,7 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
                 // Alt+click toggles repeat production of a unit in a factory (docs/rts-controls.md).
                 soundPlayer->playSound(Sound_ButtonClick);
                 pBuilder->handleSetRepeatClick(clickedItemID, !pBuilder->isRepeating(clickedItemID));
-            } else if((clickedItemID == static_cast<int>(pBuilder->getCurrentProducedItem())) && (pBuilder->isWaitingToPlace() == true)) {
+            } else if((clickedItemID == static_cast<int>(pBuilder->getCurrentProducedItem())) && pBuilder->mayPlaceByHand()) {
                 soundPlayer->playSound(Sound_ButtonClick);
                 if(currentGame->currentCursorMode == Game::CursorMode_Placing && !currentGame->isPlanningPlacement()) {
                     currentGame->setCursorMode(Game::CursorMode_Normal);
@@ -417,6 +418,9 @@ void BuilderList::draw(Point position) {
 
                 if(pBuilder->isWaitingToPlace()) {
                     drawCentered(pPlaceItTextTexture.get());
+                } else if(pBuilder->mayPlaceByHand()) {
+                    // A planned plot blocked by units: it waits, or the player places it elsewhere.
+                    drawCentered(pBlockedTextTexture.get());
                 } else if(pBuilder->isOnHold()) {
                     drawCentered(pOnHoldTextTexture.get());
                 } else if(pBuilder->isUnitLimitReached(buildItem.itemID)) {
@@ -480,7 +484,7 @@ void BuilderList::drawOverlay(Point position) {
 
         std::string text = resolveItemName(buildItemIter->itemID);
 
-        if(buildItemIter->itemID == pBuilder->getCurrentProducedItem() && pBuilder->isWaitingToPlace()) {
+        if(buildItemIter->itemID == pBuilder->getCurrentProducedItem() && pBuilder->mayPlaceByHand()) {
             text += " (Hotkey: P)";
         }
         if(pBuilder->isRepeating(buildItemIter->itemID)) {

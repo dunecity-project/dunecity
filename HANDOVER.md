@@ -1,18 +1,24 @@
-## 2026-10-13 — local integration: RTS controls, pre-placement, formations, Random Skirmish
+## 2026-10-13 — local 1.0.834: RTS controls, pre-placement, formations, Random Skirmish, build grid
 
 Branch `integrate/feature-batch` (worktree `~/Documents/projects/dunecity-feature-batch`,
-build tree `build-int`) merges four branches cut from 40f4e7a8 and built in parallel:
-`feat/rts-controls`, `feat/preplace-queue`, `feat/formations`, `feat/skirmish-generator`.
-Each feature's behaviour, deviations from its spec and evidence are in
-`docs/rts-controls.md`, `docs/preplace-queue.md`, `docs/formations.md` and
-`docs/skirmish-generator.md` (force-added; `docs/*` is gitignored).
+build tree `build-int`) merges five branches: `feat/rts-controls`, `feat/preplace-queue`,
+`feat/formations`, `feat/skirmish-generator` (cut from 40f4e7a8, built in parallel) and
+`feat/sidebar-grid` (cut from the integration). Version 1.0.834 (`bump-version.sh --check` OK).
+Each feature's behaviour, deviations and evidence are in `docs/rts-controls.md`,
+`docs/preplace-queue.md`, `docs/formations.md`, `docs/skirmish-generator.md` and
+`docs/sidebar-grid.md` (force-added; `docs/*` is gitignored).
 
 - RTS controls: attack-move (A on ground; Ctrl keeps forced fire), Hold (H, attack mode
   HOLD = 10), Shift-queued orders up to 16 with waypoint lines, Patrol (Q), Alt+click repeat
   production, Alt+number adds to a group, double-click / Ctrl+A selection, hotkeys in tooltips.
 - Pre-placement: with "Choose building location when ordering" (General, default on) a
-  Construction Yard item is placed first and built after; the simulation places it on its plot
-  or falls back to ready-to-place with a ticker message.
+  Construction Yard item is placed first and built after; the simulation places it on its plot.
+  Units never cancel a plan: own idle units are moved off planned plots once a second; a finished
+  building blocked by units waits (amber "waiting" ghost, BLOCKED in the sidebar, ticker for
+  enemy units) until the plot clears or the player places it elsewhere by hand. Only a structure
+  on the plot or lost build range falls back to ready-to-place. The planning cursor stays on the
+  building after each plot (Esc / right-click ends it), and each planned building goes to the
+  house's Construction Yard with the least work left, so several yards build in parallel.
 - Formations: right-click/M moves of 2+ ground units use `FormationPlanner` slots (armour front,
   ranged behind) at the slowest vehicle's pace; Ctrl+F / Options toggle. Integration also gives
   attack-move, patrol and Shift-queued waypoints formation slots (`Game::issuePositionOrder`,
@@ -21,7 +27,11 @@ Each feature's behaviour, deviations from its spec and evidence are in
   SmartBot) are unchanged, because pacing Hunt waves widened measured arrival spread.
 - Random Skirmish (main menu): seeded map size/rock/spice/symmetry, 0-3 allies, 1-5 enemies,
   enemies-allied toggle, tech level, vanilla base tiers and credit armies, DuneCity cities by
-  population. Zone entries in map INI may end in `,Level` (0-3); old maps load unchanged.
+  population. Mod dropdown lists every installed mod; City rows show only for a city-sim mod.
+  Zone entries in map INI may end in `,Level` (0-3); old maps load unchanged.
+- Build list: two-column grid of 51x31 icons; a DuneCity yard's 25 items all fit at 1024x768
+  (was 7 visible). Limit overlays now read "UNIT / LIMIT" and "HARVESTER / LIMIT" (new strings,
+  untranslated).
 
 Command ids appended after CMD_MATCH_PAUSE in this order: UNIT_ATTACKMOVE, UNIT_PATROL,
 UNIT_QUEUEORDER, BUILDER_SETREPEAT, BUILDER_RESERVE_PLACEMENT, BUILDER_CANCEL_RESERVATION,

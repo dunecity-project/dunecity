@@ -167,8 +167,8 @@ void ConstructionYard::init() {
 
 ConstructionYard::~ConstructionYard() = default;
 
-bool ConstructionYard::doPlaceStructure(int x, int y) {
-    if(isWaitingToPlace()) {
+bool ConstructionYard::doPlaceStructure(int x, int y, bool byPlayer) {
+    if(isWaitingToPlace() || (byPlayer && isReservedPlacementBlocked())) {
         return placeFinishedStructure(x, y);
     } else {
         return false;
@@ -185,12 +185,13 @@ bool ConstructionYard::update() {
     if(BuilderBase::update() == false) {
         return false;
     }
+    keepPlannedPlotsClear();
     updateReservedPlacement();
     return true;
 }
 
-Uint32 ConstructionYard::reservedPlacementUnitWaitCycles() {
-    return MILLI2CYCLES(5000);
+bool ConstructionYard::isReservedPlacementBlocked() const {
+    return isAwaitingReservedPlacement() && reservedPlacementWaitCycles > 0;
 }
 
 bool ConstructionYard::isReservableItem(Uint32 itemID) {
@@ -292,7 +293,7 @@ void ConstructionYard::handleCancelReservationClick(Uint32 reservationID) {
         objectID, reservationID));
 }
 
-void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y) {
+void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly) {
     // Seeded from the cycle, like the sidebar's version of this request, so every peer
     // picks the same spots without drawing from the game's random generator. The orders
     // are the forced moves UnitBase::handleMoveClick would send, applied in the tick.
@@ -300,6 +301,10 @@ void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y) {
     const Coord size = ::getStructureSize(itemID);
     const auto moveOff = [&](UnitBase* pUnit) {
         if(pUnit == nullptr || pUnit->getOwner() != owner || !pUnit->isRespondable()) {
+            return;
+        }
+        if(idleOnly && (pUnit->isMoving() || pUnit->getAttackMode() == HOLD
+                        || (pUnit->getDestination().isValid() && pUnit->getDestination() != pUnit->getLocation()))) {
             return;
         }
         const Coord destination = currentGameMap->findDeploySpot(pUnit, Coord(x, y), tempRandomGen, pUnit->getLocation(), size);
@@ -310,6 +315,7 @@ void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y) {
     for(int tileY = y; tileY < y + size.y; tileY++) {
         for(int tileX = x; tileX < x + size.x; tileX++) {
             Tile* pTile = currentGameMap->getTile(tileX, tileY);
+            if(pTile == nullptr) continue;
             if(pTile->hasANonInfantryGroundObject()) {
                 ObjectBase* pObject = pTile->getNonInfantryGroundObject();
                 if(pObject->isAUnit()) {
@@ -323,6 +329,40 @@ void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y) {
             }
         }
     }
+}
+
+void ConstructionYard::keepPlannedPlotsClear() {
+    // Planned plots stay free: once a second (staggered per yard) this house's units that have
+    // stopped on one are sent off it. Units walking through are left alone.
+    const Uint32 period = MILLI2CYCLES(1000);
+    if(period == 0 || (currentGame->getGameCycleCount() + objectID) % period != 0) {
+        return;
+    }
+    for(const ProductionQueueItem& entry : currentProductionQueue) {
+        if(entry.reservationID != 0 && !entry.reservationFailed) {
+            moveOwnUnitsOffPlot(entry.itemID, entry.plotX, entry.plotY, true);
+        }
+    }
+}
+
+bool ConstructionYard::foreignUnitsOnPlot(Uint32 itemID, int x, int y) const {
+    const Coord size = ::getStructureSize(itemID);
+    for(int tileY = y; tileY < y + size.y; tileY++) {
+        for(int tileX = x; tileX < x + size.x; tileX++) {
+            const Tile* pTile = currentGameMap->getTile(tileX, tileY);
+            if(pTile == nullptr) continue;
+            if(pTile->hasANonInfantryGroundObject()) {
+                const ObjectBase* pObject = pTile->getNonInfantryGroundObject();
+                if(pObject->isAUnit() && pObject->getOwner() != owner) return true;
+            } else if(pTile->hasInfantry()) {
+                for(Uint32 id : pTile->getInfantryList()) {
+                    const ObjectBase* pObject = currentGame->getObjectManager().getObject(id);
+                    if(pObject != nullptr && pObject->getOwner() != owner) return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 void ConstructionYard::updateReservedPlacement() {
@@ -339,8 +379,7 @@ void ConstructionYard::updateReservedPlacement() {
     const bool placeableIgnoringUnits = !placeableNow
         && plotTilesOk(itemID, x, y) && plotInOwnRange(owner, itemID, x, y);
 
-    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits,
-                                                  reservedPlacementWaitCycles, reservedPlacementUnitWaitCycles())) {
+    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits)) {
         case PlacementReservation::Completion::Place: {
             // The order is now an ordinary finished building at its planned site; place it
             // through the same path a CMD_PLACE_STRUCTURE takes.
@@ -354,9 +393,14 @@ void ConstructionYard::updateReservedPlacement() {
         } break;
 
         case PlacementReservation::Completion::WaitForUnits: {
-            // Ask once a second, as a player clicking on a blocked plot would.
+            // Units never cancel the plan. Own units are asked off once a second, as a player
+            // clicking on a blocked plot would; another house's units are waited out. Meanwhile
+            // the player may place the building elsewhere by hand (doPlaceStructure byPlayer).
+            if(reservedPlacementWaitCycles == 0 && owner == pLocalHouse && foreignUnitsOnPlot(itemID, x, y)) {
+                currentGame->addToNewsTicker(fmt::sprintf(_("%s is waiting: enemy units are on the planned site"), resolveItemName(itemID)));
+            }
             if(reservedPlacementWaitCycles % MILLI2CYCLES(1000) == 0) {
-                moveOwnUnitsOffPlot(itemID, x, y);
+                moveOwnUnitsOffPlot(itemID, x, y, false);
             }
             reservedPlacementWaitCycles++;
             return;

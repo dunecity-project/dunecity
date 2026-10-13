@@ -218,6 +218,8 @@ public:
     inline Uint32 getCurrentProducedItem() const { return currentProducedItem; }
     inline bool isOnHold() const { return bCurrentItemOnHold; }
     bool isWaitingToPlace() const;
+    /// May a player place the finished front order by hand now? (ConstructionYard adds plots blocked by units.)
+    virtual bool mayPlaceByHand() const { return isWaitingToPlace(); }
     bool isUnitLimitReached(Uint32 itemID) const;
     inline FixPoint getProductionProgress() const { return productionProgress; }
     /// The part of the current production progress that was paid out of the
