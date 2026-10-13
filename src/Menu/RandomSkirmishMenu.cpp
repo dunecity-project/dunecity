@@ -87,6 +87,14 @@ namespace {
 
 constexpr int kRowHeight = 22;
 constexpr int kRowGap = 3;
+constexpr int kMaxContentWidth = 800;
+
+/// Two columns of label + control rows, centred and capped on wide screens.
+int contentWidth(int screenWidth) { return std::min(screenWidth - 32, kMaxContentWidth); }
+int columnSpan(int screenWidth) { return (contentWidth(screenWidth) - 16) / 2; }
+int columnX(int screenWidth, int column) {
+    return (screenWidth - contentWidth(screenWidth)) / 2 + column * (columnSpan(screenWidth) + 16);
+}
 
 const char* const kRockNames[] = {"Low", "Medium", "High", "Very high"};
 const char* const kSpiceNames[] = {"None", "Low", "Medium", "High", "Very high"};
@@ -149,7 +157,7 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
     for(int i = 0; i < 4; ++i) rockBox.addEntry(_(kRockNames[i]) + " (" + std::to_string(kRockPercent[i]) + "%)", i);
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
-    symmetricBox.setText(_("Mirrored, fair start areas"));
+    symmetricBox.setText(_("Mirrored starts"));
     seedBox.setAllowedChars("0123456789");
     seedBox.setMaximumTextLength(10);
     newSeedButton.setText(_("New"));
@@ -204,13 +212,13 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addRow(1, row++, _("City"), &enemyCityBox);
 
     // The seed field shares its row with the "New" button.
-    const int columnWidth = (width - 48) / 2;
-    const int controlX = 16 + columnWidth * 2 / 5;
+    const int columnWidth = columnSpan(width);
+    const int controlX = columnX(width, 0) + columnWidth * 2 / 5;
     const int seedRow = 5;
     const int top = 44;
     windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * (kRowHeight + kRowGap)),
                                    Point(columnWidth - columnWidth * 2 / 5 - 64, kRowHeight));
-    windowWidget.addWidget(&newSeedButton, Point(16 + columnWidth - 58, top + seedRow * (kRowHeight + kRowGap)), Point(58, kRowHeight));
+    windowWidget.addWidget(&newSeedButton, Point(columnX(width, 0) + columnWidth - 58, top + seedRow * (kRowHeight + kRowGap)), Point(58, kRowHeight));
 
     statusLabel.setTextFontSize(12);
     statusLabel.setAlignment(Alignment_HCenter);
@@ -222,10 +230,11 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     saveButton.setOnClick([this]() { onSaveMap(); });
     startButton.setText(_("Start"));
     startButton.setOnClick([this]() { onStart(); });
-    const int buttonWidth = std::min(160, (width - 64) / 3);
-    windowWidget.addWidget(&backButton, Point(16, height - 38), Point(buttonWidth, 28));
+    const int left = columnX(width, 0), right = left + contentWidth(width);
+    const int buttonWidth = std::min(160, (contentWidth(width) - 32) / 3);
+    windowWidget.addWidget(&backButton, Point(left, height - 38), Point(buttonWidth, 28));
     windowWidget.addWidget(&saveButton, Point((width - buttonWidth) / 2, height - 38), Point(buttonWidth, 28));
-    windowWidget.addWidget(&startButton, Point(width - 16 - buttonWidth, height - 38), Point(buttonWidth, 28));
+    windowWidget.addWidget(&startButton, Point(right - buttonWidth, height - 38), Point(buttonWidth, 28));
     startButton.setActive();
 
     Params params;
@@ -243,14 +252,14 @@ void RandomSkirmishMenu::addHeader(int column, int row, const std::string& capti
     Label& label = captions[usedCaptions++];
     label.setText(caption);
     label.setTextFontSize(16);
-    const int columnWidth = (getSize().x - 48) / 2;
-    windowWidget.addWidget(&label, Point(16 + column * (columnWidth + 16), 44 + row * (kRowHeight + kRowGap)),
+    const int columnWidth = columnSpan(getSize().x);
+    windowWidget.addWidget(&label, Point(columnX(getSize().x, column), 44 + row * (kRowHeight + kRowGap)),
                            Point(columnWidth, kRowHeight));
 }
 
 void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption, Widget* control) {
-    const int columnWidth = (getSize().x - 48) / 2;
-    const int x = 16 + column * (columnWidth + 16);
+    const int columnWidth = columnSpan(getSize().x);
+    const int x = columnX(getSize().x, column);
     const int y = 44 + row * (kRowHeight + kRowGap);
     const int captionWidth = columnWidth * 2 / 5;
     if(!caption.empty() && usedCaptions < static_cast<int>(captions.size())) {

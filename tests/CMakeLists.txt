@@ -459,6 +459,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        # Random Skirmish on the real engine: the screen (house cap, persistence, Save map,
+        # screenshots), a pre-zone-level city map loading unchanged, and three generated
+        # matches (vanilla 1v1, 2v3 vs allied Large bases with 10k armies, DuneCity 192 with
+        # 15k cities at tech 8) checked against the generator's plan, measured city
+        # population, a one-minute played smoke with a clean log and a save/load round trip.
+        add_test(NAME skirmish_generator_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skirmish-probe)
+        set_tests_properties(skirmish_generator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)

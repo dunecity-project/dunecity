@@ -47,7 +47,7 @@ constexpr int kThickSpicePercent[] = {0, 10, 25, 40, 55};
 constexpr int kMargin = 2;          ///< tiles kept between a plateau and the map edge
 constexpr int kCityBlock = 5;       ///< 4x4 block of four 2x2 lots plus one road line
 constexpr int kZonesPerPolice = 16;
-constexpr int kMountainDepth = 3;   ///< rock this far from any other terrain becomes mountain
+constexpr int kMountainDepth = 4;   ///< rock this far from any other terrain becomes mountain
 
 int ceilDiv(int a, int b) { return (a + b - 1) / b; }
 int isqrt(int value) { int r = 0; while((r + 1) * (r + 1) <= value) ++r; return r; }
@@ -358,7 +358,7 @@ MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
         if(depth[y * size + x] < kMountainDepth || depth[y * size + x] == INT_MAX) continue;
         bool nearPlateau = false;
         for(const Rect& r : spec.plateaus)
-            nearPlateau = nearPlateau || Rect{r.x - 4, r.y - 4, r.w + 8, r.h + 8}.contains(x, y);
+            nearPlateau = nearPlateau || Rect{r.x - 5, r.y - 5, r.w + 10, r.h + 10}.contains(x, y);
         if(!nearPlateau) map(x, y) = Terrain_Mountain;
     }
     return map;
@@ -940,6 +940,12 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         addPlan(pool[allies + i], Role::Enemy, params.enemiesAllied ? 2 : 2 + i, &params.enemySide);
     const int houses = static_cast<int>(plans.size());
 
+    // The player builds a base from a Construction Yard alone: give them as much rock as the
+    // largest opponent start, so the human start is never the cramped one.
+    for(const Plan& plan : plans) {
+        plans[0].width = std::max(plans[0].width, plan.width);
+        plans[0].height = std::max(plans[0].height, plan.height);
+    }
     // Start slots: mirrored corners/edges when symmetric, an evenly spaced ring otherwise.
     int maxW = 0, maxH = 0;
     for(const Plan& plan : plans) { maxW = std::max(maxW, plan.width); maxH = std::max(maxH, plan.height); }

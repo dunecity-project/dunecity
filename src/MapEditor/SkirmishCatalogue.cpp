@@ -27,8 +27,10 @@ namespace SkirmishGenerator {
 Catalogue makeCatalogue(const ObjectData& data, bool cityMode) {
     Catalogue catalogue;
     for(int house = 0; house < NUM_HOUSES; ++house) {
+        // Only houses a custom game can field have a name outside their mod (guest houses).
+        if(!isCustomGameHouseAvailable(static_cast<HOUSETYPE>(house))) continue;
         catalogue.houseNames[house] = getHouseNameByNumber(static_cast<HOUSETYPE>(house));
-        if(isCustomGameHouseAvailable(static_cast<HOUSETYPE>(house))) catalogue.houses.push_back(house);
+        catalogue.houses.push_back(house);
     }
     for(int item = ItemID_Invalid + 1; item < Num_ItemID; ++item) {
         if(!isStructure(item) && !isUnit(item)) continue;

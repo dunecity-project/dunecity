@@ -282,7 +282,8 @@ TEST_CASE("Random skirmish: armies spend 90-100% of the budget with a per-type c
     // At tech 1 nothing that builds units exists yet; at tech 2 infantry and trikes do.
     REQUIRE(armyTypes(HOUSE_ATREIDES, 1, c).empty());
     REQUIRE_FALSE(armyTypes(HOUSE_ATREIDES, 2, c).empty());
-    REQUIRE(std::count(armyTypes(HOUSE_ATREIDES, 9, c).begin(), armyTypes(HOUSE_ATREIDES, 9, c).end(), Unit_Devastator) == 0);
+    const auto atreides = armyTypes(HOUSE_ATREIDES, 9, c);
+    REQUIRE(std::count(atreides.begin(), atreides.end(), Unit_Devastator) == 0);    // Builder(A) = Invalid
     const auto harkonnen = armyTypes(HOUSE_HARKONNEN, 9, c);
     REQUIRE(std::count(harkonnen.begin(), harkonnen.end(), Unit_Devastator) == 1);
 
