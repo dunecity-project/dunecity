@@ -25,6 +25,8 @@
 #include <misc/RobustList.h>
 #include <misc/string_util.h>
 
+#include <vector>
+
 namespace CombatReward { struct Totals; }
 class GameInitSettings;
 class Random;
@@ -272,6 +274,28 @@ protected:
     void doHuntToward(const UnitBase* pUnit, int x, int y) const;
 
     /**
+        Moves a chosen group as one formation (docs/formations.md): FormationOrders plans a
+        slot per unit, each unit is sent to its slot with doMove2Pos, and the group keeps the
+        slowest member's pace. With fewer than FormationOrders::kMinAIGroup eligible ground
+        units every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the list
+        always do.
+    */
+    void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const;
+
+    /**
+        doHuntToward() for a chosen group: each unit hunts its way to its own formation slot
+        around x,y, at the group's pace. Same fallback as doFormationMove().
+    */
+    void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const;
+
+    /**
+        Units that already have their orders (a Hunt wave, a forced attack on one objective)
+        travel at the slowest one's pace without being given destinations. Does nothing for
+        fewer than FormationOrders::kMinAIGroup eligible ground units.
+    */
+    void doFormUp(const std::vector<const UnitBase*>& units) const;
+
+    /**
         Moves the unit pUnit to x,y.
         \param  pUnit           the unit to move
         \param  pTargetObject   the object to move to
@@ -336,6 +360,9 @@ protected:
 
     bool doRequestCarryallDrop(const GroundUnit* pGroundUnit) const;
 
+    /// A fresh formation group id for this controller (FormationPlanner::makeGroupID).
+    Uint32 allocateFormationGroup() const;
+
 
 private:
     friend class House;
@@ -346,6 +373,10 @@ private:
 
     House* pHouse;
     Uint8 playerID;
+    // Several groups formed in one cycle get distinct tokens. Only ever compared within the
+    // current cycle, so not saved: a save never falls between two orders of one cycle.
+    mutable Uint32 formationTokenCycle = 0;
+    mutable Uint32 formationTokensThisCycle = 0;
     std::string playername;
     std::string playerclass;
 };

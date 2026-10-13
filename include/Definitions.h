@@ -130,7 +130,10 @@
 //       units to clear the plot. The plot decides where a finished building
 //       appears, so it cannot be recomputed after a load. A 9854 save loads with
 //       no reservations: every queued order keeps today's place-it-yourself flow.
-#define SAVEGAMEVERSION     9856
+// 9857: UnitBase formation membership: group id, formation slot and the group's speed
+//       cap (docs/formations.md). A save taken mid-march keeps the group together at
+//       its pace. A 9854 save loads with no unit in a formation.
+#define SAVEGAMEVERSION     9857
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

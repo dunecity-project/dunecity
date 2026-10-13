@@ -981,6 +981,25 @@ void DeviationProbe::legacyLedger() {
         constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
         unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
     }
+    // 9857 appended the formation membership (group, slot, speed cap) after the hunt-toward
+    // record; a pre-9849 record has none of it either. The hunt-toward bytes are already gone.
+    {
+        tank->leaveFormation();
+        OMemoryStream a; a.open(); tank->save(a);
+        const std::string before(a.getData(), a.getDataLength());
+        tank->formationGroup = 0x4A4B4C4D;
+        tank->formationSlot = Coord(0x4E4F5051, 0x52535455);
+        tank->formationSpeedCap = FixPoint(-1);
+        OMemoryStream b; b.open(); tank->save(b);
+        const std::string after(b.getData(), b.getDataLength());
+        tank->leaveFormation();
+        size_t first = 0;
+        while(first < before.size() && before[first] == after[first]) ++first;
+        size_t last = before.size();
+        while(last > first && before[last-1] == after[last-1]) --last;
+        require(last - first == 20, "The formation record is not the expected 20 bytes");
+        unitBytes.first.erase(first - unitBytes.second - 9, last - first);
+    }
 
     game->loadedSavegameVersion = 9848;
     {

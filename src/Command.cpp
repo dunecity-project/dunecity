@@ -19,6 +19,7 @@
 #include <Command.h>
 #include <CommandAuthorization.h>
 #include <CommandValidation.h>
+#include <FormationOrders.h>
 #include <misc/CampaignControls.h>
 
 #include <globals.h>
@@ -224,7 +225,8 @@ void Command::executeCommand() const {
         || commandID==CMD_UNIT_ATTACKPOS || commandID==CMD_UNIT_ATTACKOBJECT
         || commandID==CMD_UNIT_SETMODE || commandID==CMD_UNIT_SENDTOREPAIR
         || commandID==CMD_UNIT_REQUESTCARRYALLDROP || commandID==CMD_UNIT_HEAL
-        || commandID==CMD_UNIT_ATTACKMOVE || commandID==CMD_UNIT_PATROL || commandID==CMD_UNIT_QUEUEORDER;
+        || commandID==CMD_UNIT_ATTACKMOVE || commandID==CMD_UNIT_PATROL || commandID==CMD_UNIT_QUEUEORDER
+        || commandID==CMD_UNIT_FORMATION_MOVE;
     const auto* human=dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
     if (unitOrder && human && !parameter.empty()) {
         const auto* unit=dynamic_cast<const UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
@@ -235,10 +237,12 @@ void Command::executeCommand() const {
 
     // Only accepted human orders reset the stall clock, and this executes on every peer.
     // AI helpers deliberately leave repeated identical routing intents on the same clock.
-    // Any explicit movement order ends HOLD (docs/rts-controls.md).
+    // Any explicit movement order ends HOLD (docs/rts-controls.md) and the unit's formation
+    // membership; a formation move then joins anew (docs/formations.md).
     const auto applyMovementOrder = [human](UnitBase* unit, bool validIntent, const auto& action) {
         if(human && validIntent) unit->cancelCarryallPickup();
         if(validIntent) unit->leaveHoldForOrder();
+        unit->leaveFormation();
         action();
         if(human && validIntent) unit->noteExplicitPlayerOrder();
     };
@@ -360,6 +364,7 @@ case CMD_INFANTRY_CAPTURE: {
             const bool validIntent = pStructure != nullptr && pStructure->canBeCaptured()
                 && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
             if(validIntent) pInfantry->leaveHoldForOrder();
+            pInfantry->leaveFormation();
             pInfantry->doCaptureStructure((int) parameter[1]);
             if(validIntent) pInfantry->recordPlayerOrder(UnitOrder::on(UnitOrderType::Capture, parameter[1]));
         } break;
@@ -389,6 +394,7 @@ case CMD_INFANTRY_CAPTURE: {
             }
             pGroundUnit->clearOrderQueue();
             pGroundUnit->leaveHoldForOrder();
+            pGroundUnit->leaveFormation();
             pGroundUnit->doRepair();
         } break;
 
@@ -405,6 +411,7 @@ case CMD_INFANTRY_CAPTURE: {
             }
             // Stop, Hold and every other mode change end the order queue.
             pUnit->clearOrderQueue();
+            pUnit->leaveFormation();
             pUnit->doSetAttackMode((ATTACKMODE) parameter[1]);
             if(human) pUnit->noteExplicitPlayerOrder();
         } break;
@@ -441,6 +448,7 @@ case CMD_INFANTRY_CAPTURE: {
                || !mayActOnObject(playerID, commandID, parameter[0], pHarvester)) {
                 return;
             }
+            if(auto* pUnit = dynamic_cast<UnitBase*>(pHarvester)) pUnit->leaveFormation();
             harvesterDoReturn(pHarvester);
             if(auto* pUnit = dynamic_cast<UnitBase*>(pHarvester)) {
                 pUnit->recordPlayerOrder(UnitOrder::on(UnitOrderType::HarvesterReturn, NONE_ID));
@@ -706,6 +714,36 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             pConstYard->doCancelReservation(parameter[1]);
+        } break;
+
+        case CMD_UNIT_FORMATION_MOVE: {
+            if(parameter.size() != 4) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_UNIT_FORMATION_MOVE needs 4 Parameters!");
+            }
+            UnitBase* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
+                return;
+            }
+            // A malformed token or a slot off the map is not something the game sends.
+            if(!FormationPlanner::isValidToken(parameter[3])
+               || !currentGameMap->tileExists((int) parameter[1], (int) parameter[2])) {
+                return;
+            }
+            Coord destination((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(unit, true, [&] {
+                if(!FormationOrders::eligible(unit)) {
+                    // Aircraft and units off the map keep the ordinary forced move.
+                    unit->doMove2Pos(destination.x, destination.y, true);
+                    return;
+                }
+                // The slot may have become unusable (a building went up) between the plan and
+                // this cycle: every peer moves it to the same nearest usable tile.
+                destination = FormationOrders::revalidatedSlot(unit, destination);
+                unit->doMove2Pos(destination.x, destination.y, true);
+                FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, parameter[3]), {destination});
+            });
+            // Like a plain move, it replaces the order queue and becomes its front.
+            unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));
         } break;
 
         case CMD_PLAYER_PAUSE: {

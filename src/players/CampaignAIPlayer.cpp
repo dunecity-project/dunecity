@@ -612,12 +612,17 @@ void CampaignAIPlayer::updateUnits() {
     }
     
     // Launch the wave: set to HUNT and attack the selected target
+    std::vector<const UnitBase*> wave;
     for(Uint32 id : attackTeam.memberIds) {
         const UnitBase* pUnit = static_cast<const UnitBase*>(getObject(id));
         if(!pUnit) continue;
         doSetAttackMode(pUnit, HUNT);
         doAttackObject(pUnit, pBestCandidate, true);
+        wave.push_back(pUnit);
     }
+    // The wave closes on its target together, at the slowest member's pace
+    // (docs/formations.md); the target and the attack orders are unchanged.
+    doFormUp(wave);
     
     // Team will be cleared and rebuilt on next update
     attackTeam.nextLaunchCycle = now + attackTeam.cooldownCycles;

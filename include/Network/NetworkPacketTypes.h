@@ -183,6 +183,9 @@
 //     CMD_BUILDER_CANCEL_RESERVATION are new commands, and a reserved order is placed by
 //     the simulation when it finishes, so a 70 peer cannot execute or replay them.
 //     Save 9856.
+// 71: Formation movement. New CMD_UNIT_FORMATION_MOVE (unit, slot, group token); every
+//     unit order ends formation membership; formation members move at the group's
+//     speed cap; QuantBot, campaign AI and AIPlayer group moves use formations. Save 9857.
 #define NETWORK_PROTOCOL_VERSION            71
 
 // Mod transfer limits

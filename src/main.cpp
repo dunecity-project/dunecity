@@ -1146,6 +1146,7 @@ int main(int argc, char *argv[]) {
             settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
             settings.general.chooseBuildingLocation = myINIFile.getBoolValue("General","Choose Building Location",true);
+            settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs

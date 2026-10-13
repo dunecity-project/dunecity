@@ -181,6 +181,32 @@ public:
     void leaveHoldForOrder();
 
     /**
+        Formation membership (docs/formations.md). A member travels to its formation slot -
+        or, without a slot, keeps its own order - no faster than the group's speed cap, unless
+        it is lagging behind the group. Set only through FormationOrders::join(). Any new order
+        from a player or an AI, a carryall pickup, deviation, arrival, contact with an enemy or
+        being the last member left ends it. Saved from SAVEGAMEVERSION 9857.
+    */
+    bool isInFormation() const { return formationGroup != 0; }
+    Uint32 getFormationGroup() const { return formationGroup; }
+    const Coord& getFormationSlot() const { return formationSlot; }
+    FixPoint getFormationSpeedCap() const { return formationSpeedCap; }
+    bool isFormationCatchingUp() const { return formationCatchUp; }
+    /// Joins formation groupID heading for slot (invalid: keep the current order), capped
+    /// at this unit's own reference speed until FormationOrders::join sets the group's.
+    void joinFormation(Uint32 groupID, const Coord& slot);
+    void setFormationSpeedCap(FixPoint cap) { formationSpeedCap = cap; }
+    /// Per-cycle catch-up decision (FormationPlanner::runsAtFullSpeed), made before units move.
+    void setFormationCatchUp(bool catchUp) { formationCatchUp = catchUp; }
+    void leaveFormation();
+    /// The pace this unit sets in a formation: its speed on open sand, undamaged, unloaded, off-road.
+    FixPoint getFormationReferenceSpeed() const;
+    /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to move?
+    bool formationMarchEnded() const;
+    /// Tiles still to go to the formation slot, or to the current destination without a slot.
+    int formationRemainingTiles() const;
+
+    /**
         This method is called when an unit should move to another unit/structure
         \param  TargetObjectID  the ID of the other unit/structure
     */
@@ -547,6 +573,8 @@ protected:
     virtual void idleAction();
 
     virtual void setSpeeds();
+    /// A realized movement speed, limited to the formation's speed cap while that applies.
+    FixPoint applyFormationSpeedCap(FixPoint speed) const;
     FixPoint getTerrainAdjustedSpeed(int cargoPercent = 0) const;
 
     virtual void targeting();
@@ -624,6 +652,11 @@ protected:
     bool isIdleForOrders() const;
     /// The front order has finished: start the next one.
     void finishFrontOrder();
+    // Formation membership, contiguous and saved together (SAVEGAMEVERSION 9857).
+    Uint32   formationGroup = 0;                 ///< FormationPlanner::makeGroupID(); 0 = none
+    Coord    formationSlot = Coord::Invalid();   ///< Destination in the formation; invalid = own order
+    FixPoint formationSpeedCap = 0;              ///< The group's pace: slowest member's reference speed
+    bool     formationCatchUp = false;           ///< Transient: lagging, so full speed this cycle
 
 
     bool     moving;                 ///< Are we currently moving?

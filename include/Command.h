@@ -79,6 +79,7 @@ typedef enum {
     CMD_BUILDER_SETREPEAT,            ///< BUILDER_SETREPEAT(OBJECT_ID, ITEM_ID, B_ENABLED)
     CMD_BUILDER_RESERVE_PLACEMENT,    ///< BUILDER_RESERVE_PLACEMENT(BUILDER_ID, ITEM_ID, X, Y), queues the structure and reserves its plot
     CMD_BUILDER_CANCEL_RESERVATION,   ///< BUILDER_CANCEL_RESERVATION(BUILDER_ID, RESERVATION_ID), cancels that reserved order with the normal refund
+    CMD_UNIT_FORMATION_MOVE,          ///< UNIT_FORMATION_MOVE(OBJECT_ID,X,Y,GROUP_TOKEN), forced move to a formation slot (docs/formations.md)
 
     CMD_MAX
 } CMDTYPE;

@@ -16,6 +16,7 @@
  */
 
 #include <Game.h>
+#include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <GUI/dune/JoinProgressWindow.h>
@@ -1266,6 +1267,10 @@ void Game::processObjects()
     if ((currentCursorMode == CursorMode_Placing) && selectedList.empty()) {
         setCursorMode(CursorMode_Normal);
     }
+
+    // Formation upkeep before anything moves: membership ends and catch-up flags are decided
+    // from this cycle's starting state, identically on every peer and after a load.
+    FormationOrders::update();
 
     // Time unit updates
     Uint64 unitStart = SDL_GetPerformanceCounter();
@@ -6212,6 +6217,11 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_f: {
+            // Ctrl+F switches formation moves; plain F keeps selecting the next factory.
+            if(SDL_GetModState() & KMOD_CTRL) {
+                toggleFormationMoves();
+                break;
+            }
             // select next factory
             std::set<Uint32> itemIDs;
             itemIDs.insert(Structure_Barracks);
@@ -6554,11 +6564,13 @@ bool Game::handleSelectedObjectsMoveClick(int xPos, int yPos) {
 
     UnitBase* pResponder = nullptr;
 
+    // Two or more ground units move as one formation; the rest keep the plain move.
+    const std::set<Uint32> inFormation = issueSelectedFormationMove(xPos, yPos, false);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
             pResponder = static_cast<UnitBase*>(pObject);
-            pResponder->handleMoveClick(xPos,yPos);
+            if(!inFormation.count(objectID)) pResponder->handleMoveClick(xPos,yPos);
         }
     }
 
@@ -6729,6 +6741,10 @@ bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
     const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
     std::vector<UnitBase*> queuedMovers;
     ObjectBase  *pResponder = nullptr;
+    // Ground units this click simply moves go as one formation; everything else (attack,
+    // follow, aircraft, structures) keeps its own action. A Shift click queues instead, and
+    // issuePositionOrder spreads the queued waypoints into formation slots.
+    const std::set<Uint32> inFormation = queued ? std::set<Uint32>() : issueSelectedFormationMove(xPos, yPos, true);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if(pObject && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
@@ -6742,7 +6758,7 @@ bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
                 } else {
                     queuedMovers.push_back(pUnit);
                 }
-            } else {
+            } else if(!inFormation.count(objectID)) {
                 pObject->handleActionClick(xPos, yPos);
             }
 
@@ -6792,14 +6808,26 @@ UnitBase* Game::issuePositionOrder(PositionOrder kind, const std::vector<UnitBas
     if(pLocalPlayer == nullptr || currentGameMap == nullptr || !currentGameMap->tileExists(target)) {
         return nullptr;
     }
+    // With "Move groups in formation" on, every eligible unit gets its own formation slot
+    // around the target (docs/formations.md): attack-move, patrol and queued waypoints spread
+    // out like a plain group move. These orders carry no group pace; only
+    // CMD_UNIT_FORMATION_MOVE does.
+    FormationPlanner::Plan plan;
+    if(settings.general.formationMoves && units.size() >= static_cast<size_t>(FormationOrders::kMinPlayerGroup)) {
+        std::vector<const UnitBase*> members;
+        for(const UnitBase* pUnit : units) {
+            if(pUnit != nullptr && pUnit->getOwner() == pLocalHouse && pUnit->isRespondable()) members.push_back(pUnit);
+        }
+        plan = FormationOrders::planGroup(members, target);
+    }
     UnitBase* pResponder = nullptr;
     for(UnitBase* pUnit : units) {
         if(pUnit == nullptr || pUnit->getOwner() != pLocalHouse || !pUnit->isRespondable()) {
             continue;
         }
-        // Per-unit destination. Every unit gets the clicked tile; a formation planner assigns
-        // each unit its own slot around the target here.
-        const Coord destination = target;
+        // Per-unit destination: its formation slot, or the clicked tile without one.
+        const Coord slot = plan.formation ? plan.slotFor(pUnit->getObjectID()) : Coord::Invalid();
+        const Coord destination = slot.isValid() ? slot : target;
         const Uint32 objectID = pUnit->getObjectID();
         const Uint32 x = static_cast<Uint32>(destination.x);
         const Uint32 y = static_cast<Uint32>(destination.y);
@@ -6925,6 +6953,38 @@ void Game::drawQueuedOrders() {
     }
     SDL_SetRenderDrawColor(renderer,r,g,b,a);
     SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
+}
+
+std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actionClick) {
+    std::set<Uint32> ordered;
+    if(!settings.general.formationMoves || pLocalHouse == nullptr || pLocalPlayer == nullptr
+       || currentGameMap == nullptr || !currentGameMap->tileExists(xPos, yPos)) {
+        return ordered;
+    }
+    std::vector<const UnitBase*> movers;
+    for(Uint32 objectID : selectedList) {
+        const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(objectID));
+        if(unit == nullptr || unit->getOwner() != pLocalHouse || !unit->isRespondable()
+           || !FormationOrders::eligible(unit)) continue;
+        // A right click on something visible attacks or follows it instead of moving.
+        if(actionClick && unit->getActionClickTarget(xPos, yPos) != nullptr) continue;
+        movers.push_back(unit);
+    }
+    const FormationPlanner::Plan plan = FormationOrders::planGroup(movers, Coord(xPos, yPos));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) {
+        return ordered;
+    }
+    if(gameCycleCount != formationTokenCycle) {
+        formationTokenCycle = gameCycleCount;
+        formationTokensThisCycle = 0;
+    }
+    const Uint32 token = FormationPlanner::makeToken(gameCycleCount, formationTokensThisCycle++);
+    for(const FormationPlanner::Slot& slot : plan.slots) {
+        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_MOVE, slot.objectID,
+                                      static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), token));
+        ordered.insert(slot.objectID);
+    }
+    return ordered;
 }
 
 
@@ -7786,6 +7846,15 @@ void Game::drawMovementPaths() {
     }
     SDL_SetRenderDrawColor(renderer,r,g,b,a);
     SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
+}
+
+void Game::toggleFormationMoves() {
+    settings.general.formationMoves = !settings.general.formationMoves;
+    INIFile config(getConfigFilepath());
+    config.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    config.saveChangesTo(getConfigFilepath());
+    WebRuntime::syncPersistentFiles();
+    addToNewsTicker(settings.general.formationMoves ? _("Groups move in formation") : _("Formation moves off"));
 }
 
 void Game::toggleMovementPaths() {

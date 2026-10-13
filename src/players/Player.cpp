@@ -30,6 +30,7 @@
 #include <structures/Palace.h>
 #include <structures/TurretBase.h>
 #include <units/UnitBase.h>
+#include <FormationOrders.h>
 #include <units/GroundUnit.h>
 #include <units/Devastator.h>
 #include <units/Harvester.h>
@@ -123,6 +124,7 @@ const House* Player::getHouse(int houseID) const {
 
 void Player::doRepair(const ObjectBase* pObject) const {
     if(pObject->getOwner() == getHouse() && pObject->isActive()) {
+        if(pObject->isAUnit()) const_cast<UnitBase*>(static_cast<const UnitBase*>(pObject))->leaveFormation();
         const_cast<ObjectBase*>(pObject)->doRepair();
     } else {
         logWarn("The player '%s' tries to repair a structure or unit he doesn't own or that is inactive!\n", playername.c_str());
@@ -311,6 +313,7 @@ void Player::doAttackObject(const TurretBase* pTurret, const ObjectBase* pTarget
 
 void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Pos(x, y, bForced);
     } else {
         logWarn("The player '%s' tries to move a unit he doesn't own or that is inactive!\n", playername.c_str());
@@ -320,6 +323,7 @@ void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const
 
 void Player::doHuntToward(const UnitBase* pUnit, int x, int y) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doHuntToward(x, y);
     } else {
         logWarn("The player '%s' tries to send a unit he doesn't own or that is inactive to hunt!\n", playername.c_str());
@@ -327,8 +331,76 @@ void Player::doHuntToward(const UnitBase* pUnit, int x, int y) const {
     }
 }
 
+Uint32 Player::allocateFormationGroup() const {
+    const Uint32 cycle = getGameCycleCount();
+    if(cycle != formationTokenCycle) {
+        formationTokenCycle = cycle;
+        formationTokensThisCycle = 0;
+    }
+    return FormationPlanner::makeGroupID(playerID, FormationPlanner::makeToken(cycle, formationTokensThisCycle++));
+}
+
+namespace {
+
+/// The caller's own active units, in the given order.
+std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& units, const House* house) {
+    std::vector<const UnitBase*> own;
+    for(const UnitBase* unit : units)
+        if(unit != nullptr && unit->getOwner() == house && unit->isActive()) own.push_back(unit);
+    return own;
+}
+
+} // namespace
+
+void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const {
+    const auto own = ownActiveUnits(units, getHouse());
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
+        for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced);
+        return;
+    }
+    std::vector<UnitBase*> members;
+    std::vector<Coord> slots;
+    for(const UnitBase* unit : own) {
+        const Coord slot = plan.slotFor(unit->getObjectID());
+        if(slot.isInvalid()) { doMove2Pos(unit, x, y, bForced); continue; }
+        doMove2Pos(unit, slot.x, slot.y, bForced);
+        members.push_back(const_cast<UnitBase*>(unit));
+        slots.push_back(slot);
+    }
+    FormationOrders::join(members, allocateFormationGroup(), slots);
+}
+
+void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const {
+    const auto own = ownActiveUnits(units, getHouse());
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
+        for(const UnitBase* unit : own) doHuntToward(unit, x, y);
+        return;
+    }
+    std::vector<UnitBase*> members;
+    std::vector<Coord> slots;
+    for(const UnitBase* unit : own) {
+        const Coord slot = plan.slotFor(unit->getObjectID());
+        if(slot.isInvalid()) { doHuntToward(unit, x, y); continue; }
+        doHuntToward(unit, slot.x, slot.y);
+        members.push_back(const_cast<UnitBase*>(unit));
+        slots.push_back(slot);
+    }
+    FormationOrders::join(members, allocateFormationGroup(), slots);
+}
+
+void Player::doFormUp(const std::vector<const UnitBase*>& units) const {
+    std::vector<UnitBase*> members;
+    for(const UnitBase* unit : ownActiveUnits(units, getHouse()))
+        if(FormationOrders::eligible(unit)) members.push_back(const_cast<UnitBase*>(unit));
+    if(static_cast<int>(members.size()) < FormationOrders::kMinAIGroup) return;
+    FormationOrders::join(members, allocateFormationGroup(), std::vector<Coord>(members.size(), Coord::Invalid()));
+}
+
 void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Object(pTargetObject);
     } else {
         logWarn("The player '%s' tries to move a unit (to an object) he doesn't own or that is inactive!\n", playername.c_str());
@@ -338,6 +410,7 @@ void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObjec
 
 void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackPos(x, y, bForced);
     } else {
         logWarn("The player '%s' tries to order a unit (to attack a position) he doesn't own or that is inactive!\n", playername.c_str());
@@ -347,6 +420,7 @@ void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced) cons
 
 void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackObject(pTargetObject, bForced);
     } else {
         logWarn("The player '%s' tries to attack with a unit he doesn't own or that is inactive!\n", playername.c_str());
@@ -356,6 +430,7 @@ void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObje
 
 void Player::doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doSetAttackMode(attackMode);
     } else {
         logWarn("The player '%s' tries to change the attack mode of a unit he doesn't own or that is inactive!\n", playername.c_str());
@@ -374,6 +449,7 @@ void Player::doStartDevastate(const Devastator* pDevastator) const {
 
 void Player::doReturn(const Harvester* pHarvester) const {
     if(pHarvester->getOwner() == getHouse() && pHarvester->isActive()) {
+        const_cast<Harvester*>(pHarvester)->leaveFormation();
         const_cast<Harvester*>(pHarvester)->doReturn();
     } else {
         logWarn("The player '%s' tries to return a harvester he doesn't own or that is inactive!\n", playername.c_str());
@@ -383,6 +459,7 @@ void Player::doReturn(const Harvester* pHarvester) const {
 
 void Player::doCaptureStructure(const InfantryBase* pInfantry, const StructureBase* pTargetStructure) const {
     if(pInfantry->getOwner() == getHouse() && pInfantry->isActive()) {
+        const_cast<InfantryBase*>(pInfantry)->leaveFormation();
         const_cast<InfantryBase*>(pInfantry)->doCaptureStructure(pTargetStructure);
     } else {
         logWarn("The player '%s' tries to capture with a unit he doesn't own or that is inactive!\n", playername.c_str());
@@ -402,6 +479,7 @@ bool Player::doDeploy(const MCV* pMCV) const {
 
 bool Player::doRequestCarryallDrop(const GroundUnit* pGroundUnit) const {
     if(pGroundUnit->getOwner() == getHouse() && pGroundUnit->isActive()) {
+        const_cast<GroundUnit*>(pGroundUnit)->leaveFormation();
         return const_cast<GroundUnit*>(pGroundUnit)->requestCarryall();
     } else {
         logWarn("The player '%s' tries request a carryall for a ground unit he doesn't own or that is inactive!\n", playername.c_str());

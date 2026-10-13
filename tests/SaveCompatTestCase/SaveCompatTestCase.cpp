@@ -45,7 +45,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9854 adds the unit hunt-toward flag (UnitBase::doHuntToward).
     // 9855 adds the unit order queue and builder repeat production (RTS controls).
     // 9856 adds Construction Yard placement reservations to the production queue.
-    REQUIRE(SAVEGAMEVERSION == 9856);
+    // 9857 adds unit formation membership (group, slot, speed cap; docs/formations.md).
+    REQUIRE(SAVEGAMEVERSION == 9857);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

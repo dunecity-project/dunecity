@@ -20,6 +20,8 @@
 
 #include "QuantBotInternal.h"
 
+#include <FormationOrders.h>
+
 using QuantBotInternal::mobileCombatItem;
 
 namespace QuantBotInternal {
@@ -174,6 +176,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
+    // Defence is never slowed to a formation pace (docs/formations.md).
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -318,6 +321,8 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // The nearest troops, until together with those already in the fight they
     // outweigh the threat at the building.
     const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+    // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
+    // to the building's point nearest to itself at its own speed.
     for (const auto id : response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -2078,6 +2083,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             reserved.insert(int64_t(target.y)*getMap().getSizeX()+target.x);
     }
     int issued = 0;
+    std::vector<const UnitBase*> recalled;
     // Half the budget goes to the most endangered members first; the rest is a
     // round-robin from the saved cursor, which is what guarantees that every
     // member eventually gets its order even in a nine-hundred unit match.
@@ -2095,6 +2101,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget; done.insert(candidate.id);
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
@@ -2109,9 +2116,14 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget;
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
+    // Gathering the army: the troops recalled together this pass come home together, at
+    // the slowest one's pace, each to the assembly slot withdrawUnit() chose for it
+    // (docs/formations.md). Who is recalled and where each one goes are unchanged.
+    doFormUp(recalled);
     if (issued) traceDecision("army_recall", AITelemetry::Record()
         .set("posture", ArmyPosturePolicy::postureName(armyPosture))
         .set("issued", issued).set("pending", int(count))

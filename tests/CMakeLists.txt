@@ -33,6 +33,8 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp
+        FormationPlannerTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
         ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
@@ -196,6 +198,8 @@ add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][prese
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
+# Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
+add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
 
 # Standalone network wire harness.
 #
@@ -574,6 +578,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
         set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Formation movement (docs/formations.md): twelve mixed units through the real
+        # right-click path with formations on and off, a mid-march save/reload and a 9854
+        # unit record; leaves formation-march.png as the rendered evidence.
+        add_test(NAME formation_movement_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-formation-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/formation-probe)
+        set_tests_properties(formation_movement_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         add_test(NAME unit_route_continuation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --continuation

@@ -68,6 +68,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 71 adds the RTS-control commands (attack-move, patrol, queued orders, repeat
     // production), attack mode HOLD and save 9855.
     // 71 adds the Construction Yard reservation commands and simulation-side placement.
+    // 71 adds formation movement (CMD_UNIT_FORMATION_MOVE) and save 9857.
     REQUIRE(NETWORK_PROTOCOL_VERSION == 71);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

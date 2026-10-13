@@ -20,6 +20,8 @@
 #include <Menu/MenuBase.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Network/NetworkManager.h>
+#include <FormationOrders.h>
+#include <structures/StructureBase.h>
 #include <memory>
 #include <stdexcept>
 #include <fstream>
@@ -125,6 +127,93 @@ int runOwnershipProbe() {
     if(unit->getAttackMode()!=STOP) throw std::runtime_error("unknown issuer changed unit");
     Command(hostPlayer->getPlayerID(), CMD_UNIT_SETMODE, 0xfffffff0u, GUARD).executeCommand();
     SDL_Log("OWNERSHIP_PROBE_PASS: actual game objects reject enemy, unknown and invalid commands; owner and co-op commands work");
+    {
+        // CMD_UNIT_FORMATION_MOVE on real units (docs/formations.md).
+        auto require = [](bool ok, const char* why) {
+            if(!ok) { SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "FORMATION_COMMAND_PROBE_FAIL: %s", why); throw std::runtime_error(why); }
+        };
+        auto freeTileNear = [&](Coord from) {
+            for(int r = 0; r < 24; ++r)
+                for(int dy = -r; dy <= r; ++dy)
+                    for(int dx = -r; dx <= r; ++dx) {
+                        if(std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                        const Coord at = from + Coord(dx, dy);
+                        if(!currentGameMap->tileExists(at)) continue;
+                        const auto* tile = currentGameMap->getTile(at);
+                        if(tile->hasAnObject() || tile->isMountain()) continue;
+                        return at;
+                    }
+            throw std::runtime_error("formation fixture has no free tile");
+        };
+        const Coord centre(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2);
+        std::vector<UnitBase*> group;
+        for(const Uint32 item : {Unit_Tank, Unit_Launcher, Unit_SiegeTank}) {
+            UnitBase* member = owner->createUnit(item, true);
+            member->deploy(freeTileNear(centre));
+            group.push_back(member);
+        }
+        const Uint8 host = hostPlayer->getPlayerID();
+        const Uint32 token = FormationPlanner::makeToken(game->getGameCycleCount(), 0);
+        auto formationMove = [&](Uint8 player, UnitBase* member, Coord slot, Uint32 tok) {
+            Command(player, CMD_UNIT_FORMATION_MOVE, member->getObjectID(),
+                    static_cast<Uint32>(slot.x), static_cast<Uint32>(slot.y), tok).executeCommand();
+        };
+        formationMove(enemyPlayer->getPlayerID(), group[0], centre, token);
+        require(!group[0]->isInFormation(), "An enemy put our unit into a formation");
+        formationMove(host, group[0], centre, 0);
+        require(!group[0]->isInFormation(), "A zero group token was accepted");
+        formationMove(host, group[0], centre, FormationPlanner::kTokenMask + 1);
+        require(!group[0]->isInFormation(), "An oversized group token was accepted");
+        formationMove(host, group[0], Coord(currentGameMap->getSizeX() + 5, 1), token);
+        require(!group[0]->isInFormation(), "A slot off the map was accepted");
+
+        // The owner's plan: every member joins one group at the slowest member's pace.
+        const std::vector<const UnitBase*> members(group.begin(), group.end());
+        const auto plan = FormationOrders::planGroup(members, freeTileNear(centre + Coord(8, 0)));
+        require(plan.formation && plan.slots.size() == 3, "Three real units did not get a formation plan");
+        for(UnitBase* member : group) formationMove(host, member, plan.slotFor(member->getObjectID()), token);
+        const Uint32 groupID = FormationPlanner::makeGroupID(host, token);
+        FixPoint slowest = group[0]->getFormationReferenceSpeed();
+        for(const UnitBase* member : group) slowest = std::min(slowest, member->getFormationReferenceSpeed());
+        for(const UnitBase* member : group) {
+            require(member->getFormationGroup() == groupID, "A member is not in the issuing player's group");
+            require(member->getFormationSpeedCap() == slowest, "The group pace is not the slowest member's");
+            require(member->getDestination() == plan.slotFor(member->getObjectID()) && member->wasForced(),
+                    "A member was not given a forced move to its slot");
+        }
+        require(FormationPlanner::makeGroupID(coopPlayer->getPlayerID(), token) != groupID,
+                "A co-op partner's identical token would merge with the host's group");
+
+        // A slot that became a building: every peer moves it to the same nearest usable tile.
+        Coord built = Coord::Invalid();
+        for(const StructureBase* structure : structureList)
+            if(structure->getOwner() == owner) { built = structure->getLocation(); break; }
+        require(built.isValid() && currentGameMap->getTile(built)->hasAStructure(), "No building for the slot fixture");
+        formationMove(host, group[1], built, token);
+        const Coord moved = group[1]->getFormationSlot();
+        require(group[1]->isInFormation() && moved.isValid() && !currentGameMap->getTile(moved)->hasAStructure()
+                && FormationOrders::canStand(group[1], moved) && group[1]->getDestination() == moved,
+                "A slot on a building was not moved to a usable tile");
+        require(moved == FormationOrders::revalidatedSlot(group[1], built), "The slot fallback is not deterministic");
+
+        // Any other order ends the membership.
+        Command(host, CMD_UNIT_MOVE2POS, group[2]->getObjectID(), centre.x, centre.y, 1).executeCommand();
+        require(!group[2]->isInFormation(), "A plain move kept the unit in its formation");
+        // An aircraft keeps the plain forced move.
+        UnitBase* orni = owner->createUnit(Unit_Ornithopter, true);
+        orni->deploy(freeTileNear(centre));
+        const Coord airGoal = freeTileNear(centre + Coord(3, 0));
+        formationMove(host, orni, airGoal, token);
+        require(!orni->isInFormation() && orni->getDestination() == airGoal, "An aircraft joined a formation");
+        // Per-cycle upkeep: the last member left in a group leaves it.
+        group[1]->leaveFormation();
+        FormationOrders::update();
+        require(!group[0]->isInFormation(), "A lone member kept its formation");
+        for(UnitBase* member : group) member->cancelDeployment();
+        orni->cancelDeployment();
+        SDL_Log("FORMATION_COMMAND_PROBE_PASS: owner-only, token and slot validation, shared group pace, "
+                "building fallback, order cancellation, aircraft and lone-member rules");
+    }
     CommandManager batches;
     static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle = 0;
     unit->doSetAttackMode(GUARD);

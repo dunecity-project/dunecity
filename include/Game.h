@@ -436,6 +436,8 @@ public:
     void confirmSkipMission();
     void drawMovementPaths();
     void toggleMovementPaths();
+    /// Ctrl+F: switches "Move groups in formation" and persists it (docs/formations.md).
+    void toggleFormationMoves();
     bool canSkipMission() const;
 
     /**
@@ -753,6 +755,16 @@ private:
     /// Draws queued waypoints for the local player's selected units (docs/rts-controls.md).
     void drawQueuedOrders();
 
+    /**
+        The formation part of a move or action click (docs/formations.md). With "Move groups
+        in formation" on, the selected ground units of the local house that this click simply
+        moves (no target under the cursor for an action click) are planned as one formation
+        with FormationOrders::planGroup and sent one CMD_UNIT_FORMATION_MOVE each. Fewer than
+        two such units, the setting off or an invalid tile issue nothing.
+        \return the ids of the units that were ordered; the caller handles everything else
+    */
+    std::set<Uint32> issueSelectedFormationMove(int xPos, int yPos, bool actionClick);
+
 
     /**
         Selects the next structure of any of the types specified in itemIDs. If none of this type is currently selected the first one is selected.
@@ -1064,6 +1076,10 @@ private:
 
     Uint32      skipToGameCycle = 0;            ///< skip to this game cycle
     Uint32      lastPathInstrumentationLogCycle = 0;
+    /// Local player's formation-order tokens (issueSelectedFormationMove). Client-side only:
+    /// the token travels inside the command, so peers never derive it themselves.
+    Uint32      formationTokenCycle = 0;
+    Uint32      formationTokensThisCycle = 0;
     
     Uint32      loadedSavegameVersion = 0;      ///< Version of loaded savegame (for backward compatibility)
     /// Next deviation control-interval id; 0 is reserved for "not deviated" (SAVEGAMEVERSION 9849).
