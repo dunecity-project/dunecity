@@ -119,7 +119,12 @@
 //       building with doHuntToward() walks there in Hunt and attacks only enemies
 //       it meets on the way; a save taken mid-walk has to keep that rule. A 9853
 //       save loads with no unit hunting toward anything.
-#define SAVEGAMEVERSION     9854
+// 9855: Modern RTS controls (docs/rts-controls.md). Units carry their player order queue
+//       (Shift-queued orders, attack-move and patrol: up to 16 orders, whether the front
+//       one was started, the walk retry count and the attack-move break-off point), and
+//       builders carry the items set to repeat production. A 9854 save loads with empty
+//       queues and no repeating items. Attack mode HOLD (10) is new in the same version.
+#define SAVEGAMEVERSION     9855
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

@@ -960,6 +960,7 @@ MapEditorInterface::MapEditorInterface(MapEditor* pMapEditor)
     unitDetailsAttackModeDropDownBox.addEntry(getAttackModeNameByMode(HARVEST), HARVEST);
     unitDetailsAttackModeDropDownBox.addEntry(getAttackModeNameByMode(SABOTAGE), SABOTAGE);
     unitDetailsAttackModeDropDownBox.addEntry(getAttackModeNameByMode(STOP), STOP);
+    unitDetailsAttackModeDropDownBox.addEntry(getAttackModeNameByMode(HOLD), HOLD);
 
     unitDetailsAttackModeDropDownBox.setOnSelectionChange(std::bind(&MapEditorInterface::onUnitAttackModeDropDown, this, std::placeholders::_1));
 

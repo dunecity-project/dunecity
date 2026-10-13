@@ -72,6 +72,7 @@ target_sources(dunelegacy_tests
         CityStructuresTestCase/CityStructuresTestCase.cpp
         ConstructionYardResolverTestCase/ConstructionYardResolverTestCase.cpp
         UnitMovementPolicyTestCase/UnitMovementPolicyTestCase.cpp
+        RtsControlsTestCase.cpp
         PalaceUnitLimitRegressionTestCase/PalaceUnitLimitRegressionTestCase.cpp
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
@@ -185,6 +186,8 @@ add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
+# Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
+add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 
 # Standalone network wire harness.
 #
@@ -382,7 +385,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -564,6 +567,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
             --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
         set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
+        # under fire, three-waypoint Shift queue, repeat production through the unit limit,
+        # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
+        add_test(NAME rts_controls_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
+        set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward

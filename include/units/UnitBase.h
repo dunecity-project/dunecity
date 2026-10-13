@@ -19,6 +19,7 @@
 #define UNITBASE_H
 
 #include <ObjectBase.h>
+#include <units/UnitOrderQueue.h>
 
 #include <House.h>
 
@@ -144,6 +145,40 @@ public:
     /// the farther of its weapon range and its view range.
     int huntTowardRange() const;
     static constexpr int kHuntTowardRetries = 3;
+
+    /**
+        Player orders (docs/rts-controls.md). Executed only from Command::executeCommand, so
+        every peer applies them on the same cycle. Without \a queued the order replaces the
+        unit's queue and starts now; with \a queued (Shift) it is appended and starts when the
+        orders before it are complete. A queued order on an empty queue starts at once.
+        Move, MoveToObject, AttackObject, AttackMove, Capture and HarvesterReturn only;
+        patrol goes through doIssuePatrol.
+    */
+    void doIssueOrder(const UnitOrder& order, bool queued);
+
+    /// Patrol between where the unit stands and \a point; with \a queued the point extends the route.
+    void doIssuePatrol(const Coord& point, bool queued);
+
+    /**
+        A classic order (right-click move, attack, capture, harvester return) was just executed
+        through its own command: it becomes the front of the queue, so a following Shift order
+        runs after it instead of replacing it.
+    */
+    void recordPlayerOrder(const UnitOrder& order);
+
+    /// Any order that is not queueable (Stop, Hold, a mode change, repair, forced fire...) ends the queue.
+    void clearOrderQueue();
+
+    const UnitOrderQueue& getOrderQueue() const { return orderQueue; }
+
+    /// Walking an attack-move or patrol leg, engaging enemies met on the way?
+    bool isAttackMoving() const;
+
+    /// Does this unit fight on an attack-move? Workers, transports and Saboteurs just walk.
+    bool fightsOnAttackMove() const;
+
+    /// An explicit player order ends HOLD; the unit returns to its default, Area Guard.
+    void leaveHoldForOrder();
 
     /**
         This method is called when an unit should move to another unit/structure
@@ -571,6 +606,24 @@ protected:
     bool     bFollow;                ///< Do we currently follow some other unit (specified by target)?
     Coord    huntTowardGoal;         ///< Where a doHuntToward() walk goes; invalid when none (SAVEGAMEVERSION 9854)
     Uint8    huntTowardRetries;      ///< Times that walk was resumed after the engine dropped it
+
+    // Player order queue (SAVEGAMEVERSION 9855, docs/rts-controls.md). The front entry is the
+    // order being executed. Kept together and saved as one block after huntToward.
+    UnitOrderQueue orderQueue;                             ///< Shift-queued, attack-move and patrol orders
+    bool     orderDispatched = false;                      ///< The front order has been handed to the engine
+    Uint8    orderWalkRetries = 0;                         ///< Times a dropped attack-move walk was resumed
+    Coord    attackMoveBreakOff = Coord::Invalid();        ///< Where an attack-move left its walk to fight
+
+    /// Runs the order queue once per update: completes the front order and starts the next one.
+    void updateOrderQueue();
+    /// Hands the front order to the engine, skipping orders whose target is gone.
+    void dispatchFrontOrder();
+    /// Can the front order still be carried out (target alive, unit able)?
+    bool isOrderExecutable(const UnitOrder& order) const;
+    /// Has the engine run out of movement and targets for this unit?
+    bool isIdleForOrders() const;
+    /// The front order has finished: start the next one.
+    void finishFrontOrder();
 
 
     bool     moving;                 ///< Are we currently moving?

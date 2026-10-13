@@ -116,6 +116,7 @@ void GroundUnit::checkPos() {
             && owner->hasCarryalls()
             && isEligibleForRepair() // stop deviated units from being repaired
             && !isInfantry()
+            && UnitOrderPolicy::mayAutoRepair(attackMode) // a holding unit stays where it was put
             && !forced ) { // Stefan - Allow units with targets to be picked up for repairs
 
         doRepair();

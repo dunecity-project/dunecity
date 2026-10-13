@@ -184,6 +184,10 @@ BuilderBase::BuilderBase(InputStream& stream) : StructureBase(stream) {
         tmp.load(stream);
         buildList.push_back(tmp);
     }
+
+    if(currentGame->getLoadedSavegameVersion() >= 9855) {
+        repeatItems.load(stream);
+    }
 }
 
 void BuilderBase::init() {
@@ -219,6 +223,8 @@ void BuilderBase::save(OutputStream& stream) const {
     for(const BuildItem& buildItem : buildList) {
         buildItem.save(stream);
     }
+
+    repeatItems.save(stream);
 }
 
 ObjectInterface* BuilderBase::getInterfaceContainer() {
@@ -253,6 +259,7 @@ void BuilderBase::removeItem(std::list<BuildItem>& buildItemList, std::list<Buil
             std::list<BuildItem>::iterator iter2 = iter;
             ++iter;
             buildItemList.erase(iter2);
+            repeatItems.set(itemID, false);     // nothing left to repeat
 
             // is this item currently produced?
             if(currentProducedItem == itemID) {
@@ -325,7 +332,8 @@ void BuilderBase::updateProductionProgress() {
     if(currentProducedItem != ItemID_Invalid) {
         BuildItem* tmp = getBuildItem(currentProducedItem);
 
-        if((productionProgress < tmp->price) && (isOnHold() == false) && (isUnitLimitReached(currentProducedItem) == false) && (owner->getCredits() > 0)) {
+        if((productionProgress < tmp->price)
+           && ProductionRepeat::productionAdvances(isOnHold(), isUnitLimitReached(currentProducedItem), owner->getCredits() > 0)) {
 
             FixPoint oldProgress = productionProgress;
 
@@ -617,6 +625,7 @@ bool BuilderBase::update() {
         deployTimer--;
         if(deployTimer == 0) {
             int finishedItemID = currentProducedItem;
+            const Uint32 builtItemID = currentProducedItem;
             removeBuiltItemFromProductionQueue();
 
             int num2Place = 1;
@@ -682,6 +691,12 @@ bool BuilderBase::update() {
                         AITelemetry::Record().set("builder", getObjectID()).set("item", finishedItemID)
                             .set("object", newUnit->getObjectID()).set("x", spot.x).set("y", spot.y));
                 }
+            }
+
+            // Repeat production: one more copy joins the back of the queue. It waits for
+            // credits, the unit limit and on-hold exactly like any other queued item.
+            if(repeatItems.requeueAfterCompletion(builtItemID, isAvailableToBuild(builtItemID))) {
+                doProduceItem(builtItemID, false);
             }
         }
     }
@@ -759,6 +774,30 @@ void BuilderBase::handleSetOnHoldClick(bool OnHold) {
     currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_SETONHOLD, objectID, (Uint32) OnHold));
 }
 
+void BuilderBase::handleSetRepeatClick(Uint32 itemID, bool enabled) {
+    currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_SETREPEAT, objectID, itemID, (Uint32) enabled));
+}
+
+bool BuilderBase::supportsRepeat(Uint32 itemID) const {
+    return ProductionRepeat::itemSupportsRepeat(static_cast<int>(this->itemID), static_cast<int>(itemID))
+        && isAvailableToBuild(itemID);
+}
+
+void BuilderBase::doSetRepeat(Uint32 itemID, bool enabled) {
+    if(!enabled) {
+        repeatItems.set(itemID, false);
+        return;
+    }
+    if(!supportsRepeat(itemID)) {
+        return;
+    }
+    repeatItems.set(itemID, true);
+    const BuildItem* pBuildItem = getBuildItem(itemID);
+    if(pBuildItem != nullptr && pBuildItem->num == 0) {
+        doProduceItem(itemID, false);
+    }
+}
+
 
 bool BuilderBase::doUpgrade() {
     if(upgrading) {
@@ -802,6 +841,8 @@ void BuilderBase::doProduceItem(Uint32 itemID, bool multipleMode) {
 }
 
 void BuilderBase::doCancelItem(Uint32 itemID, bool multipleMode) {
+    // Cancelling an item also ends its repeat; otherwise the loop would refill it.
+    repeatItems.set(itemID, false);
     for(BuildItem& buildItem : buildList) {
         if(buildItem.itemID == itemID) {
             for(int i = 0; i < (multipleMode ? 5 : 1); i++) {

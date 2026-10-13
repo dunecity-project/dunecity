@@ -223,7 +223,8 @@ void Command::executeCommand() const {
     const bool unitOrder=commandID==CMD_UNIT_MOVE2POS || commandID==CMD_UNIT_MOVE2OBJECT
         || commandID==CMD_UNIT_ATTACKPOS || commandID==CMD_UNIT_ATTACKOBJECT
         || commandID==CMD_UNIT_SETMODE || commandID==CMD_UNIT_SENDTOREPAIR
-        || commandID==CMD_UNIT_REQUESTCARRYALLDROP || commandID==CMD_UNIT_HEAL;
+        || commandID==CMD_UNIT_REQUESTCARRYALLDROP || commandID==CMD_UNIT_HEAL
+        || commandID==CMD_UNIT_ATTACKMOVE || commandID==CMD_UNIT_PATROL || commandID==CMD_UNIT_QUEUEORDER;
     const auto* human=dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
     if (unitOrder && human && !parameter.empty()) {
         const auto* unit=dynamic_cast<const UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
@@ -234,8 +235,10 @@ void Command::executeCommand() const {
 
     // Only accepted human orders reset the stall clock, and this executes on every peer.
     // AI helpers deliberately leave repeated identical routing intents on the same clock.
+    // Any explicit movement order ends HOLD (docs/rts-controls.md).
     const auto applyMovementOrder = [human](UnitBase* unit, bool validIntent, const auto& action) {
         if(human && validIntent) unit->cancelCarryallPickup();
+        if(validIntent) unit->leaveHoldForOrder();
         action();
         if(human && validIntent) unit->noteExplicitPlayerOrder();
     };
@@ -265,9 +268,13 @@ void Command::executeCommand() const {
             if(!CommandAuthorization::isValidBooleanParameter(parameter[3])) {
                 return;
             }
-            applyMovementOrder(unit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+            const bool validIntent = currentGameMap->tileExists((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(unit, validIntent, [&] {
                 unit->doMove2Pos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
             });
+            // An unshifted order replaces the queue and becomes its front, so a later Shift
+            // order runs after it.
+            if(validIntent) unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, Coord((int) parameter[1], (int) parameter[2])));
         } break;
 
         case CMD_UNIT_MOVE2OBJECT: {
@@ -279,9 +286,11 @@ void Command::executeCommand() const {
                 return;
             }
             const auto* target = currentGame->getObjectManager().getObject(parameter[1]);
-            applyMovementOrder(unit, target != nullptr && target != unit, [&] {
+            const bool validIntent = target != nullptr && target != unit;
+            applyMovementOrder(unit, validIntent, [&] {
                 unit->doMove2Object((int) parameter[1]);
             });
+            if(validIntent) unit->recordPlayerOrder(UnitOrder::on(UnitOrderType::MoveToObject, parameter[1]));
         } break;
 
         case CMD_UNIT_ATTACKPOS: {
@@ -295,9 +304,12 @@ void Command::executeCommand() const {
             if(!CommandAuthorization::isValidBooleanParameter(parameter[3])) {
                 return;
             }
-            applyMovementOrder(unit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+            const bool validIntent = currentGameMap->tileExists((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(unit, validIntent, [&] {
                 unit->doAttackPos((int) parameter[1], (int) parameter[2], (bool) parameter[3]);
             });
+            // Firing at the ground has no end, so nothing can be queued behind it.
+            if(validIntent) unit->clearOrderQueue();
         } break;
 
         case CMD_UNIT_ATTACKOBJECT: {
@@ -314,6 +326,7 @@ void Command::executeCommand() const {
             applyMovementOrder(pUnit, validIntent, [&] {
                 pUnit->doAttackObject((int) parameter[1], true);
             });
+            if(validIntent) pUnit->recordPlayerOrder(UnitOrder::on(UnitOrderType::AttackObject, parameter[1]));
         } break;
 
                 case CMD_UNIT_HEAL: {
@@ -333,6 +346,7 @@ void Command::executeCommand() const {
             applyMovementOrder(pUnit, pTarget != pUnit, [&] {
                 pUnit->doAttackObject((int) parameter[1], true);
             });
+            if(pTarget != pUnit) pUnit->clearOrderQueue();
         } break;
 case CMD_INFANTRY_CAPTURE: {
             if(parameter.size() != 2) {
@@ -342,7 +356,12 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], pInfantry)) {
                 return;
             }
+            const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(parameter[1]));
+            const bool validIntent = pStructure != nullptr && pStructure->canBeCaptured()
+                && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
+            if(validIntent) pInfantry->leaveHoldForOrder();
             pInfantry->doCaptureStructure((int) parameter[1]);
+            if(validIntent) pInfantry->recordPlayerOrder(UnitOrder::on(UnitOrderType::Capture, parameter[1]));
         } break;
 
         case CMD_UNIT_REQUESTCARRYALLDROP: {
@@ -353,9 +372,11 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], pGroundUnit)) {
                 return;
             }
-            applyMovementOrder(pGroundUnit, currentGameMap->tileExists((int) parameter[1], (int) parameter[2]), [&] {
+            const bool validIntent = currentGameMap->tileExists((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(pGroundUnit, validIntent, [&] {
                 pGroundUnit->doRequestCarryallDrop((int) parameter[1], (int) parameter[2]);
             });
+            if(validIntent) pGroundUnit->clearOrderQueue();
         } break;
 
         case CMD_UNIT_SENDTOREPAIR: {
@@ -366,6 +387,8 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], pGroundUnit)) {
                 return;
             }
+            pGroundUnit->clearOrderQueue();
+            pGroundUnit->leaveHoldForOrder();
             pGroundUnit->doRepair();
         } break;
 
@@ -380,6 +403,8 @@ case CMD_INFANTRY_CAPTURE: {
             if(!CommandAuthorization::isValidAttackMode(parameter[1])) {
                 return;
             }
+            // Stop, Hold and every other mode change end the order queue.
+            pUnit->clearOrderQueue();
             pUnit->doSetAttackMode((ATTACKMODE) parameter[1]);
             if(human) pUnit->noteExplicitPlayerOrder();
         } break;
@@ -392,6 +417,7 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], pDevastator)) {
                 return;
             }
+            pDevastator->clearOrderQueue();
             pDevastator->doStartDevastate();
         } break;
 
@@ -416,6 +442,9 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             harvesterDoReturn(pHarvester);
+            if(auto* pUnit = dynamic_cast<UnitBase*>(pHarvester)) {
+                pUnit->recordPlayerOrder(UnitOrder::on(UnitOrderType::HarvesterReturn, NONE_ID));
+            }
         } break;
 
         case CMD_STRUCTURE_SETDEPLOYPOSITION: {
@@ -584,6 +613,80 @@ case CMD_INFANTRY_CAPTURE: {
         case CMD_MATCH_PAUSE: {
             if (parameter.size() != 1) return;
             currentGame->executeMatchPause(playerID, parameter[0]);
+        } break;
+
+        case CMD_UNIT_ATTACKMOVE:
+        case CMD_UNIT_PATROL: {
+            if(parameter.size() != 4) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_UNIT_ATTACKMOVE/CMD_UNIT_PATROL need 4 Parameters!");
+            }
+            UnitBase* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
+                return;
+            }
+            if(!CommandAuthorization::isValidBooleanParameter(parameter[3])) {
+                return;
+            }
+            const Coord point((int) parameter[1], (int) parameter[2]);
+            if(!currentGameMap->tileExists(point)) {
+                return;
+            }
+            const bool queued = parameter[3] != 0;
+            if(queued && !unit->getOrderQueue().empty()) {
+                // Waits behind the current orders; it takes over the unit only when it starts.
+                if(commandID == CMD_UNIT_ATTACKMOVE) unit->doIssueOrder(UnitOrder::at(UnitOrderType::AttackMove, point), true);
+                else unit->doIssuePatrol(point, true);
+            } else {
+                applyMovementOrder(unit, true, [&] {
+                    if(commandID == CMD_UNIT_ATTACKMOVE) unit->doIssueOrder(UnitOrder::at(UnitOrderType::AttackMove, point), queued);
+                    else unit->doIssuePatrol(point, queued);
+                });
+            }
+        } break;
+
+        case CMD_UNIT_QUEUEORDER: {
+            if(parameter.size() != 4) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_UNIT_QUEUEORDER needs 4 Parameters!");
+            }
+            UnitBase* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
+                return;
+            }
+            UnitOrder order;
+            switch(static_cast<UnitOrderType>(parameter[1])) {
+                case UnitOrderType::Move: {
+                    if(!currentGameMap->tileExists((int) parameter[2], (int) parameter[3])) return;
+                    order = UnitOrder::at(UnitOrderType::Move, Coord((int) parameter[2], (int) parameter[3]));
+                } break;
+                case UnitOrderType::MoveToObject:
+                case UnitOrderType::AttackObject:
+                case UnitOrderType::Capture: {
+                    order = UnitOrder::on(static_cast<UnitOrderType>(parameter[1]), parameter[2]);
+                } break;
+                case UnitOrderType::HarvesterReturn: {
+                    if(!isHarvesterLikeUnit(unit->getItemID())) return;
+                    order = UnitOrder::on(UnitOrderType::HarvesterReturn, NONE_ID);
+                } break;
+                // Attack-move and patrol have their own commands; anything else is malformed.
+                default:
+                    return;
+            }
+            // A queued order on an idle unit starts at once; its dispatch ends HOLD and any lift.
+            unit->doIssueOrder(order, true);
+        } break;
+
+        case CMD_BUILDER_SETREPEAT: {
+            if(parameter.size() != 3) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_BUILDER_SETREPEAT needs 3 Parameters!");
+            }
+            BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], pBuilder)) {
+                return;
+            }
+            if(!CommandAuthorization::isValidBooleanParameter(parameter[2])) {
+                return;
+            }
+            pBuilder->doSetRepeat(parameter[1], parameter[2] != 0);
         } break;
 
         case CMD_PLAYER_PAUSE: {

@@ -29,6 +29,7 @@
 #include <GUI/SymbolButton.h>
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
+#include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 #include <GUI/HBox.h>
 #include <GUI/VBox.h>
 
@@ -57,28 +58,33 @@ protected:
         buttonVBox.addWidget(VSpacer::create(buttonGap));
 
         moveButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Move)});
-        moveButton.setTooltipText(_("Move to a position (Hotkey: M)"));
+        moveButton.setTooltipText(UnitCommandTooltips::move());
         moveButton.setToggleButton(true);
         moveButton.setOnClick(std::bind(&UnitInterface::onMove, this));
 
         attackButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Attack)});
-        attackButton.setTooltipText(settings.general.wasdCamera ? _("Attack (Shift+A)") : _("Attack a unit, structure or position (Hotkey: A)"));
+        attackButton.setTooltipText(UnitCommandTooltips::attackMove());
         attackButton.setToggleButton(true);
         attackButton.setOnClick(std::bind(&UnitInterface::onAttack, this));
 
+        patrolButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Patrol)});
+        patrolButton.setTooltipText(UnitCommandTooltips::patrol());
+        patrolButton.setToggleButton(true);
+        patrolButton.setOnClick(std::bind(&UnitInterface::onPatrol, this));
+
         carryallDropButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Drop)});
-        carryallDropButton.setTooltipText(settings.general.wasdCamera ? _("Request Carryall drop (Shift+D)") : _("Request Carryall drop to a position (Hotkey: D)"));
+        carryallDropButton.setTooltipText(UnitCommandTooltips::carryallDrop());
         carryallDropButton.setToggleButton(true);
         carryallDropButton.setOnClick(std::bind(&UnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(_("Capture a building (Hotkey: C)"));
+        captureButton.setTooltipText(UnitCommandTooltips::capture());
         captureButton.setVisible((itemID == Unit_Soldier) || (itemID == Unit_Trooper));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&UnitInterface::onCapture, this));
 
         returnButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Return)});
-        returnButton.setTooltipText(_("Return harvester to refinery (Hotkey: H)"));
+        returnButton.setTooltipText(UnitCommandTooltips::returnHarvester());
         returnButton.setVisible(isHarvesterLikeUnit(itemID));
         returnButton.setOnClick(std::bind(&UnitInterface::onReturn, this));
 
@@ -103,14 +109,14 @@ protected:
         }
 
         sendToRepairButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Repair)});
-        sendToRepairButton.setTooltipText(_("Repair this unit (Hotkey: R)"));
+        sendToRepairButton.setTooltipText(UnitCommandTooltips::repairUnit());
         sendToRepairButton.setOnClick(std::bind(&UnitInterface::OnSendToRepair, this));
 
         movementPathsButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Paths)});
         movementPathsButton.setToggleButton(true);
         movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
-        actionBar.setButtons({&moveButton, &attackButton, &movementPathsButton,
+        actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
             &destructButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
@@ -137,10 +143,19 @@ protected:
 
         stopButton.setText(_("Stop"));
         stopButton.setTextColor(color);
-        stopButton.setTooltipText(settings.general.wasdCamera ? _("Stop (Shift+S): unit will not move or attack") : _("Stop (S): unit will not move or attack"));
+        stopButton.setTooltipText(UnitCommandTooltips::stop());
         stopButton.setToggleButton(true);
         stopButton.setOnClick(std::bind(&UnitInterface::onStop, this));
         buttonVBox.addWidget(&stopButton, 26);
+
+        buttonVBox.addWidget(VSpacer::create(buttonGap));
+
+        holdButton.setText(_("Hold"));
+        holdButton.setTextColor(color);
+        holdButton.setTooltipText(UnitCommandTooltips::hold());
+        holdButton.setToggleButton(true);
+        holdButton.setOnClick(std::bind(&UnitInterface::onHold, this));
+        buttonVBox.addWidget(&holdButton, 26);
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
 
@@ -185,6 +200,10 @@ protected:
 
     void onAttack() {
         currentGame->setCursorMode(Game::CursorMode_Attack);
+    }
+
+    void onPatrol() {
+        currentGame->setCursorMode(Game::CursorMode_Patrol);
     }
     void onHeal() {
         currentGame->setCursorMode(Game::CursorMode_Heal);
@@ -241,6 +260,10 @@ protected:
         setAttackMode(STOP);
     }
 
+    void onHold() {
+        setAttackMode(HOLD);
+    }
+
     void onAmbush() {
         setAttackMode(AMBUSH);
     }
@@ -280,6 +303,7 @@ protected:
         movementPathsButton.setToggleState(settings.general.showMovementPaths);
         moveButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Move);
         attackButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Attack);
+        patrolButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Patrol);
         healButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Heal);
         attackButton.setVisible(pObject->canAttack());
         healButton.setVisible(pObject->canHeal());
@@ -296,6 +320,7 @@ protected:
             guardButton.setToggleState( AttackMode == GUARD );
             areaGuardButton.setToggleState( AttackMode == AREAGUARD );
             stopButton.setToggleState( AttackMode == STOP );
+            holdButton.setToggleState( AttackMode == HOLD );
             ambushButton.setToggleState( AttackMode == AMBUSH );
             huntButton.setToggleState( AttackMode == HUNT );
             retreatButton.setToggleState( AttackMode == RETREAT );
@@ -311,6 +336,7 @@ protected:
     SymbolButton    movementPathsButton;
     SymbolButton    moveButton;
     SymbolButton    attackButton;
+    SymbolButton    patrolButton;
     SymbolButton    captureButton;
     SymbolButton    returnButton;
     SymbolButton    deployButton;
@@ -322,6 +348,7 @@ protected:
     TextButton      guardButton;
     TextButton      areaGuardButton;
     TextButton      stopButton;
+    TextButton      holdButton;
     TextButton      ambushButton;
     TextButton      huntButton;
     TextButton      retreatButton;

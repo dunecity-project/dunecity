@@ -120,7 +120,12 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
         if(mouseLeftButton == getButton(x,y)) {
             // button released
             assert(pBuilder);
-            if((getItemIDFromIndex(mouseLeftButton) == static_cast<int>(pBuilder->getCurrentProducedItem())) && (pBuilder->isWaitingToPlace() == true)) {
+            const int clickedItemID = getItemIDFromIndex(mouseLeftButton);
+            if((SDL_GetModState() & KMOD_ALT) && clickedItemID != ItemID_Invalid && pBuilder->supportsRepeat(clickedItemID)) {
+                // Alt+click toggles repeat production of a unit in a factory (docs/rts-controls.md).
+                soundPlayer->playSound(Sound_ButtonClick);
+                pBuilder->handleSetRepeatClick(clickedItemID, !pBuilder->isRepeating(clickedItemID));
+            } else if((clickedItemID == static_cast<int>(pBuilder->getCurrentProducedItem())) && (pBuilder->isWaitingToPlace() == true)) {
                 soundPlayer->playSound(Sound_ButtonClick);
                 if(currentGame->currentCursorMode == Game::CursorMode_Placing) {
                     currentGame->setCursorMode(Game::CursorMode_Normal);
@@ -331,6 +336,21 @@ void BuilderList::draw(Point position) {
                     SDL_Rect drawLocationNumber = calcDrawingRect(pNumberTexture.get(), dest.x + BUILDERBTN_WIDTH - 3, dest.y + BUILDERBTN_HEIGHT + 2, HAlign::Right, VAlign::Bottom);
                     SDL_RenderCopy(renderer, pNumberTexture.get(), nullptr, &drawLocationNumber);
                 }
+
+                if(pBuilder->isRepeating(buildItem.itemID)) {
+                    // Loop marker: a small ring with an arrowhead in the top right corner.
+                    const int cx = dest.x + BUILDERBTN_WIDTH - 8;
+                    const int cy = dest.y + 8;
+                    const Coord ring[] = { Coord(cx-2,cy-4), Coord(cx+2,cy-4), Coord(cx+4,cy-2), Coord(cx+4,cy+2),
+                                           Coord(cx+2,cy+4), Coord(cx-2,cy+4), Coord(cx-4,cy+2), Coord(cx-4,cy-2) };
+                    SDL_Rect backing{cx-6, cy-6, 13, 13};
+                    renderFillRect(renderer, &backing, COLOR_HALF_TRANSPARENT);
+                    for(int segment = 0; segment < 7; ++segment) {
+                        renderDrawLine(renderer, ring[segment].x, ring[segment].y, ring[segment+1].x, ring[segment+1].y, COLOR_YELLOW);
+                    }
+                    renderDrawLine(renderer, cx-4, cy-2, cx-6, cy-4, COLOR_YELLOW);
+                    renderDrawLine(renderer, cx-4, cy-2, cx-2, cy-5, COLOR_YELLOW);
+                }
             }
 
             i++;
@@ -367,6 +387,11 @@ void BuilderList::drawOverlay(Point position) {
 
         if(buildItemIter->itemID == pBuilder->getCurrentProducedItem() && pBuilder->isWaitingToPlace()) {
             text += " (Hotkey: P)";
+        }
+        if(pBuilder->isRepeating(buildItemIter->itemID)) {
+            text += " - repeating (Alt+click: stop, right-click: cancel)";
+        } else if(pBuilder->supportsRepeat(buildItemIter->itemID)) {
+            text += " (Alt+click: repeat)";
         }
 
         if(text != tooltipText) {
