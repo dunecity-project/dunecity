@@ -39,6 +39,14 @@ UNIT_FORMATION_MOVE. Network protocol 71. Save 9857 with separate gates: 9855 un
 and builder repeat set, 9856 placement reservations, 9857 unit formation membership; a 9854
 save loads with none of them. Not pushed, no PR, no release.
 
+Full CTest 92/92 passed on build-int at 5ba711a6. Installed on the MBA at 22:14 AEDT
+2026-10-13 from 5ba711a6 (built on the mini, `cmake --install` staging, no Homebrew/workstation
+library references, deep/strict signature verified before and after the swap, desktop runtime
+check passed on both machines): version 1.0.834, executable SHA256
+9bf3b1ece5cd06830ba7778d34be6a6357d673ebe744305a08b41b4dc2123b15. The game was not running;
+saves untouched. Local 1.0.833 is at
+/Applications/.dunecity-backup-before-1.0.834-20261013-221411/dunecity.app.
+
 ## 2026-10-13 — 1.0.833: sanitizers on by default for Debug, and what they found
 
 `-DDUNECITY_SANITIZE` (CMakeLists.txt) defaults to `address,undefined` for native
