@@ -251,6 +251,7 @@ void runMenu() {
             chooseMod(name);
             skirmishRequire(!menu.enemyCityBox.isVisible() && !menu.allyCityBox.isVisible() && !menu.enemyCityCaption->isVisible(),
                             std::string("City rows shown for non-city mod ") + name);
+            if(std::string(name) == "vanilla") skirmishCapture(menu, "random-skirmish-vanilla");
         }
         chooseMod("dunecity");
         skirmishRequire(menu.enemyCityBox.isVisible() && menu.enemyCityCaption->isVisible() && menu.enemyCityBox.isEnabled(),

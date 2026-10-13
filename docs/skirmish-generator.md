@@ -16,7 +16,7 @@ map-editor format and starts it through the normal CustomGame path,
   - `src/MapEditor/SkirmishCatalogue.cpp`: the only engine-facing piece. It reads prices, power,
     tech levels, builders and prerequisites from the live `ObjectData`.
   - `include/Menu/RandomSkirmishMenu.h` and `src/Menu/RandomSkirmishMenu.cpp`: the screen, plus the
-    `RandomSkirmish::{activateMode, loadCatalogue, makeInit, saveMap}` steps. The probe uses the same
+    `RandomSkirmish::{activateMod, modeForMod, loadCatalogue, makeInit, saveMap}` steps. The probe uses the same
     steps.
   - `include/INIMap/ZoneStartLevel.h`, `INIMapLoader::loadStructures` and
     `ZoneStructure::setStartingLevel`: the zone-level map extension.
@@ -35,13 +35,19 @@ All of these are saved as last-used values in the configuration file, section `[
     from being rolled on each visit. This checkbox is an addition, because "random by default" and
     "persist all parameters" conflict.
 - **Game**
+  - Mod: every installed mod, the same list as Custom Game (Vanilla, DuneCity, Tornie, Dune2R,
+    Workshop mods). The match activates that mod and its effective rules the way a new Custom Game
+    does; the remaster's artwork gate runs first, as in Custom Game. The generator's mode follows the
+    mod: a mod with `Enables City Mode` (DuneCity) generates cities, any other mod is vanilla-style.
+    The City rows are shown only for a city mod. An older config without `Mod` falls back to the
+    saved mode (`dunecity` / `vanilla`).
   - Your house: Random or any house a custom game can field.
   - Credits: 1,000 / 2,000 / 3,000 / 5,000 / 7,500 / 10,000 / 20,000, applied to every house.
     Deviation: the engine has no existing credit presets, so this list is new. The default of 3,000
     is `DEFAULT_STARTINGCREDITS`.
-  - Mode: Vanilla or DuneCity. Each mode activates its mod (`vanilla` / `dunecity`) and that mod's
-    effective rules, the same way a new Custom Game does.
   - Tech level 1–9, written to `[BASIC] TechLevel`.
+  - The saved map's `[BASIC] Mod` is `dunecity` for a city mod, otherwise the chosen mod's content
+    category (`tornie` or `vanilla`).
 - **Players**
   - Allies 0–3 and enemies 1–5.
   - Total houses are capped at what the engine can field: `isCustomGameHouseAvailable`, which is 8

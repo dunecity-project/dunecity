@@ -15,6 +15,12 @@ places each finished building on its planned plot automatically.
 - Left-click on the map reserves the plot and queues the item (one command). The building stays
   selected, so every further click plans another copy; **Esc**, right-click or clicking its
   sidebar icon again leaves planning without ordering more.
+- Several Construction Yards: each planned building goes to the house's yard with the least work
+  left (queued prices minus progress, counting orders still in flight); on a tie the yard it was
+  picked from, then the lowest object id (`PlacementReservation::chooseYard`). Build range and
+  overlap are house-wide, so any yard can take any valid plot; yards that cannot build the item
+  (upgrade level, one-palace rule) are skipped. With the setting OFF a list click still orders on
+  the selected yard, since that yard is where the finished building waits to be placed.
 - All structures go through this flow (vanilla, slabs, R/C/I zones, Police, Stadium, Airport,
   Nuclear Plant). **Road and Power Line** keep the old flow (they build instantly).
 - Alt is not used here (reserved for the controls slice's repeat toggle). Only Construction Yard

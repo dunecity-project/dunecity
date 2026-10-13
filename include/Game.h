@@ -71,6 +71,7 @@ class Explosion;
 class SpatialGrid;
 class UnitBase;
 class Carryall;
+class ConstructionYard;
 class MetaServerClient;
 
 
@@ -835,6 +836,8 @@ public:
     };
     std::vector<PendingReservation> pendingReservations;
     std::vector<PlacementReservation::Footprint> pendingReservationFootprints();
+    /// The local house's yard a new reserved order goes to (least work left; docs/preplace-queue.md).
+    ConstructionYard* chooseReservationYard(Uint32 itemID, ConstructionYard* pPreferred);
     int         lastRoadTileX = -1;
     int         lastRoadTileY = -1;
     DuneCity::ZoneType selectedZoneType_ = DuneCity::ZoneType::Residential;

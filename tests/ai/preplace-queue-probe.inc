@@ -363,6 +363,47 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     require(fixtureYard->getProductionQueueSize() == 0, "Right-clicking the ghost did not cancel its reservation");
     SDL_Log("PREPLACE_PROBE: list cancel drops the newest reservation; ghost right-click cancels its own");
 
+    // ---- Several yards: planned orders go to the yard with the least work, so they build in parallel. ----
+    {
+        auto* secondYard = dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID, Structure_ConstructionYard, at(12,7).x, at(12,7).y, true, true));
+        require(secondYard != nullptr, "Could not place the second fixture yard");
+        secondYard->updateBuildList();
+        require(secondYard->getBuildItem(Structure_WindTrap) != nullptr, "The second yard cannot build wind traps");
+        require(fixtureYard->getProductionQueueSize() == 0 && secondYard->getProductionQueueSize() == 0, "Yards are not idle");
+        game->unselectAll(game->selectedList); game->selectedList.clear();
+        game->selectedList.insert(yardID); fixtureYard->setSelected(true); game->selectionChanged();
+        game->pInterface->updateObjectInterface();
+        list = dynamic_cast<BuilderInterface*>(game->pInterface->pObjectContainer)->pBuilderList;
+        clickItem(Structure_WindTrap, KMOD_NONE);
+        require(game->handlePlacementClick(pCancelA.x, pCancelA.y), "First planned wind trap refused");
+        require(game->handlePlacementClick(pCancelB.x, pCancelB.y), "Second planned wind trap refused");
+        game->setCursorMode(Game::CursorMode_Normal);
+        advance(*game, 3);
+        // The house may own other idle yards on the map; the second order goes to one of them.
+        ConstructionYard* otherYard = nullptr;
+        for(StructureBase* s : structureList) {
+            auto* candidate = dynamic_cast<ConstructionYard*>(s);
+            if(candidate != nullptr && candidate != fixtureYard && candidate->getOwner() == house
+               && candidate->getProductionQueueSize() > 0) {
+                require(otherYard == nullptr, "A planned building went to more than one other yard");
+                otherYard = candidate;
+            }
+        }
+        require(fixtureYard->getProductionQueueSize() == 1 && otherYard != nullptr && otherYard->getProductionQueueSize() == 1,
+            "Two planned buildings did not split over two idle yards");
+        require(fixtureYard->getProductionQueue().front().plotX == pCancelA.x
+                && otherYard->getProductionQueue().front().plotX == pCancelB.x,
+            "The picked yard did not take the first order, or the plots were swapped");
+        require(advanceUntil(*game, 300, [&] { return fixtureYard->getProductionProgress() > 0 && otherYard->getProductionProgress() > 0; }),
+            "The two yards are not building at the same time");
+        Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, yardID,
+                fixtureYard->getProductionQueue().front().reservationID).executeCommand();
+        Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, otherYard->getObjectID(),
+                otherYard->getProductionQueue().front().reservationID).executeCommand();
+        require(fixtureYard->getProductionQueueSize() == 0 && otherYard->getProductionQueueSize() == 0, "Distribution fixture cleanup failed");
+        SDL_Log("PREPLACE_PROBE: planned orders split over two yards and built in parallel");
+    }
+
     // ---- A destroyed yard takes its reservations with it, refunding as a dying builder does today. ----
     reserve(*game, yardID, Structure_WindTrap, pCancelA);
     reserve(*game, yardID, Structure_WindTrap, pCancelB);

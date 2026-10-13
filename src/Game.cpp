@@ -6365,8 +6365,12 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
             soundPlayer->playSound(Sound_InvalidAction);
             return false;
         }
-        pYard->handleReservePlacementClick(planItem, xPos, yPos);
-        pendingReservations.push_back({pYard->getObjectID(), planItem, xPos, yPos, gameCycleCount});
+        // Build range and overlap are house-wide, so the plot is valid for every yard of the
+        // house; the order goes to the yard with the least work left, so several Construction
+        // Yards build in parallel.
+        ConstructionYard* pBuilderYard = chooseReservationYard(planItem, pYard);
+        pBuilderYard->handleReservePlacementClick(planItem, xPos, yPos);
+        pendingReservations.push_back({pBuilderYard->getObjectID(), planItem, xPos, yPos, gameCycleCount});
         soundPlayer->playSound(Sound_PlaceStructure);
         // The planning cursor stays on this building so further copies need one click each;
         // Esc, right-click or clicking its sidebar icon again ends planning.
@@ -6484,6 +6488,26 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
             return false;
         }
     }
+}
+
+ConstructionYard* Game::chooseReservationYard(Uint32 itemID, ConstructionYard* pPreferred) {
+    std::vector<PlacementReservation::YardLoad> candidates;
+    for(StructureBase* pStructure : structureList) {
+        auto* pYard = dynamic_cast<ConstructionYard*>(pStructure);
+        if(pYard == nullptr || pYard->getOwner() != pLocalHouse || !pYard->mayReserveItem(itemID)) continue;
+        long long remaining = -pYard->getProductionProgress().lround();
+        for(const ProductionQueueItem& entry : pYard->getProductionQueue()) remaining += entry.price;
+        // Orders already sent but not yet executed count against their yard too.
+        for(const PendingReservation& pending : pendingReservations) {
+            if(pending.builderID != pYard->getObjectID()) continue;
+            for(const BuildItem& item : pYard->getBuildList())
+                if(item.itemID == pending.itemID) { remaining += item.price; break; }
+        }
+        candidates.push_back({pYard->getObjectID(), remaining});
+    }
+    const Uint32 chosenID = PlacementReservation::chooseYard(candidates, pPreferred->getObjectID());
+    auto* pChosen = dynamic_cast<ConstructionYard*>(objectManager.getObject(chosenID));
+    return pChosen != nullptr ? pChosen : pPreferred;
 }
 
 

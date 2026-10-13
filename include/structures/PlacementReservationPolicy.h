@@ -189,6 +189,30 @@ inline std::uint32_t nextReservationID(std::uint32_t current) {
     return (current == 0xFFFFFFFFu) ? 1u : current + 1u;
 }
 
+/// A Construction Yard that can take a new reserved order, and how much work it still has.
+struct YardLoad {
+    std::uint32_t yardID = 0;
+    long long remainingWork = 0;   ///< credits still to spend on its queue, incl. orders in flight
+};
+
+/**
+    The yard a new reserved order goes to, so a house with several Construction Yards builds in
+    parallel: the one with the least remaining work; on a tie the yard the player picked the
+    building from, then the lowest object id. Returns 0 when there is no candidate.
+*/
+inline std::uint32_t chooseYard(const std::vector<YardLoad>& candidates, std::uint32_t preferredID) {
+    const YardLoad* best = nullptr;
+    for(const YardLoad& yard : candidates) {
+        if(best == nullptr || yard.remainingWork < best->remainingWork
+           || (yard.remainingWork == best->remainingWork
+               && (yard.yardID == preferredID
+                   || (best->yardID != preferredID && yard.yardID < best->yardID)))) {
+            best = &yard;
+        }
+    }
+    return best != nullptr ? best->yardID : 0;
+}
+
 } // namespace PlacementReservation
 
 #endif // PLACEMENT_RESERVATION_POLICY_H

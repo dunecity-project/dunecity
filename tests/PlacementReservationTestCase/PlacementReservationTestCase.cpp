@@ -152,3 +152,23 @@ TEST_CASE("Pre-placement: reservation ids are stable and never 0", "[preplace][i
     REQUIRE(nextReservationID(41) == 42);
     REQUIRE(nextReservationID(0xFFFFFFFFu) == 1);
 }
+
+TEST_CASE("Pre-placement: orders spread over the house's Construction Yards", "[preplace][yards]") {
+    // No yard can take the order.
+    REQUIRE(chooseYard({}, 7) == 0);
+    // The least remaining work wins, wherever the building was picked from.
+    REQUIRE(chooseYard({{7, 900}, {9, 0}, {12, 300}}, 7) == 9);
+    // On a tie the yard the player picked from keeps the order...
+    REQUIRE(chooseYard({{5, 0}, {7, 0}, {9, 0}}, 7) == 7);
+    // ...otherwise the lowest object id, whatever the listing order.
+    REQUIRE(chooseYard({{9, 0}, {5, 0}, {12, 400}}, 7) == 5);
+    // Successive orders alternate between two idle yards as each one's work grows.
+    std::vector<YardLoad> yards{{3, 0}, {4, 0}};
+    std::vector<std::uint32_t> picks;
+    for(int order = 0; order < 4; ++order) {
+        const std::uint32_t chosen = chooseYard(yards, 3);
+        picks.push_back(chosen);
+        for(YardLoad& yard : yards) if(yard.yardID == chosen) yard.remainingWork += 500;
+    }
+    REQUIRE(picks == std::vector<std::uint32_t>{3, 4, 3, 4});
+}
