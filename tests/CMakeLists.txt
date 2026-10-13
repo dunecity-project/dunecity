@@ -73,6 +73,7 @@ target_sources(dunelegacy_tests
         ConstructionYardResolverTestCase/ConstructionYardResolverTestCase.cpp
         UnitMovementPolicyTestCase/UnitMovementPolicyTestCase.cpp
         PalaceUnitLimitRegressionTestCase/PalaceUnitLimitRegressionTestCase.cpp
+        PlacementReservationTestCase/PlacementReservationTestCase.cpp
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
         ../src/fixmath/fix32.c
@@ -181,6 +182,7 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")

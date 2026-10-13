@@ -176,7 +176,11 @@
 //     lifetime combat evidence (it scales both weights down instead of wrapping), so
 //     QuantBot production choices differ from 69 once that evidence is large.
 //     Save and runtime layouts remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            70
+// 71: Construction Yard pre-placement queue. CMD_BUILDER_RESERVE_PLACEMENT and
+//     CMD_BUILDER_CANCEL_RESERVATION are new commands, and a reserved order is placed by
+//     the simulation when it finishes, so a 70 peer cannot execute or replay them.
+//     Save 9856.
+#define NETWORK_PROTOCOL_VERSION            71
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

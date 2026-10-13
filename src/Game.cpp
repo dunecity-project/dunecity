@@ -2618,7 +2618,9 @@ void Game::drawScreen()
         }
     }
 
-/////////////draw placement position
+    drawReservationGhosts();
+
+//////////////draw placement position
 
     if(currentCursorMode == CursorMode_Placing) {
         //if user has selected to place a structure
@@ -2629,11 +2631,25 @@ void Game::drawScreen()
             int xPos = screenborder->screen2MapX(drawnMouseX);
             int yPos = screenborder->screen2MapY(drawnMouseY);
 
-            if(selectedList.size() == 1) {
-                auto pBuilder = dynamic_cast<BuilderBase*>(objectManager.getObject(*selectedList.begin()));
+            // Planning (pre-placement) previews an item that is not ordered yet, for the yard
+            // it will be ordered from; ordinary placing previews the selected builder's item.
+            const bool planning = isPlanningPlacement();
+            BuilderBase* pPlacingBuilder = nullptr;
+            if(planning) {
+                pPlacingBuilder = dynamic_cast<ConstructionYard*>(objectManager.getObject(planningBuilderID));
+            } else if(selectedList.size() == 1) {
+                pPlacingBuilder = dynamic_cast<BuilderBase*>(objectManager.getObject(*selectedList.begin()));
+            }
+            {
+                auto pBuilder = pPlacingBuilder;
                 if(pBuilder) {
-                    int placeItem = pBuilder->getCurrentProducedItem();
+                    int placeItem = planning ? static_cast<int>(planningItemID) : pBuilder->getCurrentProducedItem();
                     Coord structuresize = getStructureSize(placeItem);
+                    PlacementReservation::Verdict planVerdict = PlacementReservation::Verdict::Valid;
+                    if(planning) {
+                        planVerdict = static_cast<ConstructionYard*>(pBuilder)->checkReservationPlot(
+                            placeItem, xPos, yPos, pendingReservationFootprints());
+                    }
                     const bool footprintInsideMap =
                         structuresize.x > 0 && structuresize.y > 0
                         && xPos >= 0 && yPos >= 0
@@ -2664,6 +2680,11 @@ void Game::drawScreen()
                                 }
                             }
                         }
+                    }
+                    if(planning) {
+                        // Earlier reservations extend the range; overlapping one is never valid.
+                        withinRange = planVerdict != PlacementReservation::Verdict::OutOfRange
+                                   && planVerdict != PlacementReservation::Verdict::Overlap;
                     }
 
                     SDL_Texture* validPlace = nullptr;
@@ -2709,13 +2730,15 @@ void Game::drawScreen()
                             bool tileValid = false;
                             if(footprintInsideMap && withinRange && currentGameMap->tileExists(i,j)) {
                                 Tile* pTile = currentGameMap->getTile(i,j);
+                                // Planning ignores units, which are asked to move when it is built.
+                                const bool occupied = planning ? pTile->hasAStructure() : pTile->hasAGroundObject();
                                 if(isZoneStructure(placeItem)) {
                                     tileValid = zoneFootprintAnchored
                                         && DuneCity::isCityZoneTerrain(pTile->getType())
                                         && !pTile->hasCityZone()
-                                        && !pTile->hasAGroundObject();
+                                        && !occupied;
                                 } else {
-                                    tileValid = pTile->isRock() && !pTile->isMountain() && !pTile->hasAGroundObject()
+                                    tileValid = pTile->isRock() && !pTile->isMountain() && !occupied
                                         && !(((placeItem == Structure_Slab1) || (placeItem == Structure_Slab4)) && pTile->isConcrete());
                                 }
                             }
@@ -3169,6 +3192,11 @@ case CursorMode_Heal: {
                             if(currentCursorMode != CursorMode_Normal) {
                                 //cancel special cursor mode
                                 setCursorMode(CursorMode_Normal);
+                            } else if(!isObserving() && !hasRespondableOwnUnitSelected()
+                                      && screenborder->isScreenCoordInsideMap(mouse->x, mouse->y)
+                                      && handleReservationGhostRightClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y))) {
+                                // Right-clicking a planned plot cancels it. Selected units keep
+                                // their ordinary right-click order, so a ghost never eats a move.
                             } else if(settings.general.leftClickOrders || isObserving()) {
                                 // An observer's right click only clears the inspection, never
                                 // orders the view house's units about.
@@ -3356,6 +3384,10 @@ void Game::updateCursor()
 
 void Game::setCursorMode(int mode)
 {
+    // Any mode change ends pre-placement planning; beginPlacementPlanning() sets it again.
+    planningBuilderID = NONE_ID;
+    planningItemID = ItemID_Invalid;
+
     // Every non-normal cursor mode exists to issue an order (place, attack, move, heal,
     // capture, carryall drop, city zone, city road). An observer keeps only the normal
     // cursor, so none of those click handlers can be reached at all.
@@ -3366,6 +3398,132 @@ void Game::setCursorMode(int mode)
         currentCursorMode = mode;
         cursorManager.setCursorMode(mode);
     }
+}
+
+void Game::beginPlacementPlanning(Uint32 builderID, Uint32 itemID)
+{
+    setCursorMode(CursorMode_Placing);
+    if(currentCursorMode == CursorMode_Placing) {
+        planningBuilderID = builderID;
+        planningItemID = itemID;
+    }
+}
+
+bool Game::isPlanningPlacement() const
+{
+    return currentCursorMode == CursorMode_Placing && planningBuilderID != NONE_ID && planningItemID != ItemID_Invalid;
+}
+
+std::vector<PlacementReservation::Footprint> Game::pendingReservationFootprints()
+{
+    // A reservation command executes networkCycleBuffer cycles after it was issued; from
+    // then on the yard's queue (or its refusal) is the truth.
+    const Uint32 executedBy = cmdManager.getNetworkCycleBuffer() + 1;
+    pendingReservations.erase(std::remove_if(pendingReservations.begin(), pendingReservations.end(),
+        [&](const PendingReservation& pending) { return gameCycleCount > pending.issuedCycle + executedBy; }),
+        pendingReservations.end());
+
+    std::vector<PlacementReservation::Footprint> footprints;
+    for(const PendingReservation& pending : pendingReservations) {
+        const Coord size = getStructureSize(pending.itemID);
+        footprints.push_back({pending.x, pending.y, size.x, size.y});
+    }
+    return footprints;
+}
+
+void Game::drawReservationGhosts()
+{
+    // Owner-only: pLocalHouse is the player's house, or the house an observer is viewing.
+    if(pLocalHouse == nullptr) {
+        return;
+    }
+
+    SDL_Texture* validPlace = pGFXManager->getUIGraphic(currentZoomlevel == 0 ? UI_ValidPlace_Zoomlevel0
+        : (currentZoomlevel == 1 ? UI_ValidPlace_Zoomlevel1 : UI_ValidPlace_Zoomlevel2));
+    SDL_Texture* invalidPlace = pGFXManager->getUIGraphic(currentZoomlevel == 0 ? UI_InvalidPlace_Zoomlevel0
+        : (currentZoomlevel == 1 ? UI_InvalidPlace_Zoomlevel1 : UI_InvalidPlace_Zoomlevel2));
+
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != pLocalHouse || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        const auto* yard = static_cast<const ConstructionYard*>(structure);
+        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
+            const Coord size = getStructureSize(ghost.itemID);
+            SDL_Rect area = { screenborder->world2screenX(ghost.x*TILESIZE), screenborder->world2screenY(ghost.y*TILESIZE), 0, 0 };
+            area.w = screenborder->world2screenX((ghost.x + size.x)*TILESIZE) - area.x;
+            area.h = screenborder->world2screenY((ghost.y + size.y)*TILESIZE) - area.y;
+            if(area.x + area.w < 0 || area.y + area.h < 0 || area.x > getRendererWidth() || area.y > getRendererHeight()) {
+                continue;
+            }
+
+            SDL_Texture* tileTexture = ghost.failed ? invalidPlace : validPlace;
+            Uint8 previousAlpha = SDL_ALPHA_OPAQUE;
+            SDL_GetTextureAlphaMod(tileTexture, &previousAlpha);
+            SDL_SetTextureAlphaMod(tileTexture, 110);
+            for(int dy = 0; dy < size.y; ++dy) {
+                for(int dx = 0; dx < size.x; ++dx) {
+                    SDL_Rect tile = calcDrawingRect(tileTexture, screenborder->world2screenX((ghost.x + dx)*TILESIZE),
+                                                    screenborder->world2screenY((ghost.y + dy)*TILESIZE));
+                    SDL_RenderCopy(renderer, tileTexture, nullptr, &tile);
+                }
+            }
+            SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
+            renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : COLOR_WHITE);
+
+            std::string label = std::to_string(ghost.number);
+            if(ghost.failed) {
+                label += " !";
+            } else if(ghost.inProduction) {
+                const BuildItem* buildItem = nullptr;
+                for(const BuildItem& item : yard->getBuildList()) {
+                    if(item.itemID == ghost.itemID) buildItem = &item;
+                }
+                if(buildItem != nullptr && buildItem->price > 0) {
+                    const int percent = std::min(100, static_cast<int>(lround(yard->getProductionProgress() * 100 / static_cast<int>(buildItem->price))));
+                    label += "  " + std::to_string(percent) + "%";
+                }
+            }
+            sdl2::texture_ptr labelTexture = pFontManager->createTextureWithText(label, COLOR_WHITE, 14);
+            SDL_Rect labelArea = calcDrawingRect(labelTexture.get(), area.x + area.w/2, area.y + area.h/2, HAlign::Center, VAlign::Center);
+            SDL_Rect labelBack = { labelArea.x - 2, labelArea.y - 1, labelArea.w + 4, labelArea.h + 2 };
+            renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
+            SDL_RenderCopy(renderer, labelTexture.get(), nullptr, &labelArea);
+        }
+    }
+}
+
+bool Game::hasRespondableOwnUnitSelected() const
+{
+    for(Uint32 objectID : selectedList) {
+        const ObjectBase* pObject = objectManager.getObject(objectID);
+        if(pObject != nullptr && pObject->isAUnit() && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Game::handleReservationGhostRightClick(int xPos, int yPos)
+{
+    if(pLocalHouse == nullptr || pLocalPlayer == nullptr || isObserving()) {
+        return false;
+    }
+    for(StructureBase* structure : structureList) {
+        if(structure->getOwner() != pLocalHouse || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        auto* yard = static_cast<ConstructionYard*>(structure);
+        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
+            const Coord size = getStructureSize(ghost.itemID);
+            if(xPos >= ghost.x && xPos < ghost.x + size.x && yPos >= ghost.y && yPos < ghost.y + size.y) {
+                yard->handleCancelReservationClick(ghost.reservationID);
+                soundPlayer->playSound(Sound_ButtonClick);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void Game::setupView()
@@ -5919,7 +6077,7 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_ESCAPE: {
-            if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad) {
+            if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad || isPlanningPlacement()) {
                 setCursorMode(CursorMode_Normal);
             } else {
                 onOptions();
@@ -6135,6 +6293,30 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
 
 
 bool Game::handlePlacementClick(int xPos, int yPos) {
+    if(isPlanningPlacement()) {
+        auto* pYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(planningBuilderID));
+        const Uint32 planItem = planningItemID;
+        if(pYard == nullptr || pYard->getOwner() != pLocalHouse || !pYard->mayReserveItem(planItem)) {
+            setCursorMode(CursorMode_Normal);
+            soundPlayer->playSound(Sound_InvalidAction);
+            return false;
+        }
+        if(pYard->checkReservationPlot(planItem, xPos, yPos, pendingReservationFootprints())
+           != PlacementReservation::Verdict::Valid) {
+            currentGame->addToNewsTicker(fmt::sprintf(_("@DUNE.ENG|134#Cannot place %%s here."), resolveItemName(planItem)));
+            soundPlayer->playSound(Sound_InvalidAction);
+            return false;
+        }
+        pYard->handleReservePlacementClick(planItem, xPos, yPos);
+        pendingReservations.push_back({pYard->getObjectID(), planItem, xPos, yPos, gameCycleCount});
+        soundPlayer->playSound(Sound_PlaceStructure);
+        // Shift keeps the planning cursor for another copy of the same building.
+        if(!(SDL_GetModState() & KMOD_SHIFT)) {
+            setCursorMode(CursorMode_Normal);
+        }
+        return true;
+    }
+
     BuilderBase* pBuilder = nullptr;
 
     if(selectedList.size() == 1) {

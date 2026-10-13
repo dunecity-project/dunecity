@@ -72,6 +72,9 @@ typedef enum {
 
     CMD_MATCH_PAUSE,                  ///< MATCH_PAUSE(), any active human; freezes after this tick
 
+    CMD_BUILDER_RESERVE_PLACEMENT,    ///< BUILDER_RESERVE_PLACEMENT(BUILDER_ID, ITEM_ID, X, Y), queues the structure and reserves its plot
+    CMD_BUILDER_CANCEL_RESERVATION,   ///< BUILDER_CANCEL_RESERVATION(BUILDER_ID, RESERVATION_ID), cancels that reserved order with the normal refund
+
     CMD_MAX
 } CMDTYPE;
 

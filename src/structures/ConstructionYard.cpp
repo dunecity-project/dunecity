@@ -21,9 +21,123 @@
 #include <globals.h>
 
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/TextManager.h>
 #include <House.h>
 #include <Game.h>
+#include <Map.h>
+#include <SoundPlayer.h>
+#include <sand.h>
+#include <dunecity/CityConstants.h>
+#include <misc/format.h>
 #include <mod/ModManager.h>
+#include <players/HumanPlayer.h>
+#include <units/InfantryBase.h>
+
+namespace {
+
+bool footprintInsideMap(int x, int y, const Coord& size) {
+    // Written without x + size so a hostile coordinate near INT_MAX cannot overflow.
+    return size.x > 0 && size.y > 0 && x >= 0 && y >= 0
+        && x <= currentGameMap->getSizeX() - size.x
+        && y <= currentGameMap->getSizeY() - size.y;
+}
+
+/// One tile a slab may go on, units ignored.
+bool slabTileOk(const Tile* tile) {
+    return tile->isRock() && !tile->isMountain() && !tile->hasAStructure() && !tile->hasCityZone();
+}
+
+/**
+    The normal placement terrain rules for itemID at x,y with units ignored and without the
+    build-range rule: Map::okayToPlaceStructure (city rules included), no structure, no
+    mountain, and no spice under a city-only structure (House::placeStructure refuses it).
+    Slabs keep the sidebar placement rules: Slab4 needs one usable and one unpaved tile.
+*/
+bool plotTilesOk(Uint32 itemID, int x, int y) {
+    const Coord size = getStructureSize(itemID);
+    if(!footprintInsideMap(x, y, size)) {
+        return false;
+    }
+
+    if(itemID == Structure_Slab1) {
+        const Tile* tile = currentGameMap->getTile(x, y);
+        return slabTileOk(tile) && !tile->isConcrete();
+    }
+    if(itemID == Structure_Slab4) {
+        bool usable = false;
+        bool unpaved = false;
+        for(int dy = 0; dy < 2; ++dy) {
+            for(int dx = 0; dx < 2; ++dx) {
+                const Tile* tile = currentGameMap->getTile(x + dx, y + dy);
+                usable |= slabTileOk(tile);
+                unpaved |= !tile->isConcrete();
+            }
+        }
+        return usable && unpaved;
+    }
+
+    if(!currentGameMap->okayToPlaceStructure(x, y, size.x, size.y, false, nullptr, true, itemID)) {
+        return false;
+    }
+    const bool cityOnly = DuneCity::isCityOnlyStructure(itemID);
+    for(int dy = 0; dy < size.y; ++dy) {
+        for(int dx = 0; dx < size.x; ++dx) {
+            const Tile* tile = currentGameMap->getTile(x + dx, y + dy);
+            if(tile->isMountain() || tile->hasAStructure()) {
+                return false;
+            }
+            if(cityOnly && (tile->isSpice() || tile->isSpiceBloom() || tile->isSpecialBloom())) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Some tile of the plot is within build range of the house's real map tiles.
+bool plotInOwnRange(const House* house, Uint32 itemID, int x, int y) {
+    const Coord size = getStructureSize(itemID);
+    for(int dy = 0; dy < size.y; ++dy) {
+        for(int dx = 0; dx < size.x; ++dx) {
+            if(currentGameMap->isWithinBuildRange(x + dx, y + dy, house)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+    The real-map check a finished reserved building is placed with: exactly the sidebar
+    placement rules for slabs, Map::okayToPlaceStructure for everything else (plus the
+    city-only spice rule House::placeStructure applies).
+*/
+bool plotPlaceableNow(const House* house, Uint32 itemID, int x, int y) {
+    const Coord size = getStructureSize(itemID);
+    if(!footprintInsideMap(x, y, size)) {
+        return false;
+    }
+    if(itemID == Structure_Slab1) {
+        return currentGameMap->isWithinBuildRange(x, y, house)
+            && currentGameMap->okayToPlaceStructure(x, y, 1, 1, false, house)
+            && !currentGameMap->getTile(x, y)->isConcrete();
+    }
+    if(itemID == Structure_Slab4) {
+        bool usable = false;
+        bool unpaved = false;
+        for(int dy = 0; dy < 2; ++dy) {
+            for(int dx = 0; dx < 2; ++dx) {
+                usable |= currentGameMap->okayToPlaceStructure(x + dx, y + dy, 1, 1, false, house);
+                unpaved |= !currentGameMap->getTile(x + dx, y + dy)->isConcrete();
+            }
+        }
+        return usable && unpaved && plotInOwnRange(house, itemID, x, y);
+    }
+    return currentGameMap->okayToPlaceStructure(x, y, size.x, size.y, false, house, false, itemID)
+        && plotTilesOk(itemID, x, y);
+}
+
+} // namespace
 
 ConstructionYard::ConstructionYard(House* newOwner) : BuilderBase(newOwner) {
     ConstructionYard::init();
@@ -55,11 +169,211 @@ ConstructionYard::~ConstructionYard() = default;
 
 bool ConstructionYard::doPlaceStructure(int x, int y) {
     if(isWaitingToPlace()) {
-        return PlacementResult::apply([&] { return getProductionQueueSize(); }, [&] {
-            return getOwner()->placeStructure(getObjectID(), getCurrentProducedItem(), x, y) != nullptr;
-        });
+        return placeFinishedStructure(x, y);
     } else {
         return false;
+    }
+}
+
+bool ConstructionYard::placeFinishedStructure(int x, int y) {
+    return PlacementResult::apply([&] { return getProductionQueueSize(); }, [&] {
+        return getOwner()->placeStructure(getObjectID(), getCurrentProducedItem(), x, y) != nullptr;
+    });
+}
+
+bool ConstructionYard::update() {
+    if(BuilderBase::update() == false) {
+        return false;
+    }
+    updateReservedPlacement();
+    return true;
+}
+
+Uint32 ConstructionYard::reservedPlacementUnitWaitCycles() {
+    return MILLI2CYCLES(5000);
+}
+
+bool ConstructionYard::isReservableItem(Uint32 itemID) {
+    // Roads and power lines build instantly, so they keep the order-then-place flow.
+    return isStructure(itemID) && !DuneCity::isCityTileTool(itemID);
+}
+
+bool ConstructionYard::mayReserveItem(Uint32 itemID) const {
+    if(!isReservableItem(itemID)) {
+        return false;
+    }
+    const BuildItem* buildItem = getBuildItem(itemID);
+    if(buildItem == nullptr) {
+        return false;
+    }
+    // The same one-palace rule doProduceItem applies to an ordinary order.
+    return !(currentGame->getGameInitSettings().getGameOptions().onlyOnePalace
+             && itemID == Structure_Palace
+             && (buildItem->num > 0 || owner->getNumItems(Structure_Palace) > 0));
+}
+
+std::vector<PlacementReservation::Footprint> ConstructionYard::reservedFootprints(const House* house) {
+    std::vector<PlacementReservation::Footprint> footprints;
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != house || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        for(const ProductionQueueItem& entry : static_cast<const ConstructionYard*>(structure)->getProductionQueue()) {
+            if(entry.reservationID != 0) {
+                const Coord size = ::getStructureSize(entry.itemID);
+                footprints.push_back({entry.plotX, entry.plotY, size.x, size.y});
+            }
+        }
+    }
+    return footprints;
+}
+
+PlacementReservation::Verdict ConstructionYard::checkReservationPlot(Uint32 itemID, int x, int y,
+        const std::vector<PlacementReservation::Footprint>& pending) const {
+    const Coord size = ::getStructureSize(itemID);
+    std::vector<PlacementReservation::Footprint> reserved = reservedFootprints(owner);
+    reserved.insert(reserved.end(), pending.begin(), pending.end());
+    return PlacementReservation::validate({x, y, size.x, size.y}, plotTilesOk(itemID, x, y),
+        [this](int tileX, int tileY) { return currentGameMap->isWithinBuildRange(tileX, tileY, owner); },
+        reserved, BUILDRANGE);
+}
+
+bool ConstructionYard::doReservePlacement(Uint32 itemID, int x, int y) {
+    if(!mayReserveItem(itemID)
+       || checkReservationPlot(itemID, x, y) != PlacementReservation::Verdict::Valid) {
+        return false;
+    }
+
+    const std::size_t queuedBefore = currentProductionQueue.size();
+    doProduceItem(itemID, false);
+    if(currentProductionQueue.size() != queuedBefore + 1) {
+        return false;
+    }
+
+    ProductionQueueItem& order = currentProductionQueue.back();
+    order.reservationID = nextReservationID;
+    order.plotX = x;
+    order.plotY = y;
+    order.reservationFailed = false;
+    nextReservationID = PlacementReservation::nextReservationID(nextReservationID);
+    return true;
+}
+
+bool ConstructionYard::doCancelReservation(Uint32 reservationID) {
+    const PlacementReservation::CancelResult result =
+        PlacementReservation::eraseReservation(currentProductionQueue, reservationID);
+    if(!result.found) {
+        return false;
+    }
+
+    for(BuildItem& buildItem : buildList) {
+        if(buildItem.itemID == result.itemID && buildItem.num > 0) {
+            buildItem.num--;
+            break;
+        }
+    }
+
+    if(result.wasInProduction) {
+        // Exactly what cancelling the item under construction refunds today.
+        refundProductionProgress();
+        deployTimer = 0;
+        produceNextAvailableItem();
+    }
+    return true;
+}
+
+void ConstructionYard::handleReservePlacementClick(Uint32 itemID, int x, int y) {
+    currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_RESERVE_PLACEMENT,
+        objectID, itemID, static_cast<Uint32>(x), static_cast<Uint32>(y)));
+}
+
+void ConstructionYard::handleCancelReservationClick(Uint32 reservationID) {
+    currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION,
+        objectID, reservationID));
+}
+
+void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y) {
+    // Seeded from the cycle, like the sidebar's version of this request, so every peer
+    // picks the same spots without drawing from the game's random generator. The orders
+    // are the forced moves UnitBase::handleMoveClick would send, applied in the tick.
+    Random tempRandomGen(currentGame->getGameCycleCount());
+    const Coord size = ::getStructureSize(itemID);
+    const auto moveOff = [&](UnitBase* pUnit) {
+        if(pUnit == nullptr || pUnit->getOwner() != owner || !pUnit->isRespondable()) {
+            return;
+        }
+        const Coord destination = currentGameMap->findDeploySpot(pUnit, Coord(x, y), tempRandomGen, pUnit->getLocation(), size);
+        if(currentGameMap->tileExists(destination.x, destination.y)) {
+            pUnit->doMove2Pos(destination.x, destination.y, true);
+        }
+    };
+    for(int tileY = y; tileY < y + size.y; tileY++) {
+        for(int tileX = x; tileX < x + size.x; tileX++) {
+            Tile* pTile = currentGameMap->getTile(tileX, tileY);
+            if(pTile->hasANonInfantryGroundObject()) {
+                ObjectBase* pObject = pTile->getNonInfantryGroundObject();
+                if(pObject->isAUnit()) {
+                    moveOff(static_cast<UnitBase*>(pObject));
+                }
+            } else if(pTile->hasInfantry()) {
+                const std::list<Uint32> infantryList = pTile->getInfantryList();
+                for(Uint32 objectID : infantryList) {
+                    moveOff(dynamic_cast<InfantryBase*>(currentGame->getObjectManager().getObject(objectID)));
+                }
+            }
+        }
+    }
+}
+
+void ConstructionYard::updateReservedPlacement() {
+    if(!isAwaitingReservedPlacement()) {
+        return;
+    }
+
+    ProductionQueueItem& order = currentProductionQueue.front();
+    const Uint32 itemID = order.itemID;
+    const int x = order.plotX;
+    const int y = order.plotY;
+
+    const bool placeableNow = plotPlaceableNow(owner, itemID, x, y);
+    const bool placeableIgnoringUnits = !placeableNow
+        && plotTilesOk(itemID, x, y) && plotInOwnRange(owner, itemID, x, y);
+
+    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits,
+                                                  reservedPlacementWaitCycles, reservedPlacementUnitWaitCycles())) {
+        case PlacementReservation::Completion::Place: {
+            // The order is now an ordinary finished building at its planned site; place it
+            // through the same path a CMD_PLACE_STRUCTURE takes.
+            reservedPlacementWaitCycles = 0;
+            if(placeFinishedStructure(x, y)) {
+                if(owner == pLocalHouse) {
+                    soundPlayer->playSound(Sound_PlaceStructure);
+                }
+                return;
+            }
+        } break;
+
+        case PlacementReservation::Completion::WaitForUnits: {
+            // Ask once a second, as a player clicking on a blocked plot would.
+            if(reservedPlacementWaitCycles % MILLI2CYCLES(1000) == 0) {
+                moveOwnUnitsOffPlot(itemID, x, y);
+            }
+            reservedPlacementWaitCycles++;
+            return;
+        }
+
+        case PlacementReservation::Completion::Fallback:
+        default:
+            break;
+    }
+
+    // Fall back to today's ready-to-place state: the ghost turns red and the player
+    // places the building by hand.
+    order.reservationFailed = true;
+    reservedPlacementWaitCycles = 0;
+    if(owner == pLocalHouse) {
+        currentGame->addToNewsTicker(fmt::sprintf(_("%s could not be placed at the planned site"), resolveItemName(itemID)));
+        soundPlayer->playSound(Sound_InvalidAction);
     }
 }
 

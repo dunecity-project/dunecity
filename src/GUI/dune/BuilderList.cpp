@@ -33,6 +33,7 @@
 #include <structures/BuilderBase.h>
 #include <structures/StarPort.h>
 #include <structures/ChaosFactory.h>
+#include <structures/ConstructionYard.h>
 
 #include <sstream>
 
@@ -122,7 +123,7 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
             assert(pBuilder);
             if((getItemIDFromIndex(mouseLeftButton) == static_cast<int>(pBuilder->getCurrentProducedItem())) && (pBuilder->isWaitingToPlace() == true)) {
                 soundPlayer->playSound(Sound_ButtonClick);
-                if(currentGame->currentCursorMode == Game::CursorMode_Placing) {
+                if(currentGame->currentCursorMode == Game::CursorMode_Placing && !currentGame->isPlanningPlacement()) {
                     currentGame->setCursorMode(Game::CursorMode_Normal);
                 } else {
                     currentGame->setCursorMode(Game::CursorMode_Placing);
@@ -131,9 +132,24 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
                 soundPlayer->playSound(Sound_ButtonClick);
                 pBuilder->handleSetOnHoldClick(false);
             } else {
-                if(getItemIDFromIndex(mouseLeftButton) != ItemID_Invalid) {
+                const int clickedItem = getItemIDFromIndex(mouseLeftButton);
+                ConstructionYard* pYard = dynamic_cast<ConstructionYard*>(pBuilder);
+                if(clickedItem != ItemID_Invalid && pYard != nullptr && settings.general.chooseBuildingLocation
+                   && ConstructionYard::isReservableItem(clickedItem)) {
+                    // Pre-placement: pick the plot first; the map click orders it. Shift keeps
+                    // planning on the map, so it has no x5 meaning here.
+                    if(currentGame->getPlanningItemID() == static_cast<Uint32>(clickedItem)) {
+                        soundPlayer->playSound(Sound_ButtonClick);
+                        currentGame->setCursorMode(Game::CursorMode_Normal);
+                    } else if(pYard->mayReserveItem(clickedItem)) {
+                        soundPlayer->playSound(Sound_ButtonClick);
+                        currentGame->beginPlacementPlanning(builderObjectID, clickedItem);
+                    } else {
+                        soundPlayer->playSound(Sound_InvalidAction);
+                    }
+                } else if(clickedItem != ItemID_Invalid) {
                     soundPlayer->playSound(Sound_ButtonClick);
-                    pBuilder->handleProduceItemClick(getItemIDFromIndex(mouseLeftButton), SDL_GetModState() & KMOD_SHIFT);
+                    pBuilder->handleProduceItemClick(clickedItem, SDL_GetModState() & KMOD_SHIFT);
                 }
             }
         }

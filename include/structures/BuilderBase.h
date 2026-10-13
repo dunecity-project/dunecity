@@ -78,6 +78,14 @@ public:
     /// (Starport, Love Factory): how much of it came from the owner's exempt
     /// starting cash, so cancelling returns it there.
     FixPoint startingCreditsPaid = 0;
+    /// Construction Yard pre-placement: 0 = no planned plot, otherwise the id of
+    /// the reservation, unique within its builder (PlacementReservationPolicy.h).
+    Uint32 reservationID = 0;
+    Sint32 plotX = 0;               ///< planned top-left tile of a reserved order
+    Sint32 plotY = 0;
+    /// The planned plot was invalid when the order finished: it waits to be
+    /// placed by hand like an unreserved order.
+    bool   reservationFailed = false;
 };
 
 
@@ -124,6 +132,13 @@ public:
     int getBuildListSize() const { return buildList.size(); }
 
     int getProductionQueueSize() const { return currentProductionQueue.size(); }
+
+    /// The production queue in order; the front entry is the one under construction.
+    const std::list<ProductionQueueItem>& getProductionQueue() const { return currentProductionQueue; }
+
+    /// True while the finished front order holds a plot the simulation is still trying
+    /// to place it on (ConstructionYard pre-placement); it is not ready to place by hand.
+    bool isAwaitingReservedPlacement() const;
 
     /**
         Updates this builder.
@@ -247,6 +262,9 @@ protected:
     FixPoint productionProgress;     ///< The current state of the production progress (measured in money spent)
     FixPoint productionProgressFromStartingCredits; ///< Part of productionProgress paid from exempt starting cash
     Uint32   deployTimer;            ///< Timer for deploying a unit
+
+    Uint32   nextReservationID = 1;  ///< Next placement reservation id handed out by this builder
+    Uint32   reservedPlacementWaitCycles = 0; ///< Cycles the finished front reservation has waited for units to clear its plot
 
     /// Clear the progress and the payment provenance together: money already
     /// spent is gone, so a later refund must not claim a starting-cash share

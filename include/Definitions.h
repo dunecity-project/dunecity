@@ -119,7 +119,13 @@
 //       building with doHuntToward() walks there in Hunt and attacks only enemies
 //       it meets on the way; a save taken mid-walk has to keep that rule. A 9853
 //       save loads with no unit hunting toward anything.
-#define SAVEGAMEVERSION     9854
+// 9856: Construction Yard pre-placement queue. Every production queue entry
+//       carries its reservation (id, plot, fallback flag) and every builder its
+//       next reservation id and the cycles the front reservation has waited for
+//       units to clear the plot. The plot decides where a finished building
+//       appears, so it cannot be recomputed after a load. A 9854 save loads with
+//       no reservations: every queued order keeps today's place-it-yourself flow.
+#define SAVEGAMEVERSION     9856
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

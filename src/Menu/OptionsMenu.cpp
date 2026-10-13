@@ -163,6 +163,16 @@ OptionsMenu::OptionsMenu() : MenuBase()
     pages[0].addWidget(&introHBox, 32);
     pages[0].addWidget(VSpacer::create(6));
 
+    chooseBuildingLocationCheckbox.setText(_("Choose building location when ordering"));
+    chooseBuildingLocationCheckbox.setTooltipText(_("Construction Yard: pick the plot first, then the yard builds the queue in order and places each building there. Shift+click keeps planning. Off: build first, then place."));
+    chooseBuildingLocationCheckbox.setChecked(settings.general.chooseBuildingLocation);
+    chooseBuildingLocationCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
+    chooseBuildingLocationHBox.addWidget(Spacer::create(), 0.5);
+    chooseBuildingLocationHBox.addWidget(&chooseBuildingLocationCheckbox, 480);
+    chooseBuildingLocationHBox.addWidget(Spacer::create(), 0.5);
+    pages[0].addWidget(&chooseBuildingLocationHBox, 32);
+    pages[0].addWidget(VSpacer::create(6));
+
     const bool duneCityActive = ModManager::instance().isInitialized()
         && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "dunecity";
     duneCitySkinHBox.addWidget(Spacer::create(), 0.5);
@@ -494,6 +504,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= settings.general.wasdCamera != wasdCameraCheckbox.isChecked();
     bChanged |= settings.general.leftClickOrders != leftClickOrdersCheckbox.isChecked();
     bChanged |= settings.general.showMovementPaths != movementPathsCheckbox.isChecked();
+    bChanged |= settings.general.chooseBuildingLocation != chooseBuildingLocationCheckbox.isChecked();
     bChanged |= settings.general.diagnosticLogs != diagnosticLogsCheckbox.isChecked();
     bChanged |= settings.video.interfaceHeight != interfaceSizeDropDownBox.getSelectedEntryIntData();
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
@@ -563,6 +574,7 @@ void OptionsMenu::onOptionsOK() {
     settings.general.wasdCamera=wasdCameraCheckbox.isChecked();
     settings.general.leftClickOrders=leftClickOrdersCheckbox.isChecked();
     settings.general.showMovementPaths=movementPathsCheckbox.isChecked();
+    settings.general.chooseBuildingLocation=chooseBuildingLocationCheckbox.isChecked();
     settings.general.diagnosticLogs=diagnosticLogsCheckbox.isChecked();
     settings.general.playerName = playername;
     std::string languageFilename = (languageDropDownBox.getSelectedEntryIntData() < 0) ? "English.en.po" : availLanguages[languageDropDownBox.getSelectedEntryIntData()];
@@ -725,6 +737,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("General","WASD Camera",settings.general.wasdCamera);
     myINIFile.setBoolValue("General","Left Click Orders",settings.general.leftClickOrders);
     myINIFile.setBoolValue("General","Movement Paths",settings.general.showMovementPaths);
+    myINIFile.setBoolValue("General","Choose Building Location",settings.general.chooseBuildingLocation);
     myINIFile.setBoolValue("General","Diagnostic Logs",settings.general.diagnosticLogs);
     myINIFile.setBoolValue("General","Play Intro",settings.general.playIntro);
     myINIFile.setBoolValue("General","Show Tutorial Hints",settings.general.showTutorialHints);

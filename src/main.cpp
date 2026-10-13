@@ -1145,6 +1145,7 @@ int main(int argc, char *argv[]) {
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
             settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
+            settings.general.chooseBuildingLocation = myINIFile.getBoolValue("General","Choose Building Location",true);
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs

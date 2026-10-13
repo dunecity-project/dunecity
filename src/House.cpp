@@ -1148,7 +1148,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
     BuilderBase* pBuilder = (builderID == NONE_ID) ? nullptr : dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderID));
 
     if(currentGame->getGameInitSettings().getGameOptions().onlyOnePalace && pBuilder != nullptr && itemID == Structure_Palace && getNumItems(Structure_Palace) > 0) {
-        if(this == pLocalHouse && pBuilder->isSelected()) {
+        if(this == pLocalHouse && pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
             currentGame->setCursorMode(Game::CursorMode_Normal);
         }
         return nullptr;
@@ -1167,7 +1167,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1195,7 +1195,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1225,7 +1225,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1346,7 +1346,9 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 }
 
                 if (this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    // A reserved building placed by the simulation must not end the
+                    // player's planning cursor for the next one.
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
                     pLocalPlayer->onPlaceStructure(newStructure);
