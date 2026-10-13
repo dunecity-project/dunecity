@@ -1,3 +1,37 @@
+## 2026-10-13 — local 1.0.836: return to Lapis Enamel
+
+The user play-tested 1.0.835 and rejected its copper/dark-shadow lettering as
+muddy ("mutno"), asking to return to the original Lapis Enamel direction.
+Classic Desert now uses deep blue faces with a fine pale-gold one-pixel relief;
+pressed buttons use deeper blue. The Classic main-menu mod title uses the same
+blue (or High Contrast ink). Brass texture, desert background, Righteous font,
+font metrics/antialiasing, control geometry and small body text are unchanged.
+This restores the mockup's color direction, not an exact generated-font copy.
+
+The blue foreground exceeds 4.5:1 against nominal and minimum central brass
+colors for normal/pressed controls. High Contrast keeps dark foreground ink.
+Modern colors/fonts, world labels, gameplay, zoom, Dune2R scaling, saves and
+networking are unchanged. The official helper synchronizes all version files
+to 1.0.836. This remains on the same production 1.0.832 base, not a new upstream
+integration.
+
+The full Windows Visual Studio Release build and all 11 CTest suites pass
+(core: 1004 passed, four opt-in cases skipped, 10,238,839 assertions; Classic
+theme: seven cases, 352 assertions). The actual SDL Modern → Classic → Modern
+matrix passes at 640×480, 854×480, 1280×720 and Native 1920×1080, including
+preview/Back, Apply/reinitialization/persistence, real font/relief pixels in
+normal/pressed/focused states, and static construction-yard HUD/pause rendering.
+This is software-renderer/component evidence, not live gameplay certification.
+The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-836/captures` tree.
+
+The separate `build-windows-portable-836` install passes its desktop runtime
+check (exit 0). Its executable matches the rebuilt target: SHA256
+`D96E654F8E8414769C5A233BC235554C9EAF0C4D4A1081E9D06C25711B72043B`.
+Font, complete OFL notice and configuration template match source/development
+copies. Previous portable candidates are preserved. No push, PR, tag, device
+installation or publication has been performed for this local play-test iteration.
+
 ## 2026-10-13 — local 1.0.835: copper Lapis-inspired display lettering
 
 The user selected the Lapis Enamel mockup's arched Art Deco letterforms and

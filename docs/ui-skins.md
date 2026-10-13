@@ -15,10 +15,10 @@ without changing the live menus before Apply.
 Classic Desert reuses the original FAME/SCREEN desert artwork. Its buttons have
 sand-grained brass-gold faces, carved raised/recessed borders and small end
 fittings when enough label space is available. Standard button lettering uses
-solid warm copper and a tight one-pixel dark shadow, without an outline or
-hollow face. High Contrast retains dark foreground ink. Roomy buttons and large
-headings use an arched Art Deco display face inspired by the approved Lapis
-mockup; small controls/body text retain the original font. Button hitboxes stay
+deep lapis-blue faces and a fine one-pixel pale-gold relief, without a heavy
+dark shadow or hollow face. High Contrast retains dark foreground ink. Roomy
+buttons and large headings use an arched Art Deco display face inspired by the
+approved Lapis mockup; small controls/body text retain the original font. Button hitboxes stay
 unchanged, and long labels
 omit the end fittings rather than overlapping them. Other labels retain their
 contrast-safe colors. The pause window and selected-building sidebar follow
@@ -61,9 +61,11 @@ keep Philosopher. Modern keeps its existing font and colors.
 Display/default faces have separate caches. If Righteous lacks any character,
 the entire label uses Philosopher, with matching fallback metrics. Missing or
 damaged optional font files also fall back rather than preventing startup.
-Standard copper is a decorative palette; its face alone does not meet a 4.5:1
-contrast target. The tight dark shadow provides separation. Use **Colors →
-High Contrast** for dark foreground lettering with stronger contrast.
+Standard Lapis Enamel lettering replaces the low-contrast copper experiment
+from local 1.0.835. The blue foreground exceeds 4.5:1 against the nominal and
+minimum central brass colors in both normal and pressed controls; this does
+not imply every antialiased edge or decorative border meets that ratio.
+Use **Colors → High Contrast** for dark foreground lettering instead of blue.
 
 The 43,104-byte `data/Righteous-Regular.ttf` comes from
 [Google Fonts revision 90abd17](https://github.com/google/fonts/blob/90abd17b4f97671435798b6147b698aa9087612f/ofl/righteous/Righteous-Regular.ttf).
@@ -85,7 +87,7 @@ the cached UI rather than leaving old-theme widgets behind.
 The `classic_desert_ui_tests` CTest covers theme defaults, invalid values,
 Modern palette preservation, Classic contrast, preview isolation, preference
 storage and independence from interface/world scaling. Button palette checks
-also cover copper/dark-shadow colors, the deeper pressed-state ink, High Contrast and
+also cover lapis-blue/pale-gold colors, the deeper pressed-state ink, High Contrast and
 unchanged Modern colors. The renderer fixture checks opaque textured Classic
 button faces, real glyph/shadow bounds and normal/pressed/focused states at
 280×34 and 70×22 in both text palettes; Modern interiors remain flat. Font checks
@@ -148,3 +150,11 @@ invalid UTF-8, whole-label fallback, isolated caches and unchanged Modern/world
 labels. The separate portable installation passes its desktop runtime check;
 its executable, font, license and configuration template match the build/source
 copies. This is a local play-test candidate, not a published release.
+
+After play-testing the copper candidate, the user requested a return to
+**Lapis Enamel** in local 1.0.836. Standard buttons and the Classic main-menu
+mod title now use deep blue; button relief is pale gold. The font renderer,
+metrics, brass artwork, layout and Modern appearance remain unchanged. All 11
+Windows CTest suites pass (Classic subset: seven cases, 352 assertions), as do
+the four-resolution SDL skin-switch/HUD/pause matrix and portable runtime check.
+This remains local-only, with previous portable candidates preserved.

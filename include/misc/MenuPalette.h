@@ -120,15 +120,16 @@ inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin
                       COLOR_TRANSPARENT};
 }
 
-// The standard Classic display treatment is solid copper with a tight dark
-// shadow, never an outline/hollow face. High Contrast retains dark foreground
-// ink; the decorative copper face itself is not a 4.5:1 accessibility palette.
+// Lapis Enamel separates deep blue letter faces from the brass controls with
+// a fine pale-gold relief. High Contrast retains its dark foreground ink.
+// Unlike the previous decorative copper, the blue face itself is readable
+// against both normal and recessed central brass surfaces.
 inline constexpr MenuPalette buttonPalette(int value, int skin = MenuTheme::uiSkin,
                                            bool pressed = false) {
     return validatedUISkin(skin) == 1
         ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
-                      : pressed ? COLOR_RGB(137,77,41) : COLOR_RGB(151,91,50),
-                      pressed ? COLOR_RGB(45,25,12) : COLOR_RGB(65,37,18)}
+                      : pressed ? COLOR_RGB(11,20,82) : COLOR_RGB(18,29,111),
+                      pressed ? COLOR_RGB(255,220,128) : COLOR_RGB(255,235,176)}
         : menuPalette(value, skin);
 }
 

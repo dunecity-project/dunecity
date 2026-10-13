@@ -175,20 +175,19 @@ TEST_CASE("Classic colored labels remain readable on gold surfaces", "[menu][ui-
     CHECK(c.b == 0);
 }
 
-TEST_CASE("Classic button typography pairs decorative copper with a dark shadow and high-contrast option",
+TEST_CASE("Classic button typography pairs readable Lapis Enamel with pale-gold relief",
           "[menu][ui-skin][buttons][accessibility]") {
     constexpr auto standard = buttonPalette(0, 1);
     constexpr auto pressed = buttonPalette(0, 1, true);
-    static_assert(standard.foreground == COLOR_RGB(151,91,50));
-    static_assert(standard.shadow == COLOR_RGB(65,37,18));
-    static_assert(pressed.foreground == COLOR_RGB(137,77,41));
-    static_assert(pressed.shadow == COLOR_RGB(45,25,12));
+    static_assert(standard.foreground == COLOR_RGB(18,29,111));
+    static_assert(standard.shadow == COLOR_RGB(255,235,176));
+    static_assert(pressed.foreground == COLOR_RGB(11,20,82));
+    static_assert(pressed.shadow == COLOR_RGB(255,220,128));
     const auto classic = MenuTheme::themeForUISkin(1);
-    // The approved copper face is decorative, not a 4.5:1 accessibility claim.
-    // Its dark offset shadow supplies separation; High Contrast retains dark
-    // foreground glyphs for users who need the full foreground contrast.
-    CHECK(contrastRatio(standard.foreground, classic.control) < 4.5);
-    CHECK(contrastRatio(pressed.foreground, classic.pressed) < 4.5);
+    // The foreground itself must remain readable without relying on relief.
+    // The pale offset is an enamel highlight, not dark accessibility ink.
+    CHECK(contrastRatio(standard.foreground, classic.control) >= 4.5);
+    CHECK(contrastRatio(pressed.foreground, classic.pressed) >= 4.5);
     CHECK(standard.foreground != menuPalette(0, 1).foreground);
     CHECK(menuPalette(0, 1).shadow == COLOR_TRANSPARENT);
     for(int palette : {0, 1}) {
@@ -203,14 +202,11 @@ TEST_CASE("Classic button typography pairs decorative copper with a dark shadow 
             // Minimum central brass colors include both the vertical relief
             // and the quieter grain beneath a label in drawControlFrame.
             const auto minimum = down ? COLOR_RGB(195,145,39) : COLOR_RGB(214,166,56);
-            CHECK(contrastRatio(colors.shadow, nominal) >= 4.5);
-            CHECK(contrastRatio(colors.shadow, minimum) >= 4.5);
-            if(palette == 1) {
-                CHECK(contrastRatio(colors.foreground, nominal) >= 4.5);
-                CHECK(contrastRatio(colors.foreground, minimum) >= 4.5);
-            } else {
-                CHECK(relativeLuminance(colors.foreground) > relativeLuminance(colors.shadow));
-            }
+            CHECK(contrastRatio(colors.foreground, nominal) >= 4.5);
+            CHECK(contrastRatio(colors.foreground, minimum) >= 4.5);
+            CHECK(contrastRatio(colors.foreground, colors.shadow) >= 4.5);
+            CHECK(relativeLuminance(colors.foreground) < relativeLuminance(colors.shadow));
+            CHECK(colors.shadow == (down ? pressed.shadow : standard.shadow));
         }
     }
     for(bool down : {false, true}) {

@@ -222,7 +222,7 @@ struct ClassicUISkinProbe {
         require(changedPixels > 0 && foregroundPixels > 0,
                 "The real font produced no visible button foreground glyphs");
         if(classic)
-            require(shadowPixels > 0, "Classic copper typography lost its dark offset shadow");
+            require(shadowPixels > 0, "Classic Lapis typography lost its pale-gold offset relief");
     }
 
     static void checkButtonTypeface(SDL_Surface* button, const std::string& text,
@@ -332,7 +332,7 @@ struct ClassicUISkinProbe {
                 "Button previews mutated the active menu/HUD theme");
         const auto path = capturePath("buttons-modern-classic-states").string();
         require(SavePNG(sheet.get(), path.c_str()) == 0, "Saving button-state pixel evidence failed");
-        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors, copper glyphs and dark shadow;"
+        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors, Lapis glyphs and pale-gold relief;"
                 " normal/pressed/focused at 280x34 and 70x22; unchanged flat Modern interiors;"
                 " bounds, both text palettes and preview isolation");
     }
