@@ -26,8 +26,20 @@ Palfile double->char and woodyopl negative double->unsigned conversions now go
 through int / Bits (x86 behaviour on every platform).
 
 Version 1.0.833, network protocol 70 (score blend), save unchanged at 9854,
-policy overflow-safe-score-blend-v99. Linux GCC sanitizer coverage was first
-exercised by CI on this release: Docker on the Mac mini was unresponsive.
+policy overflow-safe-score-blend-v99. -fno-sanitize=vptr is added whenever
+`undefined` is on: with GCC the vptr check made dunelegacy_tests fail to link
+(typeinfo for Player/House referenced from CitySimulation.cpp). Docker on the
+Mac mini was unresponsive, so the first Linux/GCC sanitized run was PR98's CI:
+test-linux 10/10 under ASan (with LeakSanitizer) and UBSan. macOS: Release ctest
+81/81; sanitized Debug unit tests, harnesses and six game probes passed.
+
+Published 2026-10-13. PR98 merged; tag v1.0.833 -> ef8bfff7. Stable CI
+38336523345 passed every job; all 13 assets match GitHub SHA256; DMG app is
+Notarized Developer ID, stapled, version 1.0.833. SourceForge 38338055015 and
+Publish browser build 38338055046 succeeded: play/build.json 1.0.833 at
+ef8bfff7, all 8 artifacts hash-match live. Website 98cbb78 (links) plus prose
+1f20257 deployed (Deploy to Droplet 38338770370); both pages show 1.0.833
+downloads and protocol 70. No local app was installed.
 
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
 
