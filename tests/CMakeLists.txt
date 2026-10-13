@@ -12,6 +12,11 @@ target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
         MapCollectionTestCase.cpp
+        # Random Skirmish generator: the pure generator over the real map generator/mirror.
+        SkirmishGeneratorTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
@@ -185,6 +190,7 @@ add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
+add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
 
 # Standalone network wire harness.
 #
@@ -382,7 +388,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests skirmish_generator_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 

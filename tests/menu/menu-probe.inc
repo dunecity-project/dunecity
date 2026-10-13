@@ -498,7 +498,8 @@ int runMenuProbe() {
     }
     {
         MainMenu menu;
-        menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
+        menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
+            && menu.onlineButton.isVisible(), "Home play actions missing");
         menuRequire(!menu.displayButton.isVisible(),"Duplicate Display entry remains");
         menuRequire(menu.editorsButton.isVisible() && menu.editorsButton.getText()=="Editors"
             && menu.modesButton.getText()=="Extras", "Workshop and Extras destinations are not distinct");
@@ -508,7 +509,7 @@ int runMenuProbe() {
         menuCapture(menu,"home-continue");
         menu.canContinue=false; menu.refreshContextButtons();
         SDL_Event tab{}; tab.type=SDL_KEYDOWN; tab.key.keysym.sym=SDLK_TAB;
-        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
+        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
 #if defined(DUNECITY_DESKTOP_UPDATER)
         tabOrder.push_back(&menu.updateButton);
 #endif
