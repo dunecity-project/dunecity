@@ -1,3 +1,22 @@
+## 2026-10-14 — local 1.0.835: Random Skirmish player start, AI partner, natural terrain
+
+From Stefan's play-test of 1.0.834 (save `testskirmish.dls`, DuneCity 128x128, 2 allies, 2
+enemies, tech 9, 40,000-people cities): the player started with only a Construction Yard, had no
+way to add an AI to their own house, terrain and bases were blocky, Industrial zones were mixed
+into Residential/Commercial, and power was dozens of wind traps.
+
+- "You start with": AI partner (None, AI Support Easy-Brutal, QuantBot Easy-Brutal/Defend: the
+  Custom Game co-op list; it joins the player's house, `multiplePlayersPerHouse`), Base, Army and
+  City like the other sides. Persisted as `Player AI/Base/Army/City`. Menu rows shrink to fit 480p.
+- Generator (`feat/skirmish-terrain`): terrain starts from the editor's `generateRandomMap`, start
+  plateaus get irregular rims, rock islands, ridges, outcrops and editor-style spice fields; bases
+  grow around the Construction Yard (refineries toward spice, factories toward the enemy,
+  turrets and walls on the approach); cities are zoned Industrial (beside the base), then
+  Commercial, then Residential, with road reach checked per lot; nuclear plants power DuneCity
+  bases from tech 6 with at most 4 wind traps. Measurements in `docs/skirmish-generator.md`.
+
+Save 9857 and protocol 71 unchanged; only the app version moved.
+
 ## 2026-10-13 — local 1.0.834: RTS controls, pre-placement, formations, Random Skirmish, build grid
 
 Branch `integrate/feature-batch` (worktree `~/Documents/projects/dunecity-feature-batch`,
