@@ -98,10 +98,8 @@ Key remapping UI; formations (separate slice); changing AI behaviour.
 
 # As built (feat/rts-controls, 2026-10-13)
 
-Status: implemented in the engine and UI; unit tests and the command-routing probe pass. The
-dedicated real-engine behaviour probe (attack-move column, HOLD launcher, 3-waypoint queue,
-repeat ≥3 units, 9854 save load) and the smoke screenshot are **not yet written** — see
-"Not done" below.
+Status: implemented in the engine and UI; unit tests, the command-routing probe, the real-engine
+behaviour probe and the rendered smoke frame pass.
 
 ## Code map
 - `include/units/UnitOrderQueue.h` — pure order queue (`UnitOrderQueue`, max 16, save/load) and
@@ -162,14 +160,42 @@ repeat ≥3 units, 9854 save load) and the smoke screenshot are **not yet writte
 - Attack-move/patrol is abandoned (queue cleared) if the engine sends the unit to a repair yard.
 
 ## Verification (exercised)
-- `ctest --test-dir build -R "^(dunelegacy_tests|rts_controls_tests|lobby_authorization_tests|game_command_regressions)$"` → 4/4 passed
-  (unit tests incl. 14 new `[rts-controls]` cases; `game_command_regressions` now requires
-  `RTS_COMMAND_PROBE_PASS` from `tests/network/rts-command-probe.inc`: wire round trip,
-  ownership/co-op/enemy, malformed params, queue order, HOLD, lockstep batch, repeat on a real factory).
-- `ctest --test-dir build -R "^(deviation_reward_probe|quantbot_whole_army_dispatch|quantbot_launcher_kiting)$"` → 3/3 passed.
+All through ctest, Release build, `--parallel 3`:
 
-## Not done
-- Real-engine behaviour probe for attack-move/HOLD/3-waypoint/repeat-production/9854 load and the
-  smoke screenshot. The 9854 fixture save for it is committed
-  (`tests/units/fixtures/save-9854-orders.dls`, generated from base 40f4e7a8 with
-  `save-9854-orders-generator.inc.txt`; factory id 5, movers 6–8, launcher 9, enemy tank 10).
+`ctest --test-dir build -R "^(dunelegacy_tests|rts_controls_tests|lobby_authorization_tests|game_command_regressions|rts_controls_probe|deviation_reward_probe|quantbot_whole_army_dispatch|quantbot_launcher_kiting)$"`
+→ 8/8 passed.
+
+- `rts_controls_tests` / `dunelegacy_tests`: the `[rts-controls]` Catch2 cases in
+  `tests/RtsControlsTestCase.cpp` (queue append/clear/cap 16/skip dead target, patrol cycling,
+  engage range, leash, arrival/resume/give-up, HOLD never approaches or auto-repairs, repeat
+  re-queue through limits and cancel, save round trip and corrupt-input rejection, command arity).
+- `game_command_regressions` requires `RTS_COMMAND_PROBE_PASS` (`tests/network/rts-command-probe.inc`):
+  each new command through the wire format and `CommandValidation`, enemy/co-op/owner
+  authority, malformed parameters, queue order, HOLD, a lockstep `CommandManager` batch, and
+  repeat on a real heavy factory (never on a construction yard).
+- `rts_controls_probe` (`tests/units/run-rts-controls-probe.py` + `rts-controls-probe.inc`, real
+  units on Tuono-Avon over real `Game::updateGameState` cycles):
+  - the committed 9854 save (`tests/units/fixtures/save-9854-orders.dls`) loads with empty queues,
+    the factory keeps its two queued items and no repeat, movers continue, and it re-saves as 9855;
+  - three tanks attack-moving through a trike target it, kill it while still walking, and all end
+    in Area Guard within 2 tiles of the goal;
+  - a HOLD launcher attacked by a forced tank stays on its tile, with no destination, in HOLD for
+    900 cycles while being hit, and damages the tank;
+  - a move plus two Shift-queued moves are reached in order 1, 2, 3 and end on the last waypoint;
+  - repeat production builds ≥3 units with no further input, pauses (stays queued and repeating)
+    at a reached unit limit, and resumes when the limit is lifted (one copy already paid for
+    still rolls out after the limit is reached — existing engine rule);
+  - queue, patrol route, HOLD and the repeat flag survive save and load;
+  - smoke frame: a rendered 1280x800 frame contains the green move, red attack-move and blue
+    patrol waypoint colours on the map; the group panel tooltips start with "Attack Move (A)",
+    "Patrol (Q)" and "Hold (H)".
+- `deviation_reward_probe`, `quantbot_whole_army_dispatch`, `quantbot_launcher_kiting`: unchanged
+  behaviour of existing UnitBase/QuantBot order code.
+
+## Smoke screenshots
+Rendered by the probe through the production `Game::drawScreen` (SDL software renderer):
+- `/tmp/dunecity-rts-controls-smoke/rts-controls-waypoints.png` — two selected tanks: a move,
+  a Shift-queued move and a queued attack-move (green, green, red), and a two-point patrol (blue loop).
+- `/tmp/dunecity-rts-controls-smoke/rts-controls-tooltip.png` — the same frame with the hovered
+  Patrol button tooltip "Patrol (Q): attack-move back and forth from here; Shift+click adds patrol points".
+Each probe run regenerates both files (also copied into `build/rts-controls-probe/`).

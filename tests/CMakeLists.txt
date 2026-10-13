@@ -567,6 +567,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
             --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
         set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
+        # under fire, three-waypoint Shift queue, repeat production through the unit limit,
+        # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
+        add_test(NAME rts_controls_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
+        set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward
