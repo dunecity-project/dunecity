@@ -11,6 +11,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/IMemoryStream.h>
 #include <structures/BuilderBase.h>
+#include <structures/ConstructionYard.h>
 #include <structures/RepairYard.h>
 #include <GUI/ObjectInterfaces/RepairYardInterface.h>
 #include <Map.h>
@@ -152,6 +153,55 @@ int runOwnershipProbe() {
     batches.addCommandList("Host", complete);
     if(static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle != 3) throw std::runtime_error("duplicate changed watermark");
     SDL_Log("COMMAND_BATCH_PROBE_PASS: mixed batch atomic, gap held, contiguous retransmission recovered, duplicate ignored");
+    {
+        // Pre-placement commands on a real yard: the wire format, ownership, shared-house
+        // control and the multiplayer batch path all carry a reservation intact.
+        ConstructionYard* cy = nullptr;
+        for(StructureBase* structure : structureList)
+            if(structure->getOwner() == owner && structure->getItemID() == Structure_ConstructionYard) { cy = static_cast<ConstructionYard*>(structure); break; }
+        if(!cy) throw std::runtime_error("reservation fixture has no yard");
+        if(!cy->getBuildItem(Structure_WindTrap))
+            cy->buildList.emplace_back(Structure_WindTrap, game->objectData.data[Structure_WindTrap][owner->getHouseID()].price);
+        Coord plot = Coord::Invalid();
+        for(int y=0; y+2<=currentGameMap->getSizeY() && plot.isInvalid(); ++y)
+            for(int x=0; x+2<=currentGameMap->getSizeX() && plot.isInvalid(); ++x)
+                if(cy->checkReservationPlot(Structure_WindTrap, x, y) == PlacementReservation::Verdict::Valid) plot = Coord(x,y);
+        if(plot.isInvalid()) throw std::runtime_error("reservation fixture has no plot");
+        const auto wire = [](const Command& command) {
+            OMemoryStream out; out.open(); command.save(out);
+            IMemoryStream in(out.getData(), out.getDataLength());
+            return Command(in);
+        };
+        const auto reserveFrom = [&](Uint8 player) {
+            return Command(player, CMD_BUILDER_RESERVE_PLACEMENT, cy->getObjectID(), Structure_WindTrap,
+                           static_cast<Uint32>(plot.x), static_cast<Uint32>(plot.y));
+        };
+        const int before = cy->getProductionQueueSize();
+        wire(reserveFrom(enemyPlayer->getPlayerID())).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("enemy reserved a plot on our yard");
+        wire(reserveFrom(hostPlayer->getPlayerID())).executeCommand();
+        const ProductionQueueItem& order = cy->getProductionQueue().back();
+        if(cy->getProductionQueueSize() != before + 1 || order.reservationID == 0 || order.plotX != plot.x || order.plotY != plot.y)
+            throw std::runtime_error("owner reservation did not survive the wire");
+        const Uint32 id = order.reservationID;
+        wire(reserveFrom(hostPlayer->getPlayerID())).executeCommand();
+        if(cy->getProductionQueueSize() != before + 1) throw std::runtime_error("overlapping reservation accepted");
+        wire(Command(enemyPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(), id)).executeCommand();
+        if(cy->getProductionQueueSize() != before + 1) throw std::runtime_error("enemy cancelled our reservation");
+        wire(Command(coopPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(), id)).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("shared-house cancel failed");
+        // A peer's batch executes the reservation in its cycle, like any other order.
+        CommandList reservationBatch;
+        reservationBatch.commandList.emplace_back(3, std::vector<Command>{reserveFrom(hostPlayer->getPlayerID())});
+        batches.addCommandList("Host", reservationBatch);
+        batches.executeCommands(3);
+        if(cy->getProductionQueueSize() != before + 1 || cy->getProductionQueue().back().plotX != plot.x)
+            throw std::runtime_error("batched reservation did not execute");
+        Command(hostPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(),
+                cy->getProductionQueue().back().reservationID).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("owner cancel failed");
+        SDL_Log("PREPLACE_COMMAND_PROBE_PASS: reservation commands survive the wire and batches; enemy refused, owner and co-op allowed");
+    }
     Command(hostPlayer->getPlayerID(), CMD_CAMPAIGN_SKIP).executeCommand();
     if(game->isGameFinished()) throw std::runtime_error("skip finished a non-campaign game");
     // Exercise the real Game entry points used by Options and Mentat, not a duplicate policy.

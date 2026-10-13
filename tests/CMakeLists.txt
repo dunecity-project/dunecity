@@ -804,6 +804,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
             set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
+        # Construction Yard pre-placement queue: sidebar planning, reservation commands
+        # (chained and refused), save/load, placement on plan after moving a unit, the blocked
+        # fallback with its ticker message, mixed queue order, cancel refunds, yard
+        # destruction and a 9854 save. Writes preplace-ghosts.png / preplace-fallback.png.
+        add_test(NAME preplace_queue_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --preplace-probe --repeatable
+            --mod dunecity --viewport 1024x768 --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/preplace-probe)
+        set_tests_properties(preplace_queue_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
     endif()
 endif()
 

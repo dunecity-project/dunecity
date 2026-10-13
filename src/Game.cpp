@@ -3471,24 +3471,32 @@ void Game::drawReservationGhosts()
             SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
             renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : COLOR_WHITE);
 
-            std::string label = std::to_string(ghost.number);
-            if(ghost.failed) {
-                label += " !";
-            } else if(ghost.inProduction) {
+            // Queue number on top; the plot under construction adds its progress below.
+            std::vector<std::string> lines = { std::to_string(ghost.number) + (ghost.failed ? " !" : "") };
+            if(ghost.inProduction && !ghost.failed) {
                 const BuildItem* buildItem = nullptr;
                 for(const BuildItem& item : yard->getBuildList()) {
                     if(item.itemID == ghost.itemID) buildItem = &item;
                 }
                 if(buildItem != nullptr && buildItem->price > 0) {
                     const int percent = std::min(100, static_cast<int>(lround(yard->getProductionProgress() * 100 / static_cast<int>(buildItem->price))));
-                    label += "  " + std::to_string(percent) + "%";
+                    lines.push_back(std::to_string(percent) + "%");
                 }
             }
-            sdl2::texture_ptr labelTexture = pFontManager->createTextureWithText(label, COLOR_WHITE, 14);
-            SDL_Rect labelArea = calcDrawingRect(labelTexture.get(), area.x + area.w/2, area.y + area.h/2, HAlign::Center, VAlign::Center);
-            SDL_Rect labelBack = { labelArea.x - 2, labelArea.y - 1, labelArea.w + 4, labelArea.h + 2 };
-            renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
-            SDL_RenderCopy(renderer, labelTexture.get(), nullptr, &labelArea);
+            std::vector<sdl2::texture_ptr> textures;
+            int labelHeight = 0;
+            for(const std::string& line : lines) {
+                textures.push_back(pFontManager->createTextureWithText(line, COLOR_WHITE, 12));
+                labelHeight += getHeight(textures.back().get());
+            }
+            int lineY = area.y + (area.h - labelHeight)/2;
+            for(const sdl2::texture_ptr& texture : textures) {
+                SDL_Rect labelArea = calcDrawingRect(texture.get(), area.x + area.w/2, lineY, HAlign::Center, VAlign::Top);
+                SDL_Rect labelBack = { labelArea.x - 2, labelArea.y, labelArea.w + 4, labelArea.h };
+                renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
+                SDL_RenderCopy(renderer, texture.get(), nullptr, &labelArea);
+                lineY += labelArea.h;
+            }
         }
     }
 }

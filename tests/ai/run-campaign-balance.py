@@ -9,6 +9,7 @@ and structured AI decision logs remain in --output-dir. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
+import gzip
 import configparser
 import hashlib
 import json
@@ -51,6 +52,8 @@ parser.add_argument('--stats-ui-probe', action='store_true',
 parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
                     help='Render the UI probe at this window size (default 640x480)')
 parser.add_argument('--sourceforge-probe', action='store_true')
+parser.add_argument('--preplace-probe', action='store_true',
+                    help='Construction Yard pre-placement queue: reservations, chain, fallback, cancel, save/load, 9854 load')
 parser.add_argument('--harvester-safety-probe', action='store_true')
 parser.add_argument('--city-placement-probe', action='store_true')
 parser.add_argument('--opening-economy-probe', action='store_true')
@@ -257,7 +260,13 @@ if args.custom_map:
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'
 if args.harvester_safety_probe: env['BALANCE_HARVESTER_SAFETY_PROBE'] = '1'
 if args.sourceforge_probe: env['BALANCE_SOURCEFORGE_PROBE'] = '1'
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe:
+if args.preplace_probe:
+    env['BALANCE_PREPLACE_PROBE'] = '1'
+    # A save written by the last 9854 build (origin/main 40f4e7a8): it must still load.
+    fixture = out/'preplace-9854.sav'
+    fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
+    env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
+if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe:
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
