@@ -21,6 +21,7 @@
 
 #include <Definitions.h>
 
+#include <misc/unaligned.h>
 #include <SDL_endian.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -186,18 +187,18 @@ std::unique_ptr<Animation> Wsafile::getAnimation(unsigned int startindex, unsign
 /**
     This helper method decodes one frame.
     \param  pFiledata       Pointer to the data of this wsa-File
-    \param  index           Array with startoffsets
+    \param  index           Start offsets, little-endian Uint32s at no particular alignment
     \param  numberOfFrames  Number of frames to decode
     \param  pDecodedFrames  memory to copy decoded frames to (must be x*y*NumberOfFrames bytes long)
     \param  x               x-dimension of one frame
     \param  y               y-dimension of one frame
 */
-void Wsafile::decodeFrames(const unsigned char* pFiledata, Uint32* index, int numberOfFrames, unsigned char* pDecodedFrames, int x, int y) const
+void Wsafile::decodeFrames(const unsigned char* pFiledata, const unsigned char* index, int numberOfFrames, unsigned char* pDecodedFrames, int x, int y) const
 {
     for(int i = 0; i < numberOfFrames; ++i) {
         auto dec80 = std::make_unique<unsigned char[]>(x * y * 2);
 
-        decode80(pFiledata + SDL_SwapLE32(index[i]), dec80.get(), 0);
+        decode80(pFiledata + loadLE32(index + i * sizeof(Uint32)), dec80.get(), 0);
 
         decode40(dec80.get(), pDecodedFrames + i * x*y);
 
@@ -254,7 +255,7 @@ std::unique_ptr<unsigned char[]> Wsafile::readfile(SDL_RWops* rwop, int* filesiz
 void Wsafile::readdata(std::initializer_list<SDL_RWops*> files) {
     const int numFiles = static_cast<int>(files.size());
     std::vector<std::unique_ptr<unsigned char[]>> pFiledata(numFiles);
-    std::vector<Uint32*> index(numFiles);
+    std::vector<const unsigned char*> index(numFiles);
     std::vector<Uint16> numberOfFrames(numFiles);
     std::vector<bool> extended(numFiles);
 
@@ -278,17 +279,17 @@ void Wsafile::readdata(std::initializer_list<SDL_RWops*> files) {
         }
 
         if( reinterpret_cast<unsigned short *>(pFiledata[fileIndex].get())[6] == 0) {
-            index[fileIndex] = reinterpret_cast<Uint32 *>(pFiledata[fileIndex].get() + 10);
+            index[fileIndex] = pFiledata[fileIndex].get() + 10;
         } else {
-            index[fileIndex] = reinterpret_cast<Uint32 *>(pFiledata[fileIndex].get() + 8);
+            index[fileIndex] = pFiledata[fileIndex].get() + 8;
         }
 
-        if(index[fileIndex][0] == 0) {
+        if(loadLE32(index[fileIndex]) == 0) {
             // extended animation
             if(fileIndex == 0) {
                 SDL_Log("Extended WSA-File!");
             }
-            index[fileIndex]++;
+            index[fileIndex] += sizeof(Uint32);
             numberOfFrames[fileIndex]--;
             extended[fileIndex] = true;
         } else {
@@ -296,7 +297,7 @@ void Wsafile::readdata(std::initializer_list<SDL_RWops*> files) {
         }
 
         if(fileIndex == 0) {
-            if(index[0][numberOfFrames[0]+1] == 0) {
+            if(loadLE32(index[0] + (numberOfFrames[0]+1) * sizeof(Uint32)) == 0) {
                 // index[numberOfFrames[0]] point to end of file
                 // => no loop
                 looped = false;
@@ -308,7 +309,7 @@ void Wsafile::readdata(std::initializer_list<SDL_RWops*> files) {
             }
         }
 
-        if(pFiledata[fileIndex].get() + wsaFilesize < (reinterpret_cast<unsigned char *>(index[fileIndex]) + sizeof(Uint32) * numberOfFrames[fileIndex])) {
+        if(pFiledata[fileIndex].get() + wsaFilesize < index[fileIndex] + sizeof(Uint32) * numberOfFrames[fileIndex]) {
             THROW(std::runtime_error, "Wsafile::readdata(): No valid WSA-File: File too small!");
         }
 

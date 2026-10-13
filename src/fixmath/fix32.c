@@ -82,7 +82,9 @@ fix32_t fix32_mul(fix32_t inArg0, fix32_t inArg1)
 	int64_t product_hi = AC + (AD_CB >> 32);
 
 	// Handle carry from lower 64 bits to upper part of result.
-	uint64_t ad_cb_temp = AD_CB << 32;
+	// Shifts of the signed partial products are done on their two's complement bit
+	// patterns: a left shift that drops sign bits is undefined behaviour on a signed type.
+	uint64_t ad_cb_temp = (uint64_t)AD_CB << 32;
 	uint64_t product_lo = BD + ad_cb_temp;
 	if (product_lo < BD)
 		product_hi++;
@@ -94,7 +96,7 @@ fix32_t fix32_mul(fix32_t inArg0, fix32_t inArg1)
 #endif
 
 #ifdef FIXMATH_NO_ROUNDING
-	return (product_hi << 32) | (product_lo >> 32);
+	return (fix32_t)(((uint64_t)product_hi << 32) | (product_lo >> 32));
 #else
 	// Subtracting 0x80000000 (= 0.5) and then using signed right shift
 	// achieves proper rounding to result-1, except in the corner
@@ -110,7 +112,7 @@ fix32_t fix32_mul(fix32_t inArg0, fix32_t inArg1)
 	// as dividing by 0x100000000. For example if product = -1, result will
 	// also be -1 and not 0. This is compensated by adding +1 to the result
 	// and compensating this in turn in the rounding above.
-	fix32_t result = (product_hi << 32) | (product_lo >> 32);
+	fix32_t result = (fix32_t)(((uint64_t)product_hi << 32) | (product_lo >> 32));
 	result += 1;
 	return result;
 #endif
@@ -186,12 +188,12 @@ fix32_t fix32_div(fix32_t a, fix32_t b)
 		int64_t product_hi = AC + (AD_CB >> 32);
 
 		// Handle carry from lower 64 bits to upper part of result.
-		uint64_t ad_cb_temp = AD_CB << 32;
+		uint64_t ad_cb_temp = (uint64_t)AD_CB << 32;
 		uint64_t product_lo = BD + ad_cb_temp;
 		if (product_lo < BD)
 			product_hi++;
 
-		remainder -= (product_hi << (64-33)) | (product_lo >> 33);
+		remainder -= ((uint64_t)product_hi << (64-33)) | (product_lo >> 33);
 	}
 
 	// If the divider is divisible by 2^n, take advantage of it.

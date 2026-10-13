@@ -82,7 +82,7 @@ public:
     {
         ensureBufferSize(currentPos + sizeof(Uint16));
         x = SDL_SwapLE16(x);
-        *((Uint16*) (pBuffer + currentPos)) = x;
+        memcpy(pBuffer + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint16);
     }
 
@@ -90,7 +90,7 @@ public:
     {
         ensureBufferSize(currentPos + sizeof(Uint32));
         x = SDL_SwapLE32(x);
-        *((Uint32*) (pBuffer + currentPos)) = x;
+        memcpy(pBuffer + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint32);
     }
 
@@ -98,7 +98,7 @@ public:
     {
         ensureBufferSize(currentPos + sizeof(Uint64));
         x = SDL_SwapLE64(x);
-        *((Uint64*) (pBuffer + currentPos)) = x;
+        memcpy(pBuffer + currentPos, &x, sizeof(x));
         currentPos += sizeof(Uint64);
     }
 

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 69;
+static constexpr int kWireProtocolVersion = 70;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -64,7 +64,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 68 changes QuantBot MCV destinations and production MCV purchases.
     // 69 sends the nearest troops to an attacked building with a hunt-toward
     // order, a new engine targeting rule and save 9854.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 69);
+    // 70 stops the QuantBot score blend overflowing with large combat evidence.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 70);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

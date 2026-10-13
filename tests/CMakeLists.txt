@@ -805,6 +805,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     endif()
 endif()
 
+# Homebrew's Catch2 is not built with AddressSanitizer, and libc++ annotates its containers, so
+# a sanitized macOS build reports false container overflows inside Catch2's argument parsing.
+# libstdc++ on Linux does not annotate by default and needs nothing here.
+if(APPLE AND DUNECITY_SANITIZE MATCHES "address")
+    get_property(DUNECITY_ALL_TESTS DIRECTORY PROPERTY TESTS)
+    set_property(TEST ${DUNECITY_ALL_TESTS} APPEND PROPERTY
+        ENVIRONMENT "ASAN_OPTIONS=detect_container_overflow=0")
+endif()
+
 if(NOT EMSCRIPTEN AND NOT ANDROID)
     add_subdirectory(desktop-updater)
 endif()

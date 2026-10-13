@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 namespace UnitMixPolicy {
 // Tank, siege, launcher, special, ornithopter, trike, raider trike, quad.
 using Weights = std::array<int64_t, 8>;
@@ -33,6 +34,27 @@ inline int64_t performanceScore(int64_t damage, int64_t lostValue, int priorPric
     return std::max<int64_t>(0, damage) * 1000000
         / std::max<int64_t>(1, std::max<int64_t>(0, lostValue) + std::max(1, priorPrice));
 }
+// (score*evidence + prior*uncertainty) / (evidence+uncertainty), the evidence-weighted
+// blend of a measured score with the prior. Lifetime evidence in milli units can make the
+// products exceed 64 bits; both weights are then halved together until the sum fits, which
+// keeps their ratio. Whenever the sum already fits the result is exactly the plain formula.
+// evidence >= 0, uncertainty >= 1.
+inline int64_t blendWithPrior(int64_t score, int64_t evidence, int64_t prior, int64_t uncertainty) {
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+    const int64_t a = score < 0 ? -score : score;
+    const int64_t b = prior < 0 ? -prior : prior;
+    auto fits = [&] {
+        if (evidence > kMax - uncertainty) return false;
+        if (evidence != 0 && a > kMax / evidence) return false;
+        if (b > kMax / uncertainty) return false;
+        return a * evidence <= kMax - b * uncertainty;
+    };
+    while (!fits()) {
+        evidence >>= 1;
+        uncertainty = std::max<int64_t>(1, uncertainty >> 1);
+    }
+    return (score*evidence + prior*uncertainty)/(evidence+uncertainty);
+}
 // Keep a fading trial prior for each available type, rather than starving
 // an untested type when other types already have combat results.
 inline Weights exploredScores(const Weights& scores, const Weights& rewards,
@@ -44,7 +66,7 @@ inline Weights exploredScores(const Weights& scores, const Weights& rewards,
     for (size_t i=0; i<8; ++i) if (available[i]) {
         const int64_t evidence = std::max<int64_t>(0,rewards[i]) + std::max<int64_t>(0,losses[i]);
         const int64_t uncertainty = std::max<int64_t>(1,prices[i])*4;
-        result[i] = (scores[i]*evidence + prior*uncertainty)/(evidence+uncertainty);
+        result[i] = blendWithPrior(scores[i], evidence, prior, uncertainty);
     }
     return result;
 }

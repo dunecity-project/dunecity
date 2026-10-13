@@ -1,3 +1,34 @@
+## 2026-10-13 — 1.0.833: sanitizers on by default for Debug, and what they found
+
+`-DDUNECITY_SANITIZE` (CMakeLists.txt) defaults to `address,undefined` for native
+GCC/Clang Debug builds and is empty for Release, MSVC, MinGW, Android and
+Emscripten; `OFF` disables it. Reports are fatal (-fno-sanitize-recover). CI
+`test-linux` (Debug) is therefore sanitized and now builds and runs, through
+ctest, dunelegacy_tests plus network_wire_harness, relay_wire_harness,
+relay_session_tests, relay_http_transport_tests and desktop_updater_tests. On
+macOS tests/CMakeLists.txt sets ASAN_OPTIONS=detect_container_overflow=0 for
+every test (Homebrew Catch2 is uninstrumented; libc++ annotations then report
+false overflows in Catch2's argument parsing).
+
+Fixed from the sanitized unit tests and 16 game probes: misaligned typed
+loads/stores in IMemoryStream, OMemoryStream, ENetPacketOStream, Decode
+(format80/40), Shpfile, Wsafile, MentatTextFile (new include/misc/unaligned.h)
+and enet_address_set_host (macOS returns misaligned hostent data); signed left
+shifts in fix32_mul/fix32_div (now on uint64_t; a differential run over 2e8
+random and edge operand pairs matched the old code bit for bit) and MapSeed
+(now multiplications, same bits); HOUSETYPE got `: int` so a decoded -99 is
+representable and rejected; UnitMixPolicy::blendWithPrior replaces the
+(score*evidence + prior*uncertainty)/(evidence+uncertainty) blend in
+UnitMixPolicy and SpecialUnitPolicy, halving both weights until the sum fits
+int64 (exact whenever it already fitted; the special-unit test's 6e10 evidence
+overflowed); triggerStructureTutorialHint shifted 1 by item ids up to 36;
+Palfile double->char and woodyopl negative double->unsigned conversions now go
+through int / Bits (x86 behaviour on every platform).
+
+Version 1.0.833, network protocol 70 (score blend), save unchanged at 9854,
+policy overflow-safe-score-blend-v99. Linux GCC sanitizer coverage was first
+exercised by CI on this release: Docker on the Mac mini was unresponsive.
+
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
 
 User save wtf.dls (3waysplit, 1.0.831, Sardaukar Brutal vs one house, no

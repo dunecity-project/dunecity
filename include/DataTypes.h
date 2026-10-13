@@ -367,7 +367,9 @@ public:
     } gameOptions;
 };
 
-typedef enum
+// Fixed underlying type: house ids are decoded from packets and files before they are
+// validated, and without one any value outside -16..15 is undefined behaviour to hold.
+typedef enum : int
 {
     HOUSE_UNUSED    = -2,
     HOUSE_INVALID   = -1,
