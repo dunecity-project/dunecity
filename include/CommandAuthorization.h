@@ -125,6 +125,7 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_POLICE_REINFORCEMENTS:
         case CMD_ZONE_DEMOLISH:
         case CMD_STRUCTURE_DEMOLISH:
+        case CMD_UNIT_FORMATION_MOVE:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city

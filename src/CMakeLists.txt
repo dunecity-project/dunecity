@@ -111,6 +111,8 @@ target_sources(dunecity
         CrashHandler.cpp
         CursorManager.cpp
         Explosion.cpp
+        FormationOrders.cpp
+        FormationPlanner.cpp
         Game.cpp
         GameInitSettings.cpp
         GameInterface.cpp

@@ -16,6 +16,7 @@
  */
 
 #include <Game.h>
+#include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <GUI/dune/JoinProgressWindow.h>
@@ -1266,6 +1267,10 @@ void Game::processObjects()
     if ((currentCursorMode == CursorMode_Placing) && selectedList.empty()) {
         setCursorMode(CursorMode_Normal);
     }
+
+    // Formation upkeep before anything moves: membership ends and catch-up flags are decided
+    // from this cycle's starting state, identically on every peer and after a load.
+    FormationOrders::update();
 
     // Time unit updates
     Uint64 unitStart = SDL_GetPerformanceCounter();
@@ -6020,6 +6025,11 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_f: {
+            // Ctrl+F switches formation moves; plain F keeps selecting the next factory.
+            if(SDL_GetModState() & KMOD_CTRL) {
+                toggleFormationMoves();
+                break;
+            }
             // select next factory
             std::set<Uint32> itemIDs;
             itemIDs.insert(Structure_Barracks);
@@ -6296,11 +6306,13 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
 bool Game::handleSelectedObjectsMoveClick(int xPos, int yPos) {
     UnitBase* pResponder = nullptr;
 
+    // Two or more ground units move as one formation; the rest keep the plain move.
+    const std::set<Uint32> inFormation = issueSelectedFormationMove(xPos, yPos, false);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
             pResponder = static_cast<UnitBase*>(pObject);
-            pResponder->handleMoveClick(xPos,yPos);
+            if(!inFormation.count(objectID)) pResponder->handleMoveClick(xPos,yPos);
         }
     }
 
@@ -6462,10 +6474,13 @@ CursorAppearance::Action Game::getHoverCursorAction() const {
 bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
     //let unit handle right click on map or target
     ObjectBase  *pResponder = nullptr;
+    // Ground units this click simply moves go as one formation; everything else (attack,
+    // follow, aircraft, structures) keeps its own action.
+    const std::set<Uint32> inFormation = issueSelectedFormationMove(xPos, yPos, true);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if(pObject && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
-            pObject->handleActionClick(xPos, yPos);
+            if(!inFormation.count(objectID)) pObject->handleActionClick(xPos, yPos);
 
             //if this object obey the command
             if((pResponder == nullptr) && pObject->isRespondable())
@@ -6486,6 +6501,38 @@ bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
     } else {
         return false;
     }
+}
+
+std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actionClick) {
+    std::set<Uint32> ordered;
+    if(!settings.general.formationMoves || pLocalHouse == nullptr || pLocalPlayer == nullptr
+       || currentGameMap == nullptr || !currentGameMap->tileExists(xPos, yPos)) {
+        return ordered;
+    }
+    std::vector<const UnitBase*> movers;
+    for(Uint32 objectID : selectedList) {
+        const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(objectID));
+        if(unit == nullptr || unit->getOwner() != pLocalHouse || !unit->isRespondable()
+           || !FormationOrders::eligible(unit)) continue;
+        // A right click on something visible attacks or follows it instead of moving.
+        if(actionClick && unit->getActionClickTarget(xPos, yPos) != nullptr) continue;
+        movers.push_back(unit);
+    }
+    const FormationPlanner::Plan plan = FormationOrders::planGroup(movers, Coord(xPos, yPos));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) {
+        return ordered;
+    }
+    if(gameCycleCount != formationTokenCycle) {
+        formationTokenCycle = gameCycleCount;
+        formationTokensThisCycle = 0;
+    }
+    const Uint32 token = FormationPlanner::makeToken(gameCycleCount, formationTokensThisCycle++);
+    for(const FormationPlanner::Slot& slot : plan.slots) {
+        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_MOVE, slot.objectID,
+                                      static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), token));
+        ordered.insert(slot.objectID);
+    }
+    return ordered;
 }
 
 
@@ -7347,6 +7394,15 @@ void Game::drawMovementPaths() {
     }
     SDL_SetRenderDrawColor(renderer,r,g,b,a);
     SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
+}
+
+void Game::toggleFormationMoves() {
+    settings.general.formationMoves = !settings.general.formationMoves;
+    INIFile config(getConfigFilepath());
+    config.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    config.saveChangesTo(getConfigFilepath());
+    WebRuntime::syncPersistentFiles();
+    addToNewsTicker(settings.general.formationMoves ? _("Groups move in formation") : _("Formation moves off"));
 }
 
 void Game::toggleMovementPaths() {

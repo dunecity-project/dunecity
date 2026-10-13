@@ -20,6 +20,8 @@
 
 #include "QuantBotInternal.h"
 
+#include <FormationOrders.h>
+
 using QuantBotInternal::mobileCombatItem;
 
 namespace QuantBotInternal {
@@ -174,6 +176,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
+    std::vector<const UnitBase*> responders;
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -185,8 +188,14 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         doSetAttackMode(unit,AREAGUARD);
         doAttackObject(unit,intruder,!unit->isInAttackRange(intruder));
         defenceAssignments[id] = intruder->getObjectID();
+        responders.push_back(unit);
         ++dispatched;
     }
+    // The responders close in together at the slowest one's pace (docs/formations.md);
+    // each keeps its attack on the intruder and leaves the formation at contact.
+    std::vector<const UnitBase*> groundResponders;
+    for (const auto* unit : responders) if (unit->isAGroundUnit()) groundResponders.push_back(unit);
+    doFormUp(groundResponders);
     if (dispatched) traceDecision("defence_response",AITelemetry::Record().set("target",intruder->getObjectID())
         .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
         .set("already_committed_value",committed).set("required_value",SimpleArmyPolicy::responseValue(threatValue))
@@ -318,13 +327,29 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // The nearest troops, until together with those already in the fight they
     // outweigh the threat at the building.
     const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+    std::vector<const UnitBase*> responders;
     for (const auto id : response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
-        const Coord at=building->getClosestPoint(unit->getLocation());
-        doHuntToward(unit,at.x,at.y);
+        responders.push_back(unit);
         defenceAssignments[id]=building->getObjectID();
         groundSquad.erase(id);
+    }
+    // Three or more walk there as one formation (docs/formations.md): each hunts its way to
+    // its own slot around the building's point nearest to them, at the slowest one's pace.
+    // Fewer keep the individual walk to the building's nearest point. Either way it is the
+    // same unforced hunt-toward order to the same building.
+    if (static_cast<int>(responders.size()) >= FormationOrders::kMinAIGroup) {
+        int sumX=0, sumY=0;
+        for (const auto* unit : responders) { sumX+=unit->getLocation().x; sumY+=unit->getLocation().y; }
+        const int n=static_cast<int>(responders.size());
+        const Coord at=building->getClosestPoint(Coord(sumX/n,sumY/n));
+        doFormationHuntToward(responders,at.x,at.y);
+    } else {
+        for (const auto* unit : responders) {
+            const Coord at=building->getClosestPoint(unit->getLocation());
+            doHuntToward(unit,at.x,at.y);
+        }
     }
     const Coord contact=intruder->getLocation();
     if (!response.empty() || committed>0) traceDecision("base_scramble",AITelemetry::Record()
@@ -868,6 +893,18 @@ void QuantBot::launchGroundHunt() {
         ++count; value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
     }
     if (count==0) return; // An empty house checking readiness is not an attack.
+    // The chosen wave travels at its slowest member's pace so it arrives together
+    // (docs/formations.md). Who goes, when, and what each one does are unchanged: engine
+    // Hunt still picks every hunter's target, a campaign wave still attacks its objective
+    // or takes its flanking step. Membership ends at contact.
+    {
+        std::vector<const UnitBase*> wave;
+        for (const auto id : selected) {
+            const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
+            if (unit && unit->isAGroundUnit()) wave.push_back(unit);
+        }
+        doFormUp(wave);
+    }
     if (limited && profile.limitedWave) {
         attackTimer=MILLI2CYCLES(CampaignDifficultyPolicy::repeatDelayMs(
             static_cast<int>(difficulty),
@@ -2078,6 +2115,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             reserved.insert(int64_t(target.y)*getMap().getSizeX()+target.x);
     }
     int issued = 0;
+    std::vector<const UnitBase*> recalled;
     // Half the budget goes to the most endangered members first; the rest is a
     // round-robin from the saved cursor, which is what guarantees that every
     // member eventually gets its order even in a nine-hundred unit match.
@@ -2095,6 +2133,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget; done.insert(candidate.id);
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
@@ -2109,9 +2148,14 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget;
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
+    // Gathering the army: the troops recalled together this pass come home together, at
+    // the slowest one's pace, each to the assembly slot withdrawUnit() chose for it
+    // (docs/formations.md). Who is recalled and where each one goes are unchanged.
+    doFormUp(recalled);
     if (issued) traceDecision("army_recall", AITelemetry::Record()
         .set("posture", ArmyPosturePolicy::postureName(armyPosture))
         .set("issued", issued).set("pending", int(count))

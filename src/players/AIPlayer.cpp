@@ -682,6 +682,7 @@ void AIPlayer::build() {
 void AIPlayer::attack() {
     Coord destination;
     const UnitBase* pLeaderUnit = nullptr;
+    std::vector<const UnitBase*> wave;
     for(const UnitBase *pUnit : getUnitList()) {
         if (pUnit->isRespondable()
             && (pUnit->getOwner() == getHouse())
@@ -712,9 +713,17 @@ void AIPlayer::attack() {
                 }
             }
 
-            doMove2Pos(pUnit, destination.x, destination.y, false);
-            doSetAttackMode(pUnit, HUNT);
+            wave.push_back(pUnit);
         }
+    }
+
+    // The wave moves as one formation around the destination at the slowest member's
+    // pace, then hunts as before (docs/formations.md). Hunt keeps the destination it was
+    // given, so the group re-forms at that pace after the mode change.
+    if(!wave.empty()) {
+        doFormationMove(wave, destination.x, destination.y, false);
+        for(const UnitBase* pUnit : wave) doSetAttackMode(pUnit, HUNT);
+        doFormUp(wave);
     }
 
     // MULTIPLAYER FIX (Issue #4): Deterministic attack timer

@@ -187,6 +187,7 @@ public:
         bool            wasdCamera = false;
         bool            leftClickOrders = false;
         bool            showMovementPaths = true;
+        bool            formationMoves = true;    ///< Move groups of 2+ ground units in formation (Ctrl+F)
 #ifdef __EMSCRIPTEN__
         static constexpr bool defaultDiagnosticLogs = false;
 #else

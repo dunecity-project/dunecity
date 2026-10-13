@@ -72,6 +72,8 @@ typedef enum {
 
     CMD_MATCH_PAUSE,                  ///< MATCH_PAUSE(), any active human; freezes after this tick
 
+    CMD_UNIT_FORMATION_MOVE,          ///< UNIT_FORMATION_MOVE(OBJECT_ID,X,Y,GROUP_TOKEN), forced move to a formation slot (docs/formations.md)
+
     CMD_MAX
 } CMDTYPE;
 

@@ -162,6 +162,12 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         huntTowardGoal.y = stream.readSint32();
         huntTowardRetries = stream.readUint8();
     }
+    if(currentGame->getLoadedSavegameVersion() >= 9857) {
+        formationGroup = stream.readUint32();
+        formationSlot.x = stream.readSint32();
+        formationSlot.y = stream.readSint32();
+        formationSpeedCap = stream.readFixPoint();
+    }
 
 
     // A spectator restores the pending work queues as well as the saved
@@ -262,6 +268,10 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(huntTowardGoal.x);
     stream.writeSint32(huntTowardGoal.y);
     stream.writeUint8(huntTowardRetries);
+    stream.writeUint32(formationGroup);
+    stream.writeSint32(formationSlot.x);
+    stream.writeSint32(formationSlot.y);
+    stream.writeFixPoint(formationSpeedCap);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -651,7 +661,8 @@ void UnitBase::destroy() {
 }
 
 void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
-
+    // A unit changing hands leaves its old house's formation either way.
+    leaveFormation();
     if(newOwner->getHouseID() == originalHouseID) {
         quitDeviation();
         return;
@@ -906,6 +917,11 @@ bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     const FixPoint referenceCap=DynastyMovement::step(itemID,255,false,0)*0.08_fix;
     FixPoint scale=getMaxSpeed()/referenceCap;
     if(tile->isRoad()) scale*=ROADSPEEDMULTIPLIER;
+    // Formation speed matching: the realized speed of this step, step*0.08*scale world units
+    // per cycle, is held to the group's pace.
+    const FixPoint realized=FixPoint(step)*0.08_fix*scale;
+    const FixPoint capped=applyFormationSpeedCap(realized);
+    if(capped<realized) scale=scale*capped/realized;
     dynastyStepStart=routeTick*50;
     // Movement precedes scripting: the first movement tick is strictly after
     // the route call, then every3 ticks, independently of rendering cadence.
@@ -1681,6 +1697,8 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     moving = false;
     dynastyRouteTick=0; dynastyStepEnd=0;
     pickedUp = true;
+    // A carried unit is out of its formation; the drop is a new start.
+    leaveFormation();
     respondable = false;
     setActive(false);
     setVisible(VIS_ALL, false);
@@ -1711,7 +1729,56 @@ FixPoint UnitBase::getTerrainAdjustedSpeed(int cargoPercent) const {
     }
     // City roads are an intentional extension; Dynasty has no equivalent.
     if(tile->isRoad()) speed *= ROADSPEEDMULTIPLIER;
-    return speed;
+    return applyFormationSpeedCap(speed);
+}
+
+FixPoint UnitBase::applyFormationSpeedCap(FixPoint speed) const {
+    if(formationGroup == 0 || formationCatchUp || formationSpeedCap <= 0) return speed;
+    return std::min(speed, formationSpeedCap);
+}
+
+void UnitBase::joinFormation(Uint32 groupID, const Coord& slot) {
+    formationGroup = groupID;
+    formationSlot = slot;
+    formationSpeedCap = getFormationReferenceSpeed();
+    formationCatchUp = false;
+}
+
+void UnitBase::leaveFormation() {
+    formationGroup = 0;
+    formationSlot.invalidate();
+    formationSpeedCap = 0;
+    formationCatchUp = false;
+}
+
+FixPoint UnitBase::getFormationReferenceSpeed() const {
+    const FixPoint speed = getMaxSpeed();
+    if(DynastyMovement::factor(itemID) != 0) {
+        const int base = DynastyMovement::step(itemID,255,false,0);
+        if(base <= 0) return speed;
+        return speed * DynastyMovement::step(itemID, DynastyMovement::throttle(itemID,Terrain_Sand), false, 0) / base;
+    }
+    return speed * (2-getTerrainDifficulty(Terrain_Sand));
+}
+
+bool UnitBase::formationMarchEnded() const {
+    if(!active || pickedUp || getHealth() <= 0) return true;
+    // Contact: an enemy within hunt-toward reach turns the march into a fight.
+    if(const ObjectBase* pTarget = target.getObjPointer()) {
+        if(pTarget->getOwner() != nullptr && pTarget->getOwner()->getTeamID() != owner->getTeamID()
+           && blockDistance(location, pTarget->getClosestPoint(location)) <= huntTowardRange()) {
+            return true;
+        }
+    }
+    // Arrived or idle: nothing left to travel to and nothing about to start.
+    return !moving && !hasMovementIntent() && !target && attackPos.isInvalid()
+        && pendingTargetRequest == TargetRequestKind::None && !pathRequestQueued;
+}
+
+int UnitBase::formationRemainingTiles() const {
+    const Coord& goal = formationSlot.isValid() ? formationSlot : destination;
+    if(goal.isInvalid() || location.isInvalid()) return 0;
+    return std::max(std::abs(goal.x - location.x), std::abs(goal.y - location.y));
 }
 
 void UnitBase::setSpeeds() {
@@ -2346,6 +2413,7 @@ void UnitBase::quitDeviation() {
     if(wasDeviated()) {
         // revert back to real owner
         removeFromSelectionLists();
+        leaveFormation();
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);

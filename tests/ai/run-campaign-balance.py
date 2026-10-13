@@ -100,6 +100,8 @@ parser.add_argument('--whole-army-probe', action='store_true',
                     help='Verify the Custom Hard/Brutal whole-army dispatch and asset emergency defence')
 parser.add_argument('--launcher-kiting-probe', action='store_true',
                     help='Verify hunting launchers escape a too-close enemy while keeping Hunt')
+parser.add_argument('--formation-measure', action='store_true',
+                    help='Measure attack-wave arrival spread and first-contact shots over the match')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
@@ -294,6 +296,7 @@ if args.no_spice_city_probe: env['BALANCE_NO_SPICE_CITY_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
 if args.whole_army_probe: env['BALANCE_WHOLE_ARMY_PROBE'] = '1'
+if args.formation_measure: env['BALANCE_FORMATION_MEASURE'] = '1'
 if args.launcher_kiting_probe: env['BALANCE_LAUNCHER_KITING_PROBE'] = '1'
 if args.factory_recovery_probe: env['BALANCE_FACTORY_RECOVERY_PROBE'] = '1'
 if args.starport_probe: env['BALANCE_STARPORT_PROBE'] = '1'

@@ -804,6 +804,7 @@ void SmartBot::attack() {
         return;
     }
 
+    std::vector<const UnitBase*> wave;
     for(const UnitBase *pUnit : getUnitList()) {
         if (pUnit->isRespondable()
             && (pUnit->getOwner() == getHouse())
@@ -816,9 +817,13 @@ void SmartBot::attack() {
             && pUnit->getAttackMode() != HUNT)
         {
             doSetAttackMode(pUnit, HUNT);
+            wave.push_back(pUnit);
         }
 
     }
+    // The hunters travel at the slowest one's pace (docs/formations.md); aircraft are
+    // left out by doFormUp.
+    doFormUp(wave);
 
     // MULTIPLAYER FIX (Issue #4): Deterministic attack timer
     const int baseTimer = 15000;

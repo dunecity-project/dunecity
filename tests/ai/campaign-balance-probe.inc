@@ -50,6 +50,7 @@
 #include "campaign-city-economy-probe.inc"
 #include "degradation-probe.inc"
 #include "spice-income-probe.inc"
+#include "formation-wave-measure.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -290,9 +291,12 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
-    while (!game->finished && game->getGameCycleCount() < end) {
-        game->updateGameState();
-
+    if (std::getenv("BALANCE_FORMATION_MEASURE")) {
+        FormationWaveMeasure::run(*game, end);
+    } else {
+        while (!game->finished && game->getGameCycleCount() < end) {
+            game->updateGameState();
+        }
     }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=%d seed=%u attack_percent=%d partner=%s enemy=%s cycle=%u outcome=%s",
         level, seed, percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(), game->finished ? (game->won ? "won" : "lost") : "time_limit");

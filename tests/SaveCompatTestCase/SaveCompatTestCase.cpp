@@ -43,7 +43,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // patrol count, report cooldown, scan cooldown, report tally and
     // return-home flag, and the airplane's take-off frame and flight budget.
     // 9854 adds the unit hunt-toward flag (UnitBase::doHuntToward).
-    REQUIRE(SAVEGAMEVERSION == 9854);
+    // 9857 adds unit formation membership (group, slot, speed cap; docs/formations.md).
+    REQUIRE(SAVEGAMEVERSION == 9857);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 
