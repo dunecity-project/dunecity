@@ -188,6 +188,9 @@ public:
         bool            wasdCamera = false;
         bool            leftClickOrders = false;
         bool            showMovementPaths = true;
+        /// Construction Yard: clicking a building in the list picks its plot first and the
+        /// yard places it there when finished (pre-placement queue). Off = build, then place.
+        bool            chooseBuildingLocation = true;
 #ifdef __EMSCRIPTEN__
         static constexpr bool defaultDiagnosticLogs = false;
 #else

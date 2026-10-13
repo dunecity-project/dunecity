@@ -40,6 +40,7 @@
 #include <dunecity/CityOverlay.h>
 #include <AStarSearch.h>
 #include <units/UnitBase.h>
+#include <structures/PlacementReservationPolicy.h>
 
 #include <DataTypes.h>
 #include <memory>
@@ -204,6 +205,21 @@ public:
     void drawCursor() const;
     void updateCursor();
     void setCursorMode(int mode);
+
+    /**
+        Construction Yard pre-placement: enter the placing cursor for an item that is not
+        ordered yet. A map click reserves the plot (CMD_BUILDER_RESERVE_PLACEMENT); Shift
+        keeps planning another copy. UI state only, cleared by any cursor mode change.
+    */
+    void beginPlacementPlanning(Uint32 builderID, Uint32 itemID);
+    bool isPlanningPlacement() const;
+    Uint32 getPlanningItemID() const { return isPlanningPlacement() ? planningItemID : ItemID_Invalid; }
+
+    /**
+        Cancels the local house's reservation whose ghost covers this map tile, if any.
+        \return true if a cancel order was sent
+    */
+    bool handleReservationGhostRightClick(int xPos, int yPos);
 
     /**
         This method sets up the view. The start position is the center point of all owned units/structures
@@ -661,6 +677,13 @@ private:
     */
     bool handlePlacementClick(int xPos, int yPos);
 
+    /// Draws the local house's reserved plots: numbered in queue order, progress on the one
+    /// under construction, red once a plot fell back to manual placement.
+    void drawReservationGhosts();
+
+    /// True if the selection holds a unit of the local house that takes orders.
+    bool hasRespondableOwnUnitSelected() const;
+
     /**
         Performs a attack click for the currently selected units/structures.
         \param  xPos    x-coordinate in map coordinates
@@ -787,6 +810,19 @@ public:
     UnitBase* issuePositionOrder(PositionOrder kind, const std::vector<UnitBase*>& units, const Coord& target, bool queued);
 
     int         currentCursorMode = CursorMode_Normal;
+    Uint32      planningBuilderID = NONE_ID;        ///< Construction Yard the planning cursor orders from
+    Uint32      planningItemID = ItemID_Invalid;    ///< Structure the planning cursor reserves a plot for
+    /// Plots this client has asked to reserve whose command has not executed yet, so Shift
+    /// and chain planning see them before the simulation does (UI state only).
+    struct PendingReservation {
+        Uint32 builderID;
+        Uint32 itemID;
+        int x;
+        int y;
+        Uint32 issuedCycle;
+    };
+    std::vector<PendingReservation> pendingReservations;
+    std::vector<PlacementReservation::Footprint> pendingReservationFootprints();
     int         lastRoadTileX = -1;
     int         lastRoadTileY = -1;
     DuneCity::ZoneType selectedZoneType_ = DuneCity::ZoneType::Residential;

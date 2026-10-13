@@ -891,6 +891,10 @@ TEST_CASE("Commands: parameter counts must match the command table",
     REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_PLAYER_PAUSE, 1));
     REQUIRE(CommandValidation::isWellFormedCommand(CMD_STRUCTURE_DEMOLISH, 1));
     REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_STRUCTURE_DEMOLISH, 0));
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_BUILDER_RESERVE_PLACEMENT, 4));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_BUILDER_RESERVE_PLACEMENT, 3));
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_BUILDER_CANCEL_RESERVATION, 2));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_BUILDER_CANCEL_RESERVATION, 1));
 
     // The city commands read up to three optional parameters.
     REQUIRE(CommandValidation::isWellFormedCommand(CMD_CITY_PLACE_ZONE, 3));
@@ -1185,7 +1189,8 @@ TEST_CASE("Command authorization: every object action is covered, control comman
         CMD_STARPORT_PLACEORDER, CMD_STARPORT_CANCELORDER, CMD_TURRET_ATTACKOBJECT,
         CMD_TECHCENTER_SPAWN, CMD_SCOUTPOST_UPGRADE, CMD_SCOUTPOST_CHEMIPOST_UPGRADE,
         CMD_POLICE_REINFORCEMENTS, CMD_ZONE_DEMOLISH, CMD_STRUCTURE_DEMOLISH,
-        CMD_UNIT_ATTACKMOVE, CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER, CMD_BUILDER_SETREPEAT
+        CMD_UNIT_ATTACKMOVE, CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER, CMD_BUILDER_SETREPEAT,
+        CMD_BUILDER_RESERVE_PLACEMENT, CMD_BUILDER_CANCEL_RESERVATION
     };
     for(const CMDTYPE commandID : objectActions) {
         INFO("command " << static_cast<int>(commandID));

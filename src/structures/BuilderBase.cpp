@@ -18,6 +18,7 @@
  */
 
 #include <structures/BuilderBase.h>
+#include <structures/PlacementReservationPolicy.h>
 
 #include <FileClasses/TextManager.h>
 
@@ -127,11 +128,29 @@ static bool savegameHasCreditProvenance() {
         && (currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= kCreditProvenanceSaveVersion);
 }
 
+// SAVEGAMEVERSION 9856 persists Construction Yard placement reservations: each
+// queue entry's reservation id, plot and fallback flag, and each builder's next
+// reservation id and unit-clearing wait. Older saves load without reservations,
+// so every queued order keeps the place-it-yourself flow it was ordered with.
+static constexpr Uint32 kPlacementReservationSaveVersion = 9856;
+static constexpr bool kSavesPlacementReservations = SAVEGAMEVERSION >= kPlacementReservationSaveVersion;
+
+static bool savegameHasPlacementReservations() {
+    return kSavesPlacementReservations
+        && (currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= kPlacementReservationSaveVersion);
+}
+
 void ProductionQueueItem::save(OutputStream& stream) const {
     stream.writeUint32(itemID);
     stream.writeUint32(price);
     if(kSavesCreditProvenance) {
         stream.writeFixPoint(startingCreditsPaid);
+    }
+    if(kSavesPlacementReservations) {
+        stream.writeUint32(reservationID);
+        stream.writeSint32(plotX);
+        stream.writeSint32(plotY);
+        stream.writeBool(reservationFailed);
     }
 }
 
@@ -139,6 +158,12 @@ void ProductionQueueItem::load(InputStream& stream) {
     itemID = stream.readUint32();
     price = stream.readUint32();
     startingCreditsPaid = savegameHasCreditProvenance() ? stream.readFixPoint() : FixPoint(0);
+    if(savegameHasPlacementReservations()) {
+        reservationID = stream.readUint32();
+        plotX = stream.readSint32();
+        plotY = stream.readSint32();
+        reservationFailed = stream.readBool();
+    }
 }
 
 BuilderBase::BuilderBase(House* newOwner) : StructureBase(newOwner) {
@@ -188,6 +213,10 @@ BuilderBase::BuilderBase(InputStream& stream) : StructureBase(stream) {
     if(currentGame->getLoadedSavegameVersion() >= 9855) {
         repeatItems.load(stream);
     }
+    if(savegameHasPlacementReservations()) {
+        nextReservationID = stream.readUint32();
+        reservedPlacementWaitCycles = stream.readUint32();
+    }
 }
 
 void BuilderBase::init() {
@@ -225,6 +254,10 @@ void BuilderBase::save(OutputStream& stream) const {
     }
 
     repeatItems.save(stream);
+    if(kSavesPlacementReservations) {
+        stream.writeUint32(nextReservationID);
+        stream.writeUint32(reservedPlacementWaitCycles);
+    }
 }
 
 ObjectInterface* BuilderBase::getInterfaceContainer() {
@@ -301,13 +334,34 @@ void BuilderBase::setOwner(House *no) {
     // starting cash, so capturing a builder cannot mint starting credits.
     if(no != this->owner) {
         productionProgressFromStartingCredits = 0;
-        for(auto& order : currentProductionQueue) order.startingCreditsPaid = 0;
+        for(auto& order : currentProductionQueue) {
+            order.startingCreditsPaid = 0;
+            // The plots were planned by the previous owner; the new one never saw them.
+            order.reservationID = 0;
+            order.reservationFailed = false;
+        }
+        reservedPlacementWaitCycles = 0;
     }
     this->owner = no;
 }
 
+bool BuilderBase::isAwaitingReservedPlacement() const {
+    if(!PlacementReservation::frontAwaitsReservedPlacement(currentProductionQueue)
+       || currentProducedItem != currentProductionQueue.front().itemID) {
+        return false;
+    }
+    const BuildItem* tmp = getBuildItem(currentProducedItem);
+    return tmp != nullptr && productionProgress >= tmp->price;
+}
+
 bool BuilderBase::isWaitingToPlace() const {
     if((currentProducedItem == ItemID_Invalid) || isUnit(currentProducedItem)) {
+        return false;
+    }
+
+    // A finished reserved order is placed by the simulation, not by hand (or by a
+    // partner AI), until it falls back.
+    if(isAwaitingReservedPlacement()) {
         return false;
     }
 
@@ -419,6 +473,7 @@ void BuilderBase::produceNextAvailableItem() {
 
     clearProductionProgress();
     bCurrentItemOnHold = false;
+    reservedPlacementWaitCycles = 0;
 }
 
 int BuilderBase::getMaxUpgradeLevel() const {

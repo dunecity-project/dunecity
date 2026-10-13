@@ -77,6 +77,8 @@ typedef enum {
     CMD_UNIT_PATROL,                  ///< UNIT_PATROL(OBJECT_ID, X, Y, B_QUEUE)
     CMD_UNIT_QUEUEORDER,              ///< UNIT_QUEUEORDER(OBJECT_ID, ORDER_TYPE, X_OR_TARGET_ID, Y) Shift-queued order
     CMD_BUILDER_SETREPEAT,            ///< BUILDER_SETREPEAT(OBJECT_ID, ITEM_ID, B_ENABLED)
+    CMD_BUILDER_RESERVE_PLACEMENT,    ///< BUILDER_RESERVE_PLACEMENT(BUILDER_ID, ITEM_ID, X, Y), queues the structure and reserves its plot
+    CMD_BUILDER_CANCEL_RESERVATION,   ///< BUILDER_CANCEL_RESERVATION(BUILDER_ID, RESERVATION_ID), cancels that reserved order with the normal refund
 
     CMD_MAX
 } CMDTYPE;

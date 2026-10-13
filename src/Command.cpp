@@ -689,6 +689,25 @@ case CMD_INFANTRY_CAPTURE: {
             pBuilder->doSetRepeat(parameter[1], parameter[2] != 0);
         } break;
 
+        case CMD_BUILDER_RESERVE_PLACEMENT: {
+            if(parameter.size() != 4) return;
+            ConstructionYard* pConstYard = dynamic_cast<ConstructionYard*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], pConstYard)) {
+                return;
+            }
+            // Coordinates arrive as Uint32; a plot off the map is refused by the plot check.
+            pConstYard->doReservePlacement(parameter[1], static_cast<int>(parameter[2]), static_cast<int>(parameter[3]));
+        } break;
+
+        case CMD_BUILDER_CANCEL_RESERVATION: {
+            if(parameter.size() != 2) return;
+            ConstructionYard* pConstYard = dynamic_cast<ConstructionYard*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], pConstYard)) {
+                return;
+            }
+            pConstYard->doCancelReservation(parameter[1]);
+        } break;
+
         case CMD_PLAYER_PAUSE: {
             if(parameter.size() != 0) {
                 THROW(std::invalid_argument, "Command::executeCommand(): CMD_PLAYER_PAUSE needs 0 Parameters!");

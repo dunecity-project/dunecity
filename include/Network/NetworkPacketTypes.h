@@ -179,6 +179,10 @@
 // 71: Modern RTS controls (docs/rts-controls.md): new commands CMD_UNIT_ATTACKMOVE,
 //     CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER and CMD_BUILDER_SETREPEAT, attack mode HOLD,
 //     and classic unit orders now record the unit's order queue. Save 9855.
+// 71: Construction Yard pre-placement queue. CMD_BUILDER_RESERVE_PLACEMENT and
+//     CMD_BUILDER_CANCEL_RESERVATION are new commands, and a reserved order is placed by
+//     the simulation when it finishes, so a 70 peer cannot execute or replay them.
+//     Save 9856.
 #define NETWORK_PROTOCOL_VERSION            71
 
 // Mod transfer limits

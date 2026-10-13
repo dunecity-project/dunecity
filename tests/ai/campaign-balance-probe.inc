@@ -50,6 +50,7 @@
 #include "campaign-city-economy-probe.inc"
 #include "degradation-probe.inc"
 #include "spice-income-probe.inc"
+#include "preplace-queue-probe.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -113,7 +114,10 @@ int runCampaignBalanceProbe() {
     for (const auto& [h,team] : roster) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), team);
         if (h==humanHouse && !localSpectator) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
-        info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
+        // The pre-placement probe drives the human house alone: a partner AI would order
+        // and place from the same yards.
+        if (!(std::getenv("BALANCE_PREPLACE_PROBE") && h==humanHouse))
+            info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
         // Give every row a different delivery income factor, as a host would in the lobby, so
         // the probe can check which house ended up with which - including that no row picked
         // up a neighbour's rate. Matches SpiceIncomeProbe::assignedFactors.
@@ -164,6 +168,12 @@ int runCampaignBalanceProbe() {
         // Takes the owning pointer: it saves the match, replaces the Game with a reload and
         // measures the resumed delivery on the loaded one.
         runSpiceIncomeProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_PREPLACE_PROBE")) {
+        // Takes the owning pointer: it saves and reloads the match, then loads a 9854 save.
+        runPreplaceQueueProbe(game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }

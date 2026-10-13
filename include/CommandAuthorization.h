@@ -129,6 +129,8 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_UNIT_PATROL:
         case CMD_UNIT_QUEUEORDER:
         case CMD_BUILDER_SETREPEAT:
+        case CMD_BUILDER_RESERVE_PLACEMENT:
+        case CMD_BUILDER_CANCEL_RESERVATION:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city
