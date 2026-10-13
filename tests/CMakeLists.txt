@@ -80,6 +80,7 @@ target_sources(dunelegacy_tests
         ConstructionYardResolverTestCase/ConstructionYardResolverTestCase.cpp
         UnitMovementPolicyTestCase/UnitMovementPolicyTestCase.cpp
         RtsControlsTestCase.cpp
+        BuilderListLayoutTestCase.cpp
         PalaceUnitLimitRegressionTestCase/PalaceUnitLimitRegressionTestCase.cpp
         PlacementReservationTestCase/PlacementReservationTestCase.cpp
         ZonePowerTestCase/ZonePowerTestCase.cpp
@@ -200,6 +201,9 @@ add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
 add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
+
+# Sidebar build grid geometry (docs/sidebar-grid.md): slots, hit-testing, row scrolling.
+add_test(NAME sidebar_grid_tests COMMAND dunelegacy_tests "[sidebar-grid]")
 
 # Standalone network wire harness.
 #
@@ -397,7 +401,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -849,6 +853,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --viewport 1024x768 --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/preplace-probe)
         set_tests_properties(preplace_queue_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Sidebar build grid (docs/sidebar-grid.md): a DuneCity Construction Yard, a factory
+        # with a repeating unit in production and a Starport with a sold-out item, rendered
+        # through Game::drawScreen at both sizes. Writes sidebar-*-<viewport>.png.
+        foreach(grid_viewport IN ITEMS 1024x768 1920x1080)
+            add_test(NAME sidebar_grid_probe_${grid_viewport} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --sidebar-grid-probe --repeatable
+                --mod dunecity --level 9 --viewport ${grid_viewport} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/sidebar-grid-${grid_viewport}-probe)
+            set_tests_properties(sidebar_grid_probe_${grid_viewport} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
     endif()
 endif()
 

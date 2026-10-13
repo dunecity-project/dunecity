@@ -54,6 +54,8 @@ parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
 parser.add_argument('--sourceforge-probe', action='store_true')
 parser.add_argument('--preplace-probe', action='store_true',
                     help='Construction Yard pre-placement queue: reservations, chain, fallback, cancel, save/load, 9854 load')
+parser.add_argument('--sidebar-grid-probe', action='store_true',
+                    help='Sidebar build grid: yard, factory and Starport lists rendered at --viewport (PNG screenshots)')
 parser.add_argument('--harvester-safety-probe', action='store_true')
 parser.add_argument('--city-placement-probe', action='store_true')
 parser.add_argument('--opening-economy-probe', action='store_true')
@@ -192,7 +194,7 @@ if main.count(needle) != 1:
     raise RuntimeError('Main-menu injection point changed.')
 main = main.replace(needle,'int menuResult = runCampaignBalanceProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
-if args.stats_ui_probe:
+if args.stats_ui_probe or args.sidebar_grid_probe:
     # Exercise the requested logical viewport even on a smaller/headless host.
     # Only this private probe bypasses the ordinary desktop-fit clamp; the
     # shipped application retains it. SDL still supplies the real renderer.
@@ -268,7 +270,8 @@ if args.preplace_probe:
     fixture = out/'preplace-9854.sav'
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe:
+if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
+if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe:
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
@@ -276,7 +279,8 @@ if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.
         width, height = (int(value) for value in args.viewport.lower().split('x'))
     profile = out/'profile'
     profile.mkdir(exist_ok=True)
-    interface_height = -1 if args.stats_ui_probe else height
+    # Native 1:1 so a 1920x1080 window really lays the sidebar out at 1080 lines.
+    interface_height = -1 if (args.stats_ui_probe or args.sidebar_grid_probe) else height
     if args.stats_ui_probe:
         env['BALANCE_STATS_EXPECTED_WIDTH'] = str(width)
         env['BALANCE_STATS_EXPECTED_HEIGHT'] = str(height)
