@@ -34,8 +34,99 @@
 #include <structures/StarPort.h>
 #include <structures/ChaosFactory.h>
 #include <structures/ConstructionYard.h>
-
+#include <algorithm>
 #include <sstream>
+#include <vector>
+
+namespace Layout = BuilderListLayout;
+
+namespace {
+
+constexpr int ArrowX = Layout::BodyLeft + (Layout::BodyWidth - Layout::ArrowButtonWidth)/2;
+
+/// Overlay text, lines centred, at the largest font size whose lines fit inside a grid button.
+/// Composed per line so the texture is exactly as large as the text (FontManager's multiline
+/// surface is as wide as the whole string on one line).
+sdl2::texture_ptr createFittedOverlayText(const std::string& text) {
+    std::vector<std::string> lines;
+    std::istringstream input(text);
+    for(std::string line; std::getline(input, line); ) {
+        lines.push_back(line);
+    }
+    auto extent = [&](unsigned int size) {
+        int width = 0;
+        for(const std::string& line : lines) {
+            width = std::max(width, pFontManager->getTextWidth(line, size));
+        }
+        return Point(width, pFontManager->getTextHeight(size) * static_cast<int>(lines.size()));
+    };
+    constexpr unsigned int largest = 12, smallest = 8;
+    unsigned int size = largest;
+    while(size > smallest && (extent(size).x > Layout::ButtonWidth - 2 || extent(size).y > Layout::ButtonHeight - 2)) {
+        --size;
+    }
+
+    const Point textSize = extent(size);
+    sdl2::surface_ptr pic{ SDL_CreateRGBSurface(0, textSize.x, textSize.y, SCREEN_BPP, RMASK, GMASK, BMASK, AMASK) };
+    SDL_SetSurfaceBlendMode(pic.get(), SDL_BLENDMODE_NONE);
+    SDL_FillRect(pic.get(), nullptr, COLOR_INVALID);
+    SDL_SetColorKey(pic.get(), SDL_TRUE, COLOR_INVALID);
+    const int lineHeight = pFontManager->getTextHeight(size);
+    for(std::size_t i = 0; i < lines.size(); ++i) {
+        sdl2::surface_ptr line = pFontManager->createSurfaceWithText(lines[i], COLOR_WHITE, size);
+        SDL_Rect dest = calcDrawingRect(line.get(), textSize.x/2, static_cast<int>(i)*lineHeight, HAlign::Center, VAlign::Top);
+        SDL_BlitSurface(line.get(), nullptr, pic.get(), &dest);
+    }
+    return convertSurfaceToTexture(pic.get());
+}
+
+/// Draw a build picture scaled into a grid button: aspect ratio kept, centred, never enlarged.
+/// Linear filtering keeps the downscaled pixel art readable; the texture's own mode is restored.
+void drawItemPicture(SDL_Texture* pTexture, const SDL_Rect& button) {
+    const int w = getWidth(pTexture);
+    const int h = getHeight(pTexture);
+    if(w <= 0 || h <= 0) {
+        return;
+    }
+    int destW = std::min(w, button.w);
+    int destH = (h*destW + w/2) / w;
+    if(destH > button.h) {
+        destH = button.h;
+        destW = (w*destH + h/2) / h;
+    }
+    SDL_Rect dest = { button.x + (button.w - destW)/2, button.y + (button.h - destH)/2, destW, destH };
+    SDL_ScaleMode previous = SDL_ScaleModeNearest;
+    SDL_GetTextureScaleMode(pTexture, &previous);
+    SDL_SetTextureScaleMode(pTexture, SDL_ScaleModeLinear);
+    SDL_RenderCopy(renderer, pTexture, nullptr, &dest);
+    SDL_SetTextureScaleMode(pTexture, previous);
+}
+
+/// Upper and lower cap art was cut for a 101 px list. Keep both ends and repeat a plain
+/// middle strip so the cap spans `width` (the frame edge stays CapRight from the right end).
+void drawCap(SDL_Texture* pCap, int x, int y, int width) {
+    constexpr int leftPart = 64;
+    constexpr int stripBegin = 44;
+    constexpr int stripWidth = leftPart - stripBegin;
+    const int capW = getWidth(pCap);
+    const int capH = getHeight(pCap);
+    const int rightPart = capW - leftPart;
+
+    SDL_Rect src = { 0, 0, leftPart, capH };
+    SDL_Rect dest = { x, y, leftPart, capH };
+    SDL_RenderCopy(renderer, pCap, &src, &dest);
+    for(int fill = x + leftPart; fill < x + width - rightPart; fill += stripWidth) {
+        const int w = std::min(stripWidth, x + width - rightPart - fill);
+        src = { stripBegin, 0, w, capH };
+        dest = { fill, y, w, capH };
+        SDL_RenderCopy(renderer, pCap, &src, &dest);
+    }
+    src = { leftPart, 0, rightPart, capH };
+    dest = { x + width - rightPart, y, rightPart, capH };
+    SDL_RenderCopy(renderer, pCap, &src, &dest);
+}
+
+} // namespace
 
 BuilderList::BuilderList(Uint32 builderObjectID) {
     enableResizing(false,true);
@@ -47,18 +138,17 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     downButton.setTextures( pGFXManager->getUIGraphic(UI_ButtonDown,pLocalHouse->getHouseID()),
                             pGFXManager->getUIGraphic(UI_ButtonDown_Pressed,pLocalHouse->getHouseID()));
 
-    addWidget(&upButton,Point( (WIDGET_WIDTH - ARROWBTN_WIDTH)/2,0),upButton.getSize());
+    addWidget(&upButton,Point(ArrowX,0),upButton.getSize());
     upButton.setOnClick(std::bind(&BuilderList::onUp, this));
 
     addWidget(&downButton,
-                Point( (WIDGET_WIDTH - ARROWBTN_WIDTH)/2,
-                        (ARROWBTN_HEIGHT + BUILDERBTN_SPACING)),
+                Point(ArrowX, Layout::ArrowButtonHeight + Layout::Spacing),
                 downButton.getSize());
     downButton.setOnClick(std::bind(&BuilderList::onDown, this));
 
     addWidget(&orderButton,
-                Point(0,(ARROWBTN_HEIGHT + BUILDERBTN_SPACING) + BUILDERBTN_SPACING),
-                Point(WIDGET_WIDTH,ORDERBTN_HEIGHT));
+                Point(Layout::BodyLeft, Layout::ArrowButtonHeight + 2*Layout::Spacing),
+                Point(Layout::BodyWidth, Layout::OrderButtonHeight));
     orderButton.setOnClick(std::bind(&BuilderList::onOrder, this));
     orderButton.setText(_("Order"));
 
@@ -67,12 +157,13 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     mouseLeftButton = -1;
     mouseRightButton = -1;
 
-    pSoldOutTextTexture = pFontManager->createTextureWithMultilineText(_("SOLD OUT"), COLOR_WHITE, 12, true);
-    pAlreadyBuiltTextTexture = pFontManager->createTextureWithMultilineText(_("ALREADY\nBUILT"), COLOR_WHITE, 12, true);
-    pPlaceItTextTexture = pFontManager->createTextureWithMultilineText(_("PLACE IT"), COLOR_WHITE, 12, true);
-    pOnHoldTextTexture = pFontManager->createTextureWithMultilineText(_("ON HOLD"), COLOR_WHITE, 12, true);
-    pUnitLimitReachedTextTexture = pFontManager->createTextureWithMultilineText(_("UNIT LIMIT\nREACHED"), COLOR_WHITE, 12, true);
-    pHarvesterLimitReachedTextTexture = pFontManager->createTextureWithMultilineText(_("HARVESTER LIMIT\nREACHED"), COLOR_WHITE, 12, true);
+    // Grid buttons are small: short texts, each at the largest size that fits a button.
+    pSoldOutTextTexture = createFittedOverlayText(_("SOLD OUT"));
+    pAlreadyBuiltTextTexture = createFittedOverlayText(_("ALREADY\nBUILT"));
+    pPlaceItTextTexture = createFittedOverlayText(_("PLACE IT"));
+    pOnHoldTextTexture = createFittedOverlayText(_("ON HOLD"));
+    pUnitLimitReachedTextTexture = createFittedOverlayText(_("UNIT\nLIMIT"));
+    pHarvesterLimitReachedTextTexture = createFittedOverlayText(_("HARVESTER\nLIMIT"));
 
     pLastTooltip = nullptr;
     tooltipText = "";
@@ -225,8 +316,9 @@ bool BuilderList::handleKeyPress(SDL_KeyboardEvent& key) {
 }
 
 void BuilderList::draw(Point position) {
-    SDL_Rect blackRectDest = {  position.x, position.y + ARROWBTN_HEIGHT + BUILDERBTN_SPACING,
-                                getSize().x, getRealHeight(getSize().y) - 2*(ARROWBTN_HEIGHT + BUILDERBTN_SPACING) - BUILDERBTN_SPACING - ORDERBTN_HEIGHT };
+    const int height = getSize().y;
+    SDL_Rect blackRectDest = {  position.x + Layout::BodyLeft, position.y + Layout::BodyTop,
+                                Layout::BodyWidth, Layout::bodyHeight(height) };
     renderFillRect(renderer, &blackRectDest, COLOR_BLACK);
 
     BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderObjectID));
@@ -241,21 +333,13 @@ void BuilderList::draw(Point position) {
             orderButton.setVisible(false);
         }
 
-        if(getNumButtons(getSize().y) < static_cast<int>(pBuilder->getBuildList().size())) {
+        const int numItems = static_cast<int>(pBuilder->getBuildList().size());
+        const int numSlots = getNumButtons(height);
+        if(numSlots < numItems) {
             upButton.setVisible(true);
             downButton.setVisible(true);
-
-            if(currentListPos == 0) {
-                upButton.setEnabled(false);
-            } else {
-                upButton.setEnabled(true);
-            }
-
-            if(currentListPos + getNumButtons(getSize().y) < static_cast<int>(pBuilder->getBuildList().size()) ) {
-                downButton.setEnabled(true);
-            } else {
-                downButton.setEnabled(false);
-            }
+            upButton.setEnabled(currentListPos > 0);
+            downButton.setEnabled(currentListPos < Layout::maxFirstItem(numItems, height));
         } else {
             upButton.setVisible(false);
             downButton.setVisible(false);
@@ -263,125 +347,120 @@ void BuilderList::draw(Point position) {
 
         int i = 0;
         for(const BuildItem& buildItem : pBuilder->getBuildList()) {
+            const int slot = i - currentListPos;
+            i++;
+            if(slot < 0 || slot >= numSlots) {
+                continue;
+            }
 
-            if((i >= currentListPos) && (i < currentListPos+getNumButtons(getSize().y) )) {
-                const HOUSETYPE pictureHouse = static_cast<HOUSETYPE>(
-                    DuneCity::isCityOnlyStructure(buildItem.itemID) && pBuilder->getOwner()
-                        ? pBuilder->getOwner()->getHouseID()
-                        : pBuilder->getOriginalHouseID());
-                SDL_Texture* pTexture = resolveItemPicture(buildItem.itemID, pictureHouse);
+            SDL_Rect button = { position.x + Layout::slotX(slot), position.y + Layout::slotY(slot),
+                                Layout::ButtonWidth, Layout::ButtonHeight };
+            const int centerX = button.x + button.w/2;
+            const int centerY = button.y + button.h/2;
+            auto drawCentered = [&](SDL_Texture* pText) {
+                SDL_Rect textDest = calcDrawingRect(pText, centerX, centerY, HAlign::Center, VAlign::Center);
+                SDL_RenderCopy(renderer, pText, nullptr, &textDest);
+            };
 
-                const SDL_Rect dest = calcDrawingRect(pTexture, position.x + getButtonPosition(i - currentListPos).x, position.y + getButtonPosition(i - currentListPos).y);
+            const HOUSETYPE pictureHouse = static_cast<HOUSETYPE>(
+                DuneCity::isCityOnlyStructure(buildItem.itemID) && pBuilder->getOwner()
+                    ? pBuilder->getOwner()->getHouseID()
+                    : pBuilder->getOriginalHouseID());
+            SDL_Texture* pTexture = resolveItemPicture(buildItem.itemID, pictureHouse);
+            if(pTexture != nullptr) {
+                drawItemPicture(pTexture, button);
+            }
 
-                if(pTexture != nullptr) {
-                    SDL_Rect tmpDest = dest;
-                    SDL_RenderCopy(renderer, pTexture, nullptr, &tmpDest);
+            if(isStructure(buildItem.itemID)) {
+                // Structure size lattice at two thirds: 6 px cells become 4 px cells.
+                SDL_Texture* pLattice = pGFXManager->getUIGraphic(UI_StructureSizeLattice);
+                SDL_Rect destLattice = { button.x + 1, button.y + 1, (getWidth(pLattice)*2 + 1)/3, (getHeight(pLattice)*2 + 1)/3 };
+                SDL_RenderCopy(renderer, pLattice, nullptr, &destLattice);
+
+                SDL_Texture* pConcrete = pGFXManager->getUIGraphic(UI_StructureSizeConcrete);
+                const auto structureSize = getStructureSize(buildItem.itemID);
+                SDL_Rect srcConcrete = { 0, 0, 1 + structureSize.x*6, 1 + structureSize.y*6 };
+                SDL_Rect destConcrete = { button.x + 1, button.y + 1, 1 + structureSize.x*4, 1 + structureSize.y*4 };
+                SDL_RenderCopy(renderer, pConcrete, &srcConcrete, &destConcrete);
+            }
+
+            // draw price
+            sdl2::texture_ptr pPriceTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", buildItem.price), COLOR_WHITE, 12);
+            SDL_Rect drawLocation = calcDrawingRect(pPriceTexture.get(), button.x + 2, button.y + button.h - getHeight(pPriceTexture.get()) + 3);
+            SDL_RenderCopy(renderer, pPriceTexture.get(), nullptr, &drawLocation);
+
+            if(pStarport != nullptr) {
+                bool bSoldOut = (pStarport->getOwner()->getChoam().getNumAvailable(buildItem.itemID) == 0);
+
+                if(!pStarport->okToOrder() || bSoldOut) {
+                    renderFillRect(renderer, &button, COLOR_HALF_TRANSPARENT);
                 }
 
-                if(isStructure(buildItem.itemID)) {
-                    SDL_Texture* pLattice = pGFXManager->getUIGraphic(UI_StructureSizeLattice);
-                    SDL_Rect destLattice = calcDrawingRect(pLattice, dest.x + 2, dest.y + 2);
-                    SDL_RenderCopy(renderer, pLattice, nullptr, &destLattice);
-
-                    SDL_Texture* pConcrete = pGFXManager->getUIGraphic(UI_StructureSizeConcrete);
-                    SDL_Rect srcConcrete = { 0, 0, 1 + getStructureSize(buildItem.itemID).x*6, 1 + getStructureSize(buildItem.itemID).y*6 };
-                    SDL_Rect destConcrete = { dest.x + 2, dest.y + 2, srcConcrete.w, srcConcrete.h };
-                    SDL_RenderCopy(renderer, pConcrete, &srcConcrete, &destConcrete);
+                if(bSoldOut) {
+                    drawCentered(pSoldOutTextTexture.get());
                 }
 
-                // draw price
-                sdl2::texture_ptr pPriceTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", buildItem.price), COLOR_WHITE, 12);
-                SDL_Rect drawLocation = calcDrawingRect(pPriceTexture.get(), dest.x + 2, dest.y + BUILDERBTN_HEIGHT - getHeight(pPriceTexture.get()) + 3);
-                SDL_RenderCopy(renderer, pPriceTexture.get(), nullptr, &drawLocation);
+            } else if(pChaosFactory != nullptr
+                      && pChaosFactory->getRemainingStock(buildItem.itemID) <= 0) {
+                renderFillRect(renderer, &button, COLOR_HALF_TRANSPARENT);
+                drawCentered(pSoldOutTextTexture.get());
+            } else if(currentGame->getGameInitSettings().getGameOptions().onlyOnePalace && buildItem.itemID == Structure_Palace && pBuilder->getOwner()->getNumItems(Structure_Palace) > 0) {
+                renderFillRect(renderer, &button, COLOR_HALF_TRANSPARENT);
+                drawCentered(pAlreadyBuiltTextTexture.get());
+            } else if(buildItem.itemID == pBuilder->getCurrentProducedItem()) {
+                FixPoint progress = pBuilder->getProductionProgress();
+                FixPoint price = buildItem.price;
+                int max_x = lround((progress/price)*button.w);
 
-                if(pStarport != nullptr) {
-                    bool bSoldOut = (pStarport->getOwner()->getChoam().getNumAvailable(buildItem.itemID) == 0);
+                SDL_Rect progressBar = { button.x, button.y, max_x, button.h };
+                renderFillRect(renderer, &progressBar, COLOR_HALF_TRANSPARENT);
 
-                    if(!pStarport->okToOrder() || bSoldOut) {
-                        SDL_Rect progressBar = { dest.x, dest.y, BUILDERBTN_WIDTH, BUILDERBTN_HEIGHT };
-                        renderFillRect(renderer, &progressBar, COLOR_HALF_TRANSPARENT);
-                    }
-
-                    if(bSoldOut) {
-                        SDL_Rect drawLocationSoldOut = calcDrawingRect(pSoldOutTextTexture.get(), dest.x + BUILDERBTN_WIDTH/2, dest.y + BUILDERBTN_HEIGHT/2, HAlign::Center, VAlign::Center);
-                        SDL_RenderCopy(renderer, pSoldOutTextTexture.get(), nullptr, &drawLocationSoldOut);
-                    }
-
-                } else if(pChaosFactory != nullptr
-                          && pChaosFactory->getRemainingStock(buildItem.itemID) <= 0) {
-                    SDL_Rect soldOutOverlay = {
-                        dest.x, dest.y, BUILDERBTN_WIDTH, BUILDERBTN_HEIGHT
-                    };
-                    renderFillRect(renderer, &soldOutOverlay, COLOR_HALF_TRANSPARENT);
-                    SDL_Rect soldOutText = calcDrawingRect(
-                        pSoldOutTextTexture.get(),
-                        dest.x + BUILDERBTN_WIDTH/2,
-                        dest.y + BUILDERBTN_HEIGHT/2,
-                        HAlign::Center, VAlign::Center);
-                    SDL_RenderCopy(renderer, pSoldOutTextTexture.get(), nullptr, &soldOutText);
-                } else if(currentGame->getGameInitSettings().getGameOptions().onlyOnePalace && buildItem.itemID == Structure_Palace && pBuilder->getOwner()->getNumItems(Structure_Palace) > 0) {
-
-                    SDL_Rect progressBar = { dest.x, dest.y, BUILDERBTN_WIDTH, BUILDERBTN_HEIGHT };
-                    renderFillRect(renderer, &progressBar, COLOR_HALF_TRANSPARENT);
-
-                    SDL_Rect drawLocationAlreadyBuilt = calcDrawingRect(pAlreadyBuiltTextTexture.get(), dest.x + BUILDERBTN_WIDTH/2, dest.y + BUILDERBTN_HEIGHT/2, HAlign::Center, VAlign::Center);
-                    SDL_RenderCopy(renderer, pAlreadyBuiltTextTexture.get(), nullptr, &drawLocationAlreadyBuilt);
-                } else if(buildItem.itemID == pBuilder->getCurrentProducedItem()) {
-                    FixPoint progress = pBuilder->getProductionProgress();
-                    FixPoint price = buildItem.price;
-                    int max_x = lround((progress/price)*BUILDERBTN_WIDTH);
-
-                    SDL_Rect progressBar = { dest.x, dest.y, max_x, BUILDERBTN_HEIGHT };
-                    renderFillRect(renderer, &progressBar, COLOR_HALF_TRANSPARENT);
-
-                    if(pBuilder->isWaitingToPlace()) {
-                        SDL_Rect drawLocationWaitingToPlace = calcDrawingRect(pPlaceItTextTexture.get(), dest.x + BUILDERBTN_WIDTH/2, dest.y + BUILDERBTN_HEIGHT/2, HAlign::Center, VAlign::Center);
-                        SDL_RenderCopy(renderer, pPlaceItTextTexture.get(), nullptr, &drawLocationWaitingToPlace);
-                    } else if(pBuilder->isOnHold()) {
-                        SDL_Rect drawLocationOnHold = calcDrawingRect(pOnHoldTextTexture.get(), dest.x + BUILDERBTN_WIDTH/2, dest.y + BUILDERBTN_HEIGHT/2, HAlign::Center, VAlign::Center);
-                        SDL_RenderCopy(renderer, pOnHoldTextTexture.get(), nullptr, &drawLocationOnHold);
-                    } else if(pBuilder->isUnitLimitReached(buildItem.itemID)) {
-                        SDL_Rect drawLocationUnitLimitReached = calcDrawingRect(pUnitLimitReachedTextTexture.get(), dest.x + BUILDERBTN_WIDTH/2, dest.y + BUILDERBTN_HEIGHT/2, HAlign::Center, VAlign::Center);
-                        SDL_RenderCopy(renderer, pUnitLimitReachedTextTexture.get(), nullptr, &drawLocationUnitLimitReached);
-                    }
-                }
-
-                if(buildItem.num > 0) {
-                    // draw number of this in build list
-                    sdl2::texture_ptr pNumberTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", buildItem.num), COLOR_RED, 12);
-                    SDL_Rect drawLocationNumber = calcDrawingRect(pNumberTexture.get(), dest.x + BUILDERBTN_WIDTH - 3, dest.y + BUILDERBTN_HEIGHT + 2, HAlign::Right, VAlign::Bottom);
-                    SDL_RenderCopy(renderer, pNumberTexture.get(), nullptr, &drawLocationNumber);
-                }
-
-                if(pBuilder->isRepeating(buildItem.itemID)) {
-                    // Loop marker: a small ring with an arrowhead in the top right corner.
-                    const int cx = dest.x + BUILDERBTN_WIDTH - 8;
-                    const int cy = dest.y + 8;
-                    const Coord ring[] = { Coord(cx-2,cy-4), Coord(cx+2,cy-4), Coord(cx+4,cy-2), Coord(cx+4,cy+2),
-                                           Coord(cx+2,cy+4), Coord(cx-2,cy+4), Coord(cx-4,cy+2), Coord(cx-4,cy-2) };
-                    SDL_Rect backing{cx-6, cy-6, 13, 13};
-                    renderFillRect(renderer, &backing, COLOR_HALF_TRANSPARENT);
-                    for(int segment = 0; segment < 7; ++segment) {
-                        renderDrawLine(renderer, ring[segment].x, ring[segment].y, ring[segment+1].x, ring[segment+1].y, COLOR_YELLOW);
-                    }
-                    renderDrawLine(renderer, cx-4, cy-2, cx-6, cy-4, COLOR_YELLOW);
-                    renderDrawLine(renderer, cx-4, cy-2, cx-2, cy-5, COLOR_YELLOW);
+                if(pBuilder->isWaitingToPlace()) {
+                    drawCentered(pPlaceItTextTexture.get());
+                } else if(pBuilder->isOnHold()) {
+                    drawCentered(pOnHoldTextTexture.get());
+                } else if(pBuilder->isUnitLimitReached(buildItem.itemID)) {
+                    const bool harvester = buildItem.itemID == Unit_Harvester || buildItem.itemID == Unit_RebelHarvester;
+                    drawCentered(harvester ? pHarvesterLimitReachedTextTexture.get() : pUnitLimitReachedTextTexture.get());
                 }
             }
 
-            i++;
+            if(buildItem.num > 0) {
+                // draw number of this in build list
+                sdl2::texture_ptr pNumberTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", buildItem.num), COLOR_RED, 12);
+                SDL_Rect drawLocationNumber = calcDrawingRect(pNumberTexture.get(), button.x + button.w - 3, button.y + button.h + 2, HAlign::Right, VAlign::Bottom);
+                SDL_RenderCopy(renderer, pNumberTexture.get(), nullptr, &drawLocationNumber);
+            }
+
+            if(pBuilder->isRepeating(buildItem.itemID)) {
+                // Loop marker: a small ring with an arrowhead in the top right corner.
+                const int cx = button.x + button.w - 8;
+                const int cy = button.y + 8;
+                const Coord ring[] = { Coord(cx-2,cy-4), Coord(cx+2,cy-4), Coord(cx+4,cy-2), Coord(cx+4,cy+2),
+                                       Coord(cx+2,cy+4), Coord(cx-2,cy+4), Coord(cx-4,cy+2), Coord(cx-4,cy-2) };
+                SDL_Rect backing{cx-6, cy-6, 13, 13};
+                renderFillRect(renderer, &backing, COLOR_HALF_TRANSPARENT);
+                for(int segment = 0; segment < 7; ++segment) {
+                    renderDrawLine(renderer, ring[segment].x, ring[segment].y, ring[segment+1].x, ring[segment+1].y, COLOR_YELLOW);
+                }
+                renderDrawLine(renderer, cx-4, cy-2, cx-6, cy-4, COLOR_YELLOW);
+                renderDrawLine(renderer, cx-4, cy-2, cx-2, cy-5, COLOR_YELLOW);
+            }
         }
     }
 
+    // The caps frame the list body: CapLeft beyond its left edge, CapRight beyond its right edge.
+    const int capX = blackRectDest.x - Layout::CapLeft;
+    const int capWidth = Layout::CapLeft + Layout::BodyWidth + Layout::CapRight;
     SDL_Texture* pBuilderListUpperCap = pGFXManager->getUIGraphic(UI_BuilderListUpperCap);
-    SDL_Rect builderListUpperCapDest = calcDrawingRect(pBuilderListUpperCap, blackRectDest.x - 3, blackRectDest.y - 13 + 4);
-    SDL_RenderCopy(renderer, pBuilderListUpperCap, nullptr, &builderListUpperCapDest);
+    const int upperCapY = blackRectDest.y - 13 + 4;
+    drawCap(pBuilderListUpperCap, capX, upperCapY, capWidth);
 
     SDL_Texture* pBuilderListLowerCap = pGFXManager->getUIGraphic(UI_BuilderListLowerCap);
-    SDL_Rect builderListLowerCapDest = calcDrawingRect(pBuilderListLowerCap, blackRectDest.x - 3, blackRectDest.y + blackRectDest.h - 3 - 4);
-    SDL_RenderCopy(renderer, pBuilderListLowerCap, nullptr, &builderListLowerCapDest);
+    const int lowerCapY = blackRectDest.y + blackRectDest.h - 3 - 4;
+    drawCap(pBuilderListLowerCap, capX, lowerCapY, capWidth);
 
-    renderDrawVLine(renderer, builderListUpperCapDest.x + builderListUpperCapDest.w - 8, builderListUpperCapDest.y + builderListUpperCapDest.h, builderListLowerCapDest.y, COLOR_RGB(125,80,0));
+    renderDrawVLine(renderer, blackRectDest.x + Layout::BodyWidth, upperCapY + getHeight(pBuilderListUpperCap), lowerCapY, COLOR_RGB(125,80,0));
 
     StaticContainer::draw(position);
 }
@@ -419,21 +498,23 @@ void BuilderList::drawOverlay(Point position) {
             tooltipText = text;
         }
 
-        SDL_Rect dest = calcDrawingRect(pLastTooltip.get(), position.x + getButtonPosition(btn).x - 6, position.y + lastMousePos.y, HAlign::Right, VAlign::Center);
+        // Left of the list, whichever column is hovered, so it never covers the other column.
+        SDL_Rect dest = calcDrawingRect(pLastTooltip.get(), position.x + Layout::BodyLeft - 1, position.y + lastMousePos.y, HAlign::Right, VAlign::Center);
         SDL_RenderCopy(renderer, pLastTooltip.get(), nullptr, &dest);
     }
 }
 
 
 void BuilderList::resize(Uint32 width, Uint32 height) {
-    setWidgetGeometry(  &upButton,Point( (WIDGET_WIDTH - ARROWBTN_WIDTH)/2,-2),upButton.getSize());
+    const int realHeight = Layout::realHeight(height);
+    setWidgetGeometry(  &upButton,Point(ArrowX,-2),upButton.getSize());
     setWidgetGeometry(  &downButton,
-                        Point( (WIDGET_WIDTH - ARROWBTN_WIDTH)/2, getRealHeight(height) - ARROWBTN_HEIGHT - ORDERBTN_HEIGHT - BUILDERBTN_SPACING + 2),
+                        Point(ArrowX, realHeight - Layout::ArrowButtonHeight - Layout::OrderButtonHeight - Layout::Spacing + 2),
                         downButton.getSize());
 
     setWidgetGeometry(  &orderButton,
-                        Point( 0, getRealHeight(height) - ORDERBTN_HEIGHT + 2),
-                        Point(WIDGET_WIDTH,ORDERBTN_HEIGHT));
+                        Point(Layout::BodyLeft, realHeight - Layout::OrderButtonHeight + 2),
+                        Point(Layout::BodyWidth, Layout::OrderButtonHeight));
 
     StaticContainer::resize(width,height);
 
@@ -441,36 +522,18 @@ void BuilderList::resize(Uint32 width, Uint32 height) {
     // that steals the human player's scroll when QuantBot AI triggers relayout)
     BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderObjectID));
     if(pBuilder != nullptr) {
-        auto& buildList = pBuilder->getBuildList();
-        int biggestLegalPosition = std::max(0, ((int)buildList.size()) - getNumButtons(getSize().y));
-        if(currentListPos > biggestLegalPosition) {
-            currentListPos = biggestLegalPosition;
-        }
+        currentListPos = std::min(currentListPos, Layout::maxFirstItem(static_cast<int>(pBuilder->getBuildList().size()), getSize().y));
     }
-}
-
-int BuilderList::getRealHeight(int height) {
-    int tmp = height;
-    tmp -= (ARROWBTN_HEIGHT + BUILDERBTN_SPACING)*2;
-    tmp -= BUILDERBTN_SPACING;
-    tmp -= ORDERBTN_HEIGHT;
-    tmp -= BUILDERBTN_SPACING;
-    int numButtons = tmp / (BUILDERBTN_HEIGHT + BUILDERBTN_SPACING);
-
-    return numButtons * (BUILDERBTN_HEIGHT + BUILDERBTN_SPACING) + 3*BUILDERBTN_SPACING + 2*ARROWBTN_HEIGHT + ORDERBTN_HEIGHT + BUILDERBTN_SPACING;
 }
 
 void BuilderList::onUp() {
-    if(currentListPos > 0) {
-        currentListPos--;
-    }
+    currentListPos = Layout::scrollUp(currentListPos);
 }
 
 void BuilderList::onDown() {
     BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderObjectID));
-
-    if(pBuilder && (currentListPos < ((int)pBuilder->getBuildList().size()) - getNumButtons(getSize().y))) {
-        currentListPos++;
+    if(pBuilder != nullptr) {
+        currentListPos = Layout::scrollDown(currentListPos, static_cast<int>(pBuilder->getBuildList().size()), getSize().y);
     }
 }
 
@@ -482,39 +545,21 @@ void BuilderList::onOrder() {
 }
 
 int BuilderList::getNumButtons(int height) {
-    int tmp = height;
-    tmp -= (ARROWBTN_HEIGHT + BUILDERBTN_SPACING)*2;
-    tmp -= BUILDERBTN_SPACING;
-    tmp -= ORDERBTN_HEIGHT;
-    tmp -= BUILDERBTN_SPACING;
-    return tmp / (BUILDERBTN_HEIGHT + BUILDERBTN_SPACING);
+    return Layout::slots(height);
 }
 
 Point BuilderList::getButtonPosition(int BtnNumber) {
-    return Point(BUILDERBTN_SPACING,
-                    ARROWBTN_HEIGHT+2*BUILDERBTN_SPACING
-                    + BtnNumber*(BUILDERBTN_HEIGHT+BUILDERBTN_SPACING));
-
+    return Point(Layout::slotX(BtnNumber), Layout::slotY(BtnNumber));
 }
 
 int BuilderList::getButton(int x, int y) {
     BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderObjectID));
-
-    if(pBuilder) {
-        for(int i = 0; i < (int) pBuilder->getBuildList().size(); i++) {
-            if((i >= currentListPos) && (i < currentListPos+getNumButtons(getSize().y) )) {
-                if(     (x >= getButtonPosition(i - currentListPos).x)
-                    &&  (x < getButtonPosition(i - currentListPos).x + BUILDERBTN_WIDTH)
-                    &&  (y >= getButtonPosition(i - currentListPos).y)
-                    &&  (y < getButtonPosition(i - currentListPos).y + BUILDERBTN_HEIGHT)) {
-
-                    return i;
-                }
-            }
-        }
+    const int slot = Layout::slotAt(x, y, getSize().y);
+    if(pBuilder == nullptr || slot < 0) {
+        return -1;
     }
-
-    return -1;
+    const int index = currentListPos + slot;
+    return index < static_cast<int>(pBuilder->getBuildList().size()) ? index : -1;
 }
 
 int BuilderList::getItemIDFromIndex(int i) const {
