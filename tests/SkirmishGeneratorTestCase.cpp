@@ -2,6 +2,8 @@
 #include <MapEditor/SkirmishGenerator.h>
 #include <FileClasses/INIFile.h>
 #include <INIMap/ZoneStartLevel.h>
+#include <INIMap/MapMetadata.h>
+#include <INIMap/MapPlayerSectionUtils.h>
 #include <dunecity/CityConstants.h>
 #include <dunecity/CityEffects.h>
 #include <dunecity/ZonePower.h>
@@ -910,4 +912,229 @@ TEST_CASE("Random skirmish: armies have no light infantry and troopers stand fiv
         troopersSeen += troopers;
     }
     REQUIRE(troopersSeen > 5);    // the fixture really exercises bundling
+}
+
+TEST_CASE("Random skirmish: Random army and city are drawn once per map", "[skirmish][generator][random]") {
+    std::set<int> armies, cities;
+    for(uint32_t seed = 1; seed <= 12; ++seed) {
+        Params p = params(160, 2, 3, Mode::DuneCity, 9, seed);
+        p.playerSide = Side{"", BaseSize::Small, kArmyRandom, kCityRandom};
+        p.allySide = Side{"qBotMedium", BaseSize::Small, kArmyRandom, kCityRandom};
+        p.enemySide = Side{"qBotMedium", BaseSize::Small, kArmyRandom, kCityRandom};
+        const Result r = generate(p, city());
+        REQUIRE(r.houses.size() == 6);
+        // Every house set to Random has the same army budget and the same city target.
+        for(const HouseSetup& h : r.houses) {
+            INFO("seed " << seed << " house " << h.house);
+            REQUIRE(h.armyBudget == r.houses[0].armyBudget);
+            REQUIRE(h.cityTarget == r.houses[0].cityTarget);
+        }
+        const int army = r.houses[0].armyBudget, target = r.houses[0].cityTarget;
+        REQUIRE((army >= kArmyRandomMin && army <= kArmyRandomMax && army % 100 == 0));
+        REQUIRE((target >= kCityRandomMin && target <= kCityRandomMax && target % 1000 == 0));
+        armies.insert(army);
+        cities.insert(target);
+        // Deterministic per seed.
+        const Result again = generate(p, city());
+        REQUIRE(again.ini == r.ini);
+        // A side with a preset keeps it; the Random sides still share one draw.
+        p.allySide.army = 3;
+        p.allySide.city = 2;
+        const Result mixed = generate(p, city());
+        for(const HouseSetup& h : mixed.houses) {
+            REQUIRE(h.armyBudget == (h.role == Role::Ally ? kArmyBudgets[3] : army));
+            REQUIRE(h.cityTarget == (h.role == Role::Ally ? kCityTargets[2] : target));
+        }
+    }
+    // ...and different seeds draw different sizes.
+    REQUIRE(armies.size() >= 3);
+    REQUIRE(cities.size() >= 3);
+}
+
+namespace {
+
+/// Item counts of one start: buildings, units or tile entries owned by @a house.
+std::map<int, int> contentsOf(const std::vector<Placement>& placements, int house) {
+    std::map<int, int> counts;
+    for(const Placement& p : placements) if(p.house == house) ++counts[p.item];
+    return counts;
+}
+
+/// The generated map text as the engine reads it.
+struct ParsedMap {
+    explicit ParsedMap(const std::string& text) {
+        SDL_RWops* rw = SDL_RWFromConstMem(text.data(), static_cast<int>(text.size()));
+        ini = std::make_unique<INIFile>(rw);
+        SDL_RWclose(rw);
+    }
+    std::unique_ptr<INIFile> ini;
+};
+
+Params multiplayerParams(int starts, int size, Mode mode, BaseSize base, int army, int city, bool symmetric, int tech, uint32_t seed) {
+    Params p = params(size, 0, 1, mode, tech, seed);
+    p.multiplayer = true;
+    p.starts = starts;
+    p.symmetric = symmetric;
+    p.credits = 5000;
+    p.startSide = Side{"", base, army, city};
+    return p;
+}
+
+}
+
+TEST_CASE("Random skirmish: multiplayer maps have equal open starts the lobby assigns", "[skirmish][generator][multiplayer]") {
+    struct Case { int starts, size; Mode mode; BaseSize base; int army, city; bool symmetric; int tech; };
+    const Case cases[] = {
+        {2, 64, Mode::Vanilla, BaseSize::Small, 2, 0, true, 8},
+        {2, 128, Mode::DuneCity, BaseSize::Medium, kArmyRandom, kCityRandom, true, 9},
+        {3, 128, Mode::Vanilla, BaseSize::Medium, 3, 0, false, 9},
+        {4, 128, Mode::DuneCity, BaseSize::Medium, 3, 2, true, 9},
+        {4, 160, Mode::Vanilla, BaseSize::Large, kArmyRandom, 0, false, 7},
+        {6, 192, Mode::DuneCity, BaseSize::Small, 2, 1, false, 9},
+        {8, 192, Mode::Vanilla, BaseSize::Medium, 3, 0, true, 9},
+    };
+    for(const Case& k : cases) for(uint32_t seed : {3u, 20261015u}) {
+        const Params p = multiplayerParams(k.starts, k.size, k.mode, k.base, k.army, k.city, k.symmetric, k.tech, seed);
+        const Catalogue& houses = k.mode == Mode::DuneCity ? city() : vanilla();
+        const Catalogue starts = startCatalogue(houses, k.starts);
+        const Result r = generate(p, houses);
+        INFO("starts " << k.starts << " size " << k.size << " mode " << static_cast<int>(k.mode) << " seed " << seed);
+        REQUIRE(static_cast<int>(r.houses.size()) == k.starts);
+        REQUIRE(r.ini == generate(p, houses).ini);
+        REQUIRE(r.name.find(std::to_string(k.starts) + " starts") != std::string::npos);
+        requireLegal(r, starts);
+
+        // Every start is open, numbered in order and holds exactly what start 1 holds.
+        // Wall wings beside turrets stop where the rock does, so walls are the one terrain-shaped extra.
+        auto withoutWalls = [](std::map<int, int> counts) { counts.erase(Structure_Wall); return counts; };
+        const auto structures = contentsOf(r.structures, 0), units = contentsOf(r.units, 0), tiles = withoutWalls(contentsOf(r.tiles, 0));
+        REQUIRE(structures.count(Structure_ConstructionYard) == 1);
+        std::vector<Coord> centres;
+        for(int i = 0; i < k.starts; ++i) {
+            const HouseSetup& h = r.houses[i];
+            INFO("start " << i);
+            REQUIRE(h.house == i);
+            REQUIRE(h.role == Role::Open);
+            REQUIRE(h.playerClass.empty());
+            REQUIRE(h.skipped == 0);
+            REQUIRE(h.base == k.base);
+            REQUIRE(contentsOf(r.structures, i) == structures);
+            REQUIRE(contentsOf(r.units, i) == units);
+            REQUIRE(withoutWalls(contentsOf(r.tiles, i)) == tiles);
+            REQUIRE(h.armyBudget == r.houses[0].armyBudget);
+            REQUIRE(h.armySpent == r.houses[0].armySpent);
+            REQUIRE(h.cityTarget == r.houses[0].cityTarget);
+            REQUIRE(h.cityEstimate == r.houses[0].cityEstimate);
+            REQUIRE((h.armyBudget == 0 || h.armySpent * 10 >= h.armyBudget * 9));
+            REQUIRE((h.cityTarget > 0) == (k.mode == Mode::DuneCity && k.city > 0));
+            centres.push_back(h.start);
+        }
+        REQUIRE(groundConnected(r.map, centres));
+
+        // Whatever house the lobby puts on a start can field everything placed there.
+        for(const auto& [item, count] : structures) for(int house : houses.houses) {
+            INFO("structure " << houses.itemNames[item] << " house " << house);
+            REQUIRE(houses.available(item, house, k.tech));
+        }
+        for(const auto& [item, count] : units) for(int house : houses.houses) {
+            if(item == Unit_MCV) continue;
+            INFO("unit " << houses.itemNames[item] << " house " << house);
+            REQUIRE(houses.available(item, house, k.tech));
+        }
+
+        // Lobby-assignable: generic [Player1]..[PlayerN] sections, no house of its own.
+        const ParsedMap parsed(r.ini);
+        const INIFile& ini = *parsed.ini;
+        REQUIRE(MapMetadata::countPlayers(ini) == k.starts);
+        REQUIRE(MapPlayerSectionUtils::countNumberedPlayerSections(8, [&](int n) { return ini.hasSection("Player" + std::to_string(n)); }) == k.starts);
+        for(const char* house : {"Harkonnen", "Atreides", "Ordos", "Fremen", "Sardaukar", "Mercenary", "Neutral", "Rebels"})
+            REQUIRE_FALSE(ini.hasSection(house));
+        for(int i = 1; i <= k.starts; ++i) REQUIRE(ini.getIntValue("Player" + std::to_string(i), "Credits") == 5000);
+        for(const char* section : {"STRUCTURES", "UNITS"})
+            for(const auto& key : ini.getSection(section)) {
+                const std::string owner = key.getStringValue().substr(0, key.getStringValue().find(','));
+                REQUIRE(owner.rfind("Player", 0) == 0);
+                REQUIRE(std::stoi(owner.substr(6)) >= 1);
+                REQUIRE(std::stoi(owner.substr(6)) <= k.starts);
+            }
+        REQUIRE(ini.getStringValue("RANDOMSKIRMISH", "Starts") == std::to_string(k.starts));
+
+        // Mirrored starts: terrain and every start's plateau are mirror images of each other.
+        if(k.symmetric) {
+            const int s = k.size;
+            for(int y = 0; y < s; ++y) for(int x = 0; x < s; ++x) {
+                REQUIRE(r.map(x, y) == r.map(s - 1 - x, s - 1 - y));
+                if(k.starts > 2) REQUIRE(r.map(x, y) == r.map(s - 1 - x, y));
+            }
+            const Rect& first = r.houses[0].plateau;
+            std::set<std::pair<int, int>> corners;
+            for(const HouseSetup& h : r.houses) {
+                REQUIRE(h.plateau.w == first.w);
+                REQUIRE(h.plateau.h == first.h);
+                corners.insert({h.plateau.x, h.plateau.y});
+            }
+            REQUIRE(static_cast<int>(corners.size()) == k.starts);
+            if(k.starts == 2) {
+                REQUIRE(r.houses[1].plateau.x == s - first.x - first.w);
+                REQUIRE(r.houses[1].plateau.y == s - first.y - first.h);
+            }
+            if(k.starts == 4) for(const HouseSetup& h : r.houses) {
+                REQUIRE((h.plateau.x == first.x || h.plateau.x == s - first.x - first.w));
+                REQUIRE((h.plateau.y == first.y || h.plateau.y == s - first.y - first.h));
+            }
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: start catalogue is what every house can field", "[skirmish][generator][multiplayer]") {
+    for(const Catalogue* c : {&vanilla(), &city()}) {
+        const Catalogue starts = startCatalogue(*c, 4);
+        REQUIRE(starts.houses == std::vector<int>{0, 1, 2, 3});
+        REQUIRE(starts.houseNames[0] == "Player1");
+        REQUIRE(starts.houseNames[3] == "Player4");
+        for(int item = ItemID_Invalid + 1; item < Num_ItemID; ++item) {
+            if(c->itemNames[item].empty()) continue;
+            int slowest = 0, price = 0;
+            for(int house : c->houses) {
+                const int level = c->unlockLevel(item, house);
+                slowest = slowest < 0 || level < 0 ? -1 : std::max(slowest, level);
+                price = std::max(price, c->rule(item, house).price);
+            }
+            INFO("item " << c->itemNames[item]);
+            for(int start = 0; start < 4; ++start) {
+                REQUIRE(starts.unlockLevel(item, start) == (starts.rule(item, start).enabled ? slowest : -1));
+                REQUIRE(starts.rule(item, start).price == price);
+            }
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: the multiplayer screen keeps its own choices", "[skirmish][generator][multiplayer]") {
+    INIFile config(false, "");
+    Params single = params(128, 1, 2, Mode::DuneCity, 7, 99);
+    single.mod = "dunecity"; single.symmetric = false;
+    single.save(config);
+    Params hosted;
+    hosted.multiplayer = true; hosted.symmetric = true;
+    hosted.load(config);
+    // Mirrored starts default on for a hosted map although the single-player choice is off.
+    REQUIRE(hosted.symmetric);
+    hosted.mod = "vanilla"; hosted.mode = Mode::Vanilla;
+    hosted.starts = 6; hosted.startSide = Side{"", BaseSize::Large, kArmyRandom, 3};
+    hosted.save(config);
+    // The host's mod is never written over the single-player choice.
+    Params back;
+    back.load(config);
+    REQUIRE(back.mod == "dunecity"); REQUIRE(back.mode == Mode::DuneCity);
+    REQUIRE_FALSE(back.symmetric);
+    REQUIRE(back.starts == 6); REQUIRE(back.startSide.base == BaseSize::Large);
+    REQUIRE(back.startSide.army == kArmyRandom); REQUIRE(back.startSide.city == 3);
+    Params hostedAgain;
+    hostedAgain.multiplayer = true; hostedAgain.symmetric = true;
+    hostedAgain.load(config);
+    REQUIRE(hostedAgain.symmetric);
+    // Starts stay within 2-8 and the engine's house cap.
+    hostedAgain.starts = 12; hostedAgain.clamp(8); REQUIRE(hostedAgain.starts == kMaxStarts);
+    hostedAgain.starts = 12; hostedAgain.clamp(5); REQUIRE(hostedAgain.starts == 5);
+    hostedAgain.starts = 0; hostedAgain.clamp(8); REQUIRE(hostedAgain.starts == kMinStarts);
 }

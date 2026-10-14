@@ -8,8 +8,10 @@ map-editor format and starts it through the normal CustomGame path,
 ## Where it is
 - **Main menu → "Random Skirmish"**, directly below "Custom Game". Deviation from the spec: the
   `SinglePlayerMenu` class is no longer reachable. The main menu is the live single-player menu, so
-  the button goes there. Skirmish and Custom Game are unchanged. The optional "Generate…" entry in
-  Custom Game was not added.
+  the button goes there. Skirmish and Custom Game are unchanged.
+- **Hosting → "Random map..."** in the host's map chooser (`CustomGameMenu`): Multiplayer → LAN or
+  Internet game, and Custom Game's Offline/Online chooser (Play Online hosting). It opens the same
+  screen in multiplayer mode; see [Multiplayer](#multiplayer-random-map) below.
 - Code:
   - `include/MapEditor/SkirmishGenerator.h` and `src/MapEditor/SkirmishGenerator.cpp`: the pure
     generator. No engine globals, no floats, no wall clock.
@@ -75,10 +77,14 @@ Mod, house, AI and AI partner stay drop-downs.
   - AI: every non-support controller in `PlayerFactory`.
   - Base: None (MCV only) / Outpost / Small / Medium / Large / Fortress.
   - Army (credits): 0 / 1,000 / 2,500 / 5,000 / 10,000 / 20,000 credits, or Random. Random is uniform
-    from 1,000 to 20,000 in steps of 100. Armies never buy light infantry; foot soldiers are Troopers,
-    placed up to five to a tile (the engine's `NUM_INFANTRY_PER_TILE`). Vehicles take one tile each.
+    from 1,000 to 20,000 in steps of 100, drawn **once per map** from the seed: every house whose
+    Army is Random (the player's, allies' and enemies') gets that same budget. Armies never buy
+    light infantry; foot soldiers are Troopers, placed up to five to a tile (the engine's
+    `NUM_INFANTRY_PER_TILE`). Vehicles take one tile each.
   - City (DuneCity only): None / 1,000 / 5,000 / 15,000 / 40,000 people, or Random. Random is uniform
-    from 1,000 to 40,000 in steps of 1,000.
+    from 1,000 to 40,000 in steps of 1,000, drawn once per map like the army: every house whose City
+    is Random gets the same target. (Before, each house drew its own.) The unit mix each house buys
+    is still its own, from its own units.
 - The player gets their own Base, Army and City from "You start with", plus an optional AI partner
   sharing their house, on a plateau as large as the largest opponent's.
 
@@ -176,12 +182,60 @@ Mod, house, AI and AI partner stay drop-downs.
   - No new saved state, so no save gate and no `SAVEGAMEVERSION` change. Zone density and residential
     population are already saved.
 - **Save map** writes `<user>/maps/multiplayer/<N>P - <S>x<S> - Random <a>v<e>[ FFA] <Mode> T<tech> <seed>.ini`.
-  The map shows up under Custom Game > MP User Maps and can be hosted. A `[RANDOMSKIRMISH]` section
-  records seed, map seed and per-house plan; the loader ignores it.
+  The map shows up under Custom Game > MP User Maps and can be hosted (its houses are fixed; the
+  multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed
+  and per-house plan; the loader ignores it.
 - If a crowded map cannot fit everything (for example many houses on 64x64), the items that do not
   fit are skipped. They are counted in `HouseSetup::skipped`, and the screen reports them.
 
+## Multiplayer Random map
+Stefan's ask: "make random skirmish available for multiplayer … players can join and replace ai so
+no enemies and allies, you set that in the next screen where the players join after map is
+generated", and "random settings on army and city must apply equally to each player".
+
+- **Flow:** the host opens Custom Game as usual (LAN / Internet game, or Custom Game → Online) and
+  presses **Random map...** beside Load/Next. The **Random Map** screen
+  (`RandomSkirmishMenu(hostMod)`) offers:
+  - Map: Size, Rock, Spice, Mirrored starts (on by default here, saved separately as
+    `Multiplayer Symmetric`), Seed, Keep this seed — the same controls as single player.
+  - Game: the host's mod (shown, not chosen: the map chooser's Mod box stays the one mod picker),
+    Credits, Tech level. Game Rules stay on the map chooser's Game Options / Game Rules button.
+  - Players: **Start positions** 2–8 (and within the engine's custom-game house cap).
+  - **Every house starts with** Base / Army / City, applied to every start (Random draws once).
+  - No allies/enemies counts, no house, no AI type, no AI partner: the lobby decides those.
+  - **Next** generates, refuses a map whose starts would not be equal (anything skipped on a
+    crowded map; it asks for a larger map, a smaller start or fewer starts), saves the map to the
+    user `maps/multiplayer/` folder exactly like Save map, and closes. The map chooser switches to
+    MP User Maps with its filters cleared, selects the file (the online setup also adds it to its
+    map list) and continues as its own Next does, into `CustomGamePlayers`.
+- **Map format:** the starts are generic `[Player1]..[PlayerN]` sections (with `Credits=`), and
+  every structure, tile and unit belongs to `PlayerK`, as bundled multiplayer maps declare them.
+  The lobby counts them (`MapPlayerSectionUtils`) and shows N rows; humans join and take rows,
+  empty rows can be AI or closed, houses (or Random) and teams are chosen there. `INIMapLoader`
+  binds each playing house to one of the Player sections with the match's synchronized random
+  generator, as for any bundled multiplayer map. Map transfer, checksums, saves and replays are
+  the normal ones: nothing in the lobby, network or save format changed (protocol 74, save 9860
+  untouched).
+- **Equal starts:** each start is planned with `startCatalogue()`: an item is used only if every
+  custom-game house can field it at the chosen tech level, at the slowest house's unlock level,
+  the dearest price and the least favourable power. So whichever house sits on a start can build
+  and field what it holds. All starts share one plan and one army stream: the same buildings,
+  the same units, the same army value and the same city (same lots and levels). Only positions
+  differ, laid out on each start's own plateau, and the wall wings beside turrets, which stop
+  where the rock does. Every start is its own team for the layout (bases face the nearest start).
+- **Mirrored:** 2 starts are point-mirrored, more use both axes, exactly as single player; every
+  start's plateau is a mirror image of the others' for 2 and 4 starts (8 adds the edge slots).
+- **Name:** `<N>P - <S>x<S> - Random <N> starts <Mode> T<tech> <seed>.ini`; `[RANDOMSKIRMISH]`
+  records `Starts=N` and each `PlayerK=Open,<Base>,Army<spent>/<budget>,City<estimate>/<target>`.
+- **Persistence** (`[Random Skirmish]`): `Multiplayer Starts`, `Start Base/Army/City`,
+  `Multiplayer Symmetric`; the hosted screen never writes `Mod`/`Mode`, so the single-player screen
+  keeps its own mod. Both screens keep each other's choices.
+
 ## Limits and deviations
+- Multiplayer starts use only what every custom-game house can field, so a house-specific item
+  (where a mod restricts one) never appears on a hosted random map even for the house that has it.
+- Multiplayer starts are equal in contents, not in placement: each start's base is laid out on
+  its own plateau, and wall wings beside turrets stop where the rock does.
 - A Fortress's own garrison (Palace, Barracks, WOR) is already about 1,000 people. For the 1,000-person
   preset with a Fortress base, no zones are added and the city starts at the base's own population,
   up to about 1,300. This is the only case outside ±25%, and the unit test pins it.
@@ -221,12 +275,41 @@ Mod, house, AI and AI partner stay drop-downs.
     many rows and columns.
   - Zone-level parsing: bundled maps parse as "no level", and malformed fields are rejected.
   - Last-used parameters round-trip through the config file, and corrupt values are clamped.
+  - Random Army/City (`[random]`): over 12 seeds on a 6-house DuneCity map, every house set to
+    Random shares one army budget and one city target, in range, deterministic per seed; a side
+    with a preset keeps it while the Random sides still share; different seeds draw at least
+    3 different sizes.
+  - Multiplayer (`[multiplayer]`): 2, 3, 4, 6 and 8 starts (64–192, vanilla and DuneCity,
+    mirrored or not, Random army/city included, two seeds each): N open starts in order, no
+    house section, `Player1..N` sections the lobby counts with the map's credits, every
+    `[STRUCTURES]`/`[UNITS]` owner a `PlayerK`; every start holds the same building and unit
+    multiset, tile entries (walls aside), army value and city target/estimate, nothing skipped;
+    every placed building and unit is available to every house; legal tiles and connected starts;
+    mirrored terrain and mirrored plateaus. `startCatalogue()` equals the slowest house's unlock
+    level and dearest price for every item. The hosted screen's choices round-trip without
+    overwriting the single-player mod or layout; starts clamp to 2–8 and the house cap.
 - `ctest --test-dir build -R skirmish_generator_probe` (`tests/skirmish/run-skirmish-probe.py`, real
   engine, isolated profiles) runs these cases:
   - **menu:** at 640x480 and 1280x720, checks house choices and the enemy cap, persistence across
     reopening, and that Save map writes the file. Screenshots are saved as
     `build/skirmish-probe/random-skirmish*.bmp`.
   - **legacy-map:** Metropolis loads with all 2,478 zones at level 0.
+  - **mp-lobby:** the multiplayer path on the real menus and engine, DuneCity, 128, 4 starts,
+    Medium, Random army, 5,000 cities, seed 20261015. LAN-host Custom Game shows Random map...
+    (single-player Custom Game does not); the Random Map screen has none of the single-player
+    controls, mirrors by default and offers 2–8 starts (screenshot `mp-random-map-1024x768.bmp`);
+    Next saves exactly the generated map; the LAN host's map chooser selects it
+    (`mp-map-chosen-1024x768.bmp`) and the Online setup's Next hands it to its players step.
+    The lobby opened as `onNext` opens it shows 4 rows; the host sits in row 1, a guest is seated
+    as a join seats it, two QuantBot Easy fill the rest, houses Atreides/Harkonnen/Random/Ordos,
+    teams 1/2/1/2 (`mp-lobby-1024x768.bmp`). The guest's lobby is built from the host's game info
+    read back from the wire format (40,781 map bytes, unchanged) plus the host's roster events,
+    and starts byte-identical settings. Both peers start the match: 4 houses, each on its own
+    start with exactly that start's 27 structures and 34 units, 5,000 credits, the lobby's teams
+    and controllers, each peer controlling its own house; after one minute (3,750 cycles, clean
+    log) both report the same state digest. This is two peers in one process: the repository's
+    only socket-level two-peer harness (`tests/network/run-late-join-probe.py`) needs a local PHP
+    signalling service and WebRTC and is not part of ctest, so it was not run.
   - **vanilla-1v1** (64): 8 enemy structures, army 2500/2500, power 200/95 (a tenth spare means
     2 wind traps). Every case also checks players per house and the player's own base.
   - **allied-2v3** (128, Large, 10k): 5 houses with the right teams, 36–37 structures each,

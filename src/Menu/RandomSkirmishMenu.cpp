@@ -102,6 +102,7 @@ namespace {
 
 constexpr int kRowGap = 3;
 constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (5) + You start with (5)
+constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
 
 /// AI that may share the player's house: the co-op partner list of Custom Game.
 const char* const kPartnerClasses[] = {"qBotSupportEasy", "qBotSupportMedium", "qBotSupportHard", "qBotSupportBrutal",
@@ -160,7 +161,12 @@ void fillSide(Slider& base, Slider& army, Slider& city) {
 
 }
 
-RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
+RandomSkirmishMenu::RandomSkirmishMenu() : RandomSkirmishMenu(false, std::string()) {}
+
+RandomSkirmishMenu::RandomSkirmishMenu(const std::string& hostMod) : RandomSkirmishMenu(true, hostMod) {}
+
+RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& hostMod)
+ : MenuBase(), multiplayer(multiplayer), hostMod(hostMod) {
     SDL_Texture* background = pGFXManager->getUIGraphic(UI_MenuBackground);
     setBackground(background);
     resize(getTextureSize(background));
@@ -171,8 +177,8 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
 
     const int width = getSize().x, height = getSize().y;
     // Rows fit between the title and the status line, however short the window.
-    rowPitch = std::clamp((height - 44 - 70) / kLeftColumnRows, 18, 25);
-    title.setText(_("Random Skirmish"));
+    rowPitch = std::clamp((height - 44 - 70) / (multiplayer ? kMultiplayerRows : kLeftColumnRows), 18, 25);
+    title.setText(multiplayer ? _("Random Map") : _("Random Skirmish"));
     title.setTextFontSize(22);
     title.setAlignment(Alignment_HCenter);
     windowWidget.addWidget(&title, Point(0, 8), Point(width, 30));
@@ -186,30 +192,8 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     newSeedButton.setText(_("New"));
     newSeedButton.setOnClick([this]() { onNewSeed(); });
     fixedSeedBox.setText(_("Keep this seed"));
-
-    houseBox.addEntry(_("Random"), HOUSE_INVALID);
-    for(int h = 0; h < NUM_HOUSES; ++h)
-        if(isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h))) houseBox.addEntry(getHouseNameByNumber(static_cast<HOUSETYPE>(h)), h);
     for(int credits : kCreditPresets) creditsBox.addEntry(withThousands(credits), credits);
-    // Every installed mod, as in Custom Game. City size only applies to a mod that runs the city sim.
-    availableMods = ModManager::instance().listModChoices();
-    for(size_t i = 0; i < availableMods.size(); ++i) modBox.addEntry(availableMods[i].selectionLabel(), static_cast<int>(i));
-    modBox.setOnSelectionChange([this](bool) { onModChanged(); });
     for(int level = 1; level <= 9; ++level) techBox.addEntry(std::to_string(level), level);
-    alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(true); });
-    enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(false); });
-    enemiesAlliedBox.setText(_("Enemies are allied"));
-
-    fillAI(allyAIBox);
-    fillAI(enemyAIBox);
-    fillSide(allyBaseBox, allyArmyBox, allyCityBox);
-    fillSide(enemyBaseBox, enemyArmyBox, enemyCityBox);
-    fillSide(playerBaseBox, playerArmyBox, playerCityBox);
-    partnerBox.addEntry(_("None"), -1);
-    for(const char* playerClass : kPartnerClasses) {
-        const int index = PlayerFactory::getIndexByPlayerClass(playerClass);
-        if(index >= 0) partnerBox.addEntry(PlayerFactory::getByIndex(index)->getName(), index);
-    }
 
     int row = 0;
     addHeader(0, row++, _("Map"));
@@ -220,34 +204,86 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addRow(0, row++, _("Seed"), &seedBox);
     addRow(0, row++, "", &fixedSeedBox);
     addHeader(0, row++, _("Game"));
-    addRow(0, row++, _("Mod"), &modBox);
-    addRow(0, row++, _("Your house"), &houseBox);
-    addRow(0, row++, _("Credits"), &creditsBox);
-    addRow(0, row++, _("Tech level"), &techBox);
-    addHeader(0, row++, _("You start with"));
-    addRow(0, row++, _("AI partner"), &partnerBox);
-    addRow(0, row++, _("Base"), &playerBaseBox);
-    addRow(0, row++, _("Army (credits)"), &playerArmyBox);
-    addRow(0, row++, _("City"), &playerCityBox);
-    playerCityCaption = &captions[usedCaptions - 1];
 
-    row = 0;
-    addHeader(1, row++, _("Players"));
-    addRow(1, row++, _("Allies"), &alliesBox);
-    addRow(1, row++, _("Enemies"), &enemiesBox);
-    addRow(1, row++, "", &enemiesAlliedBox);
-    addHeader(1, row++, _("Allies start with"));
-    addRow(1, row++, _("AI"), &allyAIBox);
-    addRow(1, row++, _("Base"), &allyBaseBox);
-    addRow(1, row++, _("Army (credits)"), &allyArmyBox);
-    addRow(1, row++, _("City"), &allyCityBox);
-    allyCityCaption = &captions[usedCaptions - 1];
-    addHeader(1, row++, _("Enemies start with"));
-    addRow(1, row++, _("AI"), &enemyAIBox);
-    addRow(1, row++, _("Base"), &enemyBaseBox);
-    addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
-    addRow(1, row++, _("City"), &enemyCityBox);
-    enemyCityCaption = &captions[usedCaptions - 1];
+    if(multiplayer) {
+        // The host's game: its mod (chosen in the map list) and Game Rules stay there. Who plays
+        // each start, their houses and teams are the lobby's; every start begins the same.
+        std::string modLabel = hostMod;
+        for(const ModInfo& mod : ModManager::instance().listModChoices())
+            if(mod.matchesSelectionName(hostMod)) modLabel = mod.selectionLabel();
+        hostModLabel.setText(modLabel);
+        hostModLabel.setTextFontSize(13);
+        addRow(0, row++, _("Mod"), &hostModLabel);
+        addRow(0, row++, _("Credits"), &creditsBox);
+        addRow(0, row++, _("Tech level"), &techBox);
+
+        for(int starts = kMinStarts; starts <= std::max(kMinStarts, maxStarts(houseCount)); ++starts)
+            startsBox.addEntry(std::to_string(starts), starts);
+        fillSide(startBaseBox, startArmyBox, startCityBox);
+        row = 0;
+        addHeader(1, row++, _("Players"));
+        addRow(1, row++, _("Start positions"), &startsBox);
+        addHeader(1, row++, _("Every house starts with"));
+        addRow(1, row++, _("Base"), &startBaseBox);
+        addRow(1, row++, _("Army (credits)"), &startArmyBox);
+        addRow(1, row++, _("City"), &startCityBox);
+        startCityCaption = &captions[usedCaptions - 1];
+        lobbyNote.setText(_("Humans join and take starts in the next screen. Empty starts can be AI or closed; houses and teams are chosen there too."));
+        lobbyNote.setTextFontSize(12);
+        windowWidget.addWidget(&lobbyNote, Point(columnX(width, 1) + 8, 44 + row * rowPitch),
+                               Point(columnSpan(width) - 8, 3 * rowPitch));
+    } else {
+        houseBox.addEntry(_("Random"), HOUSE_INVALID);
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(isCustomGameHouseAvailable(static_cast<HOUSETYPE>(h))) houseBox.addEntry(getHouseNameByNumber(static_cast<HOUSETYPE>(h)), h);
+        // Every installed mod, as in Custom Game. City size only applies to a mod that runs the city sim.
+        availableMods = ModManager::instance().listModChoices();
+        for(size_t i = 0; i < availableMods.size(); ++i) modBox.addEntry(availableMods[i].selectionLabel(), static_cast<int>(i));
+        modBox.setOnSelectionChange([this](bool) { onModChanged(); });
+        alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(true); });
+        enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(false); });
+        enemiesAlliedBox.setText(_("Enemies are allied"));
+
+        fillAI(allyAIBox);
+        fillAI(enemyAIBox);
+        fillSide(allyBaseBox, allyArmyBox, allyCityBox);
+        fillSide(enemyBaseBox, enemyArmyBox, enemyCityBox);
+        fillSide(playerBaseBox, playerArmyBox, playerCityBox);
+        partnerBox.addEntry(_("None"), -1);
+        for(const char* playerClass : kPartnerClasses) {
+            const int index = PlayerFactory::getIndexByPlayerClass(playerClass);
+            if(index >= 0) partnerBox.addEntry(PlayerFactory::getByIndex(index)->getName(), index);
+        }
+
+        addRow(0, row++, _("Mod"), &modBox);
+        addRow(0, row++, _("Your house"), &houseBox);
+        addRow(0, row++, _("Credits"), &creditsBox);
+        addRow(0, row++, _("Tech level"), &techBox);
+        addHeader(0, row++, _("You start with"));
+        addRow(0, row++, _("AI partner"), &partnerBox);
+        addRow(0, row++, _("Base"), &playerBaseBox);
+        addRow(0, row++, _("Army (credits)"), &playerArmyBox);
+        addRow(0, row++, _("City"), &playerCityBox);
+        playerCityCaption = &captions[usedCaptions - 1];
+
+        row = 0;
+        addHeader(1, row++, _("Players"));
+        addRow(1, row++, _("Allies"), &alliesBox);
+        addRow(1, row++, _("Enemies"), &enemiesBox);
+        addRow(1, row++, "", &enemiesAlliedBox);
+        addHeader(1, row++, _("Allies start with"));
+        addRow(1, row++, _("AI"), &allyAIBox);
+        addRow(1, row++, _("Base"), &allyBaseBox);
+        addRow(1, row++, _("Army (credits)"), &allyArmyBox);
+        addRow(1, row++, _("City"), &allyCityBox);
+        allyCityCaption = &captions[usedCaptions - 1];
+        addHeader(1, row++, _("Enemies start with"));
+        addRow(1, row++, _("AI"), &enemyAIBox);
+        addRow(1, row++, _("Base"), &enemyBaseBox);
+        addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
+        addRow(1, row++, _("City"), &enemyCityBox);
+        enemyCityCaption = &captions[usedCaptions - 1];
+    }
 
     // The seed field shares its row with the "New" button.
     const int columnWidth = columnSpan(width);
@@ -264,26 +300,43 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
 
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { onCancel(); });
-    rulesButton.setText(_("Game rules..."));
-    rulesButton.setOnClick([this]() { onGameRules(); });
-    saveButton.setText(_("Save map"));
-    saveButton.setOnClick([this]() { onSaveMap(); });
-    startButton.setText(_("Start"));
-    startButton.setOnClick([this]() { onStart(); });
-    // Back on the left, Start on the right, Game rules and Save map between them.
     const int left = columnX(width, 0), span = contentWidth(width);
     const int buttonWidth = std::min(160, (span - 3 * 16) / 4);
     const int gap = (span - 4 * buttonWidth) / 3;
-    TextButton* buttons[] = {&backButton, &rulesButton, &saveButton, &startButton};
-    for(int i = 0; i < 4; ++i)
-        windowWidget.addWidget(buttons[i], Point(left + i * (buttonWidth + gap), height - 38), Point(buttonWidth, 28));
-    startButton.setActive();
+    if(multiplayer) {
+        // Back on the left, Next (save the map and choose players) on the right.
+        nextButton.setText(_("Next"));
+        nextButton.setOnClick([this]() { onCreateMap(); });
+        windowWidget.addWidget(&backButton, Point(left, height - 38), Point(buttonWidth, 28));
+        windowWidget.addWidget(&nextButton, Point(left + 3 * (buttonWidth + gap), height - 38), Point(buttonWidth, 28));
+        nextButton.setActive();
+    } else {
+        rulesButton.setText(_("Game rules..."));
+        rulesButton.setOnClick([this]() { onGameRules(); });
+        saveButton.setText(_("Save map"));
+        saveButton.setOnClick([this]() { onSaveMap(); });
+        startButton.setText(_("Start"));
+        startButton.setOnClick([this]() { onStart(); });
+        // Back on the left, Start on the right, Game rules and Save map between them.
+        TextButton* buttons[] = {&backButton, &rulesButton, &saveButton, &startButton};
+        for(int i = 0; i < 4; ++i)
+            windowWidget.addWidget(buttons[i], Point(left + i * (buttonWidth + gap), height - 38), Point(buttonWidth, 28));
+        startButton.setActive();
+    }
 
     Params params;
+    params.multiplayer = multiplayer;
+    // A hosted game starts on mirrored, equal starts unless the host turned that off before.
+    params.symmetric = multiplayer;
     params.seed = freshSeed();
     params.load(INIFile(getConfigFilepath()));
+    if(multiplayer) {
+        params.mod = hostMod;
+        params.mode = RandomSkirmish::modeForMod(hostMod);
+    }
     if(!params.fixedSeed) params.seed = freshSeed();
     params.clamp(houseCount);
+    loaded = params;
     showParams(params);
 }
 
@@ -345,6 +398,11 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(playerBaseBox, static_cast<int>(params.playerSide.base));
     selectData(playerArmyBox, params.playerSide.army);
     selectData(playerCityBox, params.playerSide.city);
+    // Multiplayer: the number of starts and what every one of them begins with.
+    selectData(startsBox, params.starts);
+    selectData(startBaseBox, static_cast<int>(params.startSide.base));
+    selectData(startArmyBox, params.startSide.army);
+    selectData(startCityBox, params.startSide.city);
     // Fixed ranges (allies 0-6, enemies 1-7, within the engine's house cap); the sum is kept
     // within kMaxOtherHouses by onPlayersChanged.
     const int others = maxOtherHouses(houseCount);
@@ -377,6 +435,7 @@ void RandomSkirmishMenu::onPlayersChanged(bool alliesMoved) {
 }
 
 std::string RandomSkirmishMenu::selectedMod() const {
+    if(multiplayer) return hostMod;
     const int index = modBox.getSelectedEntryIntData();
     return index >= 0 && index < static_cast<int>(availableMods.size()) ? availableMods[index].name : std::string();
 }
@@ -384,12 +443,13 @@ std::string RandomSkirmishMenu::selectedMod() const {
 void RandomSkirmishMenu::onModChanged() {
     // City size exists only for a mod that runs the city simulation; other mods hide the rows.
     const bool city = RandomSkirmish::modeForMod(selectedMod()) == Mode::DuneCity;
-    for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox,
-                                                        allyCityCaption, enemyCityCaption, playerCityCaption})
+    for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox, &startCityBox,
+                                                        allyCityCaption, enemyCityCaption, playerCityCaption, startCityCaption})
         if(widget != nullptr) widget->setVisible(city);
     allyCityBox.setEnabled(city && alliesBox.getSelectedEntryIntData() > 0);
     enemyCityBox.setEnabled(city);
     playerCityBox.setEnabled(city);
+    startCityBox.setEnabled(city);
 }
 
 void RandomSkirmishMenu::onNewSeed() {
@@ -397,7 +457,8 @@ void RandomSkirmishMenu::onNewSeed() {
 }
 
 Params RandomSkirmishMenu::readParams() const {
-    Params params;
+    // Starts from the last-used choices, so the ones this mode does not show are kept as they were.
+    Params params = loaded;
     params.mapSize = sizeBox.getSelectedEntryIntData();
     params.rock = static_cast<Rock>(rockBox.getSelectedEntryIntData());
     params.spice = static_cast<Spice>(spiceBox.getSelectedEntryIntData());
@@ -408,11 +469,19 @@ Params RandomSkirmishMenu::readParams() const {
         params.seed = static_cast<uint32_t>(std::min<unsigned long long>(value, 0xFFFFFFFFull));
     }
     params.fixedSeed = fixedSeedBox.isChecked();
-    params.house = houseBox.getSelectedEntryIntData();
     params.credits = creditsBox.getSelectedEntryIntData();
     params.mod = selectedMod();
     params.mode = RandomSkirmish::modeForMod(params.mod);
     params.techLevel = techBox.getSelectedEntryIntData();
+    if(multiplayer) {
+        params.starts = startsBox.getSelectedEntryIntData();
+        params.startSide.base = static_cast<BaseSize>(startBaseBox.getSelectedEntryIntData());
+        params.startSide.army = startArmyBox.getSelectedEntryIntData();
+        params.startSide.city = startCityBox.getSelectedEntryIntData();
+        params.clamp(houseCount);
+        return params;
+    }
+    params.house = houseBox.getSelectedEntryIntData();
     params.allies = alliesBox.getSelectedEntryIntData();
     params.enemies = enemiesBox.getSelectedEntryIntData();
     params.enemiesAllied = enemiesAlliedBox.isChecked();
@@ -488,6 +557,33 @@ void RandomSkirmishMenu::onSaveMap() {
     const std::string path = RandomSkirmish::saveMap(result);
     openWindow(MsgBox::create(path.empty() ? _("The map could not be saved.")
                                            : _("Saved as") + "\n" + result.name + ".ini\n" + _("(Custom Game > MP User Maps)")));
+}
+
+void RandomSkirmishMenu::onCreateMap() {
+    Params params;
+    Result result;
+    if(!generate(params, result)) return;
+    // Every start must hold the same base, army and city: a start that lost items to a crowded
+    // map would not, so the host is asked for more room instead.
+    int skipped = 0;
+    for(const auto& house : result.houses) skipped += house.skipped;
+    if(skipped > 0) {
+        openWindow(MsgBox::create(_("The starts do not fit on this map: ") + std::to_string(skipped)
+            + _(" planned buildings/units were left out, so the starts would not be equal.\nTry a larger map, a smaller start or fewer start positions.")));
+        return;
+    }
+    const std::string path = RandomSkirmish::saveMap(result);
+    if(path.empty()) {
+        openWindow(MsgBox::create(_("The map could not be saved.")));
+        return;
+    }
+    if(!params.fixedSeed) {
+        // The next visit offers a new map; this one stays in MP User Maps under its name.
+        params.seed = freshSeed();
+        remember(params);
+    }
+    createdMap = path;
+    quit();
 }
 
 void RandomSkirmishMenu::onCancel() {
