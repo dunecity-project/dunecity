@@ -189,6 +189,7 @@ public:
         bool            leftClickOrders = false;
         bool            showMovementPaths = true;
         bool            formationMoves = true;    ///< Move groups of 2+ ground units in formation (Ctrl+F)
+        int             formationShape = 0;       ///< FormationPlanner::Shape of player formation orders (Ctrl+Shift+F, unit panel)
 #ifdef __EMSCRIPTEN__
         static constexpr bool defaultDiagnosticLogs = false;
 #else

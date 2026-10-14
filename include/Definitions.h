@@ -137,7 +137,11 @@
 //       MOD7 spice income block (docs/preplace-queue.md). A 9857 build does not know
 //       MOD8 and would load such a save as vanilla, so it must refuse it. A 9857 save
 //       loads with the rule on, the only behaviour 9857 had by default.
-#define SAVEGAMEVERSION     9858
+// 9859: Formation shapes and hunting in formation (docs/formations.md): UnitBase records
+//       whether its formation is a hunting one, which the first contact of any member
+//       breaks into a fight, and the formation's facing, along which the march keeps sonic
+//       lanes clear. A 9858 or older save loads every formation as a plain march without a facing.
+#define SAVEGAMEVERSION     9859
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

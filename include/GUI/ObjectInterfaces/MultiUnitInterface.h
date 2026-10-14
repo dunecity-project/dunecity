@@ -35,6 +35,8 @@
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
+#include <GUI/ObjectInterfaces/FormationBar.h>
+#include <FormationOrders.h>
 
 #include <units/UnitBase.h>
 #include <units/MCV.h>
@@ -129,6 +131,10 @@ protected:
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
             &destructButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
+
+        // The formation choice for the next group order (docs/formations.md).
+        buttonVBox.addWidget(VSpacer::create(buttonGap));
+        buttonVBox.addWidget(&formationBar);
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
 
@@ -346,10 +352,14 @@ protected:
         bool bShowDevastate = false;
         bool bShowRepair = false;
         bool bShowCarryallDrop = false;
+        int ownGroundUnits = 0;
 
         for(const Uint32 selectedUnitID : currentGame->getSelectedList()) {
             ObjectBase* pObject = currentGame->getObjectManager().getObject(selectedUnitID);
             UnitBase* pUnit = dynamic_cast<UnitBase*>(pObject);
+            if(pUnit != nullptr && pUnit->getOwner() == pLocalHouse && FormationOrders::eligible(pUnit)) {
+                ++ownGroundUnits;
+            }
             if(pUnit != nullptr) {
                 ATTACKMODE attackMode = pUnit->getAttackMode();
                 bGuard = bGuard && (attackMode == GUARD);
@@ -410,6 +420,7 @@ protected:
         sendToRepairButton.setVisible(bShowRepair);
         carryallDropButton.setVisible(bShowCarryallDrop && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops);
         actionBar.refresh();
+        formationBar.refresh(ownGroundUnits >= FormationOrders::kMinPlayerGroup);
 
         guardButton.setToggleState( bGuard );
         areaGuardButton.setToggleState( bAreaGuard );
@@ -429,6 +440,7 @@ protected:
     HBox            buttonHBox;
     VBox            buttonVBox;
     UnitActionBar   actionBar;
+    FormationBar    formationBar;
 
     SymbolButton    movementPathsButton;
     SymbolButton    moveButton;

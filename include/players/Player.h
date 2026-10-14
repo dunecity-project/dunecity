@@ -275,16 +275,19 @@ protected:
 
     /**
         Moves a chosen group as one formation (docs/formations.md): FormationOrders plans a
-        slot per unit, each unit is sent to its slot with doMove2Pos, and the group keeps the
-        slowest member's pace. With fewer than FormationOrders::kMinAIGroup eligible ground
-        units every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the list
-        always do.
+        Combined-arms slot per unit (FormationOrders::kAIShape: tanks in front, scouts ahead,
+        nothing in a sonic lane), each unit is sent to its slot with doMove2Pos, and the group
+        keeps the slowest member's pace. With fewer than FormationOrders::kMinAIGroup eligible
+        ground units every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the
+        list always do.
     */
     void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const;
 
     /**
-        doHuntToward() for a chosen group: each unit hunts its way to its own formation slot
-        around x,y, at the group's pace. Same fallback as doFormationMove().
+        Hunting in formation: each unit hunts its way (doHuntToward) to its own Combined-arms
+        slot around x,y at the group's pace, and the first contact any member makes breaks the
+        whole group into a fight (FormationOrders::breakHunt). Same fallback as
+        doFormationMove(), with doHuntToward to x,y.
     */
     void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const;
 

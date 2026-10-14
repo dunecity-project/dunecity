@@ -439,6 +439,15 @@ public:
     void toggleMovementPaths();
     /// Ctrl+F: switches "Move groups in formation" and persists it (docs/formations.md).
     void toggleFormationMoves();
+    /// Ctrl+Shift+F: the next formation shape (Box, Combined arms, Line, Column), switching
+    /// formations on; persisted (docs/formations.md).
+    void cycleFormationShape();
+    /**
+        The formation choice of the unit panel's buttons: off, or on in shape 'shapeIndex'
+        (FormationPlanner::Shape). Persisted as General/Formation Moves and Formation Shape;
+        applies to the next move, attack-move or patrol order.
+    */
+    void chooseFormation(bool on, int shapeIndex);
     bool canSkipMission() const;
 
     /**
@@ -760,11 +769,15 @@ private:
         The formation part of a move or action click (docs/formations.md). With "Move groups
         in formation" on, the selected ground units of the local house that this click simply
         moves (no target under the cursor for an action click) are planned as one formation
-        with FormationOrders::planGroup and sent one CMD_UNIT_FORMATION_MOVE each. Fewer than
-        two such units, the setting off or an invalid tile issue nothing.
+        in the chosen shape with FormationOrders::planGroup and sent one
+        CMD_UNIT_FORMATION_MOVE each. Fewer than two such units, the setting off or an
+        invalid tile issue nothing.
         \return the ids of the units that were ordered; the caller handles everything else
     */
     std::set<Uint32> issueSelectedFormationMove(int xPos, int yPos, bool actionClick);
+
+    /// A fresh group token for the local player's next formation order (client side only).
+    Uint32 nextFormationToken();
 
 
     /**
@@ -812,8 +825,11 @@ public:
     /**
         The single place that turns a player position order for a group of units into
         commands (docs/rts-controls.md): attack-move, patrol and Shift-queued waypoints.
-        Every unit currently gets \a target itself; a formation planner computes per-unit
-        destinations here. Units must be the local player's respondable units.
+        With "Move groups in formation" on, every eligible unit gets its own slot of a
+        formation in the chosen shape (docs/formations.md); an attack-move or patrol that
+        replaces the orders becomes a hunt in formation (CMD_UNIT_FORMATION_HUNT: the group's
+        pace until any member meets the enemy, then every member fights). Units must be the
+        local player's respondable units.
         \param  kind    move, attack-move or patrol
         \param  units   the units to order
         \param  target  the clicked map tile

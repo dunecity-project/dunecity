@@ -185,23 +185,40 @@ public:
         or, without a slot, keeps its own order - no faster than the group's speed cap, unless
         it is lagging behind the group. Set only through FormationOrders::join(). Any new order
         from a player or an AI, a carryall pickup, deviation, arrival, contact with an enemy or
-        being the last member left ends it. Saved from SAVEGAMEVERSION 9857.
+        being the last member left ends it. Saved from SAVEGAMEVERSION 9857; the hunt flag
+        and the facing from 9859. In a hunting formation the first contact of any member, or a hit on one,
+        breaks the whole group into a fight (FormationOrders::breakHunt).
     */
     bool isInFormation() const { return formationGroup != 0; }
     Uint32 getFormationGroup() const { return formationGroup; }
     const Coord& getFormationSlot() const { return formationSlot; }
     FixPoint getFormationSpeedCap() const { return formationSpeedCap; }
     bool isFormationCatchingUp() const { return formationCatchUp; }
+    bool isFormationHunt() const { return formationGroup != 0 && formationHunt; }
+    /// The formation's facing (FormationPlanner::facingCode; 0 = none), saved from 9859.
+    Uint8 getFormationFacing() const { return formationGroup != 0 ? formationFacing : 0; }
+    /// The tile this unit moves to while isMoving().
+    const Coord& getNextSpot() const { return nextSpot; }
     /// Joins formation groupID heading for slot (invalid: keep the current order), capped
     /// at this unit's own reference speed until FormationOrders::join sets the group's.
-    void joinFormation(Uint32 groupID, const Coord& slot);
+    void joinFormation(Uint32 groupID, const Coord& slot, bool hunt = false, Uint8 facing = 0);
     void setFormationSpeedCap(FixPoint cap) { formationSpeedCap = cap; }
     /// Per-cycle catch-up decision (FormationPlanner::runsAtFullSpeed), made before units move.
     void setFormationCatchUp(bool catchUp) { formationCatchUp = catchUp; }
     void leaveFormation();
     /// The pace this unit sets in a formation: its speed on open sand, undamaged, unloaded, off-road.
     FixPoint getFormationReferenceSpeed() const;
-    /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to move?
+    /// Contact: the enemy this unit is targeting within huntTowardRange(), or nullptr.
+    const ObjectBase* formationContact() const;
+    /**
+        A hunting formation broke on contact with 'enemy' (FormationOrders::breakHunt): a
+        fighter without a target attacks it if its attack mode keeps a target that far away,
+        and otherwise closes in on it, engaging whatever it meets on the way; an attack-move
+        or patrol resumes its own walk from there.
+    */
+    void engageFormationContact(const ObjectBase* enemy);
+    /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to
+    /// move? A hunting member has also arrived once it stands on its slot.
     bool formationMarchEnded() const;
     /// Tiles still to go to the formation slot, or to the current destination without a slot.
     int formationRemainingTiles() const;
@@ -656,6 +673,8 @@ protected:
     Uint32   formationGroup = 0;                 ///< FormationPlanner::makeGroupID(); 0 = none
     Coord    formationSlot = Coord::Invalid();   ///< Destination in the formation; invalid = own order
     FixPoint formationSpeedCap = 0;              ///< The group's pace: slowest member's reference speed
+    bool     formationHunt = false;              ///< A hunting formation: contact breaks the group (SAVEGAMEVERSION 9859)
+    Uint8    formationFacing = 0;                ///< FormationPlanner::facingCode of the formation (SAVEGAMEVERSION 9859)
     bool     formationCatchUp = false;           ///< Transient: lagging, so full speed this cycle
 
 

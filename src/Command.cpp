@@ -226,7 +226,7 @@ void Command::executeCommand() const {
         || commandID==CMD_UNIT_SETMODE || commandID==CMD_UNIT_SENDTOREPAIR
         || commandID==CMD_UNIT_REQUESTCARRYALLDROP || commandID==CMD_UNIT_HEAL
         || commandID==CMD_UNIT_ATTACKMOVE || commandID==CMD_UNIT_PATROL || commandID==CMD_UNIT_QUEUEORDER
-        || commandID==CMD_UNIT_FORMATION_MOVE;
+        || commandID==CMD_UNIT_FORMATION_MOVE || commandID==CMD_UNIT_FORMATION_HUNT;
     const auto* human=dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
     if (unitOrder && human && !parameter.empty()) {
         const auto* unit=dynamic_cast<const UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
@@ -727,8 +727,14 @@ case CMD_INFANTRY_CAPTURE: {
             if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
                 return;
             }
-            // A malformed token or a slot off the map is not something the game sends.
-            if(!FormationPlanner::isValidToken(parameter[3])
+            // A malformed token, another order kind, an unknown facing or a slot off the map is
+            // not something the game sends (FormationOrders::packParameter; protocol 71 sent the
+            // bare token).
+            const Uint32 token = FormationOrders::tokenOf(parameter[3]);
+            const Uint8 facing = FormationOrders::facingOf(parameter[3]);
+            if(!FormationPlanner::isValidToken(token)
+               || FormationOrders::kindOf(parameter[3]) != static_cast<Uint32>(FormationOrders::OrderKind::Move)
+               || facing > 8
                || !currentGameMap->tileExists((int) parameter[1], (int) parameter[2])) {
                 return;
             }
@@ -743,10 +749,44 @@ case CMD_INFANTRY_CAPTURE: {
                 // this cycle: every peer moves it to the same nearest usable tile.
                 destination = FormationOrders::revalidatedSlot(unit, destination);
                 unit->doMove2Pos(destination.x, destination.y, true);
-                FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, parameter[3]), {destination});
+                FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, false, facing);
             });
             // Like a plain move, it replaces the order queue and becomes its front.
             unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));
+        } break;
+
+        case CMD_UNIT_FORMATION_HUNT: {
+            if(parameter.size() != 4) {
+                THROW(std::invalid_argument, "Command::executeCommand(): CMD_UNIT_FORMATION_HUNT needs 4 Parameters!");
+            }
+            UnitBase* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], unit)) {
+                return;
+            }
+            // The token, order kind and facing share the last parameter (FormationOrders::packParameter).
+            const Uint32 token = FormationOrders::tokenOf(parameter[3]);
+            const Uint32 kind = FormationOrders::kindOf(parameter[3]);
+            const Uint8 facing = FormationOrders::facingOf(parameter[3]);
+            if(!FormationPlanner::isValidToken(token)
+               || (kind != static_cast<Uint32>(FormationOrders::OrderKind::AttackMove)
+                   && kind != static_cast<Uint32>(FormationOrders::OrderKind::Patrol))
+               || facing > 8
+               || !currentGameMap->tileExists((int) parameter[1], (int) parameter[2])) {
+                return;
+            }
+            Coord destination((int) parameter[1], (int) parameter[2]);
+            applyMovementOrder(unit, true, [&] {
+                // Like CMD_UNIT_FORMATION_MOVE: every peer moves an unusable slot to the same
+                // nearest usable tile; aircraft keep the plain order without a formation.
+                const bool member = FormationOrders::eligible(unit);
+                if(member) destination = FormationOrders::revalidatedSlot(unit, destination);
+                if(kind == static_cast<Uint32>(FormationOrders::OrderKind::AttackMove)) {
+                    unit->doIssueOrder(UnitOrder::at(UnitOrderType::AttackMove, destination), false);
+                } else {
+                    unit->doIssuePatrol(destination, false);
+                }
+                if(member) FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, true, facing);
+            });
         } break;
 
         case CMD_PLAYER_PAUSE: {

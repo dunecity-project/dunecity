@@ -354,7 +354,7 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
 
 void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y));
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y), FormationOrders::kAIShape);
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced);
         return;
@@ -368,12 +368,12 @@ void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, i
         members.push_back(const_cast<UnitBase*>(unit));
         slots.push_back(slot);
     }
-    FormationOrders::join(members, allocateFormationGroup(), slots);
+    FormationOrders::join(members, allocateFormationGroup(), slots, false, FormationPlanner::facingCode(plan.forward));
 }
 
 void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y));
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y), FormationOrders::kAIShape);
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doHuntToward(unit, x, y);
         return;
@@ -387,7 +387,8 @@ void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, in
         members.push_back(const_cast<UnitBase*>(unit));
         slots.push_back(slot);
     }
-    FormationOrders::join(members, allocateFormationGroup(), slots);
+    // A hunting formation: the first contact of any member breaks the group into a fight.
+    FormationOrders::join(members, allocateFormationGroup(), slots, true, FormationPlanner::facingCode(plan.forward));
 }
 
 void Player::doFormUp(const std::vector<const UnitBase*>& units) const {

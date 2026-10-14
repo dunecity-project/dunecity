@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Move twelve mixed units in and out of formation with real game objects (docs/formations.md).
+"""Move mixed groups in and out of formation with real game objects (docs/formations.md): the
+Box on and off, a hunting save round trip, Combined arms with sonic tanks and scouts, Line,
+Column, and a hunt in formation that breaks on contact.
 
 Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
 profile and dummy SDL drivers. Logs, the test executable, the mid-march save and a rendered
@@ -67,13 +69,16 @@ env = dict(os.environ, DUNECITY_USERDIR=str(out / 'profile'), SDL_VIDEODRIVER='d
 logfile = out / 'run.log'
 with logfile.open('w') as log:
     subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
-                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)
+                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=480)
 text = logfile.read_text()
-for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_PASS:'):
+for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_COMBINED:',
+               'FORMATION_PROBE_COMBINED_FRAME:', 'FORMATION_PROBE_SHAPES:', 'FORMATION_PROBE_HUNT:',
+               'FORMATION_PROBE_PASS:'):
     if marker not in text:
         raise RuntimeError('Missing formation probe result ' + marker + ' in ' + str(logfile))
-if not (out / 'formation-march.png').is_file():
-    raise RuntimeError('The formation screenshot was not written')
+for shot in ('formation-march.png', 'formation-combined.png'):
+    if not (out / shot).is_file():
+        raise RuntimeError('The formation screenshot ' + shot + ' was not written')
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 print(next(line for line in text.splitlines() if 'FORMATION_PROBE_PASS:' in line))
 print('Formation movement probe passed. Logs: ' + str(out))

@@ -293,3 +293,356 @@ TEST_CASE("Group ids carry the issuing player and a non-zero token", "[formation
     REQUIRE((makeGroupID(3, 0x123456u) >> 24) == 3u);
     REQUIRE((makeGroupID(3, 0x123456u) & kTokenMask) == 0x123456u);
 }
+
+// ---- Formation shapes and the sonic-lane rule (docs/formations.md) --------------------------
+
+namespace {
+
+/// Large enough that no shape in these tests is clipped by the map edge.
+constexpr int kShapeMap = 128;
+
+int progressOf(const Coord& tile, const Coord& forward) { return tile.x * forward.x + tile.y * forward.y; }
+int acrossOf(const Coord& tile, const Coord& forward) { return tile.y * forward.x - tile.x * forward.y; }
+
+/// Every sonic member's lane is clear of every other member's slot.
+void requireSonicLanesClear(const Plan& result, const std::vector<Member>& members) {
+    for (const auto& sonic : members) {
+        if (!isSonic(sonic.itemID)) continue;
+        for (const auto& other : members) {
+            if (other.objectID == sonic.objectID) continue;
+            INFO("sonic " << sonic.objectID << " at " << result.slotFor(sonic.objectID).x << "," << result.slotFor(sonic.objectID).y
+                 << " other " << other.objectID << " (item " << other.itemID << ") at " << result.slotFor(other.objectID).x
+                 << "," << result.slotFor(other.objectID).y << " facing " << result.forward.x << "," << result.forward.y);
+            REQUIRE_FALSE(inSonicLane(result.slotFor(sonic.objectID), result.slotFor(other.objectID), result.forward));
+        }
+    }
+}
+
+/// A deterministic pseudo-random sequence (LCG) for the property sweeps.
+struct Sequence {
+    Uint32 state;
+    Uint32 next(Uint32 bound) { state = state * 1664525u + 1013904223u; return (state >> 8) % bound; }
+};
+
+/// Twelve units for the shape tests, scattered west of x = 12, moving east.
+std::vector<Member> combinedArmy() {
+    return {
+        makeMember(1, Unit_Tank, 4, 10, 0.80_fix),      makeMember(2, Unit_Tank, 6, 20, 0.80_fix),
+        makeMember(3, Unit_Devastator, 3, 30, 0.32_fix), makeMember(4, Unit_Launcher, 5, 12, 1.04_fix),
+        makeMember(5, Unit_Launcher, 2, 25, 1.04_fix),  makeMember(6, Unit_SiegeTank, 1, 18, 0.64_fix),
+        makeMember(7, Unit_Quad, 9, 15, 1.28_fix),      makeMember(8, Unit_Trike, 8, 28, 1.60_fix),
+        makeMember(9, Unit_RaiderTrike, 7, 5, 1.92_fix), makeMember(10, Unit_Quad, 10, 22, 1.28_fix),
+        makeMember(11, Unit_Trooper, 7, 22, 0.48_fix),  makeMember(12, Unit_Soldier, 3, 14, 0.24_fix),
+    };
+}
+
+} // namespace
+
+TEST_CASE("Shapes and unit classes", "[formation][shapes]") {
+    REQUIRE(shapeFromIndex(0) == Shape::Box);
+    REQUIRE(shapeFromIndex(1) == Shape::Combined);
+    REQUIRE(shapeFromIndex(2) == Shape::Line);
+    REQUIRE(shapeFromIndex(3) == Shape::Column);
+    REQUIRE(shapeFromIndex(4) == Shape::Box);
+    REQUIRE(shapeFromIndex(-1) == Shape::Box);
+    REQUIRE(std::string(shapeName(Shape::Combined)) == "Combined arms");
+    REQUIRE(classOf(Unit_SonicTank) == UnitClass::Sonic);
+    REQUIRE(classOf(Unit_SonicTrike) == UnitClass::Sonic);
+    REQUIRE(classOf(Unit_Tank) == UnitClass::Heavy);
+    REQUIRE(classOf(Unit_Devastator) == UnitClass::Heavy);
+    REQUIRE(classOf(Unit_FlameTank) == UnitClass::Heavy);
+    REQUIRE(classOf(Unit_Quad) == UnitClass::Light);
+    REQUIRE(classOf(Unit_Trike) == UnitClass::Light);
+    REQUIRE(classOf(Unit_RaiderTrike) == UnitClass::Light);
+    REQUIRE(classOf(Unit_Launcher) == UnitClass::Ranged);
+    REQUIRE(classOf(Unit_SiegeTank) == UnitClass::Ranged);
+    REQUIRE(classOf(Unit_Deviator) == UnitClass::Ranged);
+    REQUIRE(classOf(Unit_RocketTrike) == UnitClass::Ranged);
+    REQUIRE(classOf(Unit_Trooper) == UnitClass::Infantry);
+    REQUIRE(classOf(Unit_MCV) == UnitClass::Support);
+    REQUIRE(scoutCount(2, 1) == 1);
+    REQUIRE(scoutCount(7, 5) == 1);
+    REQUIRE(scoutCount(8, 5) == 2);
+    REQUIRE(scoutCount(16, 5) == 3);
+    REQUIRE(scoutCount(30, 2) == 2);
+    REQUIRE(scoutCount(30, 0) == 0);
+    REQUIRE(scoutDistance(5) == 4);
+    REQUIRE(scoutDistance(10) == 5);
+    REQUIRE(scoutDistance(25) == 6);
+    REQUIRE(columnWidth(3) == 1);
+    REQUIRE(columnWidth(12) == 2);
+    REQUIRE(columnWidth(20) == 3);
+    // Facing codes round-trip all eight steps; 0 is no facing.
+    std::set<int> codes;
+    for (const Coord& step : {Coord(0, -1), Coord(1, -1), Coord(1, 0), Coord(1, 1),
+                              Coord(0, 1), Coord(-1, 1), Coord(-1, 0), Coord(-1, -1)}) {
+        REQUIRE(facingCode(step) >= 1);
+        REQUIRE(facingCode(step) <= 8);
+        REQUIRE(facingFromCode(facingCode(step)) == step);
+        codes.insert(facingCode(step));
+    }
+    REQUIRE(codes.size() == 8);
+    REQUIRE(facingCode(Coord(0, 0)) == 0);
+    REQUIRE(facingCode(Coord(2, 0)) == 0);
+    REQUIRE(facingFromCode(0) == Coord(0, 0));
+    REQUIRE(facingFromCode(9) == Coord(0, 0));
+}
+
+TEST_CASE("The sonic lane is everything ahead within one formation column", "[formation][sonic]") {
+    const Coord east(1, 0), southEast(1, 1);
+    const Coord s(10, 10);
+    REQUIRE(inSonicLane(s, Coord(11, 10), east));
+    REQUIRE(inSonicLane(s, Coord(40, 10), east));     // any distance ahead
+    REQUIRE(inSonicLane(s, Coord(12, 11), east));     // the adjacent column
+    REQUIRE(inSonicLane(s, Coord(12, 9), east));
+    REQUIRE_FALSE(inSonicLane(s, Coord(12, 12), east)); // two columns over
+    REQUIRE_FALSE(inSonicLane(s, Coord(10, 11), east)); // level with it
+    REQUIRE_FALSE(inSonicLane(s, Coord(9, 10), east));  // behind it
+    REQUIRE(inSonicLane(s, Coord(13, 13), southEast));
+    REQUIRE(inSonicLane(s, Coord(12, 10), southEast));  // the next diagonal column
+    REQUIRE(inSonicLane(s, Coord(10, 12), southEast));
+    REQUIRE_FALSE(inSonicLane(s, Coord(13, 10), southEast));
+    REQUIRE_FALSE(inSonicLane(s, Coord(11, 9), southEast)); // level (progress 0)
+    REQUIRE_FALSE(inSonicLane(s, Coord(9, 9), southEast));
+}
+
+TEST_CASE("Combined arms: tanks in front, ranged behind, light vehicles on the flanks, scouts ahead", "[formation][shapes]") {
+    Terrain terrain;
+    const auto members = combinedArmy();
+    for (const auto& [target, forward] : {std::pair<Coord, Coord>{Coord(50, 20), Coord(1, 0)},
+                                          std::pair<Coord, Coord>{Coord(5, 60), Coord(0, 1)},
+                                          std::pair<Coord, Coord>{Coord(45, 60), Coord(1, 1)}}) {
+        INFO("target " << target.x << "," << target.y);
+        const auto result = plan(members, target, kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined);
+        REQUIRE(result.forward == forward);
+        requireUnique(result, members);
+        // Twelve members: two scouts, the fastest light vehicles (raider trike 1.92, trike 1.60).
+        REQUIRE(result.scouts == std::vector<Uint32>{8, 9});
+        int heavyBack = INT32_MAX, heavyFront = INT32_MIN, rangedFront = INT32_MIN, rangedBack = INT32_MAX;
+        int infantryFront = INT32_MIN, bodyLeft = INT32_MAX, bodyRight = INT32_MIN;
+        for (const auto& member : members) {
+            const Coord slot = result.slotFor(member.objectID);
+            const int p = progressOf(slot, forward);
+            const int a = acrossOf(slot, forward);
+            switch (classOf(member.itemID)) {
+                case UnitClass::Heavy:
+                    heavyBack = std::min(heavyBack, p); heavyFront = std::max(heavyFront, p);
+                    bodyLeft = std::min(bodyLeft, a); bodyRight = std::max(bodyRight, a); break;
+                case UnitClass::Ranged:
+                    rangedFront = std::max(rangedFront, p); rangedBack = std::min(rangedBack, p);
+                    bodyLeft = std::min(bodyLeft, a); bodyRight = std::max(bodyRight, a); break;
+                case UnitClass::Infantry: infantryFront = std::max(infantryFront, p); break;
+                default: break;
+            }
+        }
+        REQUIRE(heavyBack > rangedFront);           // tanks in front of the launchers and siege
+        REQUIRE(rangedBack > infantryFront);        // infantry at the rear
+        for (const auto& member : members) {
+            if (classOf(member.itemID) != UnitClass::Light) continue;
+            const Coord slot = result.slotFor(member.objectID);
+            const bool scout = std::count(result.scouts.begin(), result.scouts.end(), member.objectID) > 0;
+            if (scout) {
+                // Ahead of the front row by the scout distance (diagonal steps count twice).
+                const int ahead = progressOf(slot, forward) - heavyFront;
+                const int step = forward.x * forward.x + forward.y * forward.y;
+                REQUIRE(ahead == scoutDistance(12) * step);
+            } else {
+                // Flankers: beside the tanks and launchers, never ahead of the front row.
+                const int a = acrossOf(slot, forward);
+                REQUIRE((a < bodyLeft || a > bodyRight));
+                REQUIRE(progressOf(slot, forward) <= heavyFront);
+                REQUIRE(progressOf(slot, forward) >= rangedBack);
+            }
+        }
+    }
+}
+
+TEST_CASE("Combined arms sends scouts only when light vehicles exist", "[formation][shapes]") {
+    Terrain terrain;
+    const std::vector<Member> heavy = {
+        makeMember(1, Unit_Tank, 4, 10), makeMember(2, Unit_Tank, 6, 20), makeMember(3, Unit_Launcher, 3, 30),
+        makeMember(4, Unit_SiegeTank, 2, 2), makeMember(5, Unit_Soldier, 9, 9),
+    };
+    REQUIRE(plan(heavy, Coord(40, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined).scouts.empty());
+    auto withQuad = heavy;
+    withQuad.push_back(makeMember(6, Unit_Quad, 5, 5, 1.28_fix));
+    const auto result = plan(withQuad, Coord(40, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined);
+    REQUIRE(result.scouts == std::vector<Uint32>{6});
+    // The scout is the most advanced member.
+    for (const auto& member : heavy)
+        REQUIRE(progressOf(result.slotFor(6), result.forward) > progressOf(result.slotFor(member.objectID), result.forward));
+    // Thirty units with plenty of light vehicles send three.
+    std::vector<Member> large;
+    for (Uint32 i = 0; i < 30; ++i)
+        large.push_back(makeMember(100 + i, i % 3 == 0 ? Unit_Trike : Unit_Tank, 2 + (i % 6) * 2, 2 + (i / 6) * 3,
+                                   i % 3 == 0 ? 1.60_fix : 0.80_fix));
+    REQUIRE(plan(large, Coord(50, 40), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined).scouts.size() == 3);
+}
+
+TEST_CASE("Line is wide and shallow, Column narrow and deep", "[formation][shapes]") {
+    Terrain terrain;
+    const auto members = combinedArmy();
+    for (const Coord& target : {Coord(50, 20), Coord(30, 60)}) {
+        const auto line = plan(members, target, kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Line);
+        const auto column = plan(members, target, kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Column);
+        requireUnique(line, members);
+        requireUnique(column, members);
+        auto extent = [&](const Plan& result, bool along) {
+            int lo = INT32_MAX, hi = INT32_MIN;
+            for (const auto& slot : result.slots) {
+                const int v = along ? progressOf(slot.tile, result.forward) : acrossOf(slot.tile, result.forward);
+                lo = std::min(lo, v); hi = std::max(hi, v);
+            }
+            // A diagonal facing steps two units of progress (or across) per rank (or column).
+            const int step = result.forward.x * result.forward.x + result.forward.y * result.forward.y;
+            return (hi - lo) / step + 1;
+        };
+        // Eleven cells (the two infantry share one) abreast in one rank.
+        REQUIRE(extent(line, true) == 1);
+        REQUIRE(extent(line, false) == 11);
+        // Two abreast, six deep.
+        REQUIRE(extent(column, false) == 2);
+        REQUIRE(extent(column, true) == 6);
+        // Armour leads both: the tanks are in the first rank.
+        int tankProgress = INT32_MIN;
+        for (const auto& member : members)
+            if (member.itemID == Unit_Tank)
+                tankProgress = std::max(tankProgress, progressOf(column.slotFor(member.objectID), column.forward));
+        for (const auto& slot : column.slots) REQUIRE(progressOf(slot.tile, column.forward) <= tankProgress);
+    }
+    // Wider than kLineMaxWidth: a second rank behind the first.
+    std::vector<Member> many;
+    for (Uint32 i = 0; i < 20; ++i) many.push_back(makeMember(200 + i, Unit_Tank, 2 + (i % 5), 2 + (i / 5) * 4));
+    const auto wide = plan(many, Coord(50, 30), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Line);
+    std::set<int> ranks;
+    for (const auto& slot : wide.slots) ranks.insert(progressOf(slot.tile, wide.forward));
+    REQUIRE(ranks.size() == 2);
+}
+
+TEST_CASE("Sonic units take the front row, as one block, with nothing ahead of their lanes", "[formation][sonic]") {
+    Terrain terrain;
+    auto members = combinedArmy();
+    members.push_back(makeMember(13, Unit_SonicTank, 2, 16, 0.80_fix));
+    members.push_back(makeMember(14, Unit_SonicTank, 5, 26, 0.80_fix));
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column}) {
+        INFO("shape " << shapeName(shape));
+        const auto result = plan(members, Coord(50, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+        requireUnique(result, members);
+        requireSonicLanesClear(result, members);
+        // Both sonic tanks stand in the most advanced rank apart from scouts, next to each other.
+        int front = INT32_MIN;
+        for (const auto& member : members)
+            if (!std::count(result.scouts.begin(), result.scouts.end(), member.objectID))
+                front = std::max(front, progressOf(result.slotFor(member.objectID), result.forward));
+        REQUIRE(progressOf(result.slotFor(13), result.forward) == front);
+        REQUIRE(progressOf(result.slotFor(14), result.forward) == front);
+        REQUIRE(std::abs(acrossOf(result.slotFor(13), result.forward) - acrossOf(result.slotFor(14), result.forward)) == 1);
+    }
+    // More sonic units than the front is wide: the front row widens to take them all.
+    std::vector<Member> sonics;
+    for (Uint32 i = 0; i < 5; ++i) sonics.push_back(makeMember(300 + i, Unit_SonicTank, 3, 2 + i * 4));
+    sonics.push_back(makeMember(310, Unit_Tank, 1, 10));
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column}) {
+        const auto result = plan(sonics, Coord(40, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+        requireSonicLanesClear(result, sonics);
+        std::set<int> ranks;
+        for (const auto& member : sonics)
+            if (isSonic(member.itemID)) ranks.insert(progressOf(result.slotFor(member.objectID), result.forward));
+        REQUIRE(ranks.size() == 1);
+    }
+}
+
+TEST_CASE("A tight group with a unit in front of a sonic tank forms the box instead", "[formation][sonic]") {
+    Terrain terrain;
+    // Moving east; the tank stands directly east of (ahead of) the sonic tank.
+    const std::vector<Member> group = {
+        makeMember(1, Unit_SonicTank, 10, 10), makeMember(2, Unit_Tank, 11, 10), makeMember(3, Unit_Launcher, 10, 11),
+    };
+    const auto result = plan(group, Coord(40, 10), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile);
+    requireSonicLanesClear(result, group);
+    // Without a sonic tank the same group keeps its shape.
+    auto plain = group;
+    plain[0] = makeMember(1, Unit_Tank, 10, 10);
+    const auto kept = plan(plain, Coord(40, 10), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile);
+    REQUIRE(kept.slotFor(2) - kept.slotFor(1) == Coord(1, 0));
+}
+
+TEST_CASE("Every shape is identical whatever order the members are listed in", "[formation][determinism][shapes]") {
+    Terrain terrain;
+    terrain.blocked = {{40, 20}, {41, 20}, {40, 21}, {44, 18}, {44, 22}};
+    auto members = combinedArmy();
+    members.push_back(makeMember(13, Unit_SonicTank, 2, 16, 0.80_fix));
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column}) {
+        const auto reference = plan(members, Coord(40, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+        auto shuffled = members;
+        for (int round = 0; round < 24; ++round) {
+            std::rotate(shuffled.begin(), shuffled.begin() + 1 + round % 5, shuffled.end());
+            if (round % 2) std::reverse(shuffled.begin(), shuffled.end());
+            const auto again = plan(shuffled, Coord(40, 20), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+            REQUIRE(slotsOf(again) == slotsOf(reference));
+            REQUIRE(again.scouts == reference.scouts);
+            REQUIRE(again.forward == reference.forward);
+        }
+    }
+}
+
+TEST_CASE("Sonic lanes stay clear for every shape, group size, facing and obstacle field", "[formation][sonic][property]") {
+    constexpr int kSweepMap = 128;
+    const Uint32 items[] = {Unit_SonicTank, Unit_SonicTrike, Unit_Tank, Unit_Devastator, Unit_Quad, Unit_Trike,
+                            Unit_RaiderTrike, Unit_Launcher, Unit_SiegeTank, Unit_Deviator, Unit_Trooper,
+                            Unit_Soldier, Unit_Harvester};
+    const Coord facings[] = {Coord(1, 0), Coord(1, 1), Coord(0, 1), Coord(-1, 1),
+                             Coord(-1, 0), Coord(-1, -1), Coord(0, -1), Coord(1, -1)};
+    int plans = 0, relocated = 0;
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column}) {
+        for (int size = 2; size <= 30; ++size) {
+            for (int f = 0; f < 8; ++f) {
+                for (int obstacles = 0; obstacles < 2; ++obstacles) {
+                    Sequence random{static_cast<Uint32>(size * 7919 + f * 104729 + obstacles * 31 + static_cast<int>(shape) * 13)};
+                    const Coord start(64, 64);
+                    const Coord target(start.x + facings[f].x * 25, start.y + facings[f].y * 25);
+                    std::vector<Member> members;
+                    bool sonic = false;
+                    for (int i = 0; i < size; ++i) {
+                        // At least one sonic unit; otherwise a random mix.
+                        const Uint32 item = i == 0 ? Unit_SonicTank : items[random.next(sizeof(items) / sizeof(items[0]))];
+                        sonic = sonic || isSonic(item);
+                        members.push_back(makeMember(1000 + random.next(9000) * 32 + i, item,
+                                                     start.x - 8 + static_cast<int>(random.next(17)),
+                                                     start.y - 8 + static_cast<int>(random.next(17)),
+                                                     FixPoint(1 + random.next(3))));
+                    }
+                    REQUIRE(sonic);
+                    Terrain terrain;
+                    if (obstacles) {
+                        // About a fifth of the ground around the target is blocked.
+                        for (int y = target.y - 10; y <= target.y + 10; ++y)
+                            for (int x = target.x - 10; x <= target.x + 10; ++x)
+                                if (random.next(5) == 0) terrain.blocked.insert({x, y});
+                    }
+                    const auto result = plan(members, target, kSweepMap, kSweepMap, terrain.query(), kInfantryPerTile, shape);
+                    INFO("shape " << shapeName(shape) << " size " << size << " facing " << facings[f].x << "," << facings[f].y
+                         << " obstacles " << obstacles);
+                    REQUIRE(result.formation);
+                    requireUnique(result, members);
+                    requireSonicLanesClear(result, members);
+                    for (const auto& slot : result.slots) {
+                        REQUIRE(slot.tile.x >= 0);
+                        REQUIRE(slot.tile.y >= 0);
+                        REQUIRE(slot.tile.x < kSweepMap);
+                        REQUIRE(slot.tile.y < kSweepMap);
+                        REQUIRE_FALSE(terrain.blocked.count({slot.tile.x, slot.tile.y}));
+                    }
+                    if (obstacles) {
+                        const auto open = plan(members, target, kSweepMap, kSweepMap, Terrain().query(), kInfantryPerTile, shape);
+                        relocated += slotsOf(open) != slotsOf(result) ? 1 : 0;
+                    }
+                    ++plans;
+                }
+            }
+        }
+    }
+    REQUIRE(plans == 4 * 29 * 8 * 2);
+    // The obstacle fields really forced fallbacks.
+    REQUIRE(relocated > 4 * 29 * 8 / 2);
+}

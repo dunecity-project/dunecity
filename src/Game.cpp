@@ -6222,9 +6222,11 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_f: {
-            // Ctrl+F switches formation moves; plain F keeps selecting the next factory.
+            // Ctrl+F switches formation moves, Ctrl+Shift+F picks the next shape; plain F keeps
+            // selecting the next factory.
             if(SDL_GetModState() & KMOD_CTRL) {
-                toggleFormationMoves();
+                if(SDL_GetModState() & KMOD_SHIFT) cycleFormationShape();
+                else toggleFormationMoves();
                 break;
             }
             // select next factory
@@ -6835,18 +6837,24 @@ UnitBase* Game::issuePositionOrder(PositionOrder kind, const std::vector<UnitBas
     if(pLocalPlayer == nullptr || currentGameMap == nullptr || !currentGameMap->tileExists(target)) {
         return nullptr;
     }
-    // With "Move groups in formation" on, every eligible unit gets its own formation slot
-    // around the target (docs/formations.md): attack-move, patrol and queued waypoints spread
-    // out like a plain group move. These orders carry no group pace; only
-    // CMD_UNIT_FORMATION_MOVE does.
+    // With "Move groups in formation" on, every eligible unit gets its own slot of a formation
+    // in the chosen shape around the target (docs/formations.md). An attack-move or patrol
+    // that replaces the orders hunts in formation: one CMD_UNIT_FORMATION_HUNT per slot with a
+    // shared token, so the group keeps its pace until a member meets the enemy. Queued
+    // waypoints keep their slots but carry no pace.
     FormationPlanner::Plan plan;
     if(settings.general.formationMoves && units.size() >= static_cast<size_t>(FormationOrders::kMinPlayerGroup)) {
         std::vector<const UnitBase*> members;
         for(const UnitBase* pUnit : units) {
             if(pUnit != nullptr && pUnit->getOwner() == pLocalHouse && pUnit->isRespondable()) members.push_back(pUnit);
         }
-        plan = FormationOrders::planGroup(members, target);
+        plan = FormationOrders::planGroup(members, target, FormationPlanner::shapeFromIndex(settings.general.formationShape));
     }
+    const bool hunt = plan.formation && !queued && kind != PositionOrder::Move
+        && static_cast<int>(plan.slots.size()) >= FormationOrders::kMinPlayerGroup;
+    const Uint32 huntParameter = !hunt ? 0 : FormationOrders::packParameter(
+        kind == PositionOrder::AttackMove ? FormationOrders::OrderKind::AttackMove : FormationOrders::OrderKind::Patrol,
+        FormationPlanner::facingCode(plan.forward), nextFormationToken());
     UnitBase* pResponder = nullptr;
     for(UnitBase* pUnit : units) {
         if(pUnit == nullptr || pUnit->getOwner() != pLocalHouse || !pUnit->isRespondable()) {
@@ -6858,6 +6866,11 @@ UnitBase* Game::issuePositionOrder(PositionOrder kind, const std::vector<UnitBas
         const Uint32 objectID = pUnit->getObjectID();
         const Uint32 x = static_cast<Uint32>(destination.x);
         const Uint32 y = static_cast<Uint32>(destination.y);
+        if(hunt && slot.isValid()) {
+            cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_HUNT, objectID, x, y, huntParameter));
+            pResponder = pUnit;
+            continue;
+        }
         switch(kind) {
             case PositionOrder::Move: {
                 cmdManager.addCommand(queued
@@ -6997,21 +7010,27 @@ std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actio
         if(actionClick && unit->getActionClickTarget(xPos, yPos) != nullptr) continue;
         movers.push_back(unit);
     }
-    const FormationPlanner::Plan plan = FormationOrders::planGroup(movers, Coord(xPos, yPos));
+    const FormationPlanner::Plan plan = FormationOrders::planGroup(movers, Coord(xPos, yPos),
+        FormationPlanner::shapeFromIndex(settings.general.formationShape));
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) {
         return ordered;
     }
+    const Uint32 parameter = FormationOrders::packParameter(FormationOrders::OrderKind::Move,
+        FormationPlanner::facingCode(plan.forward), nextFormationToken());
+    for(const FormationPlanner::Slot& slot : plan.slots) {
+        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_MOVE, slot.objectID,
+                                      static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), parameter));
+        ordered.insert(slot.objectID);
+    }
+    return ordered;
+}
+
+Uint32 Game::nextFormationToken() {
     if(gameCycleCount != formationTokenCycle) {
         formationTokenCycle = gameCycleCount;
         formationTokensThisCycle = 0;
     }
-    const Uint32 token = FormationPlanner::makeToken(gameCycleCount, formationTokensThisCycle++);
-    for(const FormationPlanner::Slot& slot : plan.slots) {
-        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_MOVE, slot.objectID,
-                                      static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), token));
-        ordered.insert(slot.objectID);
-    }
-    return ordered;
+    return FormationPlanner::makeToken(gameCycleCount, formationTokensThisCycle++);
 }
 
 
@@ -7876,12 +7895,27 @@ void Game::drawMovementPaths() {
 }
 
 void Game::toggleFormationMoves() {
-    settings.general.formationMoves = !settings.general.formationMoves;
+    chooseFormation(!settings.general.formationMoves, settings.general.formationShape);
+}
+
+void Game::cycleFormationShape() {
+    // Off counts as the shape before the first: the cycle starts at the chosen shape.
+    const int next = settings.general.formationMoves
+        ? (settings.general.formationShape + 1) % FormationPlanner::kShapeCount
+        : settings.general.formationShape;
+    chooseFormation(true, next);
+}
+
+void Game::chooseFormation(bool on, int shapeIndex) {
+    settings.general.formationMoves = on;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromIndex(shapeIndex));
     INIFile config(getConfigFilepath());
     config.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    config.setIntValue("General","Formation Shape",settings.general.formationShape);
     config.saveChangesTo(getConfigFilepath());
     WebRuntime::syncPersistentFiles();
-    addToNewsTicker(settings.general.formationMoves ? _("Groups move in formation") : _("Formation moves off"));
+    const std::string shape = _(FormationPlanner::shapeName(FormationPlanner::shapeFromIndex(settings.general.formationShape)));
+    addToNewsTicker(on ? fmt::sprintf(_("Groups move in formation: %s"), shape) : _("Formation moves off"));
 }
 
 void Game::toggleMovementPaths() {

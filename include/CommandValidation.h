@@ -87,6 +87,7 @@ inline int exactParameterCount(CMDTYPE commandID) {
         case CMD_BUILDER_RESERVE_PLACEMENT:     return 4;
         case CMD_BUILDER_CANCEL_RESERVATION:    return 2;
         case CMD_UNIT_FORMATION_MOVE:           return 4;
+        case CMD_UNIT_FORMATION_HUNT:           return 4;
 
         // The city commands read up to three optional parameters
         // (CitySimulation::executeCityCommand substitutes 0 for missing ones).
