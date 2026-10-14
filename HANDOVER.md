@@ -1,3 +1,11 @@
+## 2026-10-14 — local 1.0.840 installed on the MBA
+
+1.0.840 = the formation fixes below plus the colonist escort (86% of march cycles with escort on
+3+ sides). Full CTest 92/92 passed, run one test at a time with probe output deleted between
+(the Mac mini disk is nearly full). Installed on the MBA at 23:05 AEDT: executable SHA256
+6e833e4167d9d54f8f8b0cc828969f9195758abe9c24658910ad283b53a719fd, runtime check passed; 1.0.839
+at /Applications/.dunecity-backup-before-1.0.840-20261014-230505/dunecity.app.
+
 ## 2026-10-14 — formation fixes after 1.0.839 play-test (save 9860, protocol 74, not released)
 
 Stefan's 1.0.839 feedback (siege tanks in front, harvesters out, MCVs escorted, one speed, sonic lanes).
