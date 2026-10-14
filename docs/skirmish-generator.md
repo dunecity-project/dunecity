@@ -32,9 +32,12 @@ Mod, house, AI and AI partner stay drop-downs.
 
 - **Map**
   - Size: 64, 96, 128, 160, 192 or 256. Default 128.
-  - Rock: Low 15%, Medium 25%, High 35%, Very high 50%. This is the target share of rock plus
-    mountain. Starts are always clean rock, so a crowded map (many houses, large cities on a
-    small map) ends above its target: Stefan's 128x128 5-house 40,000-people match measures 67%.
+  - Rock: 15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% target share of rock plus mountain (the first four
+    keep their saved indices). Past what the editor's rock fields reach, rock grows outward from its
+    edges ring by ring with a seeded coin flip per tile (`growRock`), so coasts stay ragged and
+    mirrored maps stay symmetric; at 100% the whole map is rock and mountain. Spice only grows on
+    sand, so high rock leaves little (at 100% no) spice. Starts are always clean rock, so a crowded
+    map ends above its target: Stefan's 128x128 5-house 40,000-people match measures 67%.
   - Spice: None, Low 6%, Medium 12%, High 18%, Very high 24% of the map (spice, thick spice and
     blooms; Very high matches the map editor's default random map). Thick spice share inside the
     fields 0/10/25/40/55%.
@@ -56,22 +59,27 @@ Mod, house, AI and AI partner stay drop-downs.
   - Tech level 1–9, default 9 (everything unlocked), written to `[BASIC] TechLevel`.
   - The saved map's `[BASIC] Mod` is `dunecity` for a city mod, otherwise the chosen mod's content
     category (`tornie` or `vanilla`).
+  - "Game rules..." (bottom row) opens the same Game Rules window as Custom Game (game speed,
+    concrete, fog of war, explored map, instant build, one palace, unit damage, rocket turret
+    power, sandworms, carryall drops, immortal player, unit/harvester/yard caps). Until it is used
+    the match takes the chosen mod's effective rules; once confirmed, its rules are used for every
+    match started from the screen. "Remember as default" in the window saves them globally.
 - **Players**
-  - Allies 0–3 and enemies 1–5.
-  - Total houses are capped at what the engine can field: `isCustomGameHouseAvailable`, which is 8
-    in vanilla and DuneCity, or 9 with a registered Custom house. The UI limits the enemy count to
-    match.
+  - Allies 0–6 and enemies 1–7, at most 7 together (the player plus seven houses). Moving one
+    slider past the total pushes the other down. The engine's house cap (`isCustomGameHouseAvailable`:
+    8, or 9 with a registered Custom house) also applies; a ninth house does not lift the 7.
   - "Enemies are allied" on puts all enemies on team 2. Off puts each enemy on its own team (2, 3, …).
     The player and allies are always team 1.
 - **Per side** (Allies / Enemies)
   - AI: every non-support controller in `PlayerFactory`.
   - Base: None (MCV only) / Outpost / Small / Medium / Large / Fortress.
-  - Army: 0 / 1,000 / 2,500 / 5,000 / 10,000 / 20,000 credits, or Random. Random is uniform from
-    1,000 to 20,000 in steps of 100.
+  - Army (credits): 0 / 1,000 / 2,500 / 5,000 / 10,000 / 20,000 credits, or Random. Random is uniform
+    from 1,000 to 20,000 in steps of 100. Armies never buy light infantry; foot soldiers are Troopers,
+    placed up to five to a tile (the engine's `NUM_INFANTRY_PER_TILE`). Vehicles take one tile each.
   - City (DuneCity only): None / 1,000 / 5,000 / 15,000 / 40,000 people, or Random. Random is uniform
     from 1,000 to 40,000 in steps of 1,000.
-- The human always starts with a Construction Yard and the chosen credits, on a plateau as large as
-  the largest opponent's.
+- The player gets their own Base, Army and City from "You start with", plus an optional AI partner
+  sharing their house, on a plateau as large as the largest opponent's.
 
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map

@@ -21,6 +21,7 @@
 #include <FileClasses/INIFile.h>
 #include <FileClasses/TextManager.h>
 #include <GUI/MsgBox.h>
+#include <GUI/dune/GameOptionsWindow.h>
 #include <Menu/Dune2RReadinessMenu.h>
 #include <ObjectData.h>
 #include <mod/ModManager.h>
@@ -263,15 +264,19 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
 
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { onCancel(); });
+    rulesButton.setText(_("Game rules..."));
+    rulesButton.setOnClick([this]() { onGameRules(); });
     saveButton.setText(_("Save map"));
     saveButton.setOnClick([this]() { onSaveMap(); });
     startButton.setText(_("Start"));
     startButton.setOnClick([this]() { onStart(); });
-    const int left = columnX(width, 0), right = left + contentWidth(width);
-    const int buttonWidth = std::min(160, (contentWidth(width) - 32) / 3);
-    windowWidget.addWidget(&backButton, Point(left, height - 38), Point(buttonWidth, 28));
-    windowWidget.addWidget(&saveButton, Point((width - buttonWidth) / 2, height - 38), Point(buttonWidth, 28));
-    windowWidget.addWidget(&startButton, Point(right - buttonWidth, height - 38), Point(buttonWidth, 28));
+    // Back on the left, Start on the right, Game rules and Save map between them.
+    const int left = columnX(width, 0), span = contentWidth(width);
+    const int buttonWidth = std::min(160, (span - 3 * 16) / 4);
+    const int gap = (span - 4 * buttonWidth) / 3;
+    TextButton* buttons[] = {&backButton, &rulesButton, &saveButton, &startButton};
+    for(int i = 0; i < 4; ++i)
+        windowWidget.addWidget(buttons[i], Point(left + i * (buttonWidth + gap), height - 38), Point(buttonWidth, 28));
     startButton.setActive();
 
     Params params;
@@ -466,7 +471,7 @@ void RandomSkirmishMenu::onStart() {
     Params params;
     Result result;
     if(!generate(params, result)) return;
-    const GameInitSettings init = RandomSkirmish::makeInit(result, effectiveGameOptions);
+    const GameInitSettings init = RandomSkirmish::makeInit(result, matchRules());
     if(!params.fixedSeed) {
         // The next visit offers a new map; this one stays reproducible from its name.
         params.seed = freshSeed();
@@ -488,4 +493,27 @@ void RandomSkirmishMenu::onSaveMap() {
 void RandomSkirmishMenu::onCancel() {
     remember(readParams());
     quit();
+}
+
+const SettingsClass::GameOptionsClass& RandomSkirmishMenu::matchRules() const {
+    return rulesChosen ? rules : effectiveGameOptions;
+}
+
+void RandomSkirmishMenu::onGameRules() {
+    // Until the player has set rules here, the window opens on the chosen mod's own defaults.
+    if(!rulesChosen) {
+        if(!RandomSkirmish::activateMod(selectedMod())) {
+            openWindow(MsgBox::create(_("The chosen mod could not be activated.")));
+            return;
+        }
+        rules = effectiveGameOptions;
+    }
+    openWindow(GameOptionsWindow::create(rules));
+}
+
+void RandomSkirmishMenu::onChildWindowClose(Window* pChildWindow) {
+    if(auto* pRulesWindow = dynamic_cast<GameOptionsWindow*>(pChildWindow)) {
+        rules = pRulesWindow->getGameOptions();
+        rulesChosen = true;
+    }
 }

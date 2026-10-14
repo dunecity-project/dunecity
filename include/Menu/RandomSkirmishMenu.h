@@ -60,6 +60,11 @@ private:
     void onStart();
     void onSaveMap();
     void onCancel();
+    /// Opens the Game Rules window (fog of war, concrete, game speed, unit caps...), as Custom Game does.
+    void onGameRules();
+    void onChildWindowClose(Window* pChildWindow) override;
+    /// The rules the match starts with: the player's choice once made, else the mod's defaults.
+    const SettingsClass::GameOptionsClass& matchRules() const;
     void onNewSeed();
     /// Allies or enemies moved: the other one gives way so their sum stays within the cap.
     void onPlayersChanged(bool alliesMoved = true);
@@ -105,7 +110,9 @@ private:
     Slider allyBaseBox, allyArmyBox, allyCityBox;
     Slider enemyBaseBox, enemyArmyBox, enemyCityBox;
 
-    TextButton backButton, saveButton, startButton;
+    TextButton backButton, rulesButton, saveButton, startButton;
+    SettingsClass::GameOptionsClass rules;   ///< what the Game Rules window last returned
+    bool rulesChosen = false;               ///< the player confirmed the Game Rules window
 };
 
 #endif // RANDOMSKIRMISHMENU_H

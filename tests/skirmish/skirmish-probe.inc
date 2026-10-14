@@ -1,6 +1,7 @@
 // Included only by run-skirmish-probe.py, never by the shipped game. Drives the real Random
 // Skirmish screen and the real CustomGame start/load path with an isolated profile.
 #include <Menu/RandomSkirmishMenu.h>
+#include <GUI/dune/GameOptionsWindow.h>
 #include <MapEditor/SkirmishGenerator.h>
 #include <MapEditor/MapGenerator.h>
 #include <FileClasses/INIFile.h>
@@ -345,6 +346,26 @@ void runMenu() {
             SDL_Log("SKIRMISH_PROBE: sliders go low to high (click, drag, wheel)");
         }
         probeSelect(menu.sizeBox, 96);
+        // Game rules: the button opens the same window as Custom Game, and what it returns is
+        // what the match starts with.
+        {
+            skirmishRequire(!menu.rulesChosen, "Rules counted as chosen before the window was used");
+            menu.onGameRules();
+            auto* rulesWindow = dynamic_cast<GameOptionsWindow*>(menu.pChildWindow);
+            skirmishRequire(rulesWindow != nullptr, "Game rules button did not open the rules window");
+            const bool fog = rulesWindow->fogOfWarCheckbox.isChecked();
+            const bool explored = rulesWindow->startWithExploredMapCheckbox.isChecked();
+            rulesWindow->fogOfWarCheckbox.setChecked(!fog);
+            rulesWindow->startWithExploredMapCheckbox.setChecked(!explored);
+            rulesWindow->rememberDefaults.setChecked(false);
+            rulesWindow->onOK();
+            menu.processChildWindowOpenCloses();
+            skirmishRequire(menu.rulesChosen && menu.matchRules().fogOfWar == !fog
+                            && menu.matchRules().startWithExploredMap == !explored,
+                            "The match does not take the rules chosen in the window");
+            SDL_Log("SKIRMISH_PROBE: game rules window sets the match rules (fog %d -> %d, explored %d -> %d)",
+                    int(fog), int(!fog), int(explored), int(!explored));
+        }
         // The Mod box lists every installed mod; City rows appear only for a city-sim mod.
         auto chooseMod = [&](const std::string& name) {
             for(size_t i = 0; i < menu.availableMods.size(); ++i)
