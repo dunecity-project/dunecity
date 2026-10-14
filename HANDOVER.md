@@ -9,9 +9,9 @@ optional setting, code default Combined); `preplace_queue_probe` and `quantbot_w
 then passed. Note: POST_BUILD config copies only refresh when the app relinks; copy by hand or
 relink after changing `config/*.default`. Package: executable SHA256
 6da6974738ad83d577dbfd9f7ee9dfd7ab40e8b3cd56e439ed9174a63029af55, signature and runtime check
-passed. The MBA was offline; `/tmp/push-dunecity-1.0.841.sh` on the Mac mini retries for 12 h
-and then installs it there once the game is closed (logs: Mac mini
-`/tmp/push-dunecity-1.0.841.log`, MBA `/tmp/install-dunecity-1.0.841.log`).
+passed. The MBA was offline overnight and the background retry script exited without
+installing; installed directly on the MBA at 09:22 AEDT 2026-10-15 (same SHA256, signature and
+runtime check passed); 1.0.840 at /Applications/.dunecity-backup-before-1.0.841-20261015-092239/.
 
 ## 2026-10-15 — Random map for multiplayer hosts; equal Random army/city (branch `feat/skirmish-multiplayer`, not released)
 
