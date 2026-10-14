@@ -44,15 +44,17 @@ class Random;
 */
 namespace SkirmishGenerator {
 
-enum class Rock { Low, Medium, High, VeryHigh };
+/// Rock share steps; the first four keep their saved indices from earlier versions.
+enum class Rock { Low, Medium, High, VeryHigh, Mostly, Nearly, AlmostAll, All };
 enum class Spice { None, Low, Medium, High, VeryHigh };
 enum class BaseSize { None, Outpost, Small, Medium, Large, Fortress };
 enum class Mode { Vanilla, DuneCity };
 enum class Role { Human, Ally, Enemy };
 
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
-/// Target share (percent) of rock + mountain terrain per Rock choice.
-constexpr std::array<int, 4> kRockPercent{15, 25, 35, 50};
+/// Target share (percent) of rock + mountain terrain per Rock choice. Spice only grows on sand,
+/// so the higher steps leave less (at 100% none) for harvesting.
+constexpr std::array<int, 8> kRockPercent{15, 25, 35, 50, 65, 80, 90, 100};
 /// Target share (percent) of spice terrain (thick spice and blooms included) per Spice choice.
 /// Very high matches the map editor's default random map (7 fields, about 24%).
 constexpr std::array<int, 5> kSpicePercent{0, 6, 12, 18, 24};

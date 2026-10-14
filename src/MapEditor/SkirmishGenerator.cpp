@@ -671,7 +671,42 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     }
 }
 
-/// Smallest editor rock-field count whose terrain reaches the Rock setting, then spice.
+/**
+    Above what the editor's rock fields reach, rock spreads outward from its edges ring by ring,
+    each sand tile taking a seeded coin flip per ring, so coastlines stay ragged. Every tile is
+    painted with its mirror images, so mirrored maps stay symmetric. At 100% every tile ends as
+    rock (mountains included).
+*/
+void growRock(MapData& map, const TerrainSpec& spec, uint32_t mapSeed, int target) {
+    const int size = spec.size, area = size * size;
+    const auto mirror = MapMirror::createMapMirror(spec.mirror, size, size);
+    const auto isRock = [](TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Mountain; };
+    int rock = 0;
+    for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) rock += isRock(map(x, y));
+    const auto paint = [&](int x, int y) {
+        for(int i = 0; i < mirror->getSize(); ++i) {
+            const Coord c = mirror->getCoord(Coord(x, y), i);
+            if(map.isInsideMap(c.x, c.y) && !isRock(map(c.x, c.y))) { map(c.x, c.y) = Terrain_Rock; ++rock; }
+        }
+    };
+    for(int ring = 0; rock * 100 < target * area && ring < 4 * size; ++ring) {
+        const MapData before = map;
+        const bool lastRings = ring >= 2 * size;   // nothing left to chance: finish the job
+        for(int y = 0; y < size && rock * 100 < target * area; ++y) for(int x = 0; x < size && rock * 100 < target * area; ++x) {
+            if(isRock(before(x, y))) continue;
+            bool edge = false;
+            for(const Coord d : {Coord(1, 0), Coord(-1, 0), Coord(0, 1), Coord(0, -1)})
+                edge = edge || (before.isInsideMap(x + d.x, y + d.y) && isRock(before(x + d.x, y + d.y)));
+            if(!edge && !lastRings) continue;
+            if(!lastRings && mix(mix(mapSeed, 0x6C0Bu + static_cast<uint32_t>(ring)),
+                                 static_cast<uint32_t>(canonicalIndex(*mirror, size, x, y))) % 100 >= 55) continue;
+            paint(x, y);
+        }
+    }
+}
+
+/// Smallest editor rock-field count whose terrain reaches the Rock setting (rock then grows
+/// further for the high settings), then spice on whatever sand is left.
 MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
     const int target = kRockPercent[indexOf(spec.rock)];
     int lo = 0, hi = 64;
@@ -681,6 +716,7 @@ MapData buildTerrain(const TerrainSpec& spec, uint32_t mapSeed) {
         if(rockPercent(shapeRock(spec, mapSeed, mid)) >= target) hi = mid; else lo = mid + 1;
     }
     MapData map = shapeRock(spec, mapSeed, lo);
+    if(rockPercent(map) < target) growRock(map, spec, mapSeed, target);
     addSpice(map, spec, mapSeed);
     return map;
 }
@@ -1041,7 +1077,7 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
 void Params::clamp(int houseCount) {
     if(std::find(kMapSizes.begin(), kMapSizes.end(), mapSize) == kMapSizes.end())
         mapSize = snapTo(mapSize, kMapSizes.data(), kMapSizes.data() + kMapSizes.size());
-    rock = static_cast<Rock>(std::clamp(indexOf(rock), 0, indexOf(Rock::VeryHigh)));
+    rock = static_cast<Rock>(std::clamp(indexOf(rock), 0, indexOf(Rock::All)));
     spice = static_cast<Spice>(std::clamp(indexOf(spice), 0, indexOf(Spice::VeryHigh)));
     mode = static_cast<Mode>(std::clamp(indexOf(mode), 0, indexOf(Mode::DuneCity)));
     credits = snapTo(credits, kCreditPresets.data(), kCreditPresets.data() + kCreditPresets.size());

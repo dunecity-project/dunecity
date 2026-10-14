@@ -114,7 +114,6 @@ int columnX(int screenWidth, int column) {
     return (screenWidth - contentWidth(screenWidth)) / 2 + column * (columnSpan(screenWidth) + 16);
 }
 
-const char* const kRockNames[] = {"Low", "Medium", "High", "Very high"};
 const char* const kSpiceNames[] = {"None", "Low", "Medium", "High", "Very high"};
 const char* const kBaseNames[] = {"MCV only", "Outpost", "Small", "Medium", "Large", "Fortress"};
 
@@ -178,7 +177,7 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     windowWidget.addWidget(&title, Point(0, 8), Point(width, 30));
 
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
-    for(int i = 0; i < 4; ++i) rockBox.addEntry(_(kRockNames[i]) + " " + std::to_string(kRockPercent[i]) + "%", i);
+    for(int i = 0; i < static_cast<int>(kRockPercent.size()); ++i) rockBox.addEntry(std::to_string(kRockPercent[i]) + "%", i);
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
     symmetricBox.setText(_("Mirrored starts"));
     seedBox.setAllowedChars("0123456789");

@@ -362,9 +362,9 @@ TEST_CASE("Random skirmish: starts are ground-connected and symmetric maps mirro
         REQUIRE(groundConnected(r.map, starts));
     }
 
-    // Rock share follows the preset.
+    // Rock share follows the preset, all the way to 100%.
     int previous = 0;
-    for(int rock = 0; rock <= 3; ++rock) {
+    for(int rock = 0; rock < static_cast<int>(kRockPercent.size()); ++rock) {
         Params p = params(128, 0, 1, Mode::Vanilla, 8, 11);
         p.rock = static_cast<Rock>(rock);
         const Result r = generate(p, vanilla());
@@ -374,9 +374,25 @@ TEST_CASE("Random skirmish: starts are ground-connected and symmetric maps mirro
         const int percent = tiles * 100 / (128 * 128);
         INFO("rock preset " << rock << " share " << percent);
         REQUIRE(percent >= kRockPercent[rock]);
-        REQUIRE(percent <= kRockPercent[rock] + 12);
+        REQUIRE(percent <= std::min(100, kRockPercent[rock] + 12));
         REQUIRE(percent > previous);
+        if(kRockPercent[rock] == 100) REQUIRE(tiles == 128 * 128);    // no sand, so no spice either
+        std::vector<Coord> starts;
+        for(const auto& h : r.houses) starts.push_back(h.start);
+        REQUIRE(groundConnected(r.map, starts));
+        requireLegal(r, vanilla());
         previous = percent;
+    }
+    // A crowded, mirrored all-rock map stays symmetric, connected and legal.
+    {
+        Params p = params(128, 3, 4, Mode::DuneCity, 9, 5);
+        p.rock = Rock::All; p.symmetric = true;
+        const Result r = generate(p, city());
+        for(int y = 0; y < 128; ++y) for(int x = 0; x < 128; ++x) REQUIRE(r.map(x, y) == r.map(127 - x, 127 - y));
+        std::vector<Coord> starts;
+        for(const auto& h : r.houses) starts.push_back(h.start);
+        REQUIRE(groundConnected(r.map, starts));
+        requireLegal(r, city());
     }
 
     Params p = params(128, 1, 2, Mode::Vanilla, 8, 77);
@@ -482,7 +498,7 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     fallback.clamp(8);
     REQUIRE(fallback.mapSize == 96);
     REQUIRE(fallback.techLevel == 9);
-    REQUIRE(fallback.rock == Rock::VeryHigh);
+    REQUIRE(fallback.rock == Rock::All);
     REQUIRE(fallback.seed == Params().seed);
 }
 
