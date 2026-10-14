@@ -1,3 +1,20 @@
+## 2026-10-14 — local 1.0.838: Random Skirmish rules, rock to 100%, house counts, Trooper squads
+
+- "Game rules..." button opens Custom Game's `GameOptionsWindow`; once confirmed, `matchRules()`
+  replaces the mod's effective rules for matches started from the screen.
+- Allies 0-6, enemies 1-7, at most 7 together (`kMaxOtherHouses`, `maxOtherHouses()`); the slider
+  the player did not move gives way. `Params::clamp` enforces the same.
+- Rock steps 15/25/35/50/65/80/90/100% (`Rock` enum extended, first four indices unchanged);
+  `growRock` spreads rock from its edges past what the editor's fields reach; 100% = no sand/spice.
+- Armies never buy light infantry (`kUnitTypes` without `Unit_Soldier`); Troopers are placed up to
+  five per tile (`NUM_INFANTRY_PER_TILE`); Army rows read "Army (credits)".
+- Verified: `dunelegacy_tests`, `skirmish_generator_tests` (rock to 100% incl. mirrored crowded
+  all-rock map, caps, army bundling), `skirmish_generator_probe` (slider coupling, rules window,
+  real matches load with full army value), `menu_navigation_probe`, `retina_resolution_probe`.
+- Installed on the MBA at 18:45 AEDT: 1.0.838, executable SHA256
+  6931350116161da4929c3241c31b1f2c36c37d94f4724a615c8cb62122d4cc84, runtime check passed; 1.0.837
+  at /Applications/.dunecity-backup-before-1.0.838-20261014-184540/dunecity.app.
+
 ## 2026-10-14 — local 1.0.837: Random Skirmish sliders
 
 Ordered settings (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, each side's Base, Army,
