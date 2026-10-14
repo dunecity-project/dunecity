@@ -47,10 +47,26 @@ These rules supersede the older sections below where they disagree.
   (the troopers walk farthest).
 - **Colonist escort ring** (`QuantBot::colonistEscortPlace`): the MCV keeps its own colonisation
   order; its escorts take places relative to its tile and heading (the two front corners 3 tiles
-  ahead, then behind, then the flanks; sonic escorts only front-row places), re-planned on every
-  escort pass, in Area Guard with the guard point on the place, so they fight on contact and
-  re-form. Measured in `quantbot_mcv_deployment`: the colonist deploys; escort on 3+ sides on 54%
-  of the march cycles (goal 80%, not met yet).
+  ahead, then behind, then the flanks; sonic escorts only front-row places), in Area Guard with the
+  guard point on the place, so they fight on contact and re-form. Keeping the places
+  (`QuantBot::escortColonist`):
+  - Upkeep runs every cycle while a colonist drives (`QuantBot::keepColonistEscortsInPlace`, from
+    `QuantBot::update` before the unit-pass schedule), so a place that moved with the MCV's tile is
+    followed at once, not up to 50 cycles later; it is derived from live state only (the per-cycle
+    escort set is derived afresh by the unit pass afterwards).
+  - An escort already walking to within 2 tiles (`kEscortPlaceSlack`) of its place keeps its route:
+    every new order resets the path and the unit waits for a new one.
+  - A new order aims where the place will be one MCV tile further along the heading; an escort
+    standing there waits for the MCV to come up.
+  - An unpassable place (terrain, structure, or a unit standing there - a route to an occupied
+    tile fails and the engine waits ~500 cycles before retrying) becomes the nearest passable tile
+    on the same side of the MCV, at least two tiles to that side, so the MCV's one-tile weaves do
+    not swap the escort's side or put it in the MCV's lane.
+  - No formation pace: an escort that was in a formation leaves it, so nothing caps it below the MCV.
+  Measured in `quantbot_mcv_deployment` (two tanks): the colonist deploys; escort on 3+ sides on
+  3229 of 3713 march cycles (86%), 4 sides on 480 (12%); before 1636/3008 (54%), 228. The march is
+  longer (3713 vs 3008 cycles): on that fixture's structure-striped rock the right-hand escort has
+  to cross the MCV's lane to reach its side, and the MCV waits for it.
 
 ## Shapes (`FormationPlanner::Shape`)
 

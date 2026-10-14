@@ -14,9 +14,13 @@ Details and measurements: `docs/formations.md` ("Formation fixes, save 9860 / pr
 - Block march probe: speed spread 25.6% -> 10-14%, shape error 10.0 -> 1.2-1.4 tiles, stretch 7.0 -> 2.2 tiles.
 - Colonist escort: a ring round the MCV as a moving anchor (`QuantBot::colonistEscortPlace`): the MCV keeps its own
   order and deploys as before; escorts take places relative to its tile and heading (front corners 3 tiles ahead, then
-  behind, flanks; sonic escorts front row only), re-planned each escort pass, guard point on the place. `quantbot_mcv_deployment`:
-  colonist deploys, escort on 3+ sides on 1636/3008 march cycles (54%), 4 sides on 228. **Open:** the 80% goal is not met;
-  the probe requires 50%. Not yet diagnosed why escorts fall off the ring (rocky route, 50-cycle re-plan cadence in the probe).
+  behind, flanks; sonic escorts front row only), guard point on the place. Upkeep every cycle while a colonist drives
+  (`QuantBot::keepColonistEscortsInPlace`); no re-order while walking to within 2 tiles of the place (a re-order resets
+  the path); new orders aim one MCV tile ahead; an unpassable or occupied place moves to the nearest passable tile at
+  least 2 tiles to the same side; escorts leave any formation (no pace cap). `quantbot_mcv_deployment` (requires 80%):
+  colonist deploys, escort on 3+ sides on 3229/3713 march cycles (86%, was 54%), 4 sides on 480 (12%). The march is
+  longer than before (3713 vs 3008 cycles): on the fixture's structure-striped rock the right-hand escort crosses the
+  MCV's lane and the MCV waits for it. No saved state or command change (save 9860 / protocol 74 unchanged).
 
 ## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
 

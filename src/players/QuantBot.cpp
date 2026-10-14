@@ -569,6 +569,10 @@ void QuantBot::update() {
 			(gameMode == GameMode::Campaign) ? "Campaign" : "Custom", static_cast<int>(difficulty));
 	}
 
+    // A driving colonist's escort keeps its ring places every cycle, not only on the unit
+    // pass: the places move with each tile the MCV enters (docs/formations.md).
+    keepColonistEscortsInPlace();
+
     // Custom single-player splits the heavy pass into two stateless phases at the
     // same 50-cycle cadence: unit management on one cycle, base building half an
     // interval later, with houses spread evenly instead of bunched one cycle

@@ -833,6 +833,8 @@ void runMcvDeploymentProbe(Game& game) {
         bool leftHome=false, leftAlone=false;
         int furthestEscort=0, marchCycles=0, threeSides=0, fourSides=0;
         while(game.getObjectManager().getObject(colonistID)!=nullptr && game.getGameCycleCount()<deadline) {
+            // QuantBot::update() order: the per-cycle escort upkeep, then the objects move.
+            bot->keepColonistEscortsInPlace();
             game.processObjects();++game.gameCycleCount;
             if(game.getObjectManager().getObject(colonistID)==nullptr) break;
             arrived=colonist->getLocation();
@@ -867,11 +869,11 @@ void runMcvDeploymentProbe(Game& game) {
         }
         for(auto* tank:escorts)
             furthestEscort=std::max(furthestEscort,blockDistance(tank->getLocation(),target).lround());
-        SDL_Log("MCV_DEPLOYMENT_NOTE: escort ring on 3+ sides of the colonist on %d of %d march cycles (4 sides on %d)",
-            threeSides,marchCycles,fourSides);
-        // Measured 54% with the ring; the 80% goal is not met yet (HANDOVER.md).
-        require(marchCycles>0 && threeSides*2>=marchCycles,
-            "The escort was not round the colonist (3 sides) for at least half the march");
+        SDL_Log("MCV_DEPLOYMENT_NOTE: escort ring on 3+ sides of the colonist on %d of %d march cycles (%d%%), 4 sides on %d (%d%%)",
+            threeSides,marchCycles,marchCycles>0 ? threeSides*100/marchCycles : 0,
+            fourSides,marchCycles>0 ? fourSides*100/marchCycles : 0);
+        require(marchCycles>0 && threeSides*5>=marchCycles*4,
+            "The escort was not round the colonist (3 sides) for at least 80% of the march");
         require(leftHome && !leftAlone,"The colonist left before its escort had gathered beside it");
         require(game.getObjectManager().getObject(colonistID)==nullptr,
             "The colonist never arrived and founded its city");

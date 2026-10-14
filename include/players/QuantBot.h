@@ -1032,9 +1032,17 @@ private:
     /// Keeps an escort guarding beside its colonist. True when \a unit is one,
     /// so no other controller orders it this pass.
     bool escortColonist(const UnitBase* unit);
+    /// Escort upkeep between passes, every cycle: while a colonist drives, each escort whose
+    /// order no longer leads to its ring place is sent on again (escortColonist), so a place
+    /// that moved with the MCV's tile is followed at once. Derived from live state only.
+    void keepColonistEscortsInPlace();
+    /// An escort walking to within this many tiles of its ring place keeps its route.
+    static constexpr int kEscortPlaceSlack = 2;
     /// The escort's place in the ring round its colonist (docs/formations.md): relative to the
-    /// MCV's tile and heading, sonic escorts in the front row; invalid when it has none.
-    Coord colonistEscortPlace(const UnitBase* escort, const ObjectBase* colonist) const;
+    /// MCV's tile and heading, sonic escorts in the front row; \a lead MCV tiles further along
+    /// the heading; on an unpassable place, the nearest passable tile on the same side of the
+    /// MCV. Invalid when it has none.
+    Coord colonistEscortPlace(const UnitBase* escort, const ObjectBase* colonist, int lead = 0) const;
     /// Escorts assigned to this colonist, and whether all of them have gathered.
     int colonistEscortCount(const UnitBase* mcv, bool* gathered = nullptr) const;
     /// Runtime-only exterior staging cache. Recomputed whenever the cycle
