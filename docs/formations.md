@@ -304,8 +304,11 @@ pace. A Shift right-click therefore queues slot moves instead of starting a form
 Who QuantBot sends, when, and at what is unchanged; only how a launched ground wave travels.
 
 - **Setting:** `QuantBot Config.ini`, `[General Behavior] WaveFormation = Combined | Box | Line |
-  Column | None` (code default and template: `Combined`). Read with the other QuantBot
-  settings and part of the QuantBot config hash, so every peer of a match runs the same shape.
+  Column | None` (code default `Combined`). The key is optional and deliberately NOT in the
+  shipped `QuantBot Config.ini.default`: that file is part of every mod's effective checksum, and
+  changing it makes saves from earlier builds refuse to load ("This game needs an older mod
+  version"). Read with the other QuantBot settings and part of the QuantBot config hash, so every
+  peer of a match runs the same shape.
 - **Custom waves** (`launchGroundHunt`, Easy to Brutal): the ground members hunt in formation
   (`Player::doFormationHuntToward`) towards the closest point of the wave's objective - the
   tracked wave's front (`customWaveObjective` of the lead: the observed enemy base the strength
