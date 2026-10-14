@@ -1,3 +1,15 @@
+## 2026-10-14 — local 1.0.837: Random Skirmish sliders
+
+Ordered settings (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, each side's Base, Army,
+City) are new header-only `Slider` widgets (`include/GUI/Slider.h`, DropDownBox-compatible entry
+API): low on the left, high on the right, value text beside the track, click/drag/wheel/arrow keys.
+Mod, house, AI and partner stay drop-downs; "Random" is the rightmost Army/City step. The skirmish
+probe drives a real click, drag and wheel on the size slider. `dunelegacy_tests`,
+`skirmish_generator_tests`, `skirmish_generator_probe`, `menu_navigation_probe` and
+`retina_resolution_probe` passed. Installed on the MBA at 18:12 AEDT: version 1.0.837, executable
+SHA256 230c6ad79727b64550a92ad17550b4fcda055329d0e56db00d95a5aa350eddac, runtime check passed;
+1.0.836 kept at /Applications/.dunecity-backup-before-1.0.837-20261014-181207/dunecity.app.
+
 ## 2026-10-14 — local 1.0.836: Random Skirmish tech 9 default, rocket turrets
 
 `Params::techLevel` defaults to 9. Base templates add Rocket Turrets from Small up (Small 1,
