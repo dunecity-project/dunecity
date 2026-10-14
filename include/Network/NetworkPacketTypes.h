@@ -195,7 +195,13 @@
 //     and breaks it into a fight on contact; CMD_UNIT_FORMATION_MOVE carries the facing in
 //     its top bits; members wait rather than step into a sonic unit's lane; AI group moves
 //     use the Combined-arms shape. Save 9859.
-#define NETWORK_PROTOCOL_VERSION            73
+// 74: Formation roles and one-speed march. Harvesters never join a formation (the formation
+//     executors give them the plain order), siege tanks stand in the front row, MCVs take
+//     the centre slot, a group forms up before it marches, every member keeps the slowest
+//     member's pace (infantry included), members ahead of one that fell behind wait for it,
+//     and only a sonic unit of the same type may stand in a sonic unit's lane; QuantBot
+//     colonists march in formation with their escort. Save 9860.
+#define NETWORK_PROTOCOL_VERSION            74
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

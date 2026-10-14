@@ -40,22 +40,30 @@ namespace FormationPlanner {
 
 /// Formation rank of a unit type. Lower ranks stand further forward.
 enum class Role : Uint8 {
-    Armour = 0,     ///< tanks, quads, trikes, devastators, sonic tanks: the front rows
-    Ranged = 1,     ///< launchers, siege tanks, deviators, rocket trikes: behind the armour
+    Armour = 0,     ///< tanks, siege tanks, quads, trikes, devastators, sonic tanks: the front rows
+    Ranged = 1,     ///< launchers, deviators, rocket trikes: behind the armour
     Infantry = 2,   ///< soldiers, troopers, saboteurs: flanks of the last row, then the back
-    Support = 3     ///< harvesters and MCVs: the rear
+    Support = 3     ///< MCVs: the protected centre (harvesters never join a formation)
 };
 
 /// The formation role of a unit type (the Box shape's rows).
 Role roleOf(Uint32 itemID);
+
+/// May a unit of this type be a formation member? Every ground unit except harvesters, which
+/// keep their ordinary orders when they are selected or sent with a group.
+bool joinsFormations(Uint32 itemID);
+
+/// Is this unit protected by its formation: the centre slot (the target itself), with the
+/// rest of the group laid out around it? MCVs.
+bool isProtected(Uint32 itemID);
 
 /**
     The shapes a group can be ordered into (docs/formations.md). Every shape faces the
     direction from the group's centroid to the target and keeps the sonic-lane rule.
 */
 enum class Shape : Uint8 {
-    Box = 0,        ///< rows by role: armour, ranged, infantry, support (the default)
-    Combined = 1,   ///< tanks in front, ranged behind, light vehicles on the flanks, scouts ahead
+    Box = 0,        ///< rows by role: armour, ranged, infantry; MCVs in the centre (the default)
+    Combined = 1,   ///< sonic units and tanks (siege tanks too) in front, ranged behind, light vehicles on the flanks, scouts ahead
     Line = 2,       ///< wide and shallow: the most frontage facing the target
     Column = 3      ///< narrow and deep, for passes and bridges
 };
@@ -68,15 +76,24 @@ const char* shapeName(Shape shape);
 /// Finer unit class used by the shapes other than the Box.
 enum class UnitClass : Uint8 {
     Sonic = 0,      ///< sonic tank, sonic trike: their wave hits friends, so nothing stands ahead
-    Heavy = 1,      ///< tanks, devastators, flame tanks and other armour: the front
+    Heavy = 1,      ///< tanks, siege tanks, devastators, flame tanks and other armour: the front
     Light = 2,      ///< quads, trikes, raider trikes: flanks and scouts
-    Ranged = 3,     ///< launchers, siege tanks, deviators, rocket trikes: behind the front
+    Ranged = 3,     ///< launchers, deviators, rocket trikes: behind the front
     Infantry = 4,
-    Support = 5     ///< harvesters and MCVs
+    Support = 5     ///< MCVs: the protected centre
 };
 UnitClass classOf(Uint32 itemID);
 /// Does this unit fire a sonic wave that damages everything in its lane, friends included?
 bool isSonic(Uint32 itemID);
+
+/**
+    May a unit of type 'otherItemID' stand in the lane of a sonic unit of type 'sonicItemID'?
+    Only another sonic unit of the same type: SonicTank::handleDamage ignores damage whose
+    shooter is a sonic tank and SonicTrike::handleDamage damage whose shooter is a sonic
+    trike, but a sonic tank's wave hurts a sonic trike and the other way round, and both hurt
+    every other unit (Bullet::update, Map::damage).
+*/
+bool mayStandInLane(Uint32 sonicItemID, Uint32 otherItemID);
 
 /**
     The sonic-lane rule: is 'other' in the firing lane ahead of a sonic unit standing on
@@ -118,7 +135,7 @@ struct Slot {
 
 struct Plan {
     std::vector<Slot> slots;    ///< one per member, sorted by objectID
-    FixPoint groupSpeed = 0;    ///< groupPace(): the slowest vehicle's speed
+    FixPoint groupSpeed = 0;    ///< groupPace(): the slowest member's speed
     bool formation = false;     ///< false for fewer than two members: plain move to the target
     Coord forward = Coord(0, -1);   ///< the facing the shape was laid out for (formation plans)
     std::vector<Uint32> scouts; ///< Combined arms: the members sent ahead as scouts, sorted
@@ -138,10 +155,13 @@ using CanStand = std::function<bool(const Member& member, const Coord& tile)>;
 constexpr int kCoherentRadius = 6;
 /// Coherent groups keep their shape, with gaps between neighbours shrunk to at most this.
 constexpr int kMaxCompressedSpacing = 2;
-/// Catch-up: a member this many tiles behind the group's most advanced member runs at full speed.
-constexpr int kCatchUpLagTiles = 5;
-/// Catch-up: a member this far from the group centroid runs at full speed.
-constexpr int kCatchUpCentroidTiles = 10;
+/// The march: a member more than this many tiles further from its slot than the group's
+/// leading member runs at full speed to recover its place.
+constexpr int kRecoverLagTiles = 1;
+/// The march: a member more than this many tiles ahead of the group's last member waits.
+constexpr int kHoldLeadTiles = 2;
+/// A march shorter than this many tiles (after the form-up) goes straight to the slots.
+constexpr int kFormUpMinMarch = 8;
 /// The fallback search for a free tile looks at most this far from the wanted slot.
 constexpr int kMaxSearchRadius = 32;
 
@@ -156,7 +176,8 @@ Coord facing(const Coord& from, const Coord& to);
 
 /**
     Plans a formation move.
-    \param  members         the group, in any order (object ids must be distinct)
+    \param  members         the group, in any order (object ids must be distinct); harvesters
+                            (joinsFormations) are left out of the plan
     \param  target          the ordered destination tile (inside the map)
     \param  mapWidth        map width in tiles
     \param  mapHeight       map height in tiles
@@ -164,19 +185,34 @@ Coord facing(const Coord& from, const Coord& to);
     \param  infantryPerTile how many infantry may share one destination tile (at least 1)
     \param  shape           the formation shape; the Box keeps a coherent group's own shape
     \return the plan; with fewer than two members every member is sent to the target. For a
-            formation, no slot is in a sonic member's lane (inSonicLane, plan.forward) as long
-            as every member finds a usable tile within kMaxSearchRadius.
+            formation, every unit in a sonic member's lane (inSonicLane, plan.forward) is one
+            that mayStandInLane, and an MCV (isProtected) takes the target itself in the
+            middle row of the shape, as long as every member finds a usable tile within
+            kMaxSearchRadius.
 */
 Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
           const CanStand& canStand, int infantryPerTile, Shape shape = Shape::Box);
 
 /**
-    The pace a formation keeps: its slowest vehicle's reference speed. Infantry walk far
-    slower than any vehicle (a soldier sets 0.24 against a tank's 0.80) and holding a mixed
-    wave to that crawl was measured to cost it a quarter of its first-contact fire, so
-    infantry set the pace only for an all-infantry group. 0 for no members.
+    The pace a formation keeps: its slowest member's reference speed, infantry included, so
+    the whole block moves at one speed. 0 for no members.
 */
 FixPoint groupPace(const std::vector<Member>& members);
+
+/**
+    Form-up (docs/formations.md): where each member gathers before the march, so the group
+    sets off in its shape. The shape (the slots) is translated back onto the group: centred on
+    the members' centroid, then moved forward until its foremost slot is level with the
+    foremost member (never past the target), so the leaders wait while the others come up.
+    Each wanted tile is resolved like a slot (usable, unique, clear of sonic lanes). Pure and
+    independent of the members' order.
+    \param  members     the group; members[i] heads for slots[i]
+    \param  forward     the formation's facing (Plan::forward)
+    \return one form-up tile per member, or nothing when the march from there would be
+            shorter than kFormUpMinMarch (the members go straight to their slots)
+*/
+std::vector<Coord> formUpTiles(const std::vector<Member>& members, const std::vector<Coord>& slots, const Coord& forward,
+                               int mapWidth, int mapHeight, const CanStand& canStand, int infantryPerTile);
 
 /**
     Nearest tile to 'wanted' that is inside the map and on which the member may stand, by a
@@ -187,15 +223,24 @@ FixPoint groupPace(const std::vector<Member>& members);
 Coord nearestStandable(const Member& member, const Coord& wanted, int mapWidth, int mapHeight,
                        const CanStand& canStand);
 
+/// What a formation member does on this cycle's march (FormationOrders::update()).
+enum class March : Uint8 {
+    Pace = 0,       ///< moves at the group's pace
+    Recover = 1,    ///< fell behind its place: its own full speed until it is back
+    Hold = 2        ///< ahead of a member that fell behind: waits for it
+};
+
 /**
-    Speed-matching exception. A formation member normally moves at the group speed; it runs
-    at its own full speed while it is lagging: more than kCatchUpLagTiles further from its
-    slot than the group's most advanced member is from its own, or more than
-    kCatchUpCentroidTiles from the group centroid.
-    \param  lagTiles            own remaining distance minus the group's smallest remaining distance
-    \param  centroidDistance    tile distance to the group centroid
+    The one-speed march (docs/formations.md). Every member starts in its place relative to
+    its slot, so in formation all members are the same distance from their slots. A member
+    more than kHoldLeadTiles closer to its slot than the group's last member waits for it
+    (this is also how a scattered group forms up: the leaders wait); otherwise a member more
+    than kRecoverLagTiles further from its slot than the leading member runs at full speed
+    to recover its place; everyone else keeps the pace.
+    \param  behindLeader    own remaining tiles minus the group's smallest remaining tiles
+    \param  aheadOfLast     the group's largest remaining tiles minus own remaining tiles
 */
-bool runsAtFullSpeed(int lagTiles, int centroidDistance);
+March marchState(int behindLeader, int aheadOfLast);
 
 /// The token range a formation command may carry: 24 bits, never zero.
 constexpr Uint32 kTokenMask = 0xFFFFFFu;

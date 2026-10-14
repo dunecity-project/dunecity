@@ -1,3 +1,21 @@
+## 2026-10-14 — formation fixes after 1.0.839 play-test (save 9860, protocol 74, not released)
+
+Stefan's 1.0.839 feedback (siege tanks in front, harvesters out, MCVs escorted, one speed, sonic lanes).
+Details and measurements: `docs/formations.md` ("Formation fixes, save 9860 / protocol 74").
+
+- Siege tanks are front-line armour (Box role Armour, Combined/Line/Column class Heavy, first among heavy armour).
+- Harvesters (`isHarvesterLikeUnit` items) never get a slot or membership; selected with a group they keep their ordinary order.
+- MCVs take the centre slot (the target itself, middle row, escort around).
+- One speed: form-up first (`FormationPlanner::formUpTiles`), then every member keeps the pace unit's
+  step time (`UnitBase::formationPaceStepLength`), recovers a lost place at full speed or waits for a member >2 tiles behind;
+  marching members route through and wait behind each other (`UnitBase::canPathThrough`).
+- Sonic: only a same-type sonic unit may stand in a sonic lane. Damage code: sonic tanks ignore damage from sonic tanks
+  and sonic trikes from sonic trikes only; cross-type and every other unit are hurt; a wave whose shooter has died hurts sonic units too.
+- Block march probe: speed spread 25.6% -> 10-14%, shape error 10.0 -> 1.2-1.4 tiles, stretch 7.0 -> 2.2 tiles.
+- **Open:** the QuantBot colonist convoy as a formation was tried and reverted: in `quantbot_mcv_deployment` the convoy
+  marched in formation but the colonist never deployed (diff kept at /tmp/dunecity-formation-fixes/colonisation-attempt.diff
+  on the Mac mini, not committed). The colonist escort still follows in Area Guard as before.
+
 ## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
 
 `feat/formation-shapes` (Box, Combined arms with scouts, Line, Column; sonic-lane rule for all

@@ -368,7 +368,8 @@ void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, i
         members.push_back(const_cast<UnitBase*>(unit));
         slots.push_back(slot);
     }
-    FormationOrders::join(members, allocateFormationGroup(), slots, false, FormationPlanner::facingCode(plan.forward));
+    FormationOrders::join(members, allocateFormationGroup(), slots, false, FormationPlanner::facingCode(plan.forward),
+                          bForced ? FormationOrders::Resume::ForcedMove : FormationOrders::Resume::Move);
 }
 
 void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const {
@@ -388,7 +389,8 @@ void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, in
         slots.push_back(slot);
     }
     // A hunting formation: the first contact of any member breaks the group into a fight.
-    FormationOrders::join(members, allocateFormationGroup(), slots, true, FormationPlanner::facingCode(plan.forward));
+    FormationOrders::join(members, allocateFormationGroup(), slots, true, FormationPlanner::facingCode(plan.forward),
+                          FormationOrders::Resume::HuntToward);
 }
 
 void Player::doFormUp(const std::vector<const UnitBase*>& units) const {

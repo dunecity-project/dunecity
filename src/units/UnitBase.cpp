@@ -181,6 +181,12 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         formationHunt = stream.readBool();
         formationFacing = stream.readUint8();
     }
+    if(currentGame->getLoadedSavegameVersion() >= 9860) {
+        formationFormUp.x = stream.readSint32();
+        formationFormUp.y = stream.readSint32();
+        formationResume = stream.readUint8();
+        formationPaceItem = stream.readUint32();
+    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -291,6 +297,10 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeFixPoint(formationSpeedCap);
     stream.writeBool(formationHunt);
     stream.writeUint8(formationFacing);
+    stream.writeSint32(formationFormUp.x);
+    stream.writeSint32(formationFormUp.y);
+    stream.writeUint8(formationResume);
+    stream.writeUint32(formationPaceItem);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -931,25 +941,46 @@ bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     const int step=DynastyMovement::step(itemID,
         DynastyMovement::throttle(itemID,static_cast<TERRAINTYPE>(tile->getType())),
         getHealth()<getMaxHealth()/2,cargo);
-    const int ticks=DynastyMovement::movementTicks(step, location.x!=nextSpot.x && location.y!=nextSpot.y);
+    const bool diagonal=location.x!=nextSpot.x && location.y!=nextSpot.y;
+    const int ticks=DynastyMovement::movementTicks(step, diagonal);
     if(ticks==0 || getMaxSpeed()<=0) return false;
     // One Dynasty coordinate unit per20Hz movement tick is0.08 world
     // units per16ms cycle (64/256 *20 *0.016). INI caps remain configurable.
     const FixPoint referenceCap=DynastyMovement::step(itemID,255,false,0)*0.08_fix;
     FixPoint scale=getMaxSpeed()/referenceCap;
     if(tile->isRoad()) scale*=ROADSPEEDMULTIPLIER;
-    // Formation speed matching: the realized speed of this step, step*0.08*scale world units
-    // per cycle, is held to the group's pace.
-    const FixPoint realized=FixPoint(step)*0.08_fix*scale;
-    const FixPoint capped=applyFormationSpeedCap(realized);
-    if(capped<realized) scale=scale*capped/realized;
+    // Formation pace (docs/formations.md): a member crosses this tile no faster than the
+    // group's pace unit would - the same step time for every member, so the block moves at one
+    // speed whatever each unit's own speed is.
+    const Uint64 paceLength=formationPaceStepLength(routeTick, static_cast<TERRAINTYPE>(tile->getType()), tile->isRoad(), diagonal);
+    if(paceLength==0) {
+        // No Dynasty pace unit: hold the realized speed of this step, step*0.08*scale world
+        // units per cycle, to the group's speed cap.
+        const FixPoint realized=FixPoint(step)*0.08_fix*scale;
+        const FixPoint capped=applyFormationSpeedCap(realized);
+        if(capped<realized) scale=scale*capped/realized;
+    }
     dynastyStepStart=routeTick*50;
     // Movement precedes scripting: the first movement tick is strictly after
     // the route call, then every3 ticks, independently of rendering cadence.
     const Uint64 duration=(routeTick/3*3+ticks*3-routeTick)*50;
-    dynastyStepEnd=dynastyStepStart+std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/scale));
+    const Uint64 length=std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/scale));
+    dynastyStepEnd=dynastyStepStart+std::max(length,paceLength);
     dynastyStartX=realX-bumpyOffsetX; dynastyStartY=realY-bumpyOffsetY;
     return true;
+}
+
+Uint64 UnitBase::formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, bool road, bool diagonal) const {
+    if(formationGroup==0 || formationMarch==FormationPlanner::March::Recover || formationPaceItem==ItemID_Invalid
+       || DynastyMovement::factor(formationPaceItem)==0) return 0;
+    const int paceStep=DynastyMovement::step(formationPaceItem, DynastyMovement::throttle(formationPaceItem, terrain), false, 0);
+    const int paceTicks=DynastyMovement::movementTicks(paceStep, diagonal);
+    const FixPoint paceMax=currentGame->objectData.data[formationPaceItem][originalHouseID].maxspeed;
+    if(paceTicks==0 || paceMax<=0) return 0;
+    FixPoint paceScale=paceMax/(DynastyMovement::step(formationPaceItem,255,false,0)*0.08_fix);
+    if(road) paceScale*=ROADSPEEDMULTIPLIER;
+    const Uint64 duration=(routeTick/3*3+paceTicks*3-routeTick)*50;
+    return std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/paceScale));
 }
 
 bool UnitBase::moveDynastyStep() {
@@ -1176,9 +1207,11 @@ void UnitBase::navigate() {
                                 ObjectBase* blocker = nextTile->getObject();
                                 if(blocker && blocker->isAUnit()) {
                                     UnitBase* blockingUnit = static_cast<UnitBase*>(blocker);
-                                    if(blockingUnit->isMoving()) {
+                                    if(blockingUnit->isMoving() || marchesWith(blockingUnit)) {
                                         // Both units are moving - wait a cycle for blocker to move
-                                        // Don't clear path, blocker will likely move soon
+                                        // Don't clear path, blocker will likely move soon. A
+                                        // marching member of this unit's formation moves on at
+                                        // the same pace: the block keeps its shape behind it.
                                         currentGame->frameTiming.pauseWaitingForBlocker++;
                                         return;
                                     }
@@ -1188,6 +1221,11 @@ void UnitBase::navigate() {
                         
                         // Static blocker, structure, or out-of-bounds - clear path and reroute
                         clearPath();
+                    } else if(formationGroup != 0 && formationMarch == FormationPlanner::March::Hold) {
+                        // One speed (docs/formations.md): ahead of a member that fell behind,
+                        // wait for it before the next step.
+                        currentGame->frameTiming.pauseWaitingForBlocker++;
+                        return;
                     } else if(FormationOrders::stepEntersSonicLane(this, nextSpot)) {
                         // A formation keeps its sonic lanes clear on the march (docs/formations.md):
                         // wait, as for a moving blocker, until the step no longer enters one.
@@ -2041,17 +2079,21 @@ FixPoint UnitBase::getTerrainAdjustedSpeed(int cargoPercent) const {
 }
 
 FixPoint UnitBase::applyFormationSpeedCap(FixPoint speed) const {
-    if(formationGroup == 0 || formationCatchUp || formationSpeedCap <= 0) return speed;
+    if(formationGroup == 0 || formationMarch == FormationPlanner::March::Recover || formationSpeedCap <= 0) return speed;
     return std::min(speed, formationSpeedCap);
 }
 
-void UnitBase::joinFormation(Uint32 groupID, const Coord& slot, bool hunt, Uint8 facing) {
+void UnitBase::joinFormation(Uint32 groupID, const Coord& slot, bool hunt, Uint8 facing, FormationOrders::Resume resume) {
     formationGroup = groupID;
     formationSlot = slot;
     formationSpeedCap = getFormationReferenceSpeed();
     formationHunt = hunt;
     formationFacing = facing;
-    formationCatchUp = false;
+    formationFormUp.invalidate();
+    formationResume = static_cast<Uint8>(resume);
+    formationPaceItem = itemID;
+    formationMarch = FormationPlanner::March::Pace;
+    formationPending = slot.isValid();
 }
 
 void UnitBase::leaveFormation() {
@@ -2060,7 +2102,37 @@ void UnitBase::leaveFormation() {
     formationSpeedCap = 0;
     formationHunt = false;
     formationFacing = 0;
-    formationCatchUp = false;
+    formationFormUp.invalidate();
+    formationResume = 0;
+    formationPaceItem = ItemID_Invalid;
+    formationMarch = FormationPlanner::March::Pace;
+    formationPending = false;
+}
+
+void UnitBase::startFormUp(const Coord& tile) {
+    formationFormUp = tile;
+    // Every order kind walks to the form-up tile the same way; a forced order stays forced.
+    // An attack-move or patrol keeps its queued walk, which takes the unit on towards the
+    // slot once it stands on the form-up tile (it waits there: FormationOrders::update()).
+    doMove2Pos(tile.x, tile.y, formationResume == static_cast<Uint8>(FormationOrders::Resume::ForcedMove));
+}
+
+bool UnitBase::formUpReady() const {
+    return formationFormUp.isValid()
+        && (location == formationFormUp || destination != formationFormUp || (!moving && !hasMovementIntent()));
+}
+
+void UnitBase::endFormUp() {
+    formationFormUp.invalidate();
+    switch(static_cast<FormationOrders::Resume>(formationResume)) {
+        case FormationOrders::Resume::ForcedMove: doMove2Pos(formationSlot.x, formationSlot.y, true); break;
+        case FormationOrders::Resume::HuntToward: doHuntToward(formationSlot.x, formationSlot.y); break;
+        case FormationOrders::Resume::Walk:
+            if(destination != formationSlot) doMove2Pos(formationSlot.x, formationSlot.y, false);
+            break;
+        case FormationOrders::Resume::Move:
+        default: doMove2Pos(formationSlot.x, formationSlot.y, false); break;
+    }
 }
 
 FixPoint UnitBase::getFormationReferenceSpeed() const {
@@ -2098,6 +2170,8 @@ bool UnitBase::formationMarchEnded() const {
     // A hunting member's walk may go on beyond its slot (a patrol's next leg); the
     // formation ends where the slot is reached.
     if(formationHunt && formationSlot.isValid() && location == formationSlot) return true;
+    // A member that has formed up waits for its group: not an arrival.
+    if(formationFormUp.isValid()) return false;
     // Arrived or idle: nothing left to travel to and nothing about to start.
     return !moving && !hasMovementIntent() && !target && attackPos.isInvalid()
         && pendingTargetRequest == TargetRequestKind::None && !pathRequestQueued;
@@ -2924,6 +2998,24 @@ void UnitBase::updateVisibleUnits() {
     }
 }
 
+bool UnitBase::marchesWith(const UnitBase* other) const {
+    // Both members of one formation on its march (not forming up), the other one not waiting
+    // for a member that fell behind: it moves on at the pace, so it is no obstacle.
+    return other != nullptr && other != this && formationGroup != 0 && formationFormUp.isInvalid()
+        && other->formationGroup == formationGroup && other->owner == owner && other->formationFormUp.isInvalid()
+        && other->formationMarch != FormationPlanner::March::Hold;
+}
+
+bool UnitBase::canPathThrough(int xPos, int yPos) const {
+    if(canPass(xPos, yPos)) return true;
+    if(formationGroup == 0 || !currentGameMap->tileExists(xPos, yPos)) return false;
+    // A marching formation plans its routes through its own marching members.
+    Tile* pTile = currentGameMap->getTile(xPos, yPos);
+    if(pTile->isMountain() && !isInfantry()) return false;
+    const auto* occupant = dynamic_cast<const UnitBase*>(pTile->getGroundObject());
+    return occupant != nullptr && marchesWith(occupant);
+}
+
 bool UnitBase::canPass(int xPos, int yPos) const {
     if(!currentGameMap->tileExists(xPos, yPos)) {
         return false;
@@ -3072,7 +3164,7 @@ bool UnitBase::isCachedPathStillValid() {
 
     int nodesChecked = 0;
     for(const Coord& coord : pathList) {
-        if(!currentGameMap->tileExists(coord) || !canPass(coord.x, coord.y)) {
+        if(!currentGameMap->tileExists(coord) || !canPathThrough(coord.x, coord.y)) {
             if(currentGame != nullptr) {
                 currentGame->frameTiming.pathInvalidBlocked++;
             }

@@ -39,7 +39,7 @@ std::set<Uint32> sonicGroups;
 bool eligible(const UnitBase* unit) {
     return unit != nullptr && unit->isActive() && unit->getHealth() > 0
         && unit->isAGroundUnit() && !unit->isAFlyingUnit() && !unit->isPickedUp()
-        && unit->getItemID() != Unit_Sandworm
+        && unit->getItemID() != Unit_Sandworm && FormationPlanner::joinsFormations(unit->getItemID())
         && currentGameMap != nullptr && currentGameMap->tileExists(unit->getLocation());
 }
 
@@ -88,20 +88,27 @@ Coord revalidatedSlot(const UnitBase* unit, const Coord& slot) {
     return found.isValid() ? found : unit->getLocation();
 }
 
-void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots, bool hunt, Uint8 facing) {
+void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots, bool hunt, Uint8 facing,
+          Resume resume) {
     if(groupID == 0 || units.empty()) return;
     const House* owner = units.front()->getOwner();
     for(size_t i = 0; i < units.size(); ++i)
-        units[i]->joinFormation(groupID, i < slots.size() ? slots[i] : Coord::Invalid(), hunt, facing);
-    // The group's pace is its slowest vehicle's; infantry set it only for an all-infantry
-    // group (see FormationPlanner::groupPace). Members that joined earlier through their
-    // own formation commands count as well.
+        units[i]->joinFormation(groupID, i < slots.size() ? slots[i] : Coord::Invalid(), hunt, facing, resume);
+    // The group's pace is its slowest member's, infantry included (FormationPlanner::groupPace),
+    // and that member's type sets every capped member's step time. Members that joined
+    // earlier through their own formation commands count as well.
     std::vector<FormationPlanner::Member> members;
     for(const UnitBase* unit : unitList)
         if(unit->getFormationGroup() == groupID && unit->getOwner() == owner) members.push_back(memberOf(unit));
     const FixPoint cap = FormationPlanner::groupPace(members);
+    Uint32 paceItem = ItemID_Invalid, paceID = 0;
+    for(const auto& member : members)
+        if(member.speed == cap && (paceItem == ItemID_Invalid || member.objectID < paceID)) {
+            paceItem = member.itemID;
+            paceID = member.objectID;
+        }
     for(UnitBase* unit : unitList)
-        if(unit->getFormationGroup() == groupID && unit->getOwner() == owner) unit->setFormationSpeedCap(cap);
+        if(unit->getFormationGroup() == groupID && unit->getOwner() == owner) unit->setFormationPace(cap, paceItem);
 }
 
 void breakHunt(Uint32 groupID, const ObjectBase* enemy) {
@@ -118,6 +125,9 @@ void breakHunt(Uint32 groupID, const ObjectBase* enemy) {
 
 bool stepEntersSonicLane(const UnitBase* unit, const Coord& next) {
     if(!unit->isInFormation() || !sonicGroups.count(unit->getFormationGroup())) return false;
+    // Forming up the group crosses itself on the way into its shape, whose form-up tiles keep
+    // the lanes clear (FormationPlanner::formUpTiles): the rule holds from the march on.
+    if(unit->isFormationForming()) return false;
     const Coord forward = FormationPlanner::facingFromCode(unit->getFormationFacing());
     if(forward == Coord(0, 0)) return false;
     const bool sonic = FormationPlanner::isSonic(unit->getItemID());
@@ -129,15 +139,52 @@ bool stepEntersSonicLane(const UnitBase* unit, const Coord& next) {
         const Coord positions[2] = {other->getLocation(), other->isMoving() ? other->getNextSpot() : other->getLocation()};
         for(const Coord& at : positions) {
             if(at.isInvalid()) continue;
-            // Into another sonic unit's lane, or another member into this sonic unit's lane.
+            // Into another sonic unit's lane, or another member into this sonic unit's lane -
+            // unless it is a sonic unit of the same type, which the wave does not hurt.
             if(otherSonic && FormationPlanner::inSonicLane(at, next, forward)
-               && !FormationPlanner::inSonicLane(at, here, forward)) return true;
+               && !FormationPlanner::inSonicLane(at, here, forward)
+               && !FormationPlanner::mayStandInLane(other->getItemID(), unit->getItemID())) return true;
             if(sonic && FormationPlanner::inSonicLane(next, at, forward)
-               && !FormationPlanner::inSonicLane(here, at, forward)) return true;
+               && !FormationPlanner::inSonicLane(here, at, forward)
+               && !FormationPlanner::mayStandInLane(unit->getItemID(), other->getItemID())) return true;
         }
     }
     return false;
 }
+
+namespace {
+
+/// Plans the form-up of the members that joined group 'joined' this cycle and sends each to its
+/// form-up tile (FormationPlanner::formUpTiles). Nothing to do for a short march.
+void planFormUp(const std::vector<UnitBase*>& joined) {
+    std::vector<FormationPlanner::Member> members;
+    std::vector<Coord> slots;
+    std::map<Uint32, const UnitBase*> byID;
+    for(const UnitBase* unit : joined) {
+        members.push_back(memberOf(unit));
+        slots.push_back(unit->getFormationSlot());
+        byID[unit->getObjectID()] = unit;
+    }
+    Coord forward = FormationPlanner::facingFromCode(joined.front()->getFormationFacing());
+    if(forward == Coord(0, 0)) {
+        // Formations without a facing face from the group to its slots.
+        Sint64 sumX = 0, sumY = 0, slotX = 0, slotY = 0;
+        for(size_t i = 0; i < members.size(); ++i) {
+            sumX += members[i].tile.x; sumY += members[i].tile.y; slotX += slots[i].x; slotY += slots[i].y;
+        }
+        const Sint64 n = static_cast<Sint64>(members.size());
+        forward = FormationPlanner::facing(Coord(static_cast<int>(sumX / n), static_cast<int>(sumY / n)),
+                                           Coord(static_cast<int>(slotX / n), static_cast<int>(slotY / n)));
+    }
+    const FormationPlanner::CanStand query = [&byID](const FormationPlanner::Member& member, const Coord& tile) {
+        return canStand(byID.at(member.objectID), tile);
+    };
+    const auto tiles = FormationPlanner::formUpTiles(members, slots, forward, currentGameMap->getSizeX(),
+                                                     currentGameMap->getSizeY(), query, NUM_INFANTRY_PER_TILE);
+    for(size_t i = 0; i < tiles.size(); ++i) joined[i]->startFormUp(tiles[i]);
+}
+
+} // namespace
 
 void update() {
     // Hunting formations first: the first member in unit-list order that has made contact
@@ -152,36 +199,83 @@ void update() {
 
     struct Group {
         int members = 0;
-        Sint64 sumX = 0, sumY = 0;
-        int leastRemaining = 0;
+        int forming = 0, ready = 0;
+        int leastRemaining = 0, mostRemaining = 0, marching = 0;
+        bool laneWait = false;
     };
     // Ordered by group id and filled in unit-list order: identical on every peer.
     std::map<Uint32, Group> groups;
     for(UnitBase* unit : unitList) {
         if(!unit->isInFormation()) continue;
         if(unit->formationMarchEnded()) { unit->leaveFormation(); continue; }
-        Group& group = groups[unit->getFormationGroup()];
-        const int remaining = unit->formationRemainingTiles();
-        group.leastRemaining = group.members == 0 ? remaining : std::min(group.leastRemaining, remaining);
-        ++group.members;
-        group.sumX += unit->getLocation().x;
-        group.sumY += unit->getLocation().y;
+        ++groups[unit->getFormationGroup()].members;
     }
+    // The last member left has no one to keep pace with.
+    for(UnitBase* unit : unitList)
+        if(unit->isInFormation() && groups.at(unit->getFormationGroup()).members < 2) unit->leaveFormation();
+    // The members that joined this cycle (commands and AI orders run before this) form up
+    // together: one plan per group, in unit-list order.
+    {
+        std::map<Uint32, std::vector<UnitBase*>> joined;
+        for(UnitBase* unit : unitList) {
+            if(!unit->isFormationPending()) continue;
+            unit->clearFormationPending();
+            joined[unit->getFormationGroup()].push_back(unit);
+        }
+        for(const auto& [groupID, units] : joined) planFormUp(units);
+    }
+
 
     // The groups whose members keep the sonic lanes clear on this cycle's steps.
     sonicGroups.clear();
     for(const UnitBase* unit : unitList)
         if(unit->isInFormation() && unit->getFormationFacing() != 0 && FormationPlanner::isSonic(unit->getItemID()))
             sonicGroups.insert(unit->getFormationGroup());
+    // A member whose next step would enter a sonic lane waits for the others to move on.
+    auto laneBlocked = [](const UnitBase* unit) {
+        return sonicGroups.count(unit->getFormationGroup()) && !unit->isMoving() && unit->hasNextSpot()
+            && stepEntersSonicLane(unit, unit->getNextSpot());
+    };
+
+    // Form-up: a group marches once every forming member stands on its form-up tile (or cannot
+    // get closer, or waits at a sonic lane); then each is sent on to its slot.
+    for(const UnitBase* unit : unitList) {
+        if(!unit->isFormationForming()) continue;
+        Group& group = groups.at(unit->getFormationGroup());
+        ++group.forming;
+        group.ready += (unit->formUpReady() || laneBlocked(unit)) ? 1 : 0;
+    }
+    for(UnitBase* unit : unitList) {
+        if(!unit->isFormationForming()) continue;
+        const Group& group = groups.at(unit->getFormationGroup());
+        if(group.ready == group.forming) unit->endFormUp();
+    }
+
+    // The march: remaining distances of the marching members.
+    for(const UnitBase* unit : unitList) {
+        if(!unit->isInFormation() || unit->isFormationForming()) continue;
+        Group& group = groups.at(unit->getFormationGroup());
+        const int remaining = unit->formationRemainingTiles();
+        group.leastRemaining = group.marching == 0 ? remaining : std::min(group.leastRemaining, remaining);
+        group.mostRemaining = group.marching == 0 ? remaining : std::max(group.mostRemaining, remaining);
+        ++group.marching;
+        // The group does not wait for a member held up at a sonic lane, or the two would wait
+        // for each other for ever.
+        group.laneWait = group.laneWait || laneBlocked(unit);
+    }
+    // One speed (docs/formations.md): forming members walk to their form-up tiles at full speed
+    // and wait there; marching members keep the pace, a member that fell behind its place
+    // recovers it at full speed, and the members ahead of one that fell further behind wait.
     for(UnitBase* unit : unitList) {
         if(!unit->isInFormation()) continue;
+        if(unit->isFormationForming()) {
+            unit->setFormationMarch(unit->formUpReady() ? FormationPlanner::March::Hold : FormationPlanner::March::Recover);
+            continue;
+        }
         const Group& group = groups.at(unit->getFormationGroup());
-        // The last member left has no one to keep pace with.
-        if(group.members < 2) { unit->leaveFormation(); continue; }
-        const Coord centroid(static_cast<int>(group.sumX / group.members), static_cast<int>(group.sumY / group.members));
-        unit->setFormationCatchUp(FormationPlanner::runsAtFullSpeed(
-            unit->formationRemainingTiles() - group.leastRemaining,
-            FormationPlanner::tileDistance(unit->getLocation(), centroid)));
+        const int remaining = unit->formationRemainingTiles();
+        unit->setFormationMarch(FormationPlanner::marchState(remaining - group.leastRemaining,
+            group.laneWait ? 0 : group.mostRemaining - remaining));
     }
 }
 

@@ -749,7 +749,8 @@ case CMD_INFANTRY_CAPTURE: {
                 // this cycle: every peer moves it to the same nearest usable tile.
                 destination = FormationOrders::revalidatedSlot(unit, destination);
                 unit->doMove2Pos(destination.x, destination.y, true);
-                FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, false, facing);
+                FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, false, facing,
+                                      FormationOrders::Resume::ForcedMove);
             });
             // Like a plain move, it replaces the order queue and becomes its front.
             unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));
@@ -785,7 +786,8 @@ case CMD_INFANTRY_CAPTURE: {
                 } else {
                     unit->doIssuePatrol(destination, false);
                 }
-                if(member) FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, true, facing);
+                if(member) FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, true, facing,
+                                                 FormationOrders::Resume::Walk);
             });
         } break;
 

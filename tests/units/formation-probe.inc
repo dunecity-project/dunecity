@@ -118,7 +118,9 @@ Outcome march(Game& game, const std::vector<UnitBase*>& army, bool formations, c
             for(const UnitBase* unit : army) all = all && unit->getDestination() != unit->getLocation();
             if(all) {
                 captured = true;
-                for(const UnitBase* unit : army) outcome.ordered[unit->getObjectID()] = unit->getDestination();
+                // With formations the slot, not the form-up tile the member walks to first.
+                for(const UnitBase* unit : army)
+                    outcome.ordered[unit->getObjectID()] = unit->isInFormation() ? unit->getFormationSlot() : unit->getDestination();
             }
         }
         for(const UnitBase* unit : army)
@@ -215,18 +217,20 @@ Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const Formati
     return cycles;
 }
 
-/// The sonic tanks' lane check, using the group's facing.
+/// The sonic units' lane check, using the group's facing: steps into a sonic lane by a unit
+/// that may not stand there (anything but a sonic unit of the same type).
 int countLaneEntries(const std::vector<UnitBase*>& group, const Coord& forward, std::set<std::pair<Uint32, Uint32>>& inLane,
                      std::string& detail) {
     int entries = 0;
     for(const UnitBase* sonic : group) {
         if(!FormationPlanner::isSonic(sonic->getItemID())) continue;
         for(const UnitBase* other : group) {
-            if(other == sonic) continue;
+            if(other == sonic || FormationPlanner::mayStandInLane(sonic->getItemID(), other->getItemID())) continue;
             const auto key = std::make_pair(sonic->getObjectID(), other->getObjectID());
             const bool now = FormationPlanner::inSonicLane(sonic->getLocation(), other->getLocation(), forward);
-            // A step into the lane counts while both are on the march.
-            if(now && !inLane.count(key) && sonic->isInFormation() && other->isInFormation()) {
+            // A step into the lane counts while both are on the march (formed up).
+            if(now && !inLane.count(key) && sonic->isInFormation() && other->isInFormation()
+               && !sonic->isFormationForming() && !other->isFormationForming()) {
                 ++entries;
                 detail += " " + std::to_string(other->getObjectID()) + "@" + std::to_string(other->getLocation().x) + ","
                     + std::to_string(other->getLocation().y) + "->sonic" + std::to_string(sonic->getObjectID()) + "@"
@@ -236,6 +240,19 @@ int countLaneEntries(const std::vector<UnitBase*>& group, const Coord& forward, 
         }
     }
     return entries;
+}
+
+/// How many (sonic unit, other unit) pairs of marching members have the other in the sonic
+/// unit's lane although it may not stand there.
+int forbiddenInLane(const std::vector<UnitBase*>& group, const Coord& forward) {
+    int pairs = 0;
+    for(const UnitBase* sonic : group) {
+        if(!FormationPlanner::isSonic(sonic->getItemID()) || !sonic->isInFormation() || sonic->isFormationForming()) continue;
+        for(const UnitBase* other : group)
+            if(other != sonic && other->isInFormation() && !FormationPlanner::mayStandInLane(sonic->getItemID(), other->getItemID())
+               && FormationPlanner::inSonicLane(sonic->getLocation(), other->getLocation(), forward)) ++pairs;
+    }
+    return pairs;
 }
 
 /// A mixed army with two sonic tanks in the middle of it, scattered on the west side.
@@ -443,6 +460,211 @@ HuntOutcome huntInFormation(Game& game, House* owner, House* enemyHouse) {
     return outcome;
 }
 
+/// The block march (docs/formations.md, "One speed"): a mixed Combined-arms group with sonic
+/// tanks, siege tanks, an MCV, troopers and a harvester, right-clicked across open sand.
+const std::vector<Start> kBlockArmy = {
+    {Unit_SonicTank, Coord(6, 13)}, {Unit_SonicTank, Coord(4, 18)}, {Unit_SiegeTank, Coord(9, 15)},
+    {Unit_SiegeTank, Coord(3, 10)}, {Unit_Tank, Coord(7, 21)},      {Unit_Tank, Coord(10, 9)},
+    {Unit_Launcher, Coord(2, 15)},  {Unit_Launcher, Coord(5, 23)},  {Unit_MCV, Coord(4, 7)},
+    {Unit_Quad, Coord(11, 19)},     {Unit_Quad, Coord(8, 6)},       {Unit_Trooper, Coord(2, 20)},
+    {Unit_Trooper, Coord(6, 25)},   {Unit_Harvester, Coord(11, 24)},
+};
+const Coord kBlockTarget(40, 15);
+constexpr Uint32 kSpeedWindow = 384;     ///< cycles per speed sample (several tiles at the pace)
+
+struct BlockOutcome {
+    double speedSpread = 0;     ///< largest (max - min) / mean member speed over a steady window
+    double meanSpeed = 0;       ///< world units per cycle over the steady windows
+    double shapeError = 0;      ///< largest distance of a member from its place in the block, tiles
+    double stretch = 0;         ///< largest depth of the block along the march beyond the plan, tiles
+    int windows = 0;
+    Uint32 arrived = 0;
+    bool harvesterLeftOut = false;  ///< no slot, no membership, its own move to the clicked tile
+    bool siegeInFront = false;      ///< both siege tanks planned in the front row
+    bool mcvOnTarget = false;       ///< the MCV's slot is the clicked tile
+    int steadyCycles = 0;
+    int mcvSurrounded = 0;          ///< steady cycles with members ahead, behind and on both sides of the MCV
+    int mcvInFormation = 0;
+    int harvesterOutside = 0;       ///< steady cycles with the harvester outside the formation
+    int laneStepIns = 0;            ///< steps into a sonic lane by a unit that may not stand there
+    int steadyLanePairs = 0;        ///< such units standing in a sonic lane, summed over the steady cycles
+};
+
+BlockOutcome marchBlock(Game& game, House* owner) {
+    BlockOutcome outcome;
+    auto group = deploy(owner, kBlockArmy);
+    for(int i = 0; i < 5; ++i) game.updateGameState();
+    settings.general.formationMoves = true;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::Shape::Combined);
+    std::vector<const UnitBase*> selected(group.begin(), group.end());
+    const auto plan = FormationOrders::planGroup(selected, kBlockTarget, FormationPlanner::Shape::Combined);
+    require(plan.formation, "The block fixture got no formation plan");
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    for(UnitBase* unit : group) { game.selectedList.insert(unit->getObjectID()); unit->setSelected(true); }
+    game.selectionChanged();
+    require(game.handleSelectedObjectsActionClick(kBlockTarget.x, kBlockTarget.y), "The block right click was not accepted");
+    // The measured block: every planned member except harvesters (old builds planned them too).
+    std::vector<const UnitBase*> block;
+    const UnitBase* harvester = nullptr;
+    const UnitBase* mcv = nullptr;
+    for(const UnitBase* unit : group) {
+        if(isHarvesterLikeUnit(unit->getItemID())) harvester = unit;
+        if(unit->getItemID() == Unit_MCV) mcv = unit;
+        if(plan.slotFor(unit->getObjectID()).isValid() && !isHarvesterLikeUnit(unit->getItemID())) block.push_back(unit);
+    }
+    require(harvester != nullptr && mcv != nullptr, "The block fixture lost its harvester or MCV");
+    for(int i = 0; i < 3; ++i) game.updateGameState();
+    // The harvester in the selection is left out: no slot, no membership, its own ordinary
+    // move to the clicked tile. The player then sends it home, off the MCV's slot.
+    outcome.harvesterLeftOut = plan.slotFor(harvester->getObjectID()).isInvalid() && !harvester->isInFormation()
+        && harvester->getDestination() == kBlockTarget;
+    SDL_Log("FORMATION_PROBE_BLOCK_HARVESTER: slot %s, in formation %d, destination %d,%d (clicked %d,%d)",
+            plan.slotFor(harvester->getObjectID()).isValid() ? "planned" : "none", harvester->isInFormation(),
+            harvester->getDestination().x, harvester->getDestination().y, kBlockTarget.x, kBlockTarget.y);
+    game.getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_MOVE2POS, harvester->getObjectID(),
+                                                12u, 28u, static_cast<Uint32>(true)));
+    // Siege tanks hold the front row with the tanks; the MCV stands on the clicked tile.
+    int frontX = INT32_MIN;
+    for(const UnitBase* unit : block)
+        if(!std::count(plan.scouts.begin(), plan.scouts.end(), unit->getObjectID())) frontX = std::max(frontX, plan.slotFor(unit->getObjectID()).x);
+    outcome.siegeInFront = true;
+    for(const UnitBase* unit : block)
+        if(unit->getItemID() == Unit_SiegeTank) outcome.siegeInFront = outcome.siegeInFront && plan.slotFor(unit->getObjectID()).x == frontX;
+    outcome.mcvOnTarget = plan.slotFor(mcv->getObjectID()) == kBlockTarget;
+    std::set<std::pair<Uint32, Uint32>> inLane;
+    std::string laneDetail;
+    countLaneEntries(std::vector<UnitBase*>(group.begin(), group.end()), plan.forward, inLane, laneDetail);
+    bool shot = false;
+    double startX = 0, endX = 0;
+    for(const UnitBase* unit : block) {
+        startX += unit->getRealX().toDouble();
+        endX += plan.slotFor(unit->getObjectID()).x * TILESIZE + TILESIZE / 2;
+    }
+    startX /= block.size();
+    endX /= block.size();
+    double planDepth = 0;
+    {
+        int lo = INT32_MAX, hi = INT32_MIN;
+        for(const UnitBase* unit : block) { lo = std::min(lo, plan.slotFor(unit->getObjectID()).x); hi = std::max(hi, plan.slotFor(unit->getObjectID()).x); }
+        planDepth = hi - lo;
+    }
+    std::vector<std::vector<std::pair<double, double>>> track;     // cycle -> member -> real position
+    std::vector<double> progress;
+    Uint32 cycles = 0;
+    while(cycles < kTimeoutCycles) {
+        game.updateGameState();
+        ++cycles;
+        std::vector<std::pair<double, double>> at;
+        double sumX = 0;
+        for(const UnitBase* unit : block) {
+            at.emplace_back(unit->getRealX().toDouble(), unit->getRealY().toDouble());
+            sumX += at.back().first;
+        }
+        track.push_back(at);
+        progress.push_back((sumX / block.size() - startX) / (endX - startX));
+        outcome.laneStepIns += countLaneEntries(std::vector<UnitBase*>(group.begin(), group.end()), plan.forward, inLane, laneDetail);
+        if(progress.back() >= 0.35 && progress.back() <= 0.75) {
+            // The MCV in the middle of the marching block: members ahead, behind and on both
+            // sides of it (by more than half a tile) on every steady cycle.
+            const double mx = mcv->getRealX().toDouble(), my = mcv->getRealY().toDouble();
+            bool ahead = false, behind = false, left = false, right = false;
+            for(const auto& [x, y] : at) {
+                ahead = ahead || x > mx + TILESIZE / 2;
+                behind = behind || x < mx - TILESIZE / 2;
+                left = left || y < my - TILESIZE / 2;
+                right = right || y > my + TILESIZE / 2;
+            }
+            ++outcome.steadyCycles;
+            outcome.mcvSurrounded += (ahead && behind && left && right) ? 1 : 0;
+            outcome.mcvInFormation += mcv->isInFormation() ? 1 : 0;
+            outcome.harvesterOutside += harvester->isInFormation() ? 0 : 1;
+            outcome.steadyLanePairs += forbiddenInLane(std::vector<UnitBase*>(group.begin(), group.end()), plan.forward);
+        }
+        if(!shot && progress.back() >= 0.5) {
+            shot = true;
+            const bool paths = settings.general.showMovementPaths;
+            settings.general.showMovementPaths = false;
+            game.unselectAll(game.selectedList);
+            game.selectedList.clear();
+            saveScreenshot(game, "formation-block.png", Coord(static_cast<int>(sumX / block.size()) / TILESIZE, 14));
+            settings.general.showMovementPaths = paths;
+        }
+        bool settled = true;
+        for(const UnitBase* unit : block)
+            settled = settled && !unit->isMoving() && unit->getLocation() == plan.slotFor(unit->getObjectID());
+        if(settled) break;
+    }
+    outcome.arrived = cycles;
+    // The steady march: the block's centre between 35% and 75% of the way.
+    auto steady = [&](size_t t) { return progress[t] >= 0.35 && progress[t] <= 0.75; };
+    double speedSum = 0;
+    int speedSamples = 0;
+    std::vector<double> memberSpeed(block.size(), 0), memberLo(block.size(), 1e9), memberHi(block.size(), -1e9);
+    std::vector<double> memberError(block.size(), 0);
+    for(size_t t = 0; t + kSpeedWindow < track.size(); t += 32) {
+        if(!steady(t) || !steady(t + kSpeedWindow)) continue;
+        double lo = 1e9, hi = -1e9, sum = 0;
+        for(size_t i = 0; i < block.size(); ++i) {
+            const double speed = (track[t + kSpeedWindow][i].first - track[t][i].first) / kSpeedWindow;
+            lo = std::min(lo, speed); hi = std::max(hi, speed); sum += speed;
+            memberSpeed[i] += speed;
+            memberLo[i] = std::min(memberLo[i], speed);
+            memberHi[i] = std::max(memberHi[i], speed);
+        }
+        const double mean = sum / block.size();
+        outcome.speedSpread = std::max(outcome.speedSpread, mean > 0 ? (hi - lo) / mean : 1.0);
+        speedSum += mean;
+        ++speedSamples;
+        ++outcome.windows;
+    }
+    outcome.meanSpeed = speedSamples ? speedSum / speedSamples : 0;
+    for(size_t t = 0; t < track.size(); ++t) {
+        if(!steady(t)) continue;
+        std::vector<double> dx, dy;
+        double front = -1e9, back = 1e9;
+        for(size_t i = 0; i < block.size(); ++i) {
+            const Coord slot = plan.slotFor(block[i]->getObjectID());
+            dx.push_back(track[t][i].first - (slot.x * TILESIZE + TILESIZE / 2));
+            dy.push_back(track[t][i].second - (slot.y * TILESIZE + TILESIZE / 2));
+            front = std::max(front, track[t][i].first);
+            back = std::min(back, track[t][i].first);
+        }
+        auto median = [](std::vector<double> v) { std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end()); return v[v.size() / 2]; };
+        const double mx = median(dx), my = median(dy);
+        for(size_t i = 0; i < block.size(); ++i) {
+            const double error = std::max(std::abs(dx[i] - mx), std::abs(dy[i] - my)) / TILESIZE;
+            memberError[i] = std::max(memberError[i], error);
+            outcome.shapeError = std::max(outcome.shapeError, error);
+        }
+        outcome.stretch = std::max(outcome.stretch, (front - back) / TILESIZE - planDepth);
+    }
+    for(size_t i = 0; i < block.size(); ++i)
+        SDL_Log("FORMATION_PROBE_BLOCK_MEMBER: id=%u item=%u slot=%d,%d steady speed mean %.3f min %.3f max %.3f, largest place error %.2f tiles",
+                block[i]->getObjectID(), block[i]->getItemID(), plan.slotFor(block[i]->getObjectID()).x,
+                plan.slotFor(block[i]->getObjectID()).y, speedSamples ? memberSpeed[i] / speedSamples : 0.0,
+                memberLo[i], memberHi[i], memberError[i]);
+    SDL_Log("FORMATION_PROBE_BLOCK: %zu members, %d steady windows of %u cycles: speed spread %.1f%% (mean %.3f world units/cycle), "
+            "shape error %.2f tiles, stretch beyond the planned depth %.2f tiles, settled after %.2fs",
+            block.size(), outcome.windows, kSpeedWindow, outcome.speedSpread * 100, outcome.meanSpeed, outcome.shapeError,
+            outcome.stretch, seconds(outcome.arrived));
+    SDL_Log("FORMATION_PROBE_BLOCK_ROLES: harvester left out %d (outside the formation on %d/%d steady cycles), siege tanks in "
+            "the front row %d, MCV on the clicked tile %d, in formation %d/%d and surrounded %d/%d steady cycles, "
+            "%d sonic lane step-ins, %d unit-cycles in a sonic lane on the steady march%s",
+            outcome.harvesterLeftOut, outcome.harvesterOutside, outcome.steadyCycles, outcome.siegeInFront, outcome.mcvOnTarget,
+            outcome.mcvInFormation, outcome.steadyCycles, outcome.mcvSurrounded, outcome.steadyCycles, outcome.laneStepIns,
+            outcome.steadyLanePairs, laneDetail.c_str());
+    require(outcome.harvesterLeftOut && outcome.harvesterOutside == outcome.steadyCycles, "A selected harvester joined the formation");
+    require(outcome.siegeInFront, "A siege tank was not planned in the front row");
+    require(outcome.mcvOnTarget && outcome.steadyCycles > 0 && outcome.mcvInFormation == outcome.steadyCycles
+            && outcome.mcvSurrounded == outcome.steadyCycles, "The MCV was not in the middle of the marching block");
+    require(outcome.steadyLanePairs == 0, "A unit stood in a sonic lane on the march");
+    require(outcome.windows > 0 && outcome.speedSpread <= 0.15, "The members' speeds differ by more than 15% on the steady march");
+    require(outcome.shapeError <= 2.0 && outcome.stretch <= 3.0, "The block lost its shape on the steady march");
+    clearHouse(owner);
+    return outcome;
+}
+
 } // namespace FormationProbe
 
 int runFormationProbe() {
@@ -515,19 +737,21 @@ int runFormationProbe() {
     clearArmy(army);
 
     // 3. Mid-march save and reload of a hunting attack-move in Combined arms: membership,
-    //    slot, pace and the hunt flag survive (SAVEGAMEVERSION 9859).
+    //    slot, pace, the hunt flag, the facing and the form-up survive (SAVEGAMEVERSION 9860).
     army = deployArmy(owner);
     settings.general.formationMoves = true;
     settings.general.formationShape = static_cast<int>(FormationPlanner::Shape::Combined);
     require(game->issuePositionOrder(Game::PositionOrder::AttackMove, army, kTarget, false) != nullptr,
             "The group attack-move was not issued");
     for(int i = 0; i < 300; ++i) game->updateGameState();
-    struct Saved { Uint32 group; Coord slot; FixPoint cap; bool hunt; Uint8 facing; };
+    struct Saved { Uint32 group; Coord slot; FixPoint cap; bool hunt; Uint8 facing; Coord formUp; };
     std::map<Uint32, Saved> before;
+    int formingAtSave = 0;
     for(const UnitBase* unit : army) {
         require(unit->isInFormation() && unit->isFormationHunt(), "A member left its hunting formation mid-march");
         before[unit->getObjectID()] = {unit->getFormationGroup(), unit->getFormationSlot(), unit->getFormationSpeedCap(),
-                                       unit->isFormationHunt(), unit->getFormationFacing()};
+                                       unit->isFormationHunt(), unit->getFormationFacing(), unit->getFormationFormUp()};
+        formingAtSave += unit->isFormationForming() ? 1 : 0;
         require(unit->getFormationFacing() == FormationPlanner::facingCode(Coord(1, 0)), "A hunting member has no eastward facing");
     }
     const std::string savePath = "formation-midmarch.dls";
@@ -549,7 +773,7 @@ int runFormationProbe() {
         require(unit != nullptr, "A member disappeared across the reload");
         require(unit->getFormationGroup() == saved.group && unit->getFormationSlot() == saved.slot
                 && unit->getFormationSpeedCap() == saved.cap && unit->isFormationHunt() == saved.hunt
-                && unit->getFormationFacing() == saved.facing,
+                && unit->getFormationFacing() == saved.facing && unit->getFormationFormUp() == saved.formUp,
                 "Formation state changed across the reload");
     }
     Uint32 resumed = 0;
@@ -563,11 +787,11 @@ int runFormationProbe() {
         }
     }
     require(reached.size() == before.size(), "The reloaded formation did not finish its march");
-    SDL_Log("FORMATION_PROBE_SAVE: %zu hunting members restored with group, slot, pace, hunt flag and facing; all reached their slots %.2fs after the reload",
-            before.size(), seconds(resumed));
+    SDL_Log("FORMATION_PROBE_SAVE: %zu hunting members (%d forming up) restored with group, slot, pace, hunt flag, facing and "
+            "form-up tile; all reached their slots %.2fs after the reload", before.size(), formingAtSave, seconds(resumed));
 
     // 4. Old unit records: 9854 (no formation fields) loads with no membership, 9857 (no
-    //    hunt flag or facing) loads its formation as a plain march.
+    //    hunt flag or facing) loads its formation as a plain march, 9859 (no form-up) as a march.
     {
         Tank* tank = nullptr;
         for(UnitBase* unit : unitList) if(unit->getItemID() == Unit_Tank) { tank = static_cast<Tank*>(unit); break; }
@@ -578,7 +802,11 @@ int runFormationProbe() {
         constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
         constexpr size_t kFormationRecord = 4 + 8 + 8;     // group, slot, speed cap (9857)
         constexpr size_t kHuntFields = 1 + 1;              // hunt flag and facing (9859)
-        FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)}, true, 3);
+        constexpr size_t kFormUpFields = 8 + 1 + 4;        // form-up tile, resume kind and pace unit type (9860)
+        FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)}, true, 3,
+                              FormationOrders::Resume::Walk);
+        tank->formationFormUp = Coord(3, 4);
+        tank->formationPending = false;
         OMemoryStream withFormation; withFormation.open(); tank->save(withFormation);
         const std::string current(withFormation.getData(), withFormation.getDataLength());
         const Uint32 savedGroup = tank->getFormationGroup();
@@ -590,14 +818,38 @@ int runFormationProbe() {
         while(first < current.size() && current[first] == plain[first]) ++first;
         size_t last = current.size();
         while(last > first && current[last - 1] == plain[last - 1]) --last;
-        require(last - first <= kFormationRecord + kHuntFields && first + kFormationRecord + kHuntFields <= current.size()
+        constexpr size_t kAll = kFormationRecord + kHuntFields + kFormUpFields;
+        require(last - first <= kAll && first + kAll <= current.size()
                 && first >= kEmptyOrderQueueBlock, "The formation record is not where expected");
-        // 9854: neither the order queue nor the formation record with its hunt flag.
-        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock)
-            + current.substr(first + kFormationRecord + kHuntFields);
-        // 9857: the formation record without the hunt flag and facing after it.
-        const std::string old9857 = current.substr(0, first + kFormationRecord)
-            + current.substr(first + kFormationRecord + kHuntFields);
+        // 9854: neither the order queue nor the formation record with its later fields.
+        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock) + current.substr(first + kAll);
+        // 9857: the formation record without the hunt flag, facing and form-up after it.
+        const std::string old9857 = current.substr(0, first + kFormationRecord) + current.substr(first + kAll);
+        // 9859: everything but the form-up tile, resume kind and pace unit type.
+        const std::string old9859 = current.substr(0, first + kFormationRecord + kHuntFields) + current.substr(first + kAll);
+        game->loadedSavegameVersion = 9859;
+        {
+            IMemoryStream in(old9859.data(), old9859.size());
+            Tank restored(in);
+            require(in.getRemainingLength() == 0, "A 9859 unit record was not read exactly");
+            require(restored.getFormationGroup() == savedGroup && restored.isFormationHunt() && restored.getFormationFacing() == 3
+                    && !restored.isFormationForming(), "A 9859 unit did not load its formation as marching");
+            restored.leaveFormation();
+            restored.setHealth(0);
+            unitList.remove(&restored);
+        }
+        {
+            IMemoryStream in(current.data(), current.size());
+            game->loadedSavegameVersion = SAVEGAMEVERSION;
+            Tank restored(in);
+            require(in.getRemainingLength() == 0 && restored.getFormationFormUp() == Coord(3, 4)
+                    && restored.formationResume == static_cast<Uint8>(FormationOrders::Resume::Walk)
+                    && restored.getFormationPaceItem() == static_cast<Uint32>(Unit_Tank),
+                    "A 9860 unit did not keep its form-up tile, resume kind and pace unit");
+            restored.leaveFormation();
+            restored.setHealth(0);
+            unitList.remove(&restored);
+        }
         game->loadedSavegameVersion = 9854;
         {
             IMemoryStream in(old9854.data(), old9854.size());
@@ -643,11 +895,15 @@ int runFormationProbe() {
     //    contact, then every member fights.
     const HuntOutcome hunt = huntInFormation(*game, owner, game->getHouse(HOUSE_HARKONNEN));
 
+    // 8. The one-speed block march: form-up, equal speeds, harvester left out, MCV in the middle.
+    const BlockOutcome block = marchBlock(*game, owner);
+
     SDL_Log("FORMATION_PROBE_PASS: on spread %.2fs, off spread %.2fs, tanks ahead of launchers, hunting save round trip, "
-            "9854 and 9857 records, combined arms (%d sonic lane step-ins, scouts %d tiles ahead), line %dx%d, column %dx%d, "
-            "hunt broke after %.2fs in formation and every member hunted or fought within %.2fs",
+            "9854, 9857 and 9859 records, combined arms (%d sonic lane step-ins, scouts %d tiles ahead), line %dx%d, column %dx%d, "
+            "hunt broke after %.2fs in formation and every member hunted or fought within %.2fs, block march speed spread "
+            "%.1f%%, shape error %.2f tiles",
             seconds(on.spread), seconds(off.spread), combined.laneStepIns, combined.scoutLead, line.frontage, line.depth,
-            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged));
+            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged), block.speedSpread * 100, block.shapeError);
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
     return -1;
 }

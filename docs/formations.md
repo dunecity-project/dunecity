@@ -5,6 +5,49 @@ formations the group moves in single file and piles onto one tile. Branch `feat/
 built the Box; branch `feat/formation-shapes` (save 9859, protocol 73) adds the shapes, the
 sonic-lane rule, hunting in formation and the panel buttons described first below.
 
+## Formation fixes, save 9860 / protocol 74 (after the 1.0.839 play-test)
+
+These rules supersede the older sections below where they disagree.
+
+- **Siege tanks are front-line armour:** Box role Armour, class Heavy for the other shapes, and first
+  among the heavy armour (then other heavy armour, then light vehicles) so they hold the front row
+  when it cannot take all of it.
+- **Harvesters never join** (`joinsFormations`): no slot, no membership, no pace. Selected with a
+  group they keep their ordinary order (a plain move to the clicked tile).
+- **MCVs are protected** (`isProtected`): the MCV takes the middle of the middle row
+  (`rows.size() / 2`, behind the front row from two rows) on the target itself; the rest of that
+  row moves aside, sonic cells next to it. A Box with an MCV always forms the box.
+- **Sonic rule:** only a sonic unit of the same type may stand in a sonic unit's lane
+  (`mayStandInLane`). The damage code (`Bullet::update` sonic branch, `Map::damage`,
+  `SonicTank::handleDamage`, `SonicTrike::handleDamage`) hurts every unit in the wave, friends
+  included; a sonic tank ignores damage whose shooter is a sonic tank, a sonic trike damage whose
+  shooter is a sonic trike, and neither is immune to the other type or to a wave whose shooter has
+  died. Damage rules are unchanged. Every shape, the slot fallback, the form-up tiles and the march
+  check (`stepEntersSonicLane`, from the march on) keep the rule.
+- **One speed.** The pace is the slowest member's reference speed, infantry included, and that
+  member's type is the pace unit (saved). Members that joined this cycle form up first
+  (`formUpTiles`: the shape centred on the group, moved forward until its foremost slot is level
+  with the foremost member; skipped for a march under `kFormUpMinMarch` = 8 tiles): they walk at
+  full speed to their form-up tiles and wait there; once every member stands on its tile (or cannot
+  get closer) the group marches and each member's order towards its slot is given again
+  (`FormationOrders::Resume`). On the march every capped Dynasty step takes at least as long as
+  the pace unit's step on that tile (`UnitBase::formationPaceStepLength`); a member more than
+  `kRecoverLagTiles` = 1 further from its slot than the leader runs at full speed, and members more
+  than `kHoldLeadTiles` = 2 ahead of the last member wait (`marchState`), never while a member waits
+  at a sonic lane. Marching members plan routes through and wait behind other marching members of
+  their formation (`canPathThrough`, `marchesWith`), so rear rows do not detour round front rows.
+  Applies to player moves, formation hunts until contact, and AI formation moves.
+- **Saved (9860):** form-up tile, resume kind, pace unit type (13 bytes after the 9859 fields).
+- **Measured** (`formation_movement_probe`, Habbanya-Autumn, Combined arms, 2 sonic tanks, 2 siege
+  tanks, 2 tanks, 2 launchers, MCV, 2 quads, 2 troopers and a harvester, 384-cycle windows while the
+  block's centre is 35-75% of the way): before (1.0.839) speed spread 25.6%, shape error 10.0 tiles,
+  stretch 7.0 tiles beyond the planned depth; after 10.3-14.2%, 1.2-1.4 tiles, 2.2 tiles; MCV with
+  members ahead, behind and on both sides on every steady cycle; harvester outside the formation;
+  no unit in a sonic lane on the steady march. Form-up of that scattered group takes about 28 s
+  (the troopers walk farthest).
+- **Not done:** a QuantBot colonist convoy as one formation was tried and reverted (the colonist
+  never deployed in `quantbot_mcv_deployment`); the escort still follows in Area Guard.
+
 ## Shapes (`FormationPlanner::Shape`)
 
 Every shape faces the 8-way direction from the group's centroid to the target

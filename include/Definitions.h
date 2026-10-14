@@ -141,7 +141,12 @@
 //       whether its formation is a hunting one, which the first contact of any member
 //       breaks into a fight, and the formation's facing, along which the march keeps sonic
 //       lanes clear. A 9858 or older save loads every formation as a plain march without a facing.
-#define SAVEGAMEVERSION     9859
+// 9860: One-speed formation march (docs/formations.md): UnitBase records its form-up tile
+//       (where the member gathers before its group marches; invalid once marching), how its
+//       order towards the slot is given again when the group has formed up, and the pace
+//       unit's type (the slowest member, whose step time every capped member keeps). A 9859
+//       or older save loads every formation as already marching at its speed cap.
+#define SAVEGAMEVERSION     9860
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

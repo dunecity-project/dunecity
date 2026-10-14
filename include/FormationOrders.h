@@ -51,6 +51,17 @@ enum class OrderKind : Uint8 {
 };
 
 /**
+    How a member's order towards its slot is given again when its group has formed up and
+    the march begins (UnitBase::endFormUp; saved per member from SAVEGAMEVERSION 9860).
+*/
+enum class Resume : Uint8 {
+    Move = 0,           ///< an unforced move to the slot (AI doFormationMove without force)
+    ForcedMove = 1,     ///< a forced move to the slot (player formation moves, forced AI moves)
+    Walk = 2,           ///< the attack-move or patrol in the order queue walks on to the slot
+    HuntToward = 3      ///< doHuntToward the slot (AI hunting formations)
+};
+
+/**
     A formation command's last parameter: the 24-bit group token, the order kind in bits
     24-27 and the formation's facing code (FormationPlanner::facingCode) in bits 28-31.
     Protocol 71 sent the bare token, which reads as a Move without a facing.
@@ -90,16 +101,20 @@ Coord revalidatedSlot(const UnitBase* unit, const Coord& slot);
 
 /**
     Makes the units members of formation 'groupID' and sets the group's speed cap to the
-    slowest member's reference speed, including members that joined earlier.
+    slowest member's reference speed (infantry included), including members that joined
+    earlier. Members with a slot form up first (FormationPlanner::formUpTiles), planned for
+    the whole group by the next update() - the same cycle for commands and AI orders.
     \param  slots   one per unit: the formation slot, or Coord::Invalid() for a member that
                     keeps its own order and only matches the group's pace
     \param  hunt    a hunting formation: the first contact any member makes breaks the whole
                     group into a fight (breakHunt)
     \param  facing  the formation's facing code (FormationPlanner::facingCode of plan.forward);
                     with one, the march keeps the sonic lanes clear (stepEntersSonicLane)
+    \param  resume  the order each unit was just given towards its slot, given again after
+                    the form-up
 */
 void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots,
-          bool hunt = false, Uint8 facing = 0);
+          bool hunt = false, Uint8 facing = 0, Resume resume = Resume::Move);
 
 /**
     The sonic-lane rule on the march (docs/formations.md): would 'unit', a formation member
@@ -123,9 +138,13 @@ void breakHunt(Uint32 groupID, const ObjectBase* enemy);
 
 /**
     Per-cycle membership upkeep, run before any unit moves: a hunting formation in which any
-    member has made contact breaks (breakHunt); members that arrived, made contact, were left
-    alone or can no longer move leave their formation, and each remaining member learns
-    whether it is lagging and may run at full speed.
+    member has made contact breaks (breakHunt); the groups joined this cycle plan their
+    form-up; members that arrived, made contact, were left alone or can no longer move leave
+    their formation; a group whose members all stand on their form-up tiles (or cannot get
+    closer) starts its march; and every member learns this cycle's march
+    (FormationPlanner::marchState): forming members walk to their form-up tiles at full speed
+    and wait there, marching members keep the pace, recover a lost place or wait for a member
+    that fell behind.
 */
 void update();
 

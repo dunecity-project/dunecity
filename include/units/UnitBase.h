@@ -20,6 +20,7 @@
 
 #include <ObjectBase.h>
 #include <units/UnitOrderQueue.h>
+#include <FormationOrders.h>
 
 #include <House.h>
 
@@ -182,8 +183,9 @@ public:
 
     /**
         Formation membership (docs/formations.md). A member travels to its formation slot -
-        or, without a slot, keeps its own order - no faster than the group's speed cap, unless
-        it is lagging behind the group. Set only through FormationOrders::join(). Any new order
+        or, without a slot, keeps its own order - at the group's pace, recovering its place at
+        full speed or waiting for a member that fell behind as FormationOrders::update()
+        decides each cycle. Set only through FormationOrders::join(). Any new order
         from a player or an AI, a carryall pickup, deviation, arrival, contact with an enemy or
         being the last member left ends it. Saved from SAVEGAMEVERSION 9857; the hunt flag
         and the facing from 9859. In a hunting formation the first contact of any member, or a hit on one,
@@ -193,18 +195,38 @@ public:
     Uint32 getFormationGroup() const { return formationGroup; }
     const Coord& getFormationSlot() const { return formationSlot; }
     FixPoint getFormationSpeedCap() const { return formationSpeedCap; }
-    bool isFormationCatchingUp() const { return formationCatchUp; }
+    FormationPlanner::March getFormationMarch() const { return formationMarch; }
     bool isFormationHunt() const { return formationGroup != 0 && formationHunt; }
     /// The formation's facing (FormationPlanner::facingCode; 0 = none), saved from 9859.
     Uint8 getFormationFacing() const { return formationGroup != 0 ? formationFacing : 0; }
     /// The tile this unit moves to while isMoving().
     const Coord& getNextSpot() const { return nextSpot; }
+    /// Has this unit picked the next tile of its path (and not started the step yet unless isMoving())?
+    bool hasNextSpot() const { return nextSpotFound; }
     /// Joins formation groupID heading for slot (invalid: keep the current order), capped
     /// at this unit's own reference speed until FormationOrders::join sets the group's.
-    void joinFormation(Uint32 groupID, const Coord& slot, bool hunt = false, Uint8 facing = 0);
-    void setFormationSpeedCap(FixPoint cap) { formationSpeedCap = cap; }
-    /// Per-cycle catch-up decision (FormationPlanner::runsAtFullSpeed), made before units move.
-    void setFormationCatchUp(bool catchUp) { formationCatchUp = catchUp; }
+    /// 'resume' is how the order towards the slot is given again after a form-up.
+    void joinFormation(Uint32 groupID, const Coord& slot, bool hunt = false, Uint8 facing = 0,
+                       FormationOrders::Resume resume = FormationOrders::Resume::Move);
+    /// Joined this cycle; FormationOrders::update() plans the group's form-up next.
+    bool isFormationPending() const { return formationGroup != 0 && formationPending; }
+    void clearFormationPending() { formationPending = false; }
+    /// Forming up: walking to (or waiting on) the form-up tile before the march (saved from 9860).
+    bool isFormationForming() const { return formationGroup != 0 && formationFormUp.isValid(); }
+    const Coord& getFormationFormUp() const { return formationFormUp; }
+    /// Starts the form-up: a walk to 'tile' (forced like the order it stands in for).
+    void startFormUp(const Coord& tile);
+    /// Done forming up: on its form-up tile, or its walk there is over (no path, or an
+    /// attack-move already walking on), or nothing left to move for.
+    bool formUpReady() const;
+    /// The group has formed up: the order towards the slot is given again and the march begins.
+    void endFormUp();
+    /// The group's pace: the slowest member's reference speed and its unit type, whose step
+    /// time on each tile every capped member keeps (UnitBase::formationPaceStepLength).
+    void setFormationPace(FixPoint cap, Uint32 paceItem) { formationSpeedCap = cap; formationPaceItem = paceItem; }
+    Uint32 getFormationPaceItem() const { return formationPaceItem; }
+    /// This cycle's march (FormationPlanner::marchState), decided before units move.
+    void setFormationMarch(FormationPlanner::March march) { formationMarch = march; }
     void leaveFormation();
     /// The pace this unit sets in a formation: its speed on open sand, undamaged, unloaded, off-road.
     FixPoint getFormationReferenceSpeed() const;
@@ -326,6 +348,12 @@ public:
     bool update() override;
 
     virtual bool canPass(int xPos, int yPos) const;
+    /// Route planning: canPass, or the tile holds a marching member of this unit's marching
+    /// formation (marchesWith), which moves on at the same pace.
+    bool canPathThrough(int xPos, int yPos) const;
+    /// Are this unit and 'other' marching in the same formation, 'other' not waiting for a
+    /// member that fell behind? Then this unit waits behind it rather than routing round it.
+    bool marchesWith(const UnitBase* other) const;
 
     virtual bool hasBumpyMovementOnRock() const { return false; }
 
@@ -574,6 +602,9 @@ protected:
     bool usesDynastyGroundTiming() const;
     bool turnDynastyBody(int wantedAngle);
     bool beginDynastyStep(Uint64 routeTick);
+    /// The time the formation's pace unit takes for this step (now-units), or 0 without one or
+    /// while this member recovers its place: the floor of a capped member's step time.
+    Uint64 formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, bool road, bool diagonal) const;
     bool moveDynastyStep();
     virtual Coord movementEndpoint() const;
     // Clock units are 1/3000 second: a legacy cycle is48, a Dynasty tick50.
@@ -675,7 +706,11 @@ protected:
     FixPoint formationSpeedCap = 0;              ///< The group's pace: slowest member's reference speed
     bool     formationHunt = false;              ///< A hunting formation: contact breaks the group (SAVEGAMEVERSION 9859)
     Uint8    formationFacing = 0;                ///< FormationPlanner::facingCode of the formation (SAVEGAMEVERSION 9859)
-    bool     formationCatchUp = false;           ///< Transient: lagging, so full speed this cycle
+    Coord    formationFormUp = Coord::Invalid(); ///< Form-up tile while forming up; invalid = marching (SAVEGAMEVERSION 9860)
+    Uint8    formationResume = 0;                ///< FormationOrders::Resume: the order towards the slot (SAVEGAMEVERSION 9860)
+    Uint32   formationPaceItem = ItemID_Invalid; ///< The pace unit's type: the slowest member (SAVEGAMEVERSION 9860)
+    FormationPlanner::March formationMarch = FormationPlanner::March::Pace;  ///< Transient: this cycle's march, recomputed every cycle
+    bool     formationPending = false;           ///< Transient: joined this cycle, form-up not planned yet (never across a save)
 
 
     bool     moving;                 ///< Are we currently moving?

@@ -20,6 +20,7 @@
 #include <data.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <map>
 #include <utility>
@@ -39,6 +40,17 @@ bool insideMap(const Coord& tile, int mapWidth, int mapHeight) {
 int floorDiv(int value, int divisor) {
     const int quotient = value / divisor;
     return (value % divisor != 0 && ((value < 0) != (divisor < 0))) ? quotient - 1 : quotient;
+}
+
+bool isSiege(Uint32 itemID) {
+    return itemID == Unit_SiegeTank || itemID == Unit_EliteSiegeTank || itemID == Unit_ChemicalSiegeTank;
+}
+
+/// Who leads the armour: sonic units, then siege tanks, then the other heavy armour, then light vehicles.
+int frontRank(Uint32 itemID) {
+    if (isSonic(itemID)) return 0;
+    if (isSiege(itemID)) return 1;
+    return classOf(itemID) == UnitClass::Heavy ? 2 : 3;
 }
 
 /**
@@ -139,12 +151,17 @@ public:
         : members_(members), lateral_(std::move(lateral)), perTile_(perTile) {}
 
     /// Member indices of one class, from one flank to the other as they stand now, so
-    /// neighbours stay neighbours and paths do not cross.
+    /// neighbours stay neighbours and paths do not cross - siege tanks first among the heavy
+    /// armour, so they hold the front row when it cannot take all of it.
     std::vector<size_t> ofClass(UnitClass unitClass) const {
         std::vector<size_t> result;
         for (size_t i = 0; i < members_.size(); ++i)
             if (classOf(members_[i].itemID) == unitClass) result.push_back(i);
-        std::sort(result.begin(), result.end(), [this](size_t a, size_t b) { return lateralLess(a, b); });
+        std::sort(result.begin(), result.end(), [this](size_t a, size_t b) {
+            const bool sa = isSiege(members_[a].itemID), sb = isSiege(members_[b].itemID);
+            if (sa != sb) return sa;
+            return lateralLess(a, b);
+        });
         return result;
     }
 
@@ -170,6 +187,7 @@ public:
     }
 
     bool sonicCell(const Cell& cell) const { return isSonic(members_[cell.front()].itemID); }
+    bool protectedCell(const Cell& cell) const { return isProtected(members_[cell.front()].itemID); }
 
     /// Cuts cells into rows: the first row firstWidth wide, the others width wide.
     static void appendRows(std::vector<std::vector<Cell>>& rows, const std::vector<Cell>& cells,
@@ -183,33 +201,64 @@ public:
     }
 
     /**
-        Places the rows front to back around rank 0 (the first row ahead of the target, the
-        last behind it). Each row is centred on column 0: sonic cells take a contiguous block
-        in the middle, the other cells the columns either side of it. Both keep the order the
-        units stand in now. Returns the front row's rank.
+        Puts the protected cells (MCVs) into the middle row, rows.size() / 2 - behind the front
+        row whenever there are two rows or more - and returns the anchor row: the row that
+        stands on the target. Without protected cells it is the middle row (rowCount - 1) / 2.
     */
-    int placeRows(const std::vector<std::vector<Cell>>& rows, std::vector<Placed>& placed) const {
+    static int insertProtected(std::vector<std::vector<Cell>>& rows, const std::vector<Cell>& protectedCells) {
+        if (protectedCells.empty()) return rows.empty() ? 0 : (static_cast<int>(rows.size()) - 1) / 2;
+        if (rows.empty()) rows.emplace_back();
+        const int anchor = static_cast<int>(rows.size()) / 2;
+        rows[anchor].insert(rows[anchor].end(), protectedCells.begin(), protectedCells.end());
+        return anchor;
+    }
+
+    /**
+        Places the rows front to back with the anchor row on rank 0 (the target). Each row is
+        centred on column 0: sonic cells take a contiguous block in the middle, the other cells
+        the columns either side of it, all in the order the units stand in now. Protected cells
+        take the very middle - splitting the sonic block if they share its row - with the
+        middle one of them on column 0, so the MCV stands on the target with the group around
+        it. Returns the front row's rank.
+    */
+    int placeRows(const std::vector<std::vector<Cell>>& rows, std::vector<Placed>& placed, int anchor) const {
         const int rowCount = static_cast<int>(rows.size());
-        for (int r = 0; r < rowCount; ++r) placeRow(rows[r], (rowCount - 1) / 2 - r, placed);
-        return (rowCount - 1) / 2;
+        for (int r = 0; r < rowCount; ++r) placeRow(rows[r], anchor - r, placed);
+        return anchor;
     }
 
 private:
     void placeRow(const std::vector<Cell>& row, int rank, std::vector<Placed>& placed) const {
-        std::vector<const Cell*> sonic, other;
-        for (const Cell& cell : row) (sonicCell(cell) ? sonic : other).push_back(&cell);
+        std::vector<const Cell*> guarded, sonic, other;
+        for (const Cell& cell : row) (protectedCell(cell) ? guarded : sonicCell(cell) ? sonic : other).push_back(&cell);
         auto byLateral = [this](const Cell* a, const Cell* b) { return lateralLess(a->front(), b->front()); };
+        std::sort(guarded.begin(), guarded.end(), byLateral);
         std::sort(sonic.begin(), sonic.end(), byLateral);
         std::sort(other.begin(), other.end(), byLateral);
         const int count = static_cast<int>(row.size());
         const int sonicCount = static_cast<int>(sonic.size());
-        const int firstSonic = (count - sonicCount) / 2;
-        size_t s = 0, o = 0;
-        for (int j = 0; j < count; ++j) {
-            const bool sonicColumn = j >= firstSonic && j < firstSonic + sonicCount;
-            const Cell& cell = sonicColumn ? *sonic[s++] : *other[o++];
-            for (const size_t m : cell) placed[m] = {rank, j - (count - 1) / 2};
+        int sonicLeft, otherLeft;
+        if (guarded.empty()) {
+            // The sonic block in the middle, the others either side of it.
+            sonicLeft = 0;
+            otherLeft = (count - sonicCount) / 2;
+        } else {
+            // The protected cells in the middle, half the row either side of them: the sonic
+            // cells next to them (split as evenly as the sides allow), the others outside.
+            const int sides = count - static_cast<int>(guarded.size());
+            const int leftCount = sides / 2;
+            sonicLeft = std::min(leftCount, std::max(sonicCount - (sides - leftCount), sonicCount / 2));
+            otherLeft = leftCount - sonicLeft;
         }
+        std::vector<const Cell*> sequence(other.begin(), other.begin() + otherLeft);
+        sequence.insert(sequence.end(), sonic.begin(), sonic.begin() + sonicLeft);
+        sequence.insert(sequence.end(), guarded.begin(), guarded.end());
+        sequence.insert(sequence.end(), sonic.begin() + sonicLeft, sonic.end());
+        sequence.insert(sequence.end(), other.begin() + otherLeft, other.end());
+        const int centre = guarded.empty() ? (count - 1) / 2
+            : otherLeft + sonicLeft + (static_cast<int>(guarded.size()) - 1) / 2;
+        for (int j = 0; j < count; ++j)
+            for (const size_t m : *sequence[j]) placed[m] = {rank, j - centre};
     }
 
     const std::vector<Member>& members_;
@@ -251,11 +300,9 @@ std::vector<int> scoutColumns(int count, int left, int right, bool hasSonic, int
 
 Role roleOf(Uint32 itemID) {
     switch (itemID) {
+        // Siege tanks are armour: they hold the front row with the tanks.
         case Unit_Launcher:
         case Unit_EliteLauncher:
-        case Unit_SiegeTank:
-        case Unit_EliteSiegeTank:
-        case Unit_ChemicalSiegeTank:
         case Unit_Deviator:
         case Unit_RocketTrike:
             return Role::Ranged;
@@ -266,6 +313,15 @@ Role roleOf(Uint32 itemID) {
         default:
             return isInfantryUnit(static_cast<int>(itemID)) ? Role::Infantry : Role::Armour;
     }
+}
+
+bool joinsFormations(Uint32 itemID) {
+    // The harvester-like units (isHarvesterLikeUnit, units/HarvesterHelpers.h).
+    return itemID != Unit_Harvester && itemID != Unit_RebelHarvester;
+}
+
+bool isProtected(Uint32 itemID) {
+    return itemID == Unit_MCV;
 }
 
 Shape shapeFromIndex(int index) {
@@ -284,6 +340,10 @@ const char* shapeName(Shape shape) {
 
 bool isSonic(Uint32 itemID) {
     return itemID == Unit_SonicTank || itemID == Unit_SonicTrike;
+}
+
+bool mayStandInLane(Uint32 sonicItemID, Uint32 otherItemID) {
+    return isSonic(sonicItemID) && otherItemID == sonicItemID;
 }
 
 UnitClass classOf(Uint32 itemID) {
@@ -384,10 +444,11 @@ Coord nearestStandable(const Member& member, const Coord& wanted, int mapWidth, 
 namespace {
 
 /**
-    The Box: rows by role (armour, ranged, infantry, support), each role starting a new row
-    except infantry, which first fill the free flank cells of the row in front of them.
-    Sonic units lead the armour, all in the first row (widening it if needed), as a
-    contiguous block in the middle of its armour cells.
+    The Box: rows by role (armour, ranged, infantry), each role starting a new row except
+    infantry, which first fill the free flank cells of the row in front of them. Sonic units
+    lead the armour, all in the first row (widening it if needed), as a contiguous block in
+    the middle of its armour cells. MCVs take the middle of the middle row, on the target
+    (Layout::insertProtected), the rest of that row moving aside for them.
 */
 std::vector<Placed> boxLayout(const std::vector<Member>& members, const std::vector<int>& lateral, int perTile) {
     const int count = static_cast<int>(members.size());
@@ -397,12 +458,12 @@ std::vector<Placed> boxLayout(const std::vector<Member>& members, const std::vec
 
     // Members by role, sonic units first among the armour, and within that from one flank
     // to the other as they stand now, so neighbours stay neighbours and paths do not cross.
-    std::vector<size_t> order(members.size());
-    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::vector<size_t> order, guarded;
+    for (size_t i = 0; i < members.size(); ++i) (isProtected(members[i].itemID) ? guarded : order).push_back(i);
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         if (members[a].role != members[b].role) return members[a].role < members[b].role;
-        const bool sa = isSonic(members[a].itemID), sb = isSonic(members[b].itemID);
-        if (sa != sb) return sa;
+        // Within the armour: sonic units, siege tanks, the other heavy armour, light vehicles.
+        if (frontRank(members[a].itemID) != frontRank(members[b].itemID)) return frontRank(members[a].itemID) < frontRank(members[b].itemID);
         if (lateral[a] != lateral[b]) return lateral[a] < lateral[b];
         return members[a].objectID < members[b].objectID;
     });
@@ -428,6 +489,12 @@ std::vector<Placed> boxLayout(const std::vector<Member>& members, const std::vec
             rows.back().push_back(std::move(cell));
         }
     }
+    std::sort(guarded.begin(), guarded.end(), [&](size_t a, size_t b) {
+        if (lateral[a] != lateral[b]) return lateral[a] < lateral[b];
+        return members[a].objectID < members[b].objectID;
+    });
+    if (!guarded.empty() && rows.empty()) rows.emplace_back();
+    const int anchor = guarded.empty() ? (static_cast<int>(rows.size()) - 1) / 2 : static_cast<int>(rows.size()) / 2;
 
     // Box columns from the centre outwards: a short row stands in the middle.
     std::vector<int> centreOut;
@@ -458,20 +525,31 @@ std::vector<Placed> boxLayout(const std::vector<Member>& members, const std::vec
         for (int j = firstSonic; j < firstSonic + sonicCells; ++j) leadingColumns.push_back(centre[j]);
         for (int j = 0; j < leading; ++j)
             if (j < firstSonic || j >= firstSonic + sonicCells) leadingColumns.push_back(centre[j]);
-        // The first row stands ahead of the target, the last behind it.
-        const int ahead = (rowCount - 1) / 2 - r;
+        // The anchor row stands on the target, the rows before it ahead, the others behind.
+        const int ahead = anchor - r;
         for (int i = 0; i < cells; ++i) {
             const int column = i < leading ? leadingColumns[i] : flanks[i - leading];
             for (const size_t m : row[i]) placed[m] = {ahead, column};
         }
     }
+    // MCVs in the very middle of the anchor row: its cells left of column 0 move left and the
+    // others right, just far enough to free the columns the MCVs take.
+    const int guardedCount = static_cast<int>(guarded.size());
+    if (guardedCount > 0) {
+        const int lowest = -(guardedCount - 1) / 2;
+        for (const Cell& cell : rows[anchor])
+            for (const size_t m : cell)
+                placed[m].column += placed[m].column < 0 ? lowest : lowest + guardedCount;
+        for (int k = 0; k < guardedCount; ++k) placed[guarded[k]] = {0, lowest + k};
+    }
     return placed;
 }
 
 /**
-    Combined arms: sonic units and tanks in the front row (further tanks in rows behind
-    it), ranged units behind them, then infantry and support at the rear; light vehicles on
-    both flanks of the fighting rows, and the fastest of them as scouts ahead of the front.
+    Combined arms: sonic units, tanks and siege tanks in the front row (further armour in rows
+    behind it), ranged units behind them, then infantry at the rear; MCVs in the middle of
+    the middle row, on the target; light vehicles on both flanks of the fighting rows, and
+    the fastest of them as scouts ahead of the front.
 */
 std::vector<Placed> combinedLayout(const std::vector<Member>& members, const Layout& layout,
                                    std::vector<Uint32>& scouts) {
@@ -501,18 +579,18 @@ std::vector<Placed> combinedLayout(const std::vector<Member>& members, const Lay
     const auto frontCells = layout.cells(front);
     const auto rangedCells = layout.cells(ranged);
     const auto infantryCells = layout.cells(layout.ofClass(UnitClass::Infantry));
-    const auto supportCells = layout.cells(layout.ofClass(UnitClass::Support));
-    const int bodyCells = static_cast<int>(frontCells.size() + rangedCells.size() + infantryCells.size() + supportCells.size());
+    const auto guardedCells = layout.cells(layout.ofClass(UnitClass::Support));
+    const int bodyCells = static_cast<int>(frontCells.size() + rangedCells.size() + infantryCells.size() + guardedCells.size());
     const int width = std::max(boxWidth(bodyCells), sonicCount);
     std::vector<std::vector<Cell>> rows;
     Layout::appendRows(rows, frontCells, width, width);
     Layout::appendRows(rows, rangedCells, width, width);
     const int fightingRows = std::max<int>(1, static_cast<int>(rows.size()));
     Layout::appendRows(rows, infantryCells, width, width);
-    Layout::appendRows(rows, supportCells, width, width);
+    const int anchor = Layout::insertProtected(rows, guardedCells);
 
     std::vector<Placed> placed(members.size());
-    const int frontRank = layout.placeRows(rows, placed);
+    const int frontRank = layout.placeRows(rows, placed, anchor);
 
     // The fighting rows' extent, and the sonic block in the front row.
     int left = 0, right = 0, sonicLeft = 0, sonicRight = 0;
@@ -554,36 +632,83 @@ std::vector<Placed> combinedLayout(const std::vector<Member>& members, const Lay
 }
 
 /**
-    Line and Column: every cell in the order sonic, heavy, light, ranged, infantry, support,
-    cut into rows of 'width' (the front row at least as wide as the sonic units).
+    Line and Column: every cell in the order sonic, heavy, light, ranged, infantry, cut into
+    rows of 'width' (the front row at least as wide as the sonic units); MCVs in the middle
+    of the middle row, on the target.
 */
 std::vector<Placed> rowsLayout(const std::vector<Member>& members, const Layout& layout, bool line) {
     std::vector<size_t> order;
     for (const UnitClass unitClass : {UnitClass::Sonic, UnitClass::Heavy, UnitClass::Light,
-                                      UnitClass::Ranged, UnitClass::Infantry, UnitClass::Support}) {
+                                      UnitClass::Ranged, UnitClass::Infantry}) {
         const auto ofClass = layout.ofClass(unitClass);
         order.insert(order.end(), ofClass.begin(), ofClass.end());
     }
     const auto cells = layout.cells(order);
+    const auto guardedCells = layout.cells(layout.ofClass(UnitClass::Support));
     int sonicCells = 0;
     for (const Cell& cell : cells) sonicCells += layout.sonicCell(cell) ? 1 : 0;
-    const int cellCount = static_cast<int>(cells.size());
+    const int cellCount = static_cast<int>(cells.size() + guardedCells.size());
     const int width = line ? std::min(cellCount, kLineMaxWidth) : columnWidth(cellCount);
     std::vector<std::vector<Cell>> rows;
     Layout::appendRows(rows, cells, std::max(width, sonicCells), width);
+    const int anchor = Layout::insertProtected(rows, guardedCells);
     std::vector<Placed> placed(members.size());
-    layout.placeRows(rows, placed);
+    layout.placeRows(rows, placed, anchor);
     return placed;
 }
 
-/// Does any wanted tile stand in a sonic member's lane?
+/// Does any wanted tile stand in a sonic member's lane that it may not stand in?
 bool blocksSonicLane(const std::vector<Member>& members, const std::vector<Coord>& wanted, const Coord& forward) {
     for (size_t s = 0; s < members.size(); ++s) {
         if (!isSonic(members[s].itemID)) continue;
         for (size_t i = 0; i < members.size(); ++i)
-            if (i != s && inSonicLane(wanted[s], wanted[i], forward)) return true;
+            if (i != s && inSonicLane(wanted[s], wanted[i], forward)
+                && !mayStandInLane(members[s].itemID, members[i].itemID)) return true;
     }
     return false;
+}
+
+/**
+    Resolves wanted tiles into usable, unique ones: sonic units first, then MCVs, then armour,
+    so the front and the protected centre keep their tiles when two wanted tiles collide. A
+    relocated tile never puts a unit in a sonic lane unless it mayStandInLane (a sonic unit
+    of the same type). Indexed like 'members'; independent of their order.
+*/
+std::vector<Coord> resolveTiles(const std::vector<Member>& members, const std::vector<Coord>& wanted, const Coord& forward,
+                                int mapWidth, int mapHeight, const CanStand& canStand, int infantryPerTile) {
+    std::vector<size_t> resolveOrder(members.size());
+    for (size_t i = 0; i < resolveOrder.size(); ++i) resolveOrder[i] = i;
+    std::sort(resolveOrder.begin(), resolveOrder.end(), [&](size_t a, size_t b) {
+        const bool sa = isSonic(members[a].itemID), sb = isSonic(members[b].itemID);
+        if (sa != sb) return sa;
+        const bool pa = isProtected(members[a].itemID), pb = isProtected(members[b].itemID);
+        if (pa != pb) return pa;
+        return byRoleThenID(members[a], members[b]);
+    });
+    Occupancy occupancy(infantryPerTile);
+    std::vector<std::pair<Coord, Uint32>> sonicTiles;     // tile and item of every placed sonic unit
+    std::vector<Coord> assigned(members.size(), Coord::Invalid());
+    for (const size_t i : resolveOrder) {
+        const Member& member = members[i];
+        const bool sonic = isSonic(member.itemID);
+        // Sonic units are resolved first, so a sonic unit only meets sonic units here.
+        auto clearOfLanes = [&](const Coord& candidate) {
+            for (const auto& [tile, item] : sonicTiles) {
+                if (inSonicLane(tile, candidate, forward) && !mayStandInLane(item, member.itemID)) return false;
+                if (sonic && inSonicLane(candidate, tile, forward) && !mayStandInLane(member.itemID, item)) return false;
+            }
+            return true;
+        };
+        Coord tile = searchRings(wanted[i], mapWidth, mapHeight, [&](const Coord& candidate) {
+            return occupancy.admits(member, candidate) && clearOfLanes(candidate) && canStand(member, candidate);
+        });
+        // Nothing usable within reach: stay put rather than invent a destination.
+        if (tile.isInvalid()) tile = member.tile;
+        occupancy.take(member, tile);
+        assigned[i] = tile;
+        if (sonic) sonicTiles.emplace_back(tile, member.itemID);
+    }
+    return assigned;
 }
 
 } // namespace
@@ -591,6 +716,10 @@ bool blocksSonicLane(const std::vector<Member>& members, const std::vector<Coord
 Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
           const CanStand& canStand, int infantryPerTile, Shape shape) {
     Plan result;
+    // Harvesters keep their ordinary orders: they never get a slot.
+    members.erase(std::remove_if(members.begin(), members.end(),
+                                 [](const Member& member) { return !joinsFormations(member.itemID); }),
+                  members.end());
     std::sort(members.begin(), members.end(),
               [](const Member& a, const Member& b) { return a.objectID < b.objectID; });
     if (members.empty()) return result;
@@ -622,13 +751,16 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
     std::vector<Coord> wanted(members.size());
     bool laidOut = false;
 
-    if (shape == Shape::Box) {
+    bool anyProtected = false;
+    for (const auto& member : members) anyProtected = anyProtected || isProtected(member.itemID);
+    if (shape == Shape::Box && !anyProtected) {
         bool coherent = true;
         for (const auto& member : members)
             if (tileDistance(member.tile, centroid) > kCoherentRadius) { coherent = false; break; }
         if (coherent) {
             // Keep the shape, translated onto the target and with the gaps closed up -
             // unless that leaves someone in front of a sonic unit; then it forms the box.
+            // A group with an MCV always forms the box, around the MCV.
             std::vector<int> xs, ys;
             for (const auto& member : members) {
                 xs.push_back(member.tile.x - centroid.x);
@@ -656,56 +788,51 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
                               target.y + forward.y * placed[i].rank + lateral.y * placed[i].column);
     }
 
-    // Resolve: sonic units first, then armour, so the front keeps its tiles when two wanted
-    // tiles collide. A relocated slot never enters a sonic lane: a sonic unit stands level
-    // with any sonic unit whose lane it shares, and nothing else stands in front of one.
-    std::vector<size_t> resolveOrder(members.size());
-    for (size_t i = 0; i < resolveOrder.size(); ++i) resolveOrder[i] = i;
-    std::sort(resolveOrder.begin(), resolveOrder.end(), [&](size_t a, size_t b) {
-        const bool sa = isSonic(members[a].itemID), sb = isSonic(members[b].itemID);
-        if (sa != sb) return sa;
-        return byRoleThenID(members[a], members[b]);
-    });
-    Occupancy occupancy(infantryPerTile);
-    std::vector<Coord> sonicTiles;
-    std::vector<Coord> assigned(members.size(), Coord::Invalid());
-    for (const size_t i : resolveOrder) {
-        const Member& member = members[i];
-        const bool sonic = isSonic(member.itemID);
-        auto clearOfLanes = [&](const Coord& candidate) {
-            for (const Coord& other : sonicTiles)
-                if (inSonicLane(other, candidate, forward) || (sonic && inSonicLane(candidate, other, forward))) return false;
-            return true;
-        };
-        Coord tile = searchRings(wanted[i], mapWidth, mapHeight, [&](const Coord& candidate) {
-            return occupancy.admits(member, candidate) && clearOfLanes(candidate) && canStand(member, candidate);
-        });
-        // Nothing usable within reach: stay put rather than invent a destination.
-        if (tile.isInvalid()) tile = member.tile;
-        occupancy.take(member, tile);
-        assigned[i] = tile;
-        if (sonic) sonicTiles.push_back(tile);
-    }
-
+    const auto assigned = resolveTiles(members, wanted, forward, mapWidth, mapHeight, canStand, infantryPerTile);
     for (size_t i = 0; i < members.size(); ++i) result.slots.push_back({members[i].objectID, assigned[i]});
     return result;
 }
 
 FixPoint groupPace(const std::vector<Member>& members) {
-    bool anyVehicle = false;
-    for (const auto& member : members) anyVehicle = anyVehicle || !member.infantry;
-    bool found = false;
     FixPoint pace = 0;
-    for (const auto& member : members) {
-        if (anyVehicle && member.infantry) continue;
-        if (!found || member.speed < pace) pace = member.speed;
-        found = true;
-    }
+    for (size_t i = 0; i < members.size(); ++i)
+        if (i == 0 || members[i].speed < pace) pace = members[i].speed;
     return pace;
 }
 
-bool runsAtFullSpeed(int lagTiles, int centroidDistance) {
-    return lagTiles > kCatchUpLagTiles || centroidDistance > kCatchUpCentroidTiles;
+std::vector<Coord> formUpTiles(const std::vector<Member>& members, const std::vector<Coord>& slots, const Coord& forward,
+                               int mapWidth, int mapHeight, const CanStand& canStand, int infantryPerTile) {
+    const int count = static_cast<int>(members.size());
+    if (count < 2 || slots.size() != members.size() || (forward.x == 0 && forward.y == 0)) return {};
+    int tileX = 0, tileY = 0, slotX = 0, slotY = 0;
+    for (int i = 0; i < count; ++i) {
+        tileX += members[i].tile.x; tileY += members[i].tile.y;
+        slotX += slots[i].x; slotY += slots[i].y;
+    }
+    // The shape centred on the group as it stands...
+    Coord shift(floorDiv(slotX, count) - floorDiv(tileX, count), floorDiv(slotY, count) - floorDiv(tileY, count));
+    auto along = [&forward](const Coord& tile) { return tile.x * forward.x + tile.y * forward.y; };
+    const int step = forward.x * forward.x + forward.y * forward.y;
+    // ...moved forward until its foremost slot is level with the foremost member, so nobody
+    // walks back to form up - but never past the target.
+    int foremostMember = INT32_MIN, foremostSlot = INT32_MIN;
+    for (int i = 0; i < count; ++i) {
+        foremostMember = std::max(foremostMember, along(members[i].tile));
+        foremostSlot = std::max(foremostSlot, along(slots[i] - shift));
+    }
+    const int ahead = std::min(std::max(0, foremostMember - foremostSlot), std::max(0, along(shift))) / step;
+    shift = Coord(shift.x - forward.x * ahead, shift.y - forward.y * ahead);
+    // A short move needs no form-up: the members go straight to their slots.
+    if (tileDistance(shift, Coord(0, 0)) < kFormUpMinMarch) return {};
+    std::vector<Coord> wanted;
+    for (int i = 0; i < count; ++i) wanted.push_back(slots[i] - shift);
+    return resolveTiles(members, wanted, forward, mapWidth, mapHeight, canStand, infantryPerTile);
+}
+
+March marchState(int behindLeader, int aheadOfLast) {
+    if (aheadOfLast > kHoldLeadTiles) return March::Hold;
+    if (behindLeader > kRecoverLagTiles) return March::Recover;
+    return March::Pace;
 }
 
 } // namespace FormationPlanner

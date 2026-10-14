@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 73;
+static constexpr int kWireProtocolVersion = 74;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -71,7 +71,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 71 adds formation movement (CMD_UNIT_FORMATION_MOVE) and save 9857.
     // 72 makes plan building sites a match rule (MOD8 settings, hash) and save 9858.
     // 73 adds formation shapes and hunting in formation (CMD_UNIT_FORMATION_HUNT) and save 9859.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 73);
+    // 74 changes formation roles and pacing (harvesters out, form-up, one-speed march) and save 9860.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 74);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

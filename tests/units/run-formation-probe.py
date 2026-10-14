@@ -73,10 +73,10 @@ with logfile.open('w') as log:
 text = logfile.read_text()
 for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_COMBINED:',
                'FORMATION_PROBE_COMBINED_FRAME:', 'FORMATION_PROBE_SHAPES:', 'FORMATION_PROBE_HUNT:',
-               'FORMATION_PROBE_PASS:'):
+               'FORMATION_PROBE_BLOCK:', 'FORMATION_PROBE_BLOCK_ROLES:', 'FORMATION_PROBE_PASS:'):
     if marker not in text:
         raise RuntimeError('Missing formation probe result ' + marker + ' in ' + str(logfile))
-for shot in ('formation-march.png', 'formation-combined.png'):
+for shot in ('formation-march.png', 'formation-combined.png', 'formation-block.png'):
     if not (out / shot).is_file():
         raise RuntimeError('The formation screenshot ' + shot + ' was not written')
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
