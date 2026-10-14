@@ -24,6 +24,7 @@
 #include <GUI/Label.h>
 #include <GUI/TextButton.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/Slider.h>
 #include <GUI/Checkbox.h>
 #include <GUI/TextBox.h>
 
@@ -85,20 +86,23 @@ private:
     Label* enemyCityCaption = nullptr;
     Label* playerCityCaption = nullptr;
 
-    DropDownBox sizeBox, rockBox, spiceBox;
+    // Settings that run from low to high are sliders; choices without an order are drop-downs.
+    Slider sizeBox, rockBox, spiceBox;
     Checkbox symmetricBox;
     TextBox seedBox;
     TextButton newSeedButton;
     Checkbox fixedSeedBox;
 
-    DropDownBox houseBox, creditsBox, modBox, techBox;
+    DropDownBox houseBox, modBox;
+    Slider creditsBox, techBox;
     std::vector<ModInfo> availableMods;      ///< Mod box entries; entry data is the index
-    DropDownBox alliesBox, enemiesBox;
+    Slider alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;
 
-    DropDownBox partnerBox, playerBaseBox, playerArmyBox, playerCityBox;
-    DropDownBox allyAIBox, allyBaseBox, allyArmyBox, allyCityBox;
-    DropDownBox enemyAIBox, enemyBaseBox, enemyArmyBox, enemyCityBox;
+    DropDownBox partnerBox, allyAIBox, enemyAIBox;
+    Slider playerBaseBox, playerArmyBox, playerCityBox;
+    Slider allyBaseBox, allyArmyBox, allyCityBox;
+    Slider enemyBaseBox, enemyArmyBox, enemyCityBox;
 
     TextButton backButton, saveButton, startButton;
 };

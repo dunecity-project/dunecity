@@ -37,9 +37,10 @@ void skirmishRequire(bool ok, const std::string& what) {
     if(!ok) { SDL_Log("SKIRMISH_PROBE_FAIL: %s", what.c_str()); throw std::runtime_error(what); }
 }
 
-void probeSelect(DropDownBox& box, int data) {
+template<class Box>
+void probeSelect(Box& box, int data) {
     for(int i = 0; i < box.getNumEntries(); ++i) if(box.getEntryIntData(i) == data) { box.setSelectedItem(i); return; }
-    skirmishRequire(false, "Dropdown has no entry " + std::to_string(data));
+    skirmishRequire(false, "Control has no entry " + std::to_string(data));
 }
 
 std::string probeOut(const std::string& name) { return std::string(std::getenv("SKIRMISH_PROBE_OUT")) + "/" + name; }
@@ -308,6 +309,26 @@ void runMenu() {
         probeSelect(menu.alliesBox, 1);
         menu.onPlayersChanged();
         probeSelect(menu.enemiesBox, 3);
+        // Sliders run low (left) to high (right): a click at the left end picks the smallest map,
+        // dragging to the right end the largest, and the wheel steps one size at a time.
+        {
+            Slider& size = menu.sizeBox;
+            const int midY = size.getSize().y / 2;
+            int changes = 0;
+            size.setOnSelectionChange([&](bool interactive) { if(interactive) ++changes; });
+            probeSelect(size, 128);
+            size.handleMouseLeft(1, midY, true); size.handleMouseLeft(1, midY, false);
+            skirmishRequire(size.getSelectedEntryIntData() == kMapSizes.front(), "Left end of the size slider is not the smallest map");
+            size.handleMouseLeft(1, midY, true);
+            size.handleMouseMovement(size.getSize().x - 1, midY, false);
+            size.handleMouseLeft(size.getSize().x - 1, midY, false);
+            skirmishRequire(size.getSelectedEntryIntData() == kMapSizes.back(), "Dragging to the end of the track is not the largest map");
+            size.handleMouseWheel(1, midY, false);
+            skirmishRequire(size.getSelectedEntryIntData() == kMapSizes[kMapSizes.size() - 2], "Wheel down did not step one size smaller");
+            skirmishRequire(changes == 3, "The slider did not report each player change");
+            size.setOnSelectionChange(nullptr);
+            SDL_Log("SKIRMISH_PROBE: sliders go low to high (click, drag, wheel)");
+        }
         probeSelect(menu.sizeBox, 96);
         // The Mod box lists every installed mod; City rows appear only for a city-sim mod.
         auto chooseMod = [&](const std::string& name) {

@@ -116,7 +116,7 @@ int columnX(int screenWidth, int column) {
 
 const char* const kRockNames[] = {"Low", "Medium", "High", "Very high"};
 const char* const kSpiceNames[] = {"None", "Low", "Medium", "High", "Very high"};
-const char* const kBaseNames[] = {"None (MCV only)", "Outpost", "Small", "Medium", "Large", "Fortress"};
+const char* const kBaseNames[] = {"MCV only", "Outpost", "Small", "Medium", "Large", "Fortress"};
 
 std::string withThousands(int value) {
     std::string text = std::to_string(value);
@@ -130,7 +130,9 @@ uint32_t freshSeed() {
     return device() % 1000000000u;
 }
 
-void selectData(DropDownBox& box, int data) {
+/// Selects the entry carrying \a data in a drop-down or slider (first entry if none does).
+template<class Box>
+void selectData(Box& box, int data) {
     for(int i = 0; i < box.getNumEntries(); ++i)
         if(box.getEntryIntData(i) == data) { box.setSelectedItem(i); return; }
     if(box.getNumEntries() > 0 && box.getSelectedIndex() < 0) box.setSelectedItem(0);
@@ -145,14 +147,15 @@ void fillAI(DropDownBox& box) {
     }
 }
 
-void fillSide(DropDownBox& base, DropDownBox& army, DropDownBox& city) {
+/// Low to high, left to right; "Random" is the rightmost step of Army and City.
+void fillSide(Slider& base, Slider& army, Slider& city) {
     for(int i = 0; i <= static_cast<int>(BaseSize::Fortress); ++i) base.addEntry(_(kBaseNames[i]), i);
     for(int i = 0; i < static_cast<int>(kArmyBudgets.size()); ++i)
-        army.addEntry(i == 0 ? _("None") : withThousands(kArmyBudgets[i]) + " " + _("credits"), i);
-    army.addEntry(_("Random") + " (" + withThousands(kArmyRandomMin) + "-" + withThousands(kArmyRandomMax) + ")", kArmyRandom);
+        army.addEntry(i == 0 ? _("None") : withThousands(kArmyBudgets[i]), i);
+    army.addEntry(_("Random"), kArmyRandom);
     for(int i = 0; i < static_cast<int>(kCityTargets.size()); ++i)
-        city.addEntry(i == 0 ? _("None") : withThousands(kCityTargets[i]) + " " + _("people"), i);
-    city.addEntry(_("Random") + " (" + withThousands(kCityRandomMin) + "-" + withThousands(kCityRandomMax) + ")", kCityRandom);
+        city.addEntry(i == 0 ? _("None") : withThousands(kCityTargets[i]), i);
+    city.addEntry(_("Random"), kCityRandom);
 }
 
 }
@@ -175,7 +178,7 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     windowWidget.addWidget(&title, Point(0, 8), Point(width, 30));
 
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
-    for(int i = 0; i < 4; ++i) rockBox.addEntry(_(kRockNames[i]) + " (" + std::to_string(kRockPercent[i]) + "%)", i);
+    for(int i = 0; i < 4; ++i) rockBox.addEntry(_(kRockNames[i]) + " " + std::to_string(kRockPercent[i]) + "%", i);
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
     symmetricBox.setText(_("Mirrored starts"));
     seedBox.setAllowedChars("0123456789");
@@ -358,7 +361,8 @@ void RandomSkirmishMenu::onPlayersChanged() {
     }
     enemiesAlliedBox.setEnabled(enemiesBox.getSelectedEntryIntData() > 1);
     const bool anyAllies = allies > 0;
-    for(DropDownBox* box : {&allyAIBox, &allyBaseBox, &allyArmyBox}) box->setEnabled(anyAllies);
+    allyAIBox.setEnabled(anyAllies);
+    for(Slider* box : {&allyBaseBox, &allyArmyBox}) box->setEnabled(anyAllies);
     onModChanged();
 }
 

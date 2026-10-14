@@ -24,6 +24,12 @@ map-editor format and starts it through the normal CustomGame path,
 ## Parameters
 All of these are saved as last-used values in the configuration file, section `[Random Skirmish]`.
 
+Settings with an order (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, and each side's
+Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
+on the right, the chosen step's text beside the track. Click or drag on the track, use the mouse
+wheel, or Left/Right when the slider is active. "Random" is the rightmost step of Army and City.
+Mod, house, AI and AI partner stay drop-downs.
+
 - **Map**
   - Size: 64, 96, 128, 160, 192 or 256. Default 128.
   - Rock: Low 15%, Medium 25%, High 35%, Very high 50%. This is the target share of rock plus
