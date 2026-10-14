@@ -1154,24 +1154,28 @@ bool Catalogue::available(int item, int house, int techLevel) const {
 std::vector<int> baseTemplate(BaseSize size, int house, int techLevel, const Catalogue& catalogue) {
     struct Entry { int first; int second; int count; };
     const int none = ItemID_Invalid;
+    // Defences: every tier from Small up gets rocket turrets, falling back to gun turrets where
+    // the house or tech level cannot build them yet.
     static const std::vector<Entry> tiers[] = {
         {},
         {{Structure_ConstructionYard, none, 1}, {Structure_Refinery, none, 1}, {Structure_Radar, none, 1}},
         {{Structure_ConstructionYard, none, 1}, {Structure_Refinery, none, 1}, {Structure_Silo, none, 1},
-         {Structure_Radar, none, 1}, {Structure_Barracks, Structure_WOR, 1}, {Structure_LightFactory, none, 1}},
+         {Structure_Radar, none, 1}, {Structure_Barracks, Structure_WOR, 1}, {Structure_LightFactory, none, 1},
+         {Structure_RocketTurret, Structure_GunTurret, 1}},
         {{Structure_ConstructionYard, none, 1}, {Structure_Refinery, none, 2}, {Structure_Silo, none, 1},
          {Structure_Radar, none, 1}, {Structure_Barracks, Structure_WOR, 1}, {Structure_LightFactory, none, 1},
-         {Structure_HeavyFactory, none, 1}, {Structure_RepairYard, none, 1}, {Structure_GunTurret, none, 2}},
+         {Structure_HeavyFactory, none, 1}, {Structure_RepairYard, none, 1}, {Structure_GunTurret, none, 2},
+         {Structure_RocketTurret, Structure_GunTurret, 2}},
         {{Structure_ConstructionYard, none, 1}, {Structure_Refinery, none, 2}, {Structure_Silo, none, 2},
          {Structure_Radar, none, 1}, {Structure_Barracks, none, 1}, {Structure_WOR, none, 1},
          {Structure_LightFactory, none, 1}, {Structure_HeavyFactory, none, 1}, {Structure_HighTechFactory, none, 1},
          {Structure_RepairYard, none, 1}, {Structure_StarPort, none, 1}, {Structure_IX, none, 1},
-         {Structure_GunTurret, none, 2}, {Structure_RocketTurret, none, 4}},
+         {Structure_GunTurret, none, 2}, {Structure_RocketTurret, Structure_GunTurret, 4}},
         {{Structure_ConstructionYard, none, 1}, {Structure_Refinery, none, 3}, {Structure_Silo, none, 3},
          {Structure_Radar, none, 1}, {Structure_Barracks, none, 1}, {Structure_WOR, none, 1},
          {Structure_LightFactory, none, 1}, {Structure_HeavyFactory, none, 2}, {Structure_HighTechFactory, none, 1},
          {Structure_RepairYard, none, 1}, {Structure_StarPort, none, 1}, {Structure_IX, none, 1},
-         {Structure_Palace, none, 1}, {Structure_GunTurret, none, 4}, {Structure_RocketTurret, none, 8}},
+         {Structure_Palace, none, 1}, {Structure_GunTurret, none, 4}, {Structure_RocketTurret, Structure_GunTurret, 8}},
     };
     std::vector<int> items;
     for(const Entry& entry : tiers[indexOf(size)]) {

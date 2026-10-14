@@ -110,7 +110,7 @@ struct Params {
     Side playerSide{"", BaseSize::Medium, 3, 0};
     Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
-    int techLevel = 8;
+    int techLevel = 9;              ///< everything unlocked by default
 
     /// Clamp every field to its legal range; @a houseCount is the number of houses the
     /// engine can field in a custom game (player + allies + enemies never exceed it).

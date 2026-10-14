@@ -814,3 +814,34 @@ TEST_CASE("Random skirmish: random configurations stay legal, connected and keep
         REQUIRE(groundConnected(r.map, starts));
     }
 }
+
+TEST_CASE("Random skirmish: bases from Small up are defended by rocket turrets", "[skirmish][generator][base]") {
+    // Template level: every house that can build rocket turrets gets them; the rest get gun
+    // turrets in their place, so no tier loses its defences.
+    const std::pair<BaseSize, int> rockets[] = {{BaseSize::Small, 1}, {BaseSize::Medium, 2}, {BaseSize::Large, 4}, {BaseSize::Fortress, 8}};
+    for(const Catalogue* c : {&vanilla(), &city()}) for(int house = 0; house < 8; ++house) for(auto [tier, count] : rockets) {
+        const std::vector<int> items = baseTemplate(tier, house, 9, *c);
+        if(items.empty()) continue;
+        const auto rocketCount = std::count(items.begin(), items.end(), Structure_RocketTurret);
+        INFO("house " << house << " tier " << static_cast<int>(tier));
+        if(c->available(Structure_RocketTurret, house, 9)) REQUIRE(rocketCount == count);
+        else if(c->available(Structure_GunTurret, house, 9)) REQUIRE(std::count(items.begin(), items.end(), Structure_GunTurret) >= count);
+    }
+
+    // Generated map, default tech level: every Medium base that can build them has its rocket
+    // turrets actually placed on the map, the player's included.
+    for(Mode mode : {Mode::Vanilla, Mode::DuneCity}) {
+        Params p = params(128, 1, 2, mode, Params().techLevel, 77);
+        REQUIRE(p.techLevel == 9);
+        p.allySide.base = p.enemySide.base = p.playerSide.base = BaseSize::Medium;
+        const Catalogue& cat = mode == Mode::DuneCity ? city() : vanilla();
+        const Result r = generate(p, cat);
+        for(const auto& h : r.houses) {
+            if(!cat.available(Structure_RocketTurret, h.house, 9)) continue;
+            const auto placed = std::count_if(r.structures.begin(), r.structures.end(),
+                [&](const Placement& s) { return s.house == h.house && s.item == Structure_RocketTurret; });
+            INFO("mode " << static_cast<int>(mode) << " house " << h.house);
+            REQUIRE(placed == 2);
+        }
+    }
+}

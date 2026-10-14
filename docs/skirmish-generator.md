@@ -47,7 +47,7 @@ All of these are saved as last-used values in the configuration file, section `[
   - Credits: 1,000 / 2,000 / 3,000 / 5,000 / 7,500 / 10,000 / 20,000, applied to every house.
     Deviation: the engine has no existing credit presets, so this list is new. The default of 3,000
     is `DEFAULT_STARTINGCREDITS`.
-  - Tech level 1–9, written to `[BASIC] TechLevel`.
+  - Tech level 1–9, default 9 (everything unlocked), written to `[BASIC] TechLevel`.
   - The saved map's `[BASIC] Mod` is `dunecity` for a city mod, otherwise the chosen mod's content
     category (`tornie` or `vanilla`).
 - **Players**
@@ -103,12 +103,13 @@ All of these are saved as last-used values in the configuration file, section `[
 - **Base templates** (each item is included only if the house can field it at the chosen tech
   level, counting the item's own tech level, its builder and its prerequisites):
   - Outpost: Construction Yard, Refinery, Radar.
-  - Small: adds Silo, Barracks or WOR, and Light Factory.
-  - Medium: adds a 2nd Refinery, Heavy Factory, Repair Yard and 2 Gun Turrets.
-  - Large: adds a 2nd Silo, Barracks and WOR, Hi-Tech, Starport, IX, and 4 Rocket Turrets, with walls
-    beside the turrets.
+  - Small: adds Silo, Barracks or WOR, Light Factory and 1 Rocket Turret.
+  - Medium: adds a 2nd Refinery, Heavy Factory, Repair Yard, 2 Gun Turrets and 2 Rocket Turrets.
+  - Large: adds a 2nd Silo, Barracks and WOR, Hi-Tech, Starport, IX, 2 Gun and 4 Rocket Turrets, with
+    walls beside the turrets.
   - Fortress: 3 Refineries, 3 Silos, 2 Heavy Factories, Palace, 4 Gun and 8 Rocket Turrets, and
     longer wall runs.
+  - Rocket Turrets fall back to Gun Turrets where the house or tech level cannot build them.
 - **Power** (`addPower`): base and city together, all on the base side, production at least a
   tenth above requirement (the buffer the AI's city-power rule keeps). Where the house can build
   `Structure_NuclearPlant` (DuneCity, tech 6+, the Catalogue's real power value, 2,000), reactors
