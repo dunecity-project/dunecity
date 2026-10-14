@@ -141,12 +141,21 @@ void requireLegal(const Result& r, const Catalogue& c) {
         if(p.item == Structure_Slab1) REQUIRE(owner[p.y * size + p.x] == 1);    // concrete under a building
         else { REQUIRE(owner[p.y * size + p.x] == 0); owner[p.y * size + p.x] = 2; }
     }
+    // A vehicle owns its tile; Troopers may share one, up to the engine's five per tile.
+    std::map<int, int> infantryOn;
     for(const Placement& p : r.units) {
         INFO("unit " << c.itemNames[p.item] << " at " << p.x << "," << p.y);
         REQUIRE(r.map.isInsideMap(p.x, p.y));
         REQUIRE(r.map(p.x, p.y) != Terrain_Mountain);
-        REQUIRE(owner[p.y * size + p.x] == 0);
-        owner[p.y * size + p.x] = 3;
+        const int key = p.y * size + p.x;
+        if(p.item == Unit_Trooper || p.item == Unit_Soldier) {
+            REQUIRE((owner[key] == 0 || (owner[key] == 4 && infantryOn[key] < 5)));
+            owner[key] = 4;
+            ++infantryOn[key];
+        } else {
+            REQUIRE(owner[key] == 0);
+            owner[key] = 3;
+        }
     }
 }
 
@@ -871,4 +880,34 @@ TEST_CASE("Random skirmish: bases from Small up are defended by rocket turrets",
             REQUIRE(placed == 2);
         }
     }
+}
+
+TEST_CASE("Random skirmish: armies have no light infantry and troopers stand five to a tile", "[skirmish][generator][army]") {
+    // No house ever buys light infantry, at any budget or tech level.
+    for(const Catalogue* c : {&vanilla(), &city()}) for(int house = 0; house < 8; ++house) for(int tech = 1; tech <= 9; ++tech) {
+        const std::vector<int> types = armyTypes(house, tech, *c);
+        REQUIRE(std::find(types.begin(), types.end(), Unit_Soldier) == types.end());
+    }
+    // A generated army spends its credits, and its Troopers share tiles: as few tiles as
+    // five-per-tile allows, never more than five on one.
+    Params p = params(128, 1, 2, Mode::Vanilla, 9, 31);
+    p.allySide.army = p.enemySide.army = p.playerSide.army = static_cast<int>(kArmyBudgets.size()) - 1;
+    const Result r = generate(p, vanilla());
+    requireLegal(r, vanilla());
+    int troopersSeen = 0;
+    for(const auto& h : r.houses) {
+        std::map<int, int> perTile;
+        int troopers = 0;
+        for(const Placement& u : r.units) {
+            if(u.house != h.house) continue;
+            REQUIRE(u.item != Unit_Soldier);
+            if(u.item == Unit_Trooper) { ++troopers; ++perTile[u.y * 128 + u.x]; }
+        }
+        INFO("house " << h.house << " troopers " << troopers);
+        REQUIRE(static_cast<int>(perTile.size()) == (troopers + 4) / 5);
+        for(const auto& [tile, n] : perTile) REQUIRE(n <= 5);
+        REQUIRE(h.armySpent * 10 >= h.armyBudget * 9);
+        troopersSeen += troopers;
+    }
+    REQUIRE(troopersSeen > 5);    // the fixture really exercises bundling
 }

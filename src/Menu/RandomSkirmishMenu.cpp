@@ -226,7 +226,7 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addHeader(0, row++, _("You start with"));
     addRow(0, row++, _("AI partner"), &partnerBox);
     addRow(0, row++, _("Base"), &playerBaseBox);
-    addRow(0, row++, _("Army"), &playerArmyBox);
+    addRow(0, row++, _("Army (credits)"), &playerArmyBox);
     addRow(0, row++, _("City"), &playerCityBox);
     playerCityCaption = &captions[usedCaptions - 1];
 
@@ -238,13 +238,13 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     addHeader(1, row++, _("Allies start with"));
     addRow(1, row++, _("AI"), &allyAIBox);
     addRow(1, row++, _("Base"), &allyBaseBox);
-    addRow(1, row++, _("Army"), &allyArmyBox);
+    addRow(1, row++, _("Army (credits)"), &allyArmyBox);
     addRow(1, row++, _("City"), &allyCityBox);
     allyCityCaption = &captions[usedCaptions - 1];
     addHeader(1, row++, _("Enemies start with"));
     addRow(1, row++, _("AI"), &enemyAIBox);
     addRow(1, row++, _("Base"), &enemyBaseBox);
-    addRow(1, row++, _("Army"), &enemyArmyBox);
+    addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
     addRow(1, row++, _("City"), &enemyCityBox);
     enemyCityCaption = &captions[usedCaptions - 1];
 

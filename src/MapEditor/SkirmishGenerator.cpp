@@ -38,10 +38,14 @@ namespace SkirmishGenerator {
 
 namespace {
 
+/// Units an army may buy. No light infantry: foot soldiers come as Troopers only.
 constexpr int kUnitTypes[] = {
-    Unit_Soldier, Unit_Trooper, Unit_Trike, Unit_RaiderTrike, Unit_Quad, Unit_Tank,
+    Unit_Trooper, Unit_Trike, Unit_RaiderTrike, Unit_Quad, Unit_Tank,
     Unit_Launcher, Unit_SiegeTank, Unit_SonicTank, Unit_Deviator, Unit_Devastator
 };
+/// Infantry share a tile up to the engine's limit (NUM_INFANTRY_PER_TILE).
+constexpr int kInfantryPerTile = 5;
+bool isFootUnit(int item) { return item == Unit_Trooper || item == Unit_Soldier; }
 constexpr int kThickSpicePercent[] = {0, 10, 25, 40, 55};
 constexpr int kMargin = 2;          ///< tiles kept between a start's clean core and the map edge
 constexpr int kCityBlock = 5;       ///< 4x4 block of four 2x2 lots plus one road line
@@ -934,14 +938,29 @@ struct Layout {
     }
 
     /// Ground units on the nearest open tiles to @a from, never touching a building, a road or
-    /// another house's start.
+    /// another house's start: one vehicle per tile, foot soldiers bundled up to kInfantryPerTile.
     void layoutUnits(Plan& plan, int planIndex, Coord from, const std::vector<int>& items) {
         if(items.empty()) return;
         const int house = plan.setup.house;
+        // Each slot is one tile: a vehicle, or a squad of up to five foot soldiers (in army order).
+        std::vector<std::vector<int>> slots;
+        int openSquad = -1;
+        for(int item : items) {
+            if(isFootUnit(item)) {
+                if(openSquad < 0 || static_cast<int>(slots[openSquad].size()) >= kInfantryPerTile) {
+                    openSquad = static_cast<int>(slots.size());
+                    slots.emplace_back();
+                }
+                slots[openSquad].push_back(item);
+            } else {
+                slots.push_back({item});
+            }
+        }
         std::vector<char> seen(size * size, 0);
         std::deque<Coord> queue{from};
         seen[from.y * size + from.x] = 1;
         size_t next = 0;
+        int placed = 0;
         auto clear = [&](int x, int y) {
             if(at(x, y) != Free || map(x, y) == Terrain_Mountain || !ownable(x, y, planIndex)) return false;
             for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx)
@@ -949,12 +968,16 @@ struct Layout {
                                               || at(x + dx, y + dy) == City)) return false;
             return true;
         };
-        while(!queue.empty() && next < items.size()) {
+        while(!queue.empty() && next < slots.size()) {
             const Coord c = queue.front(); queue.pop_front();
             if(clear(c.x, c.y)) {
                 at(c.x, c.y) = UnitTile;
-                Placement p; p.house = house; p.item = items[next++]; p.x = c.x; p.y = c.y;
-                result.units.push_back(p);
+                for(int item : slots[next]) {
+                    Placement p; p.house = house; p.item = item; p.x = c.x; p.y = c.y;
+                    result.units.push_back(p);
+                    ++placed;
+                }
+                ++next;
             }
             for(const Coord& d : {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)}) {
                 const int nx = c.x + d.x, ny = c.y + d.y;
@@ -963,7 +986,7 @@ struct Layout {
                 queue.emplace_back(nx, ny);
             }
         }
-        plan.setup.skipped += static_cast<int>(items.size() - next);
+        plan.setup.skipped += static_cast<int>(items.size()) - placed;
     }
 };
 
