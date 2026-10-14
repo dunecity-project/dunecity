@@ -1,3 +1,18 @@
+## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
+
+Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and
+`feat/skirmish-multiplayer` (hosted Random map, equal Random army/city). Full CTest 93: 92 passed
+one at a time; `preplace_queue_probe` failed because `QuantBot Config.ini.default` had gained a
+`WaveFormation` line: that file is in every mod's effective checksum, so saves from earlier builds
+refused to load ("This game needs an older mod version"). The line was removed (the key stays an
+optional setting, code default Combined); `preplace_queue_probe` and `quantbot_wave_formation`
+then passed. Note: POST_BUILD config copies only refresh when the app relinks; copy by hand or
+relink after changing `config/*.default`. Package: executable SHA256
+6da6974738ad83d577dbfd9f7ee9dfd7ab40e8b3cd56e439ed9174a63029af55, signature and runtime check
+passed. The MBA was offline; `/tmp/push-dunecity-1.0.841.sh` on the Mac mini retries for 12 h
+and then installs it there once the game is closed (logs: Mac mini
+`/tmp/push-dunecity-1.0.841.log`, MBA `/tmp/install-dunecity-1.0.841.log`).
+
 ## 2026-10-15 — Random map for multiplayer hosts; equal Random army/city (branch `feat/skirmish-multiplayer`, not released)
 
 Stefan: "make random skermish available for multiplayer … players can join and replace ai so no
