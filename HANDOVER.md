@@ -1,3 +1,15 @@
+## 2026-10-14 — local 1.0.836: Random Skirmish tech 9 default, rocket turrets
+
+`Params::techLevel` defaults to 9. Base templates add Rocket Turrets from Small up (Small 1,
+Medium 2 + 2 Gun, Large 4 + 2 Gun, Fortress 8 + 4 Gun), falling back to Gun Turrets where the
+house or tech level cannot build them; a unit test checks templates for every house and that a
+default-tech Medium map places 2 Rocket Turrets per house. `skirmish_generator_tests`,
+`skirmish_generator_probe`, `menu_navigation_probe` and `dunelegacy_tests` passed.
+Installed on the MBA at 17:53 AEDT by a waiter script once the running game was quit: version
+1.0.836, executable SHA256 3826018aee50b20fb03677c6ece32f4bce6fca3d6f7c37336cb1ccdf76049515,
+desktop runtime check passed. Local 1.0.835 is at
+/Applications/.dunecity-backup-before-1.0.836-20261014-175333/dunecity.app.
+
 ## 2026-10-14 — local 1.0.835: Random Skirmish player start, AI partner, natural terrain
 
 From Stefan's play-test of 1.0.834 (save `testskirmish.dls`, DuneCity 128x128, 2 allies, 2
