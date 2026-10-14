@@ -302,13 +302,28 @@ void runMenu() {
         RandomSkirmishMenu menu;
         skirmishRequire(menu.houseBox.getNumEntries() == menu.houseCount + 1, "House choice is not Random + every custom-game house");
         skirmishRequire(menu.houseCount >= 8, "Fewer houses than a vanilla custom game fields");
-        // Allies 3 leave room for houseCount - 4 enemies, never more than five.
-        probeSelect(menu.alliesBox, 3);
-        menu.onPlayersChanged();
-        skirmishRequire(menu.enemiesBox.getNumEntries() == std::min(kMaxEnemies, menu.houseCount - 4), "Enemy count not clamped to the house cap");
+        // Allies 0-6 and enemies 1-7, never more than 7 together: moving one past the total pushes
+        // the other down, through the real slider input.
+        const int others = maxOtherHouses(menu.houseCount);
+        skirmishRequire(others == kMaxOtherHouses, "The engine cannot field the player plus seven houses");
+        skirmishRequire(menu.alliesBox.getEntryIntData(menu.alliesBox.getNumEntries() - 1) == kMaxAllies
+                        && menu.enemiesBox.getEntryIntData(menu.enemiesBox.getNumEntries() - 1) == kMaxEnemies,
+                        "Ally/enemy slider ranges are not 0-6 and 1-7");
+        probeSelect(menu.alliesBox, 2);
+        probeSelect(menu.enemiesBox, 4);
+        menu.alliesBox.handleMouseWheel(1, 1, true); menu.alliesBox.handleMouseWheel(1, 1, true);   // 2 -> 4 allies
+        skirmishRequire(menu.alliesBox.getSelectedEntryIntData() == 4 && menu.enemiesBox.getSelectedEntryIntData() == 3,
+                        "Raising allies past the total did not lower enemies");
+        for(int i = 0; i < 8; ++i) menu.enemiesBox.handleMouseWheel(1, 1, true);                    // enemies to 7
+        skirmishRequire(menu.enemiesBox.getSelectedEntryIntData() == 7 && menu.alliesBox.getSelectedEntryIntData() == 0,
+                        "Raising enemies to 7 did not lower allies to 0");
+        for(int i = 0; i < 8; ++i) menu.alliesBox.handleMouseWheel(1, 1, true);                     // allies to 6
+        skirmishRequire(menu.alliesBox.getSelectedEntryIntData() == 6 && menu.enemiesBox.getSelectedEntryIntData() == 1,
+                        "Raising allies to 6 did not leave exactly one enemy");
+        SDL_Log("SKIRMISH_PROBE: allies 0-6, enemies 1-7, together at most 7");
         probeSelect(menu.alliesBox, 1);
-        menu.onPlayersChanged();
         probeSelect(menu.enemiesBox, 3);
+        menu.onPlayersChanged(false);
         // Sliders run low (left) to high (right): a click at the left end picks the smallest map,
         // dragging to the right end the largest, and the wheel steps one size at a time.
         {

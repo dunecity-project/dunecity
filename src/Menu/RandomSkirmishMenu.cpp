@@ -196,8 +196,8 @@ RandomSkirmishMenu::RandomSkirmishMenu() : MenuBase() {
     for(size_t i = 0; i < availableMods.size(); ++i) modBox.addEntry(availableMods[i].selectionLabel(), static_cast<int>(i));
     modBox.setOnSelectionChange([this](bool) { onModChanged(); });
     for(int level = 1; level <= 9; ++level) techBox.addEntry(std::to_string(level), level);
-    alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(); });
-    enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(); });
+    alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(true); });
+    enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(false); });
     enemiesAlliedBox.setText(_("Enemies are allied"));
 
     fillAI(allyAIBox);
@@ -341,24 +341,30 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(playerBaseBox, static_cast<int>(params.playerSide.base));
     selectData(playerArmyBox, params.playerSide.army);
     selectData(playerCityBox, params.playerSide.city);
+    // Fixed ranges (allies 0-6, enemies 1-7, within the engine's house cap); the sum is kept
+    // within kMaxOtherHouses by onPlayersChanged.
+    const int others = maxOtherHouses(houseCount);
     alliesBox.clearAllEntries();
-    for(int i = 0; i <= std::min(kMaxAllies, houseCount - 2); ++i) alliesBox.addEntry(std::to_string(i), i);
+    for(int i = 0; i <= std::min(kMaxAllies, others - kMinEnemies); ++i) alliesBox.addEntry(std::to_string(i), i);
+    enemiesBox.clearAllEntries();
+    for(int i = kMinEnemies; i <= std::min(kMaxEnemies, others); ++i) enemiesBox.addEntry(std::to_string(i), i);
     selectData(alliesBox, params.allies);
-    onPlayersChanged();
     selectData(enemiesBox, params.enemies);
+    onPlayersChanged(false);
     onModChanged();
 }
 
-void RandomSkirmishMenu::onPlayersChanged() {
-    // Total houses never exceed what the engine can field in a custom game.
-    const int allies = std::max(0, alliesBox.getSelectedEntryIntData());
-    const int previous = enemiesBox.getSelectedIndex() >= 0 ? enemiesBox.getSelectedEntryIntData() : kMinEnemies;
-    const int most = std::clamp(houseCount - 1 - allies, kMinEnemies, kMaxEnemies);
-    if(enemiesBox.getNumEntries() != most) {
-        enemiesBox.clearAllEntries();
-        for(int i = kMinEnemies; i <= most; ++i) enemiesBox.addEntry(std::to_string(i), i);
-        selectData(enemiesBox, std::min(previous, most));
+void RandomSkirmishMenu::onPlayersChanged(bool alliesMoved) {
+    // Allies and enemies share kMaxOtherHouses (and the engine's house cap): the slider the
+    // player did not touch gives way.
+    const int others = maxOtherHouses(houseCount);
+    const int alliesNow = std::max(0, alliesBox.getSelectedEntryIntData());
+    const int enemiesNow = std::max(kMinEnemies, enemiesBox.getSelectedEntryIntData());
+    if(alliesNow + enemiesNow > others) {
+        if(alliesMoved) selectData(enemiesBox, std::max(kMinEnemies, others - alliesNow));
+        else selectData(alliesBox, std::max(0, others - enemiesNow));
     }
+    const int allies = std::max(0, alliesBox.getSelectedEntryIntData());
     enemiesAlliedBox.setEnabled(enemiesBox.getSelectedEntryIntData() > 1);
     const bool anyAllies = allies > 0;
     allyAIBox.setEnabled(anyAllies);

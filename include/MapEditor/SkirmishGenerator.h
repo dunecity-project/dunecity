@@ -74,9 +74,14 @@ constexpr int kCityRandom = 5;
 constexpr int kCityRandomMin = 1000;
 constexpr int kCityRandomMax = 40000;
 constexpr std::array<int, 7> kCreditPresets{1000, 2000, 3000, 5000, 7500, 10000, 20000};
-constexpr int kMaxAllies = 3;
+constexpr int kMaxAllies = 6;
 constexpr int kMinEnemies = 1;
-constexpr int kMaxEnemies = 5;
+constexpr int kMaxEnemies = 7;
+/// Allies and enemies together: the player plus at most 7 more houses (8 in all).
+constexpr int kMaxOtherHouses = 7;
+
+/// Most other houses this match can field: the shared cap, and the engine's house cap minus the player.
+constexpr int maxOtherHouses(int houseCount) { return houseCount - 1 < kMaxOtherHouses ? houseCount - 1 : kMaxOtherHouses; }
 /// Seeds tried (seed, seed+1, ...) before giving up on a ground-connected map.
 constexpr int kMaxTerrainAttempts = 8;
 /// No unit type may take more than this share of an army budget (raised to 100/n when

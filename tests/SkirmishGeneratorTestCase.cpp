@@ -198,12 +198,23 @@ TEST_CASE("Random skirmish: houses, teams and the engine cap", "[skirmish][gener
     REQUIRE(enemyTeams.size() == 3);
     for(int i = 1; i <= 2; ++i) REQUIRE(r.houses[i].team == 1);
 
-    // 1 + 3 + 5 exceeds the eight houses a vanilla custom game can field.
-    p.allies = 3; p.enemies = 5;
+    // Allies 0-6, enemies 1-7, at most 7 together (and within the engine's house cap).
+    p.allies = 6; p.enemies = 7;
     p.clamp(8);
-    REQUIRE(1 + p.allies + p.enemies == 8);
-    REQUIRE(p.allies == 3);
-    REQUIRE(generate(params(128, 3, 5, Mode::Vanilla, 8, 1), vanilla()).houses.size() == 8);
+    REQUIRE(p.allies == 6); REQUIRE(p.enemies == 1);
+    p.allies = 9; p.enemies = 9;
+    p.clamp(9);                                    // a ninth custom house does not lift the cap
+    REQUIRE(p.allies == kMaxAllies); REQUIRE(p.allies + p.enemies == kMaxOtherHouses);
+    p.allies = 0; p.enemies = 7;
+    p.clamp(8);
+    REQUIRE(p.allies == 0); REQUIRE(p.enemies == 7);
+    p.allies = 3; p.enemies = 5;
+    p.clamp(6);                                    // a smaller engine cap still wins
+    REQUIRE(p.allies + p.enemies == 5); REQUIRE(p.allies == 3);
+    REQUIRE(generate(params(128, 6, 1, Mode::Vanilla, 9, 1), vanilla()).houses.size() == 8);
+    const Result seven = generate(params(128, 0, 7, Mode::Vanilla, 9, 2), vanilla());
+    REQUIRE(seven.houses.size() == 8);
+    requireLegal(seven, vanilla());
 
     // A random player house is still a real, seeded choice.
     Params random = params(96, 0, 1, Mode::Vanilla, 8, 99);

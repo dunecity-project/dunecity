@@ -61,7 +61,8 @@ private:
     void onSaveMap();
     void onCancel();
     void onNewSeed();
-    void onPlayersChanged();
+    /// Allies or enemies moved: the other one gives way so their sum stays within the cap.
+    void onPlayersChanged(bool alliesMoved = true);
     void onModChanged();
     /// The mod selected in the Mod box, or "" when none is listed.
     std::string selectedMod() const;

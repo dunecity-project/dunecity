@@ -1055,8 +1055,9 @@ void Params::clamp(int houseCount) {
     allies = std::clamp(allies, 0, kMaxAllies);
     enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
     houseCount = std::max(2, houseCount);
-    if(1 + allies + enemies > houseCount) enemies = std::max(kMinEnemies, houseCount - 1 - allies);
-    if(1 + allies + enemies > houseCount) allies = std::max(0, houseCount - 1 - enemies);
+    const int others = maxOtherHouses(houseCount);
+    if(allies + enemies > others) enemies = std::max(kMinEnemies, others - allies);
+    if(allies + enemies > others) allies = std::max(0, others - enemies);
 }
 
 namespace {
