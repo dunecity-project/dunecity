@@ -5,6 +5,11 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
 (production objects are unchanged) and runs one process per case:
 
   menu         the Random Skirmish screen: house cap, persistence, Save map, screenshots
+  mp-lobby     multiplayer Random map: Custom Game's Random map... screen (screenshot), the saved
+               open-start map selected in the host's map list, the lobby seating the host, a
+               joining guest and two AI on four starts with teams (screenshot), the guest's game
+               info and roster through the wire format, and both peers starting the match: every
+               house on its own start with that start's contents, same state digest after a minute
   legacy-map   a bundled city map without zone levels still starts every lot empty
   vanilla-1v1  small vanilla 1v1
   allied-2v3   2v3 against allied enemies, Large bases, 10k armies, plus a one-minute smoke run
@@ -35,7 +40,7 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--cases', default='menu,legacy-map,vanilla-1v1,allied-2v3,city-192,stefan-128,'
+parser.add_argument('--cases', default='menu,mp-lobby,legacy-map,vanilla-1v1,allied-2v3,city-192,stefan-128,'
                                        'partner-support,partner-quantbot,render')
 parser.add_argument('--keep', action='store_true', help='Keep profiles and saves (screenshots are always kept)')
 parser.add_argument('--render-save', type=Path, help='render: also draw the map this saved match (.dls) started from')
@@ -121,9 +126,11 @@ for case in args.cases.split(','):
             bad = [line for line in played.splitlines()[1:] if problem.search(line) and not startup_noise.search(line)]
             if bad:
                 raise RuntimeError(f'{label}: {len(bad)} problem line(s) in the played minute, first: {bad[0]}')
-        loaded = text.split('SKIRMISH_PROBE:', 1)[0] if 'SKIRMISH_PROBE:' in text else text
+        # mp-lobby reports the menus before its match loads: scan up to its first digest instead.
+        marker = 'digest at cycle' if case == 'mp-lobby' else 'SKIRMISH_PROBE:'
+        loaded = text.split(marker, 1)[0] if marker in text else text
         map_warnings = [line for line in loaded.splitlines()
-                        if re.search(r'- Random \d+v\d+.*?\d+:|Invalid or occupied|Invalid (unit|building|house|position)|refused zone', line)]
+                        if re.search(r'- Random (\d+v\d+|\d+ starts).*?\d+:|Invalid or occupied|Invalid (unit|building|house|position)|refused zone', line)]
         if map_warnings:
             raise RuntimeError(f'{label}: map load warnings, first: {map_warnings[0]}')
         summary += [line[line.index('SKIRMISH_PROBE'):] for line in text.splitlines() if 'SKIRMISH_PROBE' in line]

@@ -1,3 +1,30 @@
+## 2026-10-15 — Random map for multiplayer hosts; equal Random army/city (branch `feat/skirmish-multiplayer`, not released)
+
+Stefan: "make random skermish available for multiplayer … players can join and replace ai so no
+enemies and allies, you set that in the next screen" and "random settings on army and city must
+apply equally to each player". Details: `docs/skirmish-generator.md` ("Multiplayer Random map").
+
+- Equal randoms (single player and hosted): Army/City "Random" is drawn once per map from the
+  seed; every house set to Random gets that budget/target (`SkirmishGenerator::generate`).
+- Hosting: the host's map chooser (`CustomGameMenu`, LAN/Internet and the Custom Game
+  Offline/Online setup) has **Random map...** → `RandomSkirmishMenu(hostMod)`: map settings,
+  credits, tech, Start positions 2–8, one Base/Army/City for every start, Mirrored starts on by
+  default; host mod and Game Rules stay in the chooser. Next saves the map to MP User Maps, the
+  chooser selects it (`selectUserMap`) and continues into the normal lobby.
+- Map: open `[Player1]..[PlayerN]` starts (`Params::multiplayer`, `Role::Open`), planned with
+  `startCatalogue()` (only what every custom-game house can field), identical buildings, units,
+  army value and city per start. Lobby, map transfer, checksums, saves and replays unchanged:
+  no protocol or save change (protocol 74, save 9860).
+- Tests: `skirmish_generator_tests` (+4 cases: equal randoms, multiplayer starts 2–8, start
+  catalogue, hosted persistence); `skirmish_generator_probe` new case `mp-lobby` (screen, chooser,
+  online setup, lobby with host + guest + 2 AI and teams, guest's wire-format copy, both peers'
+  first minute with equal state digests). No socket-level two-peer run: the late-join harness
+  needs local PHP signalling + WebRTC and is not in ctest.
+- Run one at a time on a fresh Release tree, probe output deleted after each: dunelegacy_tests
+  (1074 passed, 3 skipped), skirmish_generator_tests (22 cases), skirmish_generator_probe (all 10
+  cases incl. mp-lobby), menu_navigation_probe, retina_resolution_probe, game_command_regressions,
+  network_wire_harness, lobby_authorization_tests (5 cases): all passed.
+
 ## 2026-10-14 — local 1.0.840 installed on the MBA
 
 1.0.840 = the formation fixes below plus the colonist escort (86% of march cycles with escort on

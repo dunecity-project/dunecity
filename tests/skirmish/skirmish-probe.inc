@@ -1,9 +1,13 @@
 // Included only by run-skirmish-probe.py, never by the shipped game. Drives the real Random
 // Skirmish screen and the real CustomGame start/load path with an isolated profile.
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CustomGameMenu.h>
+#include <Menu/PlaySetup.h>
+#include <Menu/CustomGamePlayers.h>
 #include <GUI/dune/GameOptionsWindow.h>
 #include <MapEditor/SkirmishGenerator.h>
 #include <MapEditor/MapGenerator.h>
+#include <players/PlayerFactory.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <Game.h>
@@ -20,8 +24,10 @@
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
+#include <misc/OMemoryStream.h>
 #include <misc/draw_util.h>
 #include <misc/fnkdat.h>
+#include <misc/string_util.h>
 #include <sand.h>
 
 #include <cstdlib>
@@ -413,6 +419,202 @@ void runMenu() {
     }
 }
 
+/**
+    Multiplayer Random map, host side and a second peer, against the real menus and engine:
+    Custom Game (LAN host) offers Random map...; its screen has no allies/enemies/AI rows and
+    mirrors starts by default; Next saves an open-start map to MP User Maps; the host's map
+    list selects it; the lobby built from it (as Next builds it) seats the host, a joining guest
+    and two AI on the four starts with teams; the guest receives the host's game info and roster
+    in the wire format; both peers start the match, every house sits on its own start with the
+    start's exact contents, and after a minute both peers report the same state digest.
+*/
+void runMultiplayerLobby() {
+    const std::string hostName = settings.general.playerName, guestName = "Guest tester";
+    skirmishRequire(RandomSkirmish::activateMod("dunecity"), "dunecity mod did not activate");
+    {
+        CustomGameMenu lan(true, true);
+        skirmishRequire(lan.randomMapButton.isVisible() && lan.randomMapButton.isEnabled(), "LAN host has no Random map button");
+        CustomGameMenu single(false);
+        skirmishRequire(!single.randomMapButton.isVisible(), "Single-player Custom Game shows the Random map button");
+    }
+
+    // The host's Random map step.
+    std::string path;
+    Params params;
+    {
+        RandomSkirmishMenu menu(std::string("dunecity"));
+        for(Widget* hidden : std::initializer_list<Widget*>{&menu.alliesBox, &menu.enemiesBox, &menu.enemiesAlliedBox, &menu.houseBox,
+                                                            &menu.partnerBox, &menu.allyAIBox, &menu.enemyAIBox, &menu.modBox,
+                                                            &menu.rulesButton, &menu.saveButton, &menu.startButton})
+            skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
+        skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
+        skirmishRequire(menu.startsBox.getEntryIntData(0) == kMinStarts
+                        && menu.startsBox.getEntryIntData(menu.startsBox.getNumEntries() - 1) == maxStarts(menu.houseCount),
+                        "Start positions do not run from 2 to the house cap");
+        skirmishRequire(maxStarts(menu.houseCount) == kMaxStarts, "The engine cannot field eight starts");
+        skirmishRequire(menu.startCityBox.isVisible() && menu.startCityCaption->isVisible(), "City row hidden for the DuneCity host mod");
+        skirmishRequire(!menu.hostModLabel.getText().empty(), "The host's mod is not shown");
+        probeSelect(menu.sizeBox, 128);
+        probeSelect(menu.startsBox, 4);
+        probeSelect(menu.startBaseBox, static_cast<int>(BaseSize::Medium));
+        probeSelect(menu.startArmyBox, kArmyRandom);
+        probeSelect(menu.startCityBox, 2);
+        probeSelect(menu.creditsBox, 5000);
+        probeSelect(menu.techBox, 9);
+        menu.seedBox.setText("20261015");
+        menu.fixedSeedBox.setChecked(true);
+        skirmishCapture(menu, "mp-random-map");
+        params = menu.readParams();
+        skirmishRequire(params.multiplayer && params.starts == 4 && params.mod == "dunecity" && params.mode == Mode::DuneCity
+                        && params.symmetric && params.startSide.army == kArmyRandom, "The screen does not read back its choices");
+        menu.onCreateMap();
+        path = menu.getCreatedMap();
+        skirmishRequire(!path.empty() && existsFile(path), "Next did not save the map");
+    }
+    const Result result = SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode));
+    skirmishRequire(readCompleteFile(path) == result.ini, "The saved map is not the generated one");
+    for(const HouseSetup& h : result.houses) {
+        skirmishRequire(h.skipped == 0 && h.armyBudget == result.houses[0].armyBudget && h.cityTarget == result.houses[0].cityTarget,
+                        "Starts differ in the generated plan");
+    }
+    SDL_Log("SKIRMISH_PROBE: multiplayer map %s army=%d city=%d", getBasename(path).c_str(), result.houses[0].armyBudget,
+            result.houses[0].cityTarget);
+
+    // The host's map choice selects it, as Next would see it.
+    CustomGameMenu host(true, true);
+    skirmishRequire(host.selectUserMap(path) && strToLower(host.getSelectedMapPath()) == strToLower(path),
+                    "The host's map list did not select the generated map");
+    skirmishCapture(host, "mp-map-chosen");
+    {
+        // Custom Game's Offline/Online chooser (Play Online hosting) takes the new file into its
+        // fixed map list, and its Next hands that map to the players step.
+        CustomPlaySetup setup;
+        setup.rules = effectiveGameOptions;
+        setup.mods = ModManager::instance().listModChoices();
+        for(size_t i = 0; i < setup.mods.size(); ++i) if(setup.mods[i].name == "dunecity") setup.mod = static_cast<int>(i);
+        setup.online = true;
+        CustomGameMenu browser(false, false, &setup);
+        skirmishRequire(browser.randomMapButton.isVisible() && browser.randomMapButton.isEnabled(), "Custom Game setup has no Random map button");
+        skirmishRequire(browser.selectUserMap(path), "The setup map list did not select the generated map");
+        browser.onNext();
+        skirmishRequire(setup.map >= 0 && setup.map < static_cast<int>(setup.maps.size()) && strToLower(setup.maps[setup.map]) == strToLower(path),
+                        "The setup's players step would not get the generated map");
+        SDL_Log("SKIRMISH_PROBE: online setup continues with %s", getBasename(setup.maps[setup.map]).c_str());
+    }
+
+    // The lobby exactly as CustomGameMenu::onNext opens it for a LAN host.
+    GameInitSettings hostInit(getBasename(path, true), readCompleteFile(path), hostName + "'s Game", false, host.currentGameOptions);
+    CustomGamePlayers lobby(hostInit, true, true);
+    skirmishRequire(lobby.numHouses == 4, "The lobby does not offer the four starts");
+    // A seated human's entry data is 0 (PLAYER_HUMAN, private to CustomGamePlayers.cpp).
+    skirmishRequire(lobby.houseInfo[0].player1DropDown.getSelectedEntryIntData() == 0
+                    && lobby.houseInfo[0].player1DropDown.getSelectedEntry() == hostName, "The host is not seated");
+    // A guest joins: the host seats it on the first open start and sends it the game and roster.
+    OMemoryStream joinPacket;
+    joinPacket.open();
+    lobby.gameInitSettings.save(joinPacket);
+    // getChangeEventListForNewPlayer() seats a joiner on the first open start (row 1) with
+    // setPlayer2Slot() and then broadcasts; there is no socket here, so seat it the same way.
+    lobby.setPlayer2Slot(guestName, 2);
+    skirmishRequire(lobby.houseInfo[1].player1DropDown.getSelectedEntry() == guestName, "The guest was not seated on a start");
+    // The other starts get AI; houses and teams are set here: two teams of two.
+    const int ai = PlayerFactory::getIndexByPlayerClass("qBotEasy");
+    const int houses[] = {HOUSE_ATREIDES, HOUSE_HARKONNEN, HOUSE_INVALID, HOUSE_ORDOS};
+    const int teams[] = {1, 2, 1, 2};
+    for(int row = 0; row < 4; ++row) {
+        auto& info = lobby.houseInfo[row];
+        if(row >= 2) { probeSelect(info.player1DropDown, ai); lobby.onChangePlayerDropDownBoxes(true, 2 * row); }
+        probeSelect(info.houseDropDown, houses[row]);
+        lobby.onChangeHousesDropDownBoxes(true, row);
+        probeSelect(info.teamDropDown, teams[row]);
+        lobby.onChangeTeamDropDownBoxes(true, row);
+    }
+    lobby.update();
+    skirmishCapture(lobby, "mp-lobby");
+    lobby.addAllPlayersToGameInitSettings();
+    const GameInitSettings hostStart = lobby.gameInitSettings;
+    skirmishRequire(hostStart.getHouseInfoList().size() == 4, "The lobby did not start four houses");
+
+    // The guest's side: its game info comes off the wire, its roster from the host's change events.
+    settings.general.playerName = guestName;
+    GameInitSettings guestStart;
+    {
+        IMemoryStream wire(joinPacket.getData(), joinPacket.getDataLength());
+        GameInitSettings received(wire);
+        skirmishRequire(received.getFiledata() == hostInit.getFiledata(), "The map did not reach the guest unchanged");
+        CustomGamePlayers guestLobby(received, false, true);
+        guestLobby.onReceiveChangeEventList(lobby.getChangeEventList());
+        skirmishRequire(guestLobby.numHouses == 4, "The guest's lobby does not show the four starts");
+        guestLobby.addAllPlayersToGameInitSettings();
+        guestStart = guestLobby.gameInitSettings;
+    }
+    settings.general.playerName = hostName;
+    auto bytes = [](const GameInitSettings& init) {
+        OMemoryStream stream; stream.open(); init.save(stream);
+        return std::string(stream.getData(), stream.getDataLength());
+    };
+    skirmishRequire(bytes(guestStart) == bytes(hostStart), "Host and guest would start different games");
+    SDL_Log("SKIRMISH_PROBE: guest received %zu map bytes and the same %zu-byte start settings",
+            guestStart.getFiledata().size(), bytes(guestStart).size());
+
+    // Both peers play the first minute; every house is on its own start with that start's contents.
+    const Uint32 minute = MILLI2CYCLES(60 * 1000);
+    std::string digests[2];
+    for(int peer = 0; peer < 2; ++peer) {
+        settings.general.playerName = peer == 0 ? hostName : guestName;
+        auto game = startMatch(peer == 0 ? hostStart : guestStart);
+        skirmishRequire(game->isCitySimEnabled(), "City mode did not reach the match");
+        skirmishRequire(pLocalHouse != nullptr && pLocalHouse->getHouseID() == (peer == 0 ? HOUSE_ATREIDES : HOUSE_HARKONNEN),
+                        "A peer does not control the house it chose");
+        std::set<int> startsTaken;
+        int housesInGame = 0;
+        for(int h = 0; h < NUM_HOUSES; ++h) {
+            const House* house = game->getHouse(h);
+            if(!house) continue;
+            ++housesInGame;
+            const StructureBase* yard = nullptr;
+            for(const StructureBase* s : structureList) if(s->getOwner() == house && s->getItemID() == Structure_ConstructionYard) yard = s;
+            skirmishRequire(yard != nullptr, "A house has no Construction Yard");
+            int start = -1;
+            for(const HouseSetup& setup : result.houses)
+                if(setup.plateau.contains(yard->getLocation().x, yard->getLocation().y)) start = setup.house;
+            skirmishRequire(start >= 0 && startsTaken.insert(start).second, "A house is not on a start of its own");
+            std::map<int, int> wantStructures, haveStructures, wantUnits, haveUnits;
+            for(const Placement& s : result.structures) if(s.house == start) ++wantStructures[s.item];
+            for(const Placement& u : result.units) if(u.house == start) ++wantUnits[u.item];
+            for(const StructureBase* s : structureList) if(s->getOwner() == house) ++haveStructures[s->getItemID()];
+            for(const UnitBase* u : unitList) if(u->getOwner() == house && wantUnits.count(u->getItemID())) ++haveUnits[u->getItemID()];
+            skirmishRequire(haveStructures == wantStructures && haveUnits == wantUnits, "A house does not hold its start's contents");
+            // Teams and controllers are the lobby's.
+            const auto& players = house->getPlayerList();
+            skirmishRequire(players.size() == 1, "A start holds more than one controller");
+            const std::string controller = players.front()->getPlayerclass(), name = players.front()->getPlayername();
+            const int expectedTeam = h == HOUSE_ATREIDES ? 1 : h == HOUSE_HARKONNEN ? 2 : h == HOUSE_ORDOS ? 2 : 1;
+            skirmishRequire(house->getTeamID() == expectedTeam, "Team differs from the lobby for house " + std::to_string(h));
+            skirmishRequire(h == HOUSE_ATREIDES ? (controller == HUMANPLAYERCLASS && name == hostName)
+                            : h == HOUSE_HARKONNEN ? (controller == HUMANPLAYERCLASS && name == guestName)
+                            : controller == "qBotEasy", "Controller differs from the lobby for house " + std::to_string(h));
+            int structures = 0, units = 0;
+            for(const auto& entry : haveStructures) structures += entry.second;
+            for(const auto& entry : haveUnits) units += entry.second;
+            if(peer == 0)
+                SDL_Log("SKIRMISH_PROBE: house=%d start=Player%d team=%d controller=%s structures=%d units=%d credits=%d",
+                        h, start + 1, house->getTeamID(), name.c_str(), structures, units, house->getCredits());
+        }
+        skirmishRequire(housesInGame == 4, "The match does not hold four houses");
+        if(peer == 0) renderPicture(pictureOfGame(), "loaded-mp-lobby");
+        if(peer == 0) SDL_Log("SKIRMISH_SMOKE_BEGIN: multiplayer host");
+        while(!game->finished && game->getGameCycleCount() < minute) game->updateGameState();
+        if(peer == 0) SDL_Log("SKIRMISH_SMOKE_END: cycle=%u", game->getGameCycleCount());
+        skirmishRequire(!game->finished, "The match ended inside its first minute");
+        digests[peer] = GameStateDigest::describe(game->computeStateDigest());
+        SDL_Log("SKIRMISH_PROBE: %s digest at cycle %u: %s", peer == 0 ? "host" : "guest", game->getGameCycleCount(), digests[peer].c_str());
+        endMatch(game);
+    }
+    settings.general.playerName = hostName;
+    skirmishRequire(digests[0] == digests[1], "Host and guest disagree about the game state");
+}
+
 }
 
 int runSkirmishProbe() {
@@ -420,6 +622,7 @@ int runSkirmishProbe() {
     settings.network.metaServer = "http://127.0.0.1:1/";
     const std::string kind = std::getenv("SKIRMISH_PROBE_CASE") ? std::getenv("SKIRMISH_PROBE_CASE") : "";
     if(kind == "menu") runMenu();
+    else if(kind == "mp-lobby") runMultiplayerLobby();
     else if(kind == "legacy-map") runLegacyMap();
     else if(kind == "render") runRender();
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);

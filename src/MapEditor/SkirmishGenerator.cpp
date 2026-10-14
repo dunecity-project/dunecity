@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <deque>
 #include <numeric>
+#include <optional>
 
 namespace SkirmishGenerator {
 
@@ -1081,10 +1082,13 @@ std::string writeIni(const Result& result, const Params& params, const Catalogue
     line("Rock=" + std::to_string(kRockPercent[indexOf(params.rock)]));
     line("Spice=" + std::to_string(indexOf(params.spice)));
     line(std::string("Symmetric=") + (params.symmetric ? "true" : "false"));
-    line(std::string("EnemiesAllied=") + (params.enemiesAllied ? "true" : "false"));
+    // A multiplayer map's starts are open: who plays them, and on which team, is the lobby's choice.
+    if(params.multiplayer) line("Starts=" + std::to_string(result.houses.size()));
+    else line(std::string("EnemiesAllied=") + (params.enemiesAllied ? "true" : "false"));
     for(const HouseSetup& h : result.houses) {
-        line(house(h.house) + "=" + (h.role == Role::Human ? "Human" : h.role == Role::Ally ? "Ally" : "Enemy")
-             + ",Team" + std::to_string(h.team) + "," + h.playerClass
+        const char* role = h.role == Role::Human ? "Human" : h.role == Role::Ally ? "Ally" : h.role == Role::Open ? "Open" : "Enemy";
+        line(house(h.house) + "=" + role
+             + (h.role == Role::Open ? std::string() : ",Team" + std::to_string(h.team) + "," + h.playerClass)
              + (h.partnerClass.empty() ? "" : "+" + h.partnerClass) + "," + baseName(h.base)
              + ",Army" + std::to_string(h.armySpent) + "/" + std::to_string(h.armyBudget)
              + ",City" + std::to_string(h.cityEstimate) + "/" + std::to_string(h.cityTarget)
@@ -1105,15 +1109,17 @@ void Params::clamp(int houseCount) {
     mode = static_cast<Mode>(std::clamp(indexOf(mode), 0, indexOf(Mode::DuneCity)));
     credits = snapTo(credits, kCreditPresets.data(), kCreditPresets.data() + kCreditPresets.size());
     techLevel = std::clamp(techLevel, 1, 9);
-    for(Side* side : {&allySide, &enemySide, &playerSide}) {
+    for(Side* side : {&allySide, &enemySide, &playerSide, &startSide}) {
         side->base = static_cast<BaseSize>(std::clamp(indexOf(side->base), 0, indexOf(BaseSize::Fortress)));
         side->army = std::clamp(side->army, 0, kArmyRandom);
         side->city = std::clamp(side->city, 0, kCityRandom);
-        if(side->playerClass.empty() && side != &playerSide) side->playerClass = "qBotMedium";
+        if(side->playerClass.empty() && side != &playerSide && side != &startSide) side->playerClass = "qBotMedium";
     }
+    startSide.playerClass.clear();     // a start's controller is chosen in the lobby
     allies = std::clamp(allies, 0, kMaxAllies);
     enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
     houseCount = std::max(2, houseCount);
+    starts = std::clamp(starts, kMinStarts, std::max(kMinStarts, maxStarts(houseCount)));
     const int others = maxOtherHouses(houseCount);
     if(allies + enemies > others) enemies = std::max(kMinEnemies, others - allies);
     if(allies + enemies > others) allies = std::max(0, others - enemies);
@@ -1127,7 +1133,8 @@ void Params::load(const INIFile& config) {
     mapSize = config.getIntValue(kSection, "Map Size", mapSize);
     rock = static_cast<Rock>(config.getIntValue(kSection, "Rock", indexOf(rock)));
     spice = static_cast<Spice>(config.getIntValue(kSection, "Spice", indexOf(spice)));
-    symmetric = config.getBoolValue(kSection, "Symmetric", symmetric);
+    // The multiplayer screen keeps its own layout choice, mirrored unless the host changed it.
+    symmetric = config.getBoolValue(kSection, multiplayer ? "Multiplayer Symmetric" : "Symmetric", symmetric);
     const std::string seedText = config.getStringValue(kSection, "Seed", std::to_string(seed));
     if(!seedText.empty() && seedText.find_first_not_of("0123456789") == std::string::npos && seedText.size() <= 10) {
         const unsigned long long value = std::stoull(seedText);
@@ -1139,9 +1146,12 @@ void Params::load(const INIFile& config) {
     allies = config.getIntValue(kSection, "Allies", allies);
     enemies = config.getIntValue(kSection, "Enemies", enemies);
     enemiesAllied = config.getBoolValue(kSection, "Enemies Allied", enemiesAllied);
-    mode = static_cast<Mode>(config.getIntValue(kSection, "Mode", indexOf(mode)));
-    // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
-    mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
+    if(!multiplayer) {
+        // A hosted game plays the host's mod; only the single-player screen remembers one.
+        mode = static_cast<Mode>(config.getIntValue(kSection, "Mode", indexOf(mode)));
+        // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
+        mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
+    }
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         side->playerClass = config.getStringValue(kSection, prefix + "AI", side->playerClass);
@@ -1149,13 +1159,17 @@ void Params::load(const INIFile& config) {
         side->army = config.getIntValue(kSection, prefix + "Army", side->army);
         side->city = config.getIntValue(kSection, prefix + "City", side->city);
     }
+    starts = config.getIntValue(kSection, "Multiplayer Starts", starts);
+    startSide.base = static_cast<BaseSize>(config.getIntValue(kSection, "Start Base", indexOf(startSide.base)));
+    startSide.army = config.getIntValue(kSection, "Start Army", startSide.army);
+    startSide.city = config.getIntValue(kSection, "Start City", startSide.city);
 }
 
 void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Map Size", mapSize);
     config.setIntValue(kSection, "Rock", indexOf(rock));
     config.setIntValue(kSection, "Spice", indexOf(spice));
-    config.setBoolValue(kSection, "Symmetric", symmetric);
+    config.setBoolValue(kSection, multiplayer ? "Multiplayer Symmetric" : "Symmetric", symmetric);
     config.setStringValue(kSection, "Seed", std::to_string(seed));
     config.setBoolValue(kSection, "Fixed Seed", fixedSeed);
     config.setIntValue(kSection, "House", house);
@@ -1163,8 +1177,10 @@ void Params::save(INIFile& config) const {
     config.setIntValue(kSection, "Allies", allies);
     config.setIntValue(kSection, "Enemies", enemies);
     config.setBoolValue(kSection, "Enemies Allied", enemiesAllied);
-    config.setIntValue(kSection, "Mode", indexOf(mode));
-    config.setStringValue(kSection, "Mod", mod);
+    if(!multiplayer) {
+        config.setIntValue(kSection, "Mode", indexOf(mode));
+        config.setStringValue(kSection, "Mod", mod);
+    }
     config.setIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
         config.setStringValue(kSection, prefix + "AI", side->playerClass);
@@ -1172,6 +1188,10 @@ void Params::save(INIFile& config) const {
         config.setIntValue(kSection, prefix + "Army", side->army);
         config.setIntValue(kSection, prefix + "City", side->city);
     }
+    config.setIntValue(kSection, "Multiplayer Starts", starts);
+    config.setIntValue(kSection, "Start Base", indexOf(startSide.base));
+    config.setIntValue(kSection, "Start Army", startSide.army);
+    config.setIntValue(kSection, "Start City", startSide.city);
 }
 
 // ---- Catalogue ----------------------------------------------------------------------------
@@ -1207,6 +1227,39 @@ int Catalogue::unlockLevel(int item, int house) const {
 bool Catalogue::available(int item, int house, int techLevel) const {
     const int level = unlockLevel(item, house);
     return level >= 0 && level <= techLevel;
+}
+
+Catalogue startCatalogue(const Catalogue& catalogue, int starts) {
+    Catalogue shared;
+    shared.itemNames = catalogue.itemNames;
+    shared.sizes = catalogue.sizes;
+    starts = std::clamp(starts, 0, static_cast<int>(NUM_HOUSES));
+    for(int i = 0; i < starts; ++i) {
+        shared.houses.push_back(i);
+        shared.houseNames[i] = "Player" + std::to_string(i + 1);
+    }
+    for(int item = ItemID_Invalid + 1; item < Num_ItemID; ++item) {
+        ItemRule merged;
+        merged.enabled = !catalogue.houses.empty();
+        int level = 0;
+        bool first = true;
+        for(int house : catalogue.houses) {
+            const ItemRule& rule = catalogue.rule(item, house);
+            const int unlock = catalogue.unlockLevel(item, house);
+            merged.enabled = merged.enabled && rule.enabled;
+            level = level < 0 || unlock < 0 ? -1 : std::max(level, unlock);
+            // The dearest price and the least favourable power (largest draw, smallest output).
+            merged.price = first ? rule.price : std::max(merged.price, rule.price);
+            merged.power = first ? rule.power : std::max(merged.power, rule.power);
+            first = false;
+        }
+        // Built straight from the Construction Yard at the level the slowest house needs, so
+        // unlockLevel() of a start is exactly the highest unlock level among the houses.
+        merged.techLevel = merged.enabled ? level : -1;
+        merged.builder = item == Structure_ConstructionYard || level < 0 ? ItemID_Invalid : Structure_ConstructionYard;
+        for(int house = 0; house < NUM_HOUSES; ++house) shared.rules[item][house] = merged;
+    }
+    return shared;
 }
 
 // ---- Building blocks ----------------------------------------------------------------------
@@ -1353,22 +1406,36 @@ int displayedPopulation(const std::vector<Placement>& placements, int house) {
 
 // ---- Generator ----------------------------------------------------------------------------
 
-Result generate(const Params& requested, const Catalogue& catalogue) {
+Result generate(const Params& requested, const Catalogue& houseCatalogue) {
     Params params = requested;
-    params.clamp(static_cast<int>(catalogue.houses.size()));
+    params.clamp(static_cast<int>(houseCatalogue.houses.size()));
+    const bool multiplayer = params.multiplayer;
+    // Multiplayer starts are planned as Player1..PlayerN with what every house can field, so
+    // every start holds the same base, army and city whichever house the lobby puts there.
+    const std::optional<Catalogue> startRules = multiplayer
+        ? std::optional<Catalogue>(startCatalogue(houseCatalogue, params.starts)) : std::nullopt;
+    const Catalogue& catalogue = multiplayer ? *startRules : houseCatalogue;
     const int size = params.mapSize;
     Random random(params.seed);
     Result result;
+    // Random army and city sizes are drawn once per map: every house set to Random gets the same.
+    Random draws(mix(params.seed, 0x5A3D1u));
+    const int randomArmy = draws.rand(kArmyRandomMin / 100, kArmyRandomMax / 100) * 100;
+    const int randomCity = draws.rand(kCityRandomMin / 1000, kCityRandomMax / 1000) * 1000;
 
     // Houses: the player's choice (or a seeded one), then a seeded draw for everyone else.
+    // A multiplayer map has open starts instead; the lobby decides who plays where.
     std::vector<int> pool = catalogue.houses;
     int human = params.house;
-    if(std::find(pool.begin(), pool.end(), human) == pool.end())
-        human = pool.empty() ? HOUSE_HARKONNEN : pool[random.rand(0, static_cast<int>(pool.size()) - 1)];
-    pool.erase(std::remove(pool.begin(), pool.end(), human), pool.end());
-    for(int i = static_cast<int>(pool.size()) - 1; i > 0; --i) std::swap(pool[i], pool[random.rand(0, i)]);
-    const int allies = std::min(params.allies, static_cast<int>(pool.size()) - 1);
-    const int enemies = std::min(params.enemies, static_cast<int>(pool.size()) - allies);
+    int allies = 0, enemies = 0;
+    if(!multiplayer) {
+        if(std::find(pool.begin(), pool.end(), human) == pool.end())
+            human = pool.empty() ? HOUSE_HARKONNEN : pool[random.rand(0, static_cast<int>(pool.size()) - 1)];
+        pool.erase(std::remove(pool.begin(), pool.end(), human), pool.end());
+        for(int i = static_cast<int>(pool.size()) - 1; i > 0; --i) std::swap(pool[i], pool[random.rand(0, i)]);
+        allies = std::min(params.allies, static_cast<int>(pool.size()) - 1);
+        enemies = std::min(params.enemies, static_cast<int>(pool.size()) - allies);
+    }
 
     std::vector<Plan> plans;
     auto addPlan = [&](int house, Role role, int team, const Side* side) {
@@ -1376,7 +1443,8 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         plan.setup.house = house;
         plan.setup.role = role;
         plan.setup.team = team;
-        Random own(mix(params.seed, static_cast<uint32_t>(house) + 1));
+        // Multiplayer starts share one stream, so every start buys the same army.
+        Random own(mix(params.seed, multiplayer ? 1u : static_cast<uint32_t>(house) + 1));
         // Every house, the player's included, starts with its side's base, army and city.
         const Side& start = role == Role::Human ? params.playerSide : *side;
         if(role == Role::Human) {
@@ -1386,11 +1454,9 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
             plan.setup.playerClass = start.playerClass;
         }
         plan.setup.base = start.base;
-        plan.setup.armyBudget = start.army == kArmyRandom
-            ? own.rand(kArmyRandomMin / 100, kArmyRandomMax / 100) * 100 : kArmyBudgets[start.army];
+        plan.setup.armyBudget = start.army == kArmyRandom ? randomArmy : kArmyBudgets[start.army];
         if(params.mode == Mode::DuneCity)
-            plan.setup.cityTarget = start.city == kCityRandom
-                ? own.rand(kCityRandomMin / 1000, kCityRandomMax / 1000) * 1000 : kCityTargets[start.city];
+            plan.setup.cityTarget = start.city == kCityRandom ? randomCity : kCityTargets[start.city];
         plan.base = baseTemplate(start.base, house, params.techLevel, catalogue);
         plan.mcv = start.base == BaseSize::None && catalogue.rule(Unit_MCV, house).enabled;
         plan.wallsPerSide = start.base == BaseSize::Fortress ? 2 : start.base == BaseSize::Large ? 1 : 0;
@@ -1416,10 +1482,15 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         plan.height = std::max(plan.baseSide, cityH);
         plans.push_back(std::move(plan));
     };
-    addPlan(human, Role::Human, 1, nullptr);
-    for(int i = 0; i < allies; ++i) addPlan(pool[i], Role::Ally, 1, &params.allySide);
-    for(int i = 0; i < enemies; ++i)
-        addPlan(pool[allies + i], Role::Enemy, params.enemiesAllied ? 2 : 2 + i, &params.enemySide);
+    if(multiplayer) {
+        // Every start its own team for the layout (bases face the nearest other start).
+        for(int i = 0; i < static_cast<int>(catalogue.houses.size()); ++i) addPlan(i, Role::Open, i + 1, &params.startSide);
+    } else {
+        addPlan(human, Role::Human, 1, nullptr);
+        for(int i = 0; i < allies; ++i) addPlan(pool[i], Role::Ally, 1, &params.allySide);
+        for(int i = 0; i < enemies; ++i)
+            addPlan(pool[allies + i], Role::Enemy, params.enemiesAllied ? 2 : 2 + i, &params.enemySide);
+    }
     const int houses = static_cast<int>(plans.size());
 
     // The player's start is never the cramped one: as much rock as the largest start.
@@ -1460,14 +1531,15 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
             slotCenters.push_back(c);
         }
     }
-    // The player takes slot 0, allies the slots nearest to it, enemies the rest.
+    // The player takes slot 0, allies the slots nearest to it, enemies the rest; multiplayer
+    // starts keep the slot order.
     std::vector<int> order(houses - 1);
     std::iota(order.begin(), order.end(), 1);
     auto dist2 = [&](int a, int b) {
         const int dx = slotCenters[a].x - slotCenters[b].x, dy = slotCenters[a].y - slotCenters[b].y;
         return dx * dx + dy * dy;
     };
-    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return dist2(0, a) < dist2(0, b); });
+    if(!multiplayer) std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return dist2(0, a) < dist2(0, b); });
     plans[0].slot = 0;
     for(int i = 1; i < houses; ++i) plans[i].slot = order[i - 1];
 
@@ -1574,9 +1646,9 @@ Result generate(const Params& requested, const Catalogue& catalogue) {
         result.houses.push_back(plan.setup);
     }
 
-    // Name: "<N>P - <S>x<S> - Random <a>v<e> <Mode> T<tech> <seed>".
-    const std::string teams = std::to_string(1 + allies) + "v" + std::to_string(enemies)
-        + (params.enemiesAllied || enemies < 2 ? "" : " FFA");
+    // Name: "<N>P - <S>x<S> - Random <a>v<e> <Mode> T<tech> <seed>", multiplayer "... Random <N> starts ...".
+    const std::string teams = multiplayer ? std::to_string(houses) + " starts"
+        : std::to_string(1 + allies) + "v" + std::to_string(enemies) + (params.enemiesAllied || enemies < 2 ? "" : " FFA");
     result.name = std::to_string(houses) + "P - " + std::to_string(size) + "x" + std::to_string(size)
         + " - Random " + teams + (params.mode == Mode::DuneCity ? " DuneCity" : " Vanilla")
         + " T" + std::to_string(params.techLevel) + " " + std::to_string(params.seed);

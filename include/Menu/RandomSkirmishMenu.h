@@ -50,15 +50,30 @@ GameInitSettings makeInit(const SkirmishGenerator::Result& result, const Setting
 std::string saveMap(const SkirmishGenerator::Result& result);
 }
 
+/**
+    The Random Skirmish screen. Single player (the default) starts the generated match itself.
+    Multiplayer mode (Custom Game > Random map...) is the host's map step: map settings, credits,
+    tech level, the number of start positions and one Base / Army / City for every start, played
+    with the host's mod. Next saves the map to the user multiplayer maps and closes; the host's
+    map choice selects it (getCreatedMap()) and the lobby assigns players, houses and teams.
+*/
 class RandomSkirmishMenu : public MenuBase
 {
 public:
     RandomSkirmishMenu();
+    /// Multiplayer mode for a game hosted with @a hostMod.
+    explicit RandomSkirmishMenu(const std::string& hostMod);
     ~RandomSkirmishMenu() override;
 
+    /// Multiplayer mode: path of the map Next saved, "" while none was created.
+    const std::string& getCreatedMap() const { return createdMap; }
+
 private:
+    RandomSkirmishMenu(bool multiplayer, const std::string& hostMod);
     void onStart();
     void onSaveMap();
+    /// Multiplayer mode: generate, save to the user multiplayer maps and hand the path back.
+    void onCreateMap();
     void onCancel();
     /// Opens the Game Rules window (fog of war, concrete, game speed, unit caps...), as Custom Game does.
     void onGameRules();
@@ -81,6 +96,10 @@ private:
     void addHeader(int column, int row, const std::string& caption);
 
     int houseCount = 8;
+    bool multiplayer = false;
+    std::string hostMod;                     ///< multiplayer: the mod the hosted game plays
+    std::string createdMap;
+    SkirmishGenerator::Params loaded;        ///< last-used choices; readParams() keeps the ones not shown
 
     StaticContainer windowWidget;
     Label title;
@@ -91,6 +110,7 @@ private:
     Label* allyCityCaption = nullptr;
     Label* enemyCityCaption = nullptr;
     Label* playerCityCaption = nullptr;
+    Label* startCityCaption = nullptr;
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.
     Slider sizeBox, rockBox, spiceBox;
@@ -100,6 +120,8 @@ private:
     Checkbox fixedSeedBox;
 
     DropDownBox houseBox, modBox;
+    Label hostModLabel;                      ///< multiplayer: the host's mod, chosen in the map list
+    Label lobbyNote;                         ///< multiplayer: where players, AI and teams are chosen
     Slider creditsBox, techBox;
     std::vector<ModInfo> availableMods;      ///< Mod box entries; entry data is the index
     Slider alliesBox, enemiesBox;
@@ -109,8 +131,9 @@ private:
     Slider playerBaseBox, playerArmyBox, playerCityBox;
     Slider allyBaseBox, allyArmyBox, allyCityBox;
     Slider enemyBaseBox, enemyArmyBox, enemyCityBox;
+    Slider startsBox, startBaseBox, startArmyBox, startCityBox;
 
-    TextButton backButton, rulesButton, saveButton, startButton;
+    TextButton backButton, rulesButton, saveButton, startButton, nextButton;
     SettingsClass::GameOptionsClass rules;   ///< what the Game Rules window last returned
     bool rulesChosen = false;               ///< the player confirmed the Game Rules window
 };

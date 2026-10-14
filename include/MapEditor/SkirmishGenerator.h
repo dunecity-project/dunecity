@@ -49,7 +49,8 @@ enum class Rock { Low, Medium, High, VeryHigh, Mostly, Nearly, AlmostAll, All };
 enum class Spice { None, Low, Medium, High, VeryHigh };
 enum class BaseSize { None, Outpost, Small, Medium, Large, Fortress };
 enum class Mode { Vanilla, DuneCity };
-enum class Role { Human, Ally, Enemy };
+/// Open = a multiplayer start: who plays it (human or AI), its house and team are chosen in the lobby.
+enum class Role { Human, Ally, Enemy, Open };
 
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
 /// Target share (percent) of rock + mountain terrain per Rock choice. Spice only grows on sand,
@@ -65,12 +66,14 @@ constexpr int kRimMax = 7;
 constexpr int kIndustrialBuffer = 5;
 /// Wind traps that top up nuclear power at most; a larger remainder takes another reactor.
 constexpr int kMaxTopUpTraps = 4;
-/// Army budgets in credits; index kArmyRandom draws uniformly from [kArmyRandomMin, kArmyRandomMax].
+/// Army budgets in credits; index kArmyRandom draws uniformly from [kArmyRandomMin, kArmyRandomMax],
+/// once per map: every house set to Random gets that same budget.
 constexpr std::array<int, 6> kArmyBudgets{0, 1000, 2500, 5000, 10000, 20000};
 constexpr int kArmyRandom = 6;
 constexpr int kArmyRandomMin = 1000;
 constexpr int kArmyRandomMax = 20000;
-/// Displayed city population targets; index kCityRandom draws uniformly from [kCityRandomMin, kCityRandomMax].
+/// Displayed city population targets; index kCityRandom draws uniformly from [kCityRandomMin, kCityRandomMax],
+/// once per map like the army.
 constexpr std::array<int, 5> kCityTargets{0, 1000, 5000, 15000, 40000};
 constexpr int kCityRandom = 5;
 constexpr int kCityRandomMin = 1000;
@@ -84,6 +87,11 @@ constexpr int kMaxOtherHouses = 7;
 
 /// Most other houses this match can field: the shared cap, and the engine's house cap minus the player.
 constexpr int maxOtherHouses(int houseCount) { return houseCount - 1 < kMaxOtherHouses ? houseCount - 1 : kMaxOtherHouses; }
+/// Start positions of a multiplayer random map (Player1..PlayerN sections the lobby assigns).
+constexpr int kMinStarts = 2;
+constexpr int kMaxStarts = 8;
+/// Most start positions this match can field: the shared cap and the engine's house cap.
+constexpr int maxStarts(int houseCount) { return houseCount < kMaxStarts ? houseCount : kMaxStarts; }
 /// Seeds tried (seed, seed+1, ...) before giving up on a ground-connected map.
 constexpr int kMaxTerrainAttempts = 8;
 /// No unit type may take more than this share of an army budget (raised to 100/n when
@@ -119,10 +127,19 @@ struct Params {
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 9;              ///< everything unlocked by default
 
+    /// Multiplayer random map: @a starts generic start positions written as [Player1]..[PlayerN],
+    /// every one with @a startSide's base, army and city; houses, players and teams are chosen
+    /// in the lobby. House, allies, enemies and the per-side choices above are not used.
+    bool multiplayer = false;
+    int starts = 2;
+    Side startSide{"", BaseSize::Medium, 3, 0};
+
     /// Clamp every field to its legal range; @a houseCount is the number of houses the
     /// engine can field in a custom game (player + allies + enemies never exceed it).
     void clamp(int houseCount);
-    /// Last-used parameters, section "Random Skirmish" of the configuration file.
+    /// Last-used parameters, section "Random Skirmish" of the configuration file. The
+    /// multiplayer screen keeps its own Mirrored starts choice (on by default) and never
+    /// writes the mod, which there is the host's.
     void load(const INIFile& config);
     void save(INIFile& config) const;
 };
@@ -153,6 +170,11 @@ struct Catalogue {
 
 /// Engine side: read prices, power, tech levels and availability from loaded ObjectData.
 Catalogue makeCatalogue(const ObjectData& data, bool cityMode);
+/// The catalogue every multiplayer start is planned with: start i is "Player<i+1>", and each
+/// item's rule is what every custom-game house of @a catalogue can field (enabled and unlocked
+/// for all of them, at the highest unlock level and price, and the least favourable power), so
+/// any house the lobby puts on a start can field everything placed there.
+Catalogue startCatalogue(const Catalogue& catalogue, int starts);
 
 struct Rect {
     int x = 0, y = 0, w = 0, h = 0;
@@ -168,7 +190,7 @@ struct Placement {
 };
 
 struct HouseSetup {
-    int house = HOUSE_INVALID;
+    int house = HOUSE_INVALID;  ///< multiplayer: the start index (section "Player<house+1>")
     int team = 1;
     Role role = Role::Enemy;
     std::string playerClass;
@@ -188,7 +210,7 @@ struct Result {
     uint32_t mapSeed = 0;       ///< seed that produced the connected terrain
     int attempts = 0;
     bool flattenedMountains = false;
-    std::vector<HouseSetup> houses;     ///< [0] is the human player
+    std::vector<HouseSetup> houses;     ///< [0] is the human player; multiplayer: the starts in order
     std::vector<Placement> tiles;       ///< concrete, walls, roads
     std::vector<Placement> structures;
     std::vector<Placement> units;
