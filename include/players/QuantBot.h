@@ -1032,6 +1032,9 @@ private:
     /// Keeps an escort guarding beside its colonist. True when \a unit is one,
     /// so no other controller orders it this pass.
     bool escortColonist(const UnitBase* unit);
+    /// The escort's place in the ring round its colonist (docs/formations.md): relative to the
+    /// MCV's tile and heading, sonic escorts in the front row; invalid when it has none.
+    Coord colonistEscortPlace(const UnitBase* escort, const ObjectBase* colonist) const;
     /// Escorts assigned to this colonist, and whether all of them have gathered.
     int colonistEscortCount(const UnitBase* mcv, bool* gathered = nullptr) const;
     /// Runtime-only exterior staging cache. Recomputed whenever the cycle

@@ -12,9 +12,11 @@ Details and measurements: `docs/formations.md` ("Formation fixes, save 9860 / pr
 - Sonic: only a same-type sonic unit may stand in a sonic lane. Damage code: sonic tanks ignore damage from sonic tanks
   and sonic trikes from sonic trikes only; cross-type and every other unit are hurt; a wave whose shooter has died hurts sonic units too.
 - Block march probe: speed spread 25.6% -> 10-14%, shape error 10.0 -> 1.2-1.4 tiles, stretch 7.0 -> 2.2 tiles.
-- **Open:** the QuantBot colonist convoy as a formation was tried and reverted: in `quantbot_mcv_deployment` the convoy
-  marched in formation but the colonist never deployed (diff kept at /tmp/dunecity-formation-fixes/colonisation-attempt.diff
-  on the Mac mini, not committed). The colonist escort still follows in Area Guard as before.
+- Colonist escort: a ring round the MCV as a moving anchor (`QuantBot::colonistEscortPlace`): the MCV keeps its own
+  order and deploys as before; escorts take places relative to its tile and heading (front corners 3 tiles ahead, then
+  behind, flanks; sonic escorts front row only), re-planned each escort pass, guard point on the place. `quantbot_mcv_deployment`:
+  colonist deploys, escort on 3+ sides on 1636/3008 march cycles (54%), 4 sides on 228. **Open:** the 80% goal is not met;
+  the probe requires 50%. Not yet diagnosed why escorts fall off the ring (rocky route, 50-cycle re-plan cadence in the probe).
 
 ## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
 

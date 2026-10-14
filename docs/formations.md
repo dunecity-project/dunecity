@@ -45,8 +45,12 @@ These rules supersede the older sections below where they disagree.
   members ahead, behind and on both sides on every steady cycle; harvester outside the formation;
   no unit in a sonic lane on the steady march. Form-up of that scattered group takes about 28 s
   (the troopers walk farthest).
-- **Not done:** a QuantBot colonist convoy as one formation was tried and reverted (the colonist
-  never deployed in `quantbot_mcv_deployment`); the escort still follows in Area Guard.
+- **Colonist escort ring** (`QuantBot::colonistEscortPlace`): the MCV keeps its own colonisation
+  order; its escorts take places relative to its tile and heading (the two front corners 3 tiles
+  ahead, then behind, then the flanks; sonic escorts only front-row places), re-planned on every
+  escort pass, in Area Guard with the guard point on the place, so they fight on contact and
+  re-form. Measured in `quantbot_mcv_deployment`: the colonist deploys; escort on 3+ sides on 54%
+  of the march cycles (goal 80%, not met yet).
 
 ## Shapes (`FormationPlanner::Shape`)
 

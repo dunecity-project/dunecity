@@ -20,6 +20,10 @@
 
 #include "QuantBotInternal.h"
 
+#include <FormationOrders.h>
+
+#include <iterator>
+
 Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     // The base survey notices colonists that died on the way since it last
     // ran; colonySiteOpen() holds further ones back while that is remembered.
@@ -806,18 +810,67 @@ bool QuantBot::escortColonist(const UnitBase* unit) {
     if (entry == escorts.end()) return false;
     const auto* colonist = getObject(entry->second);
     if (colonist == nullptr) return false;
-    const Coord at = colonist->getLocation();
-    // Area Guard around the colonist, never a forced march: the escort turns
-    // on whatever comes near it on the way and at the new rock.
-    const_cast<UnitBase*>(unit)->setGuardPoint(at);
+    // Area Guard, never a forced march: the escort turns on whatever comes near it on the way
+    // and at the new rock, and re-forms afterwards.
     if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+    // The escort forms round the colonist as a moving anchor (docs/formations.md): a ring
+    // facing where the MCV is going, re-planned from its tile whenever it moves on. The MCV
+    // keeps its own order and path; the escort only follows its ring places, so it travels
+    // at the MCV's speed. Sonic escorts take the front places, so no escort and not the MCV
+    // stands ahead of one. The guard point follows the ring place, so Area Guard never
+    // pulls the escort back onto the MCV.
+    const Coord ringTile = colonistEscortPlace(unit, colonist);
+    const_cast<UnitBase*>(unit)->setGuardPoint(ringTile.isValid() ? ringTile : colonist->getLocation());
     if (unit->hasATarget()) return true;
-    if (blockDistance(unit->getLocation(), at).lround() <= 2) return true;
-    // Keep a path in progress that already ends beside the colonist instead of
-    // replanning it on every pass.
-    const Coord destination = unit->getDestination();
-    if (unit->isMoving() && destination.isValid() && blockDistance(destination, at).lround() <= 2) return true;
+    if (ringTile.isInvalid() || unit->getLocation() == ringTile || unit->getDestination() == ringTile) return true;
     if (currentGame->getPathRequestQueueSize() > 150) return true;
-    doMove2Pos(unit, at.x, at.y, false);
+    doMove2Pos(unit, ringTile.x, ringTile.y, false);
     return true;
+}
+
+Coord QuantBot::colonistEscortPlace(const UnitBase* escort, const ObjectBase* colonist) const {
+    const auto* mcv = dynamic_cast<const UnitBase*>(colonist);
+    if (mcv == nullptr) return Coord::Invalid();
+    // Heading: where the MCV is driving, else towards its colony site, else north.
+    const Coord here = mcv->getLocation();
+    Coord ahead = mcv->getDestination();
+    if (ahead.isInvalid() || ahead == here) {
+        const auto site = mcvExpansionSites.find(mcv->getObjectID());
+        ahead = site != mcvExpansionSites.end() ? site->second : Coord::Invalid();
+    }
+    Coord forward = (ahead.isValid() && ahead != here) ? FormationPlanner::facing(here, ahead) : Coord(0, -1);
+    if (forward == Coord(0, 0)) forward = Coord(0, -1);
+    const Coord lateral(-forward.y, forward.x);
+    // This colonist's escorts: sonic units first, then by object id (the map's order).
+    std::vector<const UnitBase*> ring;
+    for (const auto& entry : colonistEscorts())
+        if (entry.second == mcv->getObjectID())
+            if (const auto* member = dynamic_cast<const UnitBase*>(getObject(entry.first))) ring.push_back(member);
+    std::stable_sort(ring.begin(), ring.end(), [](const UnitBase* a, const UnitBase* b) {
+        return FormationPlanner::isSonic(a->getItemID()) && !FormationPlanner::isSonic(b->getItemID());
+    });
+    // Places as (ahead, across): the two front corners first (each covers the front and a
+    // side; three tiles ahead, so an escort still leads while the MCV closes up between
+    // re-plans), then behind, then the flanks. Sonic escorts only take front-row places.
+    constexpr int kFrontRow = 3;
+    static const std::pair<int, int> places[] = {{kFrontRow, -2}, {kFrontRow, 2}, {-2, 0}, {0, -2}, {0, 2}, {-2, -2}, {-2, 2},
+                                                 {kFrontRow, -4}, {kFrontRow, 4}};
+    std::vector<bool> taken(std::size(places), false);
+    for (const UnitBase* member : ring) {
+        const bool sonic = FormationPlanner::isSonic(member->getItemID());
+        size_t pick = std::size(places);
+        for (size_t i = 0; i < std::size(places) && pick == std::size(places); ++i)
+            if (!taken[i] && (!sonic || places[i].first == kFrontRow)) pick = i;
+        if (pick == std::size(places)) {
+            if (member == escort) return Coord::Invalid();
+            continue;
+        }
+        taken[pick] = true;
+        if (member != escort) continue;
+        const Coord wanted(here.x + forward.x * places[pick].first + lateral.x * places[pick].second,
+                           here.y + forward.y * places[pick].first + lateral.y * places[pick].second);
+        if (!currentGameMap->tileExists(wanted)) return Coord::Invalid();
+        return FormationOrders::revalidatedSlot(escort, wanted);
+    }
+    return Coord::Invalid();
 }
