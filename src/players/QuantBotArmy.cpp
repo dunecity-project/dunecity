@@ -602,6 +602,10 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     return true;
 }
 
+int QuantBot::waveFormationShape() const {
+    return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : getQuantBotConfig().waveFormation;
+}
+
 void QuantBot::launchGroundHunt() {
     if (supportMode) return;
     const bool limited = isCampaignEnemy();
@@ -847,7 +851,7 @@ void QuantBot::launchGroundHunt() {
     // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
     // what is decided exactly as without them; only how the ground members travel
     // changes. With WaveFormation=None every unit gets the per-unit order below.
-    const int waveShape=getQuantBotConfig().waveFormation;
+    const int waveShape=waveFormationShape();
     const bool formationWave=waveShape!=QuantBotConfig::kWaveFormationNone;
     // The Hard/Brutal campaign flank detour: a point beside the half-way mark, 8 tiles
     // off the line from 'start' to the objective; invalid when the trip is short or the

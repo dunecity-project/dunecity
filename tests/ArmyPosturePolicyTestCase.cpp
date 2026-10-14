@@ -627,7 +627,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(QuantBotConfig::parseWaveFormation("BOX", 7) == static_cast<int>(FormationPlanner::Shape::Box));
         REQUIRE(QuantBotConfig::parseWaveFormation("line", 7) == static_cast<int>(FormationPlanner::Shape::Line));
         REQUIRE(QuantBotConfig::parseWaveFormation("Column", 7) == static_cast<int>(FormationPlanner::Shape::Column));
-        REQUIRE(QuantBotConfig::parseWaveFormation("wedge", 7) == 7);
+        REQUIRE(QuantBotConfig::parseWaveFormation("phalanx", 7) == 7);
         for (int value = -1; value < FormationPlanner::kShapeCount; ++value)
             REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(value), 7) == value);
     }

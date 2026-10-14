@@ -65,12 +65,18 @@ enum class Shape : Uint8 {
     Box = 0,        ///< rows by role: armour, ranged, infantry; MCVs in the centre (the default)
     Combined = 1,   ///< sonic units and tanks (siege tanks too) in front, ranged behind, light vehicles on the flanks, scouts ahead
     Line = 2,       ///< wide and shallow: the most frontage facing the target
-    Column = 3      ///< narrow and deep, for passes and bridges
+    Column = 3,     ///< narrow and deep, for passes and bridges
+    Wedge = 4,      ///< an arrowhead: the centre of the front leads, the flanks trail back
+    Vee = 5,        ///< a concave: the flanks lead, the centre is held back
+    Echelon = 6,    ///< a slanted front: the left flank leads, each file further right trails back
+    Staggered = 7,  ///< a loose box: one tile between neighbours, alternate ranks offset (less splash)
+    Diamond = 8,    ///< armour round the outside, ranged units and MCVs inside, a point in front
+    Pincer = 9      ///< two wings with a gap between them, MCVs in the gap
 };
-constexpr int kShapeCount = 4;
+constexpr int kShapeCount = 10;
 /// Shape by index; anything out of range is the Box.
 Shape shapeFromIndex(int index);
-/// English name for the interface ("Box", "Combined arms", "Line", "Column").
+/// English name for the interface ("Box", "Combined arms", "Line", "Column", ...).
 const char* shapeName(Shape shape);
 
 /// Finer unit class used by the shapes other than the Box.
@@ -110,6 +116,8 @@ int scoutCount(int memberCount, int lightCount);
 int scoutDistance(int memberCount);
 /// Line: at most this many cells abreast (more sonic units widen the front row).
 constexpr int kLineMaxWidth = 16;
+/// Echelon: at most this many cells abreast in each slanted rank.
+constexpr int kEchelonMaxWidth = 12;
 /// Column: cells abreast for a group with this many cells (1 to 3).
 int columnWidth(int cellCount);
 

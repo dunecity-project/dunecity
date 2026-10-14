@@ -19,6 +19,7 @@
 #include <players/QuantBot.h>
 #include <units/UnitBase.h>
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -129,7 +130,8 @@ inline void sampleHouses(Game& game, int minute) {
     }
 }
 
-inline void run(Game& game, Uint32 endCycle) {
+/// Runs the match to endCycle (or until 'stop' says so) and reports every wave.
+inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop = {}) {
     std::vector<Wave> waves;
     std::map<const QuantBot*, Uint32> lastLaunch;
     std::map<const QuantBot*, std::set<Uint32>> knownMembers;
@@ -137,7 +139,7 @@ inline void run(Game& game, Uint32 endCycle) {
     std::map<Uint32, Known> previous;        // every object last cycle, while a trade window is open
     int nextSample = kSampleMinutes;
 
-    while (!game.finished && game.getGameCycleCount() < endCycle) {
+    while (!game.finished && game.getGameCycleCount() < endCycle && !(stop && stop())) {
         // Where every live member of a wave in contact stood before this cycle, for kill credit.
         std::vector<std::pair<size_t, Coord>> memberSpots;
         for (size_t w = 0; w < waves.size(); ++w) {

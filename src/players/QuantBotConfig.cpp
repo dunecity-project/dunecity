@@ -377,24 +377,25 @@ std::string QuantBotConfig::normalizeKey(const std::string& value) {
 }
 
 int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
-    std::string key = normalizeKey(name);
-    key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+    auto compact = [](const std::string& value) {
+        std::string key = normalizeKey(value);
+        key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+        return key;
+    };
+    const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
-    if (key == "COMBINED" || key == "COMBINEDARMS") return static_cast<int>(FormationPlanner::Shape::Combined);
-    if (key == "BOX") return static_cast<int>(FormationPlanner::Shape::Box);
-    if (key == "LINE") return static_cast<int>(FormationPlanner::Shape::Line);
-    if (key == "COLUMN") return static_cast<int>(FormationPlanner::Shape::Column);
+    for (int index = 0; index < FormationPlanner::kShapeCount; ++index) {
+        if (key == compact(waveFormationName(index))
+            || key == compact(FormationPlanner::shapeName(FormationPlanner::shapeFromIndex(index)))) return index;
+    }
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
-    switch (value) {
-        case static_cast<int>(FormationPlanner::Shape::Combined): return "Combined";
-        case static_cast<int>(FormationPlanner::Shape::Box): return "Box";
-        case static_cast<int>(FormationPlanner::Shape::Line): return "Line";
-        case static_cast<int>(FormationPlanner::Shape::Column): return "Column";
-        default: return "None";
-    }
+    if (value < 0 || value >= FormationPlanner::kShapeCount) return "None";
+    const auto shape = FormationPlanner::shapeFromIndex(value);
+    // The INI spelling of Combined arms is one word.
+    return shape == FormationPlanner::Shape::Combined ? "Combined" : FormationPlanner::shapeName(shape);
 }
 
 void QuantBotConfig::registerStructurePriority(int structureID, const std::string& name, int build, int target) {
