@@ -1,3 +1,15 @@
+## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
+
+`feat/formation-shapes` (Box, Combined arms with scouts, Line, Column; sonic-lane rule for all
+shapes and the AI; hunt in formation via `CMD_UNIT_FORMATION_HUNT`, breaking on first contact;
+formation buttons in the unit panel, Ctrl+Shift+F cycles shapes; see `docs/formations.md`) merged
+on top of the plan-building-sites rule below. Versions combined: save 9859 (9858 MOD8 rule, 9859
+hunting-formation flag and facing), protocol 73. Full CTest 92: 84 passed in the parallel run and
+the other 8 failed only with "No space left on device" (Mac mini disk full); each of those 8 then
+passed alone after clearing probe output. Installed on the MBA at 20:50 AEDT: 1.0.839, executable
+SHA256 480d2253ce1f1739f1e793f461c5f3402ad1377af6d4fe8fc24464c95bfee1ab, runtime check passed;
+1.0.838 at /Applications/.dunecity-backup-before-1.0.839-20261014-205042/dunecity.app.
+
 ## 2026-10-14 — plan building sites is a game rule (MOD8, save 9858, protocol 72)
 
 - The Construction Yard pre-placement queue is now a per-match rule, not a client setting:
