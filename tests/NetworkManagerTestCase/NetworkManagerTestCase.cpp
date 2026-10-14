@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 71;
+static constexpr int kWireProtocolVersion = 73;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -69,7 +69,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // production), attack mode HOLD and save 9855.
     // 71 adds the Construction Yard reservation commands and simulation-side placement.
     // 71 adds formation movement (CMD_UNIT_FORMATION_MOVE) and save 9857.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 71);
+    // 73 adds formation shapes and hunting in formation (CMD_UNIT_FORMATION_HUNT) and save 9859.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 73);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

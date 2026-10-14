@@ -22,6 +22,7 @@
 
 #include <vector>
 
+class ObjectBase;
 class UnitBase;
 
 /**
@@ -36,6 +37,32 @@ namespace FormationOrders {
 constexpr int kMinAIGroup = 3;
 constexpr int kMinPlayerGroup = 2;
 
+/// The shape AI players form their groups into: tanks in front, scouts ahead.
+constexpr FormationPlanner::Shape kAIShape = FormationPlanner::Shape::Combined;
+
+/**
+    What a formation order does once its members are on their way. Sent in bits 24-27 of a
+    formation command's last parameter (docs/formations.md).
+*/
+enum class OrderKind : Uint8 {
+    Move = 0,           ///< CMD_UNIT_FORMATION_MOVE: forced move to the slot
+    AttackMove = 1,     ///< CMD_UNIT_FORMATION_HUNT: attack-move to the slot, hunting in formation
+    Patrol = 2          ///< CMD_UNIT_FORMATION_HUNT: patrol between here and the slot, hunting in formation
+};
+
+/**
+    A formation command's last parameter: the 24-bit group token, the order kind in bits
+    24-27 and the formation's facing code (FormationPlanner::facingCode) in bits 28-31.
+    Protocol 71 sent the bare token, which reads as a Move without a facing.
+*/
+inline Uint32 packParameter(OrderKind kind, Uint8 facing, Uint32 token) {
+    return (static_cast<Uint32>(facing & 0xF) << 28) | ((static_cast<Uint32>(kind) & 0xF) << 24)
+        | (token & FormationPlanner::kTokenMask);
+}
+inline Uint32 tokenOf(Uint32 parameter) { return parameter & FormationPlanner::kTokenMask; }
+inline Uint32 kindOf(Uint32 parameter) { return (parameter >> 24) & 0xF; }
+inline Uint8 facingOf(Uint32 parameter) { return static_cast<Uint8>(parameter >> 28); }
+
 /// May this unit move in a formation? An active ground unit on the map; never aircraft or worms.
 bool eligible(const UnitBase* unit);
 
@@ -46,11 +73,13 @@ bool canStand(const UnitBase* unit, const Coord& tile);
 FormationPlanner::Member memberOf(const UnitBase* unit);
 
 /**
-    THE planning entry point: formation slots for these units towards target on the live map.
-    Ineligible units are left out of the plan (plan.slotFor() returns Coord::Invalid() for
-    them); with fewer than two eligible units plan.formation is false. Reads only.
+    THE planning entry point: formation slots for these units towards target on the live map,
+    in the given shape. Ineligible units are left out of the plan (plan.slotFor() returns
+    Coord::Invalid() for them); with fewer than two eligible units plan.formation is false.
+    Reads only.
 */
-FormationPlanner::Plan planGroup(const std::vector<const UnitBase*>& units, const Coord& target);
+FormationPlanner::Plan planGroup(const std::vector<const UnitBase*>& units, const Coord& target,
+                                 FormationPlanner::Shape shape);
 
 /**
     The destination a formation order really uses: 'slot' if the unit may still stand there,
@@ -64,13 +93,39 @@ Coord revalidatedSlot(const UnitBase* unit, const Coord& slot);
     slowest member's reference speed, including members that joined earlier.
     \param  slots   one per unit: the formation slot, or Coord::Invalid() for a member that
                     keeps its own order and only matches the group's pace
+    \param  hunt    a hunting formation: the first contact any member makes breaks the whole
+                    group into a fight (breakHunt)
+    \param  facing  the formation's facing code (FormationPlanner::facingCode of plan.forward);
+                    with one, the march keeps the sonic lanes clear (stepEntersSonicLane)
 */
-void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots);
+void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector<Coord>& slots,
+          bool hunt = false, Uint8 facing = 0);
 
 /**
-    Per-cycle membership upkeep, run before any unit moves: members that arrived, made
-    contact, were left alone or can no longer move leave their formation, and each
-    remaining member learns whether it is lagging and may run at full speed.
+    The sonic-lane rule on the march (docs/formations.md): would 'unit', a formation member
+    with a facing, put itself into the lane ahead of a sonic member of its formation by
+    stepping onto 'next' - or, if it is a sonic unit itself, bring another member into its
+    own lane? Positions count as the tile each member stands on and, while it moves, the tile
+    it moves to. A pair that already shares a lane does not stop either unit. A unit that
+    would enter a lane waits, as for a moving blocker.
+*/
+bool stepEntersSonicLane(const UnitBase* unit, const Coord& next);
+
+/**
+    Ends hunting formation 'groupID' because a member met 'enemy': every member leaves the
+    formation and drops its pace, and each one that fights and has no target of its own
+    attacks 'enemy', or closes in on it when its attack mode would not keep a target that
+    far (UnitBase::engageFormationContact; unforced, so attack-move leashes and Hunt take
+    over from there).
+    Called from the per-cycle update and when a member is hit; deterministic on every peer.
+*/
+void breakHunt(Uint32 groupID, const ObjectBase* enemy);
+
+/**
+    Per-cycle membership upkeep, run before any unit moves: a hunting formation in which any
+    member has made contact breaks (breakHunt); members that arrived, made contact, were left
+    alone or can no longer move leave their formation, and each remaining member learns
+    whether it is lagging and may run at full speed.
 */
 void update();
 

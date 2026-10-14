@@ -169,7 +169,7 @@ int runOwnershipProbe() {
 
         // The owner's plan: every member joins one group at the slowest member's pace.
         const std::vector<const UnitBase*> members(group.begin(), group.end());
-        const auto plan = FormationOrders::planGroup(members, freeTileNear(centre + Coord(8, 0)));
+        const auto plan = FormationOrders::planGroup(members, freeTileNear(centre + Coord(8, 0)), FormationPlanner::Shape::Box);
         require(plan.formation && plan.slots.size() == 3, "Three real units did not get a formation plan");
         for(UnitBase* member : group) formationMove(host, member, plan.slotFor(member->getObjectID()), token);
         const Uint32 groupID = FormationPlanner::makeGroupID(host, token);
@@ -213,6 +213,89 @@ int runOwnershipProbe() {
         orni->cancelDeployment();
         SDL_Log("FORMATION_COMMAND_PROBE_PASS: owner-only, token and slot validation, shared group pace, "
                 "building fallback, order cancellation, aircraft and lone-member rules");
+
+        // CMD_UNIT_FORMATION_HUNT: attack-move and patrol in a hunting formation.
+        std::vector<UnitBase*> hunters;
+        for(const Uint32 item : {Unit_Tank, Unit_Launcher, Unit_Quad, Unit_SonicTank}) {
+            UnitBase* member = owner->createUnit(item, true);
+            member->deploy(freeTileNear(centre));
+            hunters.push_back(member);
+        }
+        const Uint32 huntToken = FormationPlanner::makeToken(game->getGameCycleCount(), 1);
+        const Uint32 attackMove = FormationOrders::packParameter(FormationOrders::OrderKind::AttackMove, 3, huntToken);
+        const Uint32 patrol = FormationOrders::packParameter(FormationOrders::OrderKind::Patrol, 3, huntToken);
+        auto formationHunt = [&](Uint8 player, UnitBase* member, Coord slot, Uint32 parameter) {
+            Command(player, CMD_UNIT_FORMATION_HUNT, member->getObjectID(),
+                    static_cast<Uint32>(slot.x), static_cast<Uint32>(slot.y), parameter).executeCommand();
+        };
+        const std::vector<const UnitBase*> hunting(hunters.begin(), hunters.end());
+        const Coord huntGoal = freeTileNear(centre + Coord(10, 0));
+        const auto huntPlan = FormationOrders::planGroup(hunting, huntGoal, FormationPlanner::Shape::Combined);
+        require(huntPlan.formation && huntPlan.slots.size() == hunters.size(), "Four real units did not get a combined-arms plan");
+        const Coord firstSlot = huntPlan.slotFor(hunters[0]->getObjectID());
+        formationHunt(enemyPlayer->getPlayerID(), hunters[0], firstSlot, attackMove);
+        require(!hunters[0]->isInFormation(), "An enemy started our unit's formation hunt");
+        formationHunt(host, hunters[0], firstSlot, FormationOrders::packParameter(FormationOrders::OrderKind::AttackMove, 3, 0));
+        require(!hunters[0]->isInFormation(), "A formation hunt with a zero token was accepted");
+        formationHunt(host, hunters[0], firstSlot, huntToken);   // kind 0 is the plain move, not a hunt
+        require(!hunters[0]->isInFormation(), "A formation hunt of kind Move was accepted");
+        formationHunt(host, hunters[0], firstSlot, (3u << 24) | huntToken);
+        require(!hunters[0]->isInFormation(), "A formation hunt of an unknown kind was accepted");
+        formationHunt(host, hunters[0], firstSlot, (9u << 28) | (1u << 24) | huntToken);
+        require(!hunters[0]->isInFormation(), "A formation hunt with an unknown facing was accepted");
+        formationHunt(host, hunters[0], Coord(-1, 2), attackMove);
+        require(!hunters[0]->isInFormation(), "A formation hunt slot off the map was accepted");
+        // The owner's attack-move: one hunting group, the slowest vehicle's pace, unforced
+        // attack-move walks to the slots at the front of each order queue.
+        for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), attackMove);
+        const Uint32 huntGroup = FormationPlanner::makeGroupID(host, huntToken);
+        FixPoint huntPace = hunters[0]->getFormationReferenceSpeed();
+        for(const UnitBase* member : hunters) huntPace = std::min(huntPace, member->getFormationReferenceSpeed());
+        for(const UnitBase* member : hunters) {
+            require(member->getFormationGroup() == huntGroup && member->isFormationHunt() && member->getFormationFacing() == 3,
+                    "A member is not in the hunting group with the sent facing");
+            require(member->getFormationSpeedCap() == huntPace, "The hunting group's pace is not the slowest member's");
+            require(!member->getOrderQueue().empty() && member->getOrderQueue().front().type == UnitOrderType::AttackMove
+                    && member->getOrderQueue().front().pos == huntPlan.slotFor(member->getObjectID()),
+                    "A member's attack-move does not lead to its slot");
+            require(!member->wasForced(), "An attack-move in formation was forced");
+        }
+        // A hit on one member breaks the whole group: everyone leaves the formation and every
+        // fighter that had no target goes for the attacker.
+        UnitBase* raider = enemy->createUnit(Unit_Tank, true);
+        raider->deploy(freeTileNear(centre + Coord(5, 0)));
+        raider->setVisible(VIS_ALL, true);   // seen by the hunters, as it would be after a cycle
+        hunters[2]->handleDamage(1, raider->getObjectID(), enemy);
+        for(const UnitBase* member : hunters) {
+            require(!member->isInFormation() && !member->isFormationHunt() && member->getFormationSpeedCap() == 0,
+                    "A hit on one member did not break the hunting formation");
+            require(member->hasATarget(), "A member did not turn to the attacker when the formation broke");
+        }
+        // Patrol kind, then contact found by the per-cycle update: a member targeting an enemy
+        // within its reach breaks the group.
+        for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), patrol);
+        for(const UnitBase* member : hunters)
+            require(member->isFormationHunt() && member->getOrderQueue().front().type == UnitOrderType::Patrol,
+                    "A patrol in formation did not join the hunting group");
+        hunters[1]->doAttackObject(raider, false);
+        FormationOrders::update();
+        for(const UnitBase* member : hunters)
+            require(!member->isInFormation() && member->hasATarget(), "Contact did not break the hunting formation into a fight");
+        // A plain formation move never breaks on contact: only its own contacted member leaves.
+        // It carries the facing above the token (protocol 73) and joins without a hunt.
+        for(UnitBase* member : hunters)
+            formationMove(host, member, huntPlan.slotFor(member->getObjectID()),
+                          FormationOrders::packParameter(FormationOrders::OrderKind::Move, 3, huntToken));
+        require(hunters[0]->getFormationFacing() == 3 && !hunters[0]->isFormationHunt(), "A formation move lost its facing");
+        hunters[1]->doAttackObject(raider, false);
+        FormationOrders::update();
+        require(!hunters[1]->isInFormation() && hunters[0]->isInFormation() && !hunters[0]->isFormationHunt(),
+                "A plain formation move broke apart on one member's contact");
+        for(UnitBase* member : hunters) member->cancelDeployment();
+        raider->cancelDeployment();
+        SDL_Log("FORMATION_HUNT_COMMAND_PROBE_PASS: owner-only, token, kind and slot validation; attack-move and "
+                "patrol join one hunting group at the slowest pace; a hit or a contact breaks every member into a fight; "
+                "a plain formation move does not break");
     }
     CommandManager batches;
     static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle = 0;

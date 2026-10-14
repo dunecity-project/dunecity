@@ -18,6 +18,7 @@
 
 #include <units/UnitBase.h>
 #include <units/DynastyMovement.h>
+#include <FormationOrders.h>
 
 #include <globals.h>
 
@@ -176,7 +177,10 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         formationSlot.y = stream.readSint32();
         formationSpeedCap = stream.readFixPoint();
     }
-
+    if(currentGame->getLoadedSavegameVersion() >= 9859) {
+        formationHunt = stream.readBool();
+        formationFacing = stream.readUint8();
+    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -285,6 +289,8 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(formationSlot.x);
     stream.writeSint32(formationSlot.y);
     stream.writeFixPoint(formationSpeedCap);
+    stream.writeBool(formationHunt);
+    stream.writeUint8(formationFacing);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -1182,6 +1188,11 @@ void UnitBase::navigate() {
                         
                         // Static blocker, structure, or out-of-bounds - clear path and reroute
                         clearPath();
+                    } else if(FormationOrders::stepEntersSonicLane(this, nextSpot)) {
+                        // A formation keeps its sonic lanes clear on the march (docs/formations.md):
+                        // wait, as for a moving blocker, until the step no longer enters one.
+                        currentGame->frameTiming.pauseWaitingForBlocker++;
+                        return;
                     } else {
                         if (dynasty ? angle==FixPoint(nextSpotAngle) : drawnAngle==nextSpotAngle) {
                             if(dynasty && !beginDynastyStep(routeTick)) return;
@@ -1738,6 +1749,13 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 
     if(pDamager != nullptr){
 
+        // A hunting formation that is shot at has met the enemy: the whole group breaks
+        // into a fight (docs/formations.md).
+        if(damage > 0 && isFormationHunt() && pDamager->getOwner() != nullptr
+           && pDamager->getOwner()->getTeamID() != owner->getTeamID()) {
+            FormationOrders::breakHunt(formationGroup, pDamager);
+        }
+
         if(attackMode == HUNT && !forced) {
             ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
             if(canAttack(pDamager)) {
@@ -2027,10 +2045,12 @@ FixPoint UnitBase::applyFormationSpeedCap(FixPoint speed) const {
     return std::min(speed, formationSpeedCap);
 }
 
-void UnitBase::joinFormation(Uint32 groupID, const Coord& slot) {
+void UnitBase::joinFormation(Uint32 groupID, const Coord& slot, bool hunt, Uint8 facing) {
     formationGroup = groupID;
     formationSlot = slot;
     formationSpeedCap = getFormationReferenceSpeed();
+    formationHunt = hunt;
+    formationFacing = facing;
     formationCatchUp = false;
 }
 
@@ -2038,6 +2058,8 @@ void UnitBase::leaveFormation() {
     formationGroup = 0;
     formationSlot.invalidate();
     formationSpeedCap = 0;
+    formationHunt = false;
+    formationFacing = 0;
     formationCatchUp = false;
 }
 
@@ -2051,15 +2073,31 @@ FixPoint UnitBase::getFormationReferenceSpeed() const {
     return speed * (2-getTerrainDifficulty(Terrain_Sand));
 }
 
+const ObjectBase* UnitBase::formationContact() const {
+    const ObjectBase* pTarget = target.getObjPointer();
+    if(pTarget != nullptr && pTarget->getOwner() != nullptr && pTarget->getOwner()->getTeamID() != owner->getTeamID()
+       && blockDistance(location, pTarget->getClosestPoint(location)) <= huntTowardRange()) {
+        return pTarget;
+    }
+    return nullptr;
+}
+
+void UnitBase::engageFormationContact(const ObjectBase* enemy) {
+    if(enemy == nullptr || target || !fightsOnAttackMove() || !canAttack(enemy)) return;
+    if(isInAttackRange(enemy)) {
+        doAttackObject(enemy, false);
+        return;
+    }
+    doMove2Pos(enemy->getClosestPoint(location), false);
+}
+
 bool UnitBase::formationMarchEnded() const {
     if(!active || pickedUp || getHealth() <= 0) return true;
     // Contact: an enemy within hunt-toward reach turns the march into a fight.
-    if(const ObjectBase* pTarget = target.getObjPointer()) {
-        if(pTarget->getOwner() != nullptr && pTarget->getOwner()->getTeamID() != owner->getTeamID()
-           && blockDistance(location, pTarget->getClosestPoint(location)) <= huntTowardRange()) {
-            return true;
-        }
-    }
+    if(formationContact() != nullptr) return true;
+    // A hunting member's walk may go on beyond its slot (a patrol's next leg); the
+    // formation ends where the slot is reached.
+    if(formationHunt && formationSlot.isValid() && location == formationSlot) return true;
     // Arrived or idle: nothing left to travel to and nothing about to start.
     return !moving && !hasMovementIntent() && !target && attackPos.isInvalid()
         && pendingTargetRequest == TargetRequestKind::None && !pathRequestQueued;

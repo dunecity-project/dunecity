@@ -48,6 +48,20 @@ inline std::string repairUnit() {
     return withHotkey(_("Repair"), "R", false, _("send this unit to a repair yard"));
 }
 
+/// The unit panel's formation buttons (docs/formations.md): Off, then the shapes in
+/// FormationPlanner::Shape order.
+inline std::string formationChoice(int choice) {
+    switch(choice) {
+        case 0:  return withHotkey(_("Formations off"), "Ctrl+F", false, _("each unit moves on its own"));
+        case 1:  return withHotkey(_("Box formation"), "Ctrl+Shift+F", false,
+                     _("armour in front, ranged units behind, infantry on the flanks; a tight group keeps its shape"));
+        case 2:  return withHotkey(_("Combined arms"), "Ctrl+Shift+F", false,
+                     _("tanks in front, launchers behind, quads and trikes on the flanks, the fastest ahead as scouts"));
+        case 3:  return withHotkey(_("Line formation"), "Ctrl+Shift+F", false, _("wide and shallow: the most guns facing the target"));
+        default: return withHotkey(_("Column formation"), "Ctrl+Shift+F", false, _("narrow and deep, for passes and bridges"));
+    }
+}
+
 } // namespace UnitCommandTooltips
 
 #endif // UNITCOMMANDTOOLTIPS_H

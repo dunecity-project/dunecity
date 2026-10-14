@@ -186,7 +186,12 @@
 // 71: Formation movement. New CMD_UNIT_FORMATION_MOVE (unit, slot, group token); every
 //     unit order ends formation membership; formation members move at the group's
 //     speed cap; QuantBot, campaign AI and AIPlayer group moves use formations. Save 9857.
-#define NETWORK_PROTOCOL_VERSION            71
+// 73: Formation shapes and hunting in formation. New CMD_UNIT_FORMATION_HUNT (unit, slot,
+//     facing, order kind and group token) gives a group attack-move or patrol formation pace
+//     and breaks it into a fight on contact; CMD_UNIT_FORMATION_MOVE carries the facing in
+//     its top bits; members wait rather than step into a sonic unit's lane; AI group moves
+//     use the Combined-arms shape. Save 9859.
+#define NETWORK_PROTOCOL_VERSION            73
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

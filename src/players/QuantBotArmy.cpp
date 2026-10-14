@@ -2120,9 +2120,32 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             if (fresh) --freshRemaining;
         }
     }
-    // Gathering the army: the troops recalled together this pass come home together, at
-    // the slowest one's pace, each to the assembly slot withdrawUnit() chose for it
-    // (docs/formations.md). Who is recalled and where each one goes are unchanged.
+    // Gathering the army in Combined arms (docs/formations.md): the troops recalled together
+    // this pass take the planner's slots around the rally, facing the way they march home -
+    // tanks in front, ranged units behind them, light vehicles on the flanks, scouts ahead,
+    // nothing in a sonic lane - wherever that slot is safe assembly ground by withdrawUnit()'s
+    // rules and no other unit's destination; anyone else keeps the slot withdrawUnit() chose.
+    // Ids in order, so every peer agrees. They come home together at the slowest one's pace.
+    // Who is recalled is unchanged.
+    if (static_cast<int>(recalled.size()) >= FormationOrders::kMinAIGroup) {
+        const auto plan = FormationOrders::planGroup(recalled, rally, FormationOrders::kAIShape);
+        const auto tileKey = [&](Coord p) { return int64_t(p.y)*getMap().getSizeX()+p.x; };
+        std::map<int64_t, int> taken;    // the recalled units' destinations, as they stand
+        for (const auto* unit : recalled) ++taken[tileKey(unit->getDestination())];
+        for (const auto& slot : plan.slots) {
+            const auto* unit = dynamic_cast<const UnitBase*>(getObject(slot.objectID));
+            const Coord current = unit ? unit->getDestination() : Coord::Invalid();
+            const Coord p = slot.tile;
+            if (!unit || current.isInvalid() || p == current || !getMap().tileExists(p)) continue;
+            const int64_t k = tileKey(p);
+            if (taken.count(k) || reserved.count(k)
+                || blockDistance(rally, p).lround() > std::max(1, radius)
+                || getMap().getTile(p)->isSpiceBloom() || !unit->canPass(p.x, p.y) || dangerAt(p) != 0) continue;
+            doMove2Pos(unit, p.x, p.y, true);
+            if (--taken[tileKey(current)] == 0) taken.erase(tileKey(current));
+            ++taken[k];
+        }
+    }
     doFormUp(recalled);
     if (issued) traceDecision("army_recall", AITelemetry::Record()
         .set("posture", ArmyPosturePolicy::postureName(armyPosture))

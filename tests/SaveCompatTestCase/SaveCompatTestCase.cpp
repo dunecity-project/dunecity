@@ -46,7 +46,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9855 adds the unit order queue and builder repeat production (RTS controls).
     // 9856 adds Construction Yard placement reservations to the production queue.
     // 9857 adds unit formation membership (group, slot, speed cap; docs/formations.md).
-    REQUIRE(SAVEGAMEVERSION == 9857);
+    // 9859 adds the hunting-formation flag (formation shapes, hunt in formation).
+    REQUIRE(SAVEGAMEVERSION == 9859);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

@@ -376,7 +376,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     addControl(mouseOrdersHBox,leftClickOrdersCheckbox,"Left-click orders (drag to select, right-click cancels)",settings.general.leftClickOrders);
     addControl(movementPathsHBox,movementPathsCheckbox,"Show movement paths for selected units",settings.general.showMovementPaths);
     addControl(formationMovesHBox,formationMovesCheckbox,"Move groups in formation",settings.general.formationMoves);
-    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out, armour in front, and keep the slowest one's pace. Ctrl+F switches it in game."));
+    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. Ctrl+F switches it in game, Ctrl+Shift+F picks the shape, and the unit panel shows both."));
 
 
     audioHBox.addWidget(Spacer::create(), 0.5);
@@ -743,6 +743,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("General","Movement Paths",settings.general.showMovementPaths);
     myINIFile.setBoolValue("General","Choose Building Location",settings.general.chooseBuildingLocation);
     myINIFile.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    myINIFile.setIntValue("General","Formation Shape",settings.general.formationShape);
     myINIFile.setBoolValue("General","Diagnostic Logs",settings.general.diagnosticLogs);
     myINIFile.setBoolValue("General","Play Intro",settings.general.playIntro);
     myINIFile.setBoolValue("General","Show Tutorial Hints",settings.general.showTutorialHints);

@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <globals.h>
+#include <FormationPlanner.h>
 
 #include <config.h>
 
@@ -1147,6 +1148,8 @@ int main(int argc, char *argv[]) {
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
             settings.general.chooseBuildingLocation = myINIFile.getBoolValue("General","Choose Building Location",true);
             settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
+            settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromIndex(
+                myINIFile.getIntValue("General","Formation Shape",0)));
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs

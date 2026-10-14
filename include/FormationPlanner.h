@@ -46,8 +46,61 @@ enum class Role : Uint8 {
     Support = 3     ///< harvesters and MCVs: the rear
 };
 
-/// The formation role of a unit type.
+/// The formation role of a unit type (the Box shape's rows).
 Role roleOf(Uint32 itemID);
+
+/**
+    The shapes a group can be ordered into (docs/formations.md). Every shape faces the
+    direction from the group's centroid to the target and keeps the sonic-lane rule.
+*/
+enum class Shape : Uint8 {
+    Box = 0,        ///< rows by role: armour, ranged, infantry, support (the default)
+    Combined = 1,   ///< tanks in front, ranged behind, light vehicles on the flanks, scouts ahead
+    Line = 2,       ///< wide and shallow: the most frontage facing the target
+    Column = 3      ///< narrow and deep, for passes and bridges
+};
+constexpr int kShapeCount = 4;
+/// Shape by index; anything out of range is the Box.
+Shape shapeFromIndex(int index);
+/// English name for the interface ("Box", "Combined arms", "Line", "Column").
+const char* shapeName(Shape shape);
+
+/// Finer unit class used by the shapes other than the Box.
+enum class UnitClass : Uint8 {
+    Sonic = 0,      ///< sonic tank, sonic trike: their wave hits friends, so nothing stands ahead
+    Heavy = 1,      ///< tanks, devastators, flame tanks and other armour: the front
+    Light = 2,      ///< quads, trikes, raider trikes: flanks and scouts
+    Ranged = 3,     ///< launchers, siege tanks, deviators, rocket trikes: behind the front
+    Infantry = 4,
+    Support = 5     ///< harvesters and MCVs
+};
+UnitClass classOf(Uint32 itemID);
+/// Does this unit fire a sonic wave that damages everything in its lane, friends included?
+bool isSonic(Uint32 itemID);
+
+/**
+    The sonic-lane rule: is 'other' in the firing lane ahead of a sonic unit standing on
+    'sonic', for a formation facing 'forward' (one of the eight unit steps)? The lane is
+    every tile strictly ahead (positive progress along 'forward') whose lateral offset is at
+    most one formation column: 1 tile for a straight facing, the diagonal column pitch
+    (|dx - dy| or |dx + dy| <= 2) for a diagonal one.
+*/
+bool inSonicLane(const Coord& sonic, const Coord& other, const Coord& forward);
+
+/// Combined arms: how many scouts a group of memberCount with lightCount light vehicles sends ahead (0-3).
+int scoutCount(int memberCount, int lightCount);
+/// Combined arms: how many tiles ahead of the front row the scouts go (4 to 6, growing with the group).
+int scoutDistance(int memberCount);
+/// Line: at most this many cells abreast (more sonic units widen the front row).
+constexpr int kLineMaxWidth = 16;
+/// Column: cells abreast for a group with this many cells (1 to 3).
+int columnWidth(int cellCount);
+
+/// Facing codes, carried by formation commands and saved per member: 0 for none, 1-8 for
+/// the eight unit steps clockwise from north (0,-1).
+Uint8 facingCode(const Coord& forward);
+/// The unit step of a facing code; (0,0) for 0 or an unknown code.
+Coord facingFromCode(Uint8 code);
 
 struct Member {
     Uint32 objectID = 0;
@@ -67,6 +120,8 @@ struct Plan {
     std::vector<Slot> slots;    ///< one per member, sorted by objectID
     FixPoint groupSpeed = 0;    ///< groupPace(): the slowest vehicle's speed
     bool formation = false;     ///< false for fewer than two members: plain move to the target
+    Coord forward = Coord(0, -1);   ///< the facing the shape was laid out for (formation plans)
+    std::vector<Uint32> scouts; ///< Combined arms: the members sent ahead as scouts, sorted
 
     /// Destination of objectID, or Coord::Invalid() if it is not a member.
     Coord slotFor(Uint32 objectID) const;
@@ -107,10 +162,13 @@ Coord facing(const Coord& from, const Coord& to);
     \param  mapHeight       map height in tiles
     \param  canStand        terrain/structure query, see CanStand
     \param  infantryPerTile how many infantry may share one destination tile (at least 1)
-    \return the plan; with fewer than two members every member is sent to the target
+    \param  shape           the formation shape; the Box keeps a coherent group's own shape
+    \return the plan; with fewer than two members every member is sent to the target. For a
+            formation, no slot is in a sonic member's lane (inSonicLane, plan.forward) as long
+            as every member finds a usable tile within kMaxSearchRadius.
 */
 Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
-          const CanStand& canStand, int infantryPerTile);
+          const CanStand& canStand, int infantryPerTile, Shape shape = Shape::Box);
 
 /**
     The pace a formation keeps: its slowest vehicle's reference speed. Infantry walk far

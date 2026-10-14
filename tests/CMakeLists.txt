@@ -583,12 +583,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
         set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Formation movement (docs/formations.md): twelve mixed units through the real
-        # right-click path with formations on and off, a mid-march save/reload and a 9854
-        # unit record; leaves formation-march.png as the rendered evidence.
+        # right-click path with formations on and off, a hunting mid-march save/reload, 9854
+        # and 9857 unit records, Combined arms with sonic tanks and scouts (sonic lanes never
+        # entered), Line and Column, and a hunt in formation that breaks on contact; leaves
+        # formation-march.png and formation-combined.png (with the panel's formation buttons).
         add_test(NAME formation_movement_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-formation-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/formation-probe)
-        set_tests_properties(formation_movement_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(formation_movement_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME unit_route_continuation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --continuation

@@ -3,14 +3,20 @@
 //
 // Twelve mixed units are moved across open sand through the real player path
 // (Game::handleSelectedObjectsActionClick -> commands -> executor -> game loop), once with
-// "Move groups in formation" on and once off, from identical starting positions. A save
-// taken mid-march is reloaded, and a 9854 unit record is loaded into the current build.
+// "Move groups in formation" on and once off, from identical starting positions. A hunting
+// attack-move saved mid-march is reloaded, and 9854 and 9857 unit records are loaded into the
+// current build. Then the shapes: a Combined-arms march with sonic tanks and scouts (no unit
+// ever steps into a sonic lane), Line and Column frontage and depth, and a hunt in formation
+// that breaks into a fight at the first contact with an enemy group.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
 #include <Tile.h>
 #include <ScreenBorder.h>
 #include <FormationOrders.h>
+#include <GameInterface.h>
+#include <GUI/ObjectInterfaces/MultiUnitInterface.h>
+#include <GUI/ObjectInterfaces/FormationBar.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <misc/draw_util.h>
 #include <misc/IMemoryStream.h>
@@ -21,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -80,13 +87,14 @@ void clearArmy(std::vector<UnitBase*>& army) {
 /// Selects the army and right-clicks the target through the real player path.
 void order(Game& game, const std::vector<UnitBase*>& army, bool formations) {
     settings.general.formationMoves = formations;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::Shape::Box);
     game.selectedList.clear();
     for(const UnitBase* unit : army) game.selectedList.insert(unit->getObjectID());
     require(game.handleSelectedObjectsActionClick(kTarget.x, kTarget.y), "The right click was not accepted");
 }
 
-void saveScreenshot(Game& game, const char* name) {
-    screenborder->setNewScreenCenter(Coord(26 * TILESIZE, 16 * TILESIZE));
+void saveScreenshot(Game& game, const char* name, Coord centre = Coord(26, 16)) {
+    screenborder->setNewScreenCenter(Coord(centre.x * TILESIZE, centre.y * TILESIZE));
     SDL_SetRenderTarget(renderer, screenTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -153,6 +161,288 @@ void report(const char* label, const Outcome& outcome, const std::vector<UnitBas
     }
 }
 
+
+/// Removes every unit of the house from the map.
+void clearHouse(House* house) {
+    std::vector<UnitBase*> units;
+    for(UnitBase* unit : unitList) if(unit->getOwner() == house && unit->isActive()) units.push_back(unit);
+    for(UnitBase* unit : units) unit->cancelDeployment();
+}
+
+std::vector<UnitBase*> deploy(House* owner, const std::vector<Start>& starts) {
+    std::vector<UnitBase*> group;
+    for(const auto& start : starts) {
+        UnitBase* unit = owner->createUnit(start.item, true);
+        require(unit != nullptr, "Could not create a shape fixture unit");
+        unit->deploy(start.tile);
+        require(unit->getLocation() == start.tile, "A shape fixture unit did not stand on its start tile");
+        unit->angle = RIGHT; unit->drawnAngle = RIGHT;
+        group.push_back(unit);
+    }
+    return group;
+}
+
+/// Selects the group and right-clicks the target in the given shape.
+FormationPlanner::Plan orderShape(Game& game, const std::vector<UnitBase*>& group, FormationPlanner::Shape shape, Coord target) {
+    settings.general.formationMoves = true;
+    settings.general.formationShape = static_cast<int>(shape);
+    std::vector<const UnitBase*> members(group.begin(), group.end());
+    const auto plan = FormationOrders::planGroup(members, target, shape);
+    require(plan.formation && plan.slots.size() == group.size(), "The shape fixture got no formation plan");
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    for(UnitBase* unit : group) { game.selectedList.insert(unit->getObjectID()); unit->setSelected(true); }
+    game.selectionChanged();
+    require(game.handleSelectedObjectsActionClick(target.x, target.y), "The right click was not accepted");
+    return plan;
+}
+
+/// Runs until every member stands on its slot (or the timeout), calling 'each' every cycle.
+template<typename Each>
+Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const FormationPlanner::Plan& plan, Each each) {
+    Uint32 cycles = 0;
+    while(cycles < kTimeoutCycles) {
+        game.updateGameState();
+        ++cycles;
+        each(cycles);
+        bool settled = true;
+        for(const UnitBase* unit : group)
+            settled = settled && !unit->isMoving() && unit->getLocation() == plan.slotFor(unit->getObjectID());
+        if(settled) break;
+    }
+    for(const UnitBase* unit : group)
+        require(unit->getLocation() == plan.slotFor(unit->getObjectID()), "A shape member did not reach its slot");
+    return cycles;
+}
+
+/// The sonic tanks' lane check, using the group's facing.
+int countLaneEntries(const std::vector<UnitBase*>& group, const Coord& forward, std::set<std::pair<Uint32, Uint32>>& inLane,
+                     std::string& detail) {
+    int entries = 0;
+    for(const UnitBase* sonic : group) {
+        if(!FormationPlanner::isSonic(sonic->getItemID())) continue;
+        for(const UnitBase* other : group) {
+            if(other == sonic) continue;
+            const auto key = std::make_pair(sonic->getObjectID(), other->getObjectID());
+            const bool now = FormationPlanner::inSonicLane(sonic->getLocation(), other->getLocation(), forward);
+            // A step into the lane counts while both are on the march.
+            if(now && !inLane.count(key) && sonic->isInFormation() && other->isInFormation()) {
+                ++entries;
+                detail += " " + std::to_string(other->getObjectID()) + "@" + std::to_string(other->getLocation().x) + ","
+                    + std::to_string(other->getLocation().y) + "->sonic" + std::to_string(sonic->getObjectID()) + "@"
+                    + std::to_string(sonic->getLocation().x) + "," + std::to_string(sonic->getLocation().y);
+            }
+            if(now) inLane.insert(key); else inLane.erase(key);
+        }
+    }
+    return entries;
+}
+
+/// A mixed army with two sonic tanks in the middle of it, scattered on the west side.
+const std::vector<Start> kCombinedArmy = {
+    {Unit_SonicTank, Coord(5, 14)}, {Unit_SonicTank, Coord(6, 18)}, {Unit_Tank, Coord(4, 9)},
+    {Unit_Tank, Coord(8, 12)},      {Unit_Tank, Coord(3, 22)},      {Unit_Launcher, Coord(2, 11)},
+    {Unit_Launcher, Coord(5, 20)},  {Unit_Launcher, Coord(9, 24)},  {Unit_SiegeTank, Coord(3, 16)},
+    {Unit_Quad, Coord(10, 8)},      {Unit_Quad, Coord(9, 21)},      {Unit_Trike, Coord(7, 6)},
+    {Unit_Trike, Coord(11, 16)},
+};
+const Coord kCombinedTarget(38, 16);
+
+struct CombinedOutcome { int laneStepIns = 0; int scoutLead = 0; };
+
+CombinedOutcome marchCombined(Game& game, House* owner) {
+    CombinedOutcome outcome;
+    auto group = deploy(owner, kCombinedArmy);
+    for(int i = 0; i < 5; ++i) game.updateGameState();     // settle visibility before the order
+    const auto plan = orderShape(game, group, FormationPlanner::Shape::Combined, kCombinedTarget);
+    require(plan.forward == Coord(1, 0), "The combined-arms fixture does not face east");
+    require(plan.scouts.size() == 2, "Thirteen units with four light vehicles did not send two scouts");
+    // The planned shape keeps every lane clear, and the scouts stand ahead of the front.
+    int sonicFront = INT32_MIN;
+    for(const UnitBase* unit : group)
+        if(FormationPlanner::isSonic(unit->getItemID())) sonicFront = std::max(sonicFront, plan.slotFor(unit->getObjectID()).x);
+    for(const Uint32 scout : plan.scouts) {
+        const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(scout));
+        require(unit && FormationPlanner::classOf(unit->getItemID()) == FormationPlanner::UnitClass::Light, "A scout is not a light vehicle");
+        require(plan.slotFor(scout).x - sonicFront == FormationPlanner::scoutDistance(13), "A scout slot is not ahead of the front");
+    }
+    std::set<std::pair<Uint32, Uint32>> inLane;
+    std::string detail;
+    countLaneEntries(group, plan.forward, inLane, detail);  // where the units start counts as no step
+    const size_t startInLane = inLane.size();
+    bool shot = false;
+    const Uint32 cycles = runToSlots(game, group, plan, [&](Uint32 now) {
+        outcome.laneStepIns += countLaneEntries(group, plan.forward, inLane, detail);
+        if(shot) return;
+        // Frame the march with the panel once the group has formed up: every member within
+        // three tiles of its slot, scouts out in front.
+        int scoutX = INT32_MAX, frontX = INT32_MIN, sumX = 0, sumY = 0, farthest = 0;
+        for(const UnitBase* unit : group) {
+            farthest = std::max(farthest, FormationPlanner::tileDistance(unit->getLocation(), plan.slotFor(unit->getObjectID())));
+            sumX += unit->getLocation().x;
+            sumY += unit->getLocation().y;
+            if(std::count(plan.scouts.begin(), plan.scouts.end(), unit->getObjectID())) scoutX = std::min(scoutX, unit->getLocation().x);
+            else if(FormationPlanner::isSonic(unit->getItemID())) frontX = std::max(frontX, unit->getLocation().x);
+        }
+        const int count = static_cast<int>(group.size());
+        if(farthest > 3) return;
+        shot = true;
+        game.pInterface->updateObjectInterface();
+        auto* panel = dynamic_cast<MultiUnitInterface*>(game.pInterface->pObjectContainer);
+        require(panel != nullptr, "No group panel for the combined-arms frame");
+        require(panel->formationBar.isVisible(), "The formation buttons are not shown for a ground group");
+        for(int choice = 0; choice < FormationBar::kChoices; ++choice)
+            require(panel->formationBar.buttons[choice].getToggleState() == (choice == 2), "The Combined arms button is not the one held down");
+        require(panel->formationBar.buttons[2].getTooltipText().rfind("Combined arms (Ctrl+Shift+F)", 0) == 0
+                && panel->formationBar.buttons[0].getTooltipText().rfind("Formations off (Ctrl+F)", 0) == 0,
+                "The formation buttons' tooltips do not name their hotkeys");
+        SymbolButton& hovered = panel->formationBar.buttons[2];
+        hovered.bHover = true;
+        hovered.tooltipLastMouseMotion = SDL_GetTicks() - 2000;
+        // The tooltip follows the mouse: keep it below the marching group.
+        drawnMouseX = getRendererWidth() - 120;
+        drawnMouseY = getRendererHeight() - 60;
+        const bool paths = settings.general.showMovementPaths;
+        settings.general.showMovementPaths = false;
+        saveScreenshot(game, "formation-combined.png", Coord(sumX / count + 3, sumY / count));
+        settings.general.showMovementPaths = paths;
+        hovered.bHover = false;
+        SDL_Log("FORMATION_PROBE_COMBINED_FRAME: %.2fs into the march, scouts %d tiles ahead of the sonic tanks",
+                seconds(now), scoutX - frontX);
+    });
+    require(shot, "The combined-arms frame was not captured");
+    int scoutX = INT32_MAX;
+    for(const Uint32 scout : plan.scouts) scoutX = std::min(scoutX, plan.slotFor(scout).x);
+    outcome.scoutLead = scoutX - sonicFront;
+    SDL_Log("FORMATION_PROBE_COMBINED: arrived in %.2fs; %zu pairs started in a lane, %d stepped into one%s",
+            seconds(cycles), startInLane, outcome.laneStepIns, detail.c_str());
+    require(outcome.laneStepIns == 0, "A unit stepped into a sonic tank's lane during the march");
+    for(const UnitBase* sonic : group) {
+        if(!FormationPlanner::isSonic(sonic->getItemID())) continue;
+        for(const UnitBase* other : group)
+            require(other == sonic || !FormationPlanner::inSonicLane(sonic->getLocation(), other->getLocation(), plan.forward),
+                    "A unit stands in a sonic tank's lane after the march");
+    }
+    clearHouse(owner);
+    return outcome;
+}
+
+constexpr int kShapeGroup = 10;
+
+struct ShapeExtent { int frontage = 0; int depth = 0; };
+
+ShapeExtent marchShape(Game& game, House* owner, FormationPlanner::Shape shape) {
+    std::vector<Start> starts;
+    for(int i = 0; i < kShapeGroup; ++i) starts.push_back({Unit_Tank, Coord(2 + (i % 3) * 4, 4 + i * 2)});
+    auto group = deploy(owner, starts);
+    const auto plan = orderShape(game, group, shape, Coord(36, 15));
+    require(plan.forward == Coord(1, 0), "The shape fixture does not face east");
+    runToSlots(game, group, plan, [](Uint32) {});
+    std::set<int> xs, ys;
+    for(const UnitBase* unit : group) { xs.insert(unit->getLocation().x); ys.insert(unit->getLocation().y); }
+    clearHouse(owner);
+    return {static_cast<int>(ys.size()), static_cast<int>(xs.size())};
+}
+
+struct HuntOutcome { Uint32 marched = 0; Uint32 engaged = 0; };
+
+HuntOutcome huntInFormation(Game& game, House* owner, House* enemyHouse) {
+    require(enemyHouse != nullptr, "No enemy house for the hunt");
+    HuntOutcome outcome;
+    const std::vector<Start> army = {
+        {Unit_Tank, Coord(4, 12)}, {Unit_Tank, Coord(6, 17)}, {Unit_Tank, Coord(3, 20)}, {Unit_Launcher, Coord(2, 14)},
+        {Unit_Launcher, Coord(5, 23)}, {Unit_SiegeTank, Coord(2, 18)}, {Unit_Quad, Coord(9, 10)}, {Unit_Quad, Coord(8, 22)},
+        {Unit_Trike, Coord(10, 16)},
+    };
+    auto group = deploy(owner, army);
+    std::vector<Uint32> ids, enemyIDs;
+    for(const UnitBase* unit : group) ids.push_back(unit->getObjectID());
+    for(const Coord& at : {Coord(33, 14), Coord(33, 17), Coord(34, 15), Coord(34, 16)}) {
+        UnitBase* enemy = enemyHouse->createUnit(Unit_Tank, true);
+        enemy->deploy(at);
+        enemy->angle = LEFT; enemy->drawnAngle = LEFT;
+        enemy->doSetAttackMode(GUARD);
+        enemyIDs.push_back(enemy->getObjectID());
+    }
+    for(int i = 0; i < 5; ++i) game.updateGameState();
+    // Units die in the fight: look them up by id every cycle.
+    auto unitOf = [&](Uint32 id) {
+        const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(id));
+        return (unit != nullptr && unit->isActive() && unit->getHealth() > 0) ? unit : nullptr;
+    };
+    // The attack-move cursor click on the ground beyond the enemy: a hunt in formation.
+    settings.general.formationMoves = true;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::Shape::Combined);
+    const Coord goal(44, 16);
+    require(game.issuePositionOrder(Game::PositionOrder::AttackMove, group, goal, false) != nullptr,
+            "The hunting attack-move was not issued");
+    group.clear();
+    Uint32 groupID = 0;
+    Uint32 now = 0, broke = 0;
+    std::map<Uint32, Uint32> fought;     // member -> cycles after the break when it first had a target
+    std::map<Uint32, Uint32> hunting;    // member -> cycles after the break when it first fought or closed in
+    int nearestAtBreak = INT32_MAX;
+    while(now < kTimeoutCycles) {
+        game.updateGameState();
+        ++now;
+        if(groupID == 0) {
+            for(const Uint32 id : ids) if(const auto* unit = unitOf(id)) groupID = groupID ? groupID : unit->getFormationGroup();
+            require(groupID != 0, "The attack-move did not form a hunting formation");
+        }
+        if(broke == 0) {
+            int inFormation = 0, alive = 0;
+            for(const Uint32 id : ids) {
+                const auto* unit = unitOf(id);
+                if(unit == nullptr) continue;
+                ++alive;
+                if(unit->getFormationGroup() == groupID && unit->isFormationHunt()) ++inFormation;
+            }
+            if(inFormation == alive) continue;
+            // The first contact ends the formation for every member in the same cycle.
+            require(inFormation == 0, "The hunting formation broke for some members only");
+            broke = now;
+            for(const Uint32 id : ids)
+                for(const Uint32 enemyID : enemyIDs)
+                    if(unitOf(id) && unitOf(enemyID))
+                        nearestAtBreak = std::min(nearestAtBreak,
+                            FormationPlanner::tileDistance(unitOf(id)->getLocation(), unitOf(enemyID)->getLocation()));
+        }
+        for(const Uint32 id : ids) {
+            const auto* unit = unitOf(id);
+            if(unit == nullptr) continue;
+            if(unit->hasATarget() && !fought.count(id)) fought[id] = now - broke;
+            // Hunting: closing in on an enemy (its walk ends next to one) or fighting.
+            bool closing = false;
+            for(const Uint32 enemyID : enemyIDs)
+                if(const auto* enemy = unitOf(enemyID))
+                    closing = closing || (unit->getDestination().isValid()
+                        && FormationPlanner::tileDistance(unit->getDestination(), enemy->getLocation()) <= 2);
+            if((unit->hasATarget() || closing) && !hunting.count(id)) hunting[id] = now - broke;
+        }
+        if(fought.size() == ids.size() || now - broke > MILLI2CYCLES(15000)) break;
+    }
+    require(broke != 0, "The hunting formation never met the enemy");
+    outcome.marched = broke;
+    for(const auto& [id, after] : hunting) outcome.engaged = std::max(outcome.engaged, after);
+    Uint32 firing = 0;
+    for(const auto& [id, after] : fought) firing = std::max(firing, after);
+    size_t idle = 0, unfought = 0;
+    for(const Uint32 id : ids) {
+        if(!unitOf(id)) continue;
+        idle += hunting.count(id) ? 0 : 1;
+        unfought += fought.count(id) ? 0 : 1;
+    }
+    SDL_Log("FORMATION_PROBE_HUNT: marched %.2fs in formation, broke %d tiles from the nearest enemy; every member hunting "
+            "within %.2fs (%zu idle), %zu/%zu with a target, the last %.2fs after the break",
+            seconds(broke), nearestAtBreak, seconds(outcome.engaged), idle, fought.size(), ids.size(), seconds(firing));
+    require(seconds(broke) > 5.0, "The hunting formation broke before it had marched");
+    require(idle == 0 && outcome.engaged <= MILLI2CYCLES(1000), "A member did not turn on the enemy within a second of the break");
+    require(unfought == 0 && firing <= MILLI2CYCLES(15000), "A surviving member never fought after the hunting formation broke");
+    clearHouse(owner);
+    clearHouse(enemyHouse);
+    return outcome;
+}
+
 } // namespace FormationProbe
 
 int runFormationProbe() {
@@ -188,7 +478,7 @@ int runFormationProbe() {
     // 1. Formations on: the real right click issues one formation order per unit.
     auto army = deployArmy(owner);
     std::vector<const UnitBase*> constArmy(army.begin(), army.end());
-    const auto expected = FormationOrders::planGroup(constArmy, kTarget);
+    const auto expected = FormationOrders::planGroup(constArmy, kTarget, FormationPlanner::Shape::Box);
     require(expected.formation && expected.slots.size() == army.size(), "The fixture army got no formation plan");
     const Outcome on = march(*game, army, true, "formation-march.png");
     report("on", on, army);
@@ -224,15 +514,21 @@ int runFormationProbe() {
     require(on.spread <= MILLI2CYCLES(20000), "The formation arrival spread exceeds 20 seconds");
     clearArmy(army);
 
-    // 3. Mid-march save and reload: membership, slot and pace survive (SAVEGAMEVERSION 9857).
+    // 3. Mid-march save and reload of a hunting attack-move in Combined arms: membership,
+    //    slot, pace and the hunt flag survive (SAVEGAMEVERSION 9859).
     army = deployArmy(owner);
-    order(*game, army, true);
+    settings.general.formationMoves = true;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::Shape::Combined);
+    require(game->issuePositionOrder(Game::PositionOrder::AttackMove, army, kTarget, false) != nullptr,
+            "The group attack-move was not issued");
     for(int i = 0; i < 300; ++i) game->updateGameState();
-    struct Saved { Uint32 group; Coord slot; FixPoint cap; };
+    struct Saved { Uint32 group; Coord slot; FixPoint cap; bool hunt; Uint8 facing; };
     std::map<Uint32, Saved> before;
     for(const UnitBase* unit : army) {
-        require(unit->isInFormation(), "A member left its formation mid-march");
-        before[unit->getObjectID()] = {unit->getFormationGroup(), unit->getFormationSlot(), unit->getFormationSpeedCap()};
+        require(unit->isInFormation() && unit->isFormationHunt(), "A member left its hunting formation mid-march");
+        before[unit->getObjectID()] = {unit->getFormationGroup(), unit->getFormationSlot(), unit->getFormationSpeedCap(),
+                                       unit->isFormationHunt(), unit->getFormationFacing()};
+        require(unit->getFormationFacing() == FormationPlanner::facingCode(Coord(1, 0)), "A hunting member has no eastward facing");
     }
     const std::string savePath = "formation-midmarch.dls";
     require(game->saveGame(savePath), "Could not save the mid-march game");
@@ -246,11 +542,15 @@ int runFormationProbe() {
     game->initializeGameLoop();
     game->bPause = false;
     require(game->getLoadedSavegameVersion() == SAVEGAMEVERSION, "The save was not written at the current version");
+    owner = game->getHouse(HOUSE_ATREIDES);
+    require(owner && pLocalHouse == owner && pLocalPlayer != nullptr, "The reloaded local house is not the fixture house");
     for(const auto& [id, saved] : before) {
         const auto* unit = dynamic_cast<const UnitBase*>(game->getObjectManager().getObject(id));
         require(unit != nullptr, "A member disappeared across the reload");
         require(unit->getFormationGroup() == saved.group && unit->getFormationSlot() == saved.slot
-                && unit->getFormationSpeedCap() == saved.cap, "Formation state changed across the reload");
+                && unit->getFormationSpeedCap() == saved.cap && unit->isFormationHunt() == saved.hunt
+                && unit->getFormationFacing() == saved.facing,
+                "Formation state changed across the reload");
     }
     Uint32 resumed = 0;
     std::map<Uint32, bool> reached;
@@ -263,10 +563,11 @@ int runFormationProbe() {
         }
     }
     require(reached.size() == before.size(), "The reloaded formation did not finish its march");
-    SDL_Log("FORMATION_PROBE_SAVE: %zu members restored with group, slot and pace; all reached their slots %.2fs after the reload",
+    SDL_Log("FORMATION_PROBE_SAVE: %zu hunting members restored with group, slot, pace, hunt flag and facing; all reached their slots %.2fs after the reload",
             before.size(), seconds(resumed));
 
-    // 4. A 9854 unit record (no formation fields) loads into this build with no membership.
+    // 4. Old unit records: 9854 (no formation fields) loads with no membership, 9857 (no
+    //    hunt flag or facing) loads its formation as a plain march.
     {
         Tank* tank = nullptr;
         for(UnitBase* unit : unitList) if(unit->getItemID() == Unit_Tank) { tank = static_cast<Tank*>(unit); break; }
@@ -275,9 +576,13 @@ int runFormationProbe() {
         // writes a fixed 11 bytes (count, dispatched flag, walk retries, break-off point).
         tank->clearOrderQueue();
         constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
-        FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)});
+        constexpr size_t kFormationRecord = 4 + 8 + 8;     // group, slot, speed cap (9857)
+        constexpr size_t kHuntFields = 1 + 1;              // hunt flag and facing (9859)
+        FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)}, true, 3);
         OMemoryStream withFormation; withFormation.open(); tank->save(withFormation);
         const std::string current(withFormation.getData(), withFormation.getDataLength());
+        const Uint32 savedGroup = tank->getFormationGroup();
+        const FixPoint savedCap = tank->getFormationSpeedCap();
         tank->leaveFormation();
         OMemoryStream without; without.open(); tank->save(without);
         const std::string plain(without.getData(), without.getDataLength());
@@ -285,10 +590,14 @@ int runFormationProbe() {
         while(first < current.size() && current[first] == plain[first]) ++first;
         size_t last = current.size();
         while(last > first && current[last - 1] == plain[last - 1]) --last;
-        require(last - first <= 20 && first + 20 <= current.size() && first >= kEmptyOrderQueueBlock,
-                "The formation record is not where expected");
-        // Remove the whole 20-byte record that starts at the group id, and the order queue before it.
-        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock) + current.substr(first + 20);
+        require(last - first <= kFormationRecord + kHuntFields && first + kFormationRecord + kHuntFields <= current.size()
+                && first >= kEmptyOrderQueueBlock, "The formation record is not where expected");
+        // 9854: neither the order queue nor the formation record with its hunt flag.
+        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock)
+            + current.substr(first + kFormationRecord + kHuntFields);
+        // 9857: the formation record without the hunt flag and facing after it.
+        const std::string old9857 = current.substr(0, first + kFormationRecord)
+            + current.substr(first + kFormationRecord + kHuntFields);
         game->loadedSavegameVersion = 9854;
         {
             IMemoryStream in(old9854.data(), old9854.size());
@@ -300,10 +609,45 @@ int runFormationProbe() {
             restored.setHealth(0);
             unitList.remove(&restored);
         }
+        game->loadedSavegameVersion = 9857;
+        {
+            IMemoryStream in(old9857.data(), old9857.size());
+            Tank restored(in);
+            require(in.getRemainingLength() == 0, "A 9857 unit record was not read exactly");
+            require(restored.getFormationGroup() == savedGroup && restored.getFormationSlot() == Coord(1, 2)
+                    && restored.getFormationSpeedCap() == savedCap && !restored.isFormationHunt()
+                    && restored.getFormationFacing() == 0,
+                    "A 9857 unit did not load its formation as a plain march");
+            restored.leaveFormation();
+            restored.setHealth(0);
+            unitList.remove(&restored);
+        }
         game->loadedSavegameVersion = SAVEGAMEVERSION;
     }
-    SDL_Log("FORMATION_PROBE_PASS: on spread %.2fs, off spread %.2fs, tanks ahead of launchers, save round trip, 9854 record",
-            seconds(on.spread), seconds(off.spread));
+    clearHouse(owner);
+
+    // 5. Combined arms with sonic tanks: scouts ahead, light vehicles on the flanks, and no
+    //    unit ever stepping into a sonic tank's lane on the march; the frame shows the unit
+    //    panel's formation buttons.
+    const CombinedOutcome combined = marchCombined(*game, owner);
+
+    // 6. Line and Column: frontage and depth of the real arrival.
+    const ShapeExtent line = marchShape(*game, owner, FormationPlanner::Shape::Line);
+    const ShapeExtent column = marchShape(*game, owner, FormationPlanner::Shape::Column);
+    require(line.depth == 1 && line.frontage == kShapeGroup, "The line did not stand ten abreast in one rank");
+    require(column.frontage == 2 && column.depth == kShapeGroup / 2, "The column did not stand two abreast, five deep");
+    SDL_Log("FORMATION_PROBE_SHAPES: line frontage=%d depth=%d, column frontage=%d depth=%d", line.frontage, line.depth,
+            column.frontage, column.depth);
+
+    // 7. Hunt in formation towards an enemy group: the march keeps formation until the first
+    //    contact, then every member fights.
+    const HuntOutcome hunt = huntInFormation(*game, owner, game->getHouse(HOUSE_HARKONNEN));
+
+    SDL_Log("FORMATION_PROBE_PASS: on spread %.2fs, off spread %.2fs, tanks ahead of launchers, hunting save round trip, "
+            "9854 and 9857 records, combined arms (%d sonic lane step-ins, scouts %d tiles ahead), line %dx%d, column %dx%d, "
+            "hunt broke after %.2fs in formation and every member hunted or fought within %.2fs",
+            seconds(on.spread), seconds(off.spread), combined.laneStepIns, combined.scoutLead, line.frontage, line.depth,
+            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged));
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
     return -1;
 }
