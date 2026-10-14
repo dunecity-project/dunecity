@@ -194,6 +194,24 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
           const CanStand& canStand, int infantryPerTile, Shape shape = Shape::Box);
 
 /**
+    Forms a group up where it stands (the formation buttons and hotkeys, docs/formations.md).
+    The shape is laid out around the anchor - the members' centroid (centroidOf), or the
+    nearest tile there the anchor member may stand on (the MCV, else the vehicle, else the
+    member with the lowest object id) - with its front towards 'forward'. It is always the
+    shape itself: a tight Box group forms the box instead of keeping its own shape. Every
+    other rule is plan()'s: harvesters left out, the MCV on the anchor, sonic lanes clear,
+    slots resolved the same way. Pure and independent of the members' order.
+    \param  forward one of the eight unit steps; anything else faces north (0,-1)
+    \return the plan; with fewer than two members formation is false and every member keeps
+            its own tile
+*/
+Plan planInPlace(std::vector<Member> members, const Coord& forward, int mapWidth, int mapHeight,
+                 const CanStand& canStand, int infantryPerTile, Shape shape);
+
+/// The integer (floor) centroid of the members that join formations; invalid for none.
+Coord centroidOf(const std::vector<Member>& members);
+
+/**
     The pace a formation keeps: its slowest member's reference speed, infantry included, so
     the whole block moves at one speed. 0 for no members.
 */

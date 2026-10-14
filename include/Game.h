@@ -445,9 +445,20 @@ public:
     /**
         The formation choice of the unit panel's buttons: off, or on in shape 'shapeIndex'
         (FormationPlanner::Shape). Persisted as General/Formation Moves and Formation Shape;
-        applies to the next move, attack-move or patrol order.
+        applies to the next move, attack-move or patrol order. Choosing a shape (on) also
+        forms the selected ground units up in it where they stand (issueSelectedFormUp);
+        off leaves every unit where it is.
     */
     void chooseFormation(bool on, int shapeIndex);
+
+    /**
+        Remembers the heading of a local-player order that moves, attack-moves, patrols or
+        attacks (a replacing order, not a Shift-queued one) for formUpFacing. Called by
+        CommandManager::addCommand for every command this client issues; UI state only,
+        never saved or sent.
+    */
+    void rememberOrderHeading(const Command& command);
+
     bool canSkipMission() const;
 
     /**
@@ -778,6 +789,33 @@ private:
 
     /// A fresh group token for the local player's next formation order (client side only).
     Uint32 nextFormationToken();
+    /**
+        The form-up in place of the formation buttons and hotkeys (docs/formations.md): the
+        local house's selected, respondable, eligible ground units (harvesters never) form up
+        in the chosen shape around their centroid, facing formUpFacing(), with one
+        CMD_UNIT_FORMATION_MOVE of order kind FormUp each - the formation move path, forced,
+        so units in a fight re-form too. The slots are the members' form-up tiles: they walk
+        straight to them and route round each other, as in any form-up, rather than marching
+        (a march would gridlock a group crossing itself on the spot). Fewer than two such
+        units, an observer or no map issue nothing.
+        \return the ids of the units that were ordered
+    */
+    std::set<Uint32> issueSelectedFormUp();
+
+    /**
+        The facing of a form-up in place (docs/formations.md), first that applies:
+        1. the direction the members were last ordered: each member's formation facing while
+           it marches in one, else the heading of the local player's latest move-type order
+           for it or the facing of its latest form-up (orderedHeadings); the 8-way direction
+           of the sum of those unit steps;
+        2. towards the nearest enemy ground unit (not a sandworm) or structure the local team
+           can see, from the members' centroid (ties: the lower object id);
+        3. the members' average body heading (the 8-way direction of the sum of their
+           drawn angles);
+        4. north.
+    */
+    Coord formUpFacing(const std::vector<const UnitBase*>& members) const;
+
 
 
     /**
@@ -1099,7 +1137,10 @@ private:
     /// the token travels inside the command, so peers never derive it themselves.
     Uint32      formationTokenCycle = 0;
     Uint32      formationTokensThisCycle = 0;
-    
+    /// The heading (a unit step) of the local player's latest move-type order per unit
+    /// (rememberOrderHeading, read by formUpFacing). Client-side UI state: never saved or sent.
+    std::map<Uint32, Coord> orderedHeadings;
+
     Uint32      loadedSavegameVersion = 0;      ///< Version of loaded savegame (for backward compatibility)
     /// Next deviation control-interval id; 0 is reserved for "not deviated" (SAVEGAMEVERSION 9849).
     Uint32      nextDeviationEpisodeID = 1;

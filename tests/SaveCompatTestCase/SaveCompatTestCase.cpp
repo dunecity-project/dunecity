@@ -49,7 +49,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9858 adds the plan-building-sites match rule (GameInitSettings MOD8).
     // 9859 adds the hunting-formation flag (formation shapes, hunt in formation).
     // 9860 adds the form-up tile, resume kind and pace unit type (one-speed formation march).
-    REQUIRE(SAVEGAMEVERSION == 9860);
+    // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
+    REQUIRE(SAVEGAMEVERSION == 9861);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

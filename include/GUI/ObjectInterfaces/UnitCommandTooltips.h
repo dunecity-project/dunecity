@@ -49,16 +49,19 @@ inline std::string repairUnit() {
 }
 
 /// The unit panel's formation buttons (docs/formations.md): Off, then the shapes in
-/// FormationPlanner::Shape order.
+/// FormationPlanner::Shape order. A shape also forms the selected units up where they stand.
 inline std::string formationChoice(int choice) {
+    const auto shape = [](const std::string& label, const std::string& help) {
+        return withHotkey(label, "Ctrl+Shift+F", false, help + "; " + _("forms the selection up where it stands"));
+    };
     switch(choice) {
         case 0:  return withHotkey(_("Formations off"), "Ctrl+F", false, _("each unit moves on its own"));
-        case 1:  return withHotkey(_("Box formation"), "Ctrl+Shift+F", false,
-                     _("armour in front, ranged units behind, infantry on the flanks; a tight group keeps its shape"));
-        case 2:  return withHotkey(_("Combined arms"), "Ctrl+Shift+F", false,
+        case 1:  return shape(_("Box formation"),
+                     _("armour in front, ranged units behind, infantry on the flanks; on a move a tight group keeps its shape"));
+        case 2:  return shape(_("Combined arms"),
                      _("tanks in front, launchers behind, quads and trikes on the flanks, the fastest ahead as scouts"));
-        case 3:  return withHotkey(_("Line formation"), "Ctrl+Shift+F", false, _("wide and shallow: the most guns facing the target"));
-        default: return withHotkey(_("Column formation"), "Ctrl+Shift+F", false, _("narrow and deep, for passes and bridges"));
+        case 3:  return shape(_("Line formation"), _("wide and shallow: the most guns facing the target"));
+        default: return shape(_("Column formation"), _("narrow and deep, for passes and bridges"));
     }
 }
 

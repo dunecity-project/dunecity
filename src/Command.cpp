@@ -729,11 +729,13 @@ case CMD_INFANTRY_CAPTURE: {
             }
             // A malformed token, another order kind, an unknown facing or a slot off the map is
             // not something the game sends (FormationOrders::packParameter; protocol 71 sent the
-            // bare token).
+            // bare token, protocol 75 added the form-up in place).
             const Uint32 token = FormationOrders::tokenOf(parameter[3]);
+            const Uint32 kind = FormationOrders::kindOf(parameter[3]);
             const Uint8 facing = FormationOrders::facingOf(parameter[3]);
             if(!FormationPlanner::isValidToken(token)
-               || FormationOrders::kindOf(parameter[3]) != static_cast<Uint32>(FormationOrders::OrderKind::Move)
+               || (kind != static_cast<Uint32>(FormationOrders::OrderKind::Move)
+                   && kind != static_cast<Uint32>(FormationOrders::OrderKind::FormUp))
                || facing > 8
                || !currentGameMap->tileExists((int) parameter[1], (int) parameter[2])) {
                 return;
@@ -751,6 +753,11 @@ case CMD_INFANTRY_CAPTURE: {
                 unit->doMove2Pos(destination.x, destination.y, true);
                 FormationOrders::join({unit}, FormationPlanner::makeGroupID(playerID, token), {destination}, false, facing,
                                       FormationOrders::Resume::ForcedMove);
+                if(kind == static_cast<Uint32>(FormationOrders::OrderKind::FormUp)) {
+                    // Forming up where it stands: the slot is the form-up tile, and there is no march.
+                    unit->startFormUp(destination);
+                    unit->clearFormationPending();
+                }
             });
             // Like a plain move, it replaces the order queue and becomes its front.
             unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));

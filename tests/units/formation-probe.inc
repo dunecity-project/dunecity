@@ -7,7 +7,8 @@
 // attack-move saved mid-march is reloaded, and 9854 and 9857 unit records are loaded into the
 // current build. Then the shapes: a Combined-arms march with sonic tanks and scouts (no unit
 // ever steps into a sonic lane), Line and Column frontage and depth, and a hunt in formation
-// that breaks into a fight at the first contact with an enemy group.
+// that breaks into a fight at the first contact with an enemy group. Last, the formation
+// buttons and Ctrl+Shift+F form a scattered group up where it stands (Game::chooseFormation).
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -212,8 +213,13 @@ Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const Formati
             settled = settled && !unit->isMoving() && unit->getLocation() == plan.slotFor(unit->getObjectID());
         if(settled) break;
     }
-    for(const UnitBase* unit : group)
+    for(const UnitBase* unit : group) {
+        if(unit->getLocation() != plan.slotFor(unit->getObjectID()))
+            SDL_Log("FORMATION_PROBE: id=%u item=%u at %d,%d slot %d,%d moving=%d inFormation=%d forming=%d", unit->getObjectID(),
+                    unit->getItemID(), unit->getLocation().x, unit->getLocation().y, plan.slotFor(unit->getObjectID()).x,
+                    plan.slotFor(unit->getObjectID()).y, unit->isMoving(), unit->isInFormation(), unit->isFormationForming());
         require(unit->getLocation() == plan.slotFor(unit->getObjectID()), "A shape member did not reach its slot");
+    }
     return cycles;
 }
 
@@ -665,6 +671,209 @@ BlockOutcome marchBlock(Game& game, House* owner) {
     return outcome;
 }
 
+/// The form-up in place (docs/formations.md, "Form up where they stand"): a scattered mixed
+/// group with sonic tanks, an MCV, a trooper and a harvester. Twelve formation members, so
+/// an even split of headings cancels out.
+const std::vector<Start> kFormUpArmy = {
+    {Unit_SonicTank, Coord(6, 10)}, {Unit_SonicTank, Coord(4, 19)}, {Unit_Tank, Coord(9, 14)},
+    {Unit_Tank, Coord(3, 8)},       {Unit_Tank, Coord(8, 22)},      {Unit_SiegeTank, Coord(11, 17)},
+    {Unit_Launcher, Coord(2, 13)},  {Unit_Launcher, Coord(5, 24)},  {Unit_Quad, Coord(12, 9)},
+    {Unit_Trike, Coord(10, 25)},    {Unit_Trooper, Coord(7, 17)},   {Unit_MCV, Coord(4, 15)},
+    {Unit_Harvester, Coord(12, 21)},
+};
+
+struct FormUpOutcome {
+    int shapes = 0;             ///< form-ups pressed and reached (four buttons and the hotkey)
+    double slowest = 0;         ///< seconds from the press until every member stood on its slot
+};
+
+/// Enemy ground units (no sandworms) and structures the local team can see: what
+/// Game::formUpFacing faces.
+int visibleEnemies(int team) {
+    int count = 0;
+    for(const UnitBase* unit : unitList)
+        count += (unit->isActive() && unit->isAGroundUnit() && unit->getItemID() != Unit_Sandworm
+                  && unit->getOwner()->getTeamID() != team && unit->isVisible(team)) ? 1 : 0;
+    for(const StructureBase* structure : structureList)
+        count += (structure->getOwner()->getTeamID() != team && structure->isVisible(team)) ? 1 : 0;
+    return count;
+}
+
+/// Presses a formation button of the group panel the way a mouse click does.
+void pressFormationButton(Game& game, int choice) {
+    game.pInterface->updateObjectInterface();
+    auto* panel = dynamic_cast<MultiUnitInterface*>(game.pInterface->pObjectContainer);
+    require(panel != nullptr && panel->formationBar.isVisible(), "The group panel shows no formation buttons");
+    SymbolButton& button = panel->formationBar.buttons[choice];
+    const Point inside(button.getSize().x / 2, button.getSize().y / 2);
+    require(button.handleMouseLeft(inside.x, inside.y, true) && button.handleMouseLeft(inside.x, inside.y, false),
+            "A formation button did not take the click");
+}
+
+void pressCycleHotkey(Game& game) {
+    SDL_KeyboardEvent key{};
+    key.type = SDL_KEYDOWN;
+    key.keysym.sym = SDLK_f;
+    key.keysym.mod = KMOD_CTRL | KMOD_SHIFT;
+    SDL_SetModState(static_cast<SDL_Keymod>(KMOD_CTRL | KMOD_SHIFT));
+    game.handleKeyInput(key);
+    SDL_SetModState(KMOD_NONE);
+}
+
+FormUpOutcome formUpOnButtons(Game& game, House* owner, House* enemyHouse) {
+    require(enemyHouse != nullptr, "No enemy house for the form-up");
+    FormUpOutcome outcome;
+    auto all = deploy(owner, kFormUpArmy);
+    std::vector<UnitBase*> members;
+    UnitBase* harvester = nullptr;
+    for(UnitBase* unit : all) {
+        if(unit->getItemID() == Unit_Harvester) harvester = unit;
+        else members.push_back(unit);
+    }
+    const std::vector<const UnitBase*> constMembers(members.begin(), members.end());
+    require(harvester != nullptr && members.size() == 12, "The form-up fixture is not twelve members and a harvester");
+    clearHouse(enemyHouse);     // what is left of the hunt
+    for(int i = 0; i < 5; ++i) game.updateGameState();
+    const int team = owner->getTeamID();
+    require(visibleEnemies(team) == 0, "An enemy is in sight before the facing checks");
+    game.orderedHeadings.clear();
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    for(UnitBase* unit : all) { game.selectedList.insert(unit->getObjectID()); unit->setSelected(true); }
+    game.selectionChanged();
+
+    // The facing rules, last first (Game::formUpFacing).
+    // 3. No orders and no enemy in sight: the way they face (every body faces east).
+    require(game.formUpFacing(constMembers) == Coord(1, 0), "Facing east, the group would not form up facing east");
+    // 4. Half face west, half east: nothing to go by, north.
+    for(size_t i = 0; i < members.size(); ++i) {
+        members[i]->angle = (i % 2) ? LEFT : RIGHT;
+        members[i]->drawnAngle = (i % 2) ? LEFT : RIGHT;
+    }
+    require(game.formUpFacing(constMembers) == Coord(0, -1), "Headings that cancel out did not fall back to north");
+    // 2. An enemy in sight south of the group: towards it.
+    const Coord centre = FormationPlanner::centroidOf([&] {
+        std::vector<FormationPlanner::Member> planned;
+        for(const UnitBase* unit : members) planned.push_back(FormationOrders::memberOf(unit));
+        return planned;
+    }());
+    UnitBase* enemy = enemyHouse->createUnit(Unit_Tank, true);
+    enemy->deploy(Coord(centre.x, 27));
+    for(int i = 0; i < 3 && !enemy->isVisible(team); ++i) game.updateGameState();
+    require(enemy->isVisible(team), "The enemy south of the group is not in sight");
+    require(game.formUpFacing(constMembers) == FormationPlanner::facing(centre, enemy->getLocation())
+            && game.formUpFacing(constMembers) == Coord(0, 1), "The group would not form up facing the enemy in sight");
+    enemy->cancelDeployment();
+    for(UnitBase* unit : members) { unit->setTarget(nullptr); unit->setDestination(unit->getLocation()); }
+    game.updateGameState();
+    require(visibleEnemies(team) == 0, "The enemy did not leave");
+    std::map<Uint32, Coord> scattered;
+    for(const UnitBase* unit : all) scattered[unit->getObjectID()] = unit->getLocation();
+
+    int sumX = 0, sumY = 0;
+    for(const UnitBase* unit : members) { sumX += unit->getLocation().x; sumY += unit->getLocation().y; }
+    const Coord view(sumX / static_cast<int>(members.size()) + 4, sumY / static_cast<int>(members.size()));
+    const bool paths = settings.general.showMovementPaths;
+    settings.general.showMovementPaths = false;
+    game.pInterface->updateObjectInterface();
+    saveScreenshot(game, "formup-before.png", view);
+
+    // 1. The order they were last given wins: a plain right-click far to the east (formations
+    //    off). The buttons are pressed in the same cycle, before that order moves anyone.
+    settings.general.formationMoves = false;
+    require(game.handleSelectedObjectsActionClick(46, 16), "The eastward right click was not accepted");
+    require(game.formUpFacing(constMembers) == Coord(1, 0), "The last order east did not set the facing");
+
+    // Off: no command, nothing moves.
+    settings.general.formationMoves = true;
+    const Uint32 cycle = game.getGameCycleCount();
+    const size_t queuedBefore = game.getCommandManager().commandsAt(cycle).size();
+    pressFormationButton(game, 0);
+    require(!settings.general.formationMoves, "The Off button did not switch formations off");
+    require(game.getCommandManager().commandsAt(cycle).size() == queuedBefore, "The Off button issued commands");
+
+    const char* shots[] = {"formup-box.png", "formup-combined.png", "formup-line.png", "formup-column.png", "formup-hotkey-box.png"};
+    for(int press = 0; press < 5; ++press) {
+        // The four shape buttons, then Ctrl+Shift+F from Column back to Box.
+        const auto shape = FormationPlanner::shapeFromIndex(press % FormationPlanner::kShapeCount);
+        const Coord forward = game.formUpFacing(constMembers);
+        require(forward == Coord(1, 0), "The group would not keep forming up facing east");
+        const auto expected = FormationOrders::planInPlace(constMembers, forward, shape);
+        require(expected.formation && expected.slots.size() == members.size(), "The form-up got no plan");
+        std::vector<FormationPlanner::Member> planned;
+        for(const UnitBase* unit : members) planned.push_back(FormationOrders::memberOf(unit));
+        const Coord anchor = FormationPlanner::centroidOf(planned);
+        const Uint32 at = game.getGameCycleCount();
+        const size_t before = game.getCommandManager().commandsAt(at).size();
+        if(press < 4) pressFormationButton(game, 1 + press);
+        else pressCycleHotkey(game);
+        require(settings.general.formationMoves && settings.general.formationShape == static_cast<int>(shape),
+                "The press did not choose the shape");
+        // One formation move per member to its planned slot, facing east, one group token.
+        const auto& queued = game.getCommandManager().commandsAt(at);
+        require(queued.size() == before + members.size(), "The press did not issue one command per member");
+        std::set<Uint32> tokens;
+        for(size_t i = before; i < queued.size(); ++i) {
+            const Command& command = queued[i];
+            const auto parameter = command.getParameter();
+            require(command.getCommandID() == CMD_UNIT_FORMATION_MOVE, "The press issued something other than a formation move");
+            require(parameter[0] != harvester->getObjectID(), "The harvester was given a formation slot");
+            require(Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2])) == expected.slotFor(parameter[0]),
+                    "A member was not sent to its planned slot");
+            require(FormationOrders::kindOf(parameter[3]) == static_cast<Uint32>(FormationOrders::OrderKind::FormUp)
+                    && FormationOrders::facingOf(parameter[3]) == FormationPlanner::facingCode(Coord(1, 0)),
+                    "A form-up is not of kind FormUp facing east");
+            tokens.insert(FormationOrders::tokenOf(parameter[3]));
+        }
+        require(tokens.size() == 1, "The members were not ordered as one group");
+        for(const UnitBase* unit : members)
+            if(unit->getItemID() == Unit_MCV) require(expected.slotFor(unit->getObjectID()) == anchor, "The MCV is not on the group's centre");
+        game.updateGameState();
+        // One group, forming up straight into its slots at the slowest member's pace cap.
+        for(const UnitBase* unit : members)
+            require(unit->getFormationGroup() == members.front()->getFormationGroup()
+                    && unit->getFormationSpeedCap() == members.front()->getFormationSpeedCap()
+                    && (!unit->isInFormation() || (unit->getFormationSlot() == expected.slotFor(unit->getObjectID())
+                        && (unit->getLocation() == unit->getFormationSlot()
+                            || unit->getFormationFormUp() == unit->getFormationSlot()))),
+                    "A member is not forming up into its slot with its group");
+        bool harvesterJoined = false;
+        const Uint32 cycles = runToSlots(game, members, expected, [&](Uint32) {
+            harvesterJoined = harvesterJoined || harvester->isInFormation();
+        });
+        require(!harvesterJoined, "The harvester joined a formation");
+        for(const UnitBase* sonic : members) {
+            if(!FormationPlanner::isSonic(sonic->getItemID())) continue;
+            for(const UnitBase* other : members)
+                require(other == sonic || FormationPlanner::mayStandInLane(sonic->getItemID(), other->getItemID())
+                        || !FormationPlanner::inSonicLane(sonic->getLocation(), other->getLocation(), Coord(1, 0)),
+                        "A member stands in a sonic tank's lane after the form-up");
+        }
+        std::set<int> xs, ys;
+        for(const UnitBase* unit : members) { xs.insert(unit->getLocation().x); ys.insert(unit->getLocation().y); }
+        if(shape == FormationPlanner::Shape::Line) require(xs.size() == 1, "The line is not one rank deep");
+        // Two abreast; the MCV's row mate moves aside to a third file.
+        if(shape == FormationPlanner::Shape::Column) require(ys.size() <= 3 && xs.size() >= 5, "The column is not narrow and deep");
+        if(shape == FormationPlanner::Shape::Combined) require(expected.scouts.size() == 2, "Combined arms did not send its two light vehicles ahead");
+        game.pInterface->updateObjectInterface();     // the chosen shape's button held down
+        saveScreenshot(game, shots[press], view);
+        outcome.slowest = std::max(outcome.slowest, seconds(cycles));
+        ++outcome.shapes;
+        SDL_Log("FORMATION_PROBE_FORMUP_SHAPE: %s via %s around %d,%d: %zu members on their slots after %.2fs, frontage %zu depth %zu",
+                FormationPlanner::shapeName(shape), press < 4 ? "button" : "Ctrl+Shift+F", anchor.x, anchor.y, members.size(),
+                seconds(cycles), ys.size(), xs.size());
+    }
+    settings.general.showMovementPaths = paths;
+    require(game.orderedHeadings.at(members.front()->getObjectID()) == Coord(1, 0), "The form-up facing was not remembered");
+    // The harvester kept its own order: the right click east.
+    require(harvester->getLocation() != scattered.at(harvester->getObjectID()), "The harvester did not keep its own order");
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    game.selectionChanged();
+    clearHouse(owner);
+    return outcome;
+}
+
 } // namespace FormationProbe
 
 int runFormationProbe() {
@@ -898,12 +1107,20 @@ int runFormationProbe() {
     // 8. The one-speed block march: form-up, equal speeds, harvester left out, MCV in the middle.
     const BlockOutcome block = marchBlock(*game, owner);
 
+    // 9. Form up where they stand: the panel's shape buttons and Ctrl+Shift+F re-form a
+    //    scattered group around its centre, facing the way it was last sent; Off moves nobody.
+    const FormUpOutcome formUp = formUpOnButtons(*game, owner, game->getHouse(HOUSE_HARKONNEN));
+    SDL_Log("FORMATION_PROBE_FORMUP: %d form-ups in place (four buttons and Ctrl+Shift+F), all members on their slots within "
+            "%.2fs, no member in a sonic lane in any formed shape, harvester left out, Off issued nothing",
+            formUp.shapes, formUp.slowest);
+
     SDL_Log("FORMATION_PROBE_PASS: on spread %.2fs, off spread %.2fs, tanks ahead of launchers, hunting save round trip, "
             "9854, 9857 and 9859 records, combined arms (%d sonic lane step-ins, scouts %d tiles ahead), line %dx%d, column %dx%d, "
             "hunt broke after %.2fs in formation and every member hunted or fought within %.2fs, block march speed spread "
-            "%.1f%%, shape error %.2f tiles",
+            "%.1f%%, shape error %.2f tiles, %d form-ups in place",
             seconds(on.spread), seconds(off.spread), combined.laneStepIns, combined.scoutLead, line.frontage, line.depth,
-            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged), block.speedSpread * 100, block.shapeError);
+            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged), block.speedSpread * 100, block.shapeError,
+            formUp.shapes);
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
     return -1;
 }

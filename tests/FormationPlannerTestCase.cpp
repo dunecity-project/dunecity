@@ -916,3 +916,94 @@ TEST_CASE("Sonic lanes stay clear for every shape, group size, facing and obstac
     // Relocations around obstacles do put sonic units behind sonic units of their own type.
     REQUIRE(sonicBehindSonic > 0);
 }
+
+// ---- Form-up in place: the formation buttons and hotkeys (docs/formations.md) ---------------
+
+TEST_CASE("Form-up in place: the shape a move would take, laid out where the group stands", "[formation][formup][inplace]") {
+    Terrain terrain;
+    auto members = combinedArmy();
+    members.push_back(makeMember(13, Unit_SonicTank, 2, 16, 0.80_fix));
+    members.push_back(makeMember(14, Unit_SonicTank, 6, 17, 0.80_fix));
+    const Coord centroid = centroidOf(members);
+    REQUIRE(centroid == Coord(5, 18));
+    const Coord facings[] = {Coord(1, 0), Coord(1, 1), Coord(0, 1), Coord(-1, 1),
+                             Coord(-1, 0), Coord(-1, -1), Coord(0, -1), Coord(1, -1)};
+    // Far enough on the big map that nothing is clipped, here and at the move's target.
+    std::vector<Member> placed = members;
+    for (auto& member : placed) member.tile += Coord(50, 50);
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column}) {
+        for (const Coord& forward : facings) {
+            INFO("shape " << shapeName(shape) << " facing " << forward.x << "," << forward.y);
+            const auto here = planInPlace(placed, forward, kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+            REQUIRE(here.formation);
+            REQUIRE(here.forward == forward);
+            REQUIRE(here.slots.size() == placed.size());
+            requireUnique(here, placed);
+            requireSonicLanesClear(here, placed);
+            // The same slots as a move 30 tiles that way, moved back onto the group: the group
+            // is scattered, so the move lays the shape out too.
+            const Coord shift(forward.x * 30, forward.y * 30);
+            const auto moved = plan(placed, centroidOf(placed) + shift, kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape);
+            REQUIRE(moved.forward == forward);
+            for (const auto& member : placed)
+                REQUIRE(here.slotFor(member.objectID) == moved.slotFor(member.objectID) - shift);
+            REQUIRE(here.scouts == moved.scouts);
+        }
+    }
+}
+
+TEST_CASE("Form-up in place: a tight group forms the box instead of keeping its shape", "[formation][formup][inplace]") {
+    Terrain terrain;
+    const std::vector<Member> diagonal = {makeMember(1, Unit_Tank, 10, 10), makeMember(2, Unit_Tank, 11, 11),
+                                          makeMember(3, Unit_Tank, 12, 12), makeMember(4, Unit_Tank, 13, 13)};
+    // A move keeps the diagonal...
+    const auto moved = plan(diagonal, Coord(11, 40), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Box);
+    REQUIRE(moved.slotFor(4) - moved.slotFor(1) == Coord(3, 3));
+    // ...the Box button forms the box: three abreast, one behind, facing north.
+    const auto here = planInPlace(diagonal, Coord(0, -1), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Box);
+    std::map<int, int> perRow;
+    for (const auto& slot : here.slots) perRow[slot.tile.y]++;
+    std::multiset<int> rowSizes;
+    for (const auto& [row, count] : perRow) rowSizes.insert(count);
+    REQUIRE(rowSizes == std::multiset<int>{1, 3});
+    // Around the centroid (11, 11).
+    for (const auto& slot : here.slots) REQUIRE(tileDistance(slot.tile, Coord(11, 11)) <= 2);
+}
+
+TEST_CASE("Form-up in place: the anchor, the MCV, harvesters, small groups and the facing fallback", "[formation][formup][inplace]") {
+    Terrain terrain;
+    std::vector<Member> convoy = {makeMember(1, Unit_MCV, 20, 20, 0.64_fix), makeMember(2, Unit_Tank, 18, 22),
+                                  makeMember(3, Unit_Tank, 24, 21), makeMember(4, Unit_Harvester, 30, 30),
+                                  makeMember(5, Unit_Launcher, 20, 25)};
+    // The harvester is not part of the group: the centroid is the other four's, (20, 22).
+    REQUIRE(centroidOf(convoy) == Coord(20, 22));
+    const auto open = planInPlace(convoy, Coord(1, 0), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined);
+    REQUIRE(open.formation);
+    REQUIRE(open.slotFor(4).isInvalid());
+    REQUIRE(open.slotFor(1) == Coord(20, 22));     // the MCV stands on the anchor
+    REQUIRE(open.groupSpeed == 0.64_fix);
+    // The centroid is a rock spire: the anchor is the nearest tile the MCV may stand on.
+    terrain.blocked = {{20, 22}};
+    const auto blocked = planInPlace(convoy, Coord(1, 0), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Combined);
+    const Coord anchor = blocked.slotFor(1);
+    REQUIRE(anchor != Coord(20, 22));
+    REQUIRE(tileDistance(anchor, Coord(20, 22)) == 1);
+    requireUnique(blocked, convoy);
+    for (const auto& slot : blocked.slots) REQUIRE_FALSE(terrain.blocked.count({slot.tile.x, slot.tile.y}));
+    // No facing (or not a unit step) faces north.
+    terrain.blocked.clear();
+    REQUIRE(planInPlace(convoy, Coord(0, 0), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Line).forward == Coord(0, -1));
+    REQUIRE(planInPlace(convoy, Coord(3, 0), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Line).forward == Coord(0, -1));
+    // One tank and a harvester: nothing to form, everyone keeps its tile.
+    const auto lone = planInPlace({makeMember(1, Unit_Tank, 5, 5), makeMember(2, Unit_Harvester, 6, 5)}, Coord(1, 0),
+                                  kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, Shape::Box);
+    REQUIRE_FALSE(lone.formation);
+    REQUIRE(lone.slots.size() == 1);
+    REQUIRE(lone.slotFor(1) == Coord(5, 5));
+    // Independent of the members' order.
+    auto shuffled = convoy;
+    std::reverse(shuffled.begin(), shuffled.end());
+    for (const Shape shape : {Shape::Box, Shape::Combined, Shape::Line, Shape::Column})
+        REQUIRE(slotsOf(planInPlace(shuffled, Coord(-1, 1), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape))
+                == slotsOf(planInPlace(convoy, Coord(-1, 1), kShapeMap, kShapeMap, terrain.query(), kInfantryPerTile, shape)));
+}

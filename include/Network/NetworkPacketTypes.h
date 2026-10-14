@@ -201,7 +201,11 @@
 //     member's pace (infantry included), members ahead of one that fell behind wait for it,
 //     and only a sonic unit of the same type may stand in a sonic unit's lane; QuantBot
 //     colonists march in formation with their escort. Save 9860.
-#define NETWORK_PROTOCOL_VERSION            74
+// 75: Form up where they stand. CMD_UNIT_FORMATION_MOVE accepts order kind FormUp (3): the
+//     slot is also the member's form-up tile, so the group walks straight into its shape
+//     without a march. A 74 peer refuses the kind and would leave the units where they are.
+//     Save 9861.
+#define NETWORK_PROTOCOL_VERSION            75
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

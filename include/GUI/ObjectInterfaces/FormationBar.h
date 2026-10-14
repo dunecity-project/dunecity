@@ -15,8 +15,9 @@
 /**
     The unit panel's formation choice (docs/formations.md): Off, Box, Combined arms, Line and
     Column as one row of small buttons, the current choice held down. Shown while two or more
-    of the local house's ground units are selected; a click applies to the next move,
-    attack-move or patrol order (Game::chooseFormation) and is persisted like Ctrl+F.
+    of the local house's ground units are selected; a shape forms the selected units up in it
+    where they stand, and every choice applies to the next move, attack-move or patrol order
+    (Game::chooseFormation) and is persisted like Ctrl+F.
 */
 class FormationBar : public StaticContainer {
 public:

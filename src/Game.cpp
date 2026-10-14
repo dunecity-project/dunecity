@@ -6995,6 +6995,28 @@ void Game::drawQueuedOrders() {
     SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
 }
 
+namespace {
+/// One CMD_UNIT_FORMATION_MOVE of order kind 'kind' per slot of 'plan', sharing 'token' and the plan's facing.
+std::set<Uint32> sendFormationMoves(CommandManager& commands, Uint8 playerID, const FormationPlanner::Plan& plan,
+                                    FormationOrders::OrderKind kind, Uint32 token) {
+    std::set<Uint32> ordered;
+    const Uint32 parameter = FormationOrders::packParameter(kind, FormationPlanner::facingCode(plan.forward), token);
+    for(const FormationPlanner::Slot& slot : plan.slots) {
+        commands.addCommand(Command(playerID, CMD_UNIT_FORMATION_MOVE, slot.objectID,
+                                    static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), parameter));
+        ordered.insert(slot.objectID);
+    }
+    return ordered;
+}
+
+/// The unit step of a drawn angle (ANGLETYPE: RIGHT, RIGHTUP, UP, ... anticlockwise from east).
+Coord stepOfAngle(int angle) {
+    static const Coord steps[NUM_ANGLES] = {Coord(1, 0), Coord(1, -1), Coord(0, -1), Coord(-1, -1),
+                                            Coord(-1, 0), Coord(-1, 1), Coord(0, 1), Coord(1, 1)};
+    return steps[((angle % NUM_ANGLES) + NUM_ANGLES) % NUM_ANGLES];
+}
+} // namespace
+
 std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actionClick) {
     std::set<Uint32> ordered;
     if(!settings.general.formationMoves || pLocalHouse == nullptr || pLocalPlayer == nullptr
@@ -7015,14 +7037,117 @@ std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actio
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) {
         return ordered;
     }
-    const Uint32 parameter = FormationOrders::packParameter(FormationOrders::OrderKind::Move,
-        FormationPlanner::facingCode(plan.forward), nextFormationToken());
-    for(const FormationPlanner::Slot& slot : plan.slots) {
-        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_MOVE, slot.objectID,
-                                      static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), parameter));
-        ordered.insert(slot.objectID);
+    return sendFormationMoves(cmdManager, pLocalPlayer->getPlayerID(), plan, FormationOrders::OrderKind::Move, nextFormationToken());
+}
+
+std::set<Uint32> Game::issueSelectedFormUp() {
+    if(pLocalHouse == nullptr || pLocalPlayer == nullptr || currentGameMap == nullptr || isObserving()) return {};
+    std::vector<const UnitBase*> members;
+    for(Uint32 objectID : selectedList) {
+        const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(objectID));
+        if(unit != nullptr && unit->getOwner() == pLocalHouse && unit->isRespondable() && FormationOrders::eligible(unit))
+            members.push_back(unit);
     }
-    return ordered;
+    if(static_cast<int>(members.size()) < FormationOrders::kMinPlayerGroup) return {};
+    const FormationPlanner::Plan plan = FormationOrders::planInPlace(members, formUpFacing(members),
+        FormationPlanner::shapeFromIndex(settings.general.formationShape));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) return {};
+    // OrderKind::FormUp: the slots are the members' form-up tiles. A march would gridlock a
+    // group re-arranging itself on the spot (members wait for each other's lanes and for
+    // marching members that stand still); forming members route round each other instead.
+    return sendFormationMoves(cmdManager, pLocalPlayer->getPlayerID(), plan, FormationOrders::OrderKind::FormUp,
+                              nextFormationToken());
+}
+
+Coord Game::formUpFacing(const std::vector<const UnitBase*>& members) const {
+    const Coord none(0, 0);
+    // 1. The direction they were last ordered: the formation they march in, else this
+    //    player's latest move-type order for each of them.
+    Coord ordered = none;
+    for(const UnitBase* unit : members) {
+        Coord step = FormationPlanner::facingFromCode(unit->getFormationFacing());
+        if(step == none) {
+            const auto remembered = orderedHeadings.find(unit->getObjectID());
+            if(remembered != orderedHeadings.end()) step = remembered->second;
+        }
+        ordered += step;
+    }
+    if(FormationPlanner::facing(none, ordered) != none) return FormationPlanner::facing(none, ordered);
+
+    // 2. Towards the nearest enemy ground unit or structure this team can see.
+    std::vector<FormationPlanner::Member> planned;
+    for(const UnitBase* unit : members) planned.push_back(FormationOrders::memberOf(unit));
+    const Coord centroid = FormationPlanner::centroidOf(planned);
+    if(centroid.isValid() && pLocalHouse != nullptr) {
+        const int team = pLocalHouse->getTeamID();
+        const ObjectBase* nearest = nullptr;
+        long long nearestDistance = 0;
+        auto consider = [&](const ObjectBase* object) {
+            if(!object->isActive() || object->getOwner() == nullptr || object->getOwner()->getTeamID() == team
+               || !object->isVisible(team)) return;
+            const Coord offset = object->getLocation() - centroid;
+            const long long distance = static_cast<long long>(offset.x) * offset.x + static_cast<long long>(offset.y) * offset.y;
+            if(distance == 0) return;
+            if(nearest == nullptr || distance < nearestDistance
+               || (distance == nearestDistance && object->getObjectID() < nearest->getObjectID())) {
+                nearest = object;
+                nearestDistance = distance;
+            }
+        };
+        for(const UnitBase* unit : unitList)
+            if(unit->isAGroundUnit() && unit->getItemID() != Unit_Sandworm) consider(unit);
+        for(const StructureBase* structure : structureList) consider(structure);
+        if(nearest != nullptr) return FormationPlanner::facing(centroid, nearest->getLocation());
+    }
+
+    // 3. The way they face on average; 4. north.
+    Coord heading = none;
+    for(const UnitBase* unit : members) heading += stepOfAngle(unit->getAngle());
+    const Coord average = FormationPlanner::facing(none, heading);
+    return average != none ? average : Coord(0, -1);
+}
+
+void Game::rememberOrderHeading(const Command& command) {
+    if(pLocalPlayer == nullptr || pLocalHouse == nullptr || command.getPlayerID() != pLocalPlayer->getPlayerID()) return;
+    const std::vector<Uint32> parameter = command.getParameter();
+    if(parameter.empty()) return;
+    Coord heading(0, 0);
+    Coord target = Coord::Invalid();
+    switch(command.getCommandID()) {
+        case CMD_UNIT_MOVE2POS:
+        case CMD_UNIT_ATTACKPOS: {
+            if(parameter.size() >= 3) target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_ATTACKMOVE:
+        case CMD_UNIT_PATROL: {
+            // Shift-queued legs do not replace the order the unit is carrying out.
+            if(parameter.size() >= 4 && parameter[3] == 0) target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_FORMATION_MOVE:
+        case CMD_UNIT_FORMATION_HUNT: {
+            if(parameter.size() < 4) return;
+            // The formation's own facing; the unit's way to its slot for a facing-less one.
+            heading = FormationPlanner::facingFromCode(FormationOrders::facingOf(parameter[3]));
+            target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_MOVE2OBJECT:
+        case CMD_UNIT_ATTACKOBJECT: {
+            if(parameter.size() < 2) return;
+            if(const ObjectBase* pTarget = objectManager.getObject(parameter[1])) target = pTarget->getLocation();
+        } break;
+        default:
+            return;
+    }
+    const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(parameter[0]));
+    if(unit == nullptr || unit->getOwner() != pLocalHouse) return;
+    if(heading == Coord(0, 0) && target.isValid()) heading = FormationPlanner::facing(unit->getLocation(), target);
+    if(heading == Coord(0, 0)) return;
+    // Forget units that are gone once the memory grows: it lives for the whole match.
+    if(orderedHeadings.size() >= 1024) {
+        for(auto it = orderedHeadings.begin(); it != orderedHeadings.end();)
+            it = objectManager.getObject(it->first) == nullptr ? orderedHeadings.erase(it) : std::next(it);
+    }
+    orderedHeadings[unit->getObjectID()] = heading;
 }
 
 Uint32 Game::nextFormationToken() {
@@ -7916,6 +8041,12 @@ void Game::chooseFormation(bool on, int shapeIndex) {
     WebRuntime::syncPersistentFiles();
     const std::string shape = _(FormationPlanner::shapeName(FormationPlanner::shapeFromIndex(settings.general.formationShape)));
     addToNewsTicker(on ? fmt::sprintf(_("Groups move in formation: %s"), shape) : _("Formation moves off"));
+    if(!on) return;
+    // Choosing a shape forms the selected ground units up in it where they stand.
+    const std::set<Uint32> formed = issueSelectedFormUp();
+    if(!formed.empty()) {
+        if(auto* pUnit = dynamic_cast<UnitBase*>(objectManager.getObject(*formed.begin()))) pUnit->playConfirmSound();
+    }
 }
 
 void Game::toggleMovementPaths() {

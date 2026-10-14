@@ -713,33 +713,29 @@ std::vector<Coord> resolveTiles(const std::vector<Member>& members, const std::v
 
 } // namespace
 
-Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
-          const CanStand& canStand, int infantryPerTile, Shape shape) {
-    Plan result;
-    // Harvesters keep their ordinary orders: they never get a slot.
+namespace {
+
+/// The members a plan works with: harvesters left out (they keep their ordinary orders and
+/// never get a slot), sorted by object id so nothing depends on the caller's order.
+std::vector<Member> joiningMembers(std::vector<Member> members) {
     members.erase(std::remove_if(members.begin(), members.end(),
                                  [](const Member& member) { return !joinsFormations(member.itemID); }),
                   members.end());
     std::sort(members.begin(), members.end(),
               [](const Member& a, const Member& b) { return a.objectID < b.objectID; });
-    if (members.empty()) return result;
+    return members;
+}
 
+/**
+    Lays out a formation of two or more joining members (sorted by id) around 'target', its
+    front towards 'forward'. With 'keepTightShape' a coherent group keeps its own shape,
+    compressed and translated onto the target, unless that blocks a sonic lane.
+*/
+Plan layOut(const std::vector<Member>& members, const Coord& centroid, const Coord& target, const Coord& forward,
+            bool keepTightShape, int mapWidth, int mapHeight, const CanStand& canStand, int infantryPerTile, Shape shape) {
+    Plan result;
     result.groupSpeed = groupPace(members);
-
-    const int count = static_cast<int>(members.size());
-    if (count < 2) {
-        for (const auto& member : members) result.slots.push_back({member.objectID, target});
-        return result;
-    }
     result.formation = true;
-
-    int sumX = 0, sumY = 0;
-    for (const auto& member : members) { sumX += member.tile.x; sumY += member.tile.y; }
-    const Coord centroid(floorDiv(sumX, count), floorDiv(sumY, count));
-
-    // Every shape faces the direction of travel: rows across it, the front ahead.
-    Coord forward = facing(centroid, target);
-    if (forward.x == 0 && forward.y == 0) forward = Coord(0, -1);
     const Coord lateral(-forward.y, forward.x);
     result.forward = forward;
     const int perTile = std::max(1, infantryPerTile);
@@ -751,16 +747,13 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
     std::vector<Coord> wanted(members.size());
     bool laidOut = false;
 
-    bool anyProtected = false;
-    for (const auto& member : members) anyProtected = anyProtected || isProtected(member.itemID);
-    if (shape == Shape::Box && !anyProtected) {
+    if (keepTightShape) {
         bool coherent = true;
         for (const auto& member : members)
             if (tileDistance(member.tile, centroid) > kCoherentRadius) { coherent = false; break; }
         if (coherent) {
             // Keep the shape, translated onto the target and with the gaps closed up -
             // unless that leaves someone in front of a sonic unit; then it forms the box.
-            // A group with an MCV always forms the box, around the MCV.
             std::vector<int> xs, ys;
             for (const auto& member : members) {
                 xs.push_back(member.tile.x - centroid.x);
@@ -791,6 +784,64 @@ Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int ma
     const auto assigned = resolveTiles(members, wanted, forward, mapWidth, mapHeight, canStand, infantryPerTile);
     for (size_t i = 0; i < members.size(); ++i) result.slots.push_back({members[i].objectID, assigned[i]});
     return result;
+}
+
+} // namespace
+
+Coord centroidOf(const std::vector<Member>& members) {
+    const std::vector<Member> joining = joiningMembers(members);
+    if (joining.empty()) return Coord::Invalid();
+    int sumX = 0, sumY = 0;
+    for (const auto& member : joining) { sumX += member.tile.x; sumY += member.tile.y; }
+    const int count = static_cast<int>(joining.size());
+    return Coord(floorDiv(sumX, count), floorDiv(sumY, count));
+}
+
+Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
+          const CanStand& canStand, int infantryPerTile, Shape shape) {
+    members = joiningMembers(std::move(members));
+    Plan result;
+    if (members.empty()) return result;
+    if (members.size() < 2) {
+        result.groupSpeed = groupPace(members);
+        for (const auto& member : members) result.slots.push_back({member.objectID, target});
+        return result;
+    }
+    const Coord centroid = centroidOf(members);
+    // Every shape faces the direction of travel: rows across it, the front ahead.
+    Coord forward = facing(centroid, target);
+    if (forward.x == 0 && forward.y == 0) forward = Coord(0, -1);
+    // A tight Box group keeps its shape; a group with an MCV always forms the box, around the MCV.
+    bool anyProtected = false;
+    for (const auto& member : members) anyProtected = anyProtected || isProtected(member.itemID);
+    return layOut(members, centroid, target, forward, shape == Shape::Box && !anyProtected,
+                  mapWidth, mapHeight, canStand, infantryPerTile, shape);
+}
+
+Plan planInPlace(std::vector<Member> members, const Coord& forward, int mapWidth, int mapHeight,
+                 const CanStand& canStand, int infantryPerTile, Shape shape) {
+    members = joiningMembers(std::move(members));
+    Plan result;
+    if (members.size() < 2) {
+        // Nothing to form: everyone stays where it is.
+        result.groupSpeed = groupPace(members);
+        for (const auto& member : members) result.slots.push_back({member.objectID, member.tile});
+        return result;
+    }
+    const Coord centroid = centroidOf(members);
+    const Coord front = facingCode(forward) != 0 ? forward : Coord(0, -1);
+    // The anchor is the centroid, or the nearest tile the anchor member may stand on: the
+    // MCV (it takes the anchor), else the first vehicle, else the first member, by id.
+    const Member* anchorMember = &members.front();
+    for (const auto& member : members)
+        if (isProtected(member.itemID)) { anchorMember = &member; break; }
+    if (!isProtected(anchorMember->itemID))
+        for (const auto& member : members)
+            if (!member.infantry) { anchorMember = &member; break; }
+    const Coord standable = nearestStandable(*anchorMember, centroid, mapWidth, mapHeight, canStand);
+    const Coord anchor = standable.isValid() ? standable : centroid;
+    // Always the shape itself: the player asked for it, so a tight Box group forms the box.
+    return layOut(members, centroid, anchor, front, false, mapWidth, mapHeight, canStand, infantryPerTile, shape);
 }
 
 FixPoint groupPace(const std::vector<Member>& members) {
