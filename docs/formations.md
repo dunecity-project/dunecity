@@ -285,7 +285,7 @@ nothing changes.
 
 | Caller | What changed |
 |---|---|
-| QuantBot `launchGroundHunt` (custom Hunt waves, campaign waves incl. flanking) | unchanged: no pace (integration decision, see below) |
+| QuantBot `launchGroundHunt` (custom Hunt waves, campaign waves incl. flanking) | hunting formation in the `WaveFormation` shape (default Combined arms), see QuantBot waves below; `None` keeps the old orders |
 | QuantBot `scrambleWholeArmyToDefend` (1.0.832 nearest-hunt) | unchanged: no slots, no pace (defence is never slowed) |
 | QuantBot `scrambleUnitsAndDefend` (district defence) | unchanged: no pace (defence is never slowed); a defence order on a wave member ends its membership |
 | QuantBot `applyArmyPosture` (army gathering / recall) | the units recalled this pass take Combined-arms slots around the rally where the slot is safe assembly ground by `withdrawUnit()`'s rules (radius, not reserved, no bloom, passable, no danger) and nobody else's destination, in id order; the rest keep their assembly slot; then `doFormUp` |
@@ -298,6 +298,92 @@ gives every unit its own formation slot in the chosen shape for attack-move, pat
 Shift-queued waypoints when "Move groups in formation" is on. A non-queued attack-move or
 patrol hunts in formation (pace, facing, break on contact); Shift-queued orders carry no
 pace. A Shift right-click therefore queues slot moves instead of starting a formation march.
+
+## QuantBot waves in formation
+
+Who QuantBot sends, when, and at what is unchanged; only how a launched ground wave travels.
+
+- **Setting:** `QuantBot Config.ini`, `[General Behavior] WaveFormation = Combined | Box | Line |
+  Column | None` (code default and template: `Combined`). Read with the other QuantBot
+  settings and part of the QuantBot config hash, so every peer of a match runs the same shape.
+- **Custom waves** (`launchGroundHunt`, Easy to Brutal): the ground members hunt in formation
+  (`Player::doFormationHuntToward`) towards the closest point of the wave's objective - the
+  tracked wave's front (`customWaveObjective` of the lead: the observed enemy base the strength
+  survey already anchors on), else the target engine Hunt picks for the lead. First contact
+  breaks the formation; from there every member is an engine hunter as before.
+- **Campaign waves:** the attackers of one objective hunt in formation towards it and are sent
+  at it again by `campaignControlsUnit()` when idle, as before; Hard/Brutal flankers march their
+  detour as one forced formation move (`doFormationMove`) from the flank group's centre, then
+  carry on as before. Harvesters, MCVs and aircraft are never members; groups below
+  `kMinAIGroup` (3) and `None` get exactly the old per-unit orders (probe-checked).
+- **Engine changes the measurement showed were needed** (they apply to AI hunting formations,
+  `Resume::HuntToward`, so also `CampaignAIPlayer` attack teams):
+  1. *Hunt kept on the break* (`engageFormationContact(enemy, hunter)`): the close-in walk was a
+     plain move that left Hunt, so a broken wave stood in Guard after its first fight.
+  2. *Form-up in Hunt* (`startFormUp` uses `doHuntToward` to the form-up tile; reaching it does
+     not end the walk while forming): members forming up in Guard looked like idle home troops
+     and QuantBot re-ordered them, which ended their membership - half the waves had dissolved
+     within a second of launch (formation lifetime median 0 s).
+  3. *Form-up deadline* `kHuntFormUpMaxMs` = 15 s (age read from the group token, no new save
+     state): a 46-58 unit army forming up in a crowded base took 140-184 s before it marched.
+  4. *Sonic lanes out of shape:* a sonic member still recovering its place (after the deadline)
+     neither waits at a lane nor holds one; otherwise it and the members around it waited for
+     each other for ever (the probe's 15-unit wave travelled 4 tiles in 25 s).
+  5. *No stall airlift for formation members:* the 3-failed-paths carryall request ignored that
+     a formation member waits on purpose; it took members out of the formation.
+  6. A lone forming hunter left by its group hunts on to its slot instead of standing in Guard.
+
+### Measurement (Hard vs Hard, vanilla, 30 game minutes)
+
+`tests/ai/formation-wave-matrix.py` drives `run-campaign-balance.py --formation-measure
+--wave-formation <shape>` (one run at a time, run directory deleted after each), maps 2P 64x64
+Face Off, 2P 128x128 Habbanya-Penny, 2P 128x64 Ergun-Sahij, seeds 486409243, 1841712204,
+41562270, the same seeds for every shape; `--report` prints these tables. A wave is a new
+tracked dispatch with at least 3 ground members outside the enemy base area. *Contact* is the
+first cycle a member has an enemy target within max(weapon, view) range, fires, or comes within
+10 tiles of an enemy building. Shots: members' primary shots in the 30 s after contact. Lost /
+killed: value of members destroyed, and of enemies destroyed within 10 tiles of a living
+member, in the 60 s after contact. Base-arrival spread: first to last member within 10 tiles of
+an enemy building (the older metric). Survival: members alive 5 min after dispatch. Seed range:
+the per-run mean spread and per-run net trade (killed - lost) over the 9 runs.
+
+Final code (mean / median per wave; 9 runs per shape; both houses use the same shape):
+
+| Shape | Waves | Base-arrival spread s | Shots 30 s | Lost 60 s | Killed 60 s | Killed / lost | Net trade per run | Survival | In formation at contact |
+|---|---|---|---|---|---|---|---|---|---|
+| None | 63 | 114.3 / 110.9 | 33.1 / 22.0 | 872 / 600 | 3722 / 2820 | 4.27 | 4910..41600 | 51% | - |
+| Combined | 61 | 75.7 / 66.2 | 27.4 / 19.0 | 978 / 750 | 3566 / 2575 | 3.64 | 5850..32150 | 55% | 71% |
+| Box | 60 | 79.9 / 54.5 | 29.5 / 24.0 | 962 / 700 | 4135 / 3600 | 4.30 | 6510..45140 | 50% | 73% |
+| Line | 62 | 71.8 / 55.1 | 26.0 / 20.0 | 942 / 550 | 3643 / 3310 | 3.87 | 6300..40940 | 58% | 63% |
+
+Per map, killed / lost (None, Combined, Box, Line): Face Off 5.70, 8.79, 8.62, 12.37; Penny
+5.16, 3.16, 5.22, 2.85; Ergun-Sahij 3.30, 3.25, 3.46, 3.55. Army value of both houses at
+10 / 20 / 30 min: None 3844 / 15428 / 20527, Combined 3844 / 14822 / 21714, Box 3844 / 15081
+/ 20362, Line 3844 / 15072 / 21412; 2-3 of 9 matches decided in 30 min for every shape (with both
+sides on the same shape, the outcome says little about the shape).
+
+Before/after the modifications (Combined, same seeds):
+
+| Variant | Waves | Base-arrival spread s | Shots 30 s | Killed 60 s | Killed / lost | Survival | In formation at contact |
+|---|---|---|---|---|---|---|---|
+| Launch in formation only (engine as 1.0.840) | 105 | 99.0 / 90.5 | 17.2 / 11.0 | 2312 / 1395 | 4.41 | 74% | 15% |
+| With changes 1-6 (shipped) | 61 | 75.7 / 66.2 | 27.4 / 19.0 | 3566 / 2575 | 3.64 | 55% | 71% |
+| ... plus members already in contact at launch left out of the formation (rejected) | 64 | 108.9 / 99.9 | 24.2 / 19.0 | 3008 / 2350 | 3.28 | 58% | 83% |
+
+Without the changes the members fell out of their formation while forming up, stood in Guard and
+were re-dispatched as "new" waves (105 instead of ~62), so the wave hardly fought (17 shots,
+killed 2312 per wave). The rejected variant kept more members in formation but arrived more
+spread out and traded worse, so it was dropped.
+
+**Default: Combined arms.** It narrows the arrival spread most consistently against None (75.7
+against 114.3 s mean, 66 against 111 s median) and keeps more of the wave alive (55% against
+51%), but it trades somewhat worse in the first minute (killed/lost 3.64 against 4.27; 17% fewer
+shots), mostly on Penny, the large map. The per-run net trade ranges overlap widely
+(5850..32150 against 4910..41600), so this is not clearly worse, and Combined stays the default
+as Stefan prefers. Box traded best of the measured options (4.30, killed 4135 per wave, best or
+level on all three maps) and is the one to switch to (`WaveFormation=Box`) if first-minute
+trade matters more than arriving together; Line gave the tightest arrival but the weakest Penny
+trade. Brutal vs Brutal was not measured in this round.
 
 ## Verification of the shapes branch (Mac mini, Release, `--parallel 4`)
 
@@ -439,10 +525,9 @@ There are two intermediate results:
 - **No group command:** commands carry at most 4 parameters (`CommandValidation`), so the group
   is sent as one command per unit with a shared token, as the spec's alternative allows. The
   speed cap is computed by the executor from the members rather than sent.
-- **Hunt waves get no slots and no pace:** QuantBot custom and Hard/Brutal waves are engine
-  Hunt. Since 1.0.804/1.0.832 the settled decision is that the engine picks each hunter's target;
-  per-unit move orders walked waves back into base. After integration they are not formed up at
-  all. Slots are used where units share a destination: `AIPlayer` waves and the player path.
+- **Hunt waves:** QuantBot waves march as hunting formations since the QuantBot waves work above
+  (`WaveFormation=None` restores pure engine Hunt). The engine still picks each hunter's target
+  after the formation breaks; the formation only carries the wave to its objective.
 - **What "slowest" means:** the pace is the slowest *vehicle* measured on open sand (reference
   speed). Infantry set it only for an all-infantry group, because waiting for infantry measurably
   cost mixed waves their first-contact fire. The cap is set

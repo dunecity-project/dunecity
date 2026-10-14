@@ -40,6 +40,11 @@ constexpr int kMinPlayerGroup = 2;
 /// The shape AI players form their groups into: tanks in front, scouts ahead.
 constexpr FormationPlanner::Shape kAIShape = FormationPlanner::Shape::Combined;
 
+/// An AI hunting formation (Resume::HuntToward) marches at the latest this long after it was
+/// ordered, formed up or not: a whole army forming up in a crowded base can otherwise take
+/// minutes, the members that are not in place catch up on the march (docs/formations.md).
+constexpr Uint32 kHuntFormUpMaxMs = 15000;
+
 /**
     What a formation order does once its members are on their way. Sent in bits 24-27 of a
     formation command's last parameter (docs/formations.md).

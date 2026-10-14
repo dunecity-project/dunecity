@@ -329,8 +329,14 @@ Troopers_Target=50
 # AttackTimerMs          - Time between attack checks (milliseconds)
 # AttackThresholdPercent - Don't attack until military reaches this % of limit (0.0-1.0)
 # MinMoneyForProduction  - Minimum money needed to queue production
+# WaveFormation          - How a ground attack wave travels to its objective:
+#                          Combined (tanks in front, ranged behind, scouts ahead),
+#                          Box, Line, Column, or None (each unit hunts on its own).
+#                          Formation waves march at one speed and break into a
+#                          fight on first contact (docs/formations.md).
 
 [General Behavior]
 AttackTimerMs=90000
 AttackThresholdPercent=0.40
 MinMoneyForProduction=500
+WaveFormation=Combined

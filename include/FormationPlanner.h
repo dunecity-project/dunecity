@@ -259,6 +259,12 @@ inline Uint32 makeGroupID(Uint8 playerID, Uint32 token) {
     return (static_cast<Uint32>(playerID) << 24) | (token & kTokenMask);
 }
 
+/// Game cycles since the group was ordered, read from the 20 cycle bits of its token
+/// (makeToken; exact for about 4.6 hours of game time).
+inline Uint32 cyclesSinceOrdered(Uint32 groupID, Uint32 gameCycle) {
+    return (gameCycle - ((groupID & kTokenMask) >> 4)) & 0xFFFFFu;
+}
+
 } // namespace FormationPlanner
 
 #endif // FORMATIONPLANNER_H

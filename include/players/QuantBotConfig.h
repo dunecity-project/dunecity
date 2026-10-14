@@ -131,6 +131,16 @@ struct QuantBotConfig {
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
+    /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
+    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, otherwise the
+    /// FormationPlanner::Shape index the wave marches in as a hunting formation.
+    /// INI: [General Behavior] WaveFormation = None | Combined | Box | Line | Column.
+    static constexpr int kWaveFormationNone = -1;
+    int waveFormation;
+    /// "None", "Combined", "Box", "Line", "Column" (case-insensitive) to a waveFormation
+    /// value; anything else returns 'fallback'.
+    static int parseWaveFormation(const std::string& name, int fallback);
+    static const char* waveFormationName(int value);
 
     // Priority tables (configurable)
     const TargetPriority& getStructurePriority(int structureID) const;

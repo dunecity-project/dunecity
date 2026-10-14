@@ -20,6 +20,7 @@
 
 #include <data.h>
 #include <DataTypes.h>
+#include <FormationOrders.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 #include <misc/RobustList.h>
@@ -275,21 +276,23 @@ protected:
 
     /**
         Moves a chosen group as one formation (docs/formations.md): FormationOrders plans a
-        Combined-arms slot per unit (FormationOrders::kAIShape: tanks in front, scouts ahead,
-        nothing in a sonic lane), each unit is sent to its slot with doMove2Pos, and the group
-        keeps the slowest member's pace. With fewer than FormationOrders::kMinAIGroup eligible
-        ground units every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the
-        list always do.
+        slot per unit in 'shape' (default FormationOrders::kAIShape, Combined arms: tanks in
+        front, scouts ahead, nothing in a sonic lane), each unit is sent to its slot with
+        doMove2Pos, and the group keeps the slowest member's pace. With fewer than
+        FormationOrders::kMinAIGroup eligible ground units every unit gets the plain
+        doMove2Pos to x,y, as before. Aircraft in the list always do.
     */
-    void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const;
+    void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
+                         FormationPlanner::Shape shape = FormationOrders::kAIShape) const;
 
     /**
-        Hunting in formation: each unit hunts its way (doHuntToward) to its own Combined-arms
-        slot around x,y at the group's pace, and the first contact any member makes breaks the
-        whole group into a fight (FormationOrders::breakHunt). Same fallback as
+        Hunting in formation: each unit hunts its way (doHuntToward) to its own slot in
+        'shape' around x,y at the group's pace, and the first contact any member makes breaks
+        the whole group into a fight (FormationOrders::breakHunt). Same fallback as
         doFormationMove(), with doHuntToward to x,y.
     */
-    void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const;
+    void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
+                               FormationPlanner::Shape shape = FormationOrders::kAIShape) const;
 
     /**
         Units that already have their orders (a Hunt wave, a forced attack on one objective)

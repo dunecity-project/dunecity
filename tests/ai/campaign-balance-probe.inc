@@ -53,6 +53,7 @@
 #include "preplace-queue-probe.inc"
 #include "sidebar-grid-probe.inc"
 #include "formation-wave-measure.inc"
+#include "wave-formation-probe.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -75,6 +76,12 @@ int runCampaignBalanceProbe() {
     if(std::getenv("BALANCE_DEGRADATION_PROBE"))
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
+    if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {
+        const int parsed = QuantBotConfig::parseWaveFormation(shape, INT_MIN);
+        if (parsed == INT_MIN) throw std::runtime_error(std::string("Unknown wave formation: ") + shape);
+        getQuantBotConfig().waveFormation = parsed;
+    }
+    SDL_Log("CAMPAIGN_BALANCE_WAVE_FORMATION: %s", QuantBotConfig::waveFormationName(getQuantBotConfig().waveFormation));
     settings.general.playerName = "Campaign balance observer";
     settings.network.metaServer = "http://127.0.0.1:1/";
     settings.gameOptions.fogOfWar = false;
@@ -247,6 +254,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_WHOLE_ARMY_PROBE")) {
         runWholeArmyDispatchProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_WAVE_FORMATION_PROBE")) {
+        runWaveFormationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {

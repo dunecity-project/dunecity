@@ -2111,7 +2111,14 @@ void UnitBase::leaveFormation() {
 
 void UnitBase::startFormUp(const Coord& tile) {
     formationFormUp = tile;
-    // Every order kind walks to the form-up tile the same way; a forced order stays forced.
+    // An AI hunting formation (Resume::HuntToward) forms up in Hunt, hunting its way to the
+    // form-up tile: a plain move would drop Hunt, and the AI would then take its wave members
+    // for idle troops at home and give them other orders, ending their membership.
+    if(formationResume == static_cast<Uint8>(FormationOrders::Resume::HuntToward)) {
+        doHuntToward(tile.x, tile.y);
+        return;
+    }
+    // Every other order kind walks to the form-up tile the same way; a forced order stays forced.
     // An attack-move or patrol keeps its queued walk, which takes the unit on towards the
     // slot once it stands on the form-up tile (it waits there: FormationOrders::update()).
     doMove2Pos(tile.x, tile.y, formationResume == static_cast<Uint8>(FormationOrders::Resume::ForcedMove));
@@ -2154,7 +2161,25 @@ const ObjectBase* UnitBase::formationContact() const {
     return nullptr;
 }
 
-void UnitBase::engageFormationContact(const ObjectBase* enemy) {
+void UnitBase::engageFormationContact(const ObjectBase* enemy, bool hunter) {
+    if(hunter) {
+        // An AI hunting formation (Resume::HuntToward) breaks into Hunt, the mode its members
+        // marched in. The form-up walk and a plain close-in move both leave Hunt, and a wave
+        // member left in Guard stops attacking once this fight is over.
+        if(!fightsOnAttackMove()) return;
+        if(target || enemy == nullptr || !canAttack(enemy)) {
+            if(attackMode != HUNT) { attackMode = HUNT; findTargetTimer = 0; }
+            return;
+        }
+        if(isInAttackRange(enemy)) {
+            doAttackObject(enemy, false);
+            attackMode = HUNT;
+            return;
+        }
+        const Coord at = enemy->getClosestPoint(location);
+        doHuntToward(at.x, at.y);
+        return;
+    }
     if(enemy == nullptr || target || !fightsOnAttackMove() || !canAttack(enemy)) return;
     if(isInAttackRange(enemy)) {
         doAttackObject(enemy, false);
@@ -2267,8 +2292,10 @@ void UnitBase::targeting() {
             if(huntTowardGoal.isValid()) {
                 if(attackMode != HUNT || target || attackPos || forced) {
                     huntTowardGoal.invalidate();
-                } else if(blockDistance(location, huntTowardGoal) <= huntTowardRange()) {
-                    huntTowardGoal.invalidate();    // Arrived: an ordinary hunter from here on.
+                } else if(blockDistance(location, huntTowardGoal) <= huntTowardRange() && !isFormationForming()) {
+                    // Arrived: an ordinary hunter from here on. A member forming up keeps its
+                    // walk to (and wait on) the form-up tile; contact breaks the form-up.
+                    huntTowardGoal.invalidate();
                 } else if(!(destination == huntTowardGoal) && ++huntTowardRetries > kHuntTowardRetries) {
                     huntTowardGoal.invalidate();    // No way there: an ordinary hunter.
                 } else {
@@ -2586,7 +2613,9 @@ void UnitBase::finishPathRequest(PathRequestStats& stats) {
             
             // After 3 attempts without progress, request carryall (if cooldown expired)
             // Removed (location != oldLocation) requirement - freshly deployed units should also get help
-            if(noProgressCount >= 3 && carryallRequestCooldown <= 0) {
+            // A formation member makes no progress while it waits for its group on purpose
+            // (form-up, Hold); an airlift would take it out of the formation.
+            if(noProgressCount >= 3 && carryallRequestCooldown <= 0 && !isInFormation()) {
                 if(getOwner()->hasCarryalls()
                    && this->isAGroundUnit()
                    && !static_cast<GroundUnit*>(this)->hasBookedCarrier()

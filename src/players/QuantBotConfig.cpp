@@ -16,6 +16,7 @@
  */
 
 #include <players/QuantBotConfig.h>
+#include <FormationPlanner.h>
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
 #include <mod/ModManager.h>
@@ -250,6 +251,8 @@ QuantBotConfig::QuantBotConfig() {
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
+    // Attack waves march as a Combined-arms hunting formation (docs/formations.md).
+    waveFormation = static_cast<int>(FormationPlanner::Shape::Combined);
 }
 
 // Recovery/battery settings are integers, so the INI round-trip cannot change a
@@ -373,6 +376,27 @@ std::string QuantBotConfig::normalizeKey(const std::string& value) {
     return result;
 }
 
+int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
+    std::string key = normalizeKey(name);
+    key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+    if (key == "NONE" || key == "OFF") return kWaveFormationNone;
+    if (key == "COMBINED" || key == "COMBINEDARMS") return static_cast<int>(FormationPlanner::Shape::Combined);
+    if (key == "BOX") return static_cast<int>(FormationPlanner::Shape::Box);
+    if (key == "LINE") return static_cast<int>(FormationPlanner::Shape::Line);
+    if (key == "COLUMN") return static_cast<int>(FormationPlanner::Shape::Column);
+    return fallback;
+}
+
+const char* QuantBotConfig::waveFormationName(int value) {
+    switch (value) {
+        case static_cast<int>(FormationPlanner::Shape::Combined): return "Combined";
+        case static_cast<int>(FormationPlanner::Shape::Box): return "Box";
+        case static_cast<int>(FormationPlanner::Shape::Line): return "Line";
+        case static_cast<int>(FormationPlanner::Shape::Column): return "Column";
+        default: return "None";
+    }
+}
+
 void QuantBotConfig::registerStructurePriority(int structureID, const std::string& name, int build, int target) {
     structurePriorities[name] = TargetPriority{build, target};
     normalizedStructureNames[normalizeKey(name)] = name;
@@ -482,6 +506,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
         iniFile.setDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent);
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
+        iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -535,6 +560,12 @@ bool QuantBotConfig::load(const std::string& filepath) {
         attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
         attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
         minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
+        {
+            const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
+            const int parsed = parseWaveFormation(shape, INT_MIN);
+            if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
+            else waveFormation = parsed;
+        }
 
         bool needsSave = false;
 
@@ -786,6 +817,7 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("AttackTimerMs: %d", attackTimerMs);
     SDL_Log("AttackThresholdPercent: %.2f", attackThresholdPercent);
     SDL_Log("MinMoneyForProduction: %d", minMoneyForProduction);
+    SDL_Log("WaveFormation: %s", waveFormationName(waveFormation));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -908,6 +940,8 @@ std::string QuantBotConfig::getConfigHash() const {
     configStr += std::to_string(attackTimerMs);
     configStr += std::to_string(attackThresholdPercent);
     configStr += std::to_string(minMoneyForProduction);
+    configStr += "|waveFormation=";
+    configStr += std::to_string(waveFormation);
 
     // Army recovery, cohesion, outnumbered dispatch gate and front batteries.
     // Every one of these changes an AI order, so every one of them is hashed.

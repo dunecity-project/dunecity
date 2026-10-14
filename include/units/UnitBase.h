@@ -236,9 +236,14 @@ public:
         A hunting formation broke on contact with 'enemy' (FormationOrders::breakHunt): a
         fighter without a target attacks it if its attack mode keeps a target that far away,
         and otherwise closes in on it, engaging whatever it meets on the way; an attack-move
-        or patrol resumes its own walk from there.
+        or patrol resumes its own walk from there. A 'hunter' (a member of an AI hunting
+        formation, Resume::HuntToward) does the same in Hunt mode and stays in Hunt.
     */
-    void engageFormationContact(const ObjectBase* enemy);
+    void engageFormationContact(const ObjectBase* enemy, bool hunter = false);
+    /// Is this unit marching in an AI hunting formation (Resume::HuntToward)?
+    bool isFormationHuntToward() const {
+        return formationGroup != 0 && formationResume == static_cast<Uint8>(FormationOrders::Resume::HuntToward);
+    }
     /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to
     /// move? A hunting member has also arrived once it stands on its slot.
     bool formationMarchEnded() const;

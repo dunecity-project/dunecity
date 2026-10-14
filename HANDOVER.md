@@ -1,3 +1,20 @@
+## 2026-10-15 — QuantBot attack waves in formation (not released, no version bump)
+
+Stefan: "get quant bot to launch its attacks using formation - e.g. combined arms, but get it to test box and
+line as well", then "do some test games ... and make any necessary modifications". Details, measurement and the
+before/after of each change: `docs/formations.md` ("QuantBot waves in formation").
+
+- `QuantBot::launchGroundHunt`: ground members of every wave hunt in formation to the wave's objective (custom: the
+  tracked front, else engine Hunt's pick for the lead; campaign: the wave's objective; Hard/Brutal flank detour as one
+  forced formation leg). Who/when/what unchanged; <3 eligible units and `WaveFormation=None` keep the old orders.
+- `QuantBot Config.ini` `[General Behavior] WaveFormation` (None/Combined/Box/Line/Column), default Combined, hashed.
+- Engine fixes for AI hunting formations (also `CampaignAIPlayer`): Hunt kept after the break, form-up in Hunt, 15 s
+  form-up deadline from the group token, out-of-place sonic members exempt from lane waits, no stall-carryall for
+  formation members, lone forming hunter hunts on. No save/protocol change (9860 / 74).
+- Measured Hard vs Hard, 3 maps x 3 seeds x None/Combined/Box/Line (`tests/ai/formation-wave-matrix.py`): Combined
+  arrival spread 114 -> 76 s, killed/lost 4.27 -> 3.64 (noise overlaps); Box best trade 4.30. Default stays Combined.
+  Brutal not measured. New probe `quantbot_wave_formation`.
+
 ## 2026-10-14 — local 1.0.840 installed on the MBA
 
 1.0.840 = the formation fixes below plus the colonist escort (86% of march cycles with escort on

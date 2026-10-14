@@ -352,9 +352,10 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
 
 } // namespace
 
-void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced) const {
+void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
+                             FormationPlanner::Shape shape) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y), FormationOrders::kAIShape);
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y), shape);
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced);
         return;
@@ -372,9 +373,10 @@ void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, i
                           bForced ? FormationOrders::Resume::ForcedMove : FormationOrders::Resume::Move);
 }
 
-void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y) const {
+void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
+                                   FormationPlanner::Shape shape) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y), FormationOrders::kAIShape);
+    const auto plan = FormationOrders::planGroup(own, Coord(x, y), shape);
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doHuntToward(unit, x, y);
         return;

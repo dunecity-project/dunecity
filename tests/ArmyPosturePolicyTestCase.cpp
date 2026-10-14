@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <FormationPlanner.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
@@ -615,6 +616,20 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.brutal.attackThresholdPercent += 0.05f; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.hard.attackForceMilitaryValueRatio += 0.05f; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.medium.refineryMinimum += 1; }));
+    }
+    SECTION("the attack-wave formation shape is hashed and parsed") {
+        REQUIRE(baseline.waveFormation == static_cast<int>(FormationPlanner::Shape::Combined));
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = QuantBotConfig::kWaveFormationNone; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Box); }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Line); }));
+        REQUIRE(QuantBotConfig::parseWaveFormation("none", 7) == QuantBotConfig::kWaveFormationNone);
+        REQUIRE(QuantBotConfig::parseWaveFormation("Combined arms", 7) == static_cast<int>(FormationPlanner::Shape::Combined));
+        REQUIRE(QuantBotConfig::parseWaveFormation("BOX", 7) == static_cast<int>(FormationPlanner::Shape::Box));
+        REQUIRE(QuantBotConfig::parseWaveFormation("line", 7) == static_cast<int>(FormationPlanner::Shape::Line));
+        REQUIRE(QuantBotConfig::parseWaveFormation("Column", 7) == static_cast<int>(FormationPlanner::Shape::Column));
+        REQUIRE(QuantBotConfig::parseWaveFormation("wedge", 7) == 7);
+        for (int value = -1; value < FormationPlanner::kShapeCount; ++value)
+            REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(value), 7) == value);
     }
 }
 

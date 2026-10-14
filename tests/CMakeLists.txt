@@ -806,6 +806,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/whole-army-dispatch-probe)
         set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot attack waves in formation (docs/formations.md, QuantBot waves): a mixed
+        # Hard wave launches as one hunting formation in the configured shape (Combined arms,
+        # Box, Line) towards its own objective, harvester and MCV left out, no slot in a sonic
+        # lane; it marches in Hunt and every member breaks into the fight on contact and stays
+        # in Hunt. WaveFormation None and a wave below three units keep today's orders.
+        add_test(NAME quantbot_wave_formation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --wave-formation-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wave-formation-probe)
+        set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
         # already too close makes a hunting launcher move away over real game
         # cycles, keeping engine Hunt, its tracked army membership and its

@@ -117,9 +117,10 @@ void breakHunt(Uint32 groupID, const ObjectBase* enemy) {
     for(UnitBase* unit : unitList)
         if(unit->getFormationGroup() == groupID) members.push_back(unit);
     for(UnitBase* unit : members) {
+        const bool hunter = unit->isFormationHuntToward();
         unit->leaveFormation();
         // The rigid march is over: whoever is not already fighting goes for the contact.
-        unit->engageFormationContact(enemy);
+        unit->engageFormationContact(enemy, hunter);
     }
 }
 
@@ -130,10 +131,19 @@ bool stepEntersSonicLane(const UnitBase* unit, const Coord& next) {
     if(unit->isFormationForming()) return false;
     const Coord forward = FormationPlanner::facingFromCode(unit->getFormationFacing());
     if(forward == Coord(0, 0)) return false;
+    // An AI hunting formation may march before it has formed up (kHuntFormUpMaxMs). A sonic
+    // member still recovering its place there has no lane yet: it moves up to its front-row
+    // place without waiting for the members ahead of it, and nobody waits for its lane -
+    // otherwise it and the members around it wait for each other for ever.
+    auto sonicOutOfPlace = [](const UnitBase* member) {
+        return member->isFormationHuntToward() && FormationPlanner::isSonic(member->getItemID())
+            && member->getFormationMarch() == FormationPlanner::March::Recover;
+    };
+    if(sonicOutOfPlace(unit)) return false;
     const bool sonic = FormationPlanner::isSonic(unit->getItemID());
     const Coord& here = unit->getLocation();
     for(const UnitBase* other : unitList) {
-        if(other == unit || other->getFormationGroup() != unit->getFormationGroup()) continue;
+        if(other == unit || other->getFormationGroup() != unit->getFormationGroup() || sonicOutOfPlace(other)) continue;
         const bool otherSonic = FormationPlanner::isSonic(other->getItemID());
         if(!sonic && !otherSonic) continue;
         const Coord positions[2] = {other->getLocation(), other->isMoving() ? other->getNextSpot() : other->getLocation()};
@@ -210,9 +220,15 @@ void update() {
         if(unit->formationMarchEnded()) { unit->leaveFormation(); continue; }
         ++groups[unit->getFormationGroup()].members;
     }
-    // The last member left has no one to keep pace with.
-    for(UnitBase* unit : unitList)
-        if(unit->isInFormation() && groups.at(unit->getFormationGroup()).members < 2) unit->leaveFormation();
+    // The last member left has no one to keep pace with. A hunter still forming up walks in
+    // Guard to its form-up tile; it hunts on to its slot instead, as its march would have.
+    for(UnitBase* unit : unitList) {
+        if(!unit->isInFormation() || groups.at(unit->getFormationGroup()).members >= 2) continue;
+        const bool resumeHunt = unit->isFormationHuntToward() && unit->isFormationForming();
+        const Coord slot = unit->getFormationSlot();
+        unit->leaveFormation();
+        if(resumeHunt && slot.isValid()) unit->doHuntToward(slot.x, slot.y);
+    }
     // The members that joined this cycle (commands and AI orders run before this) form up
     // together: one plan per group, in unit-list order.
     {
@@ -238,7 +254,9 @@ void update() {
     };
 
     // Form-up: a group marches once every forming member stands on its form-up tile (or cannot
-    // get closer, or waits at a sonic lane); then each is sent on to its slot.
+    // get closer, or waits at a sonic lane); then each is sent on to its slot. An AI hunting
+    // formation marches at the latest kHuntFormUpMaxMs after it was ordered.
+    const Uint32 now = currentGame->getGameCycleCount();
     for(const UnitBase* unit : unitList) {
         if(!unit->isFormationForming()) continue;
         Group& group = groups.at(unit->getFormationGroup());
@@ -248,7 +266,9 @@ void update() {
     for(UnitBase* unit : unitList) {
         if(!unit->isFormationForming()) continue;
         const Group& group = groups.at(unit->getFormationGroup());
-        if(group.ready == group.forming) unit->endFormUp();
+        const bool overdue = unit->isFormationHuntToward()
+            && FormationPlanner::cyclesSinceOrdered(unit->getFormationGroup(), now) >= Uint32(MILLI2CYCLES(kHuntFormUpMaxMs));
+        if(group.ready == group.forming || overdue) unit->endFormUp();
     }
 
     // The march: remaining distances of the marching members.
