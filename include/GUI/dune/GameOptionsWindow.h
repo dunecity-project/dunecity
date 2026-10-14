@@ -106,6 +106,7 @@ private:
     HBox            maxConstructionYardsOverrideHBox;      ///< The HBox containing the override option for the maximum number of construction yards
     Checkbox        maxConstructionYardsOverrideCheckbox;  ///< Unchecked or zero means unlimited.
     DigitsTextBox   maxConstructionYardsOverrideTextBox;   ///< The maximum number of construction yards
+    Checkbox        planBuildingSitesCheckbox;      ///< Match rule: Construction Yard orders pick their plot first (pre-placement queue)
     Checkbox rememberDefaults;
     TextButton okbutton;                            ///< the ok button
 };

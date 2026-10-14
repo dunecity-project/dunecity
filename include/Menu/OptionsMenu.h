@@ -83,8 +83,6 @@ private:
     Checkbox    wasdCameraCheckbox, leftClickOrdersCheckbox, movementPathsCheckbox, formationMovesCheckbox;
     DropDownBox scrollSpeedDropDownBox;
     HBox        introHBox;
-    HBox        chooseBuildingLocationHBox;
-    Checkbox    chooseBuildingLocationCheckbox;
     HBox        diagnosticLogsHBox;
     Checkbox    diagnosticLogsCheckbox;
     HBox        flagsHBox;

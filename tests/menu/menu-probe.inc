@@ -2439,12 +2439,17 @@ int runMenuProbe() {
         auto rules=settings.gameOptions;
         GameOptionsWindow menu(rules);
         menuRequire(!menu.originalUnitDamageCheckbox.isChecked(), "Original damage must default off");
+        menuRequire(menu.planBuildingSitesCheckbox.isChecked(), "Plan building sites must default on");
+        menuRequire(menu.vbox.getMinimumSize().x <= menu.getSize().x && menu.vbox.getMinimumSize().y <= menu.getSize().y
+                    && menu.getSize().x <= getRendererWidth() && menu.getSize().y <= getRendererHeight(),
+                    "Game Rules window content does not fit the window or the screen");
         menu.concreteRequiredCheckbox.setChecked(false);
         menu.maxConstructionYardsOverrideCheckbox.setChecked(true);
         menu.maxConstructionYardsOverrideTextBox.setVisible(true);
         menu.maxConstructionYardsOverrideTextBox.setValue(2);
         menuCapture(menu,"game-rules");
         menu.originalUnitDamageCheckbox.setChecked(true);
+        menu.planBuildingSitesCheckbox.setChecked(false);
         menu.originalUnitDamageCheckbox.bHover = true;
         menu.originalUnitDamageCheckbox.tooltipLastMouseMotion = SDL_GetTicks() - 1000;
         drawnMouseX = getRendererWidth() - 12;
@@ -2458,20 +2463,26 @@ int runMenuProbe() {
                     "Damage explanation overlay extends outside the viewport");
         menu.onOK();
         menuRequire(menu.getGameOptions().originalUnitDamage, "Original damage checkbox did not save selection");
+        menuRequire(!menu.getGameOptions().planBuildingSites, "Plan building sites checkbox did not save selection");
         auto savedRules = menu.getGameOptions();
         GameOptionsWindow reopened(savedRules);
         menuRequire(reopened.originalUnitDamageCheckbox.isChecked(), "Original damage selection lost on reopening");
+        menuRequire(!reopened.planBuildingSitesCheckbox.isChecked(), "Plan building sites selection lost on reopening");
         INIFile config(false, "Damage rule fixture");
         for(const auto* section : {"Game Options", "Game Options dunecity", "Game Options dune2r"}) {
             writeGameOptionsToConfig(config, section, savedRules);
             SettingsClass::GameOptionsClass loaded;
             applyGameOptionsFromConfig(config, section, loaded);
             menuRequire(loaded.originalUnitDamage, "Original damage preference did not round-trip through INI");
+            menuRequire(!loaded.planBuildingSites, "Plan building sites preference did not round-trip through INI");
             loaded.originalUnitDamage = false;
+            loaded.planBuildingSites = true;
             writeGameOptionsToConfig(config, section, loaded);
             applyGameOptionsFromConfig(config, section, savedRules);
             menuRequire(!savedRules.originalUnitDamage, "Original damage preference could not be cleared");
+            menuRequire(savedRules.planBuildingSites, "Plan building sites preference could not be restored");
             savedRules.originalUnitDamage = true;
+            savedRules.planBuildingSites = false;
         }
         menuRequire(!menu.getGameOptions().concreteRequired,"Concrete checkbox did not disable requirements");
         menuRequire(menu.getGameOptions().maximumNumberOfConstructionYardsOverride == 2, "Yard limit UI did not save selection");

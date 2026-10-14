@@ -186,7 +186,11 @@
 // 71: Formation movement. New CMD_UNIT_FORMATION_MOVE (unit, slot, group token); every
 //     unit order ends formation membership; formation members move at the group's
 //     speed cap; QuantBot, campaign AI and AIPlayer group moves use formations. Save 9857.
-#define NETWORK_PROTOCOL_VERSION            71
+// 72: Plan building sites is a match rule (GameOptionsClass::planBuildingSites, settings
+//     marker MOD8). It is in the game-options hash, and with it off the executor refuses
+//     CMD_BUILDER_RESERVE_PLACEMENT, so a 71 peer would accept reservations this peer
+//     drops. Save 9858.
+#define NETWORK_PROTOCOL_VERSION            72
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

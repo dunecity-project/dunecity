@@ -61,7 +61,8 @@ Mod, house, AI and AI partner stay drop-downs.
     category (`tornie` or `vanilla`).
   - "Game rules..." (bottom row) opens the same Game Rules window as Custom Game (game speed,
     concrete, fog of war, explored map, instant build, one palace, unit damage, rocket turret
-    power, sandworms, carryall drops, immortal player, unit/harvester/yard caps). Until it is used
+    power, sandworms, carryall drops, immortal player, unit/harvester/yard caps, plan building
+    sites when ordering — the Construction Yard pre-placement queue, default on). Until it is used
     the match takes the chosen mod's effective rules; once confirmed, its rules are used for every
     match started from the screen. "Remember as default" in the window saves them globally.
 - **Players**

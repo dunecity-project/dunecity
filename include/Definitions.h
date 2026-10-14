@@ -133,7 +133,11 @@
 // 9857: UnitBase formation membership: group id, formation slot and the group's speed
 //       cap (docs/formations.md). A save taken mid-march keeps the group together at
 //       its pace. A 9854 save loads with no unit in a formation.
-#define SAVEGAMEVERSION     9857
+// 9858: GameInitSettings MOD8: the plan-building-sites match rule, appended after the
+//       MOD7 spice income block (docs/preplace-queue.md). A 9857 build does not know
+//       MOD8 and would load such a save as vanilla, so it must refuse it. A 9857 save
+//       loads with the rule on, the only behaviour 9857 had by default.
+#define SAVEGAMEVERSION     9858
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

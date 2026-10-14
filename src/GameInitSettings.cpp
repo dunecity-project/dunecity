@@ -37,6 +37,7 @@ constexpr Uint32 GAMEINIT_MOD5_MARKER = 0x4D4F4435; // MOD5: construction yard l
 constexpr Uint32 GAMEINIT_MOD4_MARKER = 0x4D4F4434;  // "MOD4": immutable Workshop revisions
 constexpr Uint32 GAMEINIT_MOD3_MARKER = 0x4D4F4433;  // "MOD3": graphics-only DuneCity skins
 constexpr Uint32 GAMEINIT_MOD7_MARKER = 0x4D4F4437; // MOD7: per-house spice income multiplier
+constexpr Uint32 GAMEINIT_MOD8_MARKER = 0x4D4F4438; // MOD8: plan-building-sites match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
 /// which is why a format that adds one has to raise SAVEGAMEVERSION and the protocol version.
@@ -44,7 +45,7 @@ constexpr bool isKnownModMarker(Uint32 marker) {
     return marker == GAMEINIT_MOD_MARKER || marker == GAMEINIT_MOD2_MARKER
         || marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
-        || marker == GAMEINIT_MOD7_MARKER;
+        || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER;
 }
 
 /// MOD2 and later carry the per-house colour array.
@@ -56,30 +57,38 @@ constexpr bool markerHasHouseColors(Uint32 marker) {
 constexpr bool markerHasGraphicsSkins(Uint32 marker) {
     return marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
-        || marker == GAMEINIT_MOD7_MARKER;
+        || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER;
 }
 
 /// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
 /// one of these and then ran out is a truncated stream, not an old format: the read rethrows.
 constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
     return marker == GAMEINIT_MOD4_MARKER || marker == GAMEINIT_MOD5_MARKER
-        || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER;
+        || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
+        || marker == GAMEINIT_MOD8_MARKER;
 }
 
 /// MOD5 and later carry the construction yard limit.
 constexpr bool markerHasYardLimit(Uint32 marker) {
     return marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
-        || marker == GAMEINIT_MOD7_MARKER;
+        || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER;
 }
 
 /// MOD6 and later carry the original-unit-damage rule.
 constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
-    return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER;
+    return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
+        || marker == GAMEINIT_MOD8_MARKER;
 }
 
 /// MOD7 and later carry the per-house spice income multipliers.
 constexpr bool markerHasSpiceIncome(Uint32 marker) {
-    return marker == GAMEINIT_MOD7_MARKER;
+    return marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER;
+}
+
+/// MOD8 and later carry the plan-building-sites rule, after the spice income block. Older
+/// markers keep the default (on) and read nothing more.
+constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
+    return marker == GAMEINIT_MOD8_MARKER;
 }
 }
 
@@ -253,6 +262,9 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     }
                 }
             }
+            if(markerHasPlanBuildingSites(modMarker)) {
+                gameOptions.planBuildingSites = stream.readBool();
+            }
         }
     } catch (InputStream::eof&) {
         if(markerHasWorkshopRevisions(modMarker)) throw;
@@ -377,7 +389,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD7_MARKER);
+    stream.writeUint32(GAMEINIT_MOD8_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -410,6 +422,9 @@ void GameInitSettings::save(OutputStream& stream) const {
         }
         stream.writeUint32(houseInfo.spiceIncomeMultiplier);
     }
+
+    // MOD8: the plan-building-sites rule, appended after the MOD7 block.
+    stream.writeBool(gameOptions.planBuildingSites);
 }
 
 

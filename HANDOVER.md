@@ -1,3 +1,27 @@
+## 2026-10-14 — plan building sites is a game rule (MOD8, save 9858, protocol 72)
+
+- The Construction Yard pre-placement queue is now a per-match rule, not a client setting:
+  `GameOptionsClass::planBuildingSites` (default on), checkbox "Plan building sites when ordering"
+  in the Game Rules window (Custom Game, Random Skirmish). Part of `operator==` and `getHash()`.
+- Defaults persist as `[Game Options] Plan Building Sites` (globals, main, OptionsMenu, mod
+  `GameOptions.ini`). Removed outright: `settings.general.chooseBuildingLocation`, its Options →
+  General checkbox and `[General] Choose Building Location`.
+- `GameInitSettings` writes marker MOD8: everything MOD7 carries plus the rule byte appended
+  after the spice income block. MOD7 and older read the rule as on and consume nothing more;
+  a MOD8 stream missing the byte throws (truncated). `SAVEGAMEVERSION` 9857 → 9858,
+  `NETWORK_PROTOCOL_VERSION` 71 → 72.
+- `BuilderList` reads the match rule; the `CMD_BUILDER_RESERVE_PLACEMENT` executor refuses
+  reservations when it is off (same on every peer).
+- Tests: `CoopGameSettingsTestCase` (MOD8 offsets, new `[preplace]` case: save/load, network
+  snapshot, hash, MOD4–MOD7 default on without consuming bytes, truncation), protocol/save pins,
+  `command-execution-probe` MOD8 offsets, `preplace-queue-probe` drives the match rule and checks
+  a reservation is refused when off, `menu-probe` checks the checkbox default, save, reopen, INI
+  round trip and that the window fits at 640x480, 854x480 and 1280x720.
+- Verified (build-int, Release): targeted 9 tests passed (dunelegacy_tests, preplace_queue_tests,
+  preplace_queue_probe, game_command_regressions, network_wire_harness, lobby_authorization_tests,
+  skirmish_generator_probe, menu_navigation_probe, retina_resolution_probe); full
+  `ctest -j 2` 92/92 passed. No version bump.
+
 ## 2026-10-14 — local 1.0.838: Random Skirmish rules, rock to 100%, house counts, Trooper squads
 
 - "Game rules..." button opens Custom Game's `GameOptionsWindow`; once confirmed, `matchRules()`

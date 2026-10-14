@@ -231,7 +231,8 @@ bool BuilderList::handleMouseLeft(Sint32 x, Sint32 y, bool pressed) {
             } else {
                 const int clickedItem = getItemIDFromIndex(mouseLeftButton);
                 ConstructionYard* pYard = dynamic_cast<ConstructionYard*>(pBuilder);
-                if(clickedItem != ItemID_Invalid && pYard != nullptr && settings.general.chooseBuildingLocation
+                if(clickedItem != ItemID_Invalid && pYard != nullptr
+                   && currentGame->getGameInitSettings().getGameOptions().planBuildingSites
                    && ConstructionYard::isReservableItem(clickedItem)) {
                     // Pre-placement: pick the plot first; the map click orders it. Planning stays
                     // on the building after each plot, so Shift has no x5 meaning here.

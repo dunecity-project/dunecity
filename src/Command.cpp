@@ -700,6 +700,8 @@ case CMD_INFANTRY_CAPTURE: {
 
         case CMD_BUILDER_RESERVE_PLACEMENT: {
             if(parameter.size() != 4) return;
+            // Match rule, identical on every peer: with pre-placement off nobody may reserve.
+            if(!currentGame->getGameInitSettings().getGameOptions().planBuildingSites) return;
             ConstructionYard* pConstYard = dynamic_cast<ConstructionYard*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], pConstYard)) {
                 return;

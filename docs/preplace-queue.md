@@ -5,9 +5,14 @@ places each finished building on its planned plot automatically.
 
 ## Player flow
 
-- Setting: **Settings → General → "Choose building location when ordering"**, default ON, stored
-  in the ini as `[General] Choose Building Location`. OFF = the old flow (build, then click to place),
-  including Shift+click = ×5 in the list.
+- Game rule: **Game Rules → "Plan building sites when ordering"** (Custom Game and Random Skirmish),
+  default ON. It is per match: `GameOptionsClass::planBuildingSites`, shared by every player in
+  multiplayer, part of the game-options hash, carried in `GameInitSettings` (marker MOD8, appended
+  after the MOD7 spice income block; MOD7 and older streams read as ON) and saved with the game
+  (**SAVEGAMEVERSION 9858**, **NETWORK_PROTOCOL_VERSION 72**). Remembered defaults use the ini key
+  `[Game Options] Plan Building Sites` and mod `GameOptions.ini` accepts the same key. OFF = the old
+  flow (build, then click to place), including Shift+click = ×5 in the list. The former client
+  setting (Options → General, `[General] Choose Building Location`) is gone.
 - ON: left-click (or Shift+click) on a structure in a Construction Yard list does not start
   production; it enters the placing cursor for that item (same footprint ghost and colouring as
   ordinary placement; units are ignored, earlier reservations count for build range and overlapping
@@ -19,7 +24,7 @@ places each finished building on its planned plot automatically.
   left (queued prices minus progress, counting orders still in flight); on a tie the yard it was
   picked from, then the lowest object id (`PlacementReservation::chooseYard`). Build range and
   overlap are house-wide, so any yard can take any valid plot; yards that cannot build the item
-  (upgrade level, one-palace rule) are skipped. With the setting OFF a list click still orders on
+  (upgrade level, one-palace rule) are skipped. With the rule OFF a list click still orders on
   the selected yard, since that yard is where the finished building waits to be placed.
 - All structures go through this flow (vanilla, slabs, R/C/I zones, Police, Stadium, Airport,
   Nuclear Plant). **Road and Power Line** keep the old flow (they build instantly).
@@ -43,7 +48,8 @@ places each finished building on its planned plot automatically.
 - `CMD_BUILDER_CANCEL_RESERVATION(BUILDER_ID, RESERVATION_ID)`: removes exactly that entry. If it was
   the entry under construction its progress is refunded to the pools that paid (as cancelling the
   current item does today); a not-yet-started entry costs nothing.
-- **NETWORK_PROTOCOL_VERSION 71.**
+- **NETWORK_PROTOCOL_VERSION 71** (72 since the rule became a game option). With the rule OFF the
+  executor refuses `CMD_BUILDER_RESERVE_PLACEMENT` on every peer.
 - Plot validity (`ConstructionYard::checkReservationPlot`, rules in
   `include/structures/PlacementReservationPolicy.h`): normal placement rules with units ignored
   (`Map::okayToPlaceStructure` incl. city rules, no structure, no mountain, no spice for city-only
@@ -72,7 +78,7 @@ places each finished building on its planned plot automatically.
 
 ## Deviations from the spec
 
-- "Settings → Game" does not exist; the checkbox is on the **General** tab.
+- The setting is a match rule in the Game Rules window, not a per-player option.
 - Right-click on a ghost cancels only when no own unit that takes orders is selected; otherwise the
   normal right-click order wins, so a move order on a planned plot never cancels a building.
 - Yard destruction refund is covered by the real-engine probe, not a unit test: there is no

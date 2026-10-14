@@ -87,7 +87,8 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     using namespace PreplaceProbe;
     House* house = pLocalHouse;
     require(house != nullptr && game->isCitySimEnabled(), "Probe needs the dunecity mod and a local house");
-    require(settings.general.chooseBuildingLocation, "The pre-placement setting must default to on");
+    auto& planRule = game->gameInitSettings.gameOptions.planBuildingSites;
+    require(planRule, "The plan-building-sites match rule must default to on");
 
     // Fixture area: a 14x9 patch (plus a 2-tile margin) away from every object and from the
     // house's own ground, turned into plain rock. The fixture yard sits in its top-left corner,
@@ -139,7 +140,7 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     house->startingCredits = 40000;
     house->enforceCreditCeiling();
 
-    // ---- Sidebar list: the setting decides what a click on a yard item does. ----
+    // ---- Sidebar list: the match rule decides what a click on a yard item does. ----
     game->unselectAll(game->selectedList); game->selectedList.clear();
     game->selectedList.insert(yardID); fixtureYard->setSelected(true); game->selectionChanged();
     game->pInterface->updateObjectInterface();
@@ -160,13 +161,13 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     const int produceBefore = countCommands(*game, CMD_BUILDER_PRODUCEITEM);
     clickItem(Structure_WindTrap, KMOD_SHIFT);
     require(game->isPlanningPlacement() && game->getPlanningItemID() == Structure_WindTrap,
-        "Setting on: a yard list click must enter the planning cursor");
+        "Rule on: a yard list click must enter the planning cursor");
     require(countCommands(*game, CMD_BUILDER_PRODUCEITEM) == produceBefore && fixtureYard->getProductionQueueSize() == 0,
-        "Setting on: a list click must not start production");
+        "Rule on: a list click must not start production");
     game->setCursorMode(Game::CursorMode_Normal);
-    settings.general.chooseBuildingLocation = false;
+    planRule = false;
     clickItem(Structure_WindTrap, KMOD_SHIFT);
-    require(!game->isPlanningPlacement(), "Setting off: no planning cursor");
+    require(!game->isPlanningPlacement(), "Rule off: no planning cursor");
     bool multiple = false;
     for(auto& slot : game->cmdManager.timeslot) {
         for(auto it = slot.begin(); it != slot.end(); ++it) {
@@ -178,9 +179,14 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
             }
         }
     }
-    require(multiple, "Setting off: Shift+click must keep the x5 order");
-    settings.general.chooseBuildingLocation = true;
-    SDL_Log("PREPLACE_PROBE: sidebar setting on=planning off=x5 order");
+    require(multiple, "Rule off: Shift+click must keep the x5 order");
+    // The executor enforces the rule too: every peer has the same rule, so a reservation that
+    // reaches the simulation while the rule is off is dropped everywhere alike.
+    Command(pLocalPlayer->getPlayerID(), CMD_BUILDER_RESERVE_PLACEMENT, yardID, Structure_WindTrap,
+            static_cast<Uint32>(at(2,0).x), static_cast<Uint32>(at(2,0).y)).executeCommand();
+    require(fixtureYard->getProductionQueueSize() == 0, "Rule off: a reservation command must be refused");
+    planRule = true;
+    SDL_Log("PREPLACE_PROBE: match rule on=planning off=x5 order, reservation refused when off");
 
     // ---- Planning cursor: it stays on the building after a plot, overlap with a pending plot is
     // refused, Esc leaves. ----

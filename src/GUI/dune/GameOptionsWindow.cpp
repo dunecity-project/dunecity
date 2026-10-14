@@ -161,6 +161,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&maxConstructionYardsOverrideHBox, 24);
     vboxLeft.addWidget(VSpacer::create(6));
 
+    planBuildingSitesCheckbox.setText(_("Plan building sites when ordering"));
+    planBuildingSitesCheckbox.setTooltipText(_("Construction Yard: pick each building's plot when you order it; the yard builds the queue and places them there. Unchecked: build first, then place."));
+    planBuildingSitesCheckbox.setChecked(gameOptions.planBuildingSites);
+    vboxLeft.addWidget(&planBuildingSitesCheckbox);
+    vboxLeft.addWidget(VSpacer::create(6));
+
     vboxLeft.addWidget(VSpacer::create(14));
 
 
@@ -249,6 +255,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.instantBuild = instantBuildCheckbox.isChecked();
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
+    gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();
