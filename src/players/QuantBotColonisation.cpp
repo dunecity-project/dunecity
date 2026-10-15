@@ -20,6 +20,10 @@
 
 #include "QuantBotInternal.h"
 
+#include <FormationOrders.h>
+
+#include <iterator>
+
 Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     // The base survey notices colonists that died on the way since it last
     // ran; colonySiteOpen() holds further ones back while that is remembered.
@@ -806,18 +810,142 @@ bool QuantBot::escortColonist(const UnitBase* unit) {
     if (entry == escorts.end()) return false;
     const auto* colonist = getObject(entry->second);
     if (colonist == nullptr) return false;
-    const Coord at = colonist->getLocation();
-    // Area Guard around the colonist, never a forced march: the escort turns
-    // on whatever comes near it on the way and at the new rock.
-    const_cast<UnitBase*>(unit)->setGuardPoint(at);
+    // Area Guard, never a forced march: the escort turns on whatever comes near it on the way
+    // and at the new rock, and re-forms afterwards.
     if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+    // No formation pace: an escort is never capped to a group's speed, so it always catches up
+    // with its MCV.
+    if (unit->isInFormation()) const_cast<UnitBase*>(unit)->leaveFormation();
+    // The escort forms round the colonist as a moving anchor (docs/formations.md): a ring
+    // facing where the MCV is going, from its tile. The MCV keeps its own order and path; the
+    // escort only follows its ring place. Sonic escorts take the front places, so no escort and
+    // not the MCV stands ahead of one. The guard point follows the ring place, so Area Guard
+    // never pulls the escort back onto the MCV.
+    const Coord ringTile = colonistEscortPlace(unit, colonist);
+    const_cast<UnitBase*>(unit)->setGuardPoint(ringTile.isValid() ? ringTile : colonist->getLocation());
     if (unit->hasATarget()) return true;
-    if (blockDistance(unit->getLocation(), at).lround() <= 2) return true;
-    // Keep a path in progress that already ends beside the colonist instead of
-    // replanning it on every pass.
-    const Coord destination = unit->getDestination();
-    if (unit->isMoving() && destination.isValid() && blockDistance(destination, at).lround() <= 2) return true;
+    const Coord at = unit->getLocation();
+    if (ringTile.isInvalid() || at == ringTile) return true;
+    // Every new order resets the route and the escort waits for a new path, so a small shift
+    // of the place never re-orders an escort already walking to near it.
+    const Coord walkingTo = unit->getDestination();
+    const bool walking = walkingTo.isValid() && walkingTo != at;
+    if (walking && std::max(std::abs(walkingTo.x - ringTile.x), std::abs(walkingTo.y - ringTile.y)) <= kEscortPlaceSlack)
+        return true;
+    // A new order aims where the place will be one MCV tile on, so it stays good for longer;
+    // an escort standing there waits for the MCV to come up.
+    Coord leadTile = colonistEscortPlace(unit, colonist, 1);
+    if (leadTile.isInvalid()) leadTile = ringTile;
+    if (walkingTo == leadTile) return true;
     if (currentGame->getPathRequestQueueSize() > 150) return true;
-    doMove2Pos(unit, at.x, at.y, false);
+    doMove2Pos(unit, leadTile.x, leadTile.y, false);
+    const_cast<UnitBase*>(unit)->setGuardPoint(ringTile);
     return true;
+}
+
+void QuantBot::keepColonistEscortsInPlace() {
+    if (currentGame == nullptr || supportMode || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()) return;
+    // Only while an MCV with a site drives: the escort set is not even derived otherwise.
+    bool driving = false;
+    for (const auto& entry : mcvExpansionSites) {
+        const auto* mcv = dynamic_cast<const UnitBase*>(getObject(entry.first));
+        if (mcv != nullptr && entry.second.isValid() && mcv->getDestination().isValid()
+            && mcv->getDestination() != mcv->getLocation()) {
+            driving = true;
+            break;
+        }
+    }
+    if (!driving) return;
+    std::vector<Uint32> ids;
+    for (const auto& entry : colonistEscorts()) ids.push_back(entry.first);
+    for (Uint32 id : ids) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (unit == nullptr) continue;
+        // As in checkAllUnits(): a human order, and a captured Devastator's arming, come first.
+        if (unitRole(unit, {UnitRole::Human}) != UnitRole::Free) continue;
+        if (unit->getItemID() == Unit_Devastator && unit->getDeviationEpisode().credits()) continue;
+        escortColonist(unit);
+    }
+    // The unit pass later this cycle derives the escort set afresh, after its own role changes,
+    // exactly as it did without this upkeep.
+    colonistEscortCycle = std::numeric_limits<Uint32>::max();
+}
+
+Coord QuantBot::colonistEscortPlace(const UnitBase* escort, const ObjectBase* colonist, int lead) const {
+    const auto* mcv = dynamic_cast<const UnitBase*>(colonist);
+    if (mcv == nullptr) return Coord::Invalid();
+    // Heading: where the MCV is driving, else towards its colony site, else north.
+    const Coord here = mcv->getLocation();
+    Coord ahead = mcv->getDestination();
+    if (ahead.isInvalid() || ahead == here) {
+        const auto site = mcvExpansionSites.find(mcv->getObjectID());
+        ahead = site != mcvExpansionSites.end() ? site->second : Coord::Invalid();
+    }
+    Coord forward = (ahead.isValid() && ahead != here) ? FormationPlanner::facing(here, ahead) : Coord(0, -1);
+    if (forward == Coord(0, 0)) forward = Coord(0, -1);
+    const Coord lateral(-forward.y, forward.x);
+    // The ring's centre: the MCV's tile, or \a lead tiles on along its heading.
+    const Coord anchor(here.x + forward.x * lead, here.y + forward.y * lead);
+    // This colonist's escorts: sonic units first, then by object id (the map's order).
+    std::vector<const UnitBase*> ring;
+    for (const auto& entry : colonistEscorts())
+        if (entry.second == mcv->getObjectID())
+            if (const auto* member = dynamic_cast<const UnitBase*>(getObject(entry.first))) ring.push_back(member);
+    std::stable_sort(ring.begin(), ring.end(), [](const UnitBase* a, const UnitBase* b) {
+        return FormationPlanner::isSonic(a->getItemID()) && !FormationPlanner::isSonic(b->getItemID());
+    });
+    // Places as (ahead, across): the two front corners first (each covers the front and a
+    // side; three tiles ahead, so an escort still leads while the MCV closes up), then
+    // behind, then the flanks. Sonic escorts only take front-row places.
+    constexpr int kFrontRow = 3;
+    static const std::pair<int, int> places[] = {{kFrontRow, -2}, {kFrontRow, 2}, {-2, 0}, {0, -2}, {0, 2}, {-2, -2}, {-2, 2},
+                                                 {kFrontRow, -4}, {kFrontRow, 4}};
+    std::vector<bool> taken(std::size(places), false);
+    for (const UnitBase* member : ring) {
+        const bool sonic = FormationPlanner::isSonic(member->getItemID());
+        size_t pick = std::size(places);
+        for (size_t i = 0; i < std::size(places) && pick == std::size(places); ++i)
+            if (!taken[i] && (!sonic || places[i].first == kFrontRow)) pick = i;
+        if (pick == std::size(places)) {
+            if (member == escort) return Coord::Invalid();
+            continue;
+        }
+        taken[pick] = true;
+        if (member != escort) continue;
+        const int along = places[pick].first, across = places[pick].second;
+        const Coord wanted(anchor.x + forward.x * along + lateral.x * across,
+                           anchor.y + forward.y * along + lateral.y * across);
+        // A place is passable when the escort can stand there and nothing but a unit on its way
+        // elsewhere (or the escort itself) holds it: a route to a tile a unit stands on fails, and
+        // the engine then leaves the escort waiting out a long route-retry delay.
+        const auto passable = [&](const Coord& tile) {
+            if (!currentGameMap->tileExists(tile) || tile == here || !FormationOrders::canStand(escort, tile)) return false;
+            const Tile* pTile = currentGameMap->getTile(tile);
+            if (!pTile->hasAGroundObject()) return true;
+            const ObjectBase* holder = pTile->getGroundObject();
+            if (holder == nullptr || holder == escort) return true;
+            if (!holder->isAUnit()) return false;
+            const Coord going = static_cast<const UnitBase*>(holder)->getDestination();
+            return static_cast<const UnitBase*>(holder)->isMoving() || (going.isValid() && going != tile);
+        };
+        // An unpassable place: the nearest passable tile still on the same side of the MCV -
+        // ahead or behind for a front or rear place, left or right for a corner or flank - and
+        // clear of its lane, at least two tiles to that side, so the MCV's own one-tile weaves
+        // neither move the escort to another side nor put it in the MCV's way.
+        const int unit = forward.x * forward.x + forward.y * forward.y;   // 1, or 2 diagonally
+        const auto onSide = [unit](int offset, int place) {
+            if (place == 0) return true;
+            const int clear = std::min(std::abs(place), 2) * unit;
+            return place > 0 ? offset >= clear : offset <= -clear;
+        };
+        const auto sameSide = [&](const Coord& tile) {
+            const Coord d(tile.x - anchor.x, tile.y - anchor.y);
+            return onSide(d.x * forward.x + d.y * forward.y, along) && onSide(d.x * lateral.x + d.y * lateral.y, across);
+        };
+        if (passable(wanted)) return wanted;
+        return FormationPlanner::nearestStandable(FormationOrders::memberOf(escort), wanted,
+            currentGameMap->getSizeX(), currentGameMap->getSizeY(),
+            [&](const FormationPlanner::Member&, const Coord& tile) { return sameSide(tile) && passable(tile); });
+    }
+    return Coord::Invalid();
 }

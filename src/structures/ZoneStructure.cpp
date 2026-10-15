@@ -227,6 +227,20 @@ void ZoneStructure::setResidentialPopulation(int population) {
     refreshZonePowerDraw();
 }
 
+void ZoneStructure::setStartingLevel(int level) {
+    level = std::clamp(level, 0, 3);
+    if (zoneType_ == DuneCity::ZoneType::Residential) {
+        setResidentialPopulation(DuneCity::ResidentialPopulation::fromDensity(level));
+        return;
+    }
+    const auto pos = getLocation();
+    if (!currentGameMap || !pos.isValid()) return;
+    for (int dy = 0; dy < structureSize.y; ++dy) for (int dx = 0; dx < structureSize.x; ++dx)
+        if (auto* tile = currentGameMap->getTile(pos.x + dx, pos.y + dy))
+            tile->setCityZoneDensity(static_cast<uint8_t>(level));
+    refreshZonePowerDraw();
+}
+
 ZoneStructure::~ZoneStructure() = default;
 
 ObjectInterface* ZoneStructure::getInterfaceContainer() {

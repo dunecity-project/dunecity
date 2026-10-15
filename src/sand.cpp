@@ -584,6 +584,7 @@ ATTACKMODE getAttackModeByName(const std::string& name) {
     else if(lowerName == "stop")                                return STOP;
     else if(lowerName == "capture")                             return CAPTURE;
     else if(lowerName == "retreat")                             return RETREAT;
+    else if(lowerName == "hold")                                return HOLD;
     else                                                        return ATTACKMODE_INVALID;
 }
 
@@ -598,6 +599,7 @@ std::string getAttackModeNameByMode(ATTACKMODE attackMode) {
         case SABOTAGE:  return "Sabotage";      break;
         case STOP:      return "Stop";          break;
         case CAPTURE:   return "Capture";          break;
+        case HOLD:      return "Hold";          break;
         default:
             THROW(std::invalid_argument, "getAttackModeNameByMode(): Invalid attack mode!");
         break;

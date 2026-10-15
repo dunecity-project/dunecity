@@ -43,7 +43,14 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // patrol count, report cooldown, scan cooldown, report tally and
     // return-home flag, and the airplane's take-off frame and flight budget.
     // 9854 adds the unit hunt-toward flag (UnitBase::doHuntToward).
-    REQUIRE(SAVEGAMEVERSION == 9854);
+    // 9855 adds the unit order queue and builder repeat production (RTS controls).
+    // 9856 adds Construction Yard placement reservations to the production queue.
+    // 9857 adds unit formation membership (group, slot, speed cap; docs/formations.md).
+    // 9858 adds the plan-building-sites match rule (GameInitSettings MOD8).
+    // 9859 adds the hunting-formation flag (formation shapes, hunt in formation).
+    // 9860 adds the form-up tile, resume kind and pace unit type (one-speed formation march).
+    // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
+    REQUIRE(SAVEGAMEVERSION == 9861);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

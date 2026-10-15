@@ -235,7 +235,7 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                     // and terrain/turn calculations for them altogether.
                     if (next.bClosed) continue;
                     if (next.passability == 0 || next.passabilityEpoch != passabilityEpoch) {
-                        next.passability = pUnit->canPass(nextCoord.x, nextCoord.y) ? 2 : 1;
+                        next.passability = pUnit->canPathThrough(nextCoord.x, nextCoord.y) ? 2 : 1;
                         next.passabilityEpoch = passabilityEpoch;
                     }
                     if(next.passability == 2) {

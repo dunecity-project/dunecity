@@ -149,6 +149,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Immortal Human Player", options.immortalHumanPlayer);
     config.setBoolValue(section, "City Effects", options.cityEffects);
     config.setBoolValue(section, "Original Unit Damage", options.originalUnitDamage);
+    config.setBoolValue(section, "Plan Building Sites", options.planBuildingSites);
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -177,6 +178,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Immortal Human Player", options.immortalHumanPlayer);
     readBool("City Effects", options.cityEffects);
     readBool("Original Unit Damage", options.originalUnitDamage);
+    readBool("Plan Building Sites", options.planBuildingSites);
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {

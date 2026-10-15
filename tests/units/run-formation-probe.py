@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Move mixed groups in and out of formation with real game objects (docs/formations.md): the
+Box on and off, a hunting save round trip, Combined arms with sonic tanks and scouts, Line,
+Column, a hunt in formation that breaks on contact, the one-speed block march, and the
+formation buttons and Ctrl+Shift+F forming a scattered group up where it stands.
+
+Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
+profile and dummy SDL drivers. Logs, the test executable, the mid-march save and a rendered
+screenshot of the formation are retained in --output-dir.
+"""
+import argparse
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import tempfile
+
+root = Path(__file__).resolve().parents[2]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--build-dir', type=Path, default=root / 'build')
+parser.add_argument('--output-dir', type=Path)
+args = parser.parse_args()
+build = args.build_dir.resolve()
+out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(prefix='dunecity-formation-probe-'))
+out.mkdir(parents=True, exist_ok=True)
+subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+lines = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+main = (root / 'src/main.cpp').read_text()
+needle = 'int menuResult = MainMenu().showMenu();'
+if main.count(needle) != 1:
+    raise RuntimeError('Main menu entry changed; update the test injection point.')
+main = main.replace(needle, 'int menuResult = runFormationProbe();')
+main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+pos = main.index('int main(')
+include = root / 'tests/units/formation-probe.inc'
+main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
+source = out / 'formation-probe-main.cpp'
+source.write_text(main)
+cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/main.cpp' in line))
+# Test compilation must not overwrite Ninja's production dependency records.
+for option in ('-include', '-MT', '-MF'):
+    if option in cc:
+        i = cc.index(option)
+        del cc[i:i+2]
+for option in ('-MD', '-MMD'):
+    if option in cc:
+        cc.remove(option)
+obj = out / 'formation-probe-main.o'
+cc[cc.index('-o') + 1] = str(obj)
+cc[cc.index('-c') + 1] = str(source)
+map_path = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
+cc.append('-DPROBE_MAP_PATH="' + str(map_path) + '"')
+cc.append('-fno-access-control')  # Inspect production movement state only in this diagnostic binary.
+app = out / 'formation-probe.app/Contents'
+(app / 'MacOS').mkdir(parents=True, exist_ok=True)
+resources = app / 'Resources'
+if not resources.exists():
+    resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
+binary = app / 'MacOS/formation-probe'
+link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
+link = link[link.index('&&')+1:]
+link = link[:link.index('&&')]
+link[link.index('-o')+1] = str(binary)
+link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+with (out / 'build.log').open('w') as log:
+    subprocess.run(cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+env = dict(os.environ, DUNECITY_USERDIR=str(out / 'profile'), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
+logfile = out / 'run.log'
+with logfile.open('w') as log:
+    subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
+                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=480)
+text = logfile.read_text()
+for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_PINCER:',
+               'FORMATION_PROBE_PINCER_FRAME:', 'FORMATION_PROBE_SHAPES:', 'FORMATION_PROBE_HUNT:',
+               'FORMATION_PROBE_BLOCK:', 'FORMATION_PROBE_BLOCK_ROLES:', 'FORMATION_PROBE_FORMUP:',
+               'FORMATION_PROBE_GALLERY:', 'FORMATION_PROBE_PASS:'):
+    if marker not in text:
+        raise RuntimeError('Missing formation probe result ' + marker + ' in ' + str(logfile))
+for shot in ('formation-march.png', 'formation-pincer-panel.png', 'formation-block.png', 'formup-before.png',
+             'formup-box.png', 'formup-pincer.png', 'formup-column.png', 'formup-staggered.png', 'formup-echelon.png',
+             'formup-hotkey-box.png', 'formation-shape-box.png', 'formation-shape-pincer.png', 'formation-shape-column.png',
+             'formation-shape-staggered.png', 'formation-shape-echelon.png'):
+    if not (out / shot).is_file():
+        raise RuntimeError('The formation screenshot ' + shot + ' was not written')
+subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+print(next(line for line in text.splitlines() if 'FORMATION_PROBE_PASS:' in line))
+print('Formation movement probe passed. Logs: ' + str(out))

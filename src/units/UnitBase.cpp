@@ -18,6 +18,7 @@
 
 #include <units/UnitBase.h>
 #include <units/DynastyMovement.h>
+#include <FormationOrders.h>
 
 #include <globals.h>
 
@@ -45,6 +46,7 @@
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/GroundUnit.h>
+#include <units/InfantryBase.h>
 
 #define SMOKEDELAY 30
 #define UNITIDLETIMER (GAMESPEED_DEFAULT *  315)  // about every 5s
@@ -162,7 +164,29 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         huntTowardGoal.y = stream.readSint32();
         huntTowardRetries = stream.readUint8();
     }
-
+    if(currentGame->getLoadedSavegameVersion() >= 9855) {
+        orderQueue.load(stream);
+        orderDispatched = stream.readBool();
+        orderWalkRetries = stream.readUint8();
+        attackMoveBreakOff.x = stream.readSint32();
+        attackMoveBreakOff.y = stream.readSint32();
+    }
+    if(currentGame->getLoadedSavegameVersion() >= 9857) {
+        formationGroup = stream.readUint32();
+        formationSlot.x = stream.readSint32();
+        formationSlot.y = stream.readSint32();
+        formationSpeedCap = stream.readFixPoint();
+    }
+    if(currentGame->getLoadedSavegameVersion() >= 9859) {
+        formationHunt = stream.readBool();
+        formationFacing = stream.readUint8();
+    }
+    if(currentGame->getLoadedSavegameVersion() >= 9860) {
+        formationFormUp.x = stream.readSint32();
+        formationFormUp.y = stream.readSint32();
+        formationResume = stream.readUint8();
+        formationPaceItem = stream.readUint32();
+    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -262,6 +286,21 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(huntTowardGoal.x);
     stream.writeSint32(huntTowardGoal.y);
     stream.writeUint8(huntTowardRetries);
+    orderQueue.save(stream);
+    stream.writeBool(orderDispatched);
+    stream.writeUint8(orderWalkRetries);
+    stream.writeSint32(attackMoveBreakOff.x);
+    stream.writeSint32(attackMoveBreakOff.y);
+    stream.writeUint32(formationGroup);
+    stream.writeSint32(formationSlot.x);
+    stream.writeSint32(formationSlot.y);
+    stream.writeFixPoint(formationSpeedCap);
+    stream.writeBool(formationHunt);
+    stream.writeUint8(formationFacing);
+    stream.writeSint32(formationFormUp.x);
+    stream.writeSint32(formationFormUp.y);
+    stream.writeUint8(formationResume);
+    stream.writeUint32(formationPaceItem);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -651,12 +690,14 @@ void UnitBase::destroy() {
 }
 
 void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
-
+    // A unit changing hands leaves its old house's formation either way.
+    leaveFormation();
     if(newOwner->getHouseID() == originalHouseID) {
         quitDeviation();
         return;
     } else {
         removeFromSelectionLists();
+        clearOrderQueue();      // orders from the old owner do not carry over
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);
@@ -815,9 +856,10 @@ void UnitBase::engageTarget() {
         }
 
         if(targetDistance > getWeaponRange()) {
-            // we are not in attack range
-            if(target.getObjPointer()->isAFlyingUnit()) {
-                // we are not following this air unit
+            // we are not in attack range: nobody follows an air unit, and a holding unit
+            // follows nothing
+            if(UnitOrderPolicy::outOfRangeResponse(attackMode, target.getObjPointer()->isAFlyingUnit())
+               == UnitOrderPolicy::OutOfRange::Release) {
                 releaseTarget();
                 return;
             } else {
@@ -899,20 +941,46 @@ bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     const int step=DynastyMovement::step(itemID,
         DynastyMovement::throttle(itemID,static_cast<TERRAINTYPE>(tile->getType())),
         getHealth()<getMaxHealth()/2,cargo);
-    const int ticks=DynastyMovement::movementTicks(step, location.x!=nextSpot.x && location.y!=nextSpot.y);
+    const bool diagonal=location.x!=nextSpot.x && location.y!=nextSpot.y;
+    const int ticks=DynastyMovement::movementTicks(step, diagonal);
     if(ticks==0 || getMaxSpeed()<=0) return false;
     // One Dynasty coordinate unit per20Hz movement tick is0.08 world
     // units per16ms cycle (64/256 *20 *0.016). INI caps remain configurable.
     const FixPoint referenceCap=DynastyMovement::step(itemID,255,false,0)*0.08_fix;
     FixPoint scale=getMaxSpeed()/referenceCap;
     if(tile->isRoad()) scale*=ROADSPEEDMULTIPLIER;
+    // Formation pace (docs/formations.md): a member crosses this tile no faster than the
+    // group's pace unit would - the same step time for every member, so the block moves at one
+    // speed whatever each unit's own speed is.
+    const Uint64 paceLength=formationPaceStepLength(routeTick, static_cast<TERRAINTYPE>(tile->getType()), tile->isRoad(), diagonal);
+    if(paceLength==0) {
+        // No Dynasty pace unit: hold the realized speed of this step, step*0.08*scale world
+        // units per cycle, to the group's speed cap.
+        const FixPoint realized=FixPoint(step)*0.08_fix*scale;
+        const FixPoint capped=applyFormationSpeedCap(realized);
+        if(capped<realized) scale=scale*capped/realized;
+    }
     dynastyStepStart=routeTick*50;
     // Movement precedes scripting: the first movement tick is strictly after
     // the route call, then every3 ticks, independently of rendering cadence.
     const Uint64 duration=(routeTick/3*3+ticks*3-routeTick)*50;
-    dynastyStepEnd=dynastyStepStart+std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/scale));
+    const Uint64 length=std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/scale));
+    dynastyStepEnd=dynastyStepStart+std::max(length,paceLength);
     dynastyStartX=realX-bumpyOffsetX; dynastyStartY=realY-bumpyOffsetY;
     return true;
+}
+
+Uint64 UnitBase::formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, bool road, bool diagonal) const {
+    if(formationGroup==0 || formationMarch==FormationPlanner::March::Recover || formationPaceItem==ItemID_Invalid
+       || DynastyMovement::factor(formationPaceItem)==0) return 0;
+    const int paceStep=DynastyMovement::step(formationPaceItem, DynastyMovement::throttle(formationPaceItem, terrain), false, 0);
+    const int paceTicks=DynastyMovement::movementTicks(paceStep, diagonal);
+    const FixPoint paceMax=currentGame->objectData.data[formationPaceItem][originalHouseID].maxspeed;
+    if(paceTicks==0 || paceMax<=0) return 0;
+    FixPoint paceScale=paceMax/(DynastyMovement::step(formationPaceItem,255,false,0)*0.08_fix);
+    if(road) paceScale*=ROADSPEEDMULTIPLIER;
+    const Uint64 duration=(routeTick/3*3+paceTicks*3-routeTick)*50;
+    return std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/paceScale));
 }
 
 bool UnitBase::moveDynastyStep() {
@@ -1139,9 +1207,11 @@ void UnitBase::navigate() {
                                 ObjectBase* blocker = nextTile->getObject();
                                 if(blocker && blocker->isAUnit()) {
                                     UnitBase* blockingUnit = static_cast<UnitBase*>(blocker);
-                                    if(blockingUnit->isMoving()) {
+                                    if(blockingUnit->isMoving() || marchesWith(blockingUnit)) {
                                         // Both units are moving - wait a cycle for blocker to move
-                                        // Don't clear path, blocker will likely move soon
+                                        // Don't clear path, blocker will likely move soon. A
+                                        // marching member of this unit's formation moves on at
+                                        // the same pace: the block keeps its shape behind it.
                                         currentGame->frameTiming.pauseWaitingForBlocker++;
                                         return;
                                     }
@@ -1151,6 +1221,16 @@ void UnitBase::navigate() {
                         
                         // Static blocker, structure, or out-of-bounds - clear path and reroute
                         clearPath();
+                    } else if(formationGroup != 0 && formationMarch == FormationPlanner::March::Hold) {
+                        // One speed (docs/formations.md): ahead of a member that fell behind,
+                        // wait for it before the next step.
+                        currentGame->frameTiming.pauseWaitingForBlocker++;
+                        return;
+                    } else if(FormationOrders::stepEntersSonicLane(this, nextSpot)) {
+                        // A formation keeps its sonic lanes clear on the march (docs/formations.md):
+                        // wait, as for a moving blocker, until the step no longer enters one.
+                        currentGame->frameTiming.pauseWaitingForBlocker++;
+                        return;
                     } else {
                         if (dynasty ? angle==FixPoint(nextSpotAngle) : drawnAngle==nextSpotAngle) {
                             if(dynasty && !beginDynastyStep(routeTick)) return;
@@ -1314,6 +1394,271 @@ int UnitBase::huntTowardRange() const {
     return std::max(getWeaponRange(), getViewRange());
 }
 
+// ---- Player order queue (docs/rts-controls.md) -------------------------------------------
+
+bool UnitBase::fightsOnAttackMove() const {
+    if(!canAttack() || isHarvesterLikeUnit(itemID)) {
+        return false;
+    }
+    switch(itemID) {
+        case Unit_MCV:
+        case Unit_Carryall:
+        case Unit_ChemicalCarryall:
+        case Unit_Frigate:
+        case Unit_Saboteur:     // keeps its own demolition rules
+        case Unit_Sandworm:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool UnitBase::isAttackMoving() const {
+    if(orderQueue.empty() || !orderDispatched) {
+        return false;
+    }
+    const UnitOrderType type = orderQueue.front().type;
+    return (type == UnitOrderType::AttackMove || type == UnitOrderType::Patrol) && fightsOnAttackMove();
+}
+
+void UnitBase::leaveHoldForOrder() {
+    if(attackMode == HOLD) {
+        doSetAttackMode(AREAGUARD);
+    }
+}
+
+void UnitBase::clearOrderQueue() {
+    orderQueue.clear();
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+}
+
+void UnitBase::recordPlayerOrder(const UnitOrder& order) {
+    orderQueue.replace(order);
+    orderDispatched = true;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+}
+
+void UnitBase::doIssueOrder(const UnitOrder& order, bool queued) {
+    if(order.type == UnitOrderType::Patrol || order.type >= UnitOrderType::Count) {
+        return;
+    }
+    if(!queued || orderQueue.empty()) {
+        orderQueue.replace(order);
+        dispatchFrontOrder();
+    } else {
+        orderQueue.append(order);   // refused silently once 16 orders are waiting
+    }
+}
+
+void UnitBase::doIssuePatrol(const Coord& point, bool queued) {
+    if(!currentGameMap->tileExists(point)) {
+        return;
+    }
+    if(!queued || orderQueue.empty()) {
+        if(orderQueue.startPatrol(point, location)) {
+            dispatchFrontOrder();
+        }
+    } else {
+        orderQueue.extendPatrol(point, location);
+    }
+}
+
+bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
+    switch(order.type) {
+        case UnitOrderType::Move:
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol:
+            return currentGameMap->tileExists(order.pos);
+
+        case UnitOrderType::MoveToObject: {
+            const ObjectBase* pObject = currentGame->getObjectManager().getObject(order.targetID);
+            return pObject != nullptr && pObject != this;
+        }
+
+        case UnitOrderType::AttackObject: {
+            const ObjectBase* pObject = currentGame->getObjectManager().getObject(order.targetID);
+            return pObject != nullptr && pObject != this && (canAttack() || isHarvesterLikeUnit(itemID));
+        }
+
+        case UnitOrderType::Capture: {
+            const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
+            return dynamic_cast<const InfantryBase*>(this) != nullptr && pStructure != nullptr
+                && pStructure->canBeCaptured() && pStructure->getOwner()->getTeamID() != owner->getTeamID();
+        }
+
+        case UnitOrderType::HarvesterReturn:
+            return isHarvesterLikeUnit(itemID);
+
+        case UnitOrderType::Count:
+        default:
+            return false;
+    }
+}
+
+bool UnitBase::isIdleForOrders() const {
+    if(target || attackPos.isValid()) {
+        return false;
+    }
+    if(isAFlyingUnit()) {
+        // Aircraft never stop moving; an Ornithopter drops its destination two tiles out.
+        return destination.isInvalid() || blockDistance(location, destination) <= 2;
+    }
+    return !moving && !justStoppedMoving && (destination.isInvalid() || destination == location);
+}
+
+void UnitBase::dispatchFrontOrder() {
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+    orderQueue.skipInvalid([this](const UnitOrder& order) { return isOrderExecutable(order); });
+    if(orderQueue.empty()) {
+        return;
+    }
+
+    const UnitOrder order = orderQueue.front();
+    leaveHoldForOrder();
+    if(order.type != UnitOrderType::HarvesterReturn) {
+        cancelCarryallPickup();     // an explicit order replaces any outstanding lift
+    }
+
+    switch(order.type) {
+        case UnitOrderType::Move: {
+            doMove2Pos(order.pos.x, order.pos.y, true);
+        } break;
+
+        case UnitOrderType::MoveToObject: {
+            doMove2Object(order.targetID);
+        } break;
+
+        case UnitOrderType::AttackObject: {
+            doAttackObject(order.targetID, true);
+        } break;
+
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol: {
+            if(fightsOnAttackMove()) {
+                // An unforced walk in Area Guard: targeting() stops it for enemies met on the
+                // way, and Area Guard is also the mode the unit keeps at the destination.
+                doMove2Pos(order.pos.x, order.pos.y, false);
+                attackMode = AREAGUARD;
+            } else {
+                doMove2Pos(order.pos.x, order.pos.y, true);
+            }
+        } break;
+
+        case UnitOrderType::Capture: {
+            static_cast<InfantryBase*>(this)->doCaptureStructure(order.targetID);
+        } break;
+
+        case UnitOrderType::HarvesterReturn: {
+            harvesterDoReturn(this);
+        } break;
+
+        case UnitOrderType::Count:
+        default:
+            break;
+    }
+
+    orderDispatched = true;
+    noteExplicitPlayerOrder();
+}
+
+void UnitBase::finishFrontOrder() {
+    const UnitOrderType done = orderQueue.front().type;
+    const bool walkedAttackMove = (done == UnitOrderType::AttackMove || done == UnitOrderType::Patrol)
+        && fightsOnAttackMove();
+    orderQueue.advance();
+    orderDispatched = false;
+    orderWalkRetries = 0;
+    attackMoveBreakOff.invalidate();
+    if(!orderQueue.empty()) {
+        dispatchFrontOrder();
+    } else if(walkedAttackMove) {
+        // Arrived: guard the destination in Area Guard (not Hunt).
+        setGuardPoint(location);
+        attackMode = AREAGUARD;
+    }
+}
+
+void UnitBase::updateOrderQueue() {
+    if(!orderDispatched) {
+        dispatchFrontOrder();
+        return;
+    }
+
+    const UnitOrder order = orderQueue.front();
+    switch(order.type) {
+        case UnitOrderType::AttackMove:
+        case UnitOrderType::Patrol: {
+            if(goingToRepairYard) {
+                // The engine sent the unit for repairs; the walk does not survive that trip.
+                clearOrderQueue();
+                return;
+            }
+            const bool fights = fightsOnAttackMove();
+            if(fights && target) {
+                if(attackMoveBreakOff.isInvalid()) {
+                    attackMoveBreakOff = location;
+                }
+                if(UnitOrderPolicy::attackMoveLeashBroken(attackMoveBreakOff, location)) {
+                    // Chased too far from the route: drop the target and walk on.
+                    attackMoveBreakOff.invalidate();
+                    doMove2Pos(order.pos.x, order.pos.y, false);
+                }
+                return;
+            }
+            if(fights && attackMoveBreakOff.isValid()) {
+                // The fight is over: back onto the walk.
+                attackMoveBreakOff.invalidate();
+                doMove2Pos(order.pos.x, order.pos.y, false);
+                return;
+            }
+            switch(UnitOrderPolicy::walkProgress(isIdleForOrders(), location, order.pos, orderWalkRetries)) {
+                case UnitOrderPolicy::WalkProgress::Walking:
+                    return;
+                case UnitOrderPolicy::WalkProgress::Resume:
+                    // The engine dropped the walk (no path); a blocked route usually clears.
+                    ++orderWalkRetries;
+                    doMove2Pos(order.pos.x, order.pos.y, !fights);
+                    return;
+                case UnitOrderPolicy::WalkProgress::Arrived:
+                case UnitOrderPolicy::WalkProgress::GiveUp:
+                    break;
+            }
+        } break;
+
+        case UnitOrderType::Move: {
+            if(!isIdleForOrders()) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::MoveToObject:
+        case UnitOrderType::AttackObject:
+        case UnitOrderType::Capture: {
+            // Done once the target is gone (or captured), or the engine let go of it.
+            if(isOrderExecutable(order) && target.getObjectID() == order.targetID) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::HarvesterReturn: {
+            if(harvesterIsReturning(this)) {
+                return;
+            }
+        } break;
+
+        case UnitOrderType::Count:
+        default:
+            break;
+    }
+
+    finishFrontOrder();
+}
+
 void UnitBase::doMove2Object(const ObjectBase* pTargetObject) {
     if(pTargetObject->getObjectID() == getObjectID()) {
         return;
@@ -1415,7 +1760,7 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
         cancelCarryallPickup();
     }
 
-    if(attackMode == GUARD || attackMode == STOP) {
+    if(attackMode == GUARD || attackMode == STOP || attackMode == HOLD) {
         if(moving && !justStoppedMoving) {
             doMove2Pos(nextSpot, false);
         } else {
@@ -1442,6 +1787,13 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 
     if(pDamager != nullptr){
 
+        // A hunting formation that is shot at has met the enemy: the whole group breaks
+        // into a fight (docs/formations.md).
+        if(damage > 0 && isFormationHunt() && pDamager->getOwner() != nullptr
+           && pDamager->getOwner()->getTeamID() != owner->getTeamID()) {
+            FormationOrders::breakHunt(formationGroup, pDamager);
+        }
+
         if(attackMode == HUNT && !forced) {
             ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
             if(canAttack(pDamager)) {
@@ -1462,7 +1814,8 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
         
         // Reset target timer when damaged so units can immediately look for their attacker
         // Without this, GUARD units wait up to 2 seconds before noticing they're being shot
-        if(damage > 0 && canAttack(pDamager) && (attackMode == GUARD || attackMode == AREAGUARD || attackMode == HUNT)) {
+        if(damage > 0 && canAttack(pDamager)
+           && (attackMode == GUARD || attackMode == AREAGUARD || attackMode == HUNT || attackMode == HOLD)) {
             findTargetTimer = 0;  // Allow immediate target search on next update
         }
     }
@@ -1499,6 +1852,11 @@ bool UnitBase::isInGuardRange(const ObjectBase* pObject) const  {
 
         case RETREAT: {
             return false;
+        } break;
+
+        case HOLD: {
+            // Only what the weapon reaches from where the unit stands.
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1545,6 +1903,10 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
 
         case RETREAT: {
             return false;
+        } break;
+
+        case HOLD: {
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1681,6 +2043,8 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     moving = false;
     dynastyRouteTick=0; dynastyStepEnd=0;
     pickedUp = true;
+    // A carried unit is out of its formation; the drop is a new start.
+    leaveFormation();
     respondable = false;
     setActive(false);
     setVisible(VIS_ALL, false);
@@ -1711,7 +2075,137 @@ FixPoint UnitBase::getTerrainAdjustedSpeed(int cargoPercent) const {
     }
     // City roads are an intentional extension; Dynasty has no equivalent.
     if(tile->isRoad()) speed *= ROADSPEEDMULTIPLIER;
-    return speed;
+    return applyFormationSpeedCap(speed);
+}
+
+FixPoint UnitBase::applyFormationSpeedCap(FixPoint speed) const {
+    if(formationGroup == 0 || formationMarch == FormationPlanner::March::Recover || formationSpeedCap <= 0) return speed;
+    return std::min(speed, formationSpeedCap);
+}
+
+void UnitBase::joinFormation(Uint32 groupID, const Coord& slot, bool hunt, Uint8 facing, FormationOrders::Resume resume) {
+    formationGroup = groupID;
+    formationSlot = slot;
+    formationSpeedCap = getFormationReferenceSpeed();
+    formationHunt = hunt;
+    formationFacing = facing;
+    formationFormUp.invalidate();
+    formationResume = static_cast<Uint8>(resume);
+    formationPaceItem = itemID;
+    formationMarch = FormationPlanner::March::Pace;
+    formationPending = slot.isValid();
+}
+
+void UnitBase::leaveFormation() {
+    formationGroup = 0;
+    formationSlot.invalidate();
+    formationSpeedCap = 0;
+    formationHunt = false;
+    formationFacing = 0;
+    formationFormUp.invalidate();
+    formationResume = 0;
+    formationPaceItem = ItemID_Invalid;
+    formationMarch = FormationPlanner::March::Pace;
+    formationPending = false;
+}
+
+void UnitBase::startFormUp(const Coord& tile) {
+    formationFormUp = tile;
+    // An AI hunting formation (Resume::HuntToward) forms up in Hunt, hunting its way to the
+    // form-up tile: a plain move would drop Hunt, and the AI would then take its wave members
+    // for idle troops at home and give them other orders, ending their membership.
+    if(formationResume == static_cast<Uint8>(FormationOrders::Resume::HuntToward)) {
+        doHuntToward(tile.x, tile.y);
+        return;
+    }
+    // Every other order kind walks to the form-up tile the same way; a forced order stays forced.
+    // An attack-move or patrol keeps its queued walk, which takes the unit on towards the
+    // slot once it stands on the form-up tile (it waits there: FormationOrders::update()).
+    doMove2Pos(tile.x, tile.y, formationResume == static_cast<Uint8>(FormationOrders::Resume::ForcedMove));
+}
+
+bool UnitBase::formUpReady() const {
+    return formationFormUp.isValid()
+        && (location == formationFormUp || destination != formationFormUp || (!moving && !hasMovementIntent()));
+}
+
+void UnitBase::endFormUp() {
+    formationFormUp.invalidate();
+    switch(static_cast<FormationOrders::Resume>(formationResume)) {
+        case FormationOrders::Resume::ForcedMove: doMove2Pos(formationSlot.x, formationSlot.y, true); break;
+        case FormationOrders::Resume::HuntToward: doHuntToward(formationSlot.x, formationSlot.y); break;
+        case FormationOrders::Resume::Walk:
+            if(destination != formationSlot) doMove2Pos(formationSlot.x, formationSlot.y, false);
+            break;
+        case FormationOrders::Resume::Move:
+        default: doMove2Pos(formationSlot.x, formationSlot.y, false); break;
+    }
+}
+
+FixPoint UnitBase::getFormationReferenceSpeed() const {
+    const FixPoint speed = getMaxSpeed();
+    if(DynastyMovement::factor(itemID) != 0) {
+        const int base = DynastyMovement::step(itemID,255,false,0);
+        if(base <= 0) return speed;
+        return speed * DynastyMovement::step(itemID, DynastyMovement::throttle(itemID,Terrain_Sand), false, 0) / base;
+    }
+    return speed * (2-getTerrainDifficulty(Terrain_Sand));
+}
+
+const ObjectBase* UnitBase::formationContact() const {
+    const ObjectBase* pTarget = target.getObjPointer();
+    if(pTarget != nullptr && pTarget->getOwner() != nullptr && pTarget->getOwner()->getTeamID() != owner->getTeamID()
+       && blockDistance(location, pTarget->getClosestPoint(location)) <= huntTowardRange()) {
+        return pTarget;
+    }
+    return nullptr;
+}
+
+void UnitBase::engageFormationContact(const ObjectBase* enemy, bool hunter) {
+    if(hunter) {
+        // An AI hunting formation (Resume::HuntToward) breaks into Hunt, the mode its members
+        // marched in. The form-up walk and a plain close-in move both leave Hunt, and a wave
+        // member left in Guard stops attacking once this fight is over.
+        if(!fightsOnAttackMove()) return;
+        if(target || enemy == nullptr || !canAttack(enemy)) {
+            if(attackMode != HUNT) { attackMode = HUNT; findTargetTimer = 0; }
+            return;
+        }
+        if(isInAttackRange(enemy)) {
+            doAttackObject(enemy, false);
+            attackMode = HUNT;
+            return;
+        }
+        const Coord at = enemy->getClosestPoint(location);
+        doHuntToward(at.x, at.y);
+        return;
+    }
+    if(enemy == nullptr || target || !fightsOnAttackMove() || !canAttack(enemy)) return;
+    if(isInAttackRange(enemy)) {
+        doAttackObject(enemy, false);
+        return;
+    }
+    doMove2Pos(enemy->getClosestPoint(location), false);
+}
+
+bool UnitBase::formationMarchEnded() const {
+    if(!active || pickedUp || getHealth() <= 0) return true;
+    // Contact: an enemy within hunt-toward reach turns the march into a fight.
+    if(formationContact() != nullptr) return true;
+    // A hunting member's walk may go on beyond its slot (a patrol's next leg); the
+    // formation ends where the slot is reached.
+    if(formationHunt && formationSlot.isValid() && location == formationSlot) return true;
+    // A member that has formed up waits for its group: not an arrival.
+    if(formationFormUp.isValid()) return false;
+    // Arrived or idle: nothing left to travel to and nothing about to start.
+    return !moving && !hasMovementIntent() && !target && attackPos.isInvalid()
+        && pendingTargetRequest == TargetRequestKind::None && !pathRequestQueued;
+}
+
+int UnitBase::formationRemainingTiles() const {
+    const Coord& goal = formationSlot.isValid() ? formationSlot : destination;
+    if(goal.isInvalid() || location.isInvalid()) return 0;
+    return std::max(std::abs(goal.x - location.x), std::abs(goal.y - location.y));
 }
 
 void UnitBase::setSpeeds() {
@@ -1798,8 +2292,10 @@ void UnitBase::targeting() {
             if(huntTowardGoal.isValid()) {
                 if(attackMode != HUNT || target || attackPos || forced) {
                     huntTowardGoal.invalidate();
-                } else if(blockDistance(location, huntTowardGoal) <= huntTowardRange()) {
-                    huntTowardGoal.invalidate();    // Arrived: an ordinary hunter from here on.
+                } else if(blockDistance(location, huntTowardGoal) <= huntTowardRange() && !isFormationForming()) {
+                    // Arrived: an ordinary hunter from here on. A member forming up keeps its
+                    // walk to (and wait on) the form-up tile; contact breaks the form-up.
+                    huntTowardGoal.invalidate();
                 } else if(!(destination == huntTowardGoal) && ++huntTowardRetries > kHuntTowardRetries) {
                     huntTowardGoal.invalidate();    // No way there: an ordinary hunter.
                 } else {
@@ -1822,7 +2318,24 @@ void UnitBase::targeting() {
                 }
             }
 
-            
+            // Attack-move/patrol walk: stop only for an enemy within max(weapon, view) range
+            // of the unit, never for the nearest enemy anywhere (the Area Guard acquisition
+            // below would). The fight itself runs on the ordinary targeting rules; the order
+            // queue resumes the walk afterwards and enforces the leash.
+            if(isAttackMoving() && !target && !attackPos && !forced) {
+                const ObjectBase* pNewTarget = findTarget();
+                if(pNewTarget != nullptr
+                   && UnitOrderPolicy::attackMoveEngages(
+                        blockDistance(location, pNewTarget->getClosestPoint(location)).lround(),
+                        getWeaponRange(), getViewRange())) {
+                    attackMoveBreakOff = location;
+                    doAttackObject(pNewTarget, false);
+                }
+                findTargetTimer = MILLI2CYCLES(500);
+                engageTarget();
+                return;
+            }
+
             // Refresh target if current one is out of weapon range
             if(target && !attackPos && !forced && 
                (attackMode == GUARD || attackMode == AREAGUARD || attackMode == AMBUSH || attackMode == HUNT)) {
@@ -1866,8 +2379,9 @@ void UnitBase::targeting() {
                     }
                     
                     if(inRange) {
-                        // Saboteurs need forced=true to pathfind onto occupied tiles
-                        bool forceAttack = (getItemID() == Unit_Saboteur);
+                        // Saboteurs need forced=true to pathfind onto occupied tiles; a holding
+                        // Saboteur waits for a target to come to it instead.
+                        bool forceAttack = (getItemID() == Unit_Saboteur) && attackMode != HOLD;
                         doAttackObject(pNewTarget, forceAttack);
                         
                         // Sandworms switch to HUNT after acquiring target
@@ -2099,7 +2613,9 @@ void UnitBase::finishPathRequest(PathRequestStats& stats) {
             
             // After 3 attempts without progress, request carryall (if cooldown expired)
             // Removed (location != oldLocation) requirement - freshly deployed units should also get help
-            if(noProgressCount >= 3 && carryallRequestCooldown <= 0) {
+            // A formation member makes no progress while it waits for its group on purpose
+            // (form-up, Hold); an airlift would take it out of the formation.
+            if(noProgressCount >= 3 && carryallRequestCooldown <= 0 && !isInFormation()) {
                 if(getOwner()->hasCarryalls()
                    && this->isAGroundUnit()
                    && !static_cast<GroundUnit*>(this)->hasBookedCarrier()
@@ -2346,6 +2862,8 @@ void UnitBase::quitDeviation() {
     if(wasDeviated()) {
         // revert back to real owner
         removeFromSelectionLists();
+        clearOrderQueue();      // the borrowing house's orders end with its control
+        leaveFormation();
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);
@@ -2362,6 +2880,10 @@ void UnitBase::quitDeviation() {
 
 bool UnitBase::update() {
     if(active) {
+        // Player orders first, so a finished order hands over to the next one before this
+        // cycle's targeting decides what the unit does.
+        if(!orderQueue.empty() && !pickedUp) updateOrderQueue();
+
         // Time targeting
         Uint64 targetStart = SDL_GetPerformanceCounter();
         targeting();
@@ -2503,6 +3025,24 @@ void UnitBase::updateVisibleUnits() {
             }
         }
     }
+}
+
+bool UnitBase::marchesWith(const UnitBase* other) const {
+    // Both members of one formation on its march (not forming up), the other one not waiting
+    // for a member that fell behind: it moves on at the pace, so it is no obstacle.
+    return other != nullptr && other != this && formationGroup != 0 && formationFormUp.isInvalid()
+        && other->formationGroup == formationGroup && other->owner == owner && other->formationFormUp.isInvalid()
+        && other->formationMarch != FormationPlanner::March::Hold;
+}
+
+bool UnitBase::canPathThrough(int xPos, int yPos) const {
+    if(canPass(xPos, yPos)) return true;
+    if(formationGroup == 0 || !currentGameMap->tileExists(xPos, yPos)) return false;
+    // A marching formation plans its routes through its own marching members.
+    Tile* pTile = currentGameMap->getTile(xPos, yPos);
+    if(pTile->isMountain() && !isInfantry()) return false;
+    const auto* occupant = dynamic_cast<const UnitBase*>(pTile->getGroundObject());
+    return occupant != nullptr && marchesWith(occupant);
 }
 
 bool UnitBase::canPass(int xPos, int yPos) const {
@@ -2653,7 +3193,7 @@ bool UnitBase::isCachedPathStillValid() {
 
     int nodesChecked = 0;
     for(const Coord& coord : pathList) {
-        if(!currentGameMap->tileExists(coord) || !canPass(coord.x, coord.y)) {
+        if(!currentGameMap->tileExists(coord) || !canPathThrough(coord.x, coord.y)) {
             if(currentGame != nullptr) {
                 currentGame->frameTiming.pathInvalidBlocked++;
             }

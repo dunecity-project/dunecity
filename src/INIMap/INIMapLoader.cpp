@@ -18,6 +18,8 @@
 
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <structures/ZoneStructure.h>
+#include <INIMap/ZoneStartLevel.h>
 #include <units/TankBase.h>
 
 #include <Trigger/ReinforcementTrigger.h>
@@ -885,6 +887,13 @@ void INIMapLoader::loadStructures()
                     continue;
                 } else {
                     newStructure->setHealth(newStructure->getMaxHealth() * percentHealth);
+                    // Optional fifth field: a pre-developed zone (INIMap/ZoneStartLevel.h).
+                    // Entries without it keep the empty lot every older map relies on.
+                    const int startLevel = ZoneStartLevel::parse(tmp);
+                    if(startLevel >= 0) {
+                        if(auto* zone = dynamic_cast<ZoneStructure*>(newStructure)) zone->setStartingLevel(startLevel);
+                        else logWarning(key.getLineNumber(), "Zone level given for non-zone '" + BuildingStr + "' ignored");
+                    }
                 }
             }
         } else {

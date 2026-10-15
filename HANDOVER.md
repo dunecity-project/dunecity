@@ -1,3 +1,314 @@
+## 2026-10-15 — local 1.0.842 installed on the MBA
+
+Integration `cbcac37a` = Codex staging cleanup `5c4057a0` + `feat/formation-research` (`fe6f8957`,
+includes `feat/formation-form-up`): formation buttons / Ctrl+Shift+F form the selection up in
+place; five shapes Box, Pincer, Column, Staggered, Echelon (+ Off); QuantBot `WaveFormation`
+default None; fight-in-formation modes measured and not kept. Save 9861 / protocol 75 (1.0.841
+cannot load its saves or join its games). `agent-workspace stage verify` at cbcac37a: build,
+check-build-deps and CTest 93/93 serial passed (exit 0, no source change). Package: executable
+SHA256 63ea31c7dec02abd2ff1babca1f7271ecb688bc6232f69f9f0afda1ed3cb6374, no Homebrew/local
+links, signature and runtime check passed; installed on the MBA 2026-10-15 21:05 AEDT, 1.0.841 at
+/Applications/.dunecity-backup-before-1.0.842-20261015-210538/. Not pushed or published.
+
+## 2026-10-15 — Fighting in formation through first contact: measured, not kept (branch `feat/formation-research`)
+
+Stefan approved making formations fight in formation through first contact so they can beat None. Details and
+tables: `docs/formations.md` ("Fighting in formation through first contact"). Raw data:
+`docs/formation-results/engagement/` (tags `pilot`, `pilot2`).
+
+- Built and measured five engagement modes against None and against today's scatter (Hard duels, sizes
+  128/160/192, seeds 7101-7606, Column and Box, 36 games per pairing, 576 games): Hold (leash 0 and 2),
+  Advance, Deploy (close in up to 6 tiles past weapon range) and Arc (spread into one battle line across the
+  threat). Shared rules: fire only in reach, re-march after 3 s quiet, break on an enemy within 2 tiles / a
+  third lost / outranged / 8 s outranged / 30 s.
+- No mode's 95% interval clears 0.5 against None (best box/arc 0.417, 0.25-0.58) or against scatter (best
+  column/arc 0.514, 0.35-0.67); Box Hold, Advance and Deploy and Column hold2 and Advance lose to None outright.
+  The formation survives the fight (about half the members in formation 10 s after contact vs 20-26% with
+  scatter), but the first-minute trade is no better than scatter's (2.0-3.2 vs 3.0-3.6 killed/lost) and below
+  None's (5-6.6).
+- Decision: scatter stays, QuantBot `WaveFormation` stays None. The engagement code, its saved state, the
+  test-only switch and the WIP's save 9862 / protocol 76 were removed (WIP history: commit `d09813f1`, Hold/
+  Advance/Deploy; Arc was measured from an uncommitted build). Save 9861 / protocol 75 unchanged. Kept: duel
+  harness `--pairs` (with a per-pairing report) and `--all-houses`, and the wave metric `in_formation_10s`.
+  The full 108-game run and the Brutal sample were not run: no mode qualified in the pilot.
+- Tests (one ctest run, -j3, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 29 quantbot_* tests: 37/37 passed. Probe output
+  deleted afterwards.
+
+## 2026-10-15 — Formation research (branch `feat/formation-research`, not released)
+
+Stefan: "test different styles of formations ... keep the best 5"; then None as a control. Details and all tables:
+`docs/formations.md` ("Formation research"). Merged `feat/formation-form-up` (save 9861 / protocol 75, unchanged).
+
+- 1,980 Hard duels (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, `tests/ai/formation-duel.py`):
+  None 0.562 (0.51-0.61) ranks first; the shapes score 0.438 (0.39-0.49) against None; no shape beats it.
+- Applied: QuantBot `WaveFormation` default None; `kAIShape` removed - AIPlayer, CampaignAIPlayer and QuantBot recall
+  follow `WaveFormation` (None: pre-formation orders). Kept shapes Box, Pincer, Column, Staggered, Echelon (+ Off);
+  removed Combined arms (scouts), Line, Wedge, Vee, Diamond. Stable ids; removed ids load as Box (settings only -
+  commands and saves carry slots, not shapes). Generator fix: no unit starts on a spice bloom.
+- Tests (one ctest run, -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe (after the probe's
+  marker/screenshot list was updated), game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 23 quantbot_* probes passed.
+- Open: Brutal None-vs-kept-shapes sample (tag `brutal`, results in /tmp/dunecity-formation-research/results) was
+  running at hand-over; the approved "fight in formation through first contact" engagement mode is not started.
+## 2026-10-15 — formation buttons form the selection up where it stands (branch `feat/formation-form-up`, save 9861, protocol 75, not released)
+
+Stefan: "when selecting men and then setting a formation, the troops should move into that formation".
+A shape button (Box/Combined/Line/Column), `Ctrl+Shift+F` or `Ctrl+F` switching on now re-forms the
+selected ground units in that shape around their centroid (`FormationPlanner::planInPlace`,
+`Game::issueSelectedFormUp`), facing the way they were last sent, else the nearest visible enemy, else
+their average heading, else north (`Game::formUpFacing`). Off moves nobody. Commands are
+`CMD_UNIT_FORMATION_MOVE` with the new order kind FormUp (the slot is the form-up tile); forming members
+in a ring on each other's tiles step aside (`FormationOrders::stepAsideForFormUp`). Details, measurements
+and deviations in `docs/formations.md` ("Form up where they stand"). Version numbers 9861/75 need
+reconciling with the other formation branch at integration.
+
+## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
+
+Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and
+`feat/skirmish-multiplayer` (hosted Random map, equal Random army/city). Full CTest 93: 92 passed
+one at a time; `preplace_queue_probe` failed because `QuantBot Config.ini.default` had gained a
+`WaveFormation` line: that file is in every mod's effective checksum, so saves from earlier builds
+refused to load ("This game needs an older mod version"). The line was removed (the key stays an
+optional setting, code default Combined); `preplace_queue_probe` and `quantbot_wave_formation`
+then passed. Note: POST_BUILD config copies only refresh when the app relinks; copy by hand or
+relink after changing `config/*.default`. Package: executable SHA256
+6da6974738ad83d577dbfd9f7ee9dfd7ab40e8b3cd56e439ed9174a63029af55, signature and runtime check
+passed. The MBA was offline overnight and the background retry script exited without
+installing; installed directly on the MBA at 09:22 AEDT 2026-10-15 (same SHA256, signature and
+runtime check passed); 1.0.840 at /Applications/.dunecity-backup-before-1.0.841-20261015-092239/.
+
+## 2026-10-15 — Random map for multiplayer hosts; equal Random army/city (branch `feat/skirmish-multiplayer`, not released)
+
+Stefan: "make random skermish available for multiplayer … players can join and replace ai so no
+enemies and allies, you set that in the next screen" and "random settings on army and city must
+apply equally to each player". Details: `docs/skirmish-generator.md` ("Multiplayer Random map").
+
+- Equal randoms (single player and hosted): Army/City "Random" is drawn once per map from the
+  seed; every house set to Random gets that budget/target (`SkirmishGenerator::generate`).
+- Hosting: the host's map chooser (`CustomGameMenu`, LAN/Internet and the Custom Game
+  Offline/Online setup) has **Random map...** → `RandomSkirmishMenu(hostMod)`: map settings,
+  credits, tech, Start positions 2–8, one Base/Army/City for every start, Mirrored starts on by
+  default; host mod and Game Rules stay in the chooser. Next saves the map to MP User Maps, the
+  chooser selects it (`selectUserMap`) and continues into the normal lobby.
+- Map: open `[Player1]..[PlayerN]` starts (`Params::multiplayer`, `Role::Open`), planned with
+  `startCatalogue()` (only what every custom-game house can field), identical buildings, units,
+  army value and city per start. Lobby, map transfer, checksums, saves and replays unchanged:
+  no protocol or save change (protocol 74, save 9860).
+- Tests: `skirmish_generator_tests` (+4 cases: equal randoms, multiplayer starts 2–8, start
+  catalogue, hosted persistence); `skirmish_generator_probe` new case `mp-lobby` (screen, chooser,
+  online setup, lobby with host + guest + 2 AI and teams, guest's wire-format copy, both peers'
+  first minute with equal state digests). No socket-level two-peer run: the late-join harness
+  needs local PHP signalling + WebRTC and is not in ctest.
+- Run one at a time on a fresh Release tree, probe output deleted after each: dunelegacy_tests
+  (1074 passed, 3 skipped), skirmish_generator_tests (22 cases), skirmish_generator_probe (all 10
+  cases incl. mp-lobby), menu_navigation_probe, retina_resolution_probe, game_command_regressions,
+  network_wire_harness, lobby_authorization_tests (5 cases): all passed.
+## 2026-10-15 — QuantBot attack waves in formation (not released, no version bump)
+
+Stefan: "get quant bot to launch its attacks using formation - e.g. combined arms, but get it to test box and
+line as well", then "do some test games ... and make any necessary modifications". Details, measurement and the
+before/after of each change: `docs/formations.md` ("QuantBot waves in formation").
+
+- `QuantBot::launchGroundHunt`: ground members of every wave hunt in formation to the wave's objective (custom: the
+  tracked front, else engine Hunt's pick for the lead; campaign: the wave's objective; Hard/Brutal flank detour as one
+  forced formation leg). Who/when/what unchanged; <3 eligible units and `WaveFormation=None` keep the old orders.
+- `QuantBot Config.ini` `[General Behavior] WaveFormation` (None/Combined/Box/Line/Column), default Combined, hashed.
+- Engine fixes for AI hunting formations (also `CampaignAIPlayer`): Hunt kept after the break, form-up in Hunt, 15 s
+  form-up deadline from the group token, out-of-place sonic members exempt from lane waits, no stall-carryall for
+  formation members, lone forming hunter hunts on. No save/protocol change (9860 / 74).
+- Measured Hard vs Hard, 3 maps x 3 seeds x None/Combined/Box/Line (`tests/ai/formation-wave-matrix.py`): Combined
+  arrival spread 114 -> 76 s, killed/lost 4.27 -> 3.64 (noise overlaps); Box best trade 4.30. Default stays Combined.
+  Brutal not measured. New probe `quantbot_wave_formation`.
+
+## 2026-10-14 — local 1.0.840 installed on the MBA
+
+1.0.840 = the formation fixes below plus the colonist escort (86% of march cycles with escort on
+3+ sides). Full CTest 92/92 passed, run one test at a time with probe output deleted between
+(the Mac mini disk is nearly full). Installed on the MBA at 23:05 AEDT: executable SHA256
+6e833e4167d9d54f8f8b0cc828969f9195758abe9c24658910ad283b53a719fd, runtime check passed; 1.0.839
+at /Applications/.dunecity-backup-before-1.0.840-20261014-230505/dunecity.app.
+
+## 2026-10-14 — formation fixes after 1.0.839 play-test (save 9860, protocol 74, not released)
+
+Stefan's 1.0.839 feedback (siege tanks in front, harvesters out, MCVs escorted, one speed, sonic lanes).
+Details and measurements: `docs/formations.md` ("Formation fixes, save 9860 / protocol 74").
+
+- Siege tanks are front-line armour (Box role Armour, Combined/Line/Column class Heavy, first among heavy armour).
+- Harvesters (`isHarvesterLikeUnit` items) never get a slot or membership; selected with a group they keep their ordinary order.
+- MCVs take the centre slot (the target itself, middle row, escort around).
+- One speed: form-up first (`FormationPlanner::formUpTiles`), then every member keeps the pace unit's
+  step time (`UnitBase::formationPaceStepLength`), recovers a lost place at full speed or waits for a member >2 tiles behind;
+  marching members route through and wait behind each other (`UnitBase::canPathThrough`).
+- Sonic: only a same-type sonic unit may stand in a sonic lane. Damage code: sonic tanks ignore damage from sonic tanks
+  and sonic trikes from sonic trikes only; cross-type and every other unit are hurt; a wave whose shooter has died hurts sonic units too.
+- Block march probe: speed spread 25.6% -> 10-14%, shape error 10.0 -> 1.2-1.4 tiles, stretch 7.0 -> 2.2 tiles.
+- Colonist escort: a ring round the MCV as a moving anchor (`QuantBot::colonistEscortPlace`): the MCV keeps its own
+  order and deploys as before; escorts take places relative to its tile and heading (front corners 3 tiles ahead, then
+  behind, flanks; sonic escorts front row only), guard point on the place. Upkeep every cycle while a colonist drives
+  (`QuantBot::keepColonistEscortsInPlace`); no re-order while walking to within 2 tiles of the place (a re-order resets
+  the path); new orders aim one MCV tile ahead; an unpassable or occupied place moves to the nearest passable tile at
+  least 2 tiles to the same side; escorts leave any formation (no pace cap). `quantbot_mcv_deployment` (requires 80%):
+  colonist deploys, escort on 3+ sides on 3229/3713 march cycles (86%, was 54%), 4 sides on 480 (12%). The march is
+  longer than before (3713 vs 3008 cycles): on the fixture's structure-striped rock the right-hand escort crosses the
+  MCV's lane and the MCV waits for it. No saved state or command change (save 9860 / protocol 74 unchanged).
+
+## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
+
+`feat/formation-shapes` (Box, Combined arms with scouts, Line, Column; sonic-lane rule for all
+shapes and the AI; hunt in formation via `CMD_UNIT_FORMATION_HUNT`, breaking on first contact;
+formation buttons in the unit panel, Ctrl+Shift+F cycles shapes; see `docs/formations.md`) merged
+on top of the plan-building-sites rule below. Versions combined: save 9859 (9858 MOD8 rule, 9859
+hunting-formation flag and facing), protocol 73. Full CTest 92: 84 passed in the parallel run and
+the other 8 failed only with "No space left on device" (Mac mini disk full); each of those 8 then
+passed alone after clearing probe output. Installed on the MBA at 20:50 AEDT: 1.0.839, executable
+SHA256 480d2253ce1f1739f1e793f461c5f3402ad1377af6d4fe8fc24464c95bfee1ab, runtime check passed;
+1.0.838 at /Applications/.dunecity-backup-before-1.0.839-20261014-205042/dunecity.app.
+
+## 2026-10-14 — plan building sites is a game rule (MOD8, save 9858, protocol 72)
+
+- The Construction Yard pre-placement queue is now a per-match rule, not a client setting:
+  `GameOptionsClass::planBuildingSites` (default on), checkbox "Plan building sites when ordering"
+  in the Game Rules window (Custom Game, Random Skirmish). Part of `operator==` and `getHash()`.
+- Defaults persist as `[Game Options] Plan Building Sites` (globals, main, OptionsMenu, mod
+  `GameOptions.ini`). Removed outright: `settings.general.chooseBuildingLocation`, its Options →
+  General checkbox and `[General] Choose Building Location`.
+- `GameInitSettings` writes marker MOD8: everything MOD7 carries plus the rule byte appended
+  after the spice income block. MOD7 and older read the rule as on and consume nothing more;
+  a MOD8 stream missing the byte throws (truncated). `SAVEGAMEVERSION` 9857 → 9858,
+  `NETWORK_PROTOCOL_VERSION` 71 → 72.
+- `BuilderList` reads the match rule; the `CMD_BUILDER_RESERVE_PLACEMENT` executor refuses
+  reservations when it is off (same on every peer).
+- Tests: `CoopGameSettingsTestCase` (MOD8 offsets, new `[preplace]` case: save/load, network
+  snapshot, hash, MOD4–MOD7 default on without consuming bytes, truncation), protocol/save pins,
+  `command-execution-probe` MOD8 offsets, `preplace-queue-probe` drives the match rule and checks
+  a reservation is refused when off, `menu-probe` checks the checkbox default, save, reopen, INI
+  round trip and that the window fits at 640x480, 854x480 and 1280x720.
+- Verified (build-int, Release): targeted 9 tests passed (dunelegacy_tests, preplace_queue_tests,
+  preplace_queue_probe, game_command_regressions, network_wire_harness, lobby_authorization_tests,
+  skirmish_generator_probe, menu_navigation_probe, retina_resolution_probe); full
+  `ctest -j 2` 92/92 passed. No version bump.
+
+## 2026-10-14 — local 1.0.838: Random Skirmish rules, rock to 100%, house counts, Trooper squads
+
+- "Game rules..." button opens Custom Game's `GameOptionsWindow`; once confirmed, `matchRules()`
+  replaces the mod's effective rules for matches started from the screen.
+- Allies 0-6, enemies 1-7, at most 7 together (`kMaxOtherHouses`, `maxOtherHouses()`); the slider
+  the player did not move gives way. `Params::clamp` enforces the same.
+- Rock steps 15/25/35/50/65/80/90/100% (`Rock` enum extended, first four indices unchanged);
+  `growRock` spreads rock from its edges past what the editor's fields reach; 100% = no sand/spice.
+- Armies never buy light infantry (`kUnitTypes` without `Unit_Soldier`); Troopers are placed up to
+  five per tile (`NUM_INFANTRY_PER_TILE`); Army rows read "Army (credits)".
+- Verified: `dunelegacy_tests`, `skirmish_generator_tests` (rock to 100% incl. mirrored crowded
+  all-rock map, caps, army bundling), `skirmish_generator_probe` (slider coupling, rules window,
+  real matches load with full army value), `menu_navigation_probe`, `retina_resolution_probe`.
+- Installed on the MBA at 18:45 AEDT: 1.0.838, executable SHA256
+  6931350116161da4929c3241c31b1f2c36c37d94f4724a615c8cb62122d4cc84, runtime check passed; 1.0.837
+  at /Applications/.dunecity-backup-before-1.0.838-20261014-184540/dunecity.app.
+
+## 2026-10-14 — local 1.0.837: Random Skirmish sliders
+
+Ordered settings (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, each side's Base, Army,
+City) are new header-only `Slider` widgets (`include/GUI/Slider.h`, DropDownBox-compatible entry
+API): low on the left, high on the right, value text beside the track, click/drag/wheel/arrow keys.
+Mod, house, AI and partner stay drop-downs; "Random" is the rightmost Army/City step. The skirmish
+probe drives a real click, drag and wheel on the size slider. `dunelegacy_tests`,
+`skirmish_generator_tests`, `skirmish_generator_probe`, `menu_navigation_probe` and
+`retina_resolution_probe` passed. Installed on the MBA at 18:12 AEDT: version 1.0.837, executable
+SHA256 230c6ad79727b64550a92ad17550b4fcda055329d0e56db00d95a5aa350eddac, runtime check passed;
+1.0.836 kept at /Applications/.dunecity-backup-before-1.0.837-20261014-181207/dunecity.app.
+
+## 2026-10-14 — local 1.0.836: Random Skirmish tech 9 default, rocket turrets
+
+`Params::techLevel` defaults to 9. Base templates add Rocket Turrets from Small up (Small 1,
+Medium 2 + 2 Gun, Large 4 + 2 Gun, Fortress 8 + 4 Gun), falling back to Gun Turrets where the
+house or tech level cannot build them; a unit test checks templates for every house and that a
+default-tech Medium map places 2 Rocket Turrets per house. `skirmish_generator_tests`,
+`skirmish_generator_probe`, `menu_navigation_probe` and `dunelegacy_tests` passed.
+Installed on the MBA at 17:53 AEDT by a waiter script once the running game was quit: version
+1.0.836, executable SHA256 3826018aee50b20fb03677c6ece32f4bce6fca3d6f7c37336cb1ccdf76049515,
+desktop runtime check passed. Local 1.0.835 is at
+/Applications/.dunecity-backup-before-1.0.836-20261014-175333/dunecity.app.
+
+## 2026-10-14 — local 1.0.835: Random Skirmish player start, AI partner, natural terrain
+
+From Stefan's play-test of 1.0.834 (save `testskirmish.dls`, DuneCity 128x128, 2 allies, 2
+enemies, tech 9, 40,000-people cities): the player started with only a Construction Yard, had no
+way to add an AI to their own house, terrain and bases were blocky, Industrial zones were mixed
+into Residential/Commercial, and power was dozens of wind traps.
+
+- "You start with": AI partner (None, AI Support Easy-Brutal, QuantBot Easy-Brutal/Defend: the
+  Custom Game co-op list; it joins the player's house, `multiplePlayersPerHouse`), Base, Army and
+  City like the other sides. Persisted as `Player AI/Base/Army/City`. Menu rows shrink to fit 480p.
+- Generator (`feat/skirmish-terrain`): terrain starts from the editor's `generateRandomMap`, start
+  plateaus get irregular rims, rock islands, ridges, outcrops and editor-style spice fields; bases
+  grow around the Construction Yard (refineries toward spice, factories toward the enemy,
+  turrets and walls on the approach); cities are zoned Industrial (beside the base), then
+  Commercial, then Residential, with road reach checked per lot; nuclear plants power DuneCity
+  bases from tech 6 with at most 4 wind traps. Measurements in `docs/skirmish-generator.md`.
+
+Save 9857 and protocol 71 unchanged; only the app version moved. Full CTest 92/92 passed on the
+merged tree (before the version bump); after the bump `dunelegacy_tests`,
+`skirmish_generator_tests` and `skirmish_generator_probe` passed again. The probe now covers
+Stefan's configuration (`stefan-128`) and AI partners (`partner-support`, `partner-quantbot`).
+
+Installed on the MBA at 00:17 AEDT 2026-10-14 from 3c72cea4 (same procedure as 1.0.834; no
+Homebrew/workstation library references, signature and desktop runtime check passed on both
+machines): version 1.0.835, executable SHA256
+45e3cace3b400e75738607479a8ead309f8b7a7761e2d8cecc1caf790bcf1261. Game not running; saves
+untouched. Local 1.0.834 is at
+/Applications/.dunecity-backup-before-1.0.835-20261014-001736/dunecity.app.
+
+## 2026-10-13 — local 1.0.834: RTS controls, pre-placement, formations, Random Skirmish, build grid
+
+Branch `integrate/feature-batch` (worktree `~/Documents/projects/dunecity-feature-batch`,
+build tree `build-int`) merges five branches: `feat/rts-controls`, `feat/preplace-queue`,
+`feat/formations`, `feat/skirmish-generator` (cut from 40f4e7a8, built in parallel) and
+`feat/sidebar-grid` (cut from the integration). Version 1.0.834 (`bump-version.sh --check` OK).
+Each feature's behaviour, deviations and evidence are in `docs/rts-controls.md`,
+`docs/preplace-queue.md`, `docs/formations.md`, `docs/skirmish-generator.md` and
+`docs/sidebar-grid.md` (force-added; `docs/*` is gitignored).
+
+- RTS controls: attack-move (A on ground; Ctrl keeps forced fire), Hold (H, attack mode
+  HOLD = 10), Shift-queued orders up to 16 with waypoint lines, Patrol (Q), Alt+click repeat
+  production, Alt+number adds to a group, double-click / Ctrl+A selection, hotkeys in tooltips.
+- Pre-placement: with "Choose building location when ordering" (General, default on) a
+  Construction Yard item is placed first and built after; the simulation places it on its plot.
+  Units never cancel a plan: own idle units are moved off planned plots once a second; a finished
+  building blocked by units waits (amber "waiting" ghost, BLOCKED in the sidebar, ticker for
+  enemy units) until the plot clears or the player places it elsewhere by hand. Only a structure
+  on the plot or lost build range falls back to ready-to-place. The planning cursor stays on the
+  building after each plot (Esc / right-click ends it), and each planned building goes to the
+  house's Construction Yard with the least work left, so several yards build in parallel.
+- Formations: right-click/M moves of 2+ ground units use `FormationPlanner` slots (armour front,
+  ranged behind) at the slowest vehicle's pace; Ctrl+F / Options toggle. Integration also gives
+  attack-move, patrol and Shift-queued waypoints formation slots (`Game::issuePositionOrder`,
+  no pace). AI: `AIPlayer` waves, campaign attack teams and QuantBot army recall are formed up;
+  defence (1.0.832 scramble, district defence) and pure Hunt waves (QuantBot `launchGroundHunt`,
+  SmartBot) are unchanged, because pacing Hunt waves widened measured arrival spread.
+- Random Skirmish (main menu): seeded map size/rock/spice/symmetry, 0-3 allies, 1-5 enemies,
+  enemies-allied toggle, tech level, vanilla base tiers and credit armies, DuneCity cities by
+  population. Mod dropdown lists every installed mod; City rows show only for a city-sim mod.
+  Zone entries in map INI may end in `,Level` (0-3); old maps load unchanged.
+- Build list: two-column grid of 51x31 icons; a DuneCity yard's 25 items all fit at 1024x768
+  (was 7 visible). Limit overlays now read "UNIT / LIMIT" and "HARVESTER / LIMIT" (new strings,
+  untranslated).
+
+Command ids appended after CMD_MATCH_PAUSE in this order: UNIT_ATTACKMOVE, UNIT_PATROL,
+UNIT_QUEUEORDER, BUILDER_SETREPEAT, BUILDER_RESERVE_PLACEMENT, BUILDER_CANCEL_RESERVATION,
+UNIT_FORMATION_MOVE. Network protocol 71. Save 9857 with separate gates: 9855 unit order queue
+and builder repeat set, 9856 placement reservations, 9857 unit formation membership; a 9854
+save loads with none of them. Not pushed, no PR, no release.
+
+Full CTest 92/92 passed on build-int at 5ba711a6. Installed on the MBA at 22:14 AEDT
+2026-10-13 from 5ba711a6 (built on the mini, `cmake --install` staging, no Homebrew/workstation
+library references, deep/strict signature verified before and after the swap, desktop runtime
+check passed on both machines): version 1.0.834, executable SHA256
+9bf3b1ece5cd06830ba7778d34be6a6357d673ebe744305a08b41b4dc2123b15. The game was not running;
+saves untouched. Local 1.0.833 is at
+/Applications/.dunecity-backup-before-1.0.834-20261013-221411/dunecity.app.
+
 ## 2026-10-13 — 1.0.833: sanitizers on by default for Debug, and what they found
 
 `-DDUNECITY_SANITIZE` (CMakeLists.txt) defaults to `address,undefined` for native

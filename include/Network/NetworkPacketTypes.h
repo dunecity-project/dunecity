@@ -176,7 +176,36 @@
 //     lifetime combat evidence (it scales both weights down instead of wrapping), so
 //     QuantBot production choices differ from 69 once that evidence is large.
 //     Save and runtime layouts remain unchanged.
-#define NETWORK_PROTOCOL_VERSION            70
+// 71: Modern RTS controls (docs/rts-controls.md): new commands CMD_UNIT_ATTACKMOVE,
+//     CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER and CMD_BUILDER_SETREPEAT, attack mode HOLD,
+//     and classic unit orders now record the unit's order queue. Save 9855.
+// 71: Construction Yard pre-placement queue. CMD_BUILDER_RESERVE_PLACEMENT and
+//     CMD_BUILDER_CANCEL_RESERVATION are new commands, and a reserved order is placed by
+//     the simulation when it finishes, so a 70 peer cannot execute or replay them.
+//     Save 9856.
+// 71: Formation movement. New CMD_UNIT_FORMATION_MOVE (unit, slot, group token); every
+//     unit order ends formation membership; formation members move at the group's
+//     speed cap; QuantBot, campaign AI and AIPlayer group moves use formations. Save 9857.
+// 72: Plan building sites is a match rule (GameOptionsClass::planBuildingSites, settings
+//     marker MOD8). It is in the game-options hash, and with it off the executor refuses
+//     CMD_BUILDER_RESERVE_PLACEMENT, so a 71 peer would accept reservations this peer
+//     drops. Save 9858.
+// 73: Formation shapes and hunting in formation. New CMD_UNIT_FORMATION_HUNT (unit, slot,
+//     facing, order kind and group token) gives a group attack-move or patrol formation pace
+//     and breaks it into a fight on contact; CMD_UNIT_FORMATION_MOVE carries the facing in
+//     its top bits; members wait rather than step into a sonic unit's lane; AI group moves
+//     use the Combined-arms shape. Save 9859.
+// 74: Formation roles and one-speed march. Harvesters never join a formation (the formation
+//     executors give them the plain order), siege tanks stand in the front row, MCVs take
+//     the centre slot, a group forms up before it marches, every member keeps the slowest
+//     member's pace (infantry included), members ahead of one that fell behind wait for it,
+//     and only a sonic unit of the same type may stand in a sonic unit's lane; QuantBot
+//     colonists march in formation with their escort. Save 9860.
+// 75: Form up where they stand. CMD_UNIT_FORMATION_MOVE accepts order kind FormUp (3): the
+//     slot is also the member's form-up tile, so the group walks straight into its shape
+//     without a march. A 74 peer refuses the kind and would leave the units where they are.
+//     Save 9861.
+#define NETWORK_PROTOCOL_VERSION            75
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

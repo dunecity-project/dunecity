@@ -975,7 +975,37 @@ void DeviationProbe::legacyLedger() {
         while(last > first && before[last-1] == after[last-1]) --last;
         require(last - first == 9, "The hunt-toward record is not the expected 9 bytes");
         require(first >= unitBytes.second, "The hunt-toward record does not follow the control interval");
-        unitBytes.first.erase(first - unitBytes.second, last - first);
+        // 9855 appended the player order queue right after the hunt-toward record: an empty
+        // queue count, the dispatched flag, the walk retries and the break-off point.
+        require(tank->getOrderQueue().empty(), "The legacy fixture unit carries queued orders");
+        constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
+        unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
+    }
+    // 9857 appended the formation membership (group, slot, speed cap) after the hunt-toward
+    // record, 9859 the hunting flag and facing after it and 9860 the form-up tile, resume kind
+    // and pace unit type; a pre-9849 record has none of it.
+    // The hunt-toward bytes are already gone.
+    {
+        tank->leaveFormation();
+        OMemoryStream a; a.open(); tank->save(a);
+        const std::string before(a.getData(), a.getDataLength());
+        tank->formationGroup = 0x4A4B4C4D;
+        tank->formationSlot = Coord(0x4E4F5051, 0x52535455);
+        tank->formationSpeedCap = FixPoint(-1);
+        tank->formationHunt = true;
+        tank->formationFacing = 7;
+        tank->formationFormUp = Coord(0x56575859, 0x5A5B5C5D);
+        tank->formationResume = 3;
+        tank->formationPaceItem = 0x5E5F6061;
+        OMemoryStream b; b.open(); tank->save(b);
+        const std::string after(b.getData(), b.getDataLength());
+        tank->leaveFormation();
+        size_t first = 0;
+        while(first < before.size() && before[first] == after[first]) ++first;
+        size_t last = before.size();
+        while(last > first && before[last-1] == after[last-1]) --last;
+        require(last - first == 35, "The formation record is not the expected 35 bytes");
+        unitBytes.first.erase(first - unitBytes.second - 9, last - first);
     }
 
     game->loadedSavegameVersion = 9848;

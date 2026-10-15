@@ -136,6 +136,7 @@ typedef enum {
     CAPTURE = 7,    ///< Capture is only used for infantry units when ordered to capture a building
     CARRYALLREQUESTED = 8, ///< This allows a unit to keep requesting a carryall even if one isn't available right now
     RETREAT = 9,           ///< Ignore other units
+    HOLD = 10,             ///< Player order: never move on its own; fire at enemies within weapon range (docs/rts-controls.md)
     ATTACKMODE_MAX
 } ATTACKMODE;
 
@@ -187,6 +188,8 @@ public:
         bool            wasdCamera = false;
         bool            leftClickOrders = false;
         bool            showMovementPaths = true;
+        bool            formationMoves = true;    ///< Move groups of 2+ ground units in formation (Ctrl+F)
+        int             formationShape = 0;       ///< FormationPlanner::Shape id of player formation orders (Ctrl+Shift+F, unit panel); removed ids load as Box
 #ifdef __EMSCRIPTEN__
         static constexpr bool defaultDiagnosticLogs = false;
 #else
@@ -280,7 +283,7 @@ public:
            startWithExploredMap(false), instantBuild(false), onlyOnePalace(false), rocketTurretsNeedPower(false),
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
-           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false)  {
+           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true)  {
         }
 
 
@@ -300,7 +303,8 @@ public:
                     && (maximumNumberOfConstructionYardsOverride == goc.maximumNumberOfConstructionYardsOverride)
                     && (immortalHumanPlayer == goc.immortalHumanPlayer)
                     && (cityEffects == goc.cityEffects)
-                    && (originalUnitDamage == goc.originalUnitDamage);
+                    && (originalUnitDamage == goc.originalUnitDamage)
+                    && (planBuildingSites == goc.planBuildingSites);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -329,6 +333,7 @@ public:
             optStr += std::to_string(cityEffects);
             optStr += "/yards=" + std::to_string(maximumNumberOfConstructionYardsOverride);
             optStr += "/originalDamage=" + std::to_string(originalUnitDamage);
+            optStr += "/planSites=" + std::to_string(planBuildingSites);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -364,6 +369,10 @@ public:
         bool        immortalHumanPlayer;
         bool        cityEffects;        ///< DuneCity: enable pollution/land-value/crime/zone-growth pipeline
         bool        originalUnitDamage; ///< Match-wide original damage and splash rules; off uses City balance.
+        /// Construction Yard pre-placement queue: ordering a building picks its plot first and the
+        /// yard places it there when finished. Off = build, then place. Match-wide (every peer
+        /// runs the same rule; the command executor refuses reservations when off).
+        bool        planBuildingSites;
     } gameOptions;
 };
 

@@ -79,8 +79,8 @@ private:
     DropDownBox interfaceSizeDropDownBox;
     DropDownBox aspectDropDownBox;
     HBox        scrollHBox;
-    HBox        cameraKeysHBox, mouseOrdersHBox, movementPathsHBox;
-    Checkbox    wasdCameraCheckbox, leftClickOrdersCheckbox, movementPathsCheckbox;
+    HBox        cameraKeysHBox, mouseOrdersHBox, movementPathsHBox, formationMovesHBox;
+    Checkbox    wasdCameraCheckbox, leftClickOrdersCheckbox, movementPathsCheckbox, formationMovesCheckbox;
     DropDownBox scrollSpeedDropDownBox;
     HBox        introHBox;
     HBox        diagnosticLogsHBox;

@@ -67,6 +67,10 @@ private:
     void onMultiplePlayersPerHouseChange();
     void onMapTypeChange(int buttonID);
     void onMapListSelectionChange(bool bInteractive);
+    /// Host: generate a Random Skirmish map with open starts, then continue with it as the chosen map.
+    void onRandomMap();
+    /// Show MP User Maps with every filter cleared and select the map at @a path; false if not listed.
+    bool selectUserMap(const std::string& path);
 
     /// Full path of the selected local or downloaded map; empty until downloaded.
     std::string getSelectedMapPath() const;
@@ -138,6 +142,7 @@ private:
     HBox            buttonHBox;
     TextButton      nextButton;
     TextButton      loadButton;
+    TextButton      randomMapButton;
     TextButton      cancelButton;
 
 };

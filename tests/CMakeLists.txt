@@ -12,6 +12,11 @@ target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
         MapCollectionTestCase.cpp
+        # Random Skirmish generator: the pure generator over the real map generator/mirror.
+        SkirmishGeneratorTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
+        ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
@@ -28,6 +33,8 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp
+        FormationPlannerTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
         ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
@@ -72,7 +79,10 @@ target_sources(dunelegacy_tests
         CityStructuresTestCase/CityStructuresTestCase.cpp
         ConstructionYardResolverTestCase/ConstructionYardResolverTestCase.cpp
         UnitMovementPolicyTestCase/UnitMovementPolicyTestCase.cpp
+        RtsControlsTestCase.cpp
+        BuilderListLayoutTestCase.cpp
         PalaceUnitLimitRegressionTestCase/PalaceUnitLimitRegressionTestCase.cpp
+        PlacementReservationTestCase/PlacementReservationTestCase.cpp
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
         ../src/fixmath/fix32.c
@@ -181,10 +191,19 @@ target_compile_options(dunelegacy_tests
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
+# Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
+add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
+add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
+# Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
+add_test(NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
+
+# Sidebar build grid geometry (docs/sidebar-grid.md): slots, hit-testing, row scrolling.
+add_test(NAME sidebar_grid_tests COMMAND dunelegacy_tests "[sidebar-grid]")
 
 # Standalone network wire harness.
 #
@@ -382,7 +401,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -453,6 +472,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        # Random Skirmish on the real engine: the screen (house cap, persistence, Save map,
+        # screenshots), the hosted Random map (Custom Game's button, open Player starts saved and
+        # chosen, lobby with host, guest, AI and teams, the guest's wire-format copy, both peers'
+        # match on equal starts with matching state digests), a pre-zone-level city map loading
+        # unchanged, and three generated matches (vanilla 1v1, 2v3 vs allied Large bases with 10k
+        # armies, DuneCity 192 with 15k cities at tech 8) checked against the generator's plan,
+        # measured city population, a one-minute played smoke with a clean log and a save/load round trip.
+        add_test(NAME skirmish_generator_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skirmish-probe)
+        set_tests_properties(skirmish_generator_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
@@ -554,6 +584,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
         set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Formation movement (docs/formations.md): twelve mixed units through the real
+        # right-click path with formations on and off, a hunting mid-march save/reload, 9854
+        # and 9857 unit records, Combined arms with sonic tanks and scouts (sonic lanes never
+        # entered), Line and Column, and a hunt in formation that breaks on contact; leaves
+        # formation-march.png and formation-combined.png (with the panel's formation buttons).
+        add_test(NAME formation_movement_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-formation-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/formation-probe)
+        set_tests_properties(formation_movement_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME unit_route_continuation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --continuation
@@ -564,6 +603,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
             --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
         set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
+        # under fire, three-waypoint Shift queue, repeat production through the unit limit,
+        # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
+        add_test(NAME rts_controls_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
+        set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward
@@ -762,6 +808,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/whole-army-dispatch-probe)
         set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot attack waves in formation (docs/formations.md, QuantBot waves): a mixed
+        # Hard wave launches as one hunting formation in the configured shape (Combined arms,
+        # Box, Line) towards its own objective, harvester and MCV left out, no slot in a sonic
+        # lane; it marches in Hunt and every member breaks into the fight on contact and stays
+        # in Hunt. WaveFormation None and a wave below three units keep today's orders.
+        add_test(NAME quantbot_wave_formation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --wave-formation-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wave-formation-probe)
+        set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
         # already too close makes a hunting launcher move away over real game
         # cycles, keeping engine Hunt, its tracked army membership and its
@@ -801,6 +858,25 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --mod ${credit_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
             set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
+        # Construction Yard pre-placement queue: sidebar planning, reservation commands
+        # (chained and refused), save/load, placement on plan after moving a unit, the blocked
+        # fallback with its ticker message, mixed queue order, cancel refunds, yard
+        # destruction and a 9854 save. Writes preplace-ghosts.png / preplace-fallback.png.
+        add_test(NAME preplace_queue_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --preplace-probe --repeatable
+            --mod dunecity --viewport 1024x768 --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/preplace-probe)
+        set_tests_properties(preplace_queue_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Sidebar build grid (docs/sidebar-grid.md): a DuneCity Construction Yard, a factory
+        # with a repeating unit in production and a Starport with a sold-out item, rendered
+        # through Game::drawScreen at both sizes. Writes sidebar-*-<viewport>.png.
+        foreach(grid_viewport IN ITEMS 1024x768 1920x1080)
+            add_test(NAME sidebar_grid_probe_${grid_viewport} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --sidebar-grid-probe --repeatable
+                --mod dunecity --level 9 --viewport ${grid_viewport} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/sidebar-grid-${grid_viewport}-probe)
+            set_tests_properties(sidebar_grid_probe_${grid_viewport} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
     endif()
 endif()

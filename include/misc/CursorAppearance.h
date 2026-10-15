@@ -6,7 +6,11 @@
 #include <initializer_list>
 
 namespace CursorAppearance {
-enum class Action { Pointer, Move, Attack, Capture, Drop, Heal, Repair, Return, Deploy, Destruct, Paths };
+enum class Action { Pointer, Move, Attack, Capture, Drop, Heal, Repair, Return, Deploy, Destruct, Paths, Patrol };
+/// Cursors that pick a map position keep their hotspot clear so the exact target stays visible.
+inline bool aimsAtHotspot(Action action) {
+    return (action >= Action::Move && action <= Action::Heal) || action == Action::Patrol;
+}
 inline SDL_Point hotspot(Action action, float scale) {
     const float factor = scale / 1.5f;
     const int coordinate = static_cast<int>(std::lround((action == Action::Pointer ? 6 : 16) * factor));
@@ -68,6 +72,12 @@ inline float shapeDistance(Action action, SDL_FPoint p) {
                 std::abs(std::hypot(p.x-23,p.y-5)-2.5f)-1});
         case Action::Heal:
             return polygonDistance(p,{{11,4},{17,4},{17,11},{24,11},{24,17},{17,17},{17,24},{11,24},{11,17},{4,17},{4,11},{11,11}})-0.2f;
+        case Action::Patrol:
+            // Two opposed arrows: out to the point and back again.
+            return std::min({segmentDistance(p,{4,9},{20,9})-1.3f,
+                polygonDistance(p,{{19,4},{26,9},{19,14}}),
+                segmentDistance(p,{8,19},{24,19})-1.3f,
+                polygonDistance(p,{{9,14},{2,19},{9,24}})});
     }
     return 1000;
 }
@@ -88,7 +98,7 @@ inline SDL_Surface* create(Action action, float scale, bool targeting = true) {
             const bool pointer = action == Action::Pointer;
             // Action symbols contain no white paint. Leave a clear opening at
             // the click hotspot as well, so the exact target stays visible.
-            const bool aiming = targeting && action >= Action::Move && action <= Action::Heal;
+            const bool aiming = targeting && aimsAtHotspot(action);
             if(aiming && std::hypot(p.x-14,p.y-14)<3.5f) continue;
             if(distance <= (pointer ? 1.75f : 0.0f)) {
                 ++coverage;

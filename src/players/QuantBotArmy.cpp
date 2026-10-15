@@ -20,6 +20,8 @@
 
 #include "QuantBotInternal.h"
 
+#include <FormationOrders.h>
+
 using QuantBotInternal::mobileCombatItem;
 
 namespace QuantBotInternal {
@@ -174,6 +176,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
+    // Defence is never slowed to a formation pace (docs/formations.md).
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -318,6 +321,8 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // The nearest troops, until together with those already in the fight they
     // outweigh the threat at the building.
     const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+    // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
+    // to the building's point nearest to itself at its own speed.
     for (const auto id : response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
@@ -597,6 +602,10 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     return true;
 }
 
+int QuantBot::waveFormationShape() const {
+    return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : getQuantBotConfig().waveFormation;
+}
+
 void QuantBot::launchGroundHunt() {
     if (supportMode) return;
     const bool limited = isCampaignEnemy();
@@ -803,6 +812,7 @@ void QuantBot::launchGroundHunt() {
     // attacking Dune army uses, and overriding it per unit was both micro and
     // the thing that walked a dispatched wave back into its own base.
     const bool trackedCustomWave=(wholeArmy || recoveryActive()) && !limited && !selected.empty();
+    const ObjectBase* observedFront=nullptr;
     if (trackedCustomWave) {
         if (recoveryActive() && ArmyPosturePolicy::suppressesOffensiveDispatch(armyPosture)) return;
         // The objective is used as an OBSERVATION anchor for the front strength
@@ -814,7 +824,7 @@ void QuantBot::launchGroundHunt() {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
         }
-        const ObjectBase* observedFront=customWaveObjective(lead);
+        observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
         if (recoveryActive() && gate.defer) {
@@ -838,6 +848,27 @@ void QuantBot::launchGroundHunt() {
         customWave.members.insert(existingHunters.begin(),existingHunters.end());
         customWave.front=observedFront ? observedFront->getObjectID() : NONE_ID;
     }
+    // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
+    // what is decided exactly as without them; only how the ground members travel
+    // changes. With WaveFormation=None every unit gets the per-unit order below.
+    const int waveShape=waveFormationShape();
+    const bool formationWave=waveShape!=QuantBotConfig::kWaveFormationNone;
+    // The Hard/Brutal campaign flank detour: a point beside the half-way mark, 8 tiles
+    // off the line from 'start' to the objective; invalid when the trip is short or the
+    // point cannot be stood on.
+    auto flankApproach=[&](Coord start, const ObjectBase* objective, const UnitBase* walker) {
+        const Coord end=objective->getLocation();
+        const int dx=end.x-start.x, dy=end.y-start.y;
+        const int length=std::max({1,std::abs(dx),std::abs(dy)});
+        const int side=difficulty==Difficulty::Brutal && getHouse()->getHouseID()%2 ? -1 : 1;
+        const Coord approach((start.x+end.x)/2-side*dy*8/length,
+                             (start.y+end.y)/2+side*dx*8/length);
+        if (length>12 && getMap().tileExists(approach) && walker->canPass(approach.x,approach.y)) return approach;
+        return Coord::Invalid();
+    };
+    std::vector<const UnitBase*> hunters;                      // engine-Hunt ground members
+    std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
+    std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
     for (auto id : selected) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
@@ -848,24 +879,88 @@ void QuantBot::launchGroundHunt() {
             if (count==0) campaignWave.front=front ? front->getObjectID() : NONE_ID;
             if (front) {
                 doSetAttackMode(unit,AREAGUARD);
-                bool flanking=false;
-                if (difficulty>=Difficulty::Hard && count%2) {
-                    const Coord start=unit->getLocation(), end=front->getLocation();
-                    const int dx=end.x-start.x, dy=end.y-start.y;
-                    const int length=std::max({1,std::abs(dx),std::abs(dy)});
-                    const int side=difficulty==Difficulty::Brutal && getHouse()->getHouseID()%2 ? -1 : 1;
-                    const Coord approach((start.x+end.x)/2-side*dy*8/length,
-                                         (start.y+end.y)/2+side*dx*8/length);
-                    if (length>12 && getMap().tileExists(approach) && unit->canPass(approach.x,approach.y)) {
-                        doMove2Pos(unit,approach.x,approach.y,true);flanking=true;
-                    }
+                const bool flank=difficulty>=Difficulty::Hard && count%2;
+                if (formationWave) {
+                    (flank ? flankers : assaults)[front->getObjectID()].push_back(unit);
+                } else {
+                    const Coord approach=flank ? flankApproach(unit->getLocation(),front,unit) : Coord::Invalid();
+                    if (approach.isValid()) doMove2Pos(unit,approach.x,approach.y,true);
+                    else doAttackObject(unit,front,true);
                 }
-                if (!flanking) doAttackObject(unit,front,true);
             }
+            else if (formationWave) hunters.push_back(unit);
             else doSetAttackMode(unit,HUNT);
-        } else if (unit->isAGroundUnit()) doSetAttackMode(unit,HUNT);
+        } else if (unit->isAGroundUnit()) {
+            if (formationWave) hunters.push_back(unit);
+            else doSetAttackMode(unit,HUNT);
+        }
         if (launcherItem(unit)) ++launcherDispatched;
         ++count; value+=std::max(100,currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+    }
+    int formationMembers=0;
+    if (formationWave) {
+        // The members that can march in a formation, and their integer centroid.
+        auto marching=[](const std::vector<const UnitBase*>& units, Coord& centre) {
+            int n=0, x=0, y=0;
+            for (const auto* unit : units) if (FormationOrders::eligible(unit)) {
+                ++n; x+=unit->getLocation().x; y+=unit->getLocation().y;
+            }
+            if (n>0) centre=Coord(x/n,y/n);
+            return n;
+        };
+        if (!hunters.empty()) {
+            // A Hunt wave hunts its way to the objective the wave was given: the tracked
+            // wave's front, else the same observed enemy base choice, else the target engine
+            // Hunt itself picks for the lead. The first contact breaks it into engine Hunt.
+            Coord centre;
+            const int n=marching(hunters,centre);
+            const ObjectBase* objective=nullptr;
+            if (n>=FormationOrders::kMinAIGroup) {
+                const UnitBase* lead=nullptr;
+                for (const auto* unit : hunters)
+                    if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
+                objective=observedFront ? observedFront : customWaveObjective(lead);
+                if (!objective) objective=lead->findClosestTarget();
+            }
+            if (objective) {
+                const Coord goal=objective->getClosestPoint(centre);
+                doFormationHuntToward(hunters,goal.x,goal.y,waveShape);
+                formationMembers+=n;
+            } else {
+                for (const auto* unit : hunters) doSetAttackMode(unit,HUNT);
+            }
+        }
+        for (auto& [id,units] : flankers) {
+            // The flank detour is one formation leg from the group's centre; once there the
+            // members are idle and campaignControlsUnit() sends them at the objective.
+            const auto* objective=getObject(id);
+            Coord centre;
+            const int n=marching(units,centre);
+            const Coord approach=n>=FormationOrders::kMinAIGroup ? flankApproach(centre,objective,units.front())
+                                                                  : Coord::Invalid();
+            if (approach.isValid()) {
+                doFormationMove(units,approach.x,approach.y,true,waveShape);
+                formationMembers+=n;
+                continue;
+            }
+            for (const auto* unit : units) {
+                const Coord own=flankApproach(unit->getLocation(),objective,unit);
+                if (own.isValid()) doMove2Pos(unit,own.x,own.y,true);
+                else doAttackObject(unit,objective,true);
+            }
+        }
+        for (auto& [id,units] : assaults) {
+            const auto* objective=getObject(id);
+            Coord centre;
+            const int n=marching(units,centre);
+            if (n>=FormationOrders::kMinAIGroup) {
+                const Coord goal=objective->getClosestPoint(centre);
+                doFormationHuntToward(units,goal.x,goal.y,waveShape);
+                formationMembers+=n;
+            } else {
+                for (const auto* unit : units) doAttackObject(unit,objective,true);
+            }
+        }
     }
     if (count==0) return; // An empty house checking readiness is not an attack.
     if (limited && profile.limitedWave) {
@@ -876,6 +971,8 @@ void QuantBot::launchGroundHunt() {
             .set("reason","next_wave_after_dispatch"));
     }
     traceDecision("ground_hunt",AITelemetry::Record().set("members",count).set("value",value)
+        .set("wave_formation",QuantBotConfig::waveFormationName(waveShape))
+        .set("formation_members",formationMembers)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
         .set("committed_units",limited ? campaignPressure().units : groundCommittedUnits)
@@ -2078,6 +2175,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             reserved.insert(int64_t(target.y)*getMap().getSizeX()+target.x);
     }
     int issued = 0;
+    std::vector<const UnitBase*> recalled;
     // Half the budget goes to the most endangered members first; the rest is a
     // round-robin from the saved cursor, which is what guarantees that every
     // member eventually gets its order even in a nine-hundred unit match.
@@ -2095,6 +2193,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget; done.insert(candidate.id);
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
@@ -2109,9 +2208,39 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
         if (fresh && freshRemaining<=0) continue;
         if (withdrawUnit(unit, rally, radius, &slots, &reserved)) {
             ++issued; --orderBudget;
+            recalled.push_back(unit);
             if (fresh) --freshRemaining;
         }
     }
+    // Gathering the army in the configured wave shape (docs/formations.md; WaveFormation=None,
+    // the default, keeps withdrawUnit()'s plain moves and no pace): the troops recalled together
+    // this pass take the planner's slots around the rally, facing the way they march home,
+    // nothing in a sonic lane, wherever that slot is safe assembly ground by withdrawUnit()'s
+    // rules and no other unit's destination; anyone else keeps the slot withdrawUnit() chose.
+    // Ids in order, so every peer agrees. They come home together at the slowest one's pace.
+    // Who is recalled is unchanged.
+    const int recallShape = waveFormationShape();
+    const bool recallInFormation = recallShape != QuantBotConfig::kWaveFormationNone;
+    if (recallInFormation && static_cast<int>(recalled.size()) >= FormationOrders::kMinAIGroup) {
+        const auto plan = FormationOrders::planGroup(recalled, rally, FormationPlanner::shapeFromId(recallShape));
+        const auto tileKey = [&](Coord p) { return int64_t(p.y)*getMap().getSizeX()+p.x; };
+        std::map<int64_t, int> taken;    // the recalled units' destinations, as they stand
+        for (const auto* unit : recalled) ++taken[tileKey(unit->getDestination())];
+        for (const auto& slot : plan.slots) {
+            const auto* unit = dynamic_cast<const UnitBase*>(getObject(slot.objectID));
+            const Coord current = unit ? unit->getDestination() : Coord::Invalid();
+            const Coord p = slot.tile;
+            if (!unit || current.isInvalid() || p == current || !getMap().tileExists(p)) continue;
+            const int64_t k = tileKey(p);
+            if (taken.count(k) || reserved.count(k)
+                || blockDistance(rally, p).lround() > std::max(1, radius)
+                || getMap().getTile(p)->isSpiceBloom() || !unit->canPass(p.x, p.y) || dangerAt(p) != 0) continue;
+            doMove2Pos(unit, p.x, p.y, true);
+            if (--taken[tileKey(current)] == 0) taken.erase(tileKey(current));
+            ++taken[k];
+        }
+    }
+    if (recallInFormation) doFormUp(recalled);
     if (issued) traceDecision("army_recall", AITelemetry::Record()
         .set("posture", ArmyPosturePolicy::postureName(armyPosture))
         .set("issued", issued).set("pending", int(count))

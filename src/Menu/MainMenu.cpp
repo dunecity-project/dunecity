@@ -28,6 +28,7 @@
 #include <MapEditor/MapEditor.h>
 
 #include <Menu/SinglePlayerMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
 #include <Menu/CrossplayMenu.h>
 #include <Menu/MultiPlayerMenu.h>
 #include <Menu/OptionsMenu.h>
@@ -154,6 +155,8 @@ MainMenu::MainMenu()
     continueButton.setOnClick([this]() { continueRecentGame(); canContinue = hasRecentGame(); });
     customButton.setText(_("Custom Game"));
     customButton.setOnClick([this]() { playCustomGame(settings.general.customGameOnline); canContinue = hasRecentGame(); });
+    randomSkirmishButton.setText(_("Random Skirmish"));
+    randomSkirmishButton.setOnClick([this]() { RandomSkirmishMenu().showMenu(); canContinue = hasRecentGame(); });
     onlineButton.setText(_("Play Online"));
     onlineButton.setOnClick([]() { CrossplayMenu().showMenu(); });
     loadButton.setText(_("Load Game"));
@@ -209,7 +212,7 @@ MainMenu::MainMenu()
 
     }
     // Only visible destinations participate in keyboard navigation, in screen order.
-    TextButton* allButtons[] = {&continueButton, &onlineButton, &campaignButton, &customButton,
+    TextButton* allButtons[] = {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton,
                                 &loadButton, &optionsButton, &editorsButton, &modesButton, &quitButton};
     for(TextButton* button : allButtons) {
         button->setKeyboardFocusVisible(false);
@@ -251,7 +254,7 @@ void MainMenu::handleInput(SDL_Event& event)
     if(!pChildWindow && (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEMOTION
                        || event.type == SDL_MOUSEBUTTONDOWN)) {
         const bool keyboard = event.type == SDL_KEYDOWN;
-        for(auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton,
+        for(auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton,
                             &loadButton, &optionsButton, &editorsButton, &modesButton, &quitButton, &updateButton}) {
             button->setKeyboardFocusVisible(keyboard);
             if(keyboard) button->handleMouseMovement(-1,-1,false);
@@ -352,7 +355,7 @@ void MainMenu::update()
     updateButton.setEnabled(state != State::Checking && state != State::Installing);
     // Native updater dialogs run their own event loop. Keep all game-entry
     // actions disabled for that entire session, including keyboard activation.
-    for (auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton,
+    for (auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton,
                          &loadButton, &optionsButton, &editorsButton, &modesButton}) {
         button->setEnabled(!updater.busy() && (button != &continueButton || canContinue));
     }
@@ -473,7 +476,7 @@ void MainMenu::refreshContextButtons()
     continueButton.setEnabled(canContinue);
     std::vector<TextButton*> buttons;
     if(canContinue) buttons.push_back(&continueButton);
-    for(auto* button : {&onlineButton,&campaignButton,&customButton,&loadButton,&optionsButton,&editorsButton,&modesButton,&quitButton}) buttons.push_back(button);
+    for(auto* button : {&onlineButton,&campaignButton,&customButton,&randomSkirmishButton,&loadButton,&optionsButton,&editorsButton,&modesButton,&quitButton}) buttons.push_back(button);
     const int width = enlargedStartMenus ? 320 : 280;
     const int x = (getSize().x-width)/2;
     const int top = std::max(132, (getSize().y-340)/2);

@@ -891,6 +891,18 @@ TEST_CASE("Commands: parameter counts must match the command table",
     REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_PLAYER_PAUSE, 1));
     REQUIRE(CommandValidation::isWellFormedCommand(CMD_STRUCTURE_DEMOLISH, 1));
     REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_STRUCTURE_DEMOLISH, 0));
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_BUILDER_RESERVE_PLACEMENT, 4));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_BUILDER_RESERVE_PLACEMENT, 3));
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_BUILDER_CANCEL_RESERVATION, 2));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_BUILDER_CANCEL_RESERVATION, 1));
+    // A formation move carries the unit, its slot and the group token.
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_MOVE, 4));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_MOVE, 3));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_MOVE, 5));
+    // A formation hunt carries the unit, its slot and the order kind above the group token.
+    REQUIRE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_HUNT, 4));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_HUNT, 3));
+    REQUIRE_FALSE(CommandValidation::isWellFormedCommand(CMD_UNIT_FORMATION_HUNT, 5));
 
     // The city commands read up to three optional parameters.
     REQUIRE(CommandValidation::isWellFormedCommand(CMD_CITY_PLACE_ZONE, 3));
@@ -1184,7 +1196,10 @@ TEST_CASE("Command authorization: every object action is covered, control comman
         CMD_BUILDER_SETONHOLD, CMD_PALACE_SPECIALWEAPON, CMD_PALACE_DEATHHAND,
         CMD_STARPORT_PLACEORDER, CMD_STARPORT_CANCELORDER, CMD_TURRET_ATTACKOBJECT,
         CMD_TECHCENTER_SPAWN, CMD_SCOUTPOST_UPGRADE, CMD_SCOUTPOST_CHEMIPOST_UPGRADE,
-        CMD_POLICE_REINFORCEMENTS, CMD_ZONE_DEMOLISH, CMD_STRUCTURE_DEMOLISH
+        CMD_POLICE_REINFORCEMENTS, CMD_ZONE_DEMOLISH, CMD_STRUCTURE_DEMOLISH,
+        CMD_UNIT_ATTACKMOVE, CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER, CMD_BUILDER_SETREPEAT,
+        CMD_BUILDER_RESERVE_PLACEMENT, CMD_BUILDER_CANCEL_RESERVATION, CMD_UNIT_FORMATION_MOVE,
+        CMD_UNIT_FORMATION_HUNT
     };
     for(const CMDTYPE commandID : objectActions) {
         INFO("command " << static_cast<int>(commandID));

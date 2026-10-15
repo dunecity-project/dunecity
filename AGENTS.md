@@ -1,5 +1,23 @@
 # AGENTS.md — DuneCity
 
+## Shared staging and multiple agents
+
+Read `/Users/stefan/.config/agent-workspace/POLICY.md` on managed Macs and
+`docs/shared-agent-staging.md` before editing, building or preparing a release.
+This applies to every Codex, Claude Code and OMP session and subagent, including
+native OMP task/eval agents. Coordinate disjoint path ownership; hand off shared
+files and Git operations to the integrator. Batch accepted changes into one
+tested release rather than creating a full build environment per request.
+
+On claw.local the shared native Release lane is this checkout's **build-int**.
+Use `agent-workspace stage --project dunecity --owner FRAMEWORK:SESSION:AGENT verify`
+in Tern after committing the batch and releasing all edit claims. Its mutex
+covers build/test/Git operations across frameworks. The copied `build` tree
+points to `dunecity-quantbot-split` and must not be reused here. The older generic
+`build` instructions below describe configuration mechanics, not the current
+registered staging lane. Keep separate trees for genuinely different toolchains
+or sanitizer configurations. Do not copy or relocate configured CMake trees.
+
 ## Read first
 
 1. **`HANDOVER.md`** — state of the current, uncommitted work: what was fixed, what is still

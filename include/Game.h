@@ -40,6 +40,7 @@
 #include <dunecity/CityOverlay.h>
 #include <AStarSearch.h>
 #include <units/UnitBase.h>
+#include <structures/PlacementReservationPolicy.h>
 
 #include <DataTypes.h>
 #include <memory>
@@ -70,6 +71,7 @@ class Explosion;
 class SpatialGrid;
 class UnitBase;
 class Carryall;
+class ConstructionYard;
 class MetaServerClient;
 
 
@@ -204,6 +206,21 @@ public:
     void drawCursor() const;
     void updateCursor();
     void setCursorMode(int mode);
+
+    /**
+        Construction Yard pre-placement: enter the placing cursor for an item that is not
+        ordered yet. A map click reserves the plot (CMD_BUILDER_RESERVE_PLACEMENT); Shift
+        keeps planning another copy. UI state only, cleared by any cursor mode change.
+    */
+    void beginPlacementPlanning(Uint32 builderID, Uint32 itemID);
+    bool isPlanningPlacement() const;
+    Uint32 getPlanningItemID() const { return isPlanningPlacement() ? planningItemID : ItemID_Invalid; }
+
+    /**
+        Cancels the local house's reservation whose ghost covers this map tile, if any.
+        \return true if a cancel order was sent
+    */
+    bool handleReservationGhostRightClick(int xPos, int yPos);
 
     /**
         This method sets up the view. The start position is the center point of all owned units/structures
@@ -420,6 +437,28 @@ public:
     void confirmSkipMission();
     void drawMovementPaths();
     void toggleMovementPaths();
+    /// Ctrl+F: switches "Move groups in formation" and persists it (docs/formations.md).
+    void toggleFormationMoves();
+    /// Ctrl+Shift+F: the next formation shape (Box, Combined arms, Line, Column), switching
+    /// formations on; persisted (docs/formations.md).
+    void cycleFormationShape();
+    /**
+        The formation choice of the unit panel's buttons: off, or on in shape 'shapeIndex'
+        (FormationPlanner::Shape). Persisted as General/Formation Moves and Formation Shape;
+        applies to the next move, attack-move or patrol order. Choosing a shape (on) also
+        forms the selected ground units up in it where they stand (issueSelectedFormUp);
+        off leaves every unit where it is.
+    */
+    void chooseFormation(bool on, int shapeId);
+
+    /**
+        Remembers the heading of a local-player order that moves, attack-moves, patrols or
+        attacks (a replacing order, not a Shift-queued one) for formUpFacing. Called by
+        CommandManager::addCommand for every command this client issues; UI state only,
+        never saved or sent.
+    */
+    void rememberOrderHeading(const Command& command);
+
     bool canSkipMission() const;
 
     /**
@@ -661,6 +700,13 @@ private:
     */
     bool handlePlacementClick(int xPos, int yPos);
 
+    /// Draws the local house's reserved plots: numbered in queue order, progress on the one
+    /// under construction, red once a plot fell back to manual placement.
+    void drawReservationGhosts();
+
+    /// True if the selection holds a unit of the local house that takes orders.
+    bool hasRespondableOwnUnitSelected() const;
+
     /**
         Performs a attack click for the currently selected units/structures.
         \param  xPos    x-coordinate in map coordinates
@@ -710,6 +756,67 @@ private:
     */
     bool handleSelectedObjectsActionClick(int xPos, int yPos);
 
+    /**
+        Performs a patrol click (Q) for the currently selected units.
+        \param  xPos    x-coordinate in map coordinates
+        \param  yPos    y-coordinate in map coordinates
+        \return true if any unit took the order
+    */
+    bool handleSelectedObjectsPatrolClick(int xPos, int yPos);
+
+    /// The local player's respondable units in the selection.
+    std::vector<UnitBase*> selectedOrderableUnits() const;
+
+    /// Selects every own unit of the selected units' types, on screen or on the whole map (T, double-click).
+    void selectSameUnitTypes(bool wholeMap);
+
+    /// Selects every own combat unit on the map: no workers, transports, frigates, worms or structures (Ctrl+A).
+    void selectAllCombatUnits();
+
+    /// Draws queued waypoints for the local player's selected units (docs/rts-controls.md).
+    void drawQueuedOrders();
+
+    /**
+        The formation part of a move or action click (docs/formations.md). With "Move groups
+        in formation" on, the selected ground units of the local house that this click simply
+        moves (no target under the cursor for an action click) are planned as one formation
+        in the chosen shape with FormationOrders::planGroup and sent one
+        CMD_UNIT_FORMATION_MOVE each. Fewer than two such units, the setting off or an
+        invalid tile issue nothing.
+        \return the ids of the units that were ordered; the caller handles everything else
+    */
+    std::set<Uint32> issueSelectedFormationMove(int xPos, int yPos, bool actionClick);
+
+    /// A fresh group token for the local player's next formation order (client side only).
+    Uint32 nextFormationToken();
+    /**
+        The form-up in place of the formation buttons and hotkeys (docs/formations.md): the
+        local house's selected, respondable, eligible ground units (harvesters never) form up
+        in the chosen shape around their centroid, facing formUpFacing(), with one
+        CMD_UNIT_FORMATION_MOVE of order kind FormUp each - the formation move path, forced,
+        so units in a fight re-form too. The slots are the members' form-up tiles: they walk
+        straight to them and route round each other, as in any form-up, rather than marching
+        (a march would gridlock a group crossing itself on the spot). Fewer than two such
+        units, an observer or no map issue nothing.
+        \return the ids of the units that were ordered
+    */
+    std::set<Uint32> issueSelectedFormUp();
+
+    /**
+        The facing of a form-up in place (docs/formations.md), first that applies:
+        1. the direction the members were last ordered: each member's formation facing while
+           it marches in one, else the heading of the local player's latest move-type order
+           for it or the facing of its latest form-up (orderedHeadings); the 8-way direction
+           of the sum of those unit steps;
+        2. towards the nearest enemy ground unit (not a sandworm) or structure the local team
+           can see, from the members' centroid (ties: the lower object id);
+        3. the members' average body heading (the 8-way direction of the sum of their
+           drawn angles);
+        4. north.
+    */
+    Coord formUpFacing(const std::vector<const UnitBase*>& members) const;
+
+
 
     /**
         Selects the next structure of any of the types specified in itemIDs. If none of this type is currently selected the first one is selected.
@@ -746,10 +853,45 @@ public:
         CursorMode_CarryallDrop,
         CursorMode_Placing,
         CursorMode_CityZone,
-        CursorMode_CityRoad
+        CursorMode_CityRoad,
+        CursorMode_Patrol
     };
 
+    /// Player position orders that go through issuePositionOrder().
+    enum class PositionOrder { Move, AttackMove, Patrol };
+
+    /**
+        The single place that turns a player position order for a group of units into
+        commands (docs/rts-controls.md): attack-move, patrol and Shift-queued waypoints.
+        With "Move groups in formation" on, every eligible unit gets its own slot of a
+        formation in the chosen shape (docs/formations.md); an attack-move or patrol that
+        replaces the orders becomes a hunt in formation (CMD_UNIT_FORMATION_HUNT: the group's
+        pace until any member meets the enemy, then every member fights). Units must be the
+        local player's respondable units.
+        \param  kind    move, attack-move or patrol
+        \param  units   the units to order
+        \param  target  the clicked map tile
+        \param  queued  true when Shift appends the order instead of replacing the queue
+        \return the unit that should confirm the order, or nullptr when no unit took it
+    */
+    UnitBase* issuePositionOrder(PositionOrder kind, const std::vector<UnitBase*>& units, const Coord& target, bool queued);
+
     int         currentCursorMode = CursorMode_Normal;
+    Uint32      planningBuilderID = NONE_ID;        ///< Construction Yard the planning cursor orders from
+    Uint32      planningItemID = ItemID_Invalid;    ///< Structure the planning cursor reserves a plot for
+    /// Plots this client has asked to reserve whose command has not executed yet, so Shift
+    /// and chain planning see them before the simulation does (UI state only).
+    struct PendingReservation {
+        Uint32 builderID;
+        Uint32 itemID;
+        int x;
+        int y;
+        Uint32 issuedCycle;
+    };
+    std::vector<PendingReservation> pendingReservations;
+    std::vector<PlacementReservation::Footprint> pendingReservationFootprints();
+    /// The local house's yard a new reserved order goes to (least work left; docs/preplace-queue.md).
+    ConstructionYard* chooseReservationYard(Uint32 itemID, ConstructionYard* pPreferred);
     int         lastRoadTileX = -1;
     int         lastRoadTileY = -1;
     DuneCity::ZoneType selectedZoneType_ = DuneCity::ZoneType::Residential;
@@ -991,7 +1133,14 @@ private:
 
     Uint32      skipToGameCycle = 0;            ///< skip to this game cycle
     Uint32      lastPathInstrumentationLogCycle = 0;
-    
+    /// Local player's formation-order tokens (issueSelectedFormationMove). Client-side only:
+    /// the token travels inside the command, so peers never derive it themselves.
+    Uint32      formationTokenCycle = 0;
+    Uint32      formationTokensThisCycle = 0;
+    /// The heading (a unit step) of the local player's latest move-type order per unit
+    /// (rememberOrderHeading, read by formUpFacing). Client-side UI state: never saved or sent.
+    std::map<Uint32, Coord> orderedHeadings;
+
     Uint32      loadedSavegameVersion = 0;      ///< Version of loaded savegame (for backward compatibility)
     /// Next deviation control-interval id; 0 is reserved for "not deviated" (SAVEGAMEVERSION 9849).
     Uint32      nextDeviationEpisodeID = 1;

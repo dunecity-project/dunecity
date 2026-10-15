@@ -74,6 +74,7 @@ void presentWithCursor(int mode, bool contextual) {
         switch(mode) {
             case Game::CursorMode_Move: action = Action::Move; break;
             case Game::CursorMode_Attack: action = Action::Attack; break;
+            case Game::CursorMode_Patrol: action = Action::Patrol; break;
             case Game::CursorMode_Heal: action = Action::Heal; break;
             case Game::CursorMode_Capture: action = Action::Capture; break;
             case Game::CursorMode_CarryallDrop: action = Action::Drop; break;
@@ -171,6 +172,7 @@ bool CursorManager::canSetCursorMode(int mode, const std::vector<Uint32>& select
 
         switch (mode) {
             case Game::CursorMode_Move:
+            case Game::CursorMode_Patrol:
                 if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
                     return true;
                 }

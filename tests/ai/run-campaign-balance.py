@@ -9,6 +9,7 @@ and structured AI decision logs remain in --output-dir. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
+import gzip
 import configparser
 import hashlib
 import json
@@ -51,6 +52,10 @@ parser.add_argument('--stats-ui-probe', action='store_true',
 parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
                     help='Render the UI probe at this window size (default 640x480)')
 parser.add_argument('--sourceforge-probe', action='store_true')
+parser.add_argument('--preplace-probe', action='store_true',
+                    help='Construction Yard pre-placement queue: reservations, chain, fallback, cancel, save/load, 9854 load')
+parser.add_argument('--sidebar-grid-probe', action='store_true',
+                    help='Sidebar build grid: yard, factory and Starport lists rendered at --viewport (PNG screenshots)')
 parser.add_argument('--harvester-safety-probe', action='store_true')
 parser.add_argument('--city-placement-probe', action='store_true')
 parser.add_argument('--opening-economy-probe', action='store_true')
@@ -100,6 +105,19 @@ parser.add_argument('--whole-army-probe', action='store_true',
                     help='Verify the Custom Hard/Brutal whole-army dispatch and asset emergency defence')
 parser.add_argument('--launcher-kiting-probe', action='store_true',
                     help='Verify hunting launchers escape a too-close enemy while keeping Hunt')
+parser.add_argument('--formation-measure', action='store_true',
+                    help='Measure attack-wave arrival spread and first-contact shots over the match')
+parser.add_argument('--wave-formation',
+                    help='QuantBot attack-wave formation for this run, by its INI name (default: the QuantBot Config.ini value)')
+parser.add_argument('--wave-formation-probe', action='store_true',
+                    help='Verify QuantBot attack waves launch and march as hunting formations in the configured shape')
+parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
+                    help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
+                         '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
+parser.add_argument('--duel-map-seed', type=int, default=1, help='Formation duel: the Random Skirmish map seed')
+parser.add_argument('--duel-sides', help='Formation duel: house:shape,house:shape (e.g. atreides:box,harkonnen:wedge)')
+parser.add_argument('--prebuilt-probe', type=Path,
+                    help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
@@ -115,8 +133,10 @@ if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not args.custom_map:
-    parser.error('--local-spectator requires --custom-map.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size):
+    parser.error('--local-spectator requires --custom-map or --duel-map-size.')
+if bool(args.duel_map_size) != bool(args.duel_sides) or (args.duel_map_size and args.custom_map):
+    parser.error('A formation duel needs --duel-map-size and --duel-sides and no --custom-map.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
@@ -178,66 +198,73 @@ if args.repeatable:
     out = Path(tempfile.mkdtemp(prefix='run-', dir=out))
 else:
     out.mkdir(parents=True, exist_ok=False)
-subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
-main = (root/'src/main.cpp').read_text()
-needle = 'int menuResult = MainMenu().showMenu();'
-if main.count(needle) != 1:
-    raise RuntimeError('Main-menu injection point changed.')
-main = main.replace(needle,'int menuResult = runCampaignBalanceProbe();')
-main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
-if args.stats_ui_probe:
-    # Exercise the requested logical viewport even on a smaller/headless host.
-    # Only this private probe bypasses the ordinary desktop-fit clamp; the
-    # shipped application retains it. SDL still supplies the real renderer.
-    fit_call = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
-    if main.count(fit_call) != 1:
-        raise RuntimeError('Window-size fixture hook changed.')
-    main = main.replace(fit_call, '/* Stats renderer fixture keeps its requested viewport. */')
-    main = main.replace('                              videoFlags);',
-                        '                              videoFlags | SDL_WINDOW_HIDDEN);')
-position = main.index('int main(')
-main = main[:position] + '#include "'+str(root/'tests/ai/campaign-balance-probe.inc')+'"\n' + main[position:]
-source, obj = out/'balance-main.cpp', out/'balance-main.o'
-source.write_text(main)
-compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
-for option in ('-include','-MT','-MF'):
-    if option in compile_command:
-        position = compile_command.index(option)
-        del compile_command[position:position+2]
-for option in ('-MD','-MMD'):
-    if option in compile_command: compile_command.remove(option)
-compile_command[compile_command.index('-o')+1] = str(obj)
-compile_command[compile_command.index('-c')+1] = str(source)
-compile_command.append('-fno-access-control')
-app = out/'balance-probe.app/Contents'
-(app/'MacOS').mkdir(parents=True)
-(app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
-binary = app/'MacOS/balance-probe'
-link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
-link = link[link.index('&&')+1:]
-link = link[:link.index('&&')]
-link[link.index('-o')+1] = str(binary)
-link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
 policy_comparison = None
-if args.quantbot_object:
-    # QuantBot.cpp and its subsystem files implement one class. The preserved
-    # object(s), from a build before or after that split, replace all of them.
-    split = [f'/players/QuantBot{part}.cpp.o' for part in
-             ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Air', 'Harvesters')]
-    present = [arg for arg in link if any(arg.endswith(name) for name in split)]
-    if len(present) != len(split):
-        raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')
-    preserved = [path.resolve() for path in args.quantbot_object]
-    position = link.index(present[0])
-    link = [arg for arg in link if arg not in present]
-    link[position:position] = [str(path) for path in preserved]
-    policy_comparison = [{'object': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-                         for path in preserved]
-with (out/'build.log').open('w') as log:
-    subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
-    subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+if args.prebuilt_probe:
+    # A probe binary built by an earlier run of this script from the same tree (formation-duel.py
+    # builds one and runs hundreds of matches with it).
+    binary = args.prebuilt_probe.resolve()
+    if not binary.is_file():
+        parser.error('--prebuilt-probe must name an existing balance-probe binary.')
+else:
+    subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
+    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+    commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
+    main = (root/'src/main.cpp').read_text()
+    needle = 'int menuResult = MainMenu().showMenu();'
+    if main.count(needle) != 1:
+        raise RuntimeError('Main-menu injection point changed.')
+    main = main.replace(needle,'int menuResult = runCampaignBalanceProbe();')
+    main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
+    if args.stats_ui_probe or args.sidebar_grid_probe:
+        # Exercise the requested logical viewport even on a smaller/headless host.
+        # Only this private probe bypasses the ordinary desktop-fit clamp; the
+        # shipped application retains it. SDL still supplies the real renderer.
+        fit_call = 'clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);'
+        if main.count(fit_call) != 1:
+            raise RuntimeError('Window-size fixture hook changed.')
+        main = main.replace(fit_call, '/* Stats renderer fixture keeps its requested viewport. */')
+        main = main.replace('                              videoFlags);',
+                            '                              videoFlags | SDL_WINDOW_HIDDEN);')
+    position = main.index('int main(')
+    main = main[:position] + '#include "'+str(root/'tests/ai/campaign-balance-probe.inc')+'"\n' + main[position:]
+    source, obj = out/'balance-main.cpp', out/'balance-main.o'
+    source.write_text(main)
+    compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
+    for option in ('-include','-MT','-MF'):
+        if option in compile_command:
+            position = compile_command.index(option)
+            del compile_command[position:position+2]
+    for option in ('-MD','-MMD'):
+        if option in compile_command: compile_command.remove(option)
+    compile_command[compile_command.index('-o')+1] = str(obj)
+    compile_command[compile_command.index('-c')+1] = str(source)
+    compile_command.append('-fno-access-control')
+    app = out/'balance-probe.app/Contents'
+    (app/'MacOS').mkdir(parents=True)
+    (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
+    binary = app/'MacOS/balance-probe'
+    link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
+    link = link[link.index('&&')+1:]
+    link = link[:link.index('&&')]
+    link[link.index('-o')+1] = str(binary)
+    link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+    if args.quantbot_object:
+        # QuantBot.cpp and its subsystem files implement one class. The preserved
+        # object(s), from a build before or after that split, replace all of them.
+        split = [f'/players/QuantBot{part}.cpp.o' for part in
+                 ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Air', 'Harvesters')]
+        present = [arg for arg in link if any(arg.endswith(name) for name in split)]
+        if len(present) != len(split):
+            raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')
+        preserved = [path.resolve() for path in args.quantbot_object]
+        position = link.index(present[0])
+        link = [arg for arg in link if arg not in present]
+        link[position:position] = [str(path) for path in preserved]
+        policy_comparison = [{'object': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                             for path in preserved]
+    with (out/'build.log').open('w') as log:
+        subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+        subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
@@ -257,7 +284,14 @@ if args.custom_map:
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'
 if args.harvester_safety_probe: env['BALANCE_HARVESTER_SAFETY_PROBE'] = '1'
 if args.sourceforge_probe: env['BALANCE_SOURCEFORGE_PROBE'] = '1'
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe:
+if args.preplace_probe:
+    env['BALANCE_PREPLACE_PROBE'] = '1'
+    # A save written by the last 9854 build (origin/main 40f4e7a8): it must still load.
+    fixture = out/'preplace-9854.sav'
+    fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
+    env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
+if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
+if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe:
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
@@ -265,7 +299,8 @@ if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe:
         width, height = (int(value) for value in args.viewport.lower().split('x'))
     profile = out/'profile'
     profile.mkdir(exist_ok=True)
-    interface_height = -1 if args.stats_ui_probe else height
+    # Native 1:1 so a 1920x1080 window really lays the sidebar out at 1080 lines.
+    interface_height = -1 if (args.stats_ui_probe or args.sidebar_grid_probe) else height
     if args.stats_ui_probe:
         env['BALANCE_STATS_EXPECTED_WIDTH'] = str(width)
         env['BALANCE_STATS_EXPECTED_HEIGHT'] = str(height)
@@ -294,6 +329,17 @@ if args.no_spice_city_probe: env['BALANCE_NO_SPICE_CITY_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
 if args.whole_army_probe: env['BALANCE_WHOLE_ARMY_PROBE'] = '1'
+if args.formation_measure: env['BALANCE_FORMATION_MEASURE'] = '1'
+if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
+if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
+if args.duel_map_size:
+    env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
+    env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)
+    try:
+        env['BALANCE_DUEL_SIDES'] = ','.join(f'{house_names.index(house.strip().lower())}:{shape.strip()}'
+                                             for house, shape in (side.split(':') for side in args.duel_sides.split(',')))
+    except ValueError:
+        parser.error('--duel-sides must be house:shape,house:shape with known houses.')
 if args.launcher_kiting_probe: env['BALANCE_LAUNCHER_KITING_PROBE'] = '1'
 if args.factory_recovery_probe: env['BALANCE_FACTORY_RECOVERY_PROBE'] = '1'
 if args.starport_probe: env['BALANCE_STARPORT_PROBE'] = '1'

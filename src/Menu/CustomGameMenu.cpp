@@ -19,6 +19,7 @@
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/PlaySetup.h>
+#include <Menu/RandomSkirmishMenu.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -282,7 +283,15 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
     loadButton.setEnabled(bMultiplayer && !setup);
     loadButton.setOnClick(std::bind(&CustomGameMenu::onLoad, this));
     buttonHBox.addWidget(&loadButton, 0.175);
-    buttonHBox.addWidget(Spacer::create(), 0.25);
+    // A host can generate the map instead: Random Skirmish settings with open starts, saved to
+    // MP User Maps and chosen here, then players, houses and teams are set in the lobby.
+    buttonHBox.addWidget(Spacer::create(), 0.05);
+    randomMapButton.setText(_("Random map..."));
+    randomMapButton.setVisible(bMultiplayer || setup);
+    randomMapButton.setEnabled(bMultiplayer || setup);
+    randomMapButton.setOnClick([this]() { onRandomMap(); });
+    buttonHBox.addWidget(&randomMapButton, 0.175);
+    buttonHBox.addWidget(Spacer::create(), 0.2);
 
     buttonHBox.addWidget(Spacer::create(), 0.0625);
 
@@ -452,6 +461,44 @@ void CustomGameMenu::onLoad()
     fnkdat("mpsave/", tmp, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT);
     std::string savepath(tmp);
     openWindow(LoadSaveWindow::create(false, _("Load Game"), savepath, "dls"));
+}
+
+void CustomGameMenu::onRandomMap()
+{
+    // The hosted game's mod is the one chosen here; the generator plans with its buildings.
+    const int modChoice = modDropDown.getSelectedIndex();
+    const std::string mod = modChoice >= 0 && modChoice < static_cast<int>(availableMods.size())
+        ? availableMods[modChoice].name : ModManager::instance().getActiveModName();
+    std::string path;
+    {
+        RandomSkirmishMenu generator(mod);
+        generator.showMenu();
+        path = generator.getCreatedMap();
+    }
+    if(path.empty()) return;
+    if(!selectUserMap(path)) {
+        openWindow(MsgBox::create(_("The generated map could not be found in MP User Maps.")));
+        return;
+    }
+    // Exactly as if the host had picked the map: on to the players.
+    onNext();
+}
+
+bool CustomGameMenu::selectUserMap(const std::string& path)
+{
+    // The offline/online setup offers a fixed list of maps; a new file joins it.
+    if(setup && std::none_of(setup->maps.begin(), setup->maps.end(),
+                             [&](const std::string& known) { return strToLower(known) == strToLower(path); }))
+        setup->maps.push_back(path);
+    for(auto* filter : {&mapModFilter, &mapSizeFilter, &mapPlayersFilter}) filter->setSelectedItem(0);
+    onMapTypeChange(3);
+    for(int i = 0; i < mapList.getNumEntries() && i < static_cast<int>(visibleMaps.size()); ++i) {
+        if(strToLower(mapEntries[visibleMaps[i]].path) == strToLower(path)) {
+            mapList.setSelectedItem(i);
+            return true;
+        }
+    }
+    return false;
 }
 
 void CustomGameMenu::onGameOptions()

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 70;
+static constexpr int kWireProtocolVersion = 75;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -65,7 +65,15 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 69 sends the nearest troops to an attacked building with a hunt-toward
     // order, a new engine targeting rule and save 9854.
     // 70 stops the QuantBot score blend overflowing with large combat evidence.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 70);
+    // 71 adds the RTS-control commands (attack-move, patrol, queued orders, repeat
+    // production), attack mode HOLD and save 9855.
+    // 71 adds the Construction Yard reservation commands and simulation-side placement.
+    // 71 adds formation movement (CMD_UNIT_FORMATION_MOVE) and save 9857.
+    // 72 makes plan building sites a match rule (MOD8 settings, hash) and save 9858.
+    // 73 adds formation shapes and hunting in formation (CMD_UNIT_FORMATION_HUNT) and save 9859.
+    // 74 changes formation roles and pacing (harvesters out, form-up, one-speed march) and save 9860.
+    // 75 adds the form-up in place (CMD_UNIT_FORMATION_MOVE order kind FormUp) and save 9861.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 75);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

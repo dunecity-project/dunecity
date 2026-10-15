@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <globals.h>
+#include <FormationPlanner.h>
 
 #include <config.h>
 
@@ -1145,6 +1146,9 @@ int main(int argc, char *argv[]) {
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
             settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
+            settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
+            settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(
+                myINIFile.getIntValue("General","Formation Shape",0)));
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs
@@ -1261,6 +1265,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.maximumNumberOfHarvestersOverride = myINIFile.getIntValue("Game Options","Maximum Number of Harvesters Override",-1);
             settings.gameOptions.maximumNumberOfConstructionYardsOverride = myINIFile.getIntValue("Game Options","Maximum Number of Construction Yards Override",-1);
             settings.gameOptions.originalUnitDamage = myINIFile.getBoolValue("Game Options", "Original Unit Damage", false);
+            settings.gameOptions.planBuildingSites = myINIFile.getBoolValue("Game Options", "Plan Building Sites", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

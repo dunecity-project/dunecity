@@ -50,6 +50,11 @@
 #include "campaign-city-economy-probe.inc"
 #include "degradation-probe.inc"
 #include "spice-income-probe.inc"
+#include "preplace-queue-probe.inc"
+#include "sidebar-grid-probe.inc"
+#include "formation-wave-measure.inc"
+#include "wave-formation-probe.inc"
+#include "formation-duel.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -72,6 +77,12 @@ int runCampaignBalanceProbe() {
     if(std::getenv("BALANCE_DEGRADATION_PROBE"))
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
+    if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {
+        const int parsed = QuantBotConfig::parseWaveFormation(shape, INT_MIN);
+        if (parsed == INT_MIN) throw std::runtime_error(std::string("Unknown wave formation: ") + shape);
+        getQuantBotConfig().waveFormation = parsed;
+    }
+    SDL_Log("CAMPAIGN_BALANCE_WAVE_FORMATION: %s", QuantBotConfig::waveFormationName(getQuantBotConfig().waveFormation));
     settings.general.playerName = "Campaign balance observer";
     settings.network.metaServer = "http://127.0.0.1:1/";
     settings.gameOptions.fogOfWar = false;
@@ -91,6 +102,14 @@ int runCampaignBalanceProbe() {
         const std::string contents((std::istreambuf_iterator<char>(file)),std::istreambuf_iterator<char>());
         init=GameInitSettings(customMap,contents,true,settings.gameOptions);
     }
+    // Formation duel: a generated Random Skirmish 1v1 instead of a campaign level or map file.
+    const bool duel=std::getenv("BALANCE_DUEL_MAP_SIZE")!=nullptr;
+    std::vector<FormationDuel::Side> duelSides;
+    if(duel) {
+        duelSides=FormationDuel::sidesFromEnv();
+        init=FormationDuel::makeInit(std::atoi(std::getenv("BALANCE_DUEL_MAP_SIZE")),
+            static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
+    }
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
     init.setLocalSpectator(localSpectator);
@@ -105,7 +124,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else {
+    } else if(!duel) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
@@ -113,7 +132,10 @@ int runCampaignBalanceProbe() {
     for (const auto& [h,team] : roster) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), team);
         if (h==humanHouse && !localSpectator) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
-        info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
+        // The pre-placement and sidebar grid probes drive the human house alone: a partner
+        // AI would order and place from the same yards.
+        if (!((std::getenv("BALANCE_PREPLACE_PROBE") || std::getenv("BALANCE_SIDEBAR_GRID_PROBE")) && h==humanHouse))
+            info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
         // Give every row a different delivery income factor, as a host would in the lobby, so
         // the probe can check which house ended up with which - including that no row picked
         // up a neighbour's rate. Matches SpiceIncomeProbe::assignedFactors.
@@ -165,6 +187,16 @@ int runCampaignBalanceProbe() {
         // measures the resumed delivery on the loaded one.
         runSpiceIncomeProbe(game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_PREPLACE_PROBE")) {
+        // Takes the owning pointer: it saves and reloads the match, then loads a 9854 save.
+        runPreplaceQueueProbe(game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_SIDEBAR_GRID_PROBE")) {
+        runSidebarGridProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_CREDIT_STORAGE_PROBE")) {
@@ -233,6 +265,10 @@ int runCampaignBalanceProbe() {
         runWholeArmyDispatchProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_WAVE_FORMATION_PROBE")) {
+        runWaveFormationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {
         runLauncherKitingProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -290,9 +326,16 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
-    while (!game->finished && game->getGameCycleCount() < end) {
-        game->updateGameState();
-
+    if (duel) {
+        FormationDuel::applyShapes(*game, duelSides);
+        FormationWaveMeasure::run(*game, end, [&]() { return FormationDuel::decided(*game, duelSides); });
+        FormationDuel::report(*game, duelSides);
+    } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
+        FormationWaveMeasure::run(*game, end);
+    } else {
+        while (!game->finished && game->getGameCycleCount() < end) {
+            game->updateGameState();
+        }
     }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=%d seed=%u attack_percent=%d partner=%s enemy=%s cycle=%u outcome=%s",
         level, seed, percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(), game->finished ? (game->won ? "won" : "lost") : "time_limit");

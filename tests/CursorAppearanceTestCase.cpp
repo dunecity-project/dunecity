@@ -7,7 +7,7 @@
 TEST_CASE("All cursor actions retain contrast and smooth edges at every supported size", "[rendering][cursor]") {
     for(float scale : {1.0f,1.5f,2.0f,3.0f,4.0f}) {
         std::set<std::vector<Uint32>> silhouettes;
-        for(int mode=0;mode<11;++mode) {
+        for(int mode=0;mode<=static_cast<int>(CursorAppearance::Action::Patrol);++mode) {
             CAPTURE(scale,mode);
             const auto action=static_cast<CursorAppearance::Action>(mode);
             sdl2::surface_ptr surface{CursorAppearance::create(action,scale)};
@@ -30,7 +30,7 @@ TEST_CASE("All cursor actions retain contrast and smooth edges at every supporte
             CHECK(black>0);CHECK(smooth>0);CHECK(transparent>0);
             if(action==CursorAppearance::Action::Pointer) CHECK(white>0);
             else CHECK(white==0);
-            if(action>=CursorAppearance::Action::Move && action<=CursorAppearance::Action::Heal) {
+            if(CursorAppearance::aimsAtHotspot(action)) {
                 const int radius=static_cast<int>(scale/1.5f);
                 for(int dy=-radius;dy<=radius;++dy)for(int dx=-radius;dx<=radius;++dx) {
                     Uint8 r,g,b,a;

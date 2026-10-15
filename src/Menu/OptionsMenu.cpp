@@ -365,6 +365,8 @@ OptionsMenu::OptionsMenu() : MenuBase()
     wasdCameraCheckbox.setTooltipText(_("With WASD: Shift+S stops selected units. T selects matching units on screen; Ctrl+T selects across the map; Shift+T toggles time."));
     addControl(mouseOrdersHBox,leftClickOrdersCheckbox,"Left-click orders (drag to select, right-click cancels)",settings.general.leftClickOrders);
     addControl(movementPathsHBox,movementPathsCheckbox,"Show movement paths for selected units",settings.general.showMovementPaths);
+    addControl(formationMovesHBox,formationMovesCheckbox,"Move groups in formation",settings.general.formationMoves);
+    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. Ctrl+F switches it in game, Ctrl+Shift+F picks the shape, and the unit panel shows both; picking a shape forms the selected units up in it where they stand."));
 
 
     audioHBox.addWidget(Spacer::create(), 0.5);
@@ -494,6 +496,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= settings.general.wasdCamera != wasdCameraCheckbox.isChecked();
     bChanged |= settings.general.leftClickOrders != leftClickOrdersCheckbox.isChecked();
     bChanged |= settings.general.showMovementPaths != movementPathsCheckbox.isChecked();
+    bChanged |= settings.general.formationMoves != formationMovesCheckbox.isChecked();
     bChanged |= settings.general.diagnosticLogs != diagnosticLogsCheckbox.isChecked();
     bChanged |= settings.video.interfaceHeight != interfaceSizeDropDownBox.getSelectedEntryIntData();
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
@@ -563,6 +566,7 @@ void OptionsMenu::onOptionsOK() {
     settings.general.wasdCamera=wasdCameraCheckbox.isChecked();
     settings.general.leftClickOrders=leftClickOrdersCheckbox.isChecked();
     settings.general.showMovementPaths=movementPathsCheckbox.isChecked();
+    settings.general.formationMoves=formationMovesCheckbox.isChecked();
     settings.general.diagnosticLogs=diagnosticLogsCheckbox.isChecked();
     settings.general.playerName = playername;
     std::string languageFilename = (languageDropDownBox.getSelectedEntryIntData() < 0) ? "English.en.po" : availLanguages[languageDropDownBox.getSelectedEntryIntData()];
@@ -725,6 +729,8 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("General","WASD Camera",settings.general.wasdCamera);
     myINIFile.setBoolValue("General","Left Click Orders",settings.general.leftClickOrders);
     myINIFile.setBoolValue("General","Movement Paths",settings.general.showMovementPaths);
+    myINIFile.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    myINIFile.setIntValue("General","Formation Shape",settings.general.formationShape);
     myINIFile.setBoolValue("General","Diagnostic Logs",settings.general.diagnosticLogs);
     myINIFile.setBoolValue("General","Play Intro",settings.general.playIntro);
     myINIFile.setBoolValue("General","Show Tutorial Hints",settings.general.showTutorialHints);
@@ -774,6 +780,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Game Options","Maximum Number of Harvesters Override",settings.gameOptions.maximumNumberOfHarvestersOverride);
     myINIFile.setIntValue("Game Options","Maximum Number of Construction Yards Override",settings.gameOptions.maximumNumberOfConstructionYardsOverride);
     myINIFile.setBoolValue("Game Options", "Original Unit Damage", settings.gameOptions.originalUnitDamage);
+    myINIFile.setBoolValue("Game Options", "Plan Building Sites", settings.gameOptions.planBuildingSites);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);

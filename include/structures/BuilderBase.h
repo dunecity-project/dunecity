@@ -19,6 +19,7 @@
 #define BUILDERBASE_H
 
 #include <structures/StructureBase.h>
+#include <structures/ProductionRepeat.h>
 
 #include <data.h>
 
@@ -78,6 +79,14 @@ public:
     /// (Starport, Love Factory): how much of it came from the owner's exempt
     /// starting cash, so cancelling returns it there.
     FixPoint startingCreditsPaid = 0;
+    /// Construction Yard pre-placement: 0 = no planned plot, otherwise the id of
+    /// the reservation, unique within its builder (PlacementReservationPolicy.h).
+    Uint32 reservationID = 0;
+    Sint32 plotX = 0;               ///< planned top-left tile of a reserved order
+    Sint32 plotY = 0;
+    /// The planned plot was invalid when the order finished: it waits to be
+    /// placed by hand like an unreserved order.
+    bool   reservationFailed = false;
 };
 
 
@@ -125,6 +134,13 @@ public:
 
     int getProductionQueueSize() const { return currentProductionQueue.size(); }
 
+    /// The production queue in order; the front entry is the one under construction.
+    const std::list<ProductionQueueItem>& getProductionQueue() const { return currentProductionQueue; }
+
+    /// True while the finished front order holds a plot the simulation is still trying
+    /// to place it on (ConstructionYard pre-placement); it is not ready to place by hand.
+    bool isAwaitingReservedPlacement() const;
+
     /**
         Updates this builder.
         \return true if this object still exists, false if it was destroyed
@@ -135,6 +151,7 @@ public:
     virtual void handleProduceItemClick(Uint32 itemID, bool multipleMode = false);
     virtual void handleCancelItemClick(Uint32 itemID, bool multipleMode = false);
     virtual void handleSetOnHoldClick(bool OnHold);
+    void handleSetRepeatClick(Uint32 itemID, bool enabled);
 
 
 
@@ -165,6 +182,20 @@ public:
     inline void doSetOnHold(bool bOnHold) { bCurrentItemOnHold = bOnHold; }
 
     /**
+        Turns repeat production of a unit on or off (docs/rts-controls.md). Turning it on queues
+        one copy when none is queued, so the loop has something to repeat.
+        \param  itemID  the unit to repeat
+        \param  enabled true = keep producing it; false = stop repeating
+    */
+    void doSetRepeat(Uint32 itemID, bool enabled);
+
+    /// Can \a itemID be set to repeat in this builder right now?
+    bool supportsRepeat(Uint32 itemID) const;
+
+    /// Is \a itemID set to repeat?
+    bool isRepeating(Uint32 itemID) const { return repeatItems.contains(itemID); }
+
+    /**
         Start building a random item in this builder.
     */
     virtual void doBuildRandom();
@@ -187,6 +218,8 @@ public:
     inline Uint32 getCurrentProducedItem() const { return currentProducedItem; }
     inline bool isOnHold() const { return bCurrentItemOnHold; }
     bool isWaitingToPlace() const;
+    /// May a player place the finished front order by hand now? (ConstructionYard adds plots blocked by units.)
+    virtual bool mayPlaceByHand() const { return isWaitingToPlace(); }
     bool isUnitLimitReached(Uint32 itemID) const;
     inline FixPoint getProductionProgress() const { return productionProgress; }
     /// The part of the current production progress that was paid out of the
@@ -248,6 +281,9 @@ protected:
     FixPoint productionProgressFromStartingCredits; ///< Part of productionProgress paid from exempt starting cash
     Uint32   deployTimer;            ///< Timer for deploying a unit
 
+    Uint32   nextReservationID = 1;  ///< Next placement reservation id handed out by this builder
+    Uint32   reservedPlacementWaitCycles = 0; ///< Cycles the finished front reservation has waited for units to clear its plot
+
     /// Clear the progress and the payment provenance together: money already
     /// spent is gone, so a later refund must not claim a starting-cash share
     /// of it.
@@ -260,6 +296,9 @@ protected:
 
     std::list<ProductionQueueItem>  currentProductionQueue;     ///< This list is the production queue (It contains the item IDs of the units/structures to produce)
     std::list<BuildItem>            buildList;                  ///< This list contains all the things that can be produced by this builder
+
+    /// Units that are produced again whenever one leaves (SAVEGAMEVERSION 9855, docs/rts-controls.md).
+    ProductionRepeat::RepeatSet     repeatItems;
 };
 
 #endif //BUILDERBASE_H

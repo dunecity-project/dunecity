@@ -119,7 +119,37 @@
 //       building with doHuntToward() walks there in Hunt and attacks only enemies
 //       it meets on the way; a save taken mid-walk has to keep that rule. A 9853
 //       save loads with no unit hunting toward anything.
-#define SAVEGAMEVERSION     9854
+// 9855: Modern RTS controls (docs/rts-controls.md). Units carry their player order queue
+//       (Shift-queued orders, attack-move and patrol: up to 16 orders, whether the front
+//       one was started, the walk retry count and the attack-move break-off point), and
+//       builders carry the items set to repeat production. A 9854 save loads with empty
+//       queues and no repeating items. Attack mode HOLD (10) is new in the same version.
+// 9856: Construction Yard pre-placement queue. Every production queue entry
+//       carries its reservation (id, plot, fallback flag) and every builder its
+//       next reservation id and the cycles the front reservation has waited for
+//       units to clear the plot. The plot decides where a finished building
+//       appears, so it cannot be recomputed after a load. A 9854 save loads with
+//       no reservations: every queued order keeps today's place-it-yourself flow.
+// 9857: UnitBase formation membership: group id, formation slot and the group's speed
+//       cap (docs/formations.md). A save taken mid-march keeps the group together at
+//       its pace. A 9854 save loads with no unit in a formation.
+// 9858: GameInitSettings MOD8: the plan-building-sites match rule, appended after the
+//       MOD7 spice income block (docs/preplace-queue.md). A 9857 build does not know
+//       MOD8 and would load such a save as vanilla, so it must refuse it. A 9857 save
+//       loads with the rule on, the only behaviour 9857 had by default.
+// 9859: Formation shapes and hunting in formation (docs/formations.md): UnitBase records
+//       whether its formation is a hunting one, which the first contact of any member
+//       breaks into a fight, and the formation's facing, along which the march keeps sonic
+//       lanes clear. A 9858 or older save loads every formation as a plain march without a facing.
+// 9860: One-speed formation march (docs/formations.md): UnitBase records its form-up tile
+//       (where the member gathers before its group marches; invalid once marching), how its
+//       order towards the slot is given again when the group has formed up, and the pace
+//       unit's type (the slowest member, whose step time every capped member keeps). A 9859
+//       or older save loads every formation as already marching at its speed cap.
+// 9861: Form up where they stand (docs/formations.md): a save or replay may carry
+//       CMD_UNIT_FORMATION_MOVE commands of order kind FormUp, which a 9860 build refuses,
+//       so it must not load them. The layout is unchanged: a 9860 save loads as it is.
+#define SAVEGAMEVERSION     9861
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
