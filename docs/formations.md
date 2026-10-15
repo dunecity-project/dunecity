@@ -242,6 +242,84 @@ per round, size, seed and shape); reproduce with
   `formation_planner_tests`). No save or protocol change beyond the merged form-up branch
   (save 9861, protocol 75).
 
+### Fighting in formation through first contact (measured, not kept)
+
+Stefan approved making formations fight in formation through first contact so they could beat
+None. Five engagement modes were built and measured against None and against today's scatter
+(the first contact or hit breaks the whole group into engine Hunt, `FormationOrders::breakHunt`).
+**None of them beats None or scatter; scatter stays and the modes were removed** (no save or
+protocol change remains: save 9861, protocol 75).
+
+- **Common rules of every mode:** members of a hunting formation target like HOLD (only what
+  the weapon reaches, never chase) on the march and in the fight, keep Hunt and their membership;
+  the group engages when a member has an enemy in weapon range or is hit, re-marches to its
+  slots after 3 s with nothing in reach and no hit, and breaks into free Hunt when an enemy unit
+  is within 2 tiles, a third of its members is lost, it is hit from beyond every member's reach
+  (at once), after 8 s of hits with nothing in reach, or after 30 s. The facing turns towards the
+  threat centroid for the sonic lanes; a sonic member does not fire through its own members;
+  QuantBot launchers in such a formation do not kite.
+- **Hold:** the group halts on contact and fires from its places (leash 0; `hold2` a 2-tile
+  leash, walking back afterwards). **Advance:** the group marches on at its pace, a member with a
+  target in weapon range stops to fire. **Deploy:** halt; a member with nothing in weapon range
+  closes up to 6 tiles beyond it and fires from there. **Arc:** on contact the group spreads into
+  one battle line across the threat through its member nearest to it (one tile per member, left
+  to right as they stood, so every member has a free line of fire and no sonic lane is blocked),
+  then fights like Deploy. Hold, Advance and Deploy are in commit `d09813f1`; Arc was measured from
+  an uncommitted build on top of it.
+- **Design:** the pilot of the full plan - Hard, the Random Skirmish duel (`formation-duel.py
+  --pairs`), sizes 128/160/192, seeds 7101-7606, one house pair per seed, both side
+  assignments, 36 games per pairing, Column and Box (the best and a middle shape of the round-robin).
+  The full 108-game-per-pairing run (all five shapes, `--all-houses`) and the Brutal sample were
+  to follow only for a mode whose 95% interval cleared 0.5 against None or scatter; none did.
+
+| Pairing (first side's score) | Games | Score | 95% CI | Eliminations W-L / time-outs | Value margin / game |
+|---|---|---|---|---|---|
+| column/hold v none | 36 | 0.361 | 0.22-0.53 | 7-14 / 15 | -24,568 |
+| column/hold2 v none | 36 | 0.278 | 0.14-0.42 | 6-15 / 15 | -20,469 |
+| column/advance v none | 36 | 0.278 | 0.14-0.44 | 4-17 / 15 | -29,097 |
+| column/deploy v none | 36 | 0.333 | 0.19-0.50 | 6-16 / 14 | -14,720 |
+| column/arc v none | 36 | 0.361 | 0.19-0.53 | 5-11 / 20 | -13,662 |
+| column/scatter v none | 36 | 0.444 | 0.31-0.61 | 7-13 / 16 | -2,518 |
+| box/hold v none | 36 | 0.292 | 0.14-0.44 | 5-12 / 19 | -16,157 |
+| box/hold2 v none | 36 | 0.389 | 0.22-0.56 | 5-14 / 17 | -2,313 |
+| box/advance v none | 36 | 0.278 | 0.14-0.42 | 3-18 / 15 | -17,584 |
+| box/deploy v none | 36 | 0.222 | 0.11-0.39 | 4-16 / 16 | -21,392 |
+| box/arc v none | 36 | 0.417 | 0.25-0.58 | 5-14 / 17 | -7,563 |
+| box/scatter v none | 36 | 0.444 | 0.28-0.61 | 6-15 / 15 | -8,219 |
+| column/deploy v column/scatter | 36 | 0.486 | 0.33-0.65 | 9-9 / 18 | -1,324 |
+| column/arc v column/scatter | 36 | 0.514 | 0.35-0.67 | 8-10 / 18 | -2,061 |
+| box/deploy v box/scatter | 36 | 0.375 | 0.22-0.53 | 8-12 / 16 | -7,835 |
+| box/arc v box/scatter | 36 | 0.500 | 0.33-0.67 | 9-9 / 18 | -1,449 |
+
+Median game length 37-40 minutes in every pairing (most 192 games reach the 40-minute limit).
+Waves of the first side (every wave of the 36 games; first-minute value from contact; survival
+5 minutes after launch), with None's waves in the same games for comparison:
+
+| Mode (Column / Box) | In formation at contact | In formation +10 s | Killed / lost, first minute | Survival | None's waves: killed / lost, survival |
+|---|---|---|---|---|---|
+| hold | 55% / 60% | 50% / 54% | 3.06 / 2.53 | 63% / 63% | 5.71, 68% / 6.04, 70% |
+| hold2 | 56% / 54% | 52% / 48% | 2.95 / 3.04 | 64% / 63% | 5.65, 68% / 6.11, 65% |
+| advance | 58% / 64% | 51% / 59% | 2.21 / 1.97 | 59% / 61% | 5.87, 68% / 5.65, 70% |
+| deploy | 58% / 65% | 52% / 57% | 3.07 / 2.59 | 66% / 62% | 5.03, 66% / 6.56, 71% |
+| arc | 51% / 64% | 45% / 55% | 3.18 / 3.05 | 62% / 65% | 5.62, 65% / 4.99, 67% |
+| scatter | 45% / 54% | 20% / 26% | 3.56 / 3.03 | 63% / 62% | 4.57, 63% / 5.11, 65% |
+
+- **What it shows:** the modes keep the formation through the fight (about half the members still
+  in it 10 s after contact against 20-26% with scatter), but that does not win fights: the
+  first-minute trade is no better than scatter's and well below None's. A halted deep group fights
+  with its front rows only, and its short-range armour stands under longer-range fire; closing in
+  (Deploy) or spreading into a line (Arc) recovers scatter's level, not more. Engagements ended
+  53-73% by the re-march and 19-36% by an enemy within 2 tiles; the other break rules fired in
+  1-6% each.
+- **Decision:** QuantBot `WaveFormation` stays **None**; player hunting formations (attack-move,
+  patrol) keep the scatter; the engagement code, its saved state and its test-only switch are gone.
+  Kept from this work: the duel harness options `--pairs` (exact shape pairs and a per-pairing
+  report) and `--all-houses` (every seed with all three house pairs), and the wave metric
+  `in_formation_10s`.
+- **Raw data:** `docs/formation-results/engagement/games.csv` and `waves-by-shape.csv` (tags
+  `pilot` and `pilot2`; shape labels carry the mode as `shape/mode`; the `engagements`, `resumed`
+  and `broke_*` columns are the removed build's per-house engagement counters).
+
 ## Formation fixes, save 9860 / protocol 74 (after the 1.0.839 play-test)
 
 These rules supersede the older sections below where they disagree.

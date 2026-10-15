@@ -20,14 +20,9 @@ namespace FormationDuel {
 struct Side {
     int house = HOUSE_INVALID;
     int shape = QuantBotConfig::kWaveFormationNone;
-    std::string label;          ///< as given: shape[/engagement]
-    int engagement = -1;        ///< FormationOrders::Engagement, -1 = the game's
-    int leash = -1;             ///< holding leash tiles, -1 = the game's
 };
 
-/// BALANCE_DUEL_SIDES: "house:shape[/engagement],house:shape[/engagement]", houses by number,
-/// shapes by INI name; engagement scatter (the pre-9862 break at first contact), hold, holdN
-/// (hold with an N-tile leash) or advance; without one the game's (FormationOrders::kEngagement).
+/// BALANCE_DUEL_SIDES: "house:shape,house:shape", houses by number, shapes by INI name.
 inline std::vector<Side> sidesFromEnv() {
     std::vector<Side> sides;
     std::istringstream input(std::getenv("BALANCE_DUEL_SIDES") ? std::getenv("BALANCE_DUEL_SIDES") : "");
@@ -37,23 +32,7 @@ inline std::vector<Side> sidesFromEnv() {
         if (colon == std::string::npos) throw std::runtime_error("Invalid duel side: " + entry);
         Side side;
         side.house = std::stoi(entry.substr(0, colon));
-        side.label = entry.substr(colon + 1);
-        std::string shape = side.label;
-        const auto slash = shape.find('/');
-        if (slash != std::string::npos) {
-            const std::string engagement = shape.substr(slash + 1);
-            shape = shape.substr(0, slash);
-            if (engagement == "scatter") side.engagement = int(FormationOrders::Engagement::Scatter);
-            else if (engagement == "advance") side.engagement = int(FormationOrders::Engagement::Advance);
-            else if (engagement.rfind("hold", 0) == 0) {
-                side.engagement = int(FormationOrders::Engagement::Hold);
-                if (engagement.size() > 4) side.leash = std::stoi(engagement.substr(4));
-            } else if (engagement.rfind("deploy", 0) == 0) {
-                side.engagement = int(FormationOrders::Engagement::Deploy);
-                if (engagement.size() > 6) side.leash = std::stoi(engagement.substr(6));
-            } else throw std::runtime_error("Unknown duel engagement: " + entry);
-        }
-        side.shape = QuantBotConfig::parseWaveFormation(shape, INT_MIN);
+        side.shape = QuantBotConfig::parseWaveFormation(entry.substr(colon + 1), INT_MIN);
         if (side.shape == INT_MIN) throw std::runtime_error("Unknown duel wave formation: " + entry);
         sides.push_back(side);
     }
@@ -92,10 +71,8 @@ inline GameInitSettings makeInit(int mapSize, Uint32 mapSeed, const std::vector<
     return init;
 }
 
-/// Gives each side's QuantBot its wave shape, and its house the side's engagement (test-only).
+/// Gives each side's QuantBot its wave shape.
 inline void applyShapes(Game& game, const std::vector<Side>& sides) {
-    FormationOrders::clearTestEngagement();
-    FormationOrders::clearEngageStats();
     for (const Side& side : sides) {
         House* house = game.getHouse(side.house);
         if (!house) throw std::runtime_error("A duel house is missing");
@@ -103,7 +80,6 @@ inline void applyShapes(Game& game, const std::vector<Side>& sides) {
         for (const auto& player : house->getPlayerList())
             if (auto* bot = dynamic_cast<QuantBot*>(player.get())) { bot->waveFormationOverride = side.shape; ++bots; }
         if (bots != 1) throw std::runtime_error("A duel house does not have exactly one QuantBot");
-        FormationOrders::setTestEngagement(side.house, side.engagement, side.leash);
     }
 }
 
@@ -124,16 +100,10 @@ inline void report(Game& game, const std::vector<Side>& sides) {
         for (const auto* structure : structureList)
             if (structure->getOwner() == house && structure->getHealth() > 0) ++structures;
         if (house->isAlive()) { ++alive; winner = side.house; }
-        const auto& engage = FormationOrders::engageStats(side.house);
-        using End = FormationPlanner::EngageEnd;
-        auto ended = [&](End end) { return engage.ended[static_cast<int>(end)]; };
         SDL_Log("FORMATION_DUEL_HOUSE: house=%d shape=%s alive=%d kill_value=%d loss_value=%d structures_destroyed=%d "
-                "units_destroyed=%d structures=%d army_value=%d army_units=%d engagements=%d resumed=%d "
-                "broke_close=%d broke_losses=%d broke_outranged=%d broke_quiet=%d broke_timeout=%d",
-                side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
-                house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
-                engage.engaged, ended(End::Resume), ended(End::Close), ended(End::Losses), ended(End::Outranged),
-                ended(End::Quiet), ended(End::Timeout));
+                "units_destroyed=%d structures=%d army_value=%d army_units=%d",
+                side.house, QuantBotConfig::waveFormationName(side.shape), int(house->isAlive()), house->getKillValue(),
+                house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units);
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,
             FormationWaveMeasure::seconds(game.getGameCycleCount()));

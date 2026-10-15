@@ -9,8 +9,8 @@
 //   1. For every kept WaveFormation shape (Box, Pincer, Column, Staggered, Echelon), a mixed wave (tanks, sonic tanks, siege tanks,
 //      launchers, quads, troopers) launches as one hunting formation in exactly the configured
 //      shape towards the wave's own objective; the harvester and the MCV stay out; no slot is
-//      in a sonic lane; the wave marches and, on meeting the enemy, fights in formation: every
-//      member engages in one cycle and keeps Hunt, and afterwards marches on or hunts.
+//      in a sonic lane; the wave marches and, on meeting the enemy, every member breaks into
+//      a fight and stays in Hunt.
 //   2. With WaveFormation None the same wave gets today's orders: Hunt, no formation, no
 //      hunt-toward walk, its destination and force flag untouched.
 //   3. A wave smaller than FormationOrders::kMinAIGroup keeps today's orders as well.
@@ -241,60 +241,36 @@ void runWaveFormationProbe(Game& game) {
             for(int i=0;i<3;++i) raiders.push_back(spawn(enemy,Unit_Quad,ahead-origin+Coord(facing.y*(i-1)*2,-facing.x*(i-1)*2)));
             publish();
             for(auto* raider:raiders) {raider->doSetAttackMode(GUARD);raider->doMove2Pos(raider->getX(),raider->getY(),false);}
-            // On contact the wave fights in formation (docs/formations.md, "Fighting in formation"):
-            // every member engages in the same cycle, keeps Hunt and its membership, and the fight
-            // ends with the raiders dead and the wave marching on, or with a break rule.
-            bool engaged=false;
-            int engagedCycles=0;
-            for(int i=0;i<MILLI2CYCLES(30000) && !engaged;++i) {
+            bool broke=false;
+            for(int i=0;i<MILLI2CYCLES(30000) && !broke;++i) {
                 tick();
-                int count=0, members=0;
-                for(const auto* unit:wave.fighters) {
-                    if(currentGame->getObjectManager().getObject(rosterIds.at(unit))!=unit) continue;
-                    ++members;
-                    count+=unit->isFormationEngaged() ? 1 : 0;
-                }
-                if(count==0) {
-                    for(const auto* unit:wave.fighters)
-                        if(currentGame->getObjectManager().getObject(rosterIds.at(unit))==unit)
-                            require(unit->isInFormation(),"A wave member left the formation before the fight");
-                    continue;
-                }
-                require(count==members,"The wave did not engage as one");
-                engaged=true;
+                broke=std::none_of(wave.fighters.begin(),wave.fighters.end(),
+                    [](const UnitBase* unit){return unit->isInFormation();});
             }
-            require(engaged,"The formation wave never engaged the raiders");
-            const Uint32 group=wave.fighters.front()->getFormationGroup();
-            bool over=false;
-            for(int i=0;i<MILLI2CYCLES(40000) && !over;++i) {
-                tick();
-                int inGroup=0, engagedNow=0, alive=0;
-                for(auto* unit:wave.fighters) {
-                    if(currentGame->getObjectManager().getObject(rosterIds.at(unit))!=unit) continue;
-                    ++alive;
-                    require(unit->getAttackMode()==HUNT,"A wave member left Hunt in the fight");
-                    inGroup+=unit->getFormationGroup()==group ? 1 : 0;
-                    engagedNow+=unit->isFormationEngaged() ? 1 : 0;
-                }
-                require(inGroup==alive || inGroup==0,"The formation broke for some members only");
-                if(engagedNow) ++engagedCycles;
-                over=alive==0 || inGroup==0 || engagedNow==0;
-            }
-            require(over,"The wave's fight in formation never ended");
-            int fighting=0, alive=0, marching=0;
+            require(broke,"The formation did not break on contact");
+            // The break happened at an enemy: the raiders, or whatever enemy the members now fight
+            // (a wide Line can meet the map's own Atreides base first).
+            std::vector<const ObjectBase*> enemies(raiders.begin(),raiders.end());
+            for(const auto* unit:wave.fighters)
+                if(unit->getTarget() && unit->getTarget()->getOwner()->getTeamID()!=owner->getTeamID())
+                    enemies.push_back(unit->getTarget());
+            int contactRange=INT32_MAX;
+            for(const auto* unit:wave.fighters)
+                for(const auto* foe:enemies)
+                    contactRange=std::min(contactRange,
+                        int(blockDistance(unit->getLocation(),foe->getClosestPoint(unit->getLocation())).lround()));
+            require(contactRange<=10,"The formation broke away from any contact");
+            int fighting=0, alive=0;
             for(auto* unit:wave.fighters) {
                 if(currentGame->getObjectManager().getObject(rosterIds.at(unit))!=unit) continue;
                 ++alive;
-                require(unit->getAttackMode()==HUNT,"A member left Hunt after the fight");
-                if(unit->isInFormation()) ++marching;
+                require(unit->getAttackMode()==HUNT,"A member left Hunt when the formation broke");
                 if(unit->getTarget() || unit->isHuntingToward() || unit->isMoving()) ++fighting;
             }
-            require(alive>0 && fighting==alive,"A member stood idle after the fight in formation");
-            SDL_Log("WAVE_FORMATION_PROBE: shape=%s members=%zu forming_s=%.1f marching_s=%.1f lane_steps=%d "
-                "engaged_s=%.1f after=%s fighting=%d",
+            require(alive>0 && fighting==alive,"A member did not go into the fight after the break");
+            SDL_Log("WAVE_FORMATION_PROBE: shape=%s members=%zu forming_s=%.1f marching_s=%.1f lane_steps=%d fighting=%d",
                 name,wave.fighters.size(),formingCycles*GAMESPEED_DEFAULT/1000.0,
-                marchingCycles*GAMESPEED_DEFAULT/1000.0,laneSteps,engagedCycles*GAMESPEED_DEFAULT/1000.0,
-                marching ? "marching_on" : "broke_into_hunt",fighting);
+                marchingCycles*GAMESPEED_DEFAULT/1000.0,laneSteps,fighting);
             require(laneSteps==0,"A marching member stood in a sonic tank's lane");
             retireAll();
         }

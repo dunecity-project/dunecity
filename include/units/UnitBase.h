@@ -253,54 +253,6 @@ public:
     int formationRemainingTiles() const;
 
     /**
-        Fighting in formation (docs/formations.md): a member of a hunting formation whose
-        engagement (FormationOrders::engagementOf) is not Scatter targets like HOLD - only
-        what its weapon reaches, plus the leash around its place while holding - and never
-        chases, marching or engaged, so its membership lasts through the fight.
-    */
-    bool firesFromFormation() const;
-    ATTACKMODE targetingMode() const override;
-    int holdSearchRange() const override;
-    /// This member's engagement (FormationOrders::Engagement): 0 marching, 1 holding its place,
-    /// 2 advancing, 3 deploying (saved from 9862).
-    Uint8 getFormationEngaged() const { return formationGroup != 0 ? formationEngaged : 0; }
-    bool isFormationEngaged() const { return getFormationEngaged() != 0; }
-    /// Halted in a fight (Hold or Deploy): its order towards the slot waits for the re-march.
-    bool isFormationHolding() const { return getFormationEngaged() == 1 || getFormationEngaged() == 3; }
-    /// The place a holding member fires from (and, holding, returns to).
-    const Coord& getFormationAnchor() const { return formationAnchor; }
-    Uint32 getFormationEngageStart() const { return formationEngageStart; }
-    int getFormationEngageSize() const { return static_cast<int>(formationEngageSize); }
-    Uint32 getFormationLastInReach() const { return formationLastInReach; }
-    void setFormationLastInReach(Uint32 cycle) { formationLastInReach = cycle; }
-    /// The last enemy hit on this member (cycle and damager; damager 0 once handled).
-    Uint32 getFormationLastHit() const { return formationLastHit; }
-    Uint32 getFormationHitBy() const { return formationHitBy; }
-    void clearFormationHitBy() { formationHitBy = 0; }
-    /// The facing the sonic lanes follow: the engagement's (towards the threat) while engaged.
-    Uint8 getFormationLaneFacing() const {
-        return isFormationEngaged() && formationEngageFacing != 0 ? formationEngageFacing : getFormationFacing();
-    }
-    void setFormationEngageFacing(Uint8 facing) { formationEngageFacing = facing; }
-    /**
-        The group engages (FormationOrders::update): 'kind' 1 holds - the member stops on the
-        tile it stands on (or steps onto) and keeps that place - and 2 advances on its march.
-        Either way an AI hunter keeps Hunt and an attack-move its order queue; 'size' is the
-        group's member count, 'facing' the facing code towards the threat.
-    */
-    void beginFormationEngagement(Uint8 kind, Uint32 now, int size, Uint8 facing);
-    /// The engagement is over and the group marches on: the member's order towards its slot again.
-    void resumeFormationMarch();
-    /// A holding member without a target off its place walks back to it.
-    void returnToFormationPlace();
-    /// A holding member that followed a target beyond its leash lets it go and walks back.
-    bool formationLeashBroken(int leash) const;
-    /// An enemy target within this member's weapon range (plus 'extra' tiles), or nullptr.
-    const ObjectBase* formationTargetInReach(int extra = 0) const;
-    /// Forgets the engagement (joining or leaving a formation, the re-march).
-    void clearFormationEngagement();
-
-    /**
         This method is called when an unit should move to another unit/structure
         \param  TargetObjectID  the ID of the other unit/structure
     */
@@ -362,9 +314,6 @@ public:
         \param  object  the object to check
     */
     bool isInWeaponRange(const ObjectBase* object) const;
-    /// HOLD's reach: weapon range from here, or for a holding formation member also its
-    /// weapon range plus leash from its place (docs/formations.md).
-    bool isInHoldReach(const ObjectBase* object) const;
 
     void setAngle(int newAngle);
     const std::list<Coord>& getPlannedPath() const { return pathList; }
@@ -767,16 +716,6 @@ protected:
     Coord    formationFormUp = Coord::Invalid(); ///< Form-up tile while forming up; invalid = marching (SAVEGAMEVERSION 9860)
     Uint8    formationResume = 0;                ///< FormationOrders::Resume: the order towards the slot (SAVEGAMEVERSION 9860)
     Uint32   formationPaceItem = ItemID_Invalid; ///< The pace unit's type: the slowest member (SAVEGAMEVERSION 9860)
-    // Fighting in formation (SAVEGAMEVERSION 9862, docs/formations.md): the engagement, kept
-    // equal on every member of a group except the place and the last hit.
-    Uint8    formationEngaged = 0;               ///< 0 marching, 1 holding, 2 advancing
-    Coord    formationAnchor = Coord::Invalid(); ///< A holding member's place
-    Uint32   formationEngageStart = 0;           ///< Cycle the group's engagement began
-    Uint32   formationEngageSize = 0;            ///< The group's members when it began
-    Uint32   formationLastInReach = 0;           ///< Last cycle a member of the group had an enemy target in reach
-    Uint8    formationEngageFacing = 0;          ///< Facing code towards the threat while engaged
-    Uint32   formationLastHit = 0;               ///< Last cycle this member was hit by an enemy
-    Uint32   formationHitBy = 0;                 ///< That enemy, until FormationOrders::update() handled the hit
     FormationPlanner::March formationMarch = FormationPlanner::March::Pace;  ///< Transient: this cycle's march, recomputed every cycle
     bool     formationPending = false;           ///< Transient: joined this cycle, form-up not planned yet (never across a save)
 

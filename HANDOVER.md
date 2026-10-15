@@ -1,3 +1,29 @@
+## 2026-10-15 — Fighting in formation through first contact: measured, not kept (branch `feat/formation-research`)
+
+Stefan approved making formations fight in formation through first contact so they can beat None. Details and
+tables: `docs/formations.md` ("Fighting in formation through first contact"). Raw data:
+`docs/formation-results/engagement/` (tags `pilot`, `pilot2`).
+
+- Built and measured five engagement modes against None and against today's scatter (Hard duels, sizes
+  128/160/192, seeds 7101-7606, Column and Box, 36 games per pairing, 576 games): Hold (leash 0 and 2),
+  Advance, Deploy (close in up to 6 tiles past weapon range) and Arc (spread into one battle line across the
+  threat). Shared rules: fire only in reach, re-march after 3 s quiet, break on an enemy within 2 tiles / a
+  third lost / outranged / 8 s outranged / 30 s.
+- No mode's 95% interval clears 0.5 against None (best box/arc 0.417, 0.25-0.58) or against scatter (best
+  column/arc 0.514, 0.35-0.67); Box Hold, Advance and Deploy and Column hold2 and Advance lose to None outright.
+  The formation survives the fight (about half the members in formation 10 s after contact vs 20-26% with
+  scatter), but the first-minute trade is no better than scatter's (2.0-3.2 vs 3.0-3.6 killed/lost) and below
+  None's (5-6.6).
+- Decision: scatter stays, QuantBot `WaveFormation` stays None. The engagement code, its saved state, the
+  test-only switch and the WIP's save 9862 / protocol 76 were removed (WIP history: commit `d09813f1`, Hold/
+  Advance/Deploy; Arc was measured from an uncommitted build). Save 9861 / protocol 75 unchanged. Kept: duel
+  harness `--pairs` (with a per-pairing report) and `--all-houses`, and the wave metric `in_formation_10s`.
+  The full 108-game run and the Brutal sample were not run: no mode qualified in the pilot.
+- Tests (one ctest run, -j3, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 29 quantbot_* tests: 37/37 passed. Probe output
+  deleted afterwards.
+
 ## 2026-10-15 — Formation research (branch `feat/formation-research`, not released)
 
 Stefan: "test different styles of formations ... keep the best 5"; then None as a control. Details and all tables:

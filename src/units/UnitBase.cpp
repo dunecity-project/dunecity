@@ -187,17 +187,6 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         formationResume = stream.readUint8();
         formationPaceItem = stream.readUint32();
     }
-    if(currentGame->getLoadedSavegameVersion() >= 9862) {
-        formationEngaged = stream.readUint8();
-        formationAnchor.x = stream.readSint32();
-        formationAnchor.y = stream.readSint32();
-        formationEngageStart = stream.readUint32();
-        formationEngageSize = stream.readUint32();
-        formationLastInReach = stream.readUint32();
-        formationEngageFacing = stream.readUint8();
-        formationLastHit = stream.readUint32();
-        formationHitBy = stream.readUint32();
-    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -312,15 +301,6 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(formationFormUp.y);
     stream.writeUint8(formationResume);
     stream.writeUint32(formationPaceItem);
-    stream.writeUint8(formationEngaged);
-    stream.writeSint32(formationAnchor.x);
-    stream.writeSint32(formationAnchor.y);
-    stream.writeUint32(formationEngageStart);
-    stream.writeUint32(formationEngageSize);
-    stream.writeUint32(formationLastInReach);
-    stream.writeUint8(formationEngageFacing);
-    stream.writeUint32(formationLastHit);
-    stream.writeUint32(formationHitBy);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -822,7 +802,7 @@ void UnitBase::engageTarget() {
         return;
     }
 
-    if (target && targetingMode()==HUNT && !forced && findTargetTimer==0
+    if (target && attackMode==HUNT && !forced && findTargetTimer==0
         && !currentGameMap->terrainAttackReachable(*this,*target.getObjPointer())) {
         // Drop an old hunt when its target moves behind an impassable ridge.
         // Explicit player orders and booked transport are not autonomous hunts.
@@ -877,10 +857,9 @@ void UnitBase::engageTarget() {
 
         if(targetDistance > getWeaponRange()) {
             // we are not in attack range: nobody follows an air unit, and a holding unit
-            // follows nothing - except a holding formation member within its leash
-            if(UnitOrderPolicy::outOfRangeResponse(targetingMode(), target.getObjPointer()->isAFlyingUnit())
-               == UnitOrderPolicy::OutOfRange::Release
-               && !(isFormationHolding() && !target.getObjPointer()->isAFlyingUnit() && isInHoldReach(target.getObjPointer()))) {
+            // follows nothing
+            if(UnitOrderPolicy::outOfRangeResponse(attackMode, target.getObjPointer()->isAFlyingUnit())
+               == UnitOrderPolicy::OutOfRange::Release) {
                 releaseTarget();
                 return;
             } else {
@@ -921,9 +900,7 @@ void UnitBase::engageTarget() {
         }
 
         if(airMissile ? !moving && bodyTurnComplete : getCurrentAttackAngle() == newTargetAngle) {
-            // A sonic member of a formation fighting in place does not fire through its own
-            // members (docs/formations.md, the sonic-lane rule in the fight).
-            if(!FormationOrders::sonicFireBlocked(this, targetLocation)) attack();
+            attack();
         }
 
     } else if(attackPos) {
@@ -1810,24 +1787,16 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 
     if(pDamager != nullptr){
 
-        // A hunting formation that is shot at has met the enemy (docs/formations.md): a
-        // scattering one breaks into free fights at once; any other notes the hit, and
-        // FormationOrders::update() engages or breaks the group next.
+        // A hunting formation that is shot at has met the enemy: the whole group breaks
+        // into a fight (docs/formations.md).
         if(damage > 0 && isFormationHunt() && pDamager->getOwner() != nullptr
            && pDamager->getOwner()->getTeamID() != owner->getTeamID()) {
-            if(FormationOrders::engagementOf(owner) != FormationOrders::Engagement::Scatter) {
-                formationLastHit = currentGame->getGameCycleCount();
-                formationHitBy = damagerID;
-            } else {
-                FormationOrders::breakHunt(formationGroup, pDamager);
-            }
+            FormationOrders::breakHunt(formationGroup, pDamager);
         }
 
         if(attackMode == HUNT && !forced) {
             ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
-            // A member fighting from its formation turns only on an attacker it can reach.
-            if(canAttack(pDamager) && (!firesFromFormation()
-                   || blockDistance(location, pDamager->getClosestPoint(location)) <= holdSearchRange())) {
+            if(canAttack(pDamager)) {
                 if(!target || target.getObjPointer() == nullptr || !isInWeaponRange(target.getObjPointer())) {
                     // no target or target not on weapon range => switch target
                     doAttackObject(pDamager, false);
@@ -1856,7 +1825,7 @@ bool UnitBase::isInGuardRange(const ObjectBase* pObject) const  {
     int checkRange;
     Coord checkFrom;
     
-    switch(targetingMode()) {
+    switch(attackMode) {
         case GUARD: {
             checkRange = getWeaponRange();
             checkFrom = guardPoint*TILESIZE + Coord(TILESIZE/2, TILESIZE/2);
@@ -1886,8 +1855,8 @@ bool UnitBase::isInGuardRange(const ObjectBase* pObject) const  {
         } break;
 
         case HOLD: {
-            // Only what the weapon reaches from where the unit stands (or its leash from its place).
-            return isInHoldReach(pObject);
+            // Only what the weapon reaches from where the unit stands.
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1907,7 +1876,7 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
     int checkRange;
     Coord checkFrom;
     
-    switch(targetingMode()) {
+    switch(attackMode) {
         case GUARD: {
             checkRange = getWeaponRange();
             checkFrom = guardPoint*TILESIZE + Coord(TILESIZE/2, TILESIZE/2);
@@ -1937,7 +1906,7 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
         } break;
 
         case HOLD: {
-            return isInHoldReach(pObject);
+            return isInWeaponRange(pObject);
         } break;
 
         case STOP:
@@ -1951,16 +1920,6 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
     }
 
     return (blockDistance(checkFrom, pObject->getCenterPoint()) <= checkRange*TILESIZE);
-}
-
-bool UnitBase::isInHoldReach(const ObjectBase* pObject) const {
-    if(isInWeaponRange(pObject)) return true;
-    // A holding formation member may step its leash from its place towards a target; a
-    // deploying one closes on a target within its leash beyond weapon range from where it is.
-    const int leash = isFormationHolding() ? FormationOrders::leashOf(owner) : 0;
-    if(leash <= 0 || pObject == nullptr) return false;
-    const Coord from = getFormationEngaged() == 3 ? location : formationAnchor;
-    return from.isValid() && blockDistance(from, pObject->getClosestPoint(from)) <= getWeaponRange() + leash;
 }
 
 bool UnitBase::isInWeaponRange(const ObjectBase* object) const {
@@ -2135,7 +2094,6 @@ void UnitBase::joinFormation(Uint32 groupID, const Coord& slot, bool hunt, Uint8
     formationPaceItem = itemID;
     formationMarch = FormationPlanner::March::Pace;
     formationPending = slot.isValid();
-    clearFormationEngagement();
 }
 
 void UnitBase::leaveFormation() {
@@ -2149,102 +2107,6 @@ void UnitBase::leaveFormation() {
     formationPaceItem = ItemID_Invalid;
     formationMarch = FormationPlanner::March::Pace;
     formationPending = false;
-    clearFormationEngagement();
-}
-
-void UnitBase::clearFormationEngagement() {
-    formationEngaged = 0;
-    formationAnchor.invalidate();
-    formationEngageStart = 0;
-    formationEngageSize = 0;
-    formationLastInReach = 0;
-    formationEngageFacing = 0;
-    formationLastHit = 0;
-    formationHitBy = 0;
-}
-
-bool UnitBase::firesFromFormation() const {
-    return formationGroup != 0 && formationHunt && fightsOnAttackMove()
-        && FormationOrders::engagementOf(owner) != FormationOrders::Engagement::Scatter;
-}
-
-ATTACKMODE UnitBase::targetingMode() const {
-    // Only the modes that fight on their own: STOP, RETREAT, CAPTURE and a booked carryall
-    // keep their own rules.
-    if((attackMode == HUNT || attackMode == AREAGUARD || attackMode == GUARD || attackMode == AMBUSH)
-       && firesFromFormation()) return HOLD;
-    return attackMode;
-}
-
-int UnitBase::holdSearchRange() const {
-    return getWeaponRange() + (isFormationHolding() ? FormationOrders::leashOf(owner) : 0);
-}
-
-const ObjectBase* UnitBase::formationTargetInReach(int extra) const {
-    const ObjectBase* pTarget = target.getObjPointer();
-    if(pTarget == nullptr || targetFriendly || pTarget->getOwner() == nullptr
-       || pTarget->getOwner()->getTeamID() == owner->getTeamID() || !pTarget->isActive()) return nullptr;
-    return blockDistance(location, pTarget->getClosestPoint(location)) <= getWeaponRange() + extra ? pTarget : nullptr;
-}
-
-void UnitBase::beginFormationEngagement(Uint8 kind, Uint32 now, int size, Uint8 facing) {
-    formationEngaged = kind;
-    formationEngageStart = now;
-    formationEngageSize = static_cast<Uint32>(std::max(0, size));
-    formationLastInReach = now;
-    formationEngageFacing = facing;
-    // The form-up, if any, is over: the group fights where it stands.
-    formationFormUp.invalidate();
-    formationPending = false;
-    if(kind != 1 && kind != 3) return;
-    // Hold: stop on the tile this unit stands on, or the one it is stepping onto, and keep
-    // that place. The walk towards the slot ends (it is given again on the re-march); the
-    // attack mode and a target in reach stay, so an AI hunter is still a hunter.
-    const Coord place = (moving && !justStoppedMoving && nextSpot.isValid()) ? nextSpot : location;
-    formationAnchor = place;
-    huntTowardGoal.invalidate();
-    if(target && formationTargetInReach(FormationOrders::leashOf(owner)) == nullptr) setTarget(nullptr);
-    if(destination != place) clearPath();
-    setDestination(place);
-    setGuardPoint(place);
-    setForced(false);
-}
-
-void UnitBase::resumeFormationMarch() {
-    const bool holding = isFormationHolding();
-    const Coord slot = formationSlot;
-    clearFormationEngagement();
-    if(slot.isInvalid()) return;
-    switch(static_cast<FormationOrders::Resume>(formationResume)) {
-        case FormationOrders::Resume::HuntToward:
-            // Not while it still fights a target in reach (advancing): Hunt resumes the walk.
-            if(holding || !target) doHuntToward(slot.x, slot.y);
-            break;
-        case FormationOrders::Resume::Walk:
-            // The attack-move or patrol walks on to the slot; its order queue takes over again.
-            if(holding || !target) {
-                attackMoveBreakOff.invalidate();
-                const ATTACKMODE mode = attackMode;
-                doMove2Pos(slot.x, slot.y, false);
-                attackMode = mode;
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-void UnitBase::returnToFormationPlace() {
-    if(formationAnchor.isInvalid() || location == formationAnchor || destination == formationAnchor) return;
-    // A plain walk back that keeps the attack mode (doMove2Pos would drop Hunt).
-    clearPath();
-    setDestination(formationAnchor);
-    setGuardPoint(formationAnchor);
-}
-
-bool UnitBase::formationLeashBroken(int leash) const {
-    return getFormationEngaged() == 1 && formationAnchor.isValid()
-        && FormationPlanner::tileDistance(location, formationAnchor) > leash;
 }
 
 void UnitBase::startFormUp(const Coord& tile) {
@@ -2328,11 +2190,8 @@ void UnitBase::engageFormationContact(const ObjectBase* enemy, bool hunter) {
 
 bool UnitBase::formationMarchEnded() const {
     if(!active || pickedUp || getHealth() <= 0) return true;
-    // An engaged member fights from its formation; FormationOrders::update() ends that.
-    if(isFormationEngaged()) return false;
-    // Contact: an enemy within hunt-toward reach turns the march into a fight - except for a
-    // member that fires from its formation, whose contact engages the group instead.
-    if(!firesFromFormation() && formationContact() != nullptr) return true;
+    // Contact: an enemy within hunt-toward reach turns the march into a fight.
+    if(formationContact() != nullptr) return true;
     // A hunting member's walk may go on beyond its slot (a patrol's next leg); the
     // formation ends where the slot is reached.
     if(formationHunt && formationSlot.isValid() && location == formationSlot) return true;
@@ -2530,9 +2389,8 @@ void UnitBase::targeting() {
                             doSetAttackMode(HUNT);
                         }
                     }
-                } else if(attackMode == HUNT && !firesFromFormation()) {
-                    // HUNT units with no targets switch back to GUARD (a formation member
-                    // fighting from its place stays a hunter: its group decides)
+                } else if(attackMode == HUNT) {
+                    // HUNT units with no targets switch back to GUARD
                     setGuardPoint(location);
                     doSetAttackMode(GUARD);
                 }
@@ -2636,7 +2494,7 @@ void UnitBase::resolvePendingTargetRequest() {
                 }
             }
 
-            if(pNewTarget==nullptr && attackMode==HUNT && !firesFromFormation()) {
+            if(pNewTarget==nullptr && attackMode==HUNT) {
                 // Match the synchronous targeting path. An empty reachable
                 // target set is not a mission to retry across the whole map.
                 setGuardPoint(location);
@@ -3023,9 +2881,8 @@ void UnitBase::quitDeviation() {
 bool UnitBase::update() {
     if(active) {
         // Player orders first, so a finished order hands over to the next one before this
-        // cycle's targeting decides what the unit does. A formation holding its places in a
-        // fight keeps its walk paused; the re-march or the break hands it back.
-        if(!orderQueue.empty() && !pickedUp && !isFormationHolding()) updateOrderQueue();
+        // cycle's targeting decides what the unit does.
+        if(!orderQueue.empty() && !pickedUp) updateOrderQueue();
 
         // Time targeting
         Uint64 targetStart = SDL_GetPerformanceCounter();

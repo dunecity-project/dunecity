@@ -149,12 +149,7 @@
 // 9861: Form up where they stand (docs/formations.md): a save or replay may carry
 //       CMD_UNIT_FORMATION_MOVE commands of order kind FormUp, which a 9860 build refuses,
 //       so it must not load them. The layout is unchanged: a 9860 save loads as it is.
-// 9862: Fighting in formation (docs/formations.md): UnitBase records its hunting formation's
-//       engagement - holding or advancing, the member's place, when the engagement began, the
-//       group's size then, when a member last had an enemy in reach, the facing towards the
-//       threat - and the member's last enemy hit. A 9861 or older save loads every formation
-//       as not engaged (marching).
-#define SAVEGAMEVERSION     9862
+#define SAVEGAMEVERSION     9861
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

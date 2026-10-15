@@ -24,55 +24,17 @@
 #include <Tile.h>
 #include <units/UnitBase.h>
 
-#include <algorithm>
 #include <map>
 #include <set>
 
 namespace FormationOrders {
-
-using FormationPlanner::EngageEnd;
-using FormationPlanner::EngageView;
-using FormationPlanner::engageStep;
-using FormationPlanner::kEngageCloseTiles;
 
 namespace {
 /// Formations with a facing and a sonic member, recomputed by update() at the start of
 /// every cycle (so identical on every peer and after a load): only their members pay for
 /// the lane check when they step.
 std::set<Uint32> sonicGroups;
-
-/// Test-only engagement overrides per house id (setTestEngagement); never set by the game.
-std::map<int, std::pair<int, int>> testEngagement;
-/// Diagnostics per house id (engageStats); never read by the simulation.
-std::map<int, EngageStats> stats;
 } // namespace
-
-Engagement engagementOf(const House* house) {
-    if(house != nullptr) {
-        const auto found = testEngagement.find(house->getHouseID());
-        if(found != testEngagement.end() && found->second.first >= 0) return static_cast<Engagement>(found->second.first);
-    }
-    return kEngagement;
-}
-
-int leashOf(const House* house) {
-    if(house != nullptr) {
-        const auto found = testEngagement.find(house->getHouseID());
-        if(found != testEngagement.end() && found->second.second >= 0) return found->second.second;
-    }
-    return engagementOf(house) == Engagement::Deploy ? kEngageDeployReach : kEngageLeashTiles;
-}
-
-void setTestEngagement(int houseID, int engagement, int leash) {
-    if(engagement > static_cast<int>(Engagement::Deploy)) engagement = -1;
-    testEngagement[houseID] = {engagement, leash};
-}
-
-void clearTestEngagement() { testEngagement.clear(); }
-
-const EngageStats& engageStats(int houseID) { return stats[houseID]; }
-
-void clearEngageStats() { stats.clear(); }
 
 bool eligible(const UnitBase* unit) {
     return unit != nullptr && unit->isActive() && unit->getHealth() > 0
@@ -189,15 +151,14 @@ bool stepEntersSonicLane(const UnitBase* unit, const Coord& next) {
     // Forming up the group crosses itself on the way into its shape, whose form-up tiles keep
     // the lanes clear (FormationPlanner::formUpTiles): the rule holds from the march on.
     if(unit->isFormationForming()) return false;
-    const Coord forward = FormationPlanner::facingFromCode(unit->getFormationLaneFacing());
+    const Coord forward = FormationPlanner::facingFromCode(unit->getFormationFacing());
     if(forward == Coord(0, 0)) return false;
     // An AI hunting formation may march before it has formed up (kHuntFormUpMaxMs). A sonic
     // member still recovering its place there has no lane yet: it moves up to its front-row
     // place without waiting for the members ahead of it, and nobody waits for its lane -
     // otherwise it and the members around it wait for each other for ever.
     auto sonicOutOfPlace = [](const UnitBase* member) {
-        return member->isFormationHuntToward() && !member->isFormationEngaged()
-            && FormationPlanner::isSonic(member->getItemID())
+        return member->isFormationHuntToward() && FormationPlanner::isSonic(member->getItemID())
             && member->getFormationMarch() == FormationPlanner::March::Recover;
     };
     if(sonicOutOfPlace(unit)) return false;
@@ -219,21 +180,6 @@ bool stepEntersSonicLane(const UnitBase* unit, const Coord& next) {
                && !FormationPlanner::inSonicLane(here, at, forward)
                && !FormationPlanner::mayStandInLane(unit->getItemID(), other->getItemID())) return true;
         }
-    }
-    return false;
-}
-
-bool sonicFireBlocked(const UnitBase* unit, const Coord& targetTile) {
-    if(!FormationPlanner::isSonic(unit->getItemID()) || !unit->isInFormation() || !unit->firesFromFormation()) return false;
-    const Coord& here = unit->getLocation();
-    const Coord forward = FormationPlanner::facing(here, targetTile);
-    if(forward == Coord(0, 0)) return false;
-    const int reach = FormationPlanner::tileDistance(here, targetTile);
-    for(const UnitBase* other : unitList) {
-        if(other == unit || other->getFormationGroup() != unit->getFormationGroup()) continue;
-        if(FormationPlanner::mayStandInLane(unit->getItemID(), other->getItemID())) continue;
-        const Coord& at = other->getLocation();
-        if(FormationPlanner::tileDistance(here, at) <= reach && FormationPlanner::inSonicLane(here, at, forward)) return true;
     }
     return false;
 }
@@ -344,152 +290,18 @@ void stepAsideForFormUp() {
     }
 }
 
-/// The enemy unit within kEngageCloseTiles of 'unit' with the smallest object id, or 0.
-Uint32 closeEnemy(const UnitBase* unit) {
-    const Coord& at = unit->getLocation();
-    const int team = unit->getOwner()->getTeamID();
-    Uint32 found = 0;
-    for(int y = at.y - kEngageCloseTiles; y <= at.y + kEngageCloseTiles; ++y)
-        for(int x = at.x - kEngageCloseTiles; x <= at.x + kEngageCloseTiles; ++x) {
-            if(!currentGameMap->tileExists(x, y)) continue;
-            const Tile* tile = currentGameMap->getTile(x, y);
-            if(!tile->hasAGroundObject()) continue;
-            auto consider = [&](Uint32 id) {
-                const ObjectBase* object = currentGame->getObjectManager().getObject(id);
-                if(object == nullptr || !object->isAUnit() || !object->isActive() || object->getHealth() <= 0
-                   || object->getOwner() == nullptr || object->getOwner()->getTeamID() == team
-                   || object->getItemID() == Unit_Sandworm) return;
-                if(found == 0 || id < found) found = id;
-            };
-            for(const Uint32 id : tile->getNonInfantryGroundObjectList()) consider(id);
-            for(const Uint32 id : tile->getInfantryList()) consider(id);
-        }
-    return found;
-}
-
-/// The smaller non-zero id.
-Uint32 firstID(Uint32 a, Uint32 b) { return a == 0 ? b : (b == 0 ? a : std::min(a, b)); }
-
-/**
-    Fighting in formation (docs/formations.md): every hunting formation whose engagement is
-    not Scatter, group by group in id order. A marching group engages when a member has an
-    enemy target in weapon range or was hit (holding: every member stops on its place,
-    facing the threat); an engaged group keeps fighting, marches on or breaks into free
-    fights by engageStep. From the members' state only, with order-independent aggregates
-    (counts, extremes, smallest ids), so every peer and a loaded game decide the same.
-*/
-void engageHuntingFormations() {
-    std::map<Uint32, std::vector<UnitBase*>> groups;
-    for(UnitBase* unit : unitList)
-        if(unit->isFormationHunt() && engagementOf(unit->getOwner()) != Engagement::Scatter)
-            groups[unit->getFormationGroup()].push_back(unit);
-    const Uint32 now = currentGame->getGameCycleCount();
-    for(const auto& [groupID, members] : groups) {
-        const House* owner = members.front()->getOwner();
-        const Engagement engagement = engagementOf(owner);
-        const int leash = leashOf(owner);
-        const Uint8 engaged = members.front()->getFormationEngaged();
-        bool inReach = false, outranged = false, newHit = false;
-        Uint32 reachThreat = 0, hitThreat = 0, outrangedThreat = 0, close = 0, lastHit = 0;
-        Sint64 threatX = 0, threatY = 0, threats = 0, ownX = 0, ownY = 0;
-        for(UnitBase* unit : members) {
-            ownX += unit->getLocation().x; ownY += unit->getLocation().y;
-            if(const ObjectBase* enemy = unit->formationTargetInReach(unit->isFormationHolding() ? leash : 0)) {
-                inReach = true;
-                reachThreat = firstID(reachThreat, enemy->getObjectID());
-                const Coord at = enemy->getClosestPoint(unit->getLocation());
-                threatX += at.x; threatY += at.y; ++threats;
-            }
-            lastHit = std::max(lastHit, unit->getFormationLastHit());
-            close = firstID(close, closeEnemy(unit));
-            if(unit->getFormationHitBy() == 0) continue;
-            const ObjectBase* damager = currentGame->getObjectManager().getObject(unit->getFormationHitBy());
-            unit->clearFormationHitBy();
-            if(damager == nullptr || damager->getHealth() <= 0) continue;
-            newHit = true;
-            hitThreat = firstID(hitThreat, damager->getObjectID());
-            const Coord at = damager->getClosestPoint(unit->getLocation());
-            threatX += at.x; threatY += at.y; ++threats;
-            if(damager->isAFlyingUnit()) continue;
-            // Hit from beyond every member's reach: nobody here can answer it.
-            bool answerable = false;
-            for(const UnitBase* member : members)
-                answerable = answerable || (member->fightsOnAttackMove() && member->canAttack(damager)
-                    && blockDistance(member->getLocation(), damager->getClosestPoint(member->getLocation()))
-                           <= member->getWeaponRange() + (engagement == Engagement::Advance ? 0 : leash));
-            if(!answerable) { outranged = true; outrangedThreat = firstID(outrangedThreat, damager->getObjectID()); }
-        }
-        if(engaged == 0 && !inReach && !newHit && close == 0) continue;
-        const int n = static_cast<int>(members.size());
-        if(engaged == 0) {
-            // Engage: the group fights from where it stands, facing the threat (halting kinds).
-            const bool halts = engagement == Engagement::Hold || engagement == Engagement::Deploy;
-            Uint8 facing = 0;
-            if(halts && threats > 0)
-                facing = FormationPlanner::facingCode(FormationPlanner::facing(
-                    Coord(static_cast<int>(ownX / n), static_cast<int>(ownY / n)),
-                    Coord(static_cast<int>(threatX / threats), static_cast<int>(threatY / threats))));
-            const Uint8 kind = static_cast<Uint8>(engagement);
-            for(UnitBase* unit : members) unit->beginFormationEngagement(kind, now, n, facing);
-            ++stats[owner->getHouseID()].engaged;
-        }
-        const UnitBase* lead = members.front();
-        EngageView view;
-        view.size = lead->getFormationEngageSize();
-        view.members = n;
-        view.now = now;
-        view.started = lead->getFormationEngageStart();
-        view.lastInReach = inReach ? now : lead->getFormationLastInReach();
-        view.lastHit = lastHit;
-        view.inReach = inReach;
-        view.close = close != 0;
-        view.outranged = outranged;
-        const EngageEnd end = engageStep(view);
-        if(end == EngageEnd::None) {
-            for(UnitBase* unit : members) {
-                unit->setFormationLastInReach(view.lastInReach);
-                if(unit->getFormationEngaged() == static_cast<Uint8>(Engagement::Hold)) {
-                    // Holding: a member that followed a target beyond its leash, or has none
-                    // left, walks back to its place.
-                    if(unit->hasATarget() && unit->formationLeashBroken(leash)) unit->setTarget(nullptr);
-                    if(!unit->hasATarget() && !unit->isMoving()) unit->returnToFormationPlace();
-                } else if(unit->isFormationHolding()) {
-                    // Deploying: it stays where its last fight took it until the re-march.
-                } else if(unit->isFormationEngaged() && !unit->hasATarget() && !unit->isMoving()
-                          && unit->isFormationHuntToward() && !unit->isHuntingToward()
-                          && unit->getFormationSlot().isValid() && unit->getLocation() != unit->getFormationSlot()) {
-                    // Advancing: a hunter whose fight is over walks on to its slot.
-                    unit->doHuntToward(unit->getFormationSlot().x, unit->getFormationSlot().y);
-                }
-            }
-            continue;
-        }
-        ++stats[owner->getHouseID()].ended[static_cast<int>(end)];
-        if(end == EngageEnd::Resume) {
-            for(UnitBase* unit : members) unit->resumeFormationMarch();
-            continue;
-        }
-        const Uint32 threat = end == EngageEnd::Close ? close
-            : end == EngageEnd::Outranged ? outrangedThreat : firstID(reachThreat, hitThreat);
-        breakHunt(groupID, threat != 0 ? currentGame->getObjectManager().getObject(threat) : nullptr);
-    }
-}
-
 } // namespace
 
 void update() {
-    // Hunting formations first. A scattering one breaks at the first member in unit-list order
-    // that has made contact, identically on every peer and after a load.
+    // Hunting formations first: the first member in unit-list order that has made contact
+    // breaks its whole group, identically on every peer and after a load.
     std::map<Uint32, Uint32> contacts;    // group id -> the enemy met
     for(const UnitBase* unit : unitList) {
-        if(!unit->isInFormation() || !unit->isFormationHunt() || contacts.count(unit->getFormationGroup())
-           || engagementOf(unit->getOwner()) != Engagement::Scatter) continue;
+        if(!unit->isInFormation() || !unit->isFormationHunt() || contacts.count(unit->getFormationGroup())) continue;
         if(const ObjectBase* enemy = unit->formationContact()) contacts[unit->getFormationGroup()] = enemy->getObjectID();
     }
     for(const auto& [groupID, enemyID] : contacts)
         breakHunt(groupID, currentGame->getObjectManager().getObject(enemyID));
-    // The others fight in formation.
-    engageHuntingFormations();
 
     struct Group {
         int members = 0;
@@ -529,7 +341,7 @@ void update() {
     // The groups whose members keep the sonic lanes clear on this cycle's steps.
     sonicGroups.clear();
     for(const UnitBase* unit : unitList)
-        if(unit->isInFormation() && unit->getFormationLaneFacing() != 0 && FormationPlanner::isSonic(unit->getItemID()))
+        if(unit->isInFormation() && unit->getFormationFacing() != 0 && FormationPlanner::isSonic(unit->getItemID()))
             sonicGroups.insert(unit->getFormationGroup());
     // A member whose next step would enter a sonic lane waits for the others to move on.
     auto laneBlocked = [](const UnitBase* unit) {
@@ -560,7 +372,7 @@ void update() {
 
     // The march: remaining distances of the marching members.
     for(const UnitBase* unit : unitList) {
-        if(!unit->isInFormation() || unit->isFormationForming() || unit->isFormationHolding()) continue;
+        if(!unit->isInFormation() || unit->isFormationForming()) continue;
         Group& group = groups.at(unit->getFormationGroup());
         const int remaining = unit->formationRemainingTiles();
         group.leastRemaining = group.marching == 0 ? remaining : std::min(group.leastRemaining, remaining);
@@ -583,11 +395,6 @@ void update() {
                 && unit->getDestination() != unit->getLocation();
             unit->setFormationMarch(unit->formUpReady() && !steppingAside ? FormationPlanner::March::Hold
                                                                             : FormationPlanner::March::Recover);
-            continue;
-        }
-        if(unit->isFormationHolding()) {
-            // Holding its place in a fight: its leash steps and the walk back run at full speed.
-            unit->setFormationMarch(FormationPlanner::March::Recover);
             continue;
         }
         const Group& group = groups.at(unit->getFormationGroup());

@@ -10,7 +10,6 @@
 #include <catch2/catch_all.hpp>
 #include <FormationPlanner.h>
 #include <data.h>
-#include <Definitions.h>
 
 #include <algorithm>
 #include <map>
@@ -321,88 +320,6 @@ TEST_CASE("The one-speed march: pace, recover a lost place, wait for a member fa
     // forms up before it marches: the leaders wait.
     REQUIRE(marchState(0, kHoldLeadTiles + 1) == March::Hold);
     REQUIRE(marchState(kRecoverLagTiles + 1, kHoldLeadTiles + 1) == March::Hold);
-}
-
-TEST_CASE("Fighting in formation: the engagement rules", "[formation][engage]") {
-    const Uint32 second = MILLI2CYCLES(1000);
-    // A formation of 12 that engaged at cycle 1000 with an enemy in reach.
-    EngageView fight;
-    fight.size = 12;
-    fight.members = 12;
-    fight.started = 1000;
-    fight.now = 1000 + 5 * second;
-    fight.lastInReach = fight.now;
-    fight.inReach = true;
-    // Holding and firing: keep fighting from the places.
-    REQUIRE(engageStep(fight) == EngageEnd::None);
-
-    SECTION("an enemy unit within two tiles breaks it, before every other rule") {
-        REQUIRE(kEngageCloseTiles == 2);
-        EngageView view = fight;
-        view.close = true;
-        view.outranged = true;
-        view.members = 2;
-        REQUIRE(engageStep(view) == EngageEnd::Close);
-    }
-    SECTION("losing a third of the members breaks it") {
-        EngageView view = fight;
-        view.members = 9;      // 3 of 12 lost: a quarter
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        view.members = 8;      // 4 of 12: a third
-        REQUIRE(engageStep(view) == EngageEnd::Losses);
-        view.size = 3;
-        view.members = 2;      // one of three
-        REQUIRE(engageStep(view) == EngageEnd::Losses);
-    }
-    SECTION("a hit from beyond every member's reach breaks it at once") {
-        EngageView view = fight;
-        view.outranged = true;
-        view.now = view.started + 1;
-        REQUIRE(engageStep(view) == EngageEnd::Outranged);
-    }
-    SECTION("8 s of hits with nothing in reach breaks it") {
-        EngageView view = fight;
-        view.inReach = false;
-        view.lastInReach = fight.started;
-        view.now = fight.started + MILLI2CYCLES(kEngageOutrangedMs) - 1;
-        view.lastHit = view.now - 1;
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        view.now = fight.started + MILLI2CYCLES(kEngageOutrangedMs);
-        view.lastHit = view.now - 1;
-        REQUIRE(engageStep(view) == EngageEnd::Quiet);
-    }
-    SECTION("30 s after it began it breaks, whatever happens") {
-        EngageView view = fight;
-        view.now = fight.started + MILLI2CYCLES(kEngageMaxMs) - 1;
-        view.lastInReach = view.now;
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        view.now = fight.started + MILLI2CYCLES(kEngageMaxMs);
-        REQUIRE(engageStep(view) == EngageEnd::Timeout);
-    }
-    SECTION("nothing in reach and no hit for 3 s: the formation marches on") {
-        EngageView view = fight;
-        view.inReach = false;
-        view.lastInReach = fight.now;
-        view.now = fight.now + MILLI2CYCLES(kEngageQuietMs) - 1;
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        view.now = fight.now + MILLI2CYCLES(kEngageQuietMs);
-        REQUIRE(engageStep(view) == EngageEnd::Resume);
-        // Still being hit: it waits instead (and breaks after 8 s, above).
-        view.lastHit = view.now - 1;
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        // A hit long ago does not hold it.
-        view.lastHit = fight.started;
-        REQUIRE(engageStep(view) == EngageEnd::Resume);
-    }
-    SECTION("an engagement that began on a hit alone waits 3 s before it marches on") {
-        EngageView view;
-        view.size = view.members = 6;
-        view.started = view.lastInReach = view.lastHit = 500;
-        view.now = 500 + MILLI2CYCLES(kEngageQuietMs) - 1;
-        REQUIRE(engageStep(view) == EngageEnd::None);
-        view.now = 500 + MILLI2CYCLES(kEngageQuietMs);
-        REQUIRE(engageStep(view) == EngageEnd::Resume);
-    }
 }
 
 TEST_CASE("Group ids carry the issuing player and a non-zero token", "[formation]") {

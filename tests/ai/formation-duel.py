@@ -38,8 +38,7 @@ SEEDS = (7101, 7202, 7303)
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 KEY = ('tag', 'difficulty', 'size', 'seed', 'house_a', 'shape_a', 'house_b', 'shape_b')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units', 'engagements', 'resumed', 'broke_close', 'broke_losses', 'broke_outranged',
-                'broke_quiet', 'broke_timeout')
+                'army_value', 'army_units')
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
     f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
@@ -92,10 +91,6 @@ def schedule(args):
     return games
 
 
-def slug(key):
-    return '-'.join(key).replace('/', '_')
-
-
 def build_probe(args, scratch):
     probe = scratch / 'probe'
     binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
@@ -113,7 +108,7 @@ def build_probe(args, scratch):
 
 def play(args, scratch, binary, key):
     tag, difficulty, size, seed, house_a, shape_a, house_b, shape_b = key
-    out = scratch / slug(key)
+    out = scratch / '-'.join(key)
     shutil.rmtree(out, ignore_errors=True)
     command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
@@ -149,7 +144,7 @@ def play(args, scratch, binary, key):
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
     results = Path(args.results)
     if row['error']:
-        (results / f'failed-{slug(key)}.txt').write_text(
+        (results / f'failed-{"-".join(key)}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
@@ -361,9 +356,8 @@ def export(args):
 
 
 def pairing_report(args):
-    """Per pairing (--pairs x:y), from x's side: the score, eliminations, game length, and the
-    waves of both sides (formation at contact and 10 s later, first-minute trade, survival) plus
-    how x's engagements ended."""
+    """Per pairing (--pairs x:y), from x's side: the score, eliminations and game length, and the
+    waves of both sides (formation at contact and 10 s later, first-minute trade, survival)."""
     results = Path(args.results)
     tags, sizes, seeds = set(args.tag.split(',')), {str(s) for s in args.sizes}, {str(s) for s in args.seeds}
     def wanted(row):
@@ -376,7 +370,7 @@ def pairing_report(args):
     print('| Pairing | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | '
           'Median game min | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|')
-    wave_rows, end_rows = [], []
+    wave_rows = []
     for x, y in pairs(args):
         mine = [g for g in games if {g['shape_a'], g['shape_b']} == {x, y}]
         rows = [s for g in mine for s in sides(g, args.adjudicate) if s[0] == x]
@@ -401,24 +395,12 @@ def pairing_report(args):
                              f'{share(contact, "in_formation_at_contact"):.0f}% | {share(later, "in_formation_10s"):.0f}% | '
                              f'{kill / max(1, len(sw)):.0f} | {loss / max(1, len(sw)):.0f} | {kill / max(1, loss):.2f} | '
                              f'{100 * sum(number(wv["survivors"]) for wv in sw) / max(1, members):.0f}% |')
-        side_of = lambda g: 'a' if g['shape_a'] == x else 'b'
-        count = lambda f: sum(number(g[f'{f}_{side_of(g)}']) for g in mine)
-        engagements = count('engagements')
-        if engagements:
-            end_rows.append(f'| {x} v {y} | {engagements / len(mine):.1f} | ' + ' | '.join(
-                f'{100 * count(f) / engagements:.0f}%' for f in ('resumed', 'broke_close', 'broke_losses', 'broke_outranged',
-                                                                   'broke_quiet', 'broke_timeout')) + ' |')
     print('\nWaves of both sides (members in formation at contact and 10 s later as a share of members; first-minute '
           'value killed and lost from contact; members alive 5 min after launch):\n')
     print('| Pairing | Side | Waves | Members / wave | In formation at contact | In formation +10 s | Killed 60 s | '
           'Lost 60 s | Killed / lost | Survival |')
     print('|---|---|---|---|---|---|---|---|---|---|')
     print('\n'.join(wave_rows))
-    if end_rows:
-        print('\nHow the first side\'s engagements ended:\n')
-        print('| Pairing | Engagements / game | Marched on | Close | A third lost | Outranged | 8 s outranged | 30 s |')
-        print('|---|---|---|---|---|---|---|---|')
-        print('\n'.join(end_rows))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -433,8 +415,7 @@ parser.add_argument('--sizes', nargs='+', type=int, default=list(SIZES))
 parser.add_argument('--seeds', nargs='+', type=int, default=list(SEEDS))
 parser.add_argument('--shapes', nargs='+', default=list(SHAPES))
 parser.add_argument('--versus', help='Play only the pairs that include this shape (e.g. none: every shape against the control)')
-parser.add_argument('--pairs', help='Play (and report) exactly these pairs: x:y,x:y (a shape may carry an engagement, '
-                                    'e.g. box/scatter; see formation-duel.inc)')
+parser.add_argument('--pairs', help='Play (and report) exactly these shape pairs: x:y,x:y')
 parser.add_argument('--all-houses', action='store_true',
                     help='Play every seed with all three house pairs (three times the games) instead of one pair per seed')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')

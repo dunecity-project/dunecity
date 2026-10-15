@@ -278,30 +278,19 @@ int runOwnershipProbe() {
                     "A member's attack-move does not lead to its slot");
             require(!member->wasForced(), "An attack-move in formation was forced");
         }
-        // Fighting in formation (the game's engagement, docs/formations.md): a hit on one member
-        // is noted, and the next per-cycle update engages the whole group in one cycle - every
-        // member stays in the formation and holds where it stands.
+        // A hit on one member breaks the whole group: everyone leaves the formation and every
+        // fighter that had no target goes for the attacker.
         UnitBase* raider = enemy->createUnit(Unit_Tank, true);
         raider->deploy(freeTileNear(centre + Coord(5, 0)));
         raider->setVisible(VIS_ALL, true);   // seen by the hunters, as it would be after a cycle
         hunters[2]->handleDamage(1, raider->getObjectID(), enemy);
-        FormationOrders::update();
-        for(const UnitBase* member : hunters)
-            require(member->getFormationGroup() == huntGroup && member->isFormationHolding()
-                    && member->getFormationAnchor().isValid(), "A hit did not engage the whole hunting formation in place");
-        // The pre-9862 scatter (the test-only switch the formation duels compare against): a hit
-        // on one member breaks the whole group at once, and every fighter that had no target goes
-        // for the attacker.
-        FormationOrders::setTestEngagement(owner->getHouseID(), static_cast<int>(FormationOrders::Engagement::Scatter), -1);
-        for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), attackMove);
-        hunters[2]->handleDamage(1, raider->getObjectID(), enemy);
         for(const UnitBase* member : hunters) {
             require(!member->isInFormation() && !member->isFormationHunt() && member->getFormationSpeedCap() == 0,
-                    "A hit on one member did not break the scattering hunting formation");
+                    "A hit on one member did not break the hunting formation");
             require(member->hasATarget(), "A member did not turn to the attacker when the formation broke");
         }
         // Patrol kind, then contact found by the per-cycle update: a member targeting an enemy
-        // within its reach breaks the scattering group.
+        // within its reach breaks the group.
         for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), patrol);
         for(const UnitBase* member : hunters)
             require(member->isFormationHunt() && member->getOrderQueue().front().type == UnitOrderType::Patrol,
@@ -310,7 +299,6 @@ int runOwnershipProbe() {
         FormationOrders::update();
         for(const UnitBase* member : hunters)
             require(!member->isInFormation() && member->hasATarget(), "Contact did not break the hunting formation into a fight");
-        FormationOrders::clearTestEngagement();
         // A plain formation move never breaks on contact: only its own contacted member leaves.
         // It carries the facing above the token (protocol 73) and joins without a hunt.
         for(UnitBase* member : hunters)
@@ -324,8 +312,7 @@ int runOwnershipProbe() {
         for(UnitBase* member : hunters) member->cancelDeployment();
         raider->cancelDeployment();
         SDL_Log("FORMATION_HUNT_COMMAND_PROBE_PASS: owner-only, token, kind and slot validation; attack-move and "
-                "patrol join one hunting group at the slowest pace; a hit engages the whole group in place (scattering: a "
-                "hit or a contact breaks every member into a fight); "
+                "patrol join one hunting group at the slowest pace; a hit or a contact breaks every member into a fight; "
                 "a plain formation move does not break");
     }
     CommandManager batches;

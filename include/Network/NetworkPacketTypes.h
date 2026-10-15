@@ -205,12 +205,7 @@
 //     slot is also the member's form-up tile, so the group walks straight into its shape
 //     without a march. A 74 peer refuses the kind and would leave the units where they are.
 //     Save 9861.
-// 76: Fighting in formation. A hunting formation (CMD_UNIT_FORMATION_HUNT and AI hunting
-//     formations) no longer breaks at the first contact: its members fire only at what they
-//     reach, the group halts and fights from its places, marches on when nothing is left in
-//     reach and breaks into free fights by fixed rules (an enemy within 2 tiles, a third
-//     lost, outranged, 30 s). A 75 peer would scatter the same group. Save 9862.
-#define NETWORK_PROTOCOL_VERSION            76
+#define NETWORK_PROTOCOL_VERSION            75
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -539,9 +539,6 @@ int QuantBot::launcherEscapeRange(const UnitBase* launcher, const ObjectBase* th
 
 bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat) {
     if (!huntingLauncher(launcher) || !launcher->isActive() || !launcher->isRespondable()) return false;
-    // A launcher fighting from its wave's formation keeps its place behind the armour; the
-    // formation breaks into free fights (and kiting) when an enemy closes in (docs/formations.md).
-    if (launcher->firesFromFormation()) return false;
     // Everything that outranks fresh offence keeps outranking it: a human order,
     // a repair run, a carryall pickup and a live defence contact stay with their
     // owner rather than being turned into a dodge. The one exception is a

@@ -982,8 +982,8 @@ void DeviationProbe::legacyLedger() {
         unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
     }
     // 9857 appended the formation membership (group, slot, speed cap) after the hunt-toward
-    // record, 9859 the hunting flag and facing after it, 9860 the form-up tile, resume kind
-    // and pace unit type and 9862 the engagement; a pre-9849 record has none of it.
+    // record, 9859 the hunting flag and facing after it and 9860 the form-up tile, resume kind
+    // and pace unit type; a pre-9849 record has none of it.
     // The hunt-toward bytes are already gone.
     {
         tank->leaveFormation();
@@ -997,14 +997,6 @@ void DeviationProbe::legacyLedger() {
         tank->formationFormUp = Coord(0x56575859, 0x5A5B5C5D);
         tank->formationResume = 3;
         tank->formationPaceItem = 0x5E5F6061;
-        tank->formationEngaged = 1;
-        tank->formationAnchor = Coord(0x62636465, 0x66676869);
-        tank->formationEngageStart = 0x6A6B6C6D;
-        tank->formationEngageSize = 0x6E6F7071;
-        tank->formationLastInReach = 0x72737475;
-        tank->formationEngageFacing = 5;
-        tank->formationLastHit = 0x76777879;
-        tank->formationHitBy = 0x7A7B7C7D;
         OMemoryStream b; b.open(); tank->save(b);
         const std::string after(b.getData(), b.getDataLength());
         tank->leaveFormation();
@@ -1012,7 +1004,7 @@ void DeviationProbe::legacyLedger() {
         while(first < before.size() && before[first] == after[first]) ++first;
         size_t last = before.size();
         while(last > first && before[last-1] == after[last-1]) --last;
-        require(last - first == 35 + 30, "The formation record is not the expected 65 bytes");
+        require(last - first == 35, "The formation record is not the expected 35 bytes");
         unitBytes.first.erase(first - unitBytes.second - 9, last - first);
     }
 

@@ -266,52 +266,6 @@ enum class March : Uint8 {
 */
 March marchState(int behindLeader, int aheadOfLast);
 
-// ---- Fighting in formation (docs/formations.md): the engagement rules of a hunting formation.
-/// An enemy unit this close to a member breaks the formation into free fights.
-constexpr int kEngageCloseTiles = 2;
-/// The formation breaks once it has lost this fraction (numerator / denominator) of the
-/// members it had when the engagement began.
-constexpr int kEngageLossNumerator = 1;
-constexpr int kEngageLossDenominator = 3;
-/// Hit for this long without a member having anything in reach (outranged): break.
-constexpr Uint32 kEngageOutrangedMs = 8000;
-/// An engagement breaks into free fights at the latest this long after it began.
-constexpr Uint32 kEngageMaxMs = 30000;
-/// Nothing in reach and no hit for this long: the formation marches on.
-constexpr Uint32 kEngageQuietMs = 3000;
-
-/// Why an engagement ended (engageStep).
-enum class EngageEnd : Uint8 {
-    None = 0,       ///< still engaged
-    Resume = 1,     ///< nothing left in reach: the formation marches on
-    Close = 2,      ///< an enemy unit within kEngageCloseTiles of a member
-    Losses = 3,     ///< a third of the members lost
-    Outranged = 4,  ///< hit from beyond every member's reach
-    Quiet = 5,      ///< kEngageOutrangedMs of hits with nothing in reach
-    Timeout = 6,    ///< kEngageMaxMs
-    Count = 7
-};
-
-/// One engaged formation as the rules see it (all cycles are game cycles).
-struct EngageView {
-    int size = 0;               ///< members when the engagement began
-    int members = 0;            ///< members still in the formation
-    Uint32 now = 0;
-    Uint32 started = 0;         ///< cycle the engagement began
-    Uint32 lastInReach = 0;     ///< last cycle a member had an enemy target in reach
-    Uint32 lastHit = 0;         ///< last cycle a member was hit by an enemy
-    bool inReach = false;       ///< a member has an enemy target in reach now
-    bool close = false;         ///< an enemy unit within kEngageCloseTiles of a member now
-    bool outranged = false;     ///< a member was just hit by an enemy beyond every member's reach
-};
-
-/**
-    The engagement rules (docs/formations.md, "Fighting in formation"), a pure function: a
-    break (Close, Losses, Outranged, Quiet, Timeout, in that order), the re-march (Resume:
-    nothing in reach and no hit for kEngageQuietMs) or None (keep fighting in place).
-*/
-EngageEnd engageStep(const EngageView& view);
-
 /// The token range a formation command may carry: 24 bits, never zero.
 constexpr Uint32 kTokenMask = 0xFFFFFFu;
 inline bool isValidToken(Uint32 token) { return token != 0 && token <= kTokenMask; }
