@@ -1,3 +1,15 @@
+## 2026-10-15 — local 1.0.842 installed on the MBA
+
+Integration `cbcac37a` = Codex staging cleanup `5c4057a0` + `feat/formation-research` (`fe6f8957`,
+includes `feat/formation-form-up`): formation buttons / Ctrl+Shift+F form the selection up in
+place; five shapes Box, Pincer, Column, Staggered, Echelon (+ Off); QuantBot `WaveFormation`
+default None; fight-in-formation modes measured and not kept. Save 9861 / protocol 75 (1.0.841
+cannot load its saves or join its games). `agent-workspace stage verify` at cbcac37a: build,
+check-build-deps and CTest 93/93 serial passed (exit 0, no source change). Package: executable
+SHA256 63ea31c7dec02abd2ff1babca1f7271ecb688bc6232f69f9f0afda1ed3cb6374, no Homebrew/local
+links, signature and runtime check passed; installed on the MBA 2026-10-15 21:05 AEDT, 1.0.841 at
+/Applications/.dunecity-backup-before-1.0.842-20261015-210538/. Not pushed or published.
+
 ## 2026-10-15 — Fighting in formation through first contact: measured, not kept (branch `feat/formation-research`)
 
 Stefan approved making formations fight in formation through first contact so they can beat None. Details and
