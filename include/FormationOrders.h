@@ -37,8 +37,6 @@ namespace FormationOrders {
 constexpr int kMinAIGroup = 3;
 constexpr int kMinPlayerGroup = 2;
 
-/// The shape AI players form their groups into: tanks in front, scouts ahead.
-constexpr FormationPlanner::Shape kAIShape = FormationPlanner::Shape::Combined;
 
 /// An AI hunting formation (Resume::HuntToward) marches at the latest this long after it was
 /// ordered, formed up or not: a whole army forming up in a crowded base can otherwise take
@@ -52,7 +50,11 @@ constexpr Uint32 kHuntFormUpMaxMs = 15000;
 enum class OrderKind : Uint8 {
     Move = 0,           ///< CMD_UNIT_FORMATION_MOVE: forced move to the slot
     AttackMove = 1,     ///< CMD_UNIT_FORMATION_HUNT: attack-move to the slot, hunting in formation
-    Patrol = 2          ///< CMD_UNIT_FORMATION_HUNT: patrol between here and the slot, hunting in formation
+    Patrol = 2,         ///< CMD_UNIT_FORMATION_HUNT: patrol between here and the slot, hunting in formation
+    /// CMD_UNIT_FORMATION_MOVE (protocol 75): the group forms up where it stands (the formation
+    /// buttons): the slot is the member's form-up tile, so the members walk straight to their
+    /// slots at full speed and route round each other, as in any form-up, instead of marching
+    FormUp = 3
 };
 
 /**
@@ -96,6 +98,14 @@ FormationPlanner::Member memberOf(const UnitBase* unit);
 */
 FormationPlanner::Plan planGroup(const std::vector<const UnitBase*>& units, const Coord& target,
                                  FormationPlanner::Shape shape);
+
+/**
+    The form-up in place (FormationPlanner::planInPlace) for these units on the live map: the
+    formation buttons and hotkeys (Game::issueSelectedFormUp). Ineligible units are left out
+    as in planGroup. Reads only.
+*/
+FormationPlanner::Plan planInPlace(const std::vector<const UnitBase*>& units, const Coord& forward,
+                                   FormationPlanner::Shape shape);
 
 /**
     The destination a formation order really uses: 'slot' if the unit may still stand there,

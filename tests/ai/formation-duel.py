@@ -29,7 +29,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
-SHAPES = ('none', 'combined', 'box', 'line', 'column', 'wedge', 'vee', 'echelon', 'staggered', 'diamond', 'pincer')
+# The control and the five kept shapes (the research rounds also played combined, line, wedge, vee, diamond).
+SHAPES = ('none', 'box', 'pincer', 'column', 'staggered', 'echelon')
 SIZES = (64, 128, 192)
 SEEDS = (7101, 7202, 7303)
 # The two houses of a game, by the seed's position in --seeds (sonic tanks, devastators and
@@ -76,6 +77,8 @@ def schedule(args):
         house_a, house_b = HOUSE_PAIRS[index % len(HOUSE_PAIRS)]
         for size in args.sizes:
             for first, second in itertools.combinations(args.shapes, 2):
+                if args.versus and args.versus not in (first, second):
+                    continue
                 for shape_a, shape_b in ((first, second), (second, first)):
                     games.append((args.tag, args.difficulty, str(size), str(seed), house_a, shape_a, house_b, shape_b))
     return games
@@ -352,6 +355,7 @@ parser.add_argument('--wall-timeout', type=int, default=1800)
 parser.add_argument('--sizes', nargs='+', type=int, default=list(SIZES))
 parser.add_argument('--seeds', nargs='+', type=int, default=list(SEEDS))
 parser.add_argument('--shapes', nargs='+', default=list(SHAPES))
+parser.add_argument('--versus', help='Play only the pairs that include this shape (e.g. none: every shape against the control)')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
 parser.add_argument('--report', action='store_true')

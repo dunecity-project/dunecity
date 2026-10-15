@@ -14,6 +14,18 @@ fortress"; later: add None as a control. Details and numbers: `docs/formations.m
   hotkey cycle/config parser/tests, kept-shape tests, Brutal check, the ctest list, and final screenshots.
   UI tooltips and icons are already keyed by shape, so pruning is deleting cases.
 
+## 2026-10-15 — formation buttons form the selection up where it stands (branch `feat/formation-form-up`, save 9861, protocol 75, not released)
+
+Stefan: "when selecting men and then setting a formation, the troops should move into that formation".
+A shape button (Box/Combined/Line/Column), `Ctrl+Shift+F` or `Ctrl+F` switching on now re-forms the
+selected ground units in that shape around their centroid (`FormationPlanner::planInPlace`,
+`Game::issueSelectedFormUp`), facing the way they were last sent, else the nearest visible enemy, else
+their average heading, else north (`Game::formUpFacing`). Off moves nobody. Commands are
+`CMD_UNIT_FORMATION_MOVE` with the new order kind FormUp (the slot is the form-up tile); forming members
+in a ring on each other's tiles step aside (`FormationOrders::stepAsideForFormUp`). Details, measurements
+and deviations in `docs/formations.md` ("Form up where they stand"). Version numbers 9861/75 need
+reconciling with the other formation branch at integration.
+
 ## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
 
 Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and

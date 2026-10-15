@@ -6,7 +6,7 @@
 //
 // Drives the production QuantBot::launchGroundHunt() on a Custom Hard house against real
 // units, structures and the real map:
-//   1. For WaveFormation Combined, Box and Line, a mixed wave (tanks, sonic tanks, siege tanks,
+//   1. For every kept WaveFormation shape (Box, Pincer, Column, Staggered, Echelon), a mixed wave (tanks, sonic tanks, siege tanks,
 //      launchers, quads, troopers) launches as one hunting formation in exactly the configured
 //      shape towards the wave's own objective; the harvester and the MCV stay out; no slot is
 //      in a sonic lane; the wave marches and, on meeting the enemy, every member breaks into
@@ -146,8 +146,9 @@ void runWaveFormationProbe(Game& game) {
 
         // ---- 1. Formation waves in every measured shape -------------------------------
         const std::vector<std::pair<FormationPlanner::Shape,const char*>> shapes{
-            {FormationPlanner::Shape::Combined,"Combined"},{FormationPlanner::Shape::Box,"Box"},
-            {FormationPlanner::Shape::Line,"Line"}};
+            {FormationPlanner::Shape::Box,"Box"},{FormationPlanner::Shape::Pincer,"Pincer"},
+            {FormationPlanner::Shape::Column,"Column"},{FormationPlanner::Shape::Staggered,"Staggered"},
+            {FormationPlanner::Shape::Echelon,"Echelon"}};
         for(const auto& [shape,name] : shapes) {
             getQuantBotConfig().waveFormation=static_cast<int>(shape);
             Wave wave=muster(picks.size());
@@ -294,7 +295,7 @@ void runWaveFormationProbe(Game& game) {
 
         // ---- 3. A wave below kMinAIGroup keeps today's orders ---------------------------
         {
-            getQuantBotConfig().waveFormation=static_cast<int>(FormationPlanner::Shape::Combined);
+            getQuantBotConfig().waveFormation=static_cast<int>(FormationPlanner::Shape::Pincer);
             Wave wave=muster(size_t(FormationOrders::kMinAIGroup-1));
             // Two tanks are not a viable whole-army wave: Medium sends its share instead.
             bot->difficulty=QuantBot::Difficulty::Medium;

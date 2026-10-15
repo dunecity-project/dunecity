@@ -618,18 +618,23 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.medium.refineryMinimum += 1; }));
     }
     SECTION("the attack-wave formation shape is hashed and parsed") {
-        REQUIRE(baseline.waveFormation == static_cast<int>(FormationPlanner::Shape::Combined));
-        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = QuantBotConfig::kWaveFormationNone; }));
+        // The formation research (docs/formations.md): None, plain engine-Hunt waves, won.
+        REQUIRE(baseline.waveFormation == QuantBotConfig::kWaveFormationNone);
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Pincer); }));
         REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Box); }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Line); }));
         REQUIRE(QuantBotConfig::parseWaveFormation("none", 7) == QuantBotConfig::kWaveFormationNone);
-        REQUIRE(QuantBotConfig::parseWaveFormation("Combined arms", 7) == static_cast<int>(FormationPlanner::Shape::Combined));
         REQUIRE(QuantBotConfig::parseWaveFormation("BOX", 7) == static_cast<int>(FormationPlanner::Shape::Box));
-        REQUIRE(QuantBotConfig::parseWaveFormation("line", 7) == static_cast<int>(FormationPlanner::Shape::Line));
+        REQUIRE(QuantBotConfig::parseWaveFormation("pincer", 7) == static_cast<int>(FormationPlanner::Shape::Pincer));
         REQUIRE(QuantBotConfig::parseWaveFormation("Column", 7) == static_cast<int>(FormationPlanner::Shape::Column));
-        REQUIRE(QuantBotConfig::parseWaveFormation("phalanx", 7) == 7);
-        for (int value = -1; value < FormationPlanner::kShapeCount; ++value)
-            REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(value), 7) == value);
+        REQUIRE(QuantBotConfig::parseWaveFormation("staggered", 7) == static_cast<int>(FormationPlanner::Shape::Staggered));
+        REQUIRE(QuantBotConfig::parseWaveFormation("Echelon", 7) == static_cast<int>(FormationPlanner::Shape::Echelon));
+        // Removed shapes are unknown names: the loader keeps the default and logs the name.
+        for (const char* removed : {"Combined", "Combined arms", "Line", "Wedge", "Vee", "Diamond", "phalanx"})
+            REQUIRE(QuantBotConfig::parseWaveFormation(removed, 7) == 7);
+        REQUIRE(std::string(QuantBotConfig::waveFormationName(QuantBotConfig::kWaveFormationNone)) == "None");
+        for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+            REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(static_cast<int>(shape)), 7)
+                    == static_cast<int>(shape));
     }
 }
 

@@ -251,8 +251,9 @@ QuantBotConfig::QuantBotConfig() {
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
-    // Attack waves march as a Combined-arms hunting formation (docs/formations.md).
-    waveFormation = static_cast<int>(FormationPlanner::Shape::Combined);
+    // Attack waves hunt without a formation: in the formation research (docs/formations.md,
+    // "Formation research") plain engine-Hunt waves beat every formation shape.
+    waveFormation = kWaveFormationNone;
 }
 
 // Recovery/battery settings are integers, so the INI round-trip cannot change a
@@ -384,18 +385,15 @@ int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
     };
     const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
-    for (int index = 0; index < FormationPlanner::kShapeCount; ++index) {
-        if (key == compact(waveFormationName(index))
-            || key == compact(FormationPlanner::shapeName(FormationPlanner::shapeFromIndex(index)))) return index;
-    }
+    for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+        if (key == compact(FormationPlanner::shapeName(shape))) return static_cast<int>(shape);
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
-    if (value < 0 || value >= FormationPlanner::kShapeCount) return "None";
-    const auto shape = FormationPlanner::shapeFromIndex(value);
-    // The INI spelling of Combined arms is one word.
-    return shape == FormationPlanner::Shape::Combined ? "Combined" : FormationPlanner::shapeName(shape);
+    for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+        if (static_cast<int>(shape) == value) return FormationPlanner::shapeName(shape);
+    return "None";
 }
 
 void QuantBotConfig::registerStructurePriority(int structureID, const std::string& name, int build, int target) {

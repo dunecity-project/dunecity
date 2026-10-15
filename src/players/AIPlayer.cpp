@@ -17,6 +17,7 @@
 
 
 #include <players/AIPlayer.h>
+#include <players/QuantBotConfig.h>
 
 #include <Game.h>
 #include <GameInitSettings.h>
@@ -717,13 +718,14 @@ void AIPlayer::attack() {
         }
     }
 
-    // The wave moves as one formation around the destination at the slowest member's
-    // pace, then hunts as before (docs/formations.md). Hunt keeps the destination it was
-    // given, so the group re-forms at that pace after the mode change.
+    // In a configured shape (WaveFormation, docs/formations.md) the wave moves as one
+    // formation around the destination at the slowest member's pace, then hunts as before;
+    // Hunt keeps the destination it was given, so the group re-forms at that pace after the
+    // mode change. With None (the default) every unit moves on its own, as before formations.
     if(!wave.empty()) {
         doFormationMove(wave, destination.x, destination.y, false);
         for(const UnitBase* pUnit : wave) doSetAttackMode(pUnit, HUNT);
-        doFormUp(wave);
+        if(aiFormationShape() != QuantBotConfig::kWaveFormationNone) doFormUp(wave);
     }
 
     // MULTIPLAYER FIX (Issue #4): Deterministic attack timer

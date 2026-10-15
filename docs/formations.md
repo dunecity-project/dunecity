@@ -3,7 +3,78 @@
 A group ordered to one point arrives together and spread out in a chosen shape. Without
 formations the group moves in single file and piles onto one tile. Branch `feat/formations`
 built the Box; branch `feat/formation-shapes` (save 9859, protocol 73) adds the shapes, the
-sonic-lane rule, hunting in formation and the panel buttons described first below.
+sonic-lane rule, hunting in formation and the panel buttons described first below; branch
+`feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
+where it stands.
+
+## Form up where they stand, save 9861 / protocol 75
+
+Stefan: "when selecting men and then setting a formation, the troops should move into that
+formation".
+
+- **What triggers it:** with 2+ of the local house's ground units selected, a shape button of
+  the unit panel (Box, Combined arms, Line, Column), `Ctrl+Shift+F`, or `Ctrl+F` switching
+  formations on (`Game::chooseFormation`, on). **Off moves nobody and sends nothing.** The
+  shape is remembered for later move, attack-move and patrol orders as before.
+- **Who:** the selected, respondable, eligible units (`Game::issueSelectedFormUp`); harvesters
+  never (they keep their order), aircraft never. Units in a fight re-form too: the order is forced.
+- **Where:** `FormationPlanner::planInPlace` lays the shape out around the members' integer
+  centroid (`centroidOf`), or the nearest tile there that the anchor member can stand on (the
+  MCV, else the first vehicle, else the first member, by object id). The MCV takes the anchor.
+  It is always the shape itself: a tight group does not keep its own shape in the Box, as it does
+  on a move. Every other rule is `plan()`'s, and the slots are the same as a move's in that
+  direction, translated onto the group (`formation_planner_tests`, `[inplace]`): sonic units in
+  front with nothing in their lanes, siege tanks with the front armour, harvesters left out,
+  slots resolved by the same ring search.
+- **Facing** (`Game::formUpFacing`), the first that applies:
+  1. the way the members were last sent: each member's formation facing while it marches in
+     one, else the heading of this player's latest replacing move, attack-move, patrol, attack
+     or formation order for it (`Game::orderedHeadings`, written by `rememberOrderHeading` from
+     `CommandManager::addCommand`; client-side UI memory, never saved or sent, so it is empty
+     after a load). The 8-way direction of the sum of those unit steps; a form-up records its
+     own facing, so pressing another shape keeps it;
+  2. towards the nearest enemy ground unit (not a sandworm) or structure the local team can see,
+     from the centroid (squared distance, ties to the lower object id);
+  3. the members' average body heading (sum of their drawn-angle steps);
+  4. north.
+- **How they move:** one `CMD_UNIT_FORMATION_MOVE` per member with the shared group token, the
+  facing, and the new order kind **FormUp** (3). The executor joins the formation as for a move
+  (forced, `Resume::ForcedMove`, the group's pace cap) and makes the slot the member's form-up
+  tile (`UnitBase::startFormUp`), so the group is in its form-up phase from the start: members
+  walk straight to their slots at their own speed and route round each other, the march begins
+  once all stand on them (or cannot get closer) and ends at once. Why not the plain formation
+  move: with the march rules, the probe's group re-arranging itself on the spot gridlocked -
+  members waited for each other's sonic lanes (`stepEntersSonicLane`), and without a facing
+  they waited behind marching members that themselves stood waiting (`marchesWith`), in a ring.
+- **Stepping aside** (`FormationOrders::update`, `stepAsideForFormUp`, any form-up): units cannot
+  swap tiles, so in the form-up phase the probe's Box still left a launcher and a quad on each
+  other's tiles for good. Now a forming member standing still off its tile, whose tile holds a
+  member of its group that stands still and is not in place either, has that member step aside
+  when it has given its own walk up or when the two are in a ring of members on each other's
+  tiles (followed up to 16 members): it moves to the nearest free tile within 3
+  (`kStepAsideTiles`) that is no member's form-up tile, the other walks on, and the one that
+  stepped aside walks back to its slot when the group marches. A member walking aside is not
+  held (`March::Recover`). Only walking members (`Resume::Move`, `ForcedMove`) step aside; AI
+  hunters and attack-move walks keep their orders. Derived from live state each cycle, in
+  unit-list order: deterministic, nothing saved. The other probe steps (march, save, combined
+  arms, hunt, block march) measure identically with and without it.
+- **Protocol 75 / save 9861:** a 74 peer refuses kind FormUp and does not step aside; a 9860 build
+  must not load a save or replay that may hold such commands. The save layout is unchanged.
+- **Tooltips** of the shape buttons say "forms the selection up where it stands".
+- **Verified** by `formation_movement_probe` step 9 (log line `FORMATION_PROBE_FORMUP`): a
+  scattered group of 2 sonic tanks, 3 tanks, a siege tank, 2 launchers, a quad, a trike, a
+  trooper, an MCV and a harvester. The facing rules on real units (bodies east → east; half
+  west, half east → north; an enemy tank in sight to the south → south; a right-click east →
+  east). Off issues nothing. The four buttons through `FormationBar`'s real click handler and
+  `Ctrl+Shift+F` through `Game::handleKeyInput`: one FormUp command per member to its planned
+  slot facing east with one token, none for the harvester, the MCV on the centroid, every member
+  on its slot (Box 29.8 s from the scattered start, Combined arms 19.4 s, Line 12.1 s, Column
+  11.4 s, Box again by hotkey 30.5 s), no member in a sonic lane in any formed shape, the line one
+  rank deep, the column narrow and deep, two scouts ahead in Combined arms, the harvester never
+  in a formation and gone on its own order. Screenshots `formup-before.png`, `formup-box.png`,
+  `formup-combined.png`, `formup-line.png`, `formup-column.png`, `formup-hotkey-box.png` in the
+  probe's output directory. `game_command_regressions` checks the FormUp kind on real units
+  and refuses unknown kinds; `formation_planner_tests` `[inplace]` checks `planInPlace`.
 
 ## Formation research (branch `feat/formation-research`)
 
@@ -118,7 +189,7 @@ group keeps its own spacing; `+` is the target where no unit stands on it.)
 - **Runs:** one probe binary (`--prebuilt-probe`), 6 games in parallel on the 10-core Mac mini;
   each run directory is deleted when its rows are written. `--report` prints the tables below.
 
-### Results so far (Hard vs Hard; IN PROGRESS - the kept five and the default are not chosen yet)
+### Results (Hard vs Hard)
 
 Raw data: `docs/formation-results/games.csv` (every game) and `waves-by-shape.csv` (waves summed
 per round, size, seed and shape); reproduce with
@@ -146,9 +217,30 @@ per round, size, seed and shape); reproduce with
   waves overall. Per shape (36 games each, none separable from None on its own): Column 0.61
   (0.44-0.75), Vee 0.50, Pincer 0.47, Box 0.47, Wedge 0.46, Staggered 0.39, Line 0.39, Echelon
   0.38, Combined arms 0.36 (0.19-0.50), Diamond 0.35 (0.19-0.50). No shape beats None.
-- **Consequence (per Stefan's rule, not yet applied in code):** the QuantBot `WaveFormation`
-  default should become None. The kept five for the player (from the overall ranking, places
-  4-8 within noise): Pincer, Column, Staggered, Echelon, Box, plus Off.
+
+### The choice (applied)
+
+- **QuantBot default `WaveFormation = None`** (`QuantBotConfig`): plain engine-Hunt waves, as
+  Stefan asked when None beats the shapes. A shape can still be set in `QuantBot Config.ini`.
+- **The other AI formation moves follow the same setting** (no separate hard-coded shape any
+  more; `FormationOrders::kAIShape` is gone, `Player::aiFormationShape()` reads `WaveFormation`):
+  `Player::doFormationMove` / `doFormationHuntToward` default to it and give plain per-unit
+  orders for None; `AIPlayer::attack` (formation move to the wave destination, then `doFormUp`),
+  `CampaignAIPlayer` attack teams (formation hunt, else HUNT + forced attack as before formations)
+  and QuantBot's army recall (`applyArmyPosture`: rally slots and `doFormUp`) all use it, and all
+  three give the pre-formation orders with None. QuantBot's own waves use the per-player
+  `waveFormationShape()` (the test-only override, else the config value). Defence scrambles are
+  unchanged.
+- **Kept five player shapes:** Box, Pincer, Column, Staggered, Echelon (panel and Ctrl+Shift+F
+  order), plus Off. Removed: Combined arms (and all its scout code), Line, Wedge, Vee, Diamond.
+  The removed shapes' names are unknown `WaveFormation` values (logged, the default is kept).
+- **Stable shape ids** (`FormationPlanner::Shape`): Box 0, Column 3, Echelon 6, Staggered 7,
+  Pincer 9 - Box and Column keep their released ids. Shape ids live only in the settings
+  (`General/Formation Shape`) and the QuantBot config; formation commands and saved units carry
+  slots and facings, never a shape, so saves and replays are unaffected. A removed or unknown id
+  (1 Combined arms, 2 Line, 4, 5, 8, anything else) loads as the **Box** (`shapeFromId`, pinned in
+  `formation_planner_tests`). No save or protocol change beyond the merged form-up branch
+  (save 9861, protocol 75).
 
 ## Formation fixes, save 9860 / protocol 74 (after the 1.0.839 play-test)
 
@@ -274,9 +366,12 @@ today's behaviour: only a member in contact leaves.
 - **Unit panel:** with 2+ of the local house's ground units selected, a row of five buttons
   under the command buttons (`FormationBar`): Off, Box, Combined arms, Line, Column. The
   current choice is held down; tooltips name the hotkeys. A click calls
-  `Game::chooseFormation` and applies to the next move, attack-move or patrol order.
+  `Game::chooseFormation` and applies to the next move, attack-move or patrol order. A shape
+  also forms the selected units up in it where they stand ("Form up where they stand" above);
+  Off leaves them where they are.
 - **`Ctrl+F`** switches formations on or off; **`Ctrl+Shift+F`** picks the next shape (and
-  switches formations on). Plain `F` still selects the next factory. Both show a ticker line.
+  switches formations on). Switching on or picking a shape forms the selection up like the
+  buttons. Plain `F` still selects the next factory. Both show a ticker line.
 - Persisted in the ini as `General/Formation Moves` and `General/Formation Shape` (0-3).
 - **Right-click / M move:** a formation move in the chosen shape (`CMD_UNIT_FORMATION_MOVE`).
 - **Attack-move (A) and patrol (Q):** with formations on, a group order that replaces the
@@ -378,14 +473,15 @@ all-infantry group), the facing (`forward`) and the scouts.
 
   Engine-internal retargeting does not end membership.
 
-## Commands (protocol 71, extended in 73)
+## Commands (protocol 71, extended in 73 and 75)
 
 `CMD_UNIT_FORMATION_MOVE(OBJECT_ID, X, Y, PARAMETER)` and, new in 73,
 `CMD_UNIT_FORMATION_HUNT(OBJECT_ID, X, Y, PARAMETER)`. Both have 4 parameters and are
 classified as acting on an owned object. `PARAMETER` (`FormationOrders::packParameter`) is
-the 24-bit group token, the order kind in bits 24-27 (0 Move, 1 AttackMove, 2 Patrol) and
-the facing code in bits 28-31; a protocol-71 bare token reads as a Move without a facing.
-The move executor refuses any kind but Move, the hunt executor any kind but AttackMove or
+the 24-bit group token, the order kind in bits 24-27 (0 Move, 1 AttackMove, 2 Patrol, 3 FormUp
+from 75) and the facing code in bits 28-31; a protocol-71 bare token reads as a Move without a
+facing. The move executor refuses any kind but Move or FormUp (FormUp also makes the slot the
+member's form-up tile), the hunt executor any kind but AttackMove or
 Patrol, both an unknown facing (> 8). The hunt executor revalidates the slot, issues a
 non-queued attack-move (`doIssueOrder`) or patrol (`doIssuePatrol`) to it and joins the
 hunting group with the facing; ineligible units get the plain order.
@@ -408,7 +504,8 @@ hunting group with the facing; ineligible units get the plain order.
   cursor. At least 2 such units are needed.
 - **Everything else in the selection** keeps its old per-unit action: attack or follow,
   aircraft, and structures.
-- **`Ctrl+F`, `Ctrl+Shift+F` and the panel buttons:** see Controls above.
+- **`Ctrl+F`, `Ctrl+Shift+F` and the panel buttons:** see Controls above; choosing a shape forms
+  the selection up where it stands through `Game::issueSelectedFormUp`.
 - **Options → Controls** has a "Move groups in formation" checkbox. It is on by default and is
   stored as `General/Formation Moves`; the shape is `General/Formation Shape`.
 
@@ -703,3 +800,15 @@ There are two intermediate results:
   byte of the token parameter of both formation commands (protocol 73).
 - **Not built (non-goals):** air or naval formations, changes to who/when QuantBot sends
   units, and changes to the pathfinder.
+- **Form-up in place, one speed:** the brief asked for the formation move path with all its
+  rules. The re-form uses that path (planner, slots, harvesters out, MCV centred, sonic lanes
+  clear in the formed shape, group pace cap) but as the group's form-up phase, in which
+  members walk at their own speed and the lane wait does not apply - as in the form-up before
+  every march. Marching on the spot gridlocked (see "Form up where they stand").
+- **`Ctrl+F` forms up too:** switching formations on chooses the current shape, so it forms the
+  selection up like that shape's button; the brief named the buttons and `Ctrl+Shift+F`.
+- **Short formation moves (not changed):** a formation move whose march is under
+  `kFormUpMinMarch` skips the form-up and marches straight to the slots under the march rules.
+  When the slots overlap the group (a short move into the area it stands in), that is the
+  situation that gridlocked the form-up in place, so it can gridlock the same way [inference
+  from the probe; no short-move fixture was run].

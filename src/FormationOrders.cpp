@@ -62,21 +62,43 @@ FormationPlanner::Member memberOf(const UnitBase* unit) {
     return member;
 }
 
-FormationPlanner::Plan planGroup(const std::vector<const UnitBase*>& units, const Coord& target,
-                                 FormationPlanner::Shape shape) {
+namespace {
+/// The planner's view of the eligible units (each once) and their live terrain query.
+struct PlannerInput {
     std::vector<FormationPlanner::Member> members;
     std::map<Uint32, const UnitBase*> byID;
-    for(const UnitBase* unit : units) {
-        if(!eligible(unit) || byID.count(unit->getObjectID())) continue;
-        byID[unit->getObjectID()] = unit;
-        members.push_back(memberOf(unit));
+    FormationPlanner::CanStand query() const {
+        return [this](const FormationPlanner::Member& member, const Coord& tile) {
+            return canStand(byID.at(member.objectID), tile);
+        };
     }
+};
+
+PlannerInput plannerInput(const std::vector<const UnitBase*>& units) {
+    PlannerInput input;
+    for(const UnitBase* unit : units) {
+        if(!eligible(unit) || input.byID.count(unit->getObjectID())) continue;
+        input.byID[unit->getObjectID()] = unit;
+        input.members.push_back(memberOf(unit));
+    }
+    return input;
+}
+} // namespace
+
+FormationPlanner::Plan planGroup(const std::vector<const UnitBase*>& units, const Coord& target,
+                                 FormationPlanner::Shape shape) {
+    const PlannerInput input = plannerInput(units);
     if(currentGameMap == nullptr || !currentGameMap->tileExists(target)) return FormationPlanner::Plan();
-    const FormationPlanner::CanStand query = [&byID](const FormationPlanner::Member& member, const Coord& tile) {
-        return canStand(byID.at(member.objectID), tile);
-    };
-    return FormationPlanner::plan(members, target, currentGameMap->getSizeX(), currentGameMap->getSizeY(),
-                                  query, NUM_INFANTRY_PER_TILE, shape);
+    return FormationPlanner::plan(input.members, target, currentGameMap->getSizeX(), currentGameMap->getSizeY(),
+                                  input.query(), NUM_INFANTRY_PER_TILE, shape);
+}
+
+FormationPlanner::Plan planInPlace(const std::vector<const UnitBase*>& units, const Coord& forward,
+                                   FormationPlanner::Shape shape) {
+    const PlannerInput input = plannerInput(units);
+    if(currentGameMap == nullptr) return FormationPlanner::Plan();
+    return FormationPlanner::planInPlace(input.members, forward, currentGameMap->getSizeX(), currentGameMap->getSizeY(),
+                                         input.query(), NUM_INFANTRY_PER_TILE, shape);
 }
 
 Coord revalidatedSlot(const UnitBase* unit, const Coord& slot) {
@@ -194,6 +216,80 @@ void planFormUp(const std::vector<UnitBase*>& joined) {
     for(size_t i = 0; i < tiles.size(); ++i) joined[i]->startFormUp(tiles[i]);
 }
 
+/// How far a member that is not in place steps aside for a member that wants its tile.
+constexpr int kStepAsideTiles = 3;
+/// The longest ring of members on each other's form-up tiles that stepAsideForFormUp follows.
+constexpr int kMaxRing = 16;
+
+/// A member of group 'groupID' standing still on 'tile' although it is forming up somewhere
+/// else, or nullptr.
+UnitBase* displacedMemberOn(const Coord& tile, Uint32 groupID) {
+    if(!currentGameMap->tileExists(tile)) return nullptr;
+    const Tile* pTile = currentGameMap->getTile(tile);
+    std::vector<Uint32> ids;
+    if(const ObjectBase* object = pTile->getNonInfantryGroundObject()) ids.push_back(object->getObjectID());
+    for(Uint32 id : pTile->getInfantryList()) ids.push_back(id);
+    for(Uint32 id : ids) {
+        auto* unit = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id));
+        if(unit != nullptr && unit->getFormationGroup() == groupID && unit->isFormationForming() && !unit->isMoving()
+           && unit->getLocation() != unit->getFormationFormUp()) return unit;
+    }
+    return nullptr;
+}
+
+/**
+    Forming up in a crowd (docs/formations.md): units cannot swap tiles, so members standing on
+    each other's form-up tiles in a ring (two that want each other's tiles, or more) wait for
+    each other for ever, as can happen when a group forms up where it stands
+    (OrderKind::FormUp); so does a member whose tile is held by one that has given its own walk
+    up. When a member standing still off its form-up tile finds a member of its group that is
+    not in place standing still on that tile, and that one has given up or the two are in such
+    a ring, the one on the tile steps aside to the nearest free tile within kStepAsideTiles that
+    is no member's form-up tile, and the other walks on; the one that stepped aside walks back
+    when its group marches (UnitBase::endFormUp). Only members that walk (Resume::Move,
+    ForcedMove) step aside; hunters and attack-move walks keep their orders. In unit-list
+    order, each unit at most once a cycle, from live state only: identical on every peer and
+    after a load.
+*/
+void stepAsideForFormUp() {
+    std::set<Uint32> handled;
+    for(UnitBase* unit : unitList) {
+        if(!unit->isFormationForming() || unit->isMoving() || handled.count(unit->getObjectID())) continue;
+        const Coord tile = unit->getFormationFormUp();
+        if(unit->getLocation() == tile) continue;
+        const Uint32 groupID = unit->getFormationGroup();
+        UnitBase* blocker = displacedMemberOn(tile, groupID);
+        if(blocker == nullptr || blocker == unit || handled.count(blocker->getObjectID())) continue;
+        bool stuck = blocker->formUpReady();
+        if(!stuck) {
+            // Follow the members standing on each other's form-up tiles: back to this one is a ring.
+            const UnitBase* next = blocker;
+            for(int hop = 0; hop < kMaxRing && next != nullptr && next != unit; ++hop)
+                next = displacedMemberOn(next->getFormationFormUp(), groupID);
+            stuck = next == unit;
+        }
+        if(!stuck) continue;
+        const Resume resume = blocker->getFormationResume();
+        if(resume != Resume::Move && resume != Resume::ForcedMove) continue;
+        std::set<std::pair<int, int>> formUpTiles;
+        for(const UnitBase* member : unitList)
+            if(member->getFormationGroup() == unit->getFormationGroup() && member->isFormationForming())
+                formUpTiles.insert({member->getFormationFormUp().x, member->getFormationFormUp().y});
+        const Coord from = blocker->getLocation();
+        const Coord aside = FormationPlanner::nearestStandable(memberOf(blocker), from,
+            currentGameMap->getSizeX(), currentGameMap->getSizeY(),
+            [&](const FormationPlanner::Member&, const Coord& at) {
+                return FormationPlanner::tileDistance(at, from) <= kStepAsideTiles && !formUpTiles.count({at.x, at.y})
+                    && canStand(blocker, at) && !currentGameMap->getTile(at)->hasAGroundObject();
+            });
+        if(aside.isInvalid()) continue;
+        blocker->doMove2Pos(aside.x, aside.y, resume == Resume::ForcedMove);
+        unit->startFormUp(tile);
+        handled.insert(unit->getObjectID());
+        handled.insert(blocker->getObjectID());
+    }
+}
+
 } // namespace
 
 void update() {
@@ -253,6 +349,9 @@ void update() {
             && stepEntersSonicLane(unit, unit->getNextSpot());
     };
 
+    // Members on each other's form-up tiles make way before the group's readiness is counted.
+    stepAsideForFormUp();
+
     // Form-up: a group marches once every forming member stands on its form-up tile (or cannot
     // get closer, or waits at a sonic lane); then each is sent on to its slot. An AI hunting
     // formation marches at the latest kHuntFormUpMaxMs after it was ordered.
@@ -289,7 +388,13 @@ void update() {
     for(UnitBase* unit : unitList) {
         if(!unit->isInFormation()) continue;
         if(unit->isFormationForming()) {
-            unit->setFormationMarch(unit->formUpReady() ? FormationPlanner::March::Hold : FormationPlanner::March::Recover);
+            // A walking member sent aside by stepAsideForFormUp is ready but must still get there.
+            const Resume resume = unit->getFormationResume();
+            const bool steppingAside = (resume == Resume::Move || resume == Resume::ForcedMove)
+                && unit->getLocation() != unit->getFormationFormUp() && unit->getDestination() != unit->getFormationFormUp()
+                && unit->getDestination() != unit->getLocation();
+            unit->setFormationMarch(unit->formUpReady() && !steppingAside ? FormationPlanner::March::Hold
+                                                                            : FormationPlanner::March::Recover);
             continue;
         }
         const Group& group = groups.at(unit->getFormationGroup());

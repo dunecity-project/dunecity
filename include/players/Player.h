@@ -275,15 +275,22 @@ protected:
     void doHuntToward(const UnitBase* pUnit, int x, int y) const;
 
     /**
+        The formation shape the AI players use (docs/formations.md): QuantBot Config.ini
+        [General Behavior] WaveFormation - a FormationPlanner::Shape id, or
+        QuantBotConfig::kWaveFormationNone (the default) for plain per-unit orders.
+    */
+    static int aiFormationShape();
+
+    /**
         Moves a chosen group as one formation (docs/formations.md): FormationOrders plans a
-        slot per unit in 'shape' (default FormationOrders::kAIShape, Combined arms: tanks in
-        front, scouts ahead, nothing in a sonic lane), each unit is sent to its slot with
-        doMove2Pos, and the group keeps the slowest member's pace. With fewer than
-        FormationOrders::kMinAIGroup eligible ground units every unit gets the plain
-        doMove2Pos to x,y, as before. Aircraft in the list always do.
+        slot per unit in 'shape' (a FormationPlanner::Shape id, default aiFormationShape()),
+        each unit is sent to its slot with doMove2Pos, and the group keeps the slowest member's
+        pace. With shape kWaveFormationNone, or fewer than FormationOrders::kMinAIGroup eligible
+        ground units, every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the
+        list always do.
     */
     void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
-                         FormationPlanner::Shape shape = FormationOrders::kAIShape) const;
+                         int shape = aiFormationShape()) const;
 
     /**
         Hunting in formation: each unit hunts its way (doHuntToward) to its own slot in
@@ -292,7 +299,7 @@ protected:
         doFormationMove(), with doHuntToward to x,y.
     */
     void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
-                               FormationPlanner::Shape shape = FormationOrders::kAIShape) const;
+                               int shape = aiFormationShape()) const;
 
     /**
         Units that already have their orders (a Hunt wave, a forced attack on one objective)

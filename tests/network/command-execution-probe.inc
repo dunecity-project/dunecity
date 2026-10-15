@@ -209,10 +209,28 @@ int runOwnershipProbe() {
         group[1]->leaveFormation();
         FormationOrders::update();
         require(!group[0]->isInFormation(), "A lone member kept its formation");
+        // Order kind FormUp (protocol 75): the slot is also the form-up tile, so the members walk
+        // straight into their shape; the per-cycle update keeps it. Unknown kinds are refused.
+        const Uint32 formUpToken = FormationPlanner::makeToken(game->getGameCycleCount(), 1);
+        const Coord formUpSlots[2] = {freeTileNear(centre + Coord(-3, 0)), freeTileNear(centre + Coord(-3, 2))};
+        for(int i = 0; i < 2; ++i)
+            formationMove(host, group[i], formUpSlots[i],
+                          FormationOrders::packParameter(FormationOrders::OrderKind::FormUp, 3, formUpToken));
+        FormationOrders::update();
+        for(int i = 0; i < 2; ++i)
+            require(group[i]->getFormationGroup() == FormationPlanner::makeGroupID(host, formUpToken)
+                    && group[i]->getFormationSlot() == formUpSlots[i] && group[i]->getFormationFormUp() == formUpSlots[i]
+                    && group[i]->isFormationForming() && group[i]->getFormationFacing() == 3
+                    && group[i]->getDestination() == formUpSlots[i] && group[i]->wasForced(),
+                    "A FormUp member is not forming up straight into its slot");
+        group[0]->leaveFormation();
+        formationMove(host, group[0], formUpSlots[0], FormationOrders::packParameter(static_cast<FormationOrders::OrderKind>(4), 3, formUpToken));
+        require(!group[0]->isInFormation(), "A formation move of an unknown kind was accepted");
+        group[1]->leaveFormation();
         for(UnitBase* member : group) member->cancelDeployment();
         orni->cancelDeployment();
         SDL_Log("FORMATION_COMMAND_PROBE_PASS: owner-only, token and slot validation, shared group pace, "
-                "building fallback, order cancellation, aircraft and lone-member rules");
+                "building fallback, order cancellation, aircraft and lone-member rules, form-up in place, unknown kinds");
 
         // CMD_UNIT_FORMATION_HUNT: attack-move and patrol in a hunting formation.
         std::vector<UnitBase*> hunters;
@@ -230,7 +248,7 @@ int runOwnershipProbe() {
         };
         const std::vector<const UnitBase*> hunting(hunters.begin(), hunters.end());
         const Coord huntGoal = freeTileNear(centre + Coord(10, 0));
-        const auto huntPlan = FormationOrders::planGroup(hunting, huntGoal, FormationPlanner::Shape::Combined);
+        const auto huntPlan = FormationOrders::planGroup(hunting, huntGoal, FormationPlanner::Shape::Pincer);
         require(huntPlan.formation && huntPlan.slots.size() == hunters.size(), "Four real units did not get a combined-arms plan");
         const Coord firstSlot = huntPlan.slotFor(hunters[0]->getObjectID());
         formationHunt(enemyPlayer->getPlayerID(), hunters[0], firstSlot, attackMove);

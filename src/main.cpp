@@ -1147,7 +1147,7 @@ int main(int argc, char *argv[]) {
             settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
             settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
-            settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromIndex(
+            settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(
                 myINIFile.getIntValue("General","Formation Shape",0)));
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);

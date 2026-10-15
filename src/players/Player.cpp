@@ -18,6 +18,7 @@
  */
 
 #include <players/Player.h>
+#include <players/QuantBotConfig.h>
 
 #include <Map.h>
 #include <Game.h>
@@ -352,10 +353,14 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
 
 } // namespace
 
-void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
-                             FormationPlanner::Shape shape) const {
+int Player::aiFormationShape() {
+    return getQuantBotConfig().waveFormation;
+}
+
+void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced, int shape) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y), shape);
+    const auto plan = shape == QuantBotConfig::kWaveFormationNone ? FormationPlanner::Plan()
+        : FormationOrders::planGroup(own, Coord(x, y), FormationPlanner::shapeFromId(shape));
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced);
         return;
@@ -373,10 +378,10 @@ void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, i
                           bForced ? FormationOrders::Resume::ForcedMove : FormationOrders::Resume::Move);
 }
 
-void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
-                                   FormationPlanner::Shape shape) const {
+void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y, int shape) const {
     const auto own = ownActiveUnits(units, getHouse());
-    const auto plan = FormationOrders::planGroup(own, Coord(x, y), shape);
+    const auto plan = shape == QuantBotConfig::kWaveFormationNone ? FormationPlanner::Plan()
+        : FormationOrders::planGroup(own, Coord(x, y), FormationPlanner::shapeFromId(shape));
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
         for(const UnitBase* unit : own) doHuntToward(unit, x, y);
         return;

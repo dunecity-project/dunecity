@@ -16,6 +16,7 @@
  */
 
 #include <players/CampaignAIPlayer.h>
+#include <players/QuantBotConfig.h>
 #include <House.h>
 #include <sand.h>
 #include <Map.h>
@@ -614,10 +615,10 @@ void CampaignAIPlayer::updateUnits() {
         return;
     }
     
-    // Launch the wave. The ground units march on the target together in Combined arms
-    // (tanks in front, scouts ahead, nothing in a sonic lane) at the slowest one's pace and
-    // break into a fight at the first contact (docs/formations.md); they arrive in Hunt.
-    // Aircraft, and a wave too small to form up, set HUNT and attack the target as before.
+    // Launch the wave. In a configured shape (WaveFormation, docs/formations.md) the ground
+    // units march on the target together at the slowest one's pace and break into a fight at
+    // the first contact; they arrive in Hunt. Aircraft, a wave too small to form up, and every
+    // unit with WaveFormation=None (the default) set HUNT and attack the target as before.
     std::vector<const UnitBase*> wave, ground;
     Sint64 sumX = 0, sumY = 0;
     for(Uint32 id : attackTeam.memberIds) {
@@ -630,7 +631,8 @@ void CampaignAIPlayer::updateUnits() {
             sumY += pUnit->getLocation().y;
         }
     }
-    const bool formed = static_cast<int>(ground.size()) >= FormationOrders::kMinAIGroup;
+    const bool formed = aiFormationShape() != QuantBotConfig::kWaveFormationNone
+        && static_cast<int>(ground.size()) >= FormationOrders::kMinAIGroup;
     for(const UnitBase* pUnit : wave) {
         if(formed && FormationOrders::eligible(pUnit)) continue;
         doSetAttackMode(pUnit, HUNT);

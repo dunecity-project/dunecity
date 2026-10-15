@@ -225,7 +225,7 @@ int runRtsControlsProbe() {
 
         settings.general.formationMoves = true;
         const FormationPlanner::Plan plan = FormationOrders::planGroup(members, goal,
-            FormationPlanner::shapeFromIndex(settings.general.formationShape));
+            FormationPlanner::shapeFromId(settings.general.formationShape));
         rtsRequire(plan.formation, "Four tanks did not form a formation plan");
         rtsRequire(game->issuePositionOrder(Game::PositionOrder::AttackMove, units, goal, false) != nullptr,
                    "The group attack-move was not issued");
