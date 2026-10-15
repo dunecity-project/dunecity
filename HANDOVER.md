@@ -1,3 +1,15 @@
+## 2026-10-15 — 1.0.842 production release
+
+PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run
+38720020748 and was merged as 1ff74cf2; tag `v1.0.842` on 1ff74cf2. Build Dune Legacy 38724420748
+succeeded (all platforms, signed update feeds, release); GitHub release v1.0.842 is published
+and Latest with exe, Windows zip, dmg, macOS zip, AppImage, deb, rpm, tar.gz, three update
+feeds and two appcasts. Main build 38724395611 succeeded (latest-dev = v1.0.842). Sync
+SourceForge release 38727478482 succeeded; SourceForge latest download redirects to
+`dunecity/1.0.842/`. Website bump deploy 38727474359 succeeded (dunelegacy.com shows 1.0.842).
+Publish browser build 38727478558 and Deploy to Droplet 38728697757 succeeded; live
+`play/build.json` is 1.0.842 / 1ff74cf2. Browser gameplay was not tested by hand.
+
 ## 2026-10-15 — local 1.0.842 installed on the MBA
 
 Integration `cbcac37a` = Codex staging cleanup `5c4057a0` + `feat/formation-research` (`fe6f8957`,
