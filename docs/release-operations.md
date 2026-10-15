@@ -65,8 +65,13 @@ use a new version. No update feed is emitted for `latest-dev`.
    tar.gz and all signed update feeds.
 4. The release job updates version/download links in the separate website repo's
    `website/index.html` and `website/dune-city.html`, using `WEBSITE_DEPLOY_KEY`.
-   Watch **Deploy to Droplet** there and check the live pages. Release prose is
-   not guaranteed to be rewritten by version replacement; review it explicitly.
+   It also rebuilds the release history page `website/changelog.html` ("What's new")
+   with that repo's `scripts/build-changelog.py`: each published release shows its
+   `releases/desktop/X.Y.Z.md` notes (plus notes of untagged versions it includes),
+   else filtered commit summaries. Write a notes file for every release you want
+   described properly. Watch **Deploy to Droplet** there and check the live pages.
+   Release prose ("New in X.Y.Z" on both pages) is not rewritten by version
+   replacement; review it explicitly.
 5. A successful stable-tag build triggers **Sync SourceForge release** in
    `.github/workflows/sourceforge.yml`. Verify its success separately. It copies
    the user-facing packages without rebuilding (seven from 1.0.731), adds README and SHA256SUMS,

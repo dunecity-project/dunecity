@@ -930,6 +930,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All tags and history: the website's release history page is built from them.
+          fetch-depth: 0
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v8
@@ -1001,6 +1004,7 @@ jobs:
       - name: Update dunelegacy.com website
         env:
           WEBSITE_DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           # Strip leading 'v' to get bare version number (e.g. v1.0.5 -> 1.0.5)
@@ -1063,8 +1067,15 @@ jobs:
             sed -i "s|[0-9]\+\.[0-9]\+\.[0-9]\+ is current|${VERSION} is current|g" "$FILE"
           done
 
+          # Release history page (website/changelog.html): every published release with its
+          # releases/desktop notes, or its commit summaries when it has none.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, published: .published_at}' \
+            > "$RUNNER_TEMP/releases.jsonl"
+          python3 scripts/build-changelog.py --game-repo "$GITHUB_WORKSPACE" --releases "$RUNNER_TEMP/releases.jsonl"
+
           git config user.email "ci@dunelegacy.com"
           git config user.name "DuneCity CI"
-          git add website/index.html website/dune-city.html
+          git add website/index.html website/dune-city.html website/changelog.html
           git diff --cached --quiet || git commit -m "release: bump website to Dune City ${VERSION}"
           git push
