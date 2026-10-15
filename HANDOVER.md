@@ -1,3 +1,57 @@
+## 2026-10-15 — Fighting in formation through first contact: measured, not kept (branch `feat/formation-research`)
+
+Stefan approved making formations fight in formation through first contact so they can beat None. Details and
+tables: `docs/formations.md` ("Fighting in formation through first contact"). Raw data:
+`docs/formation-results/engagement/` (tags `pilot`, `pilot2`).
+
+- Built and measured five engagement modes against None and against today's scatter (Hard duels, sizes
+  128/160/192, seeds 7101-7606, Column and Box, 36 games per pairing, 576 games): Hold (leash 0 and 2),
+  Advance, Deploy (close in up to 6 tiles past weapon range) and Arc (spread into one battle line across the
+  threat). Shared rules: fire only in reach, re-march after 3 s quiet, break on an enemy within 2 tiles / a
+  third lost / outranged / 8 s outranged / 30 s.
+- No mode's 95% interval clears 0.5 against None (best box/arc 0.417, 0.25-0.58) or against scatter (best
+  column/arc 0.514, 0.35-0.67); Box Hold, Advance and Deploy and Column hold2 and Advance lose to None outright.
+  The formation survives the fight (about half the members in formation 10 s after contact vs 20-26% with
+  scatter), but the first-minute trade is no better than scatter's (2.0-3.2 vs 3.0-3.6 killed/lost) and below
+  None's (5-6.6).
+- Decision: scatter stays, QuantBot `WaveFormation` stays None. The engagement code, its saved state, the
+  test-only switch and the WIP's save 9862 / protocol 76 were removed (WIP history: commit `d09813f1`, Hold/
+  Advance/Deploy; Arc was measured from an uncommitted build). Save 9861 / protocol 75 unchanged. Kept: duel
+  harness `--pairs` (with a per-pairing report) and `--all-houses`, and the wave metric `in_formation_10s`.
+  The full 108-game run and the Brutal sample were not run: no mode qualified in the pilot.
+- Tests (one ctest run, -j3, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 29 quantbot_* tests: 37/37 passed. Probe output
+  deleted afterwards.
+
+## 2026-10-15 — Formation research (branch `feat/formation-research`, not released)
+
+Stefan: "test different styles of formations ... keep the best 5"; then None as a control. Details and all tables:
+`docs/formations.md` ("Formation research"). Merged `feat/formation-form-up` (save 9861 / protocol 75, unchanged).
+
+- 1,980 Hard duels (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, `tests/ai/formation-duel.py`):
+  None 0.562 (0.51-0.61) ranks first; the shapes score 0.438 (0.39-0.49) against None; no shape beats it.
+- Applied: QuantBot `WaveFormation` default None; `kAIShape` removed - AIPlayer, CampaignAIPlayer and QuantBot recall
+  follow `WaveFormation` (None: pre-formation orders). Kept shapes Box, Pincer, Column, Staggered, Echelon (+ Off);
+  removed Combined arms (scouts), Line, Wedge, Vee, Diamond. Stable ids; removed ids load as Box (settings only -
+  commands and saves carry slots, not shapes). Generator fix: no unit starts on a spice bloom.
+- Tests (one ctest run, -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe (after the probe's
+  marker/screenshot list was updated), game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 23 quantbot_* probes passed.
+- Open: Brutal None-vs-kept-shapes sample (tag `brutal`, results in /tmp/dunecity-formation-research/results) was
+  running at hand-over; the approved "fight in formation through first contact" engagement mode is not started.
+## 2026-10-15 — formation buttons form the selection up where it stands (branch `feat/formation-form-up`, save 9861, protocol 75, not released)
+
+Stefan: "when selecting men and then setting a formation, the troops should move into that formation".
+A shape button (Box/Combined/Line/Column), `Ctrl+Shift+F` or `Ctrl+F` switching on now re-forms the
+selected ground units in that shape around their centroid (`FormationPlanner::planInPlace`,
+`Game::issueSelectedFormUp`), facing the way they were last sent, else the nearest visible enemy, else
+their average heading, else north (`Game::formUpFacing`). Off moves nobody. Commands are
+`CMD_UNIT_FORMATION_MOVE` with the new order kind FormUp (the slot is the form-up tile); forming members
+in a ring on each other's tiles step aside (`FormationOrders::stepAsideForFormUp`). Details, measurements
+and deviations in `docs/formations.md` ("Form up where they stand"). Version numbers 9861/75 need
+reconciling with the other formation branch at integration.
+
 ## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
 
 Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and

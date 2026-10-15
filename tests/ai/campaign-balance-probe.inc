@@ -54,6 +54,7 @@
 #include "sidebar-grid-probe.inc"
 #include "formation-wave-measure.inc"
 #include "wave-formation-probe.inc"
+#include "formation-duel.inc"
 
 int runCampaignBalanceProbe() {
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
@@ -101,6 +102,14 @@ int runCampaignBalanceProbe() {
         const std::string contents((std::istreambuf_iterator<char>(file)),std::istreambuf_iterator<char>());
         init=GameInitSettings(customMap,contents,true,settings.gameOptions);
     }
+    // Formation duel: a generated Random Skirmish 1v1 instead of a campaign level or map file.
+    const bool duel=std::getenv("BALANCE_DUEL_MAP_SIZE")!=nullptr;
+    std::vector<FormationDuel::Side> duelSides;
+    if(duel) {
+        duelSides=FormationDuel::sidesFromEnv();
+        init=FormationDuel::makeInit(std::atoi(std::getenv("BALANCE_DUEL_MAP_SIZE")),
+            static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
+    }
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
     init.setLocalSpectator(localSpectator);
@@ -115,7 +124,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else {
+    } else if(!duel) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
@@ -317,7 +326,11 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
-    if (std::getenv("BALANCE_FORMATION_MEASURE")) {
+    if (duel) {
+        FormationDuel::applyShapes(*game, duelSides);
+        FormationWaveMeasure::run(*game, end, [&]() { return FormationDuel::decided(*game, duelSides); });
+        FormationDuel::report(*game, duelSides);
+    } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
         FormationWaveMeasure::run(*game, end);
     } else {
         while (!game->finished && game->getGameCycleCount() < end) {

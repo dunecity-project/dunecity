@@ -366,7 +366,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     addControl(mouseOrdersHBox,leftClickOrdersCheckbox,"Left-click orders (drag to select, right-click cancels)",settings.general.leftClickOrders);
     addControl(movementPathsHBox,movementPathsCheckbox,"Show movement paths for selected units",settings.general.showMovementPaths);
     addControl(formationMovesHBox,formationMovesCheckbox,"Move groups in formation",settings.general.formationMoves);
-    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. Ctrl+F switches it in game, Ctrl+Shift+F picks the shape, and the unit panel shows both."));
+    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. Ctrl+F switches it in game, Ctrl+Shift+F picks the shape, and the unit panel shows both; picking a shape forms the selected units up in it where they stand."));
 
 
     audioHBox.addWidget(Spacer::create(), 0.5);

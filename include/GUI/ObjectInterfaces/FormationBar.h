@@ -13,10 +13,11 @@
 #include <vector>
 
 /**
-    The unit panel's formation choice (docs/formations.md): Off, Box, Combined arms, Line and
-    Column as one row of small buttons, the current choice held down. Shown while two or more
-    of the local house's ground units are selected; a click applies to the next move,
-    attack-move or patrol order (Game::chooseFormation) and is persisted like Ctrl+F.
+    The unit panel's formation choice (docs/formations.md): Off, Box, Pincer, Column,
+    Staggered and Echelon (FormationPlanner::kShapes) as one row of small buttons, the current choice held down. Shown while two or more
+    of the local house's ground units are selected; a shape forms the selected units up in it
+    where they stand, and every choice applies to the next move, attack-move or patrol order
+    (Game::chooseFormation) and is persisted like Ctrl+F.
 */
 class FormationBar : public StaticContainer {
 public:
@@ -31,7 +32,8 @@ public:
             button.setToggleButton(true);
             button.setTooltipText(UnitCommandTooltips::formationChoice(choice));
             button.setOnClick([choice]() {
-                currentGame->chooseFormation(choice > 0, choice > 0 ? choice - 1 : settings.general.formationShape);
+                currentGame->chooseFormation(choice > 0, choice > 0 ? static_cast<int>(FormationPlanner::shapeAt(choice - 1))
+                                                                  : settings.general.formationShape);
             });
             addWidget(&button, Point(choice * kPitch, 0), Point(kPitch - 2, kPitch - 2));
         }
@@ -39,7 +41,8 @@ public:
 
     /// The choice in effect: 0 for off, otherwise 1 + the FormationPlanner::Shape.
     static int currentChoice() {
-        return settings.general.formationMoves ? 1 + settings.general.formationShape : 0;
+        return settings.general.formationMoves
+            ? 1 + FormationPlanner::positionOf(FormationPlanner::shapeFromId(settings.general.formationShape)) : 0;
     }
 
     Point getMinimumSize() const override {
@@ -59,26 +62,28 @@ public:
     }
 
 private:
-    /// A 20x20 symbol: the formation seen from above, its front at the top.
+    /// The dots of a choice's symbol (20x20, the formation seen from above, its front at the top).
+    static std::vector<SDL_Point> iconDots(int choice) {
+        if(choice <= 0) return {{3,4},{12,2},{7,9},{15,10},{3,15},{11,15}};                  // off: scattered
+        switch(FormationPlanner::shapeAt(choice - 1)) {
+            case FormationPlanner::Shape::Pincer:    return {{0,4},{4,4},{0,9},{4,9},{13,4},{17,4},{13,9},{17,9}};
+            case FormationPlanner::Shape::Column:    return {{6,1},{11,1},{6,6},{11,6},{6,11},{11,11},{6,16},{11,16}};
+            case FormationPlanner::Shape::Staggered: return {{1,2},{9,2},{17,2},{5,9},{13,9},{1,16},{9,16},{17,16}};
+            case FormationPlanner::Shape::Echelon:   return {{1,2},{5,5},{9,8},{13,11},{17,14}};
+            case FormationPlanner::Shape::Box:
+            default:                                 return {{4,4},{9,4},{14,4},{4,9},{9,9},{14,9},{4,14},{9,14},{14,14}};
+        }
+    }
+
     static SDL_Surface* createIcon(int choice) {
-        static const std::array<std::vector<SDL_Point>, kChoices> dots = {{
-            {{3,4},{12,2},{7,9},{15,10},{3,15},{11,15}},                                    // off: scattered
-            {{4,4},{9,4},{14,4},{4,9},{9,9},{14,9},{4,14},{9,14},{14,14}},                  // box
-            {{2,1},{16,1},{5,7},{9,7},{13,7},{1,9},{17,9},{7,12},{11,12},{9,16}},           // combined arms
-            {{0,9},{4,9},{8,9},{12,9},{16,9}},                                              // line
-            {{6,1},{11,1},{6,6},{11,6},{6,11},{11,11},{6,16},{11,16}}                       // column
-        }};
         SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormat(0, 20, 20, 32, SDL_PIXELFORMAT_RGBA32);
         if(icon == nullptr) return nullptr;
         SDL_FillRect(icon, nullptr, SDL_MapRGBA(icon->format, 0, 0, 0, 0));
-        for(const SDL_Point& dot : dots[choice]) {
+        for(const SDL_Point& dot : iconDots(choice)) {
             const SDL_Rect shadow{dot.x, dot.y, 4, 4};
             SDL_FillRect(icon, &shadow, SDL_MapRGBA(icon->format, 20, 16, 10, 200));
             const SDL_Rect body{dot.x, dot.y, 3, 3};
-            // The scouts of the combined-arms symbol are amber, everything else bone white.
-            const bool scout = choice == 2 && dot.y == 1;
-            SDL_FillRect(icon, &body, scout ? SDL_MapRGBA(icon->format, 255, 196, 64, 255)
-                                            : SDL_MapRGBA(icon->format, 250, 248, 240, 255));
+            SDL_FillRect(icon, &body, SDL_MapRGBA(icon->format, 250, 248, 240, 255));
         }
         SDL_SetSurfaceBlendMode(icon, SDL_BLENDMODE_BLEND);
         return icon;

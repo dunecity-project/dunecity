@@ -96,6 +96,11 @@ bool isSpiceTerrain(TERRAINTYPE t) {
         || t == Terrain_RedSpice || t == Terrain_ThickRedSpice || t == Terrain_RedSpiceBloom;
 }
 
+/// A unit placed on a bloom would set it off while the map loads (Tile::triggerSpiceBloom).
+bool isSpiceBloomTerrain(TERRAINTYPE t) {
+    return t == Terrain_SpiceBloom || t == Terrain_SpecialBloom || t == Terrain_GreenSpiceBloom || t == Terrain_RedSpiceBloom;
+}
+
 char terrainChar(TERRAINTYPE t) {
     switch(t) {
         case Terrain_Dunes:         return '^';
@@ -963,7 +968,7 @@ struct Layout {
         size_t next = 0;
         int placed = 0;
         auto clear = [&](int x, int y) {
-            if(at(x, y) != Free || map(x, y) == Terrain_Mountain || !ownable(x, y, planIndex)) return false;
+            if(at(x, y) != Free || map(x, y) == Terrain_Mountain || isSpiceBloomTerrain(map(x, y)) || !ownable(x, y, planIndex)) return false;
             for(int dy = -1; dy <= 1; ++dy) for(int dx = -1; dx <= 1; ++dx)
                 if(inside(x + dx, y + dy) && (at(x + dx, y + dy) == Building || at(x + dx, y + dy) == WallTile
                                               || at(x + dx, y + dy) == City)) return false;

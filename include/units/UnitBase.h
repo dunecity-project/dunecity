@@ -244,6 +244,8 @@ public:
     bool isFormationHuntToward() const {
         return formationGroup != 0 && formationResume == static_cast<Uint8>(FormationOrders::Resume::HuntToward);
     }
+    /// How this member's order towards its slot is given (FormationOrders::Resume).
+    FormationOrders::Resume getFormationResume() const { return static_cast<FormationOrders::Resume>(formationResume); }
     /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to
     /// move? A hunting member has also arrived once it stands on its slot.
     bool formationMarchEnded() const;

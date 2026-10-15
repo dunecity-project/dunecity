@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Move mixed groups in and out of formation with real game objects (docs/formations.md): the
 Box on and off, a hunting save round trip, Combined arms with sonic tanks and scouts, Line,
-Column, and a hunt in formation that breaks on contact.
+Column, a hunt in formation that breaks on contact, the one-speed block march, and the
+formation buttons and Ctrl+Shift+F forming a scattered group up where it stands.
 
 Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
 profile and dummy SDL drivers. Logs, the test executable, the mid-march save and a rendered
@@ -71,12 +72,16 @@ with logfile.open('w') as log:
     subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
                    stdout=log, stderr=subprocess.STDOUT, check=True, timeout=480)
 text = logfile.read_text()
-for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_COMBINED:',
-               'FORMATION_PROBE_COMBINED_FRAME:', 'FORMATION_PROBE_SHAPES:', 'FORMATION_PROBE_HUNT:',
-               'FORMATION_PROBE_BLOCK:', 'FORMATION_PROBE_BLOCK_ROLES:', 'FORMATION_PROBE_PASS:'):
+for marker in ('FORMATION_PROBE_SPREAD:', 'FORMATION_PROBE_SAVE:', 'FORMATION_PROBE_PINCER:',
+               'FORMATION_PROBE_PINCER_FRAME:', 'FORMATION_PROBE_SHAPES:', 'FORMATION_PROBE_HUNT:',
+               'FORMATION_PROBE_BLOCK:', 'FORMATION_PROBE_BLOCK_ROLES:', 'FORMATION_PROBE_FORMUP:',
+               'FORMATION_PROBE_GALLERY:', 'FORMATION_PROBE_PASS:'):
     if marker not in text:
         raise RuntimeError('Missing formation probe result ' + marker + ' in ' + str(logfile))
-for shot in ('formation-march.png', 'formation-combined.png', 'formation-block.png'):
+for shot in ('formation-march.png', 'formation-pincer-panel.png', 'formation-block.png', 'formup-before.png',
+             'formup-box.png', 'formup-pincer.png', 'formup-column.png', 'formup-staggered.png', 'formup-echelon.png',
+             'formup-hotkey-box.png', 'formation-shape-box.png', 'formation-shape-pincer.png', 'formation-shape-column.png',
+             'formation-shape-staggered.png', 'formation-shape-echelon.png'):
     if not (out / shot).is_file():
         raise RuntimeError('The formation screenshot ' + shot + ' was not written')
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)

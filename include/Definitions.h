@@ -146,7 +146,10 @@
 //       order towards the slot is given again when the group has formed up, and the pace
 //       unit's type (the slowest member, whose step time every capped member keeps). A 9859
 //       or older save loads every formation as already marching at its speed cap.
-#define SAVEGAMEVERSION     9860
+// 9861: Form up where they stand (docs/formations.md): a save or replay may carry
+//       CMD_UNIT_FORMATION_MOVE commands of order kind FormUp, which a 9860 build refuses,
+//       so it must not load them. The layout is unchanged: a 9860 save loads as it is.
+#define SAVEGAMEVERSION     9861
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

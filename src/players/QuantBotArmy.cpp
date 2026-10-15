@@ -602,6 +602,10 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     return true;
 }
 
+int QuantBot::waveFormationShape() const {
+    return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : getQuantBotConfig().waveFormation;
+}
+
 void QuantBot::launchGroundHunt() {
     if (supportMode) return;
     const bool limited = isCampaignEnemy();
@@ -847,7 +851,7 @@ void QuantBot::launchGroundHunt() {
     // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
     // what is decided exactly as without them; only how the ground members travel
     // changes. With WaveFormation=None every unit gets the per-unit order below.
-    const int waveShape=getQuantBotConfig().waveFormation;
+    const int waveShape=waveFormationShape();
     const bool formationWave=waveShape!=QuantBotConfig::kWaveFormationNone;
     // The Hard/Brutal campaign flank detour: a point beside the half-way mark, 8 tiles
     // off the line from 'start' to the objective; invalid when the trip is short or the
@@ -895,7 +899,6 @@ void QuantBot::launchGroundHunt() {
     }
     int formationMembers=0;
     if (formationWave) {
-        const auto shape=static_cast<FormationPlanner::Shape>(waveShape);
         // The members that can march in a formation, and their integer centroid.
         auto marching=[](const std::vector<const UnitBase*>& units, Coord& centre) {
             int n=0, x=0, y=0;
@@ -921,7 +924,7 @@ void QuantBot::launchGroundHunt() {
             }
             if (objective) {
                 const Coord goal=objective->getClosestPoint(centre);
-                doFormationHuntToward(hunters,goal.x,goal.y,shape);
+                doFormationHuntToward(hunters,goal.x,goal.y,waveShape);
                 formationMembers+=n;
             } else {
                 for (const auto* unit : hunters) doSetAttackMode(unit,HUNT);
@@ -936,7 +939,7 @@ void QuantBot::launchGroundHunt() {
             const Coord approach=n>=FormationOrders::kMinAIGroup ? flankApproach(centre,objective,units.front())
                                                                   : Coord::Invalid();
             if (approach.isValid()) {
-                doFormationMove(units,approach.x,approach.y,true,shape);
+                doFormationMove(units,approach.x,approach.y,true,waveShape);
                 formationMembers+=n;
                 continue;
             }
@@ -952,7 +955,7 @@ void QuantBot::launchGroundHunt() {
             const int n=marching(units,centre);
             if (n>=FormationOrders::kMinAIGroup) {
                 const Coord goal=objective->getClosestPoint(centre);
-                doFormationHuntToward(units,goal.x,goal.y,shape);
+                doFormationHuntToward(units,goal.x,goal.y,waveShape);
                 formationMembers+=n;
             } else {
                 for (const auto* unit : units) doAttackObject(unit,objective,true);
@@ -2209,15 +2212,17 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             if (fresh) --freshRemaining;
         }
     }
-    // Gathering the army in Combined arms (docs/formations.md): the troops recalled together
-    // this pass take the planner's slots around the rally, facing the way they march home -
-    // tanks in front, ranged units behind them, light vehicles on the flanks, scouts ahead,
-    // nothing in a sonic lane - wherever that slot is safe assembly ground by withdrawUnit()'s
+    // Gathering the army in the configured wave shape (docs/formations.md; WaveFormation=None,
+    // the default, keeps withdrawUnit()'s plain moves and no pace): the troops recalled together
+    // this pass take the planner's slots around the rally, facing the way they march home,
+    // nothing in a sonic lane, wherever that slot is safe assembly ground by withdrawUnit()'s
     // rules and no other unit's destination; anyone else keeps the slot withdrawUnit() chose.
     // Ids in order, so every peer agrees. They come home together at the slowest one's pace.
     // Who is recalled is unchanged.
-    if (static_cast<int>(recalled.size()) >= FormationOrders::kMinAIGroup) {
-        const auto plan = FormationOrders::planGroup(recalled, rally, FormationOrders::kAIShape);
+    const int recallShape = waveFormationShape();
+    const bool recallInFormation = recallShape != QuantBotConfig::kWaveFormationNone;
+    if (recallInFormation && static_cast<int>(recalled.size()) >= FormationOrders::kMinAIGroup) {
+        const auto plan = FormationOrders::planGroup(recalled, rally, FormationPlanner::shapeFromId(recallShape));
         const auto tileKey = [&](Coord p) { return int64_t(p.y)*getMap().getSizeX()+p.x; };
         std::map<int64_t, int> taken;    // the recalled units' destinations, as they stand
         for (const auto* unit : recalled) ++taken[tileKey(unit->getDestination())];
@@ -2235,7 +2240,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             ++taken[k];
         }
     }
-    doFormUp(recalled);
+    if (recallInFormation) doFormUp(recalled);
     if (issued) traceDecision("army_recall", AITelemetry::Record()
         .set("posture", ArmyPosturePolicy::postureName(armyPosture))
         .set("issued", issued).set("pending", int(count))

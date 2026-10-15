@@ -251,8 +251,9 @@ QuantBotConfig::QuantBotConfig() {
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
-    // Attack waves march as a Combined-arms hunting formation (docs/formations.md).
-    waveFormation = static_cast<int>(FormationPlanner::Shape::Combined);
+    // Attack waves hunt without a formation: in the formation research (docs/formations.md,
+    // "Formation research") plain engine-Hunt waves beat every formation shape.
+    waveFormation = kWaveFormationNone;
 }
 
 // Recovery/battery settings are integers, so the INI round-trip cannot change a
@@ -377,24 +378,22 @@ std::string QuantBotConfig::normalizeKey(const std::string& value) {
 }
 
 int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
-    std::string key = normalizeKey(name);
-    key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+    auto compact = [](const std::string& value) {
+        std::string key = normalizeKey(value);
+        key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+        return key;
+    };
+    const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
-    if (key == "COMBINED" || key == "COMBINEDARMS") return static_cast<int>(FormationPlanner::Shape::Combined);
-    if (key == "BOX") return static_cast<int>(FormationPlanner::Shape::Box);
-    if (key == "LINE") return static_cast<int>(FormationPlanner::Shape::Line);
-    if (key == "COLUMN") return static_cast<int>(FormationPlanner::Shape::Column);
+    for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+        if (key == compact(FormationPlanner::shapeName(shape))) return static_cast<int>(shape);
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
-    switch (value) {
-        case static_cast<int>(FormationPlanner::Shape::Combined): return "Combined";
-        case static_cast<int>(FormationPlanner::Shape::Box): return "Box";
-        case static_cast<int>(FormationPlanner::Shape::Line): return "Line";
-        case static_cast<int>(FormationPlanner::Shape::Column): return "Column";
-        default: return "None";
-    }
+    for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+        if (static_cast<int>(shape) == value) return FormationPlanner::shapeName(shape);
+    return "None";
 }
 
 void QuantBotConfig::registerStructurePriority(int structureID, const std::string& name, int build, int target) {

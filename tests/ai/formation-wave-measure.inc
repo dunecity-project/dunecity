@@ -19,6 +19,7 @@
 #include <players/QuantBot.h>
 #include <units/UnitBase.h>
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -54,6 +55,7 @@ struct Wave {
     Uint32 formUpEnd = 0;               ///< first cycle no member was forming up any more
     Uint32 formationEnd = 0;            ///< first cycle no member was in a formation
     int inFormationAtContact = -1;      ///< members in formation on the contact cycle
+    int inFormation10s = -1;            ///< members in formation 10 s after the contact
     int lossValue = 0;                  ///< member value destroyed in the trade window
     int killValue = 0;                  ///< enemy value destroyed near the wave in the trade window
     int survivors = -1;                 ///< members alive at the end of the wave window
@@ -87,12 +89,12 @@ inline void report(const Wave& wave) {
     SDL_Log("FORMATION_WAVE: house=%d launched=%u members=%zu engaged=%zu arrived=%zu lost=%zu "
             "contact_s=%.1f engage_spread_s=%.1f arrival_spread_s=%.1f shots30=%d loss60=%d kill60=%d "
             "survivors=%d lost_before_contact=%d formed=%d formup_s=%.1f formation_end_s=%.1f "
-            "in_formation_at_contact=%d",
+            "in_formation_at_contact=%d in_formation_10s=%d",
             wave.house, wave.launched, wave.members.size(), wave.engaged.size(), wave.arrival.size(),
             wave.died.size(), since(wave.contact, wave.launched), spreadOf(wave.engaged), spreadOf(wave.arrival),
             wave.shots, wave.lossValue, wave.killValue, wave.survivors, lostBeforeContact, wave.formed,
             wave.formed && wave.sawForming ? since(wave.formUpEnd, wave.launched) : -1.0,
-            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact);
+            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s);
 }
 
 /// Is this unit inside the enemy base area: within kTargetAreaTiles of a live enemy building?
@@ -129,7 +131,8 @@ inline void sampleHouses(Game& game, int minute) {
     }
 }
 
-inline void run(Game& game, Uint32 endCycle) {
+/// Runs the match to endCycle (or until 'stop' says so) and reports every wave.
+inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop = {}) {
     std::vector<Wave> waves;
     std::map<const QuantBot*, Uint32> lastLaunch;
     std::map<const QuantBot*, std::set<Uint32>> knownMembers;
@@ -137,7 +140,7 @@ inline void run(Game& game, Uint32 endCycle) {
     std::map<Uint32, Known> previous;        // every object last cycle, while a trade window is open
     int nextSample = kSampleMinutes;
 
-    while (!game.finished && game.getGameCycleCount() < endCycle) {
+    while (!game.finished && game.getGameCycleCount() < endCycle && !(stop && stop())) {
         // Where every live member of a wave in contact stood before this cycle, for kill credit.
         std::vector<std::pair<size_t, Coord>> memberSpots;
         for (size_t w = 0; w < waves.size(); ++w) {
@@ -212,6 +215,7 @@ inline void run(Game& game, Uint32 endCycle) {
                 if (fired && wave.contact != 0 && now < wave.contact + kContactWindowCycles) ++wave.shots;
             }
             if (wave.contact == now) wave.inFormationAtContact = inFormation;
+            if (wave.contact != 0 && now == wave.contact + Uint32(MILLI2CYCLES(10000))) wave.inFormation10s = inFormation;
             if (forming > 0) wave.sawForming = true;
             if (wave.sawForming && wave.formUpEnd == 0 && forming == 0) wave.formUpEnd = now;
             if (wave.formed && wave.formationEnd == 0 && inFormation == 0) wave.formationEnd = now;

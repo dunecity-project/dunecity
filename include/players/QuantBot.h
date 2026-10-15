@@ -817,6 +817,14 @@ private:
     ArmyPosturePolicy::Posture armyPosture = ArmyPosturePolicy::Posture::Offensive;
     Uint32 postureSince = 0;
     ArmyPosturePolicy::AttritionLedger attrition;
+    /// Test-only (tests/ai/formation-duel.py): this player's attack-wave shape instead of
+    /// QuantBotConfig::waveFormation, so two QuantBots of one match can march in different
+    /// shapes. Never set by the game, not saved and not part of the config hash; production
+    /// always uses the one config value. kNoWaveFormationOverride = no override.
+    static constexpr int kNoWaveFormationOverride = -2;
+    int waveFormationOverride = kNoWaveFormationOverride;
+    /// The attack-wave shape this player uses: the override if set, else the config value.
+    int waveFormationShape() const;
     /// Tracked Custom wave. Same type as the campaign wave, so membership,
     /// objective and save/load are the proven ones.
     CampaignDifficultyPolicy::Wave customWave;

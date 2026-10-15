@@ -1086,6 +1086,28 @@ TEST_CASE("Random skirmish: multiplayer maps have equal open starts the lobby as
     }
 }
 
+TEST_CASE("Random skirmish: no unit starts on a spice bloom", "[skirmish][generator][army]") {
+    // A unit on a bloom sets it off while the map loads (Tile::triggerSpiceBloom, which crashed
+    // a local-spectator load of the 64x64 Fortress / 20,000-credit map with seed 7101).
+    auto bloom = [](TERRAINTYPE t) {
+        return t == Terrain_SpiceBloom || t == Terrain_SpecialBloom || t == Terrain_GreenSpiceBloom || t == Terrain_RedSpiceBloom;
+    };
+    int maps = 0, mapsWithBlooms = 0;
+    for(const int size : {64, 128, 192})
+        for(uint32_t seed = 7100; seed < 7120; ++seed) {
+            const Params p = multiplayerParams(2, size, Mode::Vanilla, BaseSize::Fortress, 5, 0, true, 9, seed);
+            const Result r = generate(p, vanilla());
+            INFO("size " << size << " seed " << seed);
+            bool blooms = false;
+            for(int y = 0; y < size; ++y) for(int x = 0; x < size; ++x) blooms = blooms || bloom(r.map(x, y));
+            mapsWithBlooms += blooms ? 1 : 0;
+            for(const Placement& u : r.units) REQUIRE_FALSE(bloom(r.map(u.x, u.y)));
+            ++maps;
+        }
+    REQUIRE(maps == 60);
+    REQUIRE(mapsWithBlooms > 0);
+}
+
 TEST_CASE("Random skirmish: start catalogue is what every house can field", "[skirmish][generator][multiplayer]") {
     for(const Catalogue* c : {&vanilla(), &city()}) {
         const Catalogue starts = startCatalogue(*c, 4);

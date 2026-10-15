@@ -58,26 +58,37 @@ bool joinsFormations(Uint32 itemID);
 bool isProtected(Uint32 itemID);
 
 /**
-    The shapes a group can be ordered into (docs/formations.md). Every shape faces the
-    direction from the group's centroid to the target and keeps the sonic-lane rule.
+    The shapes a group can be ordered into (docs/formations.md, "Formation research": the five
+    kept of ten candidates). Every shape faces the direction from the group's centroid to the
+    target and keeps the sonic-lane rule. The values are stable ids, stored in the settings
+    ("Formation Shape") and as the QuantBot WaveFormation: Box and Column keep their released
+    ids; 1, 2, 4, 5 and 8 belonged to shapes that were removed (Combined arms, Line, Wedge, Vee,
+    Diamond) and read back as the Box (shapeFromId).
 */
 enum class Shape : Uint8 {
     Box = 0,        ///< rows by role: armour, ranged, infantry; MCVs in the centre (the default)
-    Combined = 1,   ///< sonic units and tanks (siege tanks too) in front, ranged behind, light vehicles on the flanks, scouts ahead
-    Line = 2,       ///< wide and shallow: the most frontage facing the target
-    Column = 3      ///< narrow and deep, for passes and bridges
+    Column = 3,     ///< narrow and deep, for passes and bridges
+    Echelon = 6,    ///< a slanted front: the left flank leads, each file further right trails back
+    Staggered = 7,  ///< a loose box: one tile between neighbours, alternate ranks offset (less splash)
+    Pincer = 9      ///< two wings with a gap between them, MCVs in the gap
 };
-constexpr int kShapeCount = 4;
-/// Shape by index; anything out of range is the Box.
-Shape shapeFromIndex(int index);
-/// English name for the interface ("Box", "Combined arms", "Line", "Column").
+constexpr int kShapeCount = 5;
+/// The shapes in panel and Ctrl+Shift+F order.
+constexpr Shape kShapes[kShapeCount] = {Shape::Box, Shape::Pincer, Shape::Column, Shape::Staggered, Shape::Echelon};
+/// The shape with this stable id; a removed or unknown id is the Box.
+Shape shapeFromId(int id);
+/// The shape at this panel position (0 to kShapeCount - 1); anything else is the Box.
+Shape shapeAt(int position);
+/// The panel position of a shape.
+int positionOf(Shape shape);
+/// English name for the interface ("Box", "Pincer", "Column", "Staggered", "Echelon").
 const char* shapeName(Shape shape);
 
 /// Finer unit class used by the shapes other than the Box.
 enum class UnitClass : Uint8 {
     Sonic = 0,      ///< sonic tank, sonic trike: their wave hits friends, so nothing stands ahead
     Heavy = 1,      ///< tanks, siege tanks, devastators, flame tanks and other armour: the front
-    Light = 2,      ///< quads, trikes, raider trikes: flanks and scouts
+    Light = 2,      ///< quads, trikes, raider trikes
     Ranged = 3,     ///< launchers, deviators, rocket trikes: behind the front
     Infantry = 4,
     Support = 5     ///< MCVs: the protected centre
@@ -104,12 +115,8 @@ bool mayStandInLane(Uint32 sonicItemID, Uint32 otherItemID);
 */
 bool inSonicLane(const Coord& sonic, const Coord& other, const Coord& forward);
 
-/// Combined arms: how many scouts a group of memberCount with lightCount light vehicles sends ahead (0-3).
-int scoutCount(int memberCount, int lightCount);
-/// Combined arms: how many tiles ahead of the front row the scouts go (4 to 6, growing with the group).
-int scoutDistance(int memberCount);
-/// Line: at most this many cells abreast (more sonic units widen the front row).
-constexpr int kLineMaxWidth = 16;
+/// Echelon: at most this many cells abreast in each slanted rank.
+constexpr int kEchelonMaxWidth = 12;
 /// Column: cells abreast for a group with this many cells (1 to 3).
 int columnWidth(int cellCount);
 
@@ -138,7 +145,6 @@ struct Plan {
     FixPoint groupSpeed = 0;    ///< groupPace(): the slowest member's speed
     bool formation = false;     ///< false for fewer than two members: plain move to the target
     Coord forward = Coord(0, -1);   ///< the facing the shape was laid out for (formation plans)
-    std::vector<Uint32> scouts; ///< Combined arms: the members sent ahead as scouts, sorted
 
     /// Destination of objectID, or Coord::Invalid() if it is not a member.
     Coord slotFor(Uint32 objectID) const;
@@ -192,6 +198,24 @@ Coord facing(const Coord& from, const Coord& to);
 */
 Plan plan(std::vector<Member> members, const Coord& target, int mapWidth, int mapHeight,
           const CanStand& canStand, int infantryPerTile, Shape shape = Shape::Box);
+
+/**
+    Forms a group up where it stands (the formation buttons and hotkeys, docs/formations.md).
+    The shape is laid out around the anchor - the members' centroid (centroidOf), or the
+    nearest tile there the anchor member may stand on (the MCV, else the vehicle, else the
+    member with the lowest object id) - with its front towards 'forward'. It is always the
+    shape itself: a tight Box group forms the box instead of keeping its own shape. Every
+    other rule is plan()'s: harvesters left out, the MCV on the anchor, sonic lanes clear,
+    slots resolved the same way. Pure and independent of the members' order.
+    \param  forward one of the eight unit steps; anything else faces north (0,-1)
+    \return the plan; with fewer than two members formation is false and every member keeps
+            its own tile
+*/
+Plan planInPlace(std::vector<Member> members, const Coord& forward, int mapWidth, int mapHeight,
+                 const CanStand& canStand, int infantryPerTile, Shape shape);
+
+/// The integer (floor) centroid of the members that join formations; invalid for none.
+Coord centroidOf(const std::vector<Member>& members);
 
 /**
     The pace a formation keeps: its slowest member's reference speed, infantry included, so
