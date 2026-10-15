@@ -18,6 +18,7 @@
 #include <FormationPlanner.h>
 
 #include <data.h>
+#include <Definitions.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -932,6 +933,22 @@ March marchState(int behindLeader, int aheadOfLast) {
     if (aheadOfLast > kHoldLeadTiles) return March::Hold;
     if (behindLeader > kRecoverLagTiles) return March::Recover;
     return March::Pace;
+}
+
+EngageEnd engageStep(const EngageView& view) {
+    if(view.close) return EngageEnd::Close;
+    // A third of the members lost: size * (1 - 1/3) or fewer left.
+    if(view.size > 0 && view.members * kEngageLossDenominator
+                        <= view.size * (kEngageLossDenominator - kEngageLossNumerator)) return EngageEnd::Losses;
+    if(view.outranged) return EngageEnd::Outranged;
+    const Uint32 sinceReach = view.now - std::max(view.lastInReach, view.started);
+    const Uint32 sinceHit = view.lastHit > view.now ? 0 : view.now - view.lastHit;
+    if(!view.inReach && sinceReach >= Uint32(MILLI2CYCLES(kEngageOutrangedMs))
+       && view.lastHit != 0 && sinceHit < Uint32(MILLI2CYCLES(kEngageOutrangedMs))) return EngageEnd::Quiet;
+    if(view.now - view.started >= Uint32(MILLI2CYCLES(kEngageMaxMs))) return EngageEnd::Timeout;
+    if(!view.inReach && sinceReach >= Uint32(MILLI2CYCLES(kEngageQuietMs))
+       && (view.lastHit == 0 || sinceHit >= Uint32(MILLI2CYCLES(kEngageQuietMs)))) return EngageEnd::Resume;
+    return EngageEnd::None;
 }
 
 } // namespace FormationPlanner

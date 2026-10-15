@@ -38,12 +38,13 @@ SEEDS = (7101, 7202, 7303)
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 KEY = ('tag', 'difficulty', 'size', 'seed', 'house_a', 'shape_a', 'house_b', 'shape_b')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units')
+                'army_value', 'army_units', 'engagements', 'resumed', 'broke_close', 'broke_losses', 'broke_outranged',
+                'broke_quiet', 'broke_timeout')
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
     f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
                'arrival_spread_s', 'shots30', 'loss60', 'kill60', 'survivors', 'lost_before_contact', 'formed',
-               'formup_s', 'formation_end_s', 'in_formation_at_contact')
+               'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s')
 HOUSE_NUMBERS = {'harkonnen': '0', 'atreides': '1', 'ordos': '2'}
 lock = threading.Lock()
 
@@ -70,18 +71,29 @@ def append(path, fields, rows):
             writer.writerows(rows)
 
 
+def pairs(args):
+    """The shape pairs to play: --pairs if given, else every pair of --shapes (only those with --versus)."""
+    if args.pairs:
+        return [tuple(pair.split(':', 1)) for pair in args.pairs.split(',')]
+    return [(first, second) for first, second in itertools.combinations(args.shapes, 2)
+            if not args.versus or args.versus in (first, second)]
+
+
 def schedule(args):
     """Every game of the round-robin, a whole seed at a time so partial results stay balanced."""
     games = []
     for index, seed in enumerate(args.seeds):
-        house_a, house_b = HOUSE_PAIRS[index % len(HOUSE_PAIRS)]
-        for size in args.sizes:
-            for first, second in itertools.combinations(args.shapes, 2):
-                if args.versus and args.versus not in (first, second):
-                    continue
-                for shape_a, shape_b in ((first, second), (second, first)):
-                    games.append((args.tag, args.difficulty, str(size), str(seed), house_a, shape_a, house_b, shape_b))
+        houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
+        for house_a, house_b in houses:
+            for size in args.sizes:
+                for first, second in pairs(args):
+                    for shape_a, shape_b in ((first, second), (second, first)):
+                        games.append((args.tag, args.difficulty, str(size), str(seed), house_a, shape_a, house_b, shape_b))
     return games
+
+
+def slug(key):
+    return '-'.join(key).replace('/', '_')
 
 
 def build_probe(args, scratch):
@@ -101,7 +113,7 @@ def build_probe(args, scratch):
 
 def play(args, scratch, binary, key):
     tag, difficulty, size, seed, house_a, shape_a, house_b, shape_b = key
-    out = scratch / '-'.join(key)
+    out = scratch / slug(key)
     shutil.rmtree(out, ignore_errors=True)
     command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
@@ -137,7 +149,7 @@ def play(args, scratch, binary, key):
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
     results = Path(args.results)
     if row['error']:
-        (results / f'failed-{"-".join(key)}.txt').write_text(
+        (results / f'failed-{slug(key)}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
@@ -334,14 +346,79 @@ def export(args):
         if number(wave['in_formation_at_contact'], -1) >= 0:
             s['contact_waves'] += 1
             s['in_formation_at_contact'] += number(wave['in_formation_at_contact'])
+        if number(wave.get('in_formation_10s'), -1) >= 0:
+            s['waves_10s'] += 1
+            s['in_formation_10s'] += number(wave['in_formation_10s'])
     fields = ('tag', 'difficulty', 'size', 'seed', 'shape', 'waves', 'members', 'kill60', 'loss60', 'survivors',
-              'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact')
+              'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact',
+              'waves_10s', 'in_formation_10s')
     with (target / 'waves-by-shape.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
         for key in sorted(sums):
             writer.writerow(list(key) + [f'{sums[key][f]:.1f}'.rstrip('0').rstrip('.') for f in fields[5:]])
     print(f'{len(games)} games and {len(sums)} wave sums written to {target}')
+
+
+def pairing_report(args):
+    """Per pairing (--pairs x:y), from x's side: the score, eliminations, game length, and the
+    waves of both sides (formation at contact and 10 s later, first-minute trade, survival) plus
+    how x's engagements ended."""
+    results = Path(args.results)
+    tags, sizes, seeds = set(args.tag.split(',')), {str(s) for s in args.sizes}, {str(s) for s in args.seeds}
+    def wanted(row):
+        return (row['tag'] in tags and row['difficulty'] == args.difficulty and row['size'] in sizes
+                and row['seed'] in seeds)
+    games = [g for g in read(results / 'games.csv') if wanted(g)]
+    waves = [w for w in read(results / 'waves.csv') if wanted(w)]
+    print(f'{args.difficulty}, tag {args.tag}, sizes {" ".join(map(str, args.sizes))}; time-outs adjudicated on a unit '
+          f'trade of {args.adjudicate:.0f} credits or more.\n')
+    print('| Pairing | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | '
+          'Median game min | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    wave_rows, end_rows = [], []
+    for x, y in pairs(args):
+        mine = [g for g in games if {g['shape_a'], g['shape_b']} == {x, y}]
+        rows = [s for g in mine for s in sides(g, args.adjudicate) if s[0] == x]
+        if not rows:
+            continue
+        scores = [r[2] for r in rows]
+        low, high = bootstrap(scores)
+        w = sum(r[5] == 1.0 for r in rows); l = sum(r[5] == 0.0 for r in rows); d = sum(r[5] == 0.5 for r in rows)
+        verdict = f'beats {y}' if low > 0.5 else (f'loses to {y}' if high < 0.5 else 'not distinguishable')
+        print(f'| {x} v {y} | {len(rows)} | {statistics.mean(scores):.3f} | {low:.2f}-{high:.2f} | {w}-{l} / {d} | '
+              f'{statistics.mean(r[5] for r in rows):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | '
+              f'{statistics.median(number(g["end_s"]) / 60 for g in mine):.1f} | {verdict} |')
+        keys = {tuple(g[k] for k in KEY) for g in mine}
+        for shape in (x, y):
+            sw = [wv for wv in waves if tuple(wv[k] for k in KEY) in keys and wv['shape'] == shape]
+            members = sum(number(wv['members']) for wv in sw)
+            kill = sum(number(wv['kill60']) for wv in sw); loss = sum(number(wv['loss60']) for wv in sw)
+            contact = [wv for wv in sw if number(wv['in_formation_at_contact'], -1) >= 0]
+            later = [wv for wv in sw if number(wv.get('in_formation_10s'), -1) >= 0]
+            share = lambda ws, f: 100 * sum(number(wv[f]) for wv in ws) / max(1, sum(number(wv['members']) for wv in ws))
+            wave_rows.append(f'| {x} v {y} | {shape} | {len(sw)} | {members / max(1, len(sw)):.1f} | '
+                             f'{share(contact, "in_formation_at_contact"):.0f}% | {share(later, "in_formation_10s"):.0f}% | '
+                             f'{kill / max(1, len(sw)):.0f} | {loss / max(1, len(sw)):.0f} | {kill / max(1, loss):.2f} | '
+                             f'{100 * sum(number(wv["survivors"]) for wv in sw) / max(1, members):.0f}% |')
+        side_of = lambda g: 'a' if g['shape_a'] == x else 'b'
+        count = lambda f: sum(number(g[f'{f}_{side_of(g)}']) for g in mine)
+        engagements = count('engagements')
+        if engagements:
+            end_rows.append(f'| {x} v {y} | {engagements / len(mine):.1f} | ' + ' | '.join(
+                f'{100 * count(f) / engagements:.0f}%' for f in ('resumed', 'broke_close', 'broke_losses', 'broke_outranged',
+                                                                   'broke_quiet', 'broke_timeout')) + ' |')
+    print('\nWaves of both sides (members in formation at contact and 10 s later as a share of members; first-minute '
+          'value killed and lost from contact; members alive 5 min after launch):\n')
+    print('| Pairing | Side | Waves | Members / wave | In formation at contact | In formation +10 s | Killed 60 s | '
+          'Lost 60 s | Killed / lost | Survival |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    print('\n'.join(wave_rows))
+    if end_rows:
+        print('\nHow the first side\'s engagements ended:\n')
+        print('| Pairing | Engagements / game | Marched on | Close | A third lost | Outranged | 8 s outranged | 30 s |')
+        print('|---|---|---|---|---|---|---|---|')
+        print('\n'.join(end_rows))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -356,6 +433,10 @@ parser.add_argument('--sizes', nargs='+', type=int, default=list(SIZES))
 parser.add_argument('--seeds', nargs='+', type=int, default=list(SEEDS))
 parser.add_argument('--shapes', nargs='+', default=list(SHAPES))
 parser.add_argument('--versus', help='Play only the pairs that include this shape (e.g. none: every shape against the control)')
+parser.add_argument('--pairs', help='Play (and report) exactly these pairs: x:y,x:y (a shape may carry an engagement, '
+                                    'e.g. box/scatter; see formation-duel.inc)')
+parser.add_argument('--all-houses', action='store_true',
+                    help='Play every seed with all three house pairs (three times the games) instead of one pair per seed')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
 parser.add_argument('--report', action='store_true')
@@ -364,7 +445,7 @@ parser.add_argument('--adjudicate', type=float, default=1000,
                     help='Report: a time-out goes to the side ahead on killed unit value by at least this many credits')
 args = parser.parse_args()
 if args.report:
-    report(args)
+    pairing_report(args) if args.pairs else report(args)
 elif args.export:
     export(args)
 else:

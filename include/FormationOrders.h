@@ -22,6 +22,7 @@
 
 #include <vector>
 
+class House;
 class ObjectBase;
 class UnitBase;
 
@@ -67,6 +68,47 @@ enum class Resume : Uint8 {
     Walk = 2,           ///< the attack-move or patrol in the order queue walks on to the slot
     HuntToward = 3      ///< doHuntToward the slot (AI hunting formations)
 };
+
+/**
+    How a hunting formation fights (docs/formations.md, "Fighting in formation"). Members of a
+    hunting formation that does not scatter target only what their weapons reach (and, holding,
+    what the leash reaches), never chase, and keep their membership through the fight.
+*/
+enum class Engagement : Uint8 {
+    Scatter = 0,    ///< the first contact or hit breaks the whole group into free fights (before save 9862)
+    Hold = 1,       ///< the group halts on contact and fires from its places until a break rule or the re-march
+    Advance = 2,    ///< the group marches on at its pace; a member with a target in weapon range stops to fire
+    Deploy = 3      ///< the group halts on contact; a member with nothing in weapon range closes on the
+                    ///< nearest enemy within its leash and fires from there; no walk back until the re-march
+};
+
+/// The engagement every hunting formation uses (chosen by measurement, docs/formations.md).
+constexpr Engagement kEngagement = Engagement::Hold;
+/// Hold: a member may step this far from its place towards a target, then returns.
+constexpr int kEngageLeashTiles = 0;
+/// Deploy: a member closes on an enemy up to this far beyond its weapon range.
+constexpr int kEngageDeployReach = 6;
+/// The engagement this house's hunting formations use: kEngagement unless a test overrides it.
+Engagement engagementOf(const House* house);
+/// How far beyond its weapon range an engaged member of this house goes for a target (Hold:
+/// from its place, kEngageLeashTiles; Deploy: from where it is, kEngageDeployReach), unless a
+/// test overrides it.
+int leashOf(const House* house);
+/**
+    Test-only (formation duels, probes): this house's hunting formations use 'engagement' and
+    'leash' (negative: the default) instead of kEngagement / kEngageLeashTiles. Never set by
+    the game, not saved and not hashed; clearTestEngagement() restores the defaults.
+*/
+void setTestEngagement(int houseID, int engagement, int leash);
+void clearTestEngagement();
+
+/// Engagement telemetry per house (read-only diagnostics for the duel probe; no simulation effect).
+struct EngageStats {
+    int engaged = 0;
+    int ended[static_cast<int>(FormationPlanner::EngageEnd::Count)] = {};
+};
+const EngageStats& engageStats(int houseID);
+void clearEngageStats();
 
 /**
     A formation command's last parameter: the 24-bit group token, the order kind in bits
@@ -142,24 +184,37 @@ void join(const std::vector<UnitBase*>& units, Uint32 groupID, const std::vector
 bool stepEntersSonicLane(const UnitBase* unit, const Coord& next);
 
 /**
+    The sonic-lane rule in the fight (docs/formations.md): may sonic member 'unit' of a hunting
+    formation that does not scatter not fire at 'targetTile' because a member of its formation
+    that the wave would hurt (FormationPlanner::mayStandInLane) stands in the lane towards it,
+    no farther away than the target?
+*/
+bool sonicFireBlocked(const UnitBase* unit, const Coord& targetTile);
+
+/**
     Ends hunting formation 'groupID' because a member met 'enemy': every member leaves the
     formation and drops its pace, and each one that fights and has no target of its own
     attacks 'enemy', or closes in on it when its attack mode would not keep a target that
     far (UnitBase::engageFormationContact; unforced, so attack-move leashes and Hunt take
-    over from there).
+    over from there). A scattering formation (Engagement::Scatter) breaks this way at its
+    first contact or hit; the others when a break rule fires (engageStep).
     Called from the per-cycle update and when a member is hit; deterministic on every peer.
 */
 void breakHunt(Uint32 groupID, const ObjectBase* enemy);
 
 /**
-    Per-cycle membership upkeep, run before any unit moves: a hunting formation in which any
-    member has made contact breaks (breakHunt); the groups joined this cycle plan their
-    form-up; members that arrived, made contact, were left alone or can no longer move leave
+    Per-cycle membership upkeep, run before any unit moves: a scattering hunting formation in
+    which any member has made contact breaks (breakHunt); a hunting formation of another
+    engagement in which a member has an enemy target in weapon range or was hit engages
+    (holding: every member halts on its place), and an engaged one follows engageStep (fight
+    on, march on or break); the groups joined this cycle plan their form-up; members that
+    arrived, made contact (plain marches), were left alone or can no longer move leave
     their formation; a group whose members all stand on their form-up tiles (or cannot get
     closer) starts its march; and every member learns this cycle's march
     (FormationPlanner::marchState): forming members walk to their form-up tiles at full speed
     and wait there, marching members keep the pace, recover a lost place or wait for a member
-    that fell behind.
+    that fell behind. Every decision is made per group from the members' state in unit-list
+    order, with order-independent aggregates, so every peer and a loaded game agree.
 */
 void update();
 

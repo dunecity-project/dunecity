@@ -153,6 +153,11 @@ public:
     const UnitBase* findClosestTargetUnit() const;
     const ObjectBase* findClosestTarget() const;
     virtual const ObjectBase* findTarget() const;
+    /// The attack mode target searches and range checks use: attackMode, except that a unit
+    /// fighting from its formation searches like HOLD (UnitBase::firesFromFormation).
+    virtual ATTACKMODE targetingMode() const { return attackMode; }
+    /// How far a HOLD search reaches: the weapon range (a holding formation member adds its leash).
+    virtual int holdSearchRange() const { return getWeaponRange(); }
 
     /**
         Target-search workload counters. Process-wide diagnostics only: they are
