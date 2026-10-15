@@ -1,19 +1,19 @@
-## 2026-10-15 — Formation research (branch `feat/formation-research`, IN PROGRESS, not released)
+## 2026-10-15 — Formation research (branch `feat/formation-research`, not released)
 
-Stefan: "test different styles of formations ... keep the best 5 ... 1-1 skirmish with army and base provided
-fortress"; later: add None as a control. Details and numbers: `docs/formations.md` ("Formation research").
+Stefan: "test different styles of formations ... keep the best 5"; then None as a control. Details and all tables:
+`docs/formations.md` ("Formation research"). Merged `feat/formation-form-up` (save 9861 / protocol 75, unchanged).
 
-- Done: web research (annotated sources); ten planner shapes (Box, Combined, Line, Column, Wedge, Vee, Echelon,
-  Staggered, Diamond, Pincer), all rules kept, `formation_planner_tests` sweeps every shape; real-engine gallery in
-  `formation_movement_probe` (step 9, `formation-shape-<name>.png`, all ten form with 0 sonic-lane step-ins);
-  test-only `QuantBot::waveFormationOverride`; duel harness `tests/ai/formation-duel.py` (Random Skirmish 1v1,
-  mirrored, Fortress + 20,000-credit armies); 1,620 Hard games (rounds 1-2); generator fix: no unit starts on a
-  spice bloom (crashed the load of 64x64 seed 7101), pinned by `skirmish_generator_tests`.
-- None control finished (360 games): None ranks first, 0.562 (0.51-0.61); the shapes together score 0.438
-  (0.39-0.49) against None, and no shape beats it. Next: make None the QuantBot default as Stefan asked; choose the kept five and prune planner/UI/
-  hotkey cycle/config parser/tests, kept-shape tests, Brutal check, the ctest list, and final screenshots.
-  UI tooltips and icons are already keyed by shape, so pruning is deleting cases.
-
+- 1,980 Hard duels (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, `tests/ai/formation-duel.py`):
+  None 0.562 (0.51-0.61) ranks first; the shapes score 0.438 (0.39-0.49) against None; no shape beats it.
+- Applied: QuantBot `WaveFormation` default None; `kAIShape` removed - AIPlayer, CampaignAIPlayer and QuantBot recall
+  follow `WaveFormation` (None: pre-formation orders). Kept shapes Box, Pincer, Column, Staggered, Echelon (+ Off);
+  removed Combined arms (scouts), Line, Wedge, Vee, Diamond. Stable ids; removed ids load as Box (settings only -
+  commands and saves carry slots, not shapes). Generator fix: no unit starts on a spice bloom.
+- Tests (one ctest run, -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe (after the probe's
+  marker/screenshot list was updated), game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 23 quantbot_* probes passed.
+- Open: Brutal None-vs-kept-shapes sample (tag `brutal`, results in /tmp/dunecity-formation-research/results) was
+  running at hand-over; the approved "fight in formation through first contact" engagement mode is not started.
 ## 2026-10-15 — formation buttons form the selection up where it stands (branch `feat/formation-form-up`, save 9861, protocol 75, not released)
 
 Stefan: "when selecting men and then setting a formation, the troops should move into that formation".
