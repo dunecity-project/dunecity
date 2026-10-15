@@ -9,8 +9,8 @@ fortress"; later: add None as a control. Details and numbers: `docs/formations.m
   test-only `QuantBot::waveFormationOverride`; duel harness `tests/ai/formation-duel.py` (Random Skirmish 1v1,
   mirrored, Fortress + 20,000-credit armies); 1,620 Hard games (rounds 1-2); generator fix: no unit starts on a
   spice bloom (crashed the load of 64x64 seed 7101), pinned by `skirmish_generator_tests`.
-- Open: the None-control games (360, `--tag round1` and `--tag round2` with `none` in `--shapes`) were running at
-  hand-over; then choose the kept five and the `WaveFormation` default (None if it stays ahead), prune planner/UI/
+- None control finished (360 games): None ranks first, 0.562 (0.51-0.61); the shapes together score 0.438
+  (0.39-0.49) against None, and no shape beats it. Next: make None the QuantBot default as Stefan asked; choose the kept five and prune planner/UI/
   hotkey cycle/config parser/tests, kept-shape tests, Brutal check, the ctest list, and final screenshots.
   UI tooltips and icons are already keyed by shape, so pruning is deleting cases.
 
