@@ -59,24 +59,36 @@ public:
     }
 
 private:
-    /// A 20x20 symbol: the formation seen from above, its front at the top.
+    /// The dots of a choice's symbol (20x20, the formation seen from above, its front at the top).
+    static std::vector<SDL_Point> iconDots(int choice) {
+        if(choice <= 0) return {{3,4},{12,2},{7,9},{15,10},{3,15},{11,15}};                  // off: scattered
+        switch(FormationPlanner::shapeFromIndex(choice - 1)) {
+            case FormationPlanner::Shape::Combined:
+                return {{2,1},{16,1},{5,7},{9,7},{13,7},{1,9},{17,9},{7,12},{11,12},{9,16}};
+            case FormationPlanner::Shape::Line:      return {{0,9},{4,9},{8,9},{12,9},{16,9}};
+            case FormationPlanner::Shape::Column:    return {{6,1},{11,1},{6,6},{11,6},{6,11},{11,11},{6,16},{11,16}};
+            case FormationPlanner::Shape::Wedge:     return {{8,1},{5,5},{11,5},{2,9},{14,9},{0,13},{16,13}};
+            case FormationPlanner::Shape::Vee:       return {{0,2},{16,2},{3,6},{13,6},{6,10},{10,10},{8,14}};
+            case FormationPlanner::Shape::Echelon:   return {{1,2},{5,5},{9,8},{13,11},{17,14}};
+            case FormationPlanner::Shape::Staggered: return {{1,2},{9,2},{17,2},{5,9},{13,9},{1,16},{9,16},{17,16}};
+            case FormationPlanner::Shape::Diamond:   return {{8,1},{4,5},{12,5},{1,9},{15,9},{4,13},{12,13},{8,16}};
+            case FormationPlanner::Shape::Pincer:    return {{0,4},{4,4},{0,9},{4,9},{13,4},{17,4},{13,9},{17,9}};
+            case FormationPlanner::Shape::Box:
+            default:                                 return {{4,4},{9,4},{14,4},{4,9},{9,9},{14,9},{4,14},{9,14},{14,14}};
+        }
+    }
+
     static SDL_Surface* createIcon(int choice) {
-        static const std::array<std::vector<SDL_Point>, kChoices> dots = {{
-            {{3,4},{12,2},{7,9},{15,10},{3,15},{11,15}},                                    // off: scattered
-            {{4,4},{9,4},{14,4},{4,9},{9,9},{14,9},{4,14},{9,14},{14,14}},                  // box
-            {{2,1},{16,1},{5,7},{9,7},{13,7},{1,9},{17,9},{7,12},{11,12},{9,16}},           // combined arms
-            {{0,9},{4,9},{8,9},{12,9},{16,9}},                                              // line
-            {{6,1},{11,1},{6,6},{11,6},{6,11},{11,11},{6,16},{11,16}}                       // column
-        }};
         SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormat(0, 20, 20, 32, SDL_PIXELFORMAT_RGBA32);
         if(icon == nullptr) return nullptr;
         SDL_FillRect(icon, nullptr, SDL_MapRGBA(icon->format, 0, 0, 0, 0));
-        for(const SDL_Point& dot : dots[choice]) {
+        const bool combined = choice > 0 && FormationPlanner::shapeFromIndex(choice - 1) == FormationPlanner::Shape::Combined;
+        for(const SDL_Point& dot : iconDots(choice)) {
             const SDL_Rect shadow{dot.x, dot.y, 4, 4};
             SDL_FillRect(icon, &shadow, SDL_MapRGBA(icon->format, 20, 16, 10, 200));
             const SDL_Rect body{dot.x, dot.y, 3, 3};
             // The scouts of the combined-arms symbol are amber, everything else bone white.
-            const bool scout = choice == 2 && dot.y == 1;
+            const bool scout = combined && dot.y == 1;
             SDL_FillRect(icon, &body, scout ? SDL_MapRGBA(icon->format, 255, 196, 64, 255)
                                             : SDL_MapRGBA(icon->format, 250, 248, 240, 255));
         }

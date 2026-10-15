@@ -5,6 +5,144 @@ formations the group moves in single file and piles onto one tile. Branch `feat/
 built the Box; branch `feat/formation-shapes` (save 9859, protocol 73) adds the shapes, the
 sonic-lane rule, hunting in formation and the panel buttons described first below.
 
+## Formation research (branch `feat/formation-research`)
+
+Stefan: "you don't need to keep mine default ... test different styles of formations, maybe do
+some online research. come up with different formations, keep the best 5. do extensive play
+testing on different sized maps." This section is the research, the candidates, the round-robin
+and the choice; it supersedes the older sections below where they disagree.
+
+### Sources and ideas
+
+- **Age of Empires II / IV** ([AoE wiki, Unit formation](https://ageofempires.fandom.com/wiki/Unit_formation)).
+  AoE II: *Line* (melee in front, ranged behind; the default), *Box* (weak units in the centre,
+  protected from every side), *Staggered* (units farther apart against siege splash) and
+  *Flank* (two subgroups that try to surround the enemy). AoE IV: default rectangle about twice
+  as wide as deep, *Line* one or two deep (spreads ranged fire, limits pass-through hits),
+  *Wedge* (one unit at the head, each row two more), *Staggered* (spacing and offset rows
+  against area damage), *Column* (ships). All members move at the slowest unit's speed and
+  only keep formation within a few tiles of each other - the same rules this planner uses.
+- **US Army FM 3-21.71, ch. 3, mounted formations** ([GlobalSecurity](https://www.globalsecurity.org/military/library/policy/army/fm/3-21-71/ch3.htm)).
+  *Column / staggered column*: fast and easy to control, flank fire excellent, front fire
+  limited. *Wedge*: for unclear situations and likely contact - front fire excellent, flanks
+  good. *Line*: the assault - maximum fire to the front, little depth, poor flanks. *Echelon*:
+  covers one flank of a larger force. *Coil / herringbone*: stationary all-round security.
+  Platoons are combined inside larger shapes ("wedges within a company vee").
+- **Total War** ([Rome II Encyclopedia, formations](https://r2encv2.totalwar.com/en/manual/single-player/0081_enc_page_battle_play_phase_conflict_army_formations/index.html)).
+  Sorted lines by unit type, *Crescent* (the line bows inward to draw the enemy into the centre
+  and encircle it), *Spear point* (heavy in front, light on the flanks), *Wedge* (stab through
+  a line), *Skirmish* (a missile screen in front), cavalry on the flanks; units keep their
+  shape and spacing while carrying out orders.
+- **StarCraft II, the concave** ([Game Design Scrapbook, "Micro for Noobs: The Concave"](http://gamedesignreviews.com/scrapbook/micro-for-noobs-the-concave/)).
+  Ranged units fight best in an arc at weapon range around the enemy, all of them firing; a
+  "pile-up" lets only the front few fire. Our Vee is the concave for a marching group.
+- **Company of Heroes 2** ([manual](https://www.feralinteractive.com/en/manual/companyofheroes2/latest/steam)):
+  vehicle armour is weaker at the sides and the rear - lead with the armour, keep the flanks
+  covered. (Dune Legacy has no facing armour; the lesson that remains is armour in front.)
+- **Beyond All Reason** (the Total Annihilation / Supreme Commander lineage,
+  [Move in Formation](https://www.beyondallreason.info/commands/move-in-formation)): keep the
+  formation and move at the slowest unit's speed. No primary source for Supreme Commander's own
+  formation templates or for a Command & Conquer formation move was found in this round.
+- **Dune II / Dune 2000 / Emperor** ([Dune RTS Wiki, Sonic Tank (Dune II)](https://dunerts.wiki.gg/wiki/Sonic_Tank_(Dune_II))):
+  the sonic blast damages every friendly and enemy unit it touches and passes through objects,
+  so nothing of ours may stand ahead of a sonic tank - the sonic-lane rule every candidate keeps.
+  No formation templates of their own were found for these three games in this round.
+
+### Candidates (ten, all in `FormationPlanner` during the research)
+
+Every candidate keeps every rule of the planner: a pure, deterministic, integer function of
+the members (any order), sonic units only where nothing but a sonic unit of their own type
+stands in their lane, siege tanks with the front-line armour, harvesters left out, MCVs on the
+target in the middle of the middle row, and every slot resolved to a usable, unique tile by the
+ring search. Diagrams: 16 units (2 sonic tanks `S`, 3 tanks and a devastator `H`, 2 siege
+tanks `G`, 3 quads/trikes `l`, 4 launchers `r`, a trooper squad `i`), marching up the page.
+
+- **Box** (doctrine: box / coil): rows by role, armour, ranged, infantry; a tight group keeps
+  its own shape.
+- **Combined arms** (spear point; traveling overwatch): armour front row, ranged behind, light
+  vehicles on the flanks, the fastest 1-3 as scouts 4-6 tiles ahead.
+- **Line** (line abreast; AoE/Total War line): up to 16 abreast, one or two ranks.
+- **Column** (column / staggered column): 1-3 abreast, deep.
+- **Wedge** (wedge; AoE IV wedge): an arrowhead, one rank further back per column out; the
+  front spots go to armour (siege tanks first), the inner back to ranged units.
+- **Vee** (vee; Total War crescent; StarCraft concave): the flanks lead by one rank every two
+  columns from the second column out, the centre (with the sonic units) hangs back.
+- **Echelon** (echelon right; refused right flank): the left flank leads, one rank every two
+  columns, up to 12 abreast.
+- **Staggered** (AoE staggered; dispersion against splash): the box's rows two tiles apart,
+  units two columns apart, alternate rows offset by one column - no two units adjacent.
+- **Diamond** (diamond; all-round security): rows growing by two from a point to a waist and
+  back; armour round the outside front first, light vehicles on the widest flanks, ranged units
+  and infantry inside.
+- **Pincer** (AoE II flank; double envelopment): the row layout split into two wings with a
+  gap of about half a wing's width between them; MCVs stand in the gap.
+
+```
+Box          Combined     Line              Column  Wedge     Vee       Echelon       Staggered    Diamond  Pincer
+H.r.G.l.H.S  ll...l       HiHrrrGSlGlHlHHr  SG      ...S...   G.....G   GG..........  .H.H.S.G.G   ..S..    HHGS...+...GHHH
+....+......  ......                         HG      ..GGH..   HHHSHHl   ..HH........  ..........   .GlG.    irrr.......lllr
+i.r.l.H.H.r  .HHSGG                         HH      .HHHHl.   .rllrr.   ....HS......  l.l.H.H.H.   HrlrH
+...........  ..HHH.                         HH      rl..lrr   ...ri..   ....HHll....  ..........   HrriH
+H.r.G.l....  ..rrrr                         ll      r.....i             ......lrrr..  .r.r.r.l.r   .lH..
+             ...i..                         rl                          ..........ri  ..........
+                                            rr                                        ....i.....
+                                            ir
+```
+
+(Combined arms: 4 empty rows between the scouts and the front are left out. Box: a tight
+group keeps its own spacing; `+` is the target where no unit stands on it.)
+
+### The round-robin (`tests/ai/formation-duel.py`)
+
+- **Game:** a Random Skirmish map from the real `SkirmishGenerator` (multiplayer 2 starts,
+  *Mirrored starts* = point-symmetric terrain, vanilla, tech 9, Medium rock and spice), both
+  starts with a **Fortress** base and a **20,000-credit** army, two QuantBots of one difficulty
+  (`formation-duel.inc`, through `run-campaign-balance.py --duel-map-size --duel-map-seed
+  --duel-sides --local-spectator`). Each side's attack waves march in its own shape: the
+  test-only `QuantBot::waveFormationOverride` (not saved, not hashed, never set by the game);
+  production keeps one `WaveFormation` config value. Everything else is the real game.
+- **End:** one house eliminated (`House::isAlive`), or the time limit (40 game minutes).
+- **Pairing:** every pair of shapes on every map size and seed, twice: the two shapes swap
+  houses, the match seed, map and start assignment stay the same, so house and start
+  differences cancel within the pair. Houses per seed: Atreides-Harkonnen, Ordos-Atreides,
+  Harkonnen-Ordos (sonic tanks, devastators and deviators all appear).
+- **Score:** 1 for a win, 0 for a loss; a time-out is adjudicated on the unit trade (the side
+  whose killed unit value is ahead by 1,000 credits or more wins it, else 0.5). The strict
+  score (eliminations only) is reported too. 95% intervals are bootstrap intervals over a
+  shape's games (2,000 resamples, fixed seed); "by seed" is the range of the per-seed scores.
+- **Metrics per game** (`games.csv`): winner, game time, each side's killed and lost unit
+  value, enemy structures destroyed, structures and army left. **Per wave** (the existing
+  `formation-wave-measure.inc`): value killed and lost in the first 60 s after contact,
+  survival after 5 minutes, base-arrival spread, time to contact, members in formation at
+  contact.
+- **Runs:** one probe binary (`--prebuilt-probe`), 6 games in parallel on the 10-core Mac mini;
+  each run directory is deleted when its rows are written. `--report` prints the tables below.
+
+### Results so far (Hard vs Hard; IN PROGRESS - the kept five and the default are not chosen yet)
+
+Raw data: `docs/formation-results/games.csv` (every game) and `waves-by-shape.csv` (waves summed
+per round, size, seed and shape); reproduce with
+`tests/ai/formation-duel.py --results <dir> --tag round1,round2 --sizes 64 128 160 192 --seeds 7101 7202 7303 7404 7505 7606 --report`.
+
+- **Round 1** (sizes 64/128/192, seeds 7101/7202/7303) and **round 2** (128/160/192, seeds
+  7404/7505/7606): the ten shapes, all 45 pairs, both house assignments, 1,620 games, 59%
+  decided by elimination (median 29.8 min); most 192 games reach the 40-minute limit.
+- Ten-shape ranking (adjudicated score, 95% CI, ~324 games each): Pincer 0.56 (0.51-0.61),
+  Column 0.54 (0.48-0.59), Staggered 0.53 (0.48-0.59), Echelon 0.52, Box 0.51, Wedge 0.49,
+  Vee 0.48, Diamond 0.47, Line 0.46 (0.41-0.51), Combined arms 0.44 (0.39-0.49). Only Pincer is
+  clearly above the field and only Combined arms clearly below; places 2-8 are within noise.
+- **64x64 tells nothing about shapes:** waves are in contact the moment they launch (median
+  contact 0 s); in rounds 1-2 the same house won both assignments of almost every 64 pair.
+- **Why shapes matter little:** a hunting formation breaks for every member at the first
+  contact or the first hit (`FormationOrders::breakHunt`; in one instrumented 128 game 401 of
+  458 membership ends were breakHunt, the rest QuantBot defence/re-position orders), so half
+  the waves have no member left in formation when the measured contact comes; the median
+  formation lifetime is 0-6 s after the 15 s form-up deadline.
+- **Control (None, plain engine-Hunt waves):** added at Stefan's request; its 360 games against
+  every shape on the same maps, seeds and houses were still running at the hand-over. The first
+  33 (64 and 128, seed 7101) went 0.67 (0.48-0.82) for None. If None stays ahead it becomes the
+  QuantBot default, as Stefan asked.
+
 ## Formation fixes, save 9860 / protocol 74 (after the 1.0.839 play-test)
 
 These rules supersede the older sections below where they disagree.

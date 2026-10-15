@@ -201,9 +201,10 @@ FormationPlanner::Plan orderShape(Game& game, const std::vector<UnitBase*>& grou
 
 /// Runs until every member stands on its slot (or the timeout), calling 'each' every cycle.
 template<typename Each>
-Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const FormationPlanner::Plan& plan, Each each) {
+Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const FormationPlanner::Plan& plan, Each each,
+                  Uint32 timeout = kTimeoutCycles) {
     Uint32 cycles = 0;
-    while(cycles < kTimeoutCycles) {
+    while(cycles < timeout) {
         game.updateGameState();
         ++cycles;
         each(cycles);
@@ -212,8 +213,13 @@ Uint32 runToSlots(Game& game, const std::vector<UnitBase*>& group, const Formati
             settled = settled && !unit->isMoving() && unit->getLocation() == plan.slotFor(unit->getObjectID());
         if(settled) break;
     }
-    for(const UnitBase* unit : group)
-        require(unit->getLocation() == plan.slotFor(unit->getObjectID()), "A shape member did not reach its slot");
+    for(const UnitBase* unit : group) {
+        const Coord slot = plan.slotFor(unit->getObjectID());
+        if(unit->getLocation() != slot)
+            SDL_Log("FORMATION_PROBE_STUCK: id=%u item=%u at %d,%d slot %d,%d after %u cycles", unit->getObjectID(),
+                    unit->getItemID(), unit->getLocation().x, unit->getLocation().y, slot.x, slot.y, cycles);
+        require(unit->getLocation() == slot, "A shape member did not reach its slot");
+    }
     return cycles;
 }
 
@@ -359,6 +365,69 @@ ShapeExtent marchShape(Game& game, House* owner, FormationPlanner::Shape shape) 
     for(const UnitBase* unit : group) { xs.insert(unit->getLocation().x); ys.insert(unit->getLocation().y); }
     clearHouse(owner);
     return {static_cast<int>(ys.size()), static_cast<int>(xs.size())};
+}
+
+/// Sixteen mixed units with two sonic tanks, scattered on the west side: the shape gallery.
+const std::vector<Start> kGalleryArmy = {
+    {Unit_SonicTank, Coord(5, 13)}, {Unit_SonicTank, Coord(6, 18)}, {Unit_Tank, Coord(4, 8)},
+    {Unit_Tank, Coord(8, 11)},      {Unit_Tank, Coord(3, 22)},      {Unit_Tank, Coord(9, 25)},
+    {Unit_SiegeTank, Coord(3, 15)}, {Unit_SiegeTank, Coord(7, 23)}, {Unit_Launcher, Coord(2, 11)},
+    {Unit_Launcher, Coord(5, 20)},  {Unit_Launcher, Coord(9, 15)},  {Unit_Quad, Coord(10, 8)},
+    {Unit_Quad, Coord(10, 21)},     {Unit_Trike, Coord(7, 5)},      {Unit_Trooper, Coord(2, 18)},
+    {Unit_Trooper, Coord(2, 19)},
+};
+const Coord kGalleryTarget(36, 15);
+
+struct GalleryOutcome { int shapes = 0; int laneStepIns = 0; double slowest = 0; };
+
+/// Every shape: the gallery army right-clicked east in it through the real player path, every
+/// member on its slot, no step into a sonic lane on the march, and a frame of the formed group
+/// with its panel button held down (formation-shape-<name>.png).
+GalleryOutcome marchEveryShape(Game& game, House* owner) {
+    GalleryOutcome outcome;
+    for(int index = 0; index < FormationPlanner::kShapeCount; ++index) {
+        const auto shape = FormationPlanner::shapeFromIndex(index);
+        auto group = deploy(owner, kGalleryArmy);
+        for(int i = 0; i < 5; ++i) game.updateGameState();
+        const auto plan = orderShape(game, group, shape, kGalleryTarget);
+        require(plan.forward == Coord(1, 0), "The gallery fixture does not face east");
+        std::set<std::pair<Uint32, Uint32>> inLane;
+        std::string detail;
+        countLaneEntries(group, plan.forward, inLane, detail);
+        int stepIns = 0;
+        SDL_Log("FORMATION_PROBE_GALLERY_START: %s", FormationPlanner::shapeName(shape));
+        // The troopers set the pace: three times the usual allowance.
+        const Uint32 cycles = runToSlots(game, group, plan, [&](Uint32) {
+            stepIns += countLaneEntries(group, plan.forward, inLane, detail);
+        }, 3 * kTimeoutCycles);
+        int sumX = 0, sumY = 0;
+        for(const UnitBase* unit : group) { sumX += unit->getLocation().x; sumY += unit->getLocation().y; }
+        game.pInterface->updateObjectInterface();
+        auto* panel = dynamic_cast<MultiUnitInterface*>(game.pInterface->pObjectContainer);
+        require(panel != nullptr && panel->formationBar.isVisible(), "No formation buttons for the gallery group");
+        for(int choice = 0; choice < FormationBar::kChoices; ++choice)
+            require(panel->formationBar.buttons[choice].getToggleState() == (choice == index + 1),
+                    "The gallery shape's button is not the one held down");
+        const bool paths = settings.general.showMovementPaths;
+        settings.general.showMovementPaths = false;
+        std::string name = FormationPlanner::shapeName(shape);
+        std::replace(name.begin(), name.end(), ' ', '-');
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+        const std::string file = "formation-shape-" + name + ".png";
+        saveScreenshot(game, file.c_str(), Coord(sumX / static_cast<int>(group.size()) + 4, sumY / static_cast<int>(group.size())));
+        settings.general.showMovementPaths = paths;
+        SDL_Log("FORMATION_PROBE_GALLERY: %s formed in %.2fs, %d sonic lane step-ins%s, frame %s",
+                FormationPlanner::shapeName(shape), seconds(cycles), stepIns, detail.c_str(), file.c_str());
+        require(stepIns == 0, std::string("A unit stepped into a sonic lane marching in ") + FormationPlanner::shapeName(shape));
+        outcome.laneStepIns += stepIns;
+        outcome.slowest = std::max(outcome.slowest, seconds(cycles));
+        ++outcome.shapes;
+        clearHouse(owner);
+        game.unselectAll(game.selectedList);
+        game.selectedList.clear();
+        for(int i = 0; i < 5; ++i) game.updateGameState();
+    }
+    return outcome;
 }
 
 struct HuntOutcome { Uint32 marched = 0; Uint32 engaged = 0; };
@@ -898,12 +967,16 @@ int runFormationProbe() {
     // 8. The one-speed block march: form-up, equal speeds, harvester left out, MCV in the middle.
     const BlockOutcome block = marchBlock(*game, owner);
 
+    // 9. The shape gallery: every shape formed by the real player path, one frame each.
+    const GalleryOutcome gallery = marchEveryShape(*game, owner);
+
     SDL_Log("FORMATION_PROBE_PASS: on spread %.2fs, off spread %.2fs, tanks ahead of launchers, hunting save round trip, "
             "9854, 9857 and 9859 records, combined arms (%d sonic lane step-ins, scouts %d tiles ahead), line %dx%d, column %dx%d, "
             "hunt broke after %.2fs in formation and every member hunted or fought within %.2fs, block march speed spread "
-            "%.1f%%, shape error %.2f tiles",
+            "%.1f%%, shape error %.2f tiles, %d shapes formed (slowest %.2fs, %d sonic lane step-ins)",
             seconds(on.spread), seconds(off.spread), combined.laneStepIns, combined.scoutLead, line.frontage, line.depth,
-            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged), block.speedSpread * 100, block.shapeError);
+            column.frontage, column.depth, seconds(hunt.marched), seconds(hunt.engaged), block.speedSpread * 100, block.shapeError,
+            gallery.shapes, gallery.slowest, gallery.laneStepIns);
     game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
     return -1;
 }

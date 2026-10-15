@@ -3,6 +3,7 @@
 
 #include <globals.h>
 #include <FileClasses/TextManager.h>
+#include <FormationPlanner.h>
 
 #include <string>
 
@@ -51,14 +52,34 @@ inline std::string repairUnit() {
 /// The unit panel's formation buttons (docs/formations.md): Off, then the shapes in
 /// FormationPlanner::Shape order.
 inline std::string formationChoice(int choice) {
-    switch(choice) {
-        case 0:  return withHotkey(_("Formations off"), "Ctrl+F", false, _("each unit moves on its own"));
-        case 1:  return withHotkey(_("Box formation"), "Ctrl+Shift+F", false,
-                     _("armour in front, ranged units behind, infantry on the flanks; a tight group keeps its shape"));
-        case 2:  return withHotkey(_("Combined arms"), "Ctrl+Shift+F", false,
-                     _("tanks in front, launchers behind, quads and trikes on the flanks, the fastest ahead as scouts"));
-        case 3:  return withHotkey(_("Line formation"), "Ctrl+Shift+F", false, _("wide and shallow: the most guns facing the target"));
-        default: return withHotkey(_("Column formation"), "Ctrl+Shift+F", false, _("narrow and deep, for passes and bridges"));
+    if(choice <= 0) return withHotkey(_("Formations off"), "Ctrl+F", false, _("each unit moves on its own"));
+    const std::string key = "Ctrl+Shift+F";
+    switch(FormationPlanner::shapeFromIndex(choice - 1)) {
+        case FormationPlanner::Shape::Combined:
+            return withHotkey(_("Combined arms"), key, false,
+                              _("tanks in front, launchers behind, quads and trikes on the flanks, the fastest ahead as scouts"));
+        case FormationPlanner::Shape::Line:
+            return withHotkey(_("Line formation"), key, false, _("wide and shallow: the most guns facing the target"));
+        case FormationPlanner::Shape::Column:
+            return withHotkey(_("Column formation"), key, false, _("narrow and deep, for passes and bridges"));
+        case FormationPlanner::Shape::Wedge:
+            return withHotkey(_("Wedge formation"), key, false, _("an arrowhead: armour at the point and down both sides"));
+        case FormationPlanner::Shape::Vee:
+            return withHotkey(_("Vee formation"), key, false, _("a concave: the flanks lead, the centre hangs back"));
+        case FormationPlanner::Shape::Echelon:
+            return withHotkey(_("Echelon formation"), key, false, _("a slanted front, the left flank leading"));
+        case FormationPlanner::Shape::Staggered:
+            return withHotkey(_("Staggered formation"), key, false,
+                              _("a loose box, a free tile between units: less splash damage, a wide front"));
+        case FormationPlanner::Shape::Diamond:
+            return withHotkey(_("Diamond formation"), key, false, _("armour round the outside, launchers and MCVs inside"));
+        case FormationPlanner::Shape::Pincer:
+            return withHotkey(_("Pincer formation"), key, false,
+                              _("two wings with a gap between them, armour in front, MCVs in the gap"));
+        case FormationPlanner::Shape::Box:
+        default:
+            return withHotkey(_("Box formation"), key, false,
+                              _("armour in front, ranged units behind, infantry on the flanks; a tight group keeps its shape"));
     }
 }
 

@@ -1,3 +1,19 @@
+## 2026-10-15 — Formation research (branch `feat/formation-research`, IN PROGRESS, not released)
+
+Stefan: "test different styles of formations ... keep the best 5 ... 1-1 skirmish with army and base provided
+fortress"; later: add None as a control. Details and numbers: `docs/formations.md` ("Formation research").
+
+- Done: web research (annotated sources); ten planner shapes (Box, Combined, Line, Column, Wedge, Vee, Echelon,
+  Staggered, Diamond, Pincer), all rules kept, `formation_planner_tests` sweeps every shape; real-engine gallery in
+  `formation_movement_probe` (step 9, `formation-shape-<name>.png`, all ten form with 0 sonic-lane step-ins);
+  test-only `QuantBot::waveFormationOverride`; duel harness `tests/ai/formation-duel.py` (Random Skirmish 1v1,
+  mirrored, Fortress + 20,000-credit armies); 1,620 Hard games (rounds 1-2); generator fix: no unit starts on a
+  spice bloom (crashed the load of 64x64 seed 7101), pinned by `skirmish_generator_tests`.
+- Open: the None-control games (360, `--tag round1` and `--tag round2` with `none` in `--shapes`) were running at
+  hand-over; then choose the kept five and the `WaveFormation` default (None if it stays ahead), prune planner/UI/
+  hotkey cycle/config parser/tests, kept-shape tests, Brutal check, the ctest list, and final screenshots.
+  UI tooltips and icons are already keyed by shape, so pruning is deleting cases.
+
 ## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
 
 Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and

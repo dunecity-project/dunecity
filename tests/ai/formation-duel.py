@@ -28,7 +28,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
-SHAPES = ('combined', 'box', 'line', 'column', 'wedge', 'vee', 'echelon', 'staggered', 'diamond', 'pincer')
+# 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
+SHAPES = ('none', 'combined', 'box', 'line', 'column', 'wedge', 'vee', 'echelon', 'staggered', 'diamond', 'pincer')
 SIZES = (64, 128, 192)
 SEEDS = (7101, 7202, 7303)
 # The two houses of a game, by the seed's position in --seeds (sonic tanks, devastators and
@@ -175,16 +176,24 @@ def number(value, default=0.0):
         return default
 
 
-def sides(game):
-    """(shape, opponent, score, own house fields, opponent fields) for both sides of a game."""
+def sides(game, margin):
+    """(shape, opponent, score, own house fields, opponent fields, strict score) for both sides of a game.
+
+    The strict score counts eliminations only (1 win, 0 loss, 0.5 time-out). The score adjudicates
+    a time-out on the unit trade: the side whose killed unit value exceeds the other's by at least
+    'margin' credits wins it, otherwise it stays a draw."""
     winner = game['winner']
     result = []
     for me, them in (('a', 'b'), ('b', 'a')):
         house = HOUSE_NUMBERS[game[f'house_{me}']]
-        score = 0.5 if winner in ('', '-1') else (1.0 if winner == house else 0.0)
-        result.append((game[f'shape_{me}'], game[f'shape_{them}'], score,
-                       {f: number(game[f'{f}_{me}']) for f in HOUSE_FIELDS},
-                       {f: number(game[f'{f}_{them}']) for f in HOUSE_FIELDS}))
+        own = {f: number(game[f'{f}_{me}']) for f in HOUSE_FIELDS}
+        other = {f: number(game[f'{f}_{them}']) for f in HOUSE_FIELDS}
+        strict = 0.5 if winner in ('', '-1') else (1.0 if winner == house else 0.0)
+        score = strict
+        if strict == 0.5:
+            trade = own['kill_value'] - other['kill_value']
+            score = 1.0 if trade >= margin else (0.0 if trade <= -margin else 0.5)
+        result.append((game[f'shape_{me}'], game[f'shape_{them}'], score, own, other, strict))
     return result
 
 
@@ -199,28 +208,32 @@ def bootstrap(scores, rounds=2000):
 
 def report(args):
     results = Path(args.results)
-    games = [g for g in read(results / 'games.csv') if g['tag'] == args.tag and g['difficulty'] == args.difficulty
-             and g['shape_a'] in args.shapes and g['shape_b'] in args.shapes]
-    waves = [w for w in read(results / 'waves.csv') if w['tag'] == args.tag and w['difficulty'] == args.difficulty
-             and w['shape_a'] in args.shapes and w['shape_b'] in args.shapes]
+    # --tag may name several rounds for the report (round1,round2).
+    tags, sizes, seeds = set(args.tag.split(',')), {str(s) for s in args.sizes}, {str(s) for s in args.seeds}
+    def wanted(row):
+        return (row['tag'] in tags and row['difficulty'] == args.difficulty and row['size'] in sizes
+                and row['seed'] in seeds and row['shape_a'] in args.shapes and row['shape_b'] in args.shapes)
+    games = [g for g in read(results / 'games.csv') if wanted(g)]
+    waves = [w for w in read(results / 'waves.csv') if wanted(w)]
     if not games:
         print('No games.')
         return
     per = defaultdict(list)
     for game in games:
-        for shape, opponent, score, own, other in sides(game):
-            per[shape].append((game, opponent, score, own, other))
+        for shape, opponent, score, own, other, strict in sides(game, args.adjudicate):
+            per[shape].append((game, opponent, score, own, other, strict))
     decided = sum(g['winner'] not in ('', '-1') for g in games)
     win_times = [number(g['end_s']) / 60 for g in games if g['winner'] not in ('', '-1')]
-    print(f'{len(games)} games ({args.difficulty}, tag {args.tag}), {decided} decided '
+    print(f'{len(games)} games ({args.difficulty}, tag {args.tag}), {decided} decided by elimination '
           f'({100 * decided / len(games):.0f}%), median time to win {statistics.median(win_times) if win_times else 0:.1f} min, '
-          f'time limit {args.minutes} min.\n')
-    print('| Rank | Shape | Games | W-D-L | Score | 95% CI | By size ' + ' / '.join(str(s) for s in args.sizes)
-          + ' | By seed (min-max) | Value margin / game | Enemy structures / game | Win time min |')
-    print('|---|---|---|---|---|---|---|---|---|---|---|')
+          f'time limit {args.minutes} min; time-outs adjudicated on a unit trade of {args.adjudicate:.0f} credits or more.\n')
+    print('| Rank | Shape | Games | Score | 95% CI | By size ' + ' / '.join(str(s) for s in args.sizes)
+          + ' | By seed (min-max) | Eliminations W-D-L | Strict score | Value margin / game | Enemy structures / game | Win time min |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|')
     table = []
     for shape, rows in per.items():
         scores = [r[2] for r in rows]
+        stricts = [r[5] for r in rows]
         mean = statistics.mean(scores)
         low, high = bootstrap(scores)
         by_size = []
@@ -228,16 +241,39 @@ def report(args):
             s = [r[2] for r in rows if r[0]['size'] == str(size)]
             by_size.append(f'{statistics.mean(s):.2f}' if s else '-')
         by_seed = [statistics.mean([r[2] for r in rows if r[0]['seed'] == seed]) for seed in sorted({r[0]['seed'] for r in rows})]
-        margin = statistics.mean(r[3]['kill_value'] - r[3]['loss_value'] for r in rows)
+        margin = statistics.mean(r[3]['kill_value'] - r[4]['kill_value'] for r in rows)
         structures = statistics.mean(r[3]['structures_destroyed'] for r in rows)
-        wins = [number(r[0]['end_s']) / 60 for r in rows if r[2] == 1.0]
-        w = sum(s == 1.0 for s in scores); d = sum(s == 0.5 for s in scores); l = sum(s == 0.0 for s in scores)
+        wins = [number(r[0]['end_s']) / 60 for r in rows if r[5] == 1.0]
+        w = sum(s == 1.0 for s in stricts); d = sum(s == 0.5 for s in stricts); l = sum(s == 0.0 for s in stricts)
         table.append((mean, shape, len(rows), f'{w}-{d}-{l}', low, high, by_size, by_seed, margin, structures,
-                      statistics.median(wins) if wins else 0))
+                      statistics.median(wins) if wins else 0, statistics.mean(stricts)))
     table.sort(key=lambda t: (-t[0], -t[8]))
-    for rank, (mean, shape, n, wdl, low, high, by_size, by_seed, margin, structures, win_time) in enumerate(table, 1):
-        print(f'| {rank} | {shape} | {n} | {wdl} | {mean:.3f} | {low:.2f}-{high:.2f} | {" / ".join(by_size)} | '
-              f'{min(by_seed):.2f}-{max(by_seed):.2f} | {margin:+.0f} | {structures:.1f} | {win_time:.1f} |')
+    for rank, (mean, shape, n, wdl, low, high, by_size, by_seed, margin, structures, win_time, strict) in enumerate(table, 1):
+        print(f'| {rank} | {shape} | {n} | {mean:.3f} | {low:.2f}-{high:.2f} | {" / ".join(by_size)} | '
+              f'{min(by_seed):.2f}-{max(by_seed):.2f} | {wdl} | {strict:.3f} | {margin:+.0f} | {structures:.1f} | {win_time:.1f} |')
+
+    if 'none' in per:
+        print('\nAgainst the control (None: no formation, the plain engine-Hunt waves), same maps, seeds and houses:\n')
+        print('| Shape | Games v None | Score v None | 95% CI | Eliminations W-D-L | Strict score | Value margin / game | Verdict |')
+        print('|---|---|---|---|---|---|---|---|')
+        for t in table:
+            shape = t[1]
+            if shape == 'none':
+                continue
+            rows = [r for r in per[shape] if r[1] == 'none']
+            if not rows:
+                continue
+            scores = [r[2] for r in rows]
+            stricts = [r[5] for r in rows]
+            low, high = bootstrap(scores)
+            w = sum(s == 1.0 for s in stricts); d = sum(s == 0.5 for s in stricts); l = sum(s == 0.0 for s in stricts)
+            verdict = 'beats None' if low > 0.5 else ('loses to None' if high < 0.5 else 'not distinguishable from None')
+            print(f'| {shape} | {len(rows)} | {statistics.mean(scores):.3f} | {low:.2f}-{high:.2f} | {w}-{d}-{l} | '
+                  f'{statistics.mean(stricts):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | {verdict} |')
+        every = [r[2] for shape in per if shape != 'none' for r in per[shape] if r[1] == 'none']
+        if every:
+            low, high = bootstrap(every)
+            print(f'| all shapes | {len(every)} | {statistics.mean(every):.3f} | {low:.2f}-{high:.2f} | | | | |')
 
     order = [t[1] for t in table]
     print('\nHead to head (row shape\'s score against the column shape, both houses, all sizes and seeds):\n')
@@ -272,6 +308,39 @@ def report(args):
               f'{100 * statistics.mean(formed) if formed else 0:.0f}% |')
 
 
+def export(args):
+    """Writes the small CSVs kept in git: every game (games.csv as recorded) and the waves summed
+    per round, size, seed and shape (waves-by-shape.csv; the raw waves.csv stays out of git)."""
+    results, target = Path(args.results), Path(args.export)
+    target.mkdir(parents=True, exist_ok=True)
+    games = read(results / 'games.csv')
+    with (target / 'games.csv').open('w', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=GAME_FIELDS)
+        writer.writeheader()
+        writer.writerows(games)
+    sums = defaultdict(lambda: defaultdict(float))
+    for wave in read(results / 'waves.csv'):
+        key = (wave['tag'], wave['difficulty'], wave['size'], wave['seed'], wave['shape'])
+        s = sums[key]
+        s['waves'] += 1
+        for field in ('members', 'kill60', 'loss60', 'survivors', 'lost_before_contact', 'shots30'):
+            s[field] += number(wave[field])
+        if number(wave['arrived']) >= 2:
+            s['spread_waves'] += 1
+            s['arrival_spread_s'] += number(wave['arrival_spread_s'])
+        if number(wave['in_formation_at_contact'], -1) >= 0:
+            s['contact_waves'] += 1
+            s['in_formation_at_contact'] += number(wave['in_formation_at_contact'])
+    fields = ('tag', 'difficulty', 'size', 'seed', 'shape', 'waves', 'members', 'kill60', 'loss60', 'survivors',
+              'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact')
+    with (target / 'waves-by-shape.csv').open('w', newline='') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(fields)
+        for key in sorted(sums):
+            writer.writerow(list(key) + [f'{sums[key][f]:.1f}'.rstrip('0').rstrip('.') for f in fields[5:]])
+    print(f'{len(games)} games and {len(sums)} wave sums written to {target}')
+
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--results', required=True, help='Directory for games.csv and waves.csv')
@@ -286,9 +355,14 @@ parser.add_argument('--shapes', nargs='+', default=list(SHAPES))
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
 parser.add_argument('--report', action='store_true')
+parser.add_argument('--export', help='Write games.csv and waves-by-shape.csv (the files kept in git) to this directory')
+parser.add_argument('--adjudicate', type=float, default=1000,
+                    help='Report: a time-out goes to the side ahead on killed unit value by at least this many credits')
 args = parser.parse_args()
 if args.report:
     report(args)
+elif args.export:
+    export(args)
 else:
     if not args.scratch:
         parser.error('--scratch is required to play.')
