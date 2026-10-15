@@ -138,10 +138,17 @@ per round, size, seed and shape); reproduce with
   458 membership ends were breakHunt, the rest QuantBot defence/re-position orders), so half
   the waves have no member left in formation when the measured contact comes; the median
   formation lifetime is 0-6 s after the 15 s form-up deadline.
-- **Control (None, plain engine-Hunt waves):** added at Stefan's request; its 360 games against
-  every shape on the same maps, seeds and houses were still running at the hand-over. The first
-  33 (64 and 128, seed 7101) went 0.67 (0.48-0.82) for None. If None stays ahead it becomes the
-  QuantBot default, as Stefan asked.
+- **Control (None, plain engine-Hunt waves), complete:** 360 games, 36 against each shape on the
+  same maps, seeds and houses, both assignments. With None in the round-robin (1,980 games):
+  **None 0.562 (0.51-0.61)**, Pincer 0.554, Column 0.543, Staggered 0.517, Echelon 0.510, Box
+  0.506, Vee 0.486, Wedge 0.485, Line 0.454, Diamond 0.453, Combined arms 0.431. Against None
+  directly the shapes together score **0.438 (0.39-0.49)**: formation waves lose to plain Hunt
+  waves overall. Per shape (36 games each, none separable from None on its own): Column 0.61
+  (0.44-0.75), Vee 0.50, Pincer 0.47, Box 0.47, Wedge 0.46, Staggered 0.39, Line 0.39, Echelon
+  0.38, Combined arms 0.36 (0.19-0.50), Diamond 0.35 (0.19-0.50). No shape beats None.
+- **Consequence (per Stefan's rule, not yet applied in code):** the QuantBot `WaveFormation`
+  default should become None. The kept five for the player (from the overall ranking, places
+  4-8 within noise): Pincer, Column, Staggered, Echelon, Box, plus Off.
 
 ## Formation fixes, save 9860 / protocol 74 (after the 1.0.839 play-test)
 
