@@ -177,10 +177,41 @@ work; nothing else in the game changes with None. Per-unit repair runs stay as t
 no reason to replace them (the retreat-only variant, which keeps them, is level with None, and the
 repair counter could not be tied to wins or losses in this round).
 
-**Not done in this round** (stopped at the request budget): a second iteration on the release (for
-example holding the released blob's members to the contact for a few seconds so they engage together,
-or excluding foot infantry from the pace) and a full 108-game Brutal run; the Brutal sample above was run
-although Blob did not win on Hard.
+### Second round: Blob variants (36-game screen, tag `pilot2`, commit `57d2b973`)
+
+Test-only bits `QuantBot::blobVariantOverride`, duel label flags after `+`: **v** = vehicle pace (foot
+infantry neither sets the pace nor holds a gather or leg; 75% quorum instead of 90%), **r** = release
+only on a real fight (a building, or visible enemy fighters within 10 tiles of the contact worth at
+least a quarter of the party; a lone scout or a single hit is shot by the three nearest members while
+the blob marches on), **k** = a member below 60% health stays with a party that has not met a fight yet
+instead of driving to the repair yard. Also fixed for every Blob variant: a damaged party member is no
+longer pulled back to the squad rally by the old "rotate damaged units" rule. Hard, sizes 128/160/192,
+seeds 7101-7606, one house pair per seed, both sides (36 games; 15 games of the last two pairings
+failed on the 1,800 s wall limit with 7 parallel jobs and are left out, so `blob+vrk/noretreat` has 21).
+Report: `docs/formation-results/blob/report-pilot2.md`.
+
+| Candidate v None (Hard) | Games | Score | 95% CI | Contact s | Engaged ≤10 s | Killed / lost 60 s | Releases / game |
+|---|---|---|---|---|---|---|---|
+| blob (round 1, 108 games) | 108 | 0.306 | 0.22-0.39 | 54 | 11% | 2.89 | 17.8 |
+| blob+v | 36 | 0.417 | 0.25-0.58 | 71 | 11% | 3.50 | 19.4 |
+| blob+r | 36 | 0.361 | 0.22-0.53 | 54 | 9% | 2.94 | 8.6 |
+| blob+vr | 36 | 0.361 | 0.22-0.53 | 71 | 11% | 2.75 | 8.4 |
+| blob+vrk | 36 | 0.347 | 0.21-0.50 | 67 | 11% | 2.32 | 9.4 |
+| blob+vrk/noretreat | 21 | 0.333 | 0.14-0.52 | 58 | 10% | 2.64 | 8.8 |
+
+None of the variants beats None; none is separable from the first Blob either. Vehicle pace brings the
+first-minute trade level with None (3.50 against 3.51) but still reaches contact later. Releasing only on
+a real fight halves the release/reform churn (19 to 9 per game) but trades worse: the scouts it ignores
+are what None's waves kill early. Keeping damaged members makes the trade worse still. The members still
+engage piecemeal after the release (9-11% within 10 s, None 8%). **Decision unchanged: `WaveFormation`
+stays None**; Blob and the variant switches stay opt-in/test-only.
+
+**Open (handed on):** a coordinated engage after the release (all members converge on the threat centroid
+at the blob's pace before free combat), a concave on the last leg, consolidating near the enemy then
+attacking all at once, planner shapes for the approach only, attack-then-reorganise, an engage decision by
+local strength, and focus fire. A new variant is one bit in `QuantBot::blobVariantOverride`
+(`include/players/QuantBot.h`), its rule in `src/players/QuantBotBlob.cpp`, and a flag letter in
+`tests/ai/formation-duel.inc` (`sidesFromEnv`); labels then run as `--pairs "blob+<flags>:none"`.
 
 ## Form up where they stand, save 9861 / protocol 75
 

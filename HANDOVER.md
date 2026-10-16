@@ -20,6 +20,10 @@ UAlbertaBot regroup position, sharpy-sc2, AoE II attack groups, BAR), design, te
   reaches contact 21 s later and trades worse in the first minute (2.89 v 3.67 killed/lost).
 - Decision: `WaveFormation` default stays None; Blob remains selectable. Not done: a second iteration on
   the release/engagement and a full Brutal run (request budget).
+- Second round (commit `57d2b973`, test-only `blobVariantOverride`, labels `blob+v|r|k`): 36-game Hard
+  screen of vehicle pace, release-only-on-a-real-fight and keep-damaged-members variants: best blob+v
+  0.417 (0.25-0.58), none beats None. Table and open ideas in `docs/formations.md` (second round).
+  The same acceptance list re-run on `57d2b973` (ctest -j2): 38/38 passed.
 - Tests (one ctest run, -j2, Release tree `build`): dunelegacy_tests, formation_planner_tests,
   formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
   skirmish_generator_tests, menu_navigation_probe and all quantbot_* tests incl. the new
