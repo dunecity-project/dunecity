@@ -73,7 +73,8 @@ every house within 40 game minutes on all of them. Details and tables:
   copied map folder) could not be saved. Fix: `Workshop::saveMap` treats the sidecar only as a
   reuse hint; a missing or damaged revision means "save as a new revision". The selftest now
   starts every export from a sidecar naming an absent revision and checks the exported map is
-  pinned to a revision in the store (fails on the old binary, passes on the fix).
+  pinned to a revision in the store (fails on the old binary, passes on the fix). Full ctest -j3
+  at 93d1a5bc: 94/94 passed, 1347 s.
 - Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
   from a 75 peer. Save 9861 unchanged. No version bump.
 
