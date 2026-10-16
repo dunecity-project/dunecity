@@ -124,6 +124,10 @@ struct QuantBotConfig {
         int dispatchBypassBps;        // Share of CONFIGURED limit that bypasses it
         int recallOrdersPerPass;      // Fair recall/hold orders per AI pass
         bool frontBatteriesEnabled;   // Enemy-facing rocket batteries
+        /// House-level withdrawals: severe local defeat, sustained attrition, core attack
+        /// and the local squad pull-back. Off by default: with them the all-against-Atreides
+        /// match loses a seed and wins 2-5 minutes later (quantbot_all_against_atreides).
+        bool withdrawalsEnabled;
     };
     RecoverySettings recovery;
 

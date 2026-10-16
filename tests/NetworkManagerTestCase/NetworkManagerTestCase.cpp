@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 76;
+static constexpr int kWireProtocolVersion = 77;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -74,7 +74,10 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 74 changes formation roles and pacing (harvesters out, form-up, one-speed march) and save 9860.
     // 75 adds the form-up in place (CMD_UNIT_FORMATION_MOVE order kind FormUp) and save 9861.
     // 76 adds QuantBot hunt parties (WaveFormation Blob, Blob waves) and save 9862.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 76);
+    // 77 bounds the QuantBot front battery, decouples walls from it, credits destroyed
+    // buildings to the posture trade and makes a harvester override of 0 "no ceiling" for
+    // every AI; no saved state change.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 77);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

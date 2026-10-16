@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Check banked city income after ordinary AI games, without fixture grants."""
+"""Check banked city income after ordinary AI games, without fixture grants.
+
+Every house that starts with a construction yard must bank more than 100 credits of city
+tax. Every house still alive after the 12 minutes must also have built a four-lot R/I
+opening. A house defeated meanwhile is reported (`defeated`) but not held to the lot count:
+on the 3 vs 1 64x64 map Atreides loses its army to its Harkonnen neighbour's starting units
+in minute 1-2 and its yard in minute 3-4, and whether it fits a third residential lot in
+first is chance (docs/no-spice-economy-817.md, docs/quantbot-all-against-atreides.md).
+"""
 import argparse
 import configparser
 import json
@@ -58,9 +66,11 @@ for house, state in initial.items():
     economy, built = result.get('economy_totals', {}), result.get('built', {})
     zones = [built.get(str(i), 0) for i in (20, 21, 22)]
     results[house] = {'starting_cash': state['credits'], 'zones_built': zones,
-                      'final_cash': result['credits'], **economy}
+                      'final_cash': result['credits'], 'defeated': not result['alive'], **economy}
     assert economy.get('city_net_applied', 0) > 100, f'{house}: tax never became usable income'
-    assert sum(zones) >= 4 and zones[0] > 0 and zones[2] > 0, f'{house}: no funded R/I city opening'
+    if result['alive']:
+        assert sum(zones) >= 4 and zones[0] > 0 and zones[2] > 0, f'{house}: no funded R/I city opening'
 assert results, 'No active AI construction yard was checked'
+assert any(not r['defeated'] for r in results.values()), 'No surviving city was checked'
 (out / 'income-receipt.json').write_text(json.dumps(results, indent=2) + '\n')
 print('NO_SPICE_CITY_PROGRESS_OK', json.dumps(results, sort_keys=True))

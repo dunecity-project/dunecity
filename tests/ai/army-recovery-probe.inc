@@ -34,6 +34,8 @@ void runArmyRecoveryProbe(Game& game) {
     bot->postureSince=0;
     getQuantBotConfig().recovery.enabled=true;
     getQuantBotConfig().recovery.frontBatteriesEnabled=true;
+    // The withdrawal machine is off by default; this fixture verifies it when enabled.
+    getQuantBotConfig().recovery.withdrawalsEnabled=true;
     require(bot->recoveryActive(),"Recovery gate refused Custom Brutal");
 
     if (std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) {
@@ -1484,14 +1486,15 @@ void runArmyRecoveryProbe(Game& game) {
             bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
             bot->lastSurvey=bot->surveyArmy();
             // Economy gate: no battery without refineries, a factory and a yard.
-            require(bot->frontBatteryGoal(27,1,1,1,bot->lastSurvey)==0,
+            require(bot->frontBatteryGoal(27,1,1,1)==0,
                 "A battery was planned before the economy that pays for it");
-            const int goal=bot->frontBatteryGoal(27,2,1,1,bot->lastSurvey);
-            require(goal>=24,"A mature base did not scale past twenty-four emplacements");
-            const int small=bot->frontBatteryGoal(9,2,1,1,bot->lastSurvey);
-            require(small>=FrontBatteryPolicy::kOpeningBandMin
-                && small<=FrontBatteryPolicy::kOpeningBandMax+1,
-                "A small base did not land in the opening band");
+            // The battery stays in the 8-12 band however big the base grows
+            // (FrontBatteryPolicy::batteryGoal): the army answers the front.
+            const int goal=bot->frontBatteryGoal(27,2,1,1);
+            require(goal==FrontBatteryPolicy::kOpeningBandMax,
+                "A mature base's battery left the 8-12 band");
+            const int small=bot->frontBatteryGoal(9,2,1,1);
+            require(small==9,"A small base did not get its own demand inside the band");
             // A ground-only opponent must still produce useful defence.
             require(goal>2,"A ground-only front still capped the battery at the baseline");
 
@@ -1571,7 +1574,7 @@ void runArmyRecoveryProbe(Game& game) {
             const int goalNow=bot->frontBatteryGoal(
                 RocketTurretPolicy::coverageTurretCap(demand),
                 owner->getNumItems(Structure_Refinery),owner->getNumItems(Structure_HeavyFactory),
-                owner->getNumItems(Structure_RepairYard),bot->lastSurvey);
+                owner->getNumItems(Structure_RepairYard));
             const int allowance=FrontBatteryPolicy::frontAllowance(goalNow);
             int frontTurrets=0;
             for(const auto* structure:structureList) {

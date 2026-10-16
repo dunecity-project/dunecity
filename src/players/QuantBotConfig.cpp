@@ -246,6 +246,7 @@ QuantBotConfig::QuantBotConfig() {
     recovery.dispatchBypassBps = 8000;          // 80% of the CONFIGURED limit
     recovery.recallOrdersPerPass = 12;
     recovery.frontBatteriesEnabled = true;
+    recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -279,6 +280,7 @@ static void saveRecoverySettings(INIFile& iniFile, const std::string& section,
     iniFile.setIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
     iniFile.setIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
     iniFile.setBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
+    iniFile.setBoolValue(section, "WithdrawalsEnabled", settings.withdrawalsEnabled);
 }
 
 static void loadRecoverySettings(const INIFile& iniFile, const std::string& section,
@@ -301,6 +303,7 @@ static void loadRecoverySettings(const INIFile& iniFile, const std::string& sect
     settings.dispatchBypassBps = iniFile.getIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
     settings.recallOrdersPerPass = iniFile.getIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
     settings.frontBatteriesEnabled = iniFile.getBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
+    settings.withdrawalsEnabled = iniFile.getBoolValue(section, "WithdrawalsEnabled", settings.withdrawalsEnabled);
 }
 
 // Helper function to save difficulty settings to INI
@@ -973,6 +976,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("dispatchBypassBps", recovery.dispatchBypassBps);
     addNamed("recallOrdersPerPass", recovery.recallOrdersPerPass);
     addNamed("frontBatteries", recovery.frontBatteriesEnabled);
+    addNamed("withdrawals", recovery.withdrawalsEnabled);
     configStr += "|/REC|";
 
 

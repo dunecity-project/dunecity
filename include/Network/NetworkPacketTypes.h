@@ -209,7 +209,11 @@
 //     QuantBot wave gathers, marches as one blob, releases into Hunt on contact, reforms and
 //     falls back a short way to reform; its party state is saved. A 75 peer would order the
 //     same AI units differently and desynchronise. Save 9862.
-#define NETWORK_PROTOCOL_VERSION            76
+// 77: QuantBot AI decisions change, no saved state or command change: the Custom Hard/Brutal
+//     front battery stays in the 8-12 band, walls follow only the fixed-count defence
+//     turrets, and a harvester override of 0 is "no ceiling" for every AI (QuantBot initial
+//     limit, Mentat). A 76 peer would order different buildings and desync. Save 9862.
+#define NETWORK_PROTOCOL_VERSION            77
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

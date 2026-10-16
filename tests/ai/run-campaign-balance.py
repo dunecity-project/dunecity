@@ -44,6 +44,13 @@ parser.add_argument('--harvester-limit', type=int, choices=range(-1,101), defaul
 parser.add_argument('--rocket-turrets-need-power', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--concrete-required', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--require-win', action='store_true', help='Fail a full-match run on defeat or time limit')
+parser.add_argument('--game-options', type=Path,
+                    help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
+parser.add_argument('--elimination-match', action='store_true',
+                    help='Play until one team is left (also as a local spectator) and log per-minute house samples')
+parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
+parser.add_argument('--save-profile', type=Path,
+                    help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
 parser.add_argument('--partner-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--enemy-ai', choices=('quantbot','ai-player'), default='quantbot', help='Enemy controller family; AI Player has Easy/Medium/Hard')
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
@@ -143,6 +150,10 @@ if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
 if args.local_spectator and not (args.custom_map or args.duel_map_size):
     parser.error('--local-spectator requires --custom-map or --duel-map-size.')
+if args.load_save and (args.custom_map or args.duel_map_size or not args.load_save.is_file()):
+    parser.error('--load-save needs an existing savegame and no --custom-map or --duel-map-size.')
+if args.game_options and not args.game_options.is_file():
+    parser.error('--game-options must name an existing INI file.')
 if bool(args.duel_map_size) != bool(args.duel_sides) or (args.duel_map_size and args.custom_map):
     parser.error('A formation duel needs --duel-map-size and --duel-sides and no --custom-map.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
@@ -331,6 +342,14 @@ if args.local_spectator:
 if args.custom_map:
     env['BALANCE_CUSTOM_MAP'] = str(args.custom_map.resolve())
     env['BALANCE_ROSTER'] = ','.join(f'{house}:{team}' for house, team in roster)
+if args.game_options: env['BALANCE_GAME_OPTIONS'] = str(args.game_options.resolve())
+if args.elimination_match: env['BALANCE_ELIMINATION_MATCH'] = '1'
+if args.load_save:
+    env['BALANCE_LOAD_SAVE'] = str(args.load_save.resolve())
+    # A player's save pins the Workshop revisions of its mod and map; his profile's
+    # workshop/revisions supply them without a metaserver download.
+    if args.save_profile:
+        shutil.copytree(args.save_profile/'workshop', out/'profile'/'workshop', dirs_exist_ok=True)
 (out/'setup.json').write_text(json.dumps({**vars(args), 'resolved_roster': roster,
                                        'policy_comparison': policy_comparison}, default=str, indent=2)+'\n')
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'

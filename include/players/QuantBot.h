@@ -179,6 +179,7 @@ public:
     void onDecrementUnits(int itemID) override;
     void onIncrementUnitKills(int itemID) override;
     void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) override;
+    void onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) override;
     void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) override;
 
 private:
@@ -1223,8 +1224,7 @@ private:
     ArmyPosturePolicy::DispatchGate offensiveDispatchGate(const ArmySurvey& survey) const;
     /// Front battery goal for this base, zero when the feature is off or the
     /// economy is not ready. Never lowers the established counter-air goal.
-    int frontBatteryGoal(int coverageCap, int refineries, int heavyFactories,
-                         int repairYards, const ArmySurvey& survey) const;
+    int frontBatteryGoal(int coverageCap, int refineries, int heavyFactories, int repairYards) const;
     /// Observed enemy approach direction for battery siting, from visible enemy
     /// bases and remembered structure losses only.
     Coord observedFrontDirection(Coord anchor) const;

@@ -680,8 +680,7 @@ int House::getMaxHarvesters() const {
     // Saved houses may contain the former map-size default. The saved game
     // options distinguish that default from a limit deliberately selected by
     // the player. AI economy targets are decisions, not engine restrictions.
-    return currentGame ? std::max(0, currentGame->getGameInitSettings().getGameOptions()
-        .maximumNumberOfHarvestersOverride) : maxHarvesters;
+    return currentGame ? currentGame->getGameInitSettings().getGameOptions().harvesterCeiling() : maxHarvesters;
 }
 
 bool House::isUnitLimitReached(int itemID) const {

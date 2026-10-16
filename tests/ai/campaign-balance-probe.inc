@@ -57,6 +57,8 @@
 #include "blob-wave-probe.inc"
 #include "formation-duel.inc"
 #include "probe-digest.inc"
+#include "elimination-match.inc"
+#include <FileClasses/INIFile.h>
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -97,6 +99,13 @@ int runCampaignBalanceProbe() {
     if (std::getenv("BALANCE_HARVESTER_LIMIT"))
         settings.gameOptions.maximumNumberOfHarvestersOverride=std::atoi(std::getenv("BALANCE_HARVESTER_LIMIT"));
     if (std::getenv("BALANCE_PACING_PROBE")) settings.gameOptions.maximumNumberOfHarvestersOverride=100;
+    // A whole [Game Options] section, as a player's Dune City.ini stores it (the
+    // all-against-Atreides fixture is Stefan's own). Applied last, so it wins.
+    if (const char* options = std::getenv("BALANCE_GAME_OPTIONS")) {
+        const INIFile optionsFile(options);
+        if (!optionsFile.hasSection("Game Options")) throw std::runtime_error("No [Game Options] in BALANCE_GAME_OPTIONS");
+        applyGameOptionsFromConfig(optionsFile, "Game Options", settings.gameOptions);
+    }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
@@ -114,11 +123,14 @@ int runCampaignBalanceProbe() {
             static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
     }
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
+    // Continue a saved match instead (its own seed, roster and options).
+    const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
+    if (loadSave) init = GameInitSettings(loadSave);
     const bool localSpectator=std::getenv("BALANCE_LOCAL_SPECTATOR")!=nullptr;
     init.setLocalSpectator(localSpectator);
     init.setMultiplePlayersPerHouse(!localSpectator);
     std::vector<std::pair<int,int>> roster;
-    if(customMap) {
+    if(customMap && !loadSave) {
         std::istringstream input(std::getenv("BALANCE_ROSTER") ? std::getenv("BALANCE_ROSTER") : "");
         std::string slot;
         while(std::getline(input,slot,',')) {
@@ -127,7 +139,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else if(!duel) {
+    } else if(!duel && !loadSave) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
@@ -336,6 +348,7 @@ int runCampaignBalanceProbe() {
         return MENU_QUIT_DEFAULT;
     }
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
+    std::string outcome;
     const long long setupMs = ProbeDigest::millisecondsSince(probeStart);
     const auto loopStart = ProbeDigest::Clock::now();
     const Uint32 firstCycle = game->getGameCycleCount();
@@ -348,12 +361,15 @@ int runCampaignBalanceProbe() {
         FormationDuel::report(*game, duelSides);
     } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
         FormationWaveMeasure::run(*game, end, [&]() { ProbeDigest::periodic(*game); return false; });
+    } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {
+        outcome = EliminationMatch::run(*game, end, humanHouse);
     } else {
         while (!game->finished && game->getGameCycleCount() < end) {
             ProbeDigest::periodic(*game);
             game->updateGameState();
         }
     }
+    if (outcome.empty()) outcome = game->finished ? (game->won ? "won" : "lost") : "time_limit";
     {
         const long long loopMs = ProbeDigest::millisecondsSince(loopStart);
         const Uint32 cycles = game->getGameCycleCount() - firstCycle;
@@ -362,8 +378,9 @@ int runCampaignBalanceProbe() {
                 loopMs > 0 ? cycles * 1000.0 / loopMs : 0.0);
     }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=%d seed=%u attack_percent=%d partner=%s enemy=%s cycle=%u outcome=%s",
-        level, seed, percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(), game->finished ? (game->won ? "won" : "lost") : "time_limit");
-    if (!game->finished) {
+        level, game->getGameInitSettings().getRandomSeed(), percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(),
+        outcome.c_str());
+    if (outcome == "time_limit") {
         for (const auto* unit:unitList) {
             const auto* target=unit->getTarget();
             const auto* candidate=unit->findTarget();
