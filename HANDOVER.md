@@ -29,6 +29,27 @@ UAlbertaBot regroup position, sharpy-sc2, AoE II attack groups, BAR), design, te
   skirmish_generator_tests, menu_navigation_probe and all quantbot_* tests incl. the new
   `quantbot_blob_waves`: 38/38 passed. Probe/duel scratch deleted; results kept.
 
+## 2026-10-16 — Faster headless simulation batches (branch `perf/headless-sim`, not released)
+
+Stefan: "improve the performance of the headless simulation runs. e.g. run multiple in parallel
+optimise the game engine etc". Details, profiles and tables: `docs/headless-performance.md`.
+Save 9861 / protocol 75 unchanged; no version bump.
+
+- Profile (192 duel, origin/main): main thread 37% waiting for the 4 path workers, 25% the duel
+  harness's own `FormationWaveMeasure` (17% `inTargetArea`), 5.5% per-unit clock reads; with those
+  gone A* is ~50% of a game. Start-up ~1.5-1.9 s/game (graphics, mod reload, voices).
+- Engine, bit-identical: A* heap slots carry f, hoisted neighbour-loop invariants, inline
+  `fix32_mul`, `PathWorkerPool` caller joins the batch (one-task batches inline), per-unit phase
+  timing halved and switchable (`FrameTiming::unitPhases`, off in probes).
+- Harness: `formation-duel.py` defaults to `--path-workers 1` and no AI log (`run-campaign-balance.py
+  --no-ai-telemetry`), biggest maps first; probe binary cached in `build/balance-probe-cache`;
+  `tests/ai/probe-digest.inc` (PROBE_DIGEST/PROBE_TIMING); `tests/performance/headless-bench.py`.
+- Result under load 30-36: 6 parallel duels 194 -> 487 games/h, CPU per game -40%; `--jobs 8` idle,
+  `--jobs 6` when shared. Determinism: 47 benchmark runs plus a 40-minute 192 duel give identical
+  digests and measurements before/after (and for 1 vs 4 path workers, AI log on/off).
+- ctest -j3: dunelegacy_tests, game_command_regressions, network_wire_harness, formation_planner_tests,
+  formation_movement_probe, skirmish_generator_tests, active_tile_probe, all 29 quantbot_*: 36/36 passed.
+
 ## 2026-10-15 — 1.0.842 production release
 
 PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run
