@@ -103,9 +103,10 @@ inline bool straggler(int distanceToLegEnd, int leg, int radius) {
 
 /// Has the blob reached the end of this leg? \a counted members are not stragglers, \a arrived
 /// of them stand at the leg's end; \a elapsed and \a maxCycles in cycles.
-inline bool legComplete(int counted, int arrived, uint32_t elapsed, uint32_t maxCycles) {
+inline bool legComplete(int counted, int arrived, uint32_t elapsed, uint32_t maxCycles,
+                        int quorumBps = kLegQuorumBps) {
     if (counted <= 0 || elapsed >= maxCycles) return true;
-    return int64_t(arrived) * 10000 >= int64_t(kLegQuorumBps) * counted;
+    return int64_t(arrived) * 10000 >= int64_t(quorumBps) * counted;
 }
 
 /// The time limit (cycles) of a gather, reform or leg whose slowest member needs
@@ -121,9 +122,10 @@ inline uint32_t travelLimit(int64_t travelCycles, int64_t cyclesPerSecond, int m
 /// gathered count last grew; all in cycles. \a awayMoving: some member that is not there yet
 /// is still on its way, so a slow arrival is not a stall.
 inline bool gatherComplete(int members, int gathered, uint32_t elapsed, uint32_t sinceArrival,
-                           uint32_t maxCycles, uint32_t stallCycles, bool awayMoving) {
+                           uint32_t maxCycles, uint32_t stallCycles, bool awayMoving,
+                           int quorumBps = kGatherQuorumBps) {
     if (members <= 0) return true;
-    if (int64_t(gathered) * 10000 >= int64_t(kGatherQuorumBps) * members) return true;
+    if (int64_t(gathered) * 10000 >= int64_t(quorumBps) * members) return true;
     if (elapsed >= maxCycles) return true;
     return !awayMoving && sinceArrival >= stallCycles
         && int64_t(gathered) * 10000 >= int64_t(kGatherStallQuorumBps) * members;

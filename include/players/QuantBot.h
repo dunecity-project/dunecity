@@ -858,6 +858,18 @@ private:
     /// Blob waves, 0 = never, 1 = also for plain Hunt waves. Never set by the game, not saved,
     /// not hashed.
     int tacticalRetreatOverride = -1;
+    /// Test-only Blob-wave variants (tests/ai/formation-duel.py, label suffix +v/+r/+k): bits of
+    /// kBlobVehiclePace (foot infantry neither sets the pace nor holds a gather or leg; 75%
+    /// quorum), kBlobRealFight (only a real fight releases the blob; a lone scout or harvester
+    /// is shot by the nearest members while the blob marches on) and kBlobKeepDamaged (members
+    /// below 60% stay with a party that has not met a fight yet instead of driving to repair).
+    /// Never set by the game, not saved, not hashed.
+    static constexpr int kBlobVehiclePace = 1, kBlobRealFight = 2, kBlobKeepDamaged = 4;
+    int blobVariantOverride = 0;
+    /// Is \a contact (met at \a at) a real fight for this party rather than a lone scout?
+    bool huntPartyRealFight(const BlobParty& party, const ObjectBase* contact) const;
+    /// Sends the members nearest \a contact (at most three) to shoot it; the party marches on.
+    void huntPartySkirmish(const BlobParty& party, const ObjectBase* contact);
     /// Telemetry for the duel reports only: never read by a decision, not saved.
     struct BlobStats {
         int parties = 0, gathered = 0, gatherTimeouts = 0, releases = 0, reforms = 0, fallbacks = 0,

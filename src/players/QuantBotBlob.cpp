@@ -262,13 +262,14 @@ void QuantBot::startHuntParty(const std::vector<const UnitBase*>& units, const O
 namespace {
 
 /// The slowest member's travel time (cycles) to \a point, straight-line at its open-sand speed,
-/// over the members within \a ignoreBeyond tiles of it.
+/// over the members within \a ignoreBeyond tiles of it (without foot infantry if \a vehicles).
 template<class Lookup>
-int64_t slowestTravel(const Lookup& lookup, const std::set<Uint32>& members, Coord point, int ignoreBeyond) {
+int64_t slowestTravel(const Lookup& lookup, const std::set<Uint32>& members, Coord point, int ignoreBeyond,
+                      bool vehicles) {
     int64_t slowest = 0;
     for (const Uint32 id : members) {
         const auto* unit = dynamic_cast<const UnitBase*>(lookup(id));
-        if (!unit || !unit->isActive()) continue;
+        if (!unit || !unit->isActive() || (vehicles && unit->isInfantry())) continue;
         const int distance = tiles(unit->getLocation(), point);
         const FixPoint speed = unit->getFormationReferenceSpeed();
         if (distance > ignoreBeyond || speed <= 0) continue;
@@ -289,7 +290,8 @@ void QuantBot::startPartyGather(BlobParty& party, Phase phase, Coord point) {
     party.outmatchedSince = std::numeric_limits<Uint32>::max();
     // Wait for every member's walk there (the slowest one's), but never longer than the cap.
     const auto lookup = [this](Uint32 id) { return getObject(id); };
-    party.legCycles = BlobWavePolicy::travelLimit(slowestTravel(lookup, party.members, point, INT32_MAX),
+    party.legCycles = BlobWavePolicy::travelLimit(slowestTravel(lookup, party.members, point, INT32_MAX,
+        (blobVariantOverride & kBlobVehiclePace) != 0),
         MILLI2CYCLES(1000), phase == Phase::Reform ? BlobWavePolicy::kReformMaxMs : BlobWavePolicy::kGatherMaxMs);
     sendHuntParty(party, point, false, false);
 }
@@ -306,7 +308,8 @@ void QuantBot::startPartyLeg(BlobParty& party, const UnitBase* anchor) {
     // formation": faster units move at the speed of the slowest). Stragglers are not waited for.
     const int radius = BlobWavePolicy::blobRadius(members) + 1;
     const auto lookup = [this](Uint32 id) { return getObject(id); };
-    party.legCycles = BlobWavePolicy::travelLimit(slowestTravel(lookup, party.members, party.rally, 2 * leg + radius),
+    party.legCycles = BlobWavePolicy::travelLimit(slowestTravel(lookup, party.members, party.rally, 2 * leg + radius,
+        (blobVariantOverride & kBlobVehiclePace) != 0),
         MILLI2CYCLES(1000), BlobWavePolicy::kLegMaxMs);
     ++blobStats.legs;
     sendHuntParty(party, party.rally, false, false);
@@ -393,8 +396,50 @@ void QuantBot::huntPartyMemberHit(const UnitBase* unit, const ObjectBase* damage
     const Coord contact = damager->getClosestPoint(unit->getLocation());
     party->lastContact = getGameCycleCount();
     party->threat = contact;
-    if (party->phase == Phase::Gather || party->phase == Phase::March || party->phase == Phase::Reform)
+    if (party->phase == Phase::Gather || party->phase == Phase::March || party->phase == Phase::Reform) {
+        if ((blobVariantOverride & kBlobRealFight) && !huntPartyRealFight(*party, damager)) {
+            // A lone raider: the member that was hit answers it, the blob marches on.
+            if (unit->canAttack(damager) && unit->getTarget() != damager) doAttackObject(unit, damager, false);
+            return;
+        }
         releaseHuntParty(*party, contact, "hit");
+    }
+}
+
+bool QuantBot::huntPartyRealFight(const BlobParty& party, const ObjectBase* contact) const {
+    if (!contact || contact->isAStructure()) return true;     // a base, a turret: the real thing
+    const int myTeam = getHouse()->getTeamID();
+    const auto& data = currentGame->objectData.data;
+    const Coord at = contact->getLocation();
+    int64_t hostile = 0, own = 0;
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getOwner()->getTeamID() == myTeam || unit->getHealth() <= 0 || !unit->isActive()
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)
+            || tiles(at, unit->getLocation()) > BlobWavePolicy::kLocalRadiusTiles) continue;
+        hostile += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+    }
+    for (const Uint32 id : party.members) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || unit->getHealth() <= 0) continue;
+        own += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+    }
+    // A fight is real when the enemy there is at least a quarter of the party.
+    return hostile * 4 >= own;
+}
+
+void QuantBot::huntPartySkirmish(const BlobParty& party, const ObjectBase* contact) {
+    // The three members nearest the scout shoot it (id order breaks ties); the rest march on.
+    std::vector<std::pair<int64_t, const UnitBase*>> nearest;
+    for (const Uint32 id : party.members) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || !unit->isActive() || !unit->isRespondable() || !unit->canAttack(contact)) continue;
+        nearest.push_back({distanceSquared(unit->getLocation(), contact->getClosestPoint(unit->getLocation())), unit});
+    }
+    std::stable_sort(nearest.begin(), nearest.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (size_t i = 0; i < nearest.size() && i < 3; ++i)
+        if (nearest[i].second->getTarget() != contact) doAttackObject(nearest[i].second, contact, false);
 }
 
 void QuantBot::updateHuntParties() {
@@ -447,23 +492,33 @@ void QuantBot::updateHuntParties() {
         switch (party.phase) {
             case Phase::Gather:
             case Phase::Reform: {
-                if (contact) { releaseHuntParty(party, contactAt, "contact"); break; }
+                if (contact && (!(blobVariantOverride & kBlobRealFight) || huntPartyRealFight(party, contact))) {
+                    releaseHuntParty(party, contactAt, "contact"); break;
+                }
+                if (contact) huntPartySkirmish(party, contact);
+                // Vehicle pace: foot infantry neither holds the gather nor counts towards it.
+                const bool vehiclePace = (blobVariantOverride & kBlobVehiclePace) != 0;
+                const int quorum = vehiclePace ? 7500 : BlobWavePolicy::kGatherQuorumBps;
+                int paced = 0;
                 int gathered = 0;
                 bool awayMoving = false;
                 for (const auto* unit : active) {
+                    if (vehiclePace && unit->isInfantry()) continue;
+                    ++paced;
                     if (tiles(unit->getLocation(), party.rally) <= radius) ++gathered;
                     else awayMoving = awayMoving || unit->isMoving() || unit->hasPendingPathRequest();
                 }
+                if (paced == 0) paced = members;
                 if (Uint32(gathered) > party.gathered) { party.gathered = gathered; party.lastArrival = now; }
                 const bool reform = party.phase == Phase::Reform;
                 const Uint32 maxCycles = party.legCycles;
-                if (!BlobWavePolicy::gatherComplete(members, gathered, elapsed,
+                if (!BlobWavePolicy::gatherComplete(paced, gathered, elapsed,
                         ArmyPosturePolicy::elapsed(now, party.lastArrival), maxCycles,
-                        MILLI2CYCLES(BlobWavePolicy::kGatherStallMs), awayMoving)) {
+                        MILLI2CYCLES(BlobWavePolicy::kGatherStallMs), awayMoving, quorum)) {
                     sendHuntParty(party, party.rally, false, true);
                     break;
                 }
-                if (elapsed >= maxCycles && int64_t(gathered) * 10000 < int64_t(BlobWavePolicy::kGatherQuorumBps) * members)
+                if (elapsed >= maxCycles && int64_t(gathered) * 10000 < int64_t(quorum) * paced)
                     ++blobStats.gatherTimeouts;
                 if (reform) ++blobStats.reforms; else ++blobStats.gathered;
                 traceDecision("hunt_party_formed", AITelemetry::Record().set("phase", BlobWavePolicy::phaseName(party.phase))
@@ -473,7 +528,10 @@ void QuantBot::updateHuntParties() {
             } break;
 
             case Phase::March: {
-                if (contact) { releaseHuntParty(party, contactAt, "contact"); break; }
+                if (contact && (!(blobVariantOverride & kBlobRealFight) || huntPartyRealFight(party, contact))) {
+                    releaseHuntParty(party, contactAt, "contact"); break;
+                }
+                if (contact) huntPartySkirmish(party, contact);
                 // A lost objective is replaced; with nothing left to attack the party hunts.
                 const ObjectBase* objective = huntPartyObjective(party, anchor);
                 if (!objective) { dissolveHuntParty(party, true, "no_objective"); break; }
@@ -498,13 +556,16 @@ void QuantBot::updateHuntParties() {
                 // until the blob is there (or the slowest member's time is up); stragglers far
                 // behind are sent along but not waited for.
                 int counted = 0, arrived = 0;
+                const bool vehiclePace = (blobVariantOverride & kBlobVehiclePace) != 0;
                 for (const auto* unit : active) {
+                    if (vehiclePace && unit->isInfantry()) continue;
                     const int distance = tiles(unit->getLocation(), party.rally);
                     if (BlobWavePolicy::straggler(distance, leg, radius)) continue;
                     ++counted;
                     if (distance <= radius) ++arrived;
                 }
-                if (BlobWavePolicy::legComplete(counted, arrived, elapsed, party.legCycles)) startPartyLeg(party, anchor);
+                if (BlobWavePolicy::legComplete(counted, arrived, elapsed, party.legCycles,
+                        vehiclePace ? 7500 : BlobWavePolicy::kLegQuorumBps)) startPartyLeg(party, anchor);
                 else sendHuntParty(party, party.rally, false, true);
             } break;
 

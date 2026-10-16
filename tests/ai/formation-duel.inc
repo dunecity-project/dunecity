@@ -20,8 +20,9 @@ namespace FormationDuel {
 struct Side {
     int house = HOUSE_INVALID;
     int shape = QuantBotConfig::kWaveFormationNone;
-    std::string label;          ///< as given: shape[/retreat|/noretreat]
+    std::string label;          ///< as given: shape[+flags][/retreat|/noretreat]
     int retreat = -1;           ///< QuantBot::tacticalRetreatOverride: -1 the game's (on with Blob)
+    int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged)
 };
 
 /// BALANCE_DUEL_SIDES: "house:shape[/variant],house:shape[/variant]", houses by number, shapes
@@ -45,6 +46,16 @@ inline std::vector<Side> sidesFromEnv() {
             if (variant == "retreat") side.retreat = 1;
             else if (variant == "noretreat") side.retreat = 0;
             else throw std::runtime_error("Unknown duel variant: " + entry);
+        }
+        const auto plus = shape.find('+');
+        if (plus != std::string::npos) {
+            for (const char flag : shape.substr(plus + 1)) {
+                if (flag == 'v') side.variant |= QuantBot::kBlobVehiclePace;
+                else if (flag == 'r') side.variant |= QuantBot::kBlobRealFight;
+                else if (flag == 'k') side.variant |= QuantBot::kBlobKeepDamaged;
+                else throw std::runtime_error("Unknown duel Blob variant flag: " + entry);
+            }
+            shape = shape.substr(0, plus);
         }
         side.shape = QuantBotConfig::parseWaveFormation(shape, INT_MIN);
         if (side.shape == INT_MIN) throw std::runtime_error("Unknown duel wave formation: " + entry);
@@ -95,6 +106,7 @@ inline void applyShapes(Game& game, const std::vector<Side>& sides) {
             if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
                 bot->waveFormationOverride = side.shape;
                 bot->tacticalRetreatOverride = side.retreat;
+                bot->blobVariantOverride = side.variant;
                 ++bots;
             }
         if (bots != 1) throw std::runtime_error("A duel house does not have exactly one QuantBot");

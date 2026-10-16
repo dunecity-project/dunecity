@@ -919,13 +919,19 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 					// A deviated unit cannot be repaired, so send it to reposition instead of
 					// spending the pass on a repair order the engine will refuse.
 					&& pGroundUnit->isEligibleForRepair()
+					// Test-only Blob variant: a damaged member stays with a party that has not met
+					// a fight yet (its repair run would strip the blob mid-march).
+					&& !((blobVariantOverride & kBlobKeepDamaged) && huntPartyOf(pGroundUnit->getObjectID())
+						&& huntPartyOf(pGroundUnit->getObjectID())->phase != BlobWavePolicy::Phase::Fight)
 					) {
 					if (huntPartyOf(pGroundUnit->getObjectID())) ++blobStats.repairs;
 					doRepair(pGroundUnit);
 				}
 
-				// Rotate unit backwards if it is taking damage if it is softer
-				else if (!autonomousAttack && pGroundUnit->getItemID() != Unit_Devastator
+				// Rotate unit backwards if it is taking damage if it is softer. A hunt party's
+				// member stays where its party wants it.
+				else if (!autonomousAttack && !huntPartyOf(pGroundUnit->getObjectID())
+						&& pGroundUnit->getItemID() != Unit_Devastator
 						&& pGroundUnit->getItemID() != Unit_SiegeTank) {
 					doSetAttackMode(pGroundUnit, AREAGUARD);
 					moveToOptimalSquadPosition(pGroundUnit, 6);  // 6 tile radius
