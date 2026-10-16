@@ -288,7 +288,107 @@ the override for every label, so `none` in the duels stays the previous rules.
 **Next: BWFCQ.** It is better (above) but bundling has state between passes (the bundle point, its
 30 s clock and the gate's wait), so as a default it needs those in the save (9863, gated), a real-engine
 probe for bundling and the gate, and the all-against-Atreides match - not done in this round (request
-budget). Its defence result is no worse than None's (0.333). Test-only until then.
+budget). Its defence result is no worse than None's (0.333). Test-only until then. (Done in round 4.)
+
+### Round 4: BWFCQ made shippable and the default, launcher kiting, defence (protocol 79, save 9863)
+
+Same harness, maps and seeds as round 3. Data and printed reports: `docs/formation-results/force/round4/`
+(`games.csv`, `waves-by-shape.csv`, `report-r4h.md` Hard, `report-r4b.md` Brutal, `report-r4d.md`
+defence, `report-r4hd.md` Hard with D; 468 games).
+
+**Launcher kiting with the force rules on.** `quantbot_launcher_kiting` had set the force override to 0
+because focus fire gives a hunting launcher an unforced attack order. The real conflict: focus fire and
+converging run in `concentrateForces()` before the unit pass, so a launcher with an enemy already in its
+close band got an attack (or hunt-toward) order that cleared its path and destination, and the escape
+then had to re-order it in the same pass (or, with the path queue stressed, the attack order stood and the
+launcher fought at point-blank range). Fix: `closeThreatWhileHunting()` (the escape's own threat search,
+bounded tile box, nearest then lowest id) is split out of `escapeCloseThreatWhileHunting()`, and
+`concentrateForces()` skips every hunter it returns a threat for - the pass belongs to the escape. A
+launcher standing off again is an ordinary hunter and takes the focus target. The probe now runs with
+the production rules and checks: an escaping launcher gets the forced step and no focus-fire order (the
+focus counter does not move), and standing off it takes the damaged tank in range rather than the
+healthy one and its rockets land on it (2 shots, hit within 750 cycles, Hard and Brutal); a tank beside a
+non-launcher hunter may be given as an unforced attack (focus fire) but nothing is kited. The fixture
+fixes the launcher's facing at the start of the escape section for both difficulties (a 180-degree turn
+costs two of its eight passes).
+
+**Bundling made shippable.** Optional `[Force Concentration]` keys `Bundle` and `LaunchFromBundle`
+(code defaults true, hashed; `forceBits()` adds B and W from them). Changes against the round-3 test-only
+rule:
+- Saved (SAVEGAMEVERSION 9863, appended to the QuantBot block after the hunt parties): `bundlePoint` (x,y),
+  `bundleCentre` (x,y; the O variant's centre of mass), `bundleCycle` (the 30 s re-choice clock) and
+  `bundleGateSince` (the launch gate's first hold). A 9862 save loads with no bundle (chosen afresh at the
+  first unit pass, the gate starts a new wait). Load rejects a point off the map.
+- Order-independent and bounded: the unit pass only posts a reserve unit (guard point, Area Guard) and
+  collects the ones that must walk; after the pass at most 12 get a move, farthest from the bundle first,
+  lowest id on ties (`ForceConcentrationPolicy::bundleOrderFirst`), into slots reserved for the whole
+  batch. Point search: a ring of at most 17x17 tiles every 30 s (or when the point becomes unsafe).
+- Bundling never takes a tracked wave member, a defender, colony guard, escort, repair or human unit, and
+  stands aside (as does the launch gate) while a withdrawal or recovery holds reinforcements at home;
+  bundled units keep no role, so base defence takes them like any other unit.
+- The gate only waits when a bundle exists, and a wave that stops being ready drops its wait.
+
+Probe `quantbot_force_concentration` section 6 (real engine, 16 idle tanks): one pass gives exactly 12
+bundle orders to the 12 farthest, the same units for a reversed unit list; the bundle point keeps inside
+30 s and is re-chosen after it; a ready wave scattered at home is held (re-check in 5 s) and launches
+after 60 s; save/load while the gate waits and mid-gather restores all four fields and re-saves the same
+bytes (661), a 9862 load has no bundle; all 16 gather within 36 game s; an attack on a wind trap next to
+the bundle pulls 2 defenders out of it (Hunt, kept on the next pass); the 14 left launch from the bundle
+(no hold).
+
+**Bundling waits for house readiness.** With bundling as first built, `quantbot_no_spice_income_low-cash`
+failed: both Brutal QuantBots built 3 lots instead of 4 in 12 minutes (with `Bundle=false` it passed),
+because the starting army walked to the forward bundle in the opening. Bundling therefore applies only
+while the house could attack (`bundleArmyReady()`: military value at least the house attack threshold
+at the configured readiness, the figure `attack()` uses - shared as `houseAttackThreshold()`); below it
+the reserve keeps to the home rally. `quantbot_whole_army_dispatch`, `quantbot_army_recovery` and
+`quantbot_blob_waves` spawn ready waves where they test them, so they pin FCQ (override F|C|Q); the gate
+is covered by `quantbot_force_concentration`.
+
+**Results (BWFCQ = the new default; `none` = the rules before protocol 78).** Final code (tags `r4f`,
+`r4fb`); `r4h`/`r4b` are the same rule before the readiness condition:
+
+| Pairing | Games | Score | 95% CI | Elim. W-L / time-outs | Verdict |
+|---|---|---|---|---|---|
+| BWFCQ v none, Hard (final) | 108 | **0.870** | 0.81-0.93 | 81-3 / 24 | beats none |
+| BWFCQ v FCQ, Hard (final) | 108 | **0.676** | 0.58-0.76 | 57-15 / 36 | beats FCQ |
+| BWFCQ v none, Brutal (final) | 36 | **0.931** | 0.85-1.00 | 28-0 / 8 | beats none |
+| BWFCQ v none, Hard (r4h) | 108 | 0.880 | 0.82-0.94 | 82-3 / 23 | beats none |
+| BWFCQ v FCQ, Hard (r4h) | 108 | 0.713 | 0.63-0.80 | 59-17 / 32 | beats FCQ |
+| BWFCQ v none, Brutal (r4b) | 36 | 0.917 | 0.81-1.00 | 31-0 / 5 | beats none |
+| BWFCQD v none, Hard (r4hd) | 108 | 0.889 | 0.82-0.94 | 81-3 / 24 | beats none |
+
+`quantbot_all_against_atreides` with the final default: 6/6, 30.8 31.7 33.4 30.3 34.4 31.7 minutes (seeds
+1756374161 906213928 41562270 1841712204 1430976924 1804669015; FCQ: 31.9 27.8 31.4 31.4 33.9 27.9).
+
+**Defence (`/weak`): why FCQ did worst.** Traced with the AI log (160/7202 Atreides and 192/7404
+Harkonnen as the weak side against None, where round 3's FCQ lost 153 and 130 structures and None 1
+and 10; reproduced: FCQ 95 and 167, None 1 and 0). Not an empty base: there was no base scramble at all
+before minute 34. The cause is the 60% readiness while outnumbered. The weak FCQ house launched 8-9 waves
+of 13-20k (first at 9.4-10.8 min) into an enemy army of 31-70k, lost each in the field, and its army
+fell from 42-54k (minute 18-24) to 3-5k by minute 34; only then did the enemy waves take the base (1 and
+0 structures lost before minute 34, 94 and 167 in the last six minutes). The None weak house waited for full
+readiness, sent 5-10 waves of 22-38k, kept an army of 44-46k to the end and lost 0-1 structures. The
+outnumbered dispatch gate fired 5 times around minute 9.7 (own 14.2M against 22.9M observed) and then
+stopped deferring once the enemy army was out of view.
+
+Candidate D (test-only, duel flag `D`, `kForceStrengthReadiness`): while the visible enemy mobile ground
+army (health-weighted value) is worth 125% of ours or more, a wave waits for full (100%) readiness instead
+of the configured 60% (`launchReadinessPercent()`, one unit-list pass per attack check; stateless).
+
+| Weak side v none (36 games each, tag `r4d`, before the readiness condition) | Score | 95% CI | Structures lost | Structures destroyed | Home kill / loss | Wins |
+|---|---|---|---|---|---|---|
+| BWFCQ | 0.333 | 0.19-0.50 | 55.2 | 27.4 | 0.61 | 5 |
+| BWFCQD | 0.389 | 0.22-0.56 | 53.9 | 38.0 | 0.41 | 5 |
+| FCQD | 0.361 | 0.19-0.53 | 52.5 | 19.2 | 0.48 | 2 |
+
+(Round 3, older code: None 0.333 / 53.2 lost, FCQ 0.250 / 60.8.) D points the right way (FCQD loses 52.5
+structures against FCQ's 60.8 in round 3; BWFCQD 0.389 against BWFCQ 0.333) and costs nothing on attack
+(Hard 0.889 v 0.880), but no difference separates in 36 games, so **D is not kept as a default** (stays
+a test-only flag); the next step is a 72-108-game `/weak` run of BWFCQD v BWFCQ.
+
+**Decision (applied): the QuantBot default is BWFCQ** (`Bundle=true`, `LaunchFromBundle=true` on top of
+FCQ). Protocol 79 (bundling, the gate and the launcher fix change AI orders), save 9863.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

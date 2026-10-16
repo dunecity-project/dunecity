@@ -1,3 +1,34 @@
+## 2026-10-17 — QuantBot default now BWFCQ (bundled reserve + launch from the bundle), launcher kiting fixed with force rules on, defence traced (branch `feat/ai-blob-waves`, protocol 79, save 9863, not released)
+
+Stefan: optimise how QuantBot concentrates force on attack and defence. Tables and causes:
+`docs/formations.md` ("Round 4"); data `docs/formation-results/force/round4/` (720 duels, tags r4h r4b
+r4d r4hd r4f r4fb).
+
+- **Default BWFCQ**: new optional `[Force Concentration]` keys `Bundle`, `LaunchFromBundle` (code default
+  true, hashed); `forceBits()` adds B|W. Final code: Hard 108 v previous rules 0.870 (0.81-0.93), v FCQ
+  0.676 (0.58-0.76), Brutal 36 0.931 (0.85-1.00); `quantbot_all_against_atreides` 6/6 (30.8 31.7 33.4
+  30.3 34.4 31.7 min).
+- **Saved state (9863, gated; 9862 loads with no bundle)**: `bundlePoint`, `bundleCentre`, `bundleCycle`,
+  `bundleGateSince` appended after the hunt parties (`saveForceState`/`loadForceState`). Protocol 79.
+- **Bundling rules**: at most 12 orders per pass after the unit pass, farthest first then lowest id
+  (order-independent); never wave members/defenders/guards/escorts; stands aside while recovery holds
+  reinforcements home; only once the house could attack (`bundleArmyReady()`, fixes the no-spice
+  low-cash opening); the gate waits only with a bundle and resets when the wave stops being ready.
+- **Launcher kiting**: `concentrateForces()` skips a hunting launcher whose escape applies
+  (`closeThreatWhileHunting()` split out of the escape). `quantbot_launcher_kiting` now runs with the
+  production rules and checks no focus order during the escape and the focus target hit after it.
+- **Defence**: FCQ's `/weak` losses come from 60% waves sent while outnumbered (lost in the field, army
+  collapses, base falls after minute 34), not an empty base. Test-only D (full readiness while the visible
+  enemy army is >=125% of ours): /weak 0.389 v 0.333 (36 games, not separable), Hard 0.889; not kept.
+  Next: 72-108 `/weak` games BWFCQD v BWFCQ.
+- Probes: `quantbot_force_concentration` section 6 (bundle orders, order independence, gather, gate hold
+  and 60 s timeout, defence pulls from the bundle, launch from it, save/load mid-gather and while the gate
+  waits); dispatch/recovery/blob probes pin F|C|Q.
+- Tests (one ctest -j3 run, Release `build`, final code): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl. all_against_atreides,
+  force_concentration and launcher_kiting: 40/40 passed (503 s).
+
 ## 2026-10-17 — QuantBot default now focus fire + converge + 60% waves (FCQ); bundling + launch gate (BWFCQ) measured better, test-only (branch `feat/ai-blob-waves`, protocol 78, save 9862, not released)
 
 Stefan: "optimise how the ai concentrates forces on attack and defense"; bring back squad-centre bundling,
