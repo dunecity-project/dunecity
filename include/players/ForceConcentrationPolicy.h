@@ -175,6 +175,124 @@ inline int64_t scaledReadiness(int64_t required, int percent) {
     return std::max<int64_t>(0, required) * std::max(0, percent) / 100;
 }
 
+// ---- Bundling the idle reserve -----------------------------------------------------------------
+
+/// The reserve gathers this share of the way from its home assembly point to the observed enemy
+/// base (the pre-1.0.602 rally was 75% own base + 25% enemy base) ...
+constexpr int kBundleForwardPercent = 25;
+/// ... with at most this many move orders per unit pass ...
+constexpr int kBundleOrdersPerPass = 12;
+/// ... and, with the launch gate, a ready wave waits until this share of its value stands in
+/// the bundle, at most kBundleGateMaxMs, re-checking every kBundleRecheckMs.
+constexpr int kBundleGateBps = 7000;
+constexpr int kBundleGateMaxMs = 60000;
+constexpr int kBundleRecheckMs = 5000;
+
+/// The smallest radius (at least 3 tiles) that holds \a members at two per squared tile.
+inline int bundleRadius(int members) {
+    int radius = 3;
+    while (radius * radius * 2 < members && radius < 64) ++radius;
+    return radius;
+}
+
+/// A point \a percent of the way from \a from towards \a to (integer, truncating towards from).
+inline int along(int from, int to, int percent) { return from + (to - from) * percent / 100; }
+
+/// Is enough of the wave in the bundle (\a bundled of \a total value) to launch?
+inline bool bundled(int64_t bundledValue, int64_t total) {
+    return total <= 0 || bundledValue * 10000 >= total * kBundleGateBps;
+}
+
+// ---- Splitting a wave: two angles ----------------------------------------------------------------
+
+/// A split wave's groups wait this far from the objective (outside turret reach) ...
+constexpr int kSplitStandoffTiles = 14;
+/// ... only when the wave stands at least this far from it and has this many members ...
+constexpr int kSplitMinTiles = 24;
+constexpr int kSplitMinMembers = 8;
+/// ... and attack together once this share of each group has arrived, after at most
+/// kSplitMaxMs, or as soon as this share of one group is already fighting.
+constexpr int kSplitQuorumBps = 7500;
+constexpr int kSplitMaxMs = 120000;
+constexpr int kSplitFightBps = 2500;
+/// The flanking group's share of the wave value (kForceFlank; the halves of kForceSplit: 5000).
+constexpr int kFlankShareBps = 3000;
+constexpr int kSplitOrdersPerPass = 16;
+
+/// Integer square root (floor).
+inline int64_t isqrt(int64_t value) {
+    if (value <= 0) return 0;
+    int64_t root = 0, bit = int64_t(1) << 62;
+    while (bit > value) bit >>= 2;
+    while (bit != 0) {
+        if (value >= root + bit) { value -= root + bit; root = (root >> 1) + bit; }
+        else root >>= 1;
+        bit >>= 2;
+    }
+    return root;
+}
+
+struct Point { int x = 0, y = 0; };
+
+/// The release point \a standoff tiles from \a objective in the direction of \a from (where the
+/// wave comes from) rotated by \a degrees (0, +-45 or +-90; +d and -d are mirror images across
+/// the approach line). \a from == \a objective gives \a objective.
+inline Point releasePoint(Point objective, Point from, int standoff, int degrees) {
+    const int64_t vx = from.x - objective.x, vy = from.y - objective.y;
+    const int64_t length = isqrt(vx * vx + vy * vy);
+    if (length == 0) return objective;
+    // cos/sin x1000 of the supported angles.
+    int64_t c = 1000, s = 0;
+    if (degrees == 45) { c = 707; s = 707; }
+    else if (degrees == -45) { c = 707; s = -707; }
+    else if (degrees == 90) { c = 0; s = 1000; }
+    else if (degrees == -90) { c = 0; s = -1000; }
+    const int64_t rx = vx * c - vy * s, ry = vx * s + vy * c;    // x1000
+    return {objective.x + int(rx * standoff / (length * 1000)), objective.y + int(ry * standoff / (length * 1000))};
+}
+
+struct SplitMember {
+    uint32_t id = 0;
+    int64_t value = 0;
+    int64_t lean = 0;       ///< distance to group 0's point minus distance to group 1's
+};
+
+/// Which group (0 or 1) each member joins, in input order: the members leaning most towards
+/// group 0's point (ties by id) fill group 0 until it holds \a shareBps of the value, the rest
+/// go to group 1. Both groups get at least one member when there are two or more.
+inline std::vector<int> splitGroups(const std::vector<SplitMember>& members, int shareBps) {
+    std::vector<size_t> order(members.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return members[a].lean != members[b].lean ? members[a].lean < members[b].lean : members[a].id < members[b].id;
+    });
+    int64_t total = 0;
+    for (const auto& member : members) total += std::max<int64_t>(0, member.value);
+    std::vector<int> group(members.size(), 1);
+    int64_t value = 0;
+    size_t taken = 0;
+    for (const size_t index : order) {
+        if (taken > 0 && value * 10000 >= total * shareBps) break;
+        if (taken + 1 >= members.size()) break;
+        group[index] = 0;
+        value += std::max<int64_t>(0, members[index].value);
+        ++taken;
+    }
+    return group;
+}
+
+/// Have both groups arrived (\a arrived of \a alive each, kSplitQuorumBps)?
+inline bool splitReady(const int arrived[2], const int alive[2]) {
+    for (int g = 0; g < 2; ++g)
+        if (alive[g] > 0 && int64_t(arrived[g]) * 10000 < int64_t(alive[g]) * kSplitQuorumBps) return false;
+    return true;
+}
+
+/// Is a group (\a fighting of \a alive) in a real fight, so the other must come now?
+inline bool splitFighting(int fighting, int alive) {
+    return alive > 0 && fighting > 0 && int64_t(fighting) * 10000 >= int64_t(alive) * kSplitFightBps;
+}
+
 } // namespace ForceConcentrationPolicy
 
 #endif // FORCE_CONCENTRATION_POLICY_H

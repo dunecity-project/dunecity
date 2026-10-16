@@ -131,6 +131,21 @@ struct QuantBotConfig {
     };
     RecoverySettings recovery;
 
+    /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
+    /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent; optional
+    /// keys, the code defaults apply when absent. Hashed for multiplayer.
+    struct ForceSettings {
+        /// Hunting ground fighters shoot the best target in reach: fighters first, then the
+        /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
+        bool focusFire;
+        /// Wave members not yet fighting join a fight of their army within 24 tiles.
+        bool converge;
+        /// The wave readiness and house attack threshold as a percentage of the difficulty's
+        /// (100 = unchanged; smaller = smaller, more frequent waves). Clamped to 10-300.
+        int waveReadinessPercent;
+    };
+    ForceSettings force;
+
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)

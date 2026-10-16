@@ -55,6 +55,7 @@
 #include "formation-wave-measure.inc"
 #include "wave-formation-probe.inc"
 #include "blob-wave-probe.inc"
+#include "force-concentration-probe.inc"
 #include "formation-duel.inc"
 #include "probe-digest.inc"
 #include "elimination-match.inc"
@@ -289,6 +290,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_BLOB_WAVE_PROBE")) {
         runBlobWaveProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_FORCE_PROBE")) {
+        runForceConcentrationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {

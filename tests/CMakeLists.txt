@@ -833,6 +833,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/blob-wave-probe)
         set_tests_properties(quantbot_blob_waves PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot force concentration defaults (docs/formations.md, "Concentrating force"):
+        # Custom Hard/Brutal hunters focus the damaged enemy fighter in reach, a wave member not
+        # fighting walks to its army's fight nearby, and a wave launches at 60% readiness; the
+        # orders do not depend on unit order, Medium is untouched, and the duel override 0 is
+        # the previous behaviour.
+        add_test(NAME quantbot_force_concentration COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --force-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
+        set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
         # already too close makes a hunting launcher move away over real game
         # cycles, keeping engine Hunt, its tracked army membership and its

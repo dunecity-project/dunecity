@@ -1,3 +1,39 @@
+## 2026-10-17 — QuantBot default now focus fire + converge + 60% waves (FCQ); bundling + launch gate (BWFCQ) measured better, test-only (branch `feat/ai-blob-waves`, protocol 78, save 9862, not released)
+
+Stefan: "optimise how the ai concentrates forces on attack and defense"; bring back squad-centre bundling,
+explain why big waves lose, try splitting forces and attacking from two angles. Tables, causes and
+decision: `docs/formations.md` ("Round 3"). Data and reports: `docs/formation-results/force/round3/`
+(1,692 duels: tags p3 p4 p5 h1 b1 b2 d1).
+
+- **Default changed** (`QuantBotConfig::force`, new optional INI section `[Force Concentration]`:
+  `FocusFire=true`, `Converge=true`, `WaveReadinessPercent=60`; hashed; Custom Hard/Brutal only):
+  FCQ v previous rules 0.750 (95% CI 0.67-0.83) in 108 Hard games, 0.833 (0.69-0.94) in 36 Brutal;
+  all-against-Atreides 6/6 (31.9 27.8 31.4 31.4 33.9 27.9 min). `QuantBot::forceVariantOverride`
+  now defaults to `kNoForceOverride` (config); the duel harness always sets it, so label `none` = the
+  previous rules. `waveReadinessPercent()` replaces the L/Q branches. Protocol 78 (pinned in
+  `NetworkManagerTestCase`); no saved state.
+- **New test-only flags**: B (idle reserve bundled at a forward rally 25% towards the observed enemy
+  base), O (pre-1.0.602 rule: closer of that rally and the army's centre of mass), W (wave waits for
+  70% in the bundle, max 60 s), S (two halves from 90 degrees apart, release together), T (70/30 main
+  + flank). Pure rules + tests in `ForceConcentrationPolicy.h` / `ForceConcentrationPolicyTestCase.cpp`.
+- **Results**: BWFCQ 0.852 (0.78-0.92, 108 Hard), 0.944 Brutal (36), beats FCQ head-to-head 0.750
+  (0.67-0.82, 108). O 0.750, BW 0.722, B 0.611 (36 each). Splits do not help (S 0.556, T 0.444, SFCQ
+  0.639). L 0.431: cause is tempo - the 150% house threshold (30,000 on 128 maps against a ~21,000
+  starting army) skips the opening strike and is not reached while defending; 3.4 waves/game v 7.5,
+  first at 19.9 v 10.7 min, 55 v 28 structures lost. Defence (`/weak`): no rule separates from None
+  (0.333); FCQ is lowest (0.250, 61 structures lost) - watch it.
+- **Next step**: make BWFCQ the default - save `bundlePoint`/`bundleCycle`/`bundleGateSince`
+  (save 9863, gated), add bundling/gate checks to `quantbot_force_concentration`, re-run
+  all-against-Atreides, add `BundleReserve`/`BundleLaunchGate` keys.
+- New probe `quantbot_force_concentration` (`--force-probe`, `tests/ai/force-concentration-probe.inc`).
+  `quantbot_launcher_kiting` sets override 0 (focus fire gives a hunting launcher its own attack order).
+  Harness: flags B O W S T, counters bundle_orders/gate_holds/gate_timeouts/splits/split_releases/
+  split_timeouts; `append` rewrites a CSV whose header is older.
+- Tests (one ctest -j3 run, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl.
+  `quantbot_all_against_atreides` and the new `quantbot_force_concentration`: 40/40 passed (1017 s).
+
 ## 2026-10-17 — QuantBot force concentration: 13 candidates screened, default unchanged (branch `feat/ai-blob-waves`, protocol 77, save 9862, not released)
 
 Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and

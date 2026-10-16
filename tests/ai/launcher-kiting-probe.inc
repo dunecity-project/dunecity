@@ -47,6 +47,10 @@ void runLauncherKitingProbe(Game& game) {
     bot->attrition.reset();
     bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
     bot->postureSince=0;
+    // Kiting alone: focus fire (QuantBotConfig::force, on by default) gives a hunting launcher
+    // an unforced attack on the best enemy in its reach, which is an order of its own; the
+    // force rules have their own probe (quantbot_force_concentration).
+    bot->forceVariantOverride=0;
     getQuantBotConfig().recovery.enabled=true;
 
     // ---- Free ground, large enough for a stand-off and a real retreat -------

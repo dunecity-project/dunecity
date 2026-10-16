@@ -213,7 +213,12 @@
 //     front battery stays in the 8-12 band, walls follow only the fixed-count defence
 //     turrets, and a harvester override of 0 is "no ceiling" for every AI (QuantBot initial
 //     limit, Mentat). A 76 peer would order different buildings and desync. Save 9862.
-#define NETWORK_PROTOCOL_VERSION            77
+// 78: QuantBot force concentration defaults, no saved state or command change: Custom
+//     Hard/Brutal hunters focus fire, wave members not yet fighting converge on a fight of
+//     their army nearby, and waves launch at 60% of the former readiness ([Force
+//     Concentration] in QuantBot Config, hashed). A 77 peer would order the same AI units
+//     differently and desync. Save 9862.
+#define NETWORK_PROTOCOL_VERSION            78
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

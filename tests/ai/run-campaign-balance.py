@@ -122,6 +122,8 @@ parser.add_argument('--wave-formation-probe', action='store_true',
                     help='Verify QuantBot attack waves launch and march as hunting formations in the configured shape')
 parser.add_argument('--blob-wave-probe', action='store_true',
                     help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
+parser.add_argument('--force-probe', action='store_true',
+                    help='Verify the QuantBot force-concentration defaults: focus fire, converging on a fight, 60%% waves')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -404,6 +406,7 @@ if args.formation_measure: env['BALANCE_FORMATION_MEASURE'] = '1'
 if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
+if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
 if args.duel_map_size:
     env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
     env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)

@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 77;
+static constexpr int kWireProtocolVersion = 78;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -77,7 +77,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 77 bounds the QuantBot front battery, decouples walls from it, credits destroyed
     // buildings to the posture trade and makes a harvester override of 0 "no ceiling" for
     // every AI; no saved state change.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 77);
+    // 78 makes QuantBot focus fire, converge on fights and launch waves at 60% readiness by
+    // default (QuantBot Config [Force Concentration]); no saved state change.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 78);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

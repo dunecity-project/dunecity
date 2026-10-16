@@ -3,6 +3,7 @@
 #include <players/ForceConcentrationPolicy.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 // QuantBot force concentration (docs/formations.md, "Concentrating force"): the pure decisions
@@ -106,4 +107,70 @@ TEST_CASE("Force: a staged wave attacks with local superiority; wave readiness s
     REQUIRE(scaledReadiness(10000, 150) == 15000);
     REQUIRE(scaledReadiness(10000, 60) == 6000);
     REQUIRE(scaledReadiness(-3, 150) == 0);
+}
+
+TEST_CASE("Force: the reserve bundles a quarter of the way forward and the gate waits for 70%", "[ai][force]") {
+    REQUIRE(along(40, 120, kBundleForwardPercent) == 60);
+    REQUIRE(along(120, 40, kBundleForwardPercent) == 100);
+    REQUIRE(along(10, 10, kBundleForwardPercent) == 10);
+    REQUIRE(bundleRadius(0) == 3);
+    REQUIRE(bundleRadius(18) == 3);
+    REQUIRE(bundleRadius(19) == 4);
+    REQUIRE(bundleRadius(100) == 8);
+    REQUIRE(bundled(7000, 10000));
+    REQUIRE_FALSE(bundled(6999, 10000));
+    REQUIRE(bundled(0, 0));
+}
+
+TEST_CASE("Force: split release points are integer, symmetric and 90 degrees apart", "[ai][force]") {
+    REQUIRE(isqrt(0) == 0);
+    REQUIRE(isqrt(15) == 3);
+    REQUIRE(isqrt(16) == 4);
+    REQUIRE(isqrt(int64_t(1) << 40) == (int64_t(1) << 20));
+    const Point objective{100, 100}, from{100, 40};     // the wave comes from straight above
+    const Point head = releasePoint(objective, from, 14, 0);
+    REQUIRE((head.x == 100 && head.y == 86));
+    const Point a = releasePoint(objective, from, 14, 45), b = releasePoint(objective, from, 14, -45);
+    // Mirror images across the approach line, each about 14 tiles from the objective.
+    REQUIRE(a.y == b.y);
+    REQUIRE(a.x - objective.x == objective.x - b.x);
+    REQUIRE(std::abs(a.x - objective.x) == 9);
+    REQUIRE(a.y == 91);
+    // The two release directions are perpendicular: their dot product (from the objective) is ~0.
+    const int dot = (a.x - objective.x) * (b.x - objective.x) + (a.y - objective.y) * (b.y - objective.y);
+    REQUIRE(std::abs(dot) <= 1);
+    const Point left = releasePoint(objective, from, 14, 90), right = releasePoint(objective, from, 14, -90);
+    REQUIRE((left.y == 100 && right.y == 100 && left.x + right.x == 200 && std::abs(left.x - 100) == 14));
+    REQUIRE((releasePoint(objective, objective, 14, 45).x == 100 && releasePoint(objective, objective, 14, 45).y == 100));
+}
+
+TEST_CASE("Force: split groups fill by lean and value in any input order", "[ai][force]") {
+    const std::vector<SplitMember> wave{{5, 1000, -6}, {2, 1000, 4}, {9, 500, -2}, {7, 500, 3}, {3, 1500, -6}};
+    const auto halves = splitGroups(wave, 5000);
+    // Leaning most to group 0: ids 3 then 5 (both -6, by id); 2,500 of 4,500 passes half.
+    REQUIRE(halves == std::vector<int>{0, 1, 1, 1, 0});
+    // The 30% flank: id 3 alone (1,500 of 4,500) already holds it.
+    const auto flank = splitGroups(wave, kFlankShareBps);
+    REQUIRE(flank == std::vector<int>{1, 1, 1, 1, 0});
+    auto reversed = wave;
+    std::reverse(reversed.begin(), reversed.end());
+    auto again = splitGroups(reversed, 5000);
+    std::reverse(again.begin(), again.end());
+    REQUIRE(again == halves);
+    // Two members always make two groups; one stays in group 1.
+    REQUIRE(splitGroups({{1, 100, 0}, {2, 100, 0}}, 9000) == std::vector<int>{0, 1});
+    REQUIRE(splitGroups({{1, 100, 0}}, 5000) == std::vector<int>{1});
+}
+
+TEST_CASE("Force: a split attacks when both groups are there or one is fighting", "[ai][force]") {
+    const int alive[2] = {8, 4};
+    const int some[2] = {6, 2}, both[2] = {6, 3};
+    REQUIRE_FALSE(splitReady(some, alive));
+    REQUIRE(splitReady(both, alive));
+    const int none[2] = {0, 0}, gone[2] = {0, 4};
+    REQUIRE(splitReady(none, none));
+    REQUIRE_FALSE(splitReady(none, gone));
+    REQUIRE(splitFighting(2, 8));
+    REQUIRE_FALSE(splitFighting(1, 8));
+    REQUIRE_FALSE(splitFighting(0, 0));
 }

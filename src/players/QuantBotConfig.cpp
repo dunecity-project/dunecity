@@ -248,6 +248,14 @@ QuantBotConfig::QuantBotConfig() {
     recovery.frontBatteriesEnabled = true;
     recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
+    // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
+    // Measured in duels (docs/formations.md, "Concentrating force"): focus fire + converge +
+    // waves at 60% readiness beat the previous defaults 0.750 (95% CI 0.67-0.83) in 108 Hard
+    // games and 0.833 (0.69-0.94) in 36 Brutal games.
+    force.focusFire = true;
+    force.converge = true;
+    force.waveReadinessPercent = 60;
+
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
@@ -512,6 +520,11 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
 
+        // === FORCE CONCENTRATION ===
+        iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
+        iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
+
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
         savePriorities(iniFile, "Unit Priorities", unitPriorities);
@@ -570,6 +583,10 @@ bool QuantBotConfig::load(const std::string& filepath) {
             if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
             else waveFormation = parsed;
         }
+        force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
+        force.waveReadinessPercent = std::clamp(
+            iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
 
         bool needsSave = false;
 
@@ -978,6 +995,11 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("frontBatteries", recovery.frontBatteriesEnabled);
     addNamed("withdrawals", recovery.withdrawalsEnabled);
     configStr += "|/REC|";
+    configStr += "|FORCE";
+    addNamed("focusFire", force.focusFire);
+    addNamed("converge", force.converge);
+    addNamed("waveReadinessPercent", force.waveReadinessPercent);
+    configStr += "|/FORCE|";
 
 
     // Use FNV-1a hash (consistent across platforms and compilers)

@@ -70,6 +70,19 @@ int64_t volleyOf(const UnitBase* unit) {
 
 } // namespace
 
+int QuantBot::forceBits() const {
+    if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
+    const auto& force = getQuantBotConfig().force;
+    return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0);
+}
+
+int QuantBot::waveReadinessPercent() const {
+    if (!autonomousCustomHardBrutal()) return 100;
+    if (forceVariantOverride != kNoForceOverride)
+        return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    return std::clamp(getQuantBotConfig().force.waveReadinessPercent, 10, 300);
+}
+
 bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies) {
     const int myTeam = getHouse()->getTeamID();
     const ObjectBase* current = unit->getTarget();
@@ -140,6 +153,7 @@ void QuantBot::concentrateForces() {
     const bool noOverkill = forceVariant(kForceNoOverkill);
     const bool focus = forceVariant(kForceFocusFire) && !noOverkill, convergeOn = forceVariant(kForceConverge);
     if (forceVariant(kForceMuster) || !musters.empty()) updateMusters();
+    if (!splits.empty()) updateSplits();
     if (!focus && !convergeOn && !noOverkill) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
@@ -311,4 +325,230 @@ void QuantBot::updateMusters() {
     }
     musters.erase(std::remove_if(musters.begin(), musters.end(),
         [](const Muster& muster) { return muster.members.empty(); }), musters.end());
+}
+
+// ---- Bundling the idle reserve (kForceBundle) ------------------------------------------------
+//
+// Before 1.0.602 the idle army stood at a forward rally (75% own base + 25% enemy base) or at
+// its own centre of mass, so a wave left as one body. The candidate brings that back with the
+// observed enemy base only, a bounded tile search every 30 s and a capped number of orders per
+// pass; bundled troops keep no role, so base defence takes them like any other.
+
+Coord QuantBot::forwardBundlePoint() {
+    const Uint32 now = getGameCycleCount();
+    const bool unsafe = bundlePoint.isValid() && (!getMap().tileExists(bundlePoint) || dangerAt(bundlePoint) != 0);
+    if (!unsafe && bundleCycle != std::numeric_limits<Uint32>::max() && now >= bundleCycle
+        && now - bundleCycle < Uint32(MILLI2CYCLES(30000))) return bundlePoint;
+    bundleCycle = now;
+    const Coord home = armyAssemblyAnchor();
+    if (home.isInvalid()) { bundlePoint = Coord::Invalid(); return bundlePoint; }
+    const Coord towards = observedFrontDirection(home);
+    const Coord desired(Force::along(home.x, home.x + towards.x, Force::kBundleForwardPercent),
+                        Force::along(home.y, home.y + towards.y, Force::kBundleForwardPercent));
+    auto usable = [&](Coord p) {
+        if (!getMap().tileExists(p)) return false;
+        const auto* tile = getMap().getTile(p);
+        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0;
+    };
+    bundlePoint = Coord::Invalid();
+    for (int ring = 0; ring <= 8 && bundlePoint.isInvalid(); ++ring)
+        for (int dy = -ring; dy <= ring && bundlePoint.isInvalid(); ++dy)
+            for (int dx = -ring; dx <= ring && bundlePoint.isInvalid(); ++dx)
+                if (std::max(std::abs(dx), std::abs(dy)) == ring && usable(desired + Coord(dx, dy)))
+                    bundlePoint = desired + Coord(dx, dy);
+    if (bundlePoint.isInvalid()) bundlePoint = home;
+    traceDecision("force_bundle_point", AITelemetry::Record().set("x", bundlePoint.x).set("y", bundlePoint.y)
+        .set("home_x", home.x).set("home_y", home.y).set("forward_x", towards.x).set("forward_y", towards.y));
+    return bundlePoint;
+}
+
+bool QuantBot::bundleUnit(const UnitBase* unit, int radius, int* orderBudget) {
+    if (!unit || !unit->isRespondable() || unit->hasATarget() || unit->wasForced() || unit->isMoving()
+        || unit->getAttackMode() == HUNT || unit->getAttackMode() == RETREAT || holdsOpeningPosition(unit)
+        || unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence, UnitRole::ColonyGuard,
+                           UnitRole::Escort}) != UnitRole::Free) return false;
+    const Coord from = unit->getLocation();
+    Coord at = bundlePoint;
+    // The pre-1.0.602 rule: the closer of the forward rally and the army's centre of mass.
+    if (bundleCentre.isValid() && (at.isInvalid() || tiles(from, bundleCentre) < tiles(from, at))) at = bundleCentre;
+    if (at.isInvalid()) return false;
+    const_cast<UnitBase*>(unit)->setGuardPoint(at);
+    if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+    if (tiles(from, at) <= radius) return false;
+    if (*orderBudget <= 0 || unit->hasPendingPathRequest() || currentGame->getPathRequestQueueSize() > 150) return false;
+    std::set<int64_t> reserved;
+    Coord slot = huntPartySlot(unit, at, radius, reserved);
+    if (slot.isInvalid()) slot = at;
+    doMove2Pos(unit, slot.x, slot.y, false);
+    --*orderBudget;
+    ++forceStats.bundleOrders;
+    return true;
+}
+
+int QuantBot::bundledShareBps(const std::vector<Uint32>& ids, int radius) {
+    int64_t total = 0, bundledValue = 0;
+    for (const Uint32 id : ids) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || unit->getHealth() <= 0) continue;
+        const int64_t price = std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price);
+        total += price;
+        const Coord at = unit->getLocation();
+        if ((bundlePoint.isValid() && tiles(at, bundlePoint) <= radius)
+            || (bundleCentre.isValid() && tiles(at, bundleCentre) <= radius)) bundledValue += price;
+    }
+    return total > 0 ? int(bundledValue * 10000 / total) : 10000;
+}
+
+// ---- Two-angle attack (kForceSplit / kForceFlank) --------------------------------------------
+//
+// The wave splits into two groups that walk (Area Guard, so they answer what they meet) to
+// release points kSplitStandoffTiles from the objective, on directions 90 degrees apart (S:
+// +-45 degrees off the approach; T: the main force head-on, the flank at 90 degrees). The first
+// group there waits; both then hunt towards the objective at once. A group caught in a real fight
+// on the way brings the other straight to it, and kSplitMaxMs bounds the wait.
+
+const QuantBot::Split* QuantBot::splitOf(Uint32 id) const {
+    for (const auto& split : splits)
+        if (split.members[0].count(id) || split.members[1].count(id)) return &split;
+    return nullptr;
+}
+
+bool QuantBot::startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective) {
+    if (!objective) return false;
+    std::vector<const UnitBase*> walkers;
+    int64_t sx = 0, sy = 0;
+    const UnitBase* anchor = nullptr;
+    for (const auto* unit : units) {
+        if (!unit || !unit->isActive() || !unit->isAGroundUnit()) continue;
+        walkers.push_back(unit);
+        sx += unit->getLocation().x; sy += unit->getLocation().y;
+        if (!anchor || (anchor->isInfantry() && !unit->isInfantry())) anchor = unit;
+    }
+    if (int(walkers.size()) < Force::kSplitMinMembers) return false;
+    const Coord centre(int(sx / int64_t(walkers.size())), int(sy / int64_t(walkers.size())));
+    const Coord target = objective->getClosestPoint(centre);
+    if (tiles(centre, target) < Force::kSplitMinTiles) return false;
+    auto release = [&](int degrees) {
+        const auto p = Force::releasePoint({target.x, target.y}, {centre.x, centre.y}, Force::kSplitStandoffTiles, degrees);
+        const Coord desired(std::clamp(p.x, 0, getMap().getSizeX() - 1), std::clamp(p.y, 0, getMap().getSizeY() - 1));
+        return huntPartyPoint(desired, anchor, true);
+    };
+    const bool flank = forceVariant(kForceFlank) && !forceVariant(kForceSplit);
+    Split split;
+    if (flank) {
+        // Group 0 the flank (the side whose release point is nearer), group 1 the main force.
+        const Coord left = release(90), right = release(-90);
+        split.point[0] = tiles(centre, right) < tiles(centre, left) ? right : left;
+        split.point[1] = release(0);
+    } else {
+        split.point[0] = release(45);
+        split.point[1] = release(-45);
+    }
+    if (split.point[0] == split.point[1] || tiles(split.point[0], split.point[1]) < Force::kSplitStandoffTiles / 2)
+        return false;
+    std::vector<Force::SplitMember> members;
+    for (const auto* unit : walkers)
+        members.push_back({unit->getObjectID(),
+            std::max(100, currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price),
+            tiles(unit->getLocation(), split.point[0]) - tiles(unit->getLocation(), split.point[1])});
+    const auto groups = Force::splitGroups(members, flank ? Force::kFlankShareBps : 5000);
+    for (size_t i = 0; i < walkers.size(); ++i) split.members[groups[i]].insert(walkers[i]->getObjectID());
+    split.since = getGameCycleCount();
+    split.objective = objective->getObjectID();
+    split.target = target;
+    for (int g = 0; g < 2; ++g) {
+        const int radius = Force::bundleRadius(int(split.members[g].size()));
+        std::set<int64_t> reserved;
+        for (const auto* unit : walkers) {
+            if (!split.members[g].count(unit->getObjectID())) continue;
+            Coord slot = huntPartySlot(unit, split.point[g], radius, reserved);
+            if (slot.isInvalid()) slot = split.point[g];
+            doSetAttackMode(unit, AREAGUARD);
+            const_cast<UnitBase*>(unit)->setGuardPoint(slot);
+            doMove2Pos(unit, slot.x, slot.y, false);
+        }
+    }
+    ++forceStats.splits;
+    traceDecision("force_split", AITelemetry::Record().set("objective", split.objective)
+        .set("target_x", target.x).set("target_y", target.y).set("flank", flank)
+        .set("x0", split.point[0].x).set("y0", split.point[0].y).set("n0", int(split.members[0].size()))
+        .set("x1", split.point[1].x).set("y1", split.point[1].y).set("n1", int(split.members[1].size())));
+    splits.push_back(std::move(split));
+    return true;
+}
+
+void QuantBot::updateSplits() {
+    const Uint32 now = getGameCycleCount();
+    const int myTeam = getHouse()->getTeamID();
+    int orders = Force::kSplitOrdersPerPass;
+    for (auto it = splits.begin(); it != splits.end();) {
+        Split& split = *it;
+        int alive[2] = {0, 0}, arrived[2] = {0, 0}, fighting[2] = {0, 0};
+        Coord fight[2] = {Coord::Invalid(), Coord::Invalid()};
+        for (int g = 0; g < 2; ++g) {
+            const int radius = Force::bundleRadius(int(split.members[g].size())) + 3;
+            for (auto m = split.members[g].begin(); m != split.members[g].end();) {
+                const auto* unit = dynamic_cast<const UnitBase*>(getObject(*m));
+                // Defence, repair or a human order takes a member; so does anything that made it hunt.
+                const bool keep = unit && unit->getOwner() == getHouse() && unit->getHealth() > 0
+                    && unit->getAttackMode() != HUNT
+                    && unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence}) == UnitRole::Free;
+                if (!keep) { m = split.members[g].erase(m); continue; }
+                ++alive[g];
+                if (tiles(unit->getLocation(), split.point[g]) <= radius) ++arrived[g];
+                const auto* target = unit->getTarget();
+                if (target && target->getHealth() > 0 && target->getOwner() && target->getOwner()->getTeamID() != myTeam
+                    && armed(target) && unit->isInWeaponRange(target)) {
+                    ++fighting[g];
+                    if (fight[g].isInvalid()) fight[g] = target->getLocation();
+                }
+                ++m;
+            }
+        }
+        const auto* objective = getObject(split.objective);
+        const bool objectiveGone = !objective || objective->getHealth() <= 0 || !objective->getOwner()
+            || objective->getOwner()->getTeamID() == myTeam;
+        const int fightingGroup = Force::splitFighting(fighting[0], alive[0]) ? 0
+            : Force::splitFighting(fighting[1], alive[1]) ? 1 : -1;
+        const bool timeout = ArmyPosturePolicy::elapsed(now, split.since) >= Uint32(MILLI2CYCLES(Force::kSplitMaxMs));
+        const bool ready = Force::splitReady(arrived, alive);
+        if (alive[0] == 0 || alive[1] == 0 || objectiveGone || fightingGroup >= 0 || timeout || ready) {
+            // Attack together: towards the objective, or towards a group's fight.
+            const Coord goal = fightingGroup >= 0 ? fight[fightingGroup] : split.target;
+            for (int g = 0; g < 2; ++g)
+                for (const Uint32 id : split.members[g]) {
+                    const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                    if (!unit->isActive() || !unit->isRespondable()) continue;
+                    if (unit->hasATarget() || objectiveGone) doSetAttackMode(unit, HUNT);
+                    else doHuntToward(unit, goal.x, goal.y);
+                }
+            if (timeout && !ready && fightingGroup < 0) ++forceStats.splitTimeouts;
+            ++forceStats.splitReleases;
+            traceDecision("force_split_release", AITelemetry::Record().set("objective", split.objective)
+                .set("alive0", alive[0]).set("arrived0", arrived[0]).set("fighting0", fighting[0])
+                .set("alive1", alive[1]).set("arrived1", arrived[1]).set("fighting1", fighting[1])
+                .set("ready", ready).set("timeout", timeout).set("objective_gone", objectiveGone)
+                .set("elapsed_cycles", int(ArmyPosturePolicy::elapsed(now, split.since))));
+            it = splits.erase(it);
+            continue;
+        }
+        // Still walking or waiting: re-send whoever stands idle away from its point.
+        for (int g = 0; g < 2 && orders > 0; ++g) {
+            const int radius = Force::bundleRadius(int(split.members[g].size()));
+            std::set<int64_t> reserved;
+            for (const Uint32 id : split.members[g]) {
+                if (orders <= 0) break;
+                const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                if (!unit->isActive() || !unit->isRespondable() || unit->isMoving() || unit->hasPendingPathRequest()
+                    || unit->hasATarget() || tiles(unit->getLocation(), split.point[g]) <= radius + 3) continue;
+                Coord slot = huntPartySlot(unit, split.point[g], radius, reserved);
+                if (slot.isInvalid()) slot = split.point[g];
+                if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
+                const_cast<UnitBase*>(unit)->setGuardPoint(slot);
+                doMove2Pos(unit, slot.x, slot.y, false);
+                --orders;
+            }
+        }
+        ++it;
+    }
 }

@@ -176,6 +176,120 @@ above 0.5 on Hard. Protocol 77 / save 9862 unchanged by this round (no productio
 On L, the only evidence is `p1`: fewer attacks in 40 minutes and -50,924 value per game; its cause was
 not traced in replays.
 
+(The `p2` decision above is superseded by round 3 below.)
+
+### Round 3: confirmation, Stefan's ideas, defence, and the new default (protocol 78)
+
+Same harness and maps (Hard unless stated, sizes 128/160/192, seeds 7101-7606; "108 games" =
+`--all-houses`, every seed with all three house pairs). Raw data and printed reports:
+`docs/formation-results/force/round3/` (`games.csv`, `waves-by-shape.csv`, `report-*.md`). Tags: `p3`
+confirmation, `p4` Stefan's ideas, `p5` combinations, `h1` head-to-head against FCQ, `b1`/`b2` Brutal,
+`d1` defence. Code: this branch with the new test-only flags (unflagged games bit-identical to before,
+checked with the probe digest).
+
+New test-only flags (`QuantBot::forceVariantOverride`, rules in `ForceConcentrationPolicy.h`, code in
+`QuantBotForce.cpp`, `bundleUnit` called from the unit pass, the gate in `launchGroundHunt`):
+
+| Flag | Idea | Rule as built |
+|---|---|---|
+| `B` | squad bundling (Stefan) | The idle reserve (ground fighters not hunting, defending, repairing, escorting or human-controlled) gathers at a forward rally a quarter of the way from the house's assembly point to the observed enemy base (the pre-1.0.602 75%/25% rally, observed bases only), re-chosen every 30 s or when it becomes unsafe; at most 12 orders per pass, units already inside the radius or walking are left alone. Bundled units keep no role, so base defence takes them as before. |
+| `O` (with B) | old squad centre | The closer of that rally and the army's centre of mass (every ground fighter, hunters included) - the v1.0.520 `moveToOptimalSquadPosition` rule. |
+| `W` (with B) | launch from the bundle | A ready wave launches only once 70% of its value stands in the bundle; re-checked every 5 s, at most 60 s late. |
+| `S` | two-angle attack | The wave splits in two value halves (by which release point each member is nearer) that walk in Area Guard to release points 14 tiles from the objective at +-45 degrees off the approach (90 degrees apart); both then hunt towards the objective at once when 75% of each group has arrived, when 25% of one group is already fighting (the other hunts towards that fight), or after 120 s. |
+| `T` | main force + flank | As S with 70% head-on and 30% from 90 degrees (the nearer side). |
+
+Results (score from the first side; engaged = members engaging within 10 s of contact; trade = value
+killed / lost in the first minute after contact; contact = median seconds from launch):
+
+| Candidate v None | Games | Score | 95% CI | Elim. W-L / time-outs | Engaged ≤10 s | Trade 60 s | Contact s | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| F | 108 | 0.588 | 0.49-0.68 | 45-24 / 39 | 8% | 3.63 | 39 | not distinguishable |
+| FC | 108 | 0.546 | 0.45-0.63 | 33-31 / 44 | 9% | 4.30 | 40 | not distinguishable |
+| Q (60% waves) | 108 | 0.611 | 0.52-0.69 | 54-22 / 32 | 9% | 3.74 | 58 | beats None |
+| **FCQ** | **108** | **0.750** | **0.67-0.83** | 62-12 / 34 | 9% | 4.13 | 56 | **beats None** |
+| FCQ, Brutal | 36 | 0.833 | 0.69-0.94 | 23-3 / 10 | | | | beats None |
+| Q, Brutal | 36 | 0.667 | 0.50-0.81 | 17-8 / 11 | | | | not distinguishable |
+| B | 36 | 0.611 | 0.44-0.78 | 17-9 / 10 | 11% | 3.90 | 21 | not distinguishable |
+| O | 36 | 0.750 | 0.61-0.89 | 18-3 / 15 | 10% | 4.51 | 21 | beats None |
+| BW | 36 | 0.722 | 0.58-0.86 | 18-4 / 14 | 10% | 4.16 | 19 | beats None |
+| BFC | 36 | 0.681 | 0.53-0.82 | 17-5 / 14 | 11% | 4.32 | 20 | beats None |
+| BWFC | 36 | 0.722 | 0.56-0.86 | 21-3 / 12 | 12% | 4.75 | 21 | beats None |
+| L (150% waves) | 36 | 0.431 | 0.28-0.58 | 5-16 / 15 | 7% | 4.44 | 22 | not distinguishable |
+| LBW | 36 | 0.569 | 0.40-0.72 | 11-10 / 15 | 9% | 4.85 | 13 | not distinguishable |
+| LFC | 36 | 0.306 | 0.17-0.47 | 4-16 / 16 | 7% | 3.74 | 26 | loses to None |
+| S | 36 | 0.556 | 0.39-0.72 | 13-11 / 12 | 8% | 3.19 | 34 | not distinguishable |
+| T | 36 | 0.444 | 0.28-0.61 | 9-13 / 14 | 9% | 2.95 | 29 | not distinguishable |
+| SFC | 36 | 0.528 | 0.36-0.69 | 12-10 / 14 | 8% | 3.42 | 31 | not distinguishable |
+| TFC | 36 | 0.611 | 0.44-0.75 | 16-7 / 13 | 9% | 3.43 | 35 | not distinguishable |
+| OFCQ | 36 | 0.806 | 0.67-0.92 | 26-2 / 8 | 11% | 3.98 | 35 | beats None |
+| OWFCQ | 36 | 0.694 | 0.53-0.83 | 22-3 / 11 | 9% | 3.83 | 30 | beats None |
+| SFCQ | 36 | 0.639 | 0.47-0.81 | 21-6 / 9 | 9% | 3.34 | 47 | not distinguishable |
+| **BWFCQ** | **108** | **0.852** | **0.78-0.92** | 74-3 / 31 | 11% | 4.40 | 33 | **beats None** |
+| BWFCQ, Brutal | 36 | 0.944 | 0.86-1.00 | 29-0 / 7 | | | | beats None |
+| OFCQ v FCQ | 36 | 0.583 | 0.42-0.75 | 18-10 / 8 | 11% | 2.51 | 32 | not distinguishable |
+| **BWFCQ v FCQ** | **108** | **0.750** | **0.67-0.82** | 64-14 / 30 | 14% | 3.11 | 27 | **beats FCQ** |
+
+(None's own waves in these games: engaged 8-10% within 10 s, first-minute trade 1.7-3.6, contact 23-40 s.)
+
+**Why big waves (L) lose.** Not piecemeal arrival - L's waves are the most cohesive (67% survive, 4.4
+trade). L scales the house attack threshold with the wave: on 128 maps Hard needs 30,000 of military
+value (150% of 20,000) where the starting army is ~21,000, so L skips the opening strike, the enemy's
+starting army hits L's base first, and L's army - bled by defending (traced game 128/7101: 21,350 at
+1.3 min, 6,900 at 9 min, at most 29,570) - stays below 30,000 for 20 minutes; it attacked once in 33
+minutes and lost (the None mirror attacked at 1.3 min with 72 units). Over the 36 `p4` games L launched
+3.4 waves a game against None's 7.5, its first at a median 19.9 minutes (None 10.7), and lost 55
+structures a game (None 28). Tempo, not cohesion: the enemy keeps the initiative while L waits.
+Bundling helps big waves (LBW 0.569, its own structure losses 35) but they still trail; focus fire
+does not (LFC 0.306).
+
+**Split attacks (S, T).** Rarely reach their release points: in a traced game both splits were released
+early because one group met the enemy army on the way (25% fighting), so the other group arrived
+later - the piecemeal fight they were meant to avoid. Contact comes later (34-47 s), the first-minute
+trade is worse (2.95-3.43 against 3.6-4.5 for one body), and no split variant separates from None;
+splitting FCQ costs it (SFCQ 0.639 v FCQ 0.750). One concentrated wave is better.
+
+**Squad bundling (B/O/W).** Stefan's idea works: the reserve standing a quarter of the way forward
+shortens the next wave's walk (contact 19-21 s against 33-56 s) and waves leave as one body (W: 46-58
+members a wave). B alone is not distinguishable (0.611), O and BW beat None in 36 games, and bundling
+on top of FCQ is the best rule measured: BWFCQ 0.852 in 108 Hard games, 0.944 in 36 Brutal, and 0.750
+(0.67-0.82) head-to-head against FCQ in 108 games. Engaged within 10 s rose only to 11-14%; what
+bundling buys is a shorter, single approach, not simultaneous engagement.
+
+**Defence (`/weak`, the side starts with half its army, against plain None; per game, first side):**
+
+| Candidate (weak side) | Score | 95% CI | Structures lost | Structures destroyed | Home kill / loss | Wins |
+|---|---|---|---|---|---|---|
+| None | 0.333 | 0.19-0.50 | 53.2 | 25.1 | 0.49 | 4 |
+| P | 0.333 | 0.19-0.50 | 53.4 | 25.4 | 0.52 | 4 |
+| H | 0.333 | 0.19-0.50 | 53.5 | 25.4 | 0.48 | 4 |
+| PH | 0.333 | 0.19-0.50 | 53.6 | 25.5 | 0.53 | 4 |
+| M | 0.333 | 0.19-0.50 | 53.7 | 24.9 | 0.51 | 4 |
+| B | 0.361 | 0.22-0.53 | 51.9 | 40.9 | 0.32 | 8 |
+| O | 0.389 | 0.22-0.56 | 52.9 | 24.7 | 0.51 | 3 |
+| FC | 0.361 | 0.22-0.53 | 51.5 | 13.5 | 0.48 | 2 |
+| FCQ | 0.250 | 0.11-0.39 | 60.8 | 24.3 | 0.50 | 3 |
+| BWFCQ | 0.333 | 0.19-0.50 | 55.0 | 40.7 | 0.50 | 6 |
+
+36 games each. The weak base survived (not eliminated) in 18 games with None, P, PH and FC, 17 with H,
+M, O and BWFCQ, 20 with B, 18 with FCQ - no rule separates: the defence rules (P, H, M) do not
+change the outcome of a half-army start, and none of the attack rules makes defence better. FCQ is the
+one to watch: as the weak side it scores 0.250 (8 points under None, intervals overlap) and loses 61
+structures a game - most likely (not traced) because its smaller, earlier waves leave the already
+outnumbered base emptier.
+
+**Decision (applied): the QuantBot default is FCQ** - focus fire, converging on fights and waves at 60%
+readiness, new optional `[Force Concentration]` keys in QuantBot Config (`FocusFire`, `Converge`,
+`WaveReadinessPercent`; code defaults true, true, 60; hashed). It meets the rule: 108 Hard games
+0.750 (0.67-0.83), Brutal 0.833 (0.69-0.94), `quantbot_all_against_atreides` 6/6 (31.9 27.8 31.4 31.4
+33.9 27.9 minutes against 34.0 31.9 32.2 31.7 32.8 32.8 before). `WaveFormation` stays None. No saved
+state (focus fire and converging are stateless per pass); protocol 78, save 9862. The duel harness sets
+the override for every label, so `none` in the duels stays the previous rules.
+
+**Next: BWFCQ.** It is better (above) but bundling has state between passes (the bundle point, its
+30 s clock and the gate's wait), so as a default it needs those in the save (9863, gated), a real-engine
+probe for bundling and the gate, and the all-against-Atreides match - not done in this round (request
+budget). Its defence result is no worse than None's (0.333). Test-only until then.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

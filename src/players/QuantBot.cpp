@@ -937,6 +937,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 				// Rotate unit backwards if it is taking damage if it is softer. A hunt party's
 				// member stays where its party wants it.
 				else if (!autonomousAttack && !huntPartyOf(pGroundUnit->getObjectID())
+						&& !forceHeld(pGroundUnit->getObjectID())
 						&& pGroundUnit->getItemID() != Unit_Devastator
 						&& pGroundUnit->getItemID() != Unit_SiegeTank) {
 					doSetAttackMode(pGroundUnit, AREAGUARD);

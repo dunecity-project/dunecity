@@ -878,7 +878,7 @@ private:
     int blobVariantOverride = 0;
 
     // ---- Concentrating force (docs/formations.md, "Concentrating force") -----------------
-    /// Test-only candidates (tests/ai/formation-duel.py label flags, uppercase): bits of
+    /// The rules as bits (tests/ai/formation-duel.py label flags, uppercase): bits of
     /// kForceFocusFire (F: hunting ground units shoot the best target in reach - fighters
     /// first, then the one with the fewest hit points), kForceConverge (C: wave members not
     /// fighting join a fight of their army nearby), kForcePool (P: an attacked building gets
@@ -887,11 +887,29 @@ private:
     /// (M: distant defenders muster just outside the fight and engage together),
     /// kForceBigWaves / kForceSmallWaves (L / Q: wave readiness 150% / 60%), kForceNoOverkill
     /// (N: focus fire by attack value - the most enemy damage per hit point - without overkill,
-    /// in object-id order). Custom Hard/Brutal only. Never set by the game, not saved, not hashed.
+    /// in object-id order), kForceBundle (B: the idle reserve keeps bundled at a forward rally a
+    /// quarter of the way to the observed enemy base), kForceBundleOld (O, with B: the pre-1.0.602
+    /// rule - the closer of that rally and the army's centre of mass), kForceBundleGate (W, with
+    /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
+    /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
+    /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F and C from
+    /// QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
+    /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
+    /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
-        kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128;
-    int forceVariantOverride = 0;
-    bool forceVariant(int bit) const { return (forceVariantOverride & bit) != 0 && autonomousCustomHardBrutal(); }
+        kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
+        kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
+        kForceFlank = 4096;
+    static constexpr int kNoForceOverride = -1;
+    int forceVariantOverride = kNoForceOverride;
+    /// The force bits in effect: the override if set, else the configured F and C.
+    int forceBits() const;
+    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
+    /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
+    /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
+    /// Hard/Brutal.
+    int waveReadinessPercent() const;
     /// One pass of the force rules over the army (unit phase, after the hunt parties).
     void concentrateForces();
     /// Focus fire for one hunting ground unit; true if it was given a new target.
@@ -910,10 +928,41 @@ private:
     /// Sends \a ids to muster for \a building (joining its muster if there is one).
     void startMuster(const ObjectBase* building, const std::vector<Uint32>& ids);
     void updateMusters();
+    /// Bundling (kForceBundle, test-only): where the idle reserve gathers, chosen at most every
+    /// 30 s (bundleCycle). Not saved: making it a default needs bundlePoint, bundleCycle and
+    /// bundleGateSince in the save.
+    Coord bundlePoint = Coord::Invalid();
+    /// With kForceBundleOld: the army's centre of mass this pass (the second gathering point).
+    Coord bundleCentre = Coord::Invalid();
+    Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
+    /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
+    Uint32 bundleGateSince = 0;
+    Coord forwardBundlePoint();
+    /// Sends one idle reserve unit to the bundle; true if it was given an order.
+    bool bundleUnit(const UnitBase* unit, int radius, int* orderBudget);
+    /// Share of \a ids (value, basis points) standing within \a radius of the bundle.
+    int bundledShareBps(const std::vector<Uint32>& ids, int radius);
+    /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
+    /// sides of the objective, wait for each other and then attack it together.
+    struct Split {
+        Uint32 since = 0;
+        Uint32 objective = NONE_ID;
+        Coord target = Coord::Invalid();
+        Coord point[2] = {Coord::Invalid(), Coord::Invalid()};
+        std::set<Uint32> members[2];
+    };
+    std::vector<Split> splits;
+    const Split* splitOf(Uint32 id) const;
+    /// Splits the launched ground units; false (nothing ordered) when the wave cannot split.
+    bool startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    void updateSplits();
+    /// Held by a force controller (a split group or a muster): no rally or regroup orders.
+    bool forceHeld(Uint32 id) const { return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)); }
     /// Telemetry for the duel reports only: never read by a decision, not saved.
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
-            stageHolds = 0, staged = 0;
+            stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
+            splitReleases = 0, splitTimeouts = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
