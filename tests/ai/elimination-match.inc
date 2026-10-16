@@ -75,6 +75,7 @@ inline std::string run(Game& game, Uint32 end, int house) {
     int winner = 0;
     sample(game);
     while (game.getGameCycleCount() < end) {
+        ProbeDigest::periodic(game);
         game.updateGameState();
         if (game.getGameCycleCount() % minute == 0) sample(game);
         if ((winner = survivingTeam(game)) != 0) break;

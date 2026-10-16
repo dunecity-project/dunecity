@@ -55,10 +55,12 @@
 #include "formation-wave-measure.inc"
 #include "wave-formation-probe.inc"
 #include "formation-duel.inc"
+#include "probe-digest.inc"
 #include "elimination-match.inc"
 #include <FileClasses/INIFile.h>
 
 int runCampaignBalanceProbe() {
+    const auto probeStart = ProbeDigest::Clock::now();
     const int level = std::atoi(std::getenv("BALANCE_LEVEL"));
     const int minutes = std::atoi(std::getenv("BALANCE_MINUTES"));
     const auto seed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
@@ -170,6 +172,9 @@ int runCampaignBalanceProbe() {
         AITelemetry::log().limit=std::stoull(std::getenv("BALANCE_CAPTURE_MIB"))*1024*1024;
     game->bReplay = false;
     game->initializeGameLoop();
+    // Headless: nothing reads the per-unit phase timing (DuneCity-Performance.log), and its
+    // clock reads cost about 5% of a busy match. BALANCE_UNIT_PHASE_TIMING=1 keeps it.
+    game->frameTiming.unitPhases = std::getenv("BALANCE_UNIT_PHASE_TIMING") != nullptr;
     if(std::getenv("BALANCE_DEGRADATION_PROBE")) {
         runStructureDegradationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -339,20 +344,34 @@ int runCampaignBalanceProbe() {
     }
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
     std::string outcome;
+    const long long setupMs = ProbeDigest::millisecondsSince(probeStart);
+    const auto loopStart = ProbeDigest::Clock::now();
+    const Uint32 firstCycle = game->getGameCycleCount();
     if (duel) {
         FormationDuel::applyShapes(*game, duelSides);
-        FormationWaveMeasure::run(*game, end, [&]() { return FormationDuel::decided(*game, duelSides); });
+        FormationWaveMeasure::run(*game, end, [&]() {
+            ProbeDigest::periodic(*game);
+            return FormationDuel::decided(*game, duelSides);
+        });
         FormationDuel::report(*game, duelSides);
     } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
-        FormationWaveMeasure::run(*game, end);
+        FormationWaveMeasure::run(*game, end, [&]() { ProbeDigest::periodic(*game); return false; });
     } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {
         outcome = EliminationMatch::run(*game, end, humanHouse);
     } else {
         while (!game->finished && game->getGameCycleCount() < end) {
+            ProbeDigest::periodic(*game);
             game->updateGameState();
         }
     }
     if (outcome.empty()) outcome = game->finished ? (game->won ? "won" : "lost") : "time_limit";
+    {
+        const long long loopMs = ProbeDigest::millisecondsSince(loopStart);
+        const Uint32 cycles = game->getGameCycleCount() - firstCycle;
+        ProbeDigest::atEnd(*game);
+        SDL_Log("PROBE_TIMING: setup_ms=%lld loop_ms=%lld cycles=%u cycles_per_s=%.0f", setupMs, loopMs, cycles,
+                loopMs > 0 ? cycles * 1000.0 / loopMs : 0.0);
+    }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=%d seed=%u attack_percent=%d partner=%s enemy=%s cycle=%u outcome=%s",
         level, game->getGameInitSettings().getRandomSeed(), percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(),
         outcome.c_str());

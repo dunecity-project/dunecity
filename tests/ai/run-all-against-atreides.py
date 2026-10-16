@@ -14,7 +14,9 @@ a slow win is the regression Stefan reported, so "eventually wins" is not enough
 
 Each seed prints winner, game time, Atreides' credits/army/harvester curve, enemies alive,
 attack waves launched (ground_hunt: count, size) and defence responses (defence_response,
-base_scramble). Results and logs stay under --output-dir.
+base_scramble). Results and logs stay under --output-dir. The attack and defence lines are read
+from the AI decision log, so it stays on unless --no-ai-telemetry; path search runs inline
+(--path-workers 1), the fastest setting when the matches fill the cores (docs/headless-performance.md).
 """
 import argparse
 import json
@@ -53,6 +55,10 @@ parser.add_argument('--report-only', action='store_true', help='Never fail: prin
 parser.add_argument('--human-seat', action='store_true',
                     help='An idle human player shares Atreides instead of a local spectator (releases before 1.0.820 '
                          'have no spectator mode)')
+parser.add_argument('--path-workers', type=int, default=1,
+                    help='Pathfinding threads per match (DUNECITY_PATH_WORKERS); results are identical for any count')
+parser.add_argument('--no-ai-telemetry', action='store_true',
+                    help='No AI decision log: ~3%% less CPU, but no attack/defence lines in the report')
 args = parser.parse_args()
 cap = args.minutes or int(args.win_minutes) + 1
 out = args.output_dir.resolve()
@@ -73,7 +79,8 @@ def campaign(output, *extra):
             '--roster', ROSTER, '--partner-difficulty', 'brutal',
             *(() if args.human_seat else ('--local-spectator',)), '--elimination-match',
             '--enemy-ai', args.enemy_ai, '--enemy-difficulty', 'hard', '--game-options', str(options),
-            '--capture-mib', '512', *extra]
+            '--capture-mib', '512', '--path-workers', str(args.path_workers),
+            *(('--no-ai-telemetry',) if args.no_ai_telemetry else ()), *extra]
 
 
 def fields(line, marker):
