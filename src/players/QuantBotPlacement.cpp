@@ -1339,7 +1339,7 @@ QuantBot::BatteryGeometry QuantBot::batteryGeometry(Coord anchor, Coord forward)
         }()),
         getHouse()->getNumItems(Structure_Refinery),
         getHouse()->getNumItems(Structure_HeavyFactory),
-        getHouse()->getNumItems(Structure_RepairYard), lastSurvey));
+        getHouse()->getNumItems(Structure_RepairYard)));
     return geometry;
 }
 

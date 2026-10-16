@@ -86,6 +86,22 @@ binary outside ctest.
   the session into `HANDOVER.md`; if a note is genuinely reference material, put it under `docs/`
   with a lowercase name so it is tracked deliberately.
 
+## AI and unit behaviour: mandatory regression match
+
+Every change that can alter AI decisions or unit behaviour (anything under `src/players/`,
+`include/players/`, unit/structure/combat/pathfinding code, `QuantBot Config` defaults, game
+option semantics) must pass `quantbot_all_against_atreides` before it is merged:
+
+```bash
+ctest --test-dir build -R quantbot_all_against_atreides --output-on-failure
+```
+
+It plays Stefan's setup to the end on six seeds - vanilla, `5P - 128x128 - All against Atreides`,
+Atreides QuantBot Brutal (spectated) against four AI Player (hard) houses, unit and harvester
+overrides 0 - and fails unless Atreides eliminates everyone within 40 game minutes on every
+seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
+make a change pass; see `docs/quantbot-all-against-atreides.md`.
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)

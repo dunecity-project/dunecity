@@ -134,6 +134,15 @@ If those fail because the local build tree is stale or target names differ, insp
 
 The main trap: solving a 3x3 art/rendering problem by accidentally changing the 2x2 gameplay architecture. Don’t step on the rake. It has teeth.
 
+## AI changes: mandatory regression match
+
+Every AI or unit-behaviour change (QuantBot, AI Player, units, combat, pathfinding, AI-facing
+game options) must pass `ctest --test-dir build -R quantbot_all_against_atreides` before merging:
+Atreides QuantBot Brutal must eliminate the four AI Player (hard) houses on the bundled vanilla
+"All against Atreides" map within 40 game minutes on all six seeds, with Stefan's game options.
+Never raise the limit or remove seeds to get a change through
+(`docs/quantbot-all-against-atreides.md`).
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)

@@ -27,11 +27,12 @@
     advancing an already-constructed A* frontier by a fixed node quota.
 
     The pool deliberately offers only a batch barrier. The caller selects the
-    batch, fixes every quota and the application order before dispatching, waits
-    for the whole batch, and then applies results itself in that order. Nothing
-    here can therefore influence a gameplay decision: a different worker count
-    changes only wall time. No task outlives the batch, so nothing survives the
-    mutation-quiet path phase.
+    batch, fixes every quota and the application order before dispatching, works
+    through the batch alongside the workers until it is finished, and then
+    applies results itself in that order. Nothing here can therefore influence a
+    gameplay decision: a different worker count changes only wall time. No task
+    outlives the batch, so nothing survives the mutation-quiet path phase. A
+    batch of one task always runs inline.
 
     Worker count comes from DUNECITY_PATH_WORKERS (1 runs every task inline on
     the calling thread, which is the Stage 1b serial path verbatim). It is a

@@ -347,11 +347,11 @@ void QuantBot::update() {
 				initialItemCount[Structure_Refinery], diffSettings.refineryMinimum);
 		}
 
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -445,11 +445,11 @@ void QuantBot::update() {
 			diffSettings.harvesterLimitCustomMediumMap, diffSettings.militaryValueLimitCustomMediumMap,
 			diffSettings.harvesterLimitCustomLargeMap, diffSettings.militaryValueLimitCustomLargeMap);
 
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -534,18 +534,15 @@ void QuantBot::update() {
 	const QuantBotConfig& config = getQuantBotConfig();
 	const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
-    // Default/zero means no engine ceiling. Start with the remaining resource
-    // budget, then let the house's economy/throughput planner choose its fleet.
-    const int harvesterOverride = getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
+    // No lobby ceiling (unchecked or 0) means no engine ceiling. Start with the remaining
+    // resource budget, then let the house's economy/throughput planner choose its fleet.
     int baseHarvesterLimit = std::max(1,lastCalculatedSpice / 2000);
-    if (harvesterOverride > 0) baseHarvesterLimit = std::min(baseHarvesterLimit,harvesterOverride);
 
     if (isCampaignEnemy() && difficulty!=Difficulty::Brutal) {
         // Game Options supplies an engine ceiling, not permission for an Easy
         // campaign opponent to expand to a skirmish-sized harvester fleet.
         baseHarvesterLimit=std::max(0,diffSettings.harvesterLimitPerRefineryMultiplier
             * initialItemCount[Structure_Refinery]);
-        if (harvesterOverride>0) baseHarvesterLimit=std::min(baseHarvesterLimit,harvesterOverride);
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;
@@ -765,6 +762,15 @@ void QuantBot::onIncrementUnitKills(int itemID) {
 
 void QuantBot::onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) {
     if (!currentGame || originalHouseID >= NUM_HOUSES || !mobileCombatItem(itemID)) return;
+    attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
+}
+
+/// A destroyed hostile building is what an assault on a base buys, so it is a kill in the
+/// posture machine's trade, at its purchase price. Counting only mobile kills made every
+/// attack on a turret-defended base read as a bad trade: the army withdrew from bases with
+/// no army left and grinding them out took forty minutes (quantbot_all_against_atreides).
+void QuantBot::onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) {
+    if (!currentGame || originalHouseID >= NUM_HOUSES || !isStructure(itemID)) return;
     attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
 }
 

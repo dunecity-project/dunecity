@@ -1,3 +1,90 @@
+## 2026-10-16 — All-against-Atreides AI regression fixed: mandatory test passes 6/6 (branch `fix/ai-regression-all-vs-atreides`, not released)
+
+Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla
+"All against Atreides" game against four AI Player (hard) houses. His saved game at 47 minutes
+(`quantsucks.dls`), continued headless, wins at 88.3 minutes. New mandatory ctest
+`quantbot_all_against_atreides` replays his exact setup on six seeds, and Atreides must eliminate
+every house within 40 game minutes on all of them. Details and tables:
+`docs/quantbot-all-against-atreides.md`; rule in AGENTS.md/CLAUDE.md.
+
+- Cause: army recovery (`d774f387`, 1.0.812). Not an 833→842 regression: 1.0.833 and 1.0.842
+  play bit-identical games. (1) The front-battery goal grew with base size, not with the threat:
+  Atreides' 100,000-credit base ordered 91 rocket turrets (goal 45→107). (2) The wall rule wanted
+  2 walls per turret (95 walls). Together about 30,000 credits left the army in minutes 10-20,
+  when the AI Player houses grow from 13k to 117k. (3) The posture trade counted only mobile
+  kills, so assaulting turret-defended bases read as a bad trade, and the house-level withdrawals
+  pulled home a Brutal army that was ahead (seed 1430976924 lost after a `severe_local_defeat`
+  recall of the first wave at 10.2 minutes).
+- Game minutes to eliminate all four (L = Atreides lost), seeds 1756374161 / 906213928 /
+  41562270 / 1841712204 / 1430976924 / 1804669015:
+
+  | build | per seed |
+  |---|---|
+  | 1.0.796 (human seat) | 35.1 36.9 36.7 32.8 32.1 35.6 |
+  | 1.0.820 | 31.4 66.7 35.8 69.5 37.7 37.0 |
+  | 1.0.833 | 42.4 32.4 43.0 (first three seeds only) |
+  | 1.0.842 | 42.4 32.4 43.0 32.6 L29.9 41.6 |
+  | 1.0.842, recovery off | 28.7 31.1 32.3 31.5 30.2 33.9 |
+  | branch, withdrawals on | 36.5 35.3 34.4 31.7 L39.0 32.8 |
+  | branch | 34.0 31.9 32.2 31.7 32.8 32.8 |
+
+- Fixed: the battery stays in its 8-12 band (`FrontBatteryPolicy::batteryGoal`); walls follow only
+  the fixed-count defence turrets; destroyed hostile buildings are credited to the attrition
+  ledger (`Player::onHostileStructureDestroyed`); house-level withdrawals off by default.
+- Withdrawal ablation (from "branch, withdrawals on", one trigger disabled, all six seeds): severe
+  local defeat 36.5 35.3 34.4 31.7 L35.1 32.8; local squad pull-back 36.5 35.3 34.4 31.7 L39.0
+  32.8; sustained attrition 34.0 31.9 32.2 31.7 L45.4 32.8; core under attack 36.5 35.3 34.4 31.7
+  L36.0 32.8; outnumbered dispatch gate never fired; all four 34.0 31.9 32.2 31.7 32.8 32.8. Only
+  all four together win every seed.
+- Settings: new `[Army Recovery] WithdrawalsEnabled` (QuantBot Config, code default false; the
+  shipped `.ini.default` does not list it, so the code default applies). Off ignores severe local
+  defeat, sustained attrition, core under attack and the local squad pull-back. Rally,
+  batteries, recall machinery and whole-army base defence unchanged; `quantbot_army_recovery`
+  verifies the withdrawal machine with it on. Harvester override: -1 and 0 both mean no ceiling
+  (`GameOptionsClass::harvesterCeiling()` for every reader; QuantBot initial limit, Mentat and the
+  campaign ally limit used to disagree). Stefan's vanilla profile files match the bundled ones.
+- `quantbot_no_spice_income_low-cash` failed after withdrawals went off: Atreides (house 1)
+  built 3 R/I lots, not 4. Not a withdrawal effect: with and without withdrawals the first two
+  minutes are identical, Atreides loses its starting army to its Harkonnen neighbour's starting
+  units and its yard at 2.9 (off) / 3.7 (on) minutes, and is dead at the end of both games; the
+  extra 0.8 minutes fitted the 4th lot. The 1.0.817 design (`docs/no-spice-economy-817.md`)
+  requires four lots of surviving cities only and already recorded this defeated house; the
+  probe asserted it of every house. It now asserts lots for houses alive at the end, keeps the
+  >100 banked-tax check for every house with a starting yard, reports `defeated`, and fails if
+  no surviving city was checked.
+- Robustness: harvester override -1 on the six seeds gives identical times; extra seeds 271828182
+  31.7, 3141592653 32.4, 1618033988 31.1 minutes.
+- Merged `perf/headless-sim` (0510079e). The all-against-Atreides runner uses one path thread per
+  match and keeps the AI log (its attack/defence lines need it; `--no-ai-telemetry` drops them);
+  elimination matches log PROBE_DIGEST/PROBE_TIMING. Same six times after the merge. The test
+  takes 191-205 s (75-95 s per match, three at once, load ~8-13).
+- ctest -j3 at the final commit: dunelegacy_tests, game_command_regressions, network_wire_harness,
+  formation_planner_tests, formation_movement_probe, rts_controls_probe, preplace_queue_probe,
+  skirmish_generator_tests and all 30 quantbot_* tests: 38/38 passed, 431 s.
+- Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
+  from a 75 peer. Save 9861 unchanged. No version bump.
+
+## 2026-10-16 — Faster headless simulation batches (branch `perf/headless-sim`, not released)
+
+Stefan: "improve the performance of the headless simulation runs. e.g. run multiple in parallel
+optimise the game engine etc". Details, profiles and tables: `docs/headless-performance.md`.
+Save 9861 / protocol 75 unchanged; no version bump.
+
+- Profile (192 duel, origin/main): main thread 37% waiting for the 4 path workers, 25% the duel
+  harness's own `FormationWaveMeasure` (17% `inTargetArea`), 5.5% per-unit clock reads; with those
+  gone A* is ~50% of a game. Start-up ~1.5-1.9 s/game (graphics, mod reload, voices).
+- Engine, bit-identical: A* heap slots carry f, hoisted neighbour-loop invariants, inline
+  `fix32_mul`, `PathWorkerPool` caller joins the batch (one-task batches inline), per-unit phase
+  timing halved and switchable (`FrameTiming::unitPhases`, off in probes).
+- Harness: `formation-duel.py` defaults to `--path-workers 1` and no AI log (`run-campaign-balance.py
+  --no-ai-telemetry`), biggest maps first; probe binary cached in `build/balance-probe-cache`;
+  `tests/ai/probe-digest.inc` (PROBE_DIGEST/PROBE_TIMING); `tests/performance/headless-bench.py`.
+- Result under load 30-36: 6 parallel duels 194 -> 487 games/h, CPU per game -40%; `--jobs 8` idle,
+  `--jobs 6` when shared. Determinism: 47 benchmark runs plus a 40-minute 192 duel give identical
+  digests and measurements before/after (and for 1 vs 4 path workers, AI log on/off).
+- ctest -j3: dunelegacy_tests, game_command_regressions, network_wire_harness, formation_planner_tests,
+  formation_movement_probe, skirmish_generator_tests, active_tile_probe, all 29 quantbot_*: 36/36 passed.
+
 ## 2026-10-15 — 1.0.842 production release
 
 PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run

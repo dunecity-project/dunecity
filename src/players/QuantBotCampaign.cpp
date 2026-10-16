@@ -201,7 +201,7 @@ int QuantBot::campaignAllyHarvesterLimit() const {
     return currentGame && isCampaignGameType(currentGame->gameType)
         && difficulty == Difficulty::Brutal && isAlliedWithHuman()
         && currentGame->getGameInitSettings().getMission() >= CampaignControls::firstMission(8)
-        && currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride < 0
+        && currentGame->getGameInitSettings().getGameOptions().harvesterCeiling() == 0
         ? 20 : 0;
 }
 

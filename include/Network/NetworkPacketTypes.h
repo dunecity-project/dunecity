@@ -205,7 +205,12 @@
 //     slot is also the member's form-up tile, so the group walks straight into its shape
 //     without a march. A 74 peer refuses the kind and would leave the units where they are.
 //     Save 9861.
-#define NETWORK_PROTOCOL_VERSION            75
+// 76: reserved by feat/ai-blob-waves (QuantBot blob waves, save 9862).
+// 77: QuantBot AI decisions change, no saved state or command change: the Custom Hard/Brutal
+//     front battery stays in the 8-12 band, walls follow only the fixed-count defence
+//     turrets, and a harvester override of 0 is "no ceiling" for every AI (QuantBot initial
+//     limit, Mentat). A 75 peer would order different buildings and desync. Save 9861.
+#define NETWORK_PROTOCOL_VERSION            77
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

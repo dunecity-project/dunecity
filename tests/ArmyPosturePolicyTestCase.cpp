@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <DataTypes.h>
 #include <FormationPlanner.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/CombatPowerPolicy.h>
@@ -519,23 +520,39 @@ TEST_CASE("Front battery: demand-scaled goal, economy gate and geometry",
         REQUIRE_FALSE(FrontBatteryPolicy::economyReady(2, 0, 1));
         REQUIRE_FALSE(FrontBatteryPolicy::economyReady(2, 1, 0));
         REQUIRE(FrontBatteryPolicy::economyReady(2, 1, 1));
-        REQUIRE(FrontBatteryPolicy::batteryGoal(30, false, 0) == 0);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(30, true, 0, false) == 0);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(30, false) == 0);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(30, true, false) == 0);
     }
-    SECTION("a small base lands in the opening band") {
+    SECTION("a small base gets its own demand inside the band") {
         // coverageTurretCap of a twelve-building base is around nine.
-        const int goal = FrontBatteryPolicy::batteryGoal(9, true, 0);
-        REQUIRE(goal >= FrontBatteryPolicy::kOpeningBandMin);
-        REQUIRE(goal <= FrontBatteryPolicy::kOpeningBandMax);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(9, true) == 9);
     }
-    SECTION("a tiny demand still gets a usable opening battery") {
-        REQUIRE(FrontBatteryPolicy::batteryGoal(2, true, 0) == FrontBatteryPolicy::kOpeningBandMin);
+    SECTION("a tiny demand still gets a usable battery") {
+        REQUIRE(FrontBatteryPolicy::batteryGoal(2, true) == FrontBatteryPolicy::kOpeningBandMin);
     }
-    SECTION("a mature base scales past twenty-four") {
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 0) == 27);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 10000) > 27);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 10000) <= 27 + 27 / 2 + 1);
+    SECTION("a big base never buys more than the band") {
+        // Coverage demand grows with every building: the open-ended goal bought a rich
+        // base a hundred turrets (quantbot_all_against_atreides, 1.0.812-1.0.842).
+        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true) == FrontBatteryPolicy::kOpeningBandMax);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(70, true) == FrontBatteryPolicy::kOpeningBandMax);
     }
+}
+
+TEST_CASE("Harvester override: unchecked and zero both mean no ceiling", "[ai][options]") {
+    SettingsClass::GameOptionsClass options;
+    REQUIRE(options.maximumNumberOfHarvestersOverride == -1);
+    REQUIRE(options.harvesterCeiling() == 0);     // unchecked
+    options.maximumNumberOfHarvestersOverride = 0;
+    REQUIRE(options.harvesterCeiling() == 0);     // "0 means unlimited" (Game Options tooltip)
+    options.maximumNumberOfHarvestersOverride = 1;
+    REQUIRE(options.harvesterCeiling() == 1);
+    options.maximumNumberOfHarvestersOverride = 40;
+    REQUIRE(options.harvesterCeiling() == 40);
+    options.maximumNumberOfHarvestersOverride = -7;
+    REQUIRE(options.harvesterCeiling() == 0);
+}
+
+TEST_CASE("Front battery: geometry", "[ai][battery]") {
     SECTION("front share leaves cover for the flank and the rear") {
         REQUIRE(FrontBatteryPolicy::frontAllowance(24) == 16);
         REQUIRE(FrontBatteryPolicy::frontAllowance(24) < 24);

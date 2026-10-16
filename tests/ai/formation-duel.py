@@ -115,7 +115,9 @@ def play(args, scratch, binary, key):
                '--duel-map-seed', seed, '--duel-sides', f'{house_a}:{shape_a},{house_b}:{shape_b}',
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
-               '--wall-timeout', str(args.wall_timeout)]
+               '--wall-timeout', str(args.wall_timeout), '--path-workers', str(args.path_workers)]
+    if not args.ai_telemetry:
+        command.append('--no-ai-telemetry')
     started = time.time()
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
     wall = round(time.time() - started)
@@ -160,6 +162,9 @@ def run(args):
     scratch.mkdir(parents=True, exist_ok=True)
     done = {tuple(r[k] for k in KEY) for r in read(results / 'games.csv')}
     todo = [key for key in schedule(args) if key not in done]
+    # Still a whole seed at a time, but the biggest maps of a seed first: they take longest,
+    # and starting them last leaves the other slots idle at the end of the seed.
+    todo.sort(key=lambda key: (args.seeds.index(int(key[3])), -int(key[2])))
     print(f'{len(todo)} games to play ({len(done)} already in games.csv)', flush=True)
     if not todo:
         return
@@ -419,6 +424,11 @@ parser.add_argument('--pairs', help='Play (and report) exactly these shape pairs
 parser.add_argument('--all-houses', action='store_true',
                     help='Play every seed with all three house pairs (three times the games) instead of one pair per seed')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
+parser.add_argument('--path-workers', type=int, default=1,
+                    help='Pathfinding threads per game (DUNECITY_PATH_WORKERS). 1, inline, gives the most games per '
+                         'hour when the batch fills the cores; results are identical for any count')
+parser.add_argument('--ai-telemetry', action='store_true',
+                    help='Keep the per-game AI decision log (events.jsonl); off by default, nothing here reads it')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--export', help='Write games.csv and waves-by-shape.csv (the files kept in git) to this directory')

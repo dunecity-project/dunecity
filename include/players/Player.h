@@ -102,6 +102,8 @@ public:
     // Simulation hook, independent of telemetry and legacy kill statistics.
     // Called once for a confirmed hostile unit death, using shot provenance.
     virtual void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) { }
+    // Called once for a hostile structure this player's house destroyed, using shot provenance.
+    virtual void onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) { }
     /**
         An object was hit by something or damaged somehow else.
         \param  pObject     the object that was damaged

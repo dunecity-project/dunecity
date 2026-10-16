@@ -103,10 +103,15 @@ Protocol 55 separates peers with different emergency AI behaviour; save format
 
 Once two refineries, a heavy factory, and a repair yard exist, important bases
 can grow overlapping rocket batteries towards the observed enemy approach.
-Coverage demand drives the goal: an opening battery starts around 8–12 turrets
-and a mature base can exceed 24. First cover for critical buildings, remote
+Coverage demand sizes the goal inside an 8–12 turret band; the band is also the
+ceiling. The former open-ended goal (demand plus up to half again for a threat)
+bought a rich base 90–100 turrets and, through the wall rule, as many walls, and
+lost or stretched `quantbot_all_against_atreides` (see
+`docs/quantbot-all-against-atreides.md`). First cover for critical buildings, remote
 colonies, economy reserves, power rules, construction exits, and movement
 corridors retain priority. Battery construction is spread across passes.
+Destroyed hostile buildings count as kills in the attrition trade, at their
+purchase price, so assaulting a turret-defended base is not by itself a bad trade.
 
 In DuneCity Custom Hard/Brutal games, a battery that has no usable free site can
 replace an owned residential, commercial or industrial lot on the observed
