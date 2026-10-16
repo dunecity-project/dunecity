@@ -1,3 +1,14 @@
+## 2026-10-17 — local 1.0.843 verified; MBA install pending
+
+Staging `integrate/feature-batch` = released 1.0.842 + `fix/ai-regression-all-vs-atreides`
+(010a16fc, includes `perf/headless-sim` 0510079e). Version 1.0.843, protocol 77, save 9861.
+`agent-workspace stage verify`: build, check-build-deps and CTest 94/94 serial passed (incl.
+`quantbot_all_against_atreides`, `save_scenario_export`). Package: executable SHA256
+f57fa25e1d3b46f249bb174b38db8f62a2e7e7739be3afc222eb2036c6f1b164, no Homebrew/local links,
+signature and runtime check passed. The MBA was offline; `/tmp/push-dunecity-1.0.843.sh` waits up
+to 12 h, then installs once the game is closed (log `/tmp/push-dunecity-1.0.843.log`). Not pushed
+or published. `feat/ai-blob-waves` (ForceConcentration) is still in progress and not merged.
+
 ## 2026-10-16 — All-against-Atreides AI regression fixed: mandatory test passes 6/6 (branch `fix/ai-regression-all-vs-atreides`, not released)
 
 Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla
