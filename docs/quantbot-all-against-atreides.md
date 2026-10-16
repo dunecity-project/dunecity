@@ -31,9 +31,13 @@ The runner (`tests/ai/run-all-against-atreides.py`) builds one probe and plays t
 once. For each seed it prints the winner, the game time, Atreides' credits, army value and units,
 harvesters and structures every 5 minutes, the enemies' army value, the attack waves
 (`ground_hunt`: count and size) and the defence events (`defence_response`, `base_scramble`,
-`army_recall`). Each match takes 40-280 s of wall time, depending on host load. Useful options:
-`--harvester-limit -1` (the other common lobby setting), `--human-seat` (releases before 1.0.820
-have no spectator mode), `--report-only` with a large `--win-minutes` (version comparisons).
+`army_recall`). It uses the headless batch defaults (`docs/headless-performance.md`): one path
+thread per match (`--path-workers 1`) and no unit-phase timing. The AI decision log stays on,
+because the attack and defence lines are read from it (`--no-ai-telemetry` drops them for
+~3% CPU). The whole test takes about 3.5 minutes (205 s on 2026-10-16, 75-94 s per match,
+load ~8-13). Useful options: `--harvester-limit -1` (the other common lobby setting),
+`--seeds`, `--human-seat` (releases before 1.0.820 have no spectator mode), `--report-only`
+with a large `--win-minutes` (version comparisons).
 
 Building blocks in `run-campaign-balance.py`:
 
@@ -43,26 +47,42 @@ Building blocks in `run-campaign-balance.py`:
 - `--load-save FILE --save-profile DIR`: continue a player's save. `DIR/workshop` supplies the
   mod and map revisions the save pins.
 
+## Cause
+
+The regression arrived with army recovery (`d774f387`, 1.0.812). Three parts of it hurt this
+match: (1) the front-battery goal grew with base size, not with the threat, so Atreides' 100,000
+credit base ordered 91 rocket turrets; (2) the wall rule wanted 2 walls per turret (95 walls),
+together about 30,000 credits diverted during minutes 10-20 while the AI Player houses grow
+from 13k to 117k; (3) the posture trade counted only mobile kills, so assaulting turret-defended
+bases read as a bad trade, and the house-level withdrawals kept pulling home a Brutal army that
+was ahead (one seed lost after a `severe_local_defeat` recall of the first wave at 10.2 min).
+
 ## Measured (game minutes to eliminate all four; L = Atreides lost)
 
-| seed | 1.0.796 (human seat) | 1.0.820 | 1.0.833 | 1.0.842 | 1.0.842 recovery off (ablation) | branch |
-|---|---|---|---|---|---|---|
-| 1756374161 | 35.1 | 31.4 | 42.4 | 42.4 | 28.7 | 36.5 |
-| 906213928 | 36.9 | 66.7 | 32.4 | 32.4 | 31.1 | 35.3 |
-| 41562270 | 36.7 | 35.8 | 43.0 | 43.0 | 32.3 | 34.4 |
-| 1841712204 | 32.8 | 69.5 | – | 32.6 | 31.5 | 31.7 |
-| 1430976924 | 32.1 | 37.7 | – | L 29.9 | 30.2 | L 39.0 |
-| 1804669015 | 35.6 | 37.0 | – | 41.6 | 33.9 | 32.8 |
+| seed | 1.0.796 (human seat) | 1.0.820 | 1.0.833 | 1.0.842 | 1.0.842 recovery off (ablation) | branch, withdrawals on | branch |
+|---|---|---|---|---|---|---|---|
+| 1756374161 | 35.1 | 31.4 | 42.4 | 42.4 | 28.7 | 36.5 | 34.0 |
+| 906213928 | 36.9 | 66.7 | 32.4 | 32.4 | 31.1 | 35.3 | 31.9 |
+| 41562270 | 36.7 | 35.8 | 43.0 | 43.0 | 32.3 | 34.4 | 32.2 |
+| 1841712204 | 32.8 | 69.5 | – | 32.6 | 31.5 | 31.7 | 31.7 |
+| 1430976924 | 32.1 | 37.7 | – | L 29.9 | 30.2 | L 39.0 | 32.8 |
+| 1804669015 | 35.6 | 37.0 | – | 41.6 | 33.9 | 32.8 | 32.8 |
 
 1.0.833 and 1.0.842 play identical games (no 833→842 regression). With an idle human seat,
-1.0.842 loses one seed and needs 71.2 minutes on another. The regression arrived with army
-recovery (`d774f387`, 1.0.812): turning recovery off restores 6/6 wins in 29-34 minutes.
-Changes on the branch: the front battery is limited to its 8-12 band, walls follow only the
-fixed-count turrets, and destroyed buildings count as kills in the posture trade. With these,
-five seeds win in 32-37 minutes and seed 1430976924 still loses.
+1.0.842 loses one seed and needs 71.2 minutes on another. Turning recovery off in 1.0.842
+restores 6/6 wins in 29-34 minutes. Changes on the branch: the front battery is limited to its
+8-12 band, walls follow only the fixed-count turrets, destroyed buildings count as kills in the
+posture trade, and the house-level withdrawals are off by default (below). "branch, withdrawals
+on" is the first three changes alone.
 
-The house-level withdrawals were then switched off one trigger at a time, each on all six seeds
-(game minutes per seed, in the table's order; L = lost):
+Robustness on the branch: harvester override -1 (unchecked) gives the same six times as 0
+(34.0 31.9 32.2 31.7 32.8 32.8; both mean no ceiling). Three further seeds win in 31.7
+(271828182), 32.4 (3141592653) and 31.1 (1618033988) minutes. The `perf/headless-sim` merge
+(bit-identical engine speed-ups, one path thread) reproduces all six times exactly.
+
+Starting from the first three changes ("branch, withdrawals on"), the house-level withdrawals were
+switched off one trigger at a time, each on all six seeds (game minutes per seed, in the table's
+order; L = lost):
 
 | withdrawal trigger disabled | per seed |
 |---|---|
@@ -79,6 +99,22 @@ establish improved win rate"). Withdrawals are therefore off by default
 (`[Army Recovery] WithdrawalsEnabled`, default false). Rally, batteries, the recall machinery and
 the whole-army base defence are unchanged, and `quantbot_army_recovery` still verifies the
 withdrawal machine with the setting on.
+
+### Withdrawals and `quantbot_no_spice_income_low-cash`
+
+That test (zero-spice `4P - 64x64 - 3 vs 1`, four Brutal QuantBots, seed 148680876, 12 minutes)
+failed once withdrawals were switched off: Atreides (house 1) built 3 R/I lots instead of 4. It
+is not a withdrawal effect. With and without withdrawals the first two minutes are identical:
+Atreides' starting army walks into its Harkonnen neighbour's starting units and loses all seven
+units for two, and Harkonnen then takes its yard (2.9 minutes without withdrawals, 3.7 with);
+Atreides is dead at the end of both games. The extra 0.8 minutes let it place a third
+residential lot, exactly the 4th lot the assertion counted. The 1.0.817 design
+(`docs/no-spice-economy-817.md`) already recorded "one defeated house builds only three lots
+before losing its base" for this scenario and required four lots of surviving cities only; the
+probe asserted it of every house. `run-no-spice-city-progress.py` now requires the four-lot
+R/I opening of every house alive at the end, still requires more than 100 banked tax credits
+of every house with a starting yard, reports defeated houses (`defeated` in
+`income-receipt.json`), and fails if no surviving city was checked. Withdrawals stay off.
 
 ## CI
 

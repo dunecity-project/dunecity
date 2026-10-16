@@ -1,39 +1,68 @@
-## 2026-10-16 — All-against-Atreides AI regression: mandatory test, partial fix (branch `fix/ai-regression-all-vs-atreides`, not released)
+## 2026-10-16 — All-against-Atreides AI regression fixed: mandatory test passes 6/6 (branch `fix/ai-regression-all-vs-atreides`, not released)
 
 Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla
 "All against Atreides" game against four AI Player (hard) houses. His saved game at 47 minutes
 (`quantsucks.dls`), continued headless, wins at 88.3 minutes. New mandatory ctest
 `quantbot_all_against_atreides` replays his exact setup on six seeds, and Atreides must eliminate
-every house within 40 game minutes on all of them. See `docs/quantbot-all-against-atreides.md`
-for the version table and the AGENTS.md/CLAUDE.md rule.
+every house within 40 game minutes on all of them. Details and tables:
+`docs/quantbot-all-against-atreides.md`; rule in AGENTS.md/CLAUDE.md.
 
-- Not an 833→842 regression: 1.0.833 and 1.0.842 play bit-identical games. 1.0.796 wins 6/6 in
-  32-37 minutes. 1.0.820 needs up to 69.5, and 1.0.842 loses one seed and needs 42-43 (spectator)
-  or 71 (human seat). Disabling army recovery (`d774f387`, 1.0.812) in 1.0.842 gives 6/6 in
-  28.7-33.9, and disabling only its front batteries gives 6/6 in 30.6-38.8.
-- Causes found: (1) the front-battery goal grew with base size, not with the threat. Atreides'
-  100,000-credit base ordered 91 rocket turrets (goal 45→107). (2) The wall rule then wanted
-  2 walls per turret, so 95 walls. Together they diverted about 30,000 credits from the army
-  during minutes 10-20, when the AI Player houses grow from 13k to 117k. (3) The posture trade
-  counted only mobile kills, so assaulting turret-defended bases read as a bad trade and the
-  army kept withdrawing from beaten houses.
-- Fixed: the battery stays in its 8-12 band (`FrontBatteryPolicy::batteryGoal`). Walls follow only
-  the fixed-count defence turrets. Destroyed hostile buildings are credited to the attrition ledger
-  (`Player::onHostileStructureDestroyed`).
-- Suspect #1 (harvester override 0) checked: the engine and the QuantBot runtime already treated
-  0 as unlimited, which matches the tooltip. Only the QuantBot initial limit, Mentat (0 harvesters)
-  and the campaign ally limit disagreed. All readers now use `GameOptionsClass::harvesterCeiling()`,
-  and the INI comment is corrected. This is not the cause of the slow wins, and neither is
-  Stefan's profile: his vanilla mod files match the bundled ones byte for byte (only `mod.ini`
-  formatting differs).
-  On the branch, harvester override -1 (unchecked) and 0 play bit-identical games on all six
-  seeds (same win times, same loss on 1430976924).
-- Still open: seed 1430976924 still loses. A `severe_local_defeat` withdrawal at 10.2 minutes
-  recalls the first wave, and the AI Player houses snowball. The other five seeds win in 31.7-36.5.
-  The test is meant to fail until the posture machine stops pulling home a Brutal army that is
-  ahead on the house-wide balance. Next step: measure posture-only ablations against the six seeds.
-- Protocol 77 (76 is reserved by `feat/ai-blob-waves`). AI decisions differ from a 75 peer. Save
-  9861 unchanged.
+- Cause: army recovery (`d774f387`, 1.0.812). Not an 833→842 regression: 1.0.833 and 1.0.842
+  play bit-identical games. (1) The front-battery goal grew with base size, not with the threat:
+  Atreides' 100,000-credit base ordered 91 rocket turrets (goal 45→107). (2) The wall rule wanted
+  2 walls per turret (95 walls). Together about 30,000 credits left the army in minutes 10-20,
+  when the AI Player houses grow from 13k to 117k. (3) The posture trade counted only mobile
+  kills, so assaulting turret-defended bases read as a bad trade, and the house-level withdrawals
+  pulled home a Brutal army that was ahead (seed 1430976924 lost after a `severe_local_defeat`
+  recall of the first wave at 10.2 minutes).
+- Game minutes to eliminate all four (L = Atreides lost), seeds 1756374161 / 906213928 /
+  41562270 / 1841712204 / 1430976924 / 1804669015:
+
+  | build | per seed |
+  |---|---|
+  | 1.0.796 (human seat) | 35.1 36.9 36.7 32.8 32.1 35.6 |
+  | 1.0.820 | 31.4 66.7 35.8 69.5 37.7 37.0 |
+  | 1.0.833 | 42.4 32.4 43.0 (first three seeds only) |
+  | 1.0.842 | 42.4 32.4 43.0 32.6 L29.9 41.6 |
+  | 1.0.842, recovery off | 28.7 31.1 32.3 31.5 30.2 33.9 |
+  | branch, withdrawals on | 36.5 35.3 34.4 31.7 L39.0 32.8 |
+  | branch | 34.0 31.9 32.2 31.7 32.8 32.8 |
+
+- Fixed: the battery stays in its 8-12 band (`FrontBatteryPolicy::batteryGoal`); walls follow only
+  the fixed-count defence turrets; destroyed hostile buildings are credited to the attrition
+  ledger (`Player::onHostileStructureDestroyed`); house-level withdrawals off by default.
+- Withdrawal ablation (from "branch, withdrawals on", one trigger disabled, all six seeds): severe
+  local defeat 36.5 35.3 34.4 31.7 L35.1 32.8; local squad pull-back 36.5 35.3 34.4 31.7 L39.0
+  32.8; sustained attrition 34.0 31.9 32.2 31.7 L45.4 32.8; core under attack 36.5 35.3 34.4 31.7
+  L36.0 32.8; outnumbered dispatch gate never fired; all four 34.0 31.9 32.2 31.7 32.8 32.8. Only
+  all four together win every seed.
+- Settings: new `[Army Recovery] WithdrawalsEnabled` (QuantBot Config, code default false; the
+  shipped `.ini.default` does not list it, so the code default applies). Off ignores severe local
+  defeat, sustained attrition, core under attack and the local squad pull-back. Rally,
+  batteries, recall machinery and whole-army base defence unchanged; `quantbot_army_recovery`
+  verifies the withdrawal machine with it on. Harvester override: -1 and 0 both mean no ceiling
+  (`GameOptionsClass::harvesterCeiling()` for every reader; QuantBot initial limit, Mentat and the
+  campaign ally limit used to disagree). Stefan's vanilla profile files match the bundled ones.
+- `quantbot_no_spice_income_low-cash` failed after withdrawals went off: Atreides (house 1)
+  built 3 R/I lots, not 4. Not a withdrawal effect: with and without withdrawals the first two
+  minutes are identical, Atreides loses its starting army to its Harkonnen neighbour's starting
+  units and its yard at 2.9 (off) / 3.7 (on) minutes, and is dead at the end of both games; the
+  extra 0.8 minutes fitted the 4th lot. The 1.0.817 design (`docs/no-spice-economy-817.md`)
+  requires four lots of surviving cities only and already recorded this defeated house; the
+  probe asserted it of every house. It now asserts lots for houses alive at the end, keeps the
+  >100 banked-tax check for every house with a starting yard, reports `defeated`, and fails if
+  no surviving city was checked.
+- Robustness: harvester override -1 on the six seeds gives identical times; extra seeds 271828182
+  31.7, 3141592653 32.4, 1618033988 31.1 minutes.
+- Merged `perf/headless-sim` (0510079e). The all-against-Atreides runner uses one path thread per
+  match and keeps the AI log (its attack/defence lines need it; `--no-ai-telemetry` drops them);
+  elimination matches log PROBE_DIGEST/PROBE_TIMING. Same six times after the merge. The test
+  takes 191-205 s (75-95 s per match, three at once, load ~8-13).
+- ctest -j3 at the final commit: dunelegacy_tests, game_command_regressions, network_wire_harness,
+  formation_planner_tests, formation_movement_probe, rts_controls_probe, preplace_queue_probe,
+  skirmish_generator_tests and all 30 quantbot_* tests: 38/38 passed, 431 s.
+- Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
+  from a 75 peer. Save 9861 unchanged. No version bump.
 
 ## 2026-10-16 — Faster headless simulation batches (branch `perf/headless-sim`, not released)
 

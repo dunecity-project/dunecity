@@ -99,7 +99,7 @@ ctest --test-dir build -R quantbot_all_against_atreides --output-on-failure
 It plays Stefan's setup to the end on six seeds - vanilla, `5P - 128x128 - All against Atreides`,
 Atreides QuantBot Brutal (spectated) against four AI Player (hard) houses, unit and harvester
 overrides 0 - and fails unless Atreides eliminates everyone within 40 game minutes on every
-seed (about 4-6 minutes wall, three games at a time). Do not raise the limit or drop a seed to
+seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
 make a change pass; see `docs/quantbot-all-against-atreides.md`.
 
 ## Release and hosting handover
