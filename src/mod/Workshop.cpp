@@ -111,8 +111,13 @@ Revision saveMap(const std::string& filename,const std::string& modName) {
         INIFile metadata(filename+".workshop.ini");
         auto hash=metadata.getStringValue("Workshop","Hash","");
         if(!hash.empty()) {
-            auto previous=store().get(hash);
-            if(previous.kind=="map" && previous.files[0].hash==hashBytes(data)
+            // The sidecar only names the revision to reuse when nothing changed. If that
+            // revision is no longer in the local store (a cleared or pruned Workshop cache,
+            // a copied map folder) or is damaged, the map is still saved: as a new revision.
+            Revision previous;
+            bool cached=true;
+            try { previous=store().get(hash); } catch(const std::exception&) { cached=false; }
+            if(cached && previous.kind=="map" && previous.files[0].hash==hashBytes(data)
                && (metadata.getBoolValue("Workshop","Immutable",false)
                    || saveMod(modName).hash==previous.modHash)) return previous;
         }
