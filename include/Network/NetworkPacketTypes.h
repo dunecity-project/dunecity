@@ -218,7 +218,12 @@
 //     their army nearby, and waves launch at 60% of the former readiness ([Force
 //     Concentration] in QuantBot Config, hashed). A 77 peer would order the same AI units
 //     differently and desync. Save 9862.
-#define NETWORK_PROTOCOL_VERSION            78
+// 79: QuantBot force concentration round 4: the Custom Hard/Brutal idle reserve bundles at a
+//     forward rally and ready waves launch from the bundle ([Force Concentration] Bundle,
+//     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
+//     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
+//     would order the same AI units differently and desync. Save 9863.
+#define NETWORK_PROTOCOL_VERSION            79
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

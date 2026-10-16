@@ -175,6 +175,13 @@ inline int64_t scaledReadiness(int64_t required, int percent) {
     return std::max<int64_t>(0, required) * std::max(0, percent) / 100;
 }
 
+/// A house is outnumbered (kForceStrengthReadiness) when the observed enemy army is worth this
+/// share of its own or more; its waves then wait for full readiness.
+constexpr int kOutnumberedReadinessBps = 12500;
+inline bool outnumbered(int64_t own, int64_t hostile) {
+    return hostile > 0 && hostile * 10000 >= std::max<int64_t>(0, own) * kOutnumberedReadinessBps;
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy
@@ -201,6 +208,13 @@ inline int along(int from, int to, int percent) { return from + (to - from) * pe
 /// Is enough of the wave in the bundle (\a bundled of \a total value) to launch?
 inline bool bundled(int64_t bundledValue, int64_t total) {
     return total <= 0 || bundledValue * 10000 >= total * kBundleGateBps;
+}
+
+/// Which of two reserve units gets one of the pass's bundle orders first: the one farther from
+/// the bundle (it has the longest walk), then the lower object id. A strict order on (distance,
+/// id), so the chosen units never depend on the order of the unit list.
+inline bool bundleOrderFirst(int distanceA, uint32_t idA, int distanceB, uint32_t idB) {
+    return distanceA != distanceB ? distanceA > distanceB : idA < idB;
 }
 
 // ---- Splitting a wave: two angles ----------------------------------------------------------------

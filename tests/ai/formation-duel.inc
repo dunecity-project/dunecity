@@ -25,7 +25,7 @@ struct Side {
     int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged),
                                 ///< +s (stage near the enemy), +e (stage only with local superiority)
     int force = 0;              ///< QuantBot::forceVariantOverride bits from the uppercase flags (+F, +C, +P, +H, +M, +L, +Q,
-                                ///< +N, +B, +O, +W, +S, +T)
+                                ///< +N, +B, +O, +W, +S, +T, +D)
     bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
 };
 
@@ -76,6 +76,7 @@ inline std::vector<Side> sidesFromEnv() {
                 else if (flag == 'W') side.force |= QuantBot::kForceBundle | QuantBot::kForceBundleGate;
                 else if (flag == 'S') side.force |= QuantBot::kForceSplit;
                 else if (flag == 'T') side.force |= QuantBot::kForceFlank;
+                else if (flag == 'D') side.force |= QuantBot::kForceStrengthReadiness;
                 else throw std::runtime_error("Unknown duel variant flag: " + entry);
             }
             shape = shape.substr(0, plus);
@@ -180,14 +181,14 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "releases=%d reforms=%d fallbacks=%d fallback_returns=%d legs=%d dissolved=%d stalls=%d repairs=%d "
                 "home_kill=%d home_loss=%d focus=%d converges=%d pooled=%d recalled=%d musters=%d muster_releases=%d "
                 "stage_holds=%d staged=%d bundle_orders=%d gate_holds=%d gate_timeouts=%d splits=%d split_releases=%d "
-                "split_timeouts=%d",
+                "split_timeouts=%d full_readiness=%d",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
                 stats.fallbackReturns, stats.legs, stats.dissolved, stats.stalls, stats.repairs,
                 home.kill, home.loss, force.focusSwitches, force.converges, force.pooled, force.recalled, force.musters,
                 force.musterReleases, force.stageHolds, force.staged, force.bundleOrders, force.gateHolds, force.gateTimeouts,
-                force.splits, force.splitReleases, force.splitTimeouts);
+                force.splits, force.splitReleases, force.splitTimeouts, force.fullReadiness);
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,
             FormationWaveMeasure::seconds(game.getGameCycleCount()));

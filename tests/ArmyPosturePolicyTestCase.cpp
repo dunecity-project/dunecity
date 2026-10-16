@@ -653,6 +653,18 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
             REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(static_cast<int>(shape)), 7)
                     == static_cast<int>(shape));
     }
+    SECTION("the force concentration settings are hashed, bundling on by default") {
+        REQUIRE(baseline.force.focusFire);
+        REQUIRE(baseline.force.converge);
+        REQUIRE(baseline.force.waveReadinessPercent == 60);
+        REQUIRE(baseline.force.bundle);
+        REQUIRE(baseline.force.launchFromBundle);
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.bundle = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.launchFromBundle = false; }));
+    }
 }
 
 TEST_CASE("Special units: the within-group choice is measured, not array order",

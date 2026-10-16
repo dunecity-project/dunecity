@@ -51,7 +51,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9860 adds the form-up tile, resume kind and pace unit type (one-speed formation march).
     // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
     // 9862 adds the QuantBot hunt parties (Blob waves).
-    REQUIRE(SAVEGAMEVERSION == 9862);
+    // 9863 adds the QuantBot reserve bundle and the launch gate's wait (force concentration).
+    REQUIRE(SAVEGAMEVERSION == 9863);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

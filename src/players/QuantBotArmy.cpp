@@ -428,8 +428,9 @@ void QuantBot::attack(int militaryValue) {
     const bool campaign = isCampaignGameType(currentGame->gameType);
     if (campaign) requiredMilitary=campaignRequiredArmy(requiredMilitary);
     // Wave size (docs/formations.md, "Concentrating force"): the house threshold scales with
-    // the wave readiness (QuantBotConfig::force.waveReadinessPercent; duel labels L / Q).
-    if (const int percent=waveReadinessPercent(); percent!=100)
+    // the wave readiness (QuantBotConfig::force.waveReadinessPercent; duel labels L / Q; D
+    // raises it to 100% while the house is outnumbered).
+    if (const int percent=launchReadinessPercent(); percent!=100)
         requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,percent));
     if (militaryValue < requiredMilitary) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
@@ -570,8 +571,9 @@ int QuantBot::launcherEscapeRange(const UnitBase* launcher, const ObjectBase* th
     return std::clamp(reach + 2, closeBand + 1, weaponRange);
 }
 
-bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat) {
-    if (!huntingLauncher(launcher) || !launcher->isActive() || !launcher->isRespondable()) return false;
+const ObjectBase* QuantBot::closeThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat,
+                                                    int* desiredRange) const {
+    if (!huntingLauncher(launcher) || !launcher->isActive() || !launcher->isRespondable()) return nullptr;
     // Everything that outranks fresh offence keeps outranking it: a human order,
     // a repair run, a carryall pickup and a live defence contact stay with their
     // owner rather than being turned into a dodge. The one exception is a
@@ -580,23 +582,23 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
     // across the gap instead of dying at point-blank range in its own base.
     const UnitRole role = unitRole(launcher, {UnitRole::Human, UnitRole::Repair,
                                               UnitRole::BaseDefence, UnitRole::LiveDefence});
-    if (role == UnitRole::Human || role == UnitRole::Repair || role == UnitRole::LiveDefence) return false;
-    if (static_cast<const GroundUnit*>(launcher)->isAwaitingPickup()) return false;
+    if (role == UnitRole::Human || role == UnitRole::Repair || role == UnitRole::LiveDefence) return nullptr;
+    if (static_cast<const GroundUnit*>(launcher)->isAwaitingPickup()) return nullptr;
     const ObjectBase* threat = nullptr;
-    int desiredRange = 0;
+    int range = 0;
     if (knownThreat) {
         // A hit is authoritative about who is shooting, but not about distance.
-        desiredRange = launcherEscapeRange(launcher,knownThreat);
-        if (desiredRange) threat = knownThreat;
+        range = launcherEscapeRange(launcher,knownThreat);
+        if (range) threat = knownThreat;
     } else {
         FixPoint nearest = FixPt_MAX;
         auto consider = [&](const ObjectBase* candidate) {
-            const int range = launcherEscapeRange(launcher,candidate);
-            if (!range) return;
+            const int candidateRange = launcherEscapeRange(launcher,candidate);
+            if (!candidateRange) return;
             const FixPoint distance = blockDistance(launcher->getLocation(),candidate->getLocation());
             if (!threat || distance < nearest
                 || (distance == nearest && candidate->getObjectID() < threat->getObjectID())) {
-                nearest = distance; threat = candidate; desiredRange = range;
+                nearest = distance; threat = candidate; range = candidateRange;
             }
         };
         // Nobody outside this radius can qualify: the close band is at most half
@@ -624,6 +626,13 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
             for (const UnitBase* candidate : getUnitList()) consider(candidate);
         }
     }
+    if (threat && desiredRange) *desiredRange = range;
+    return threat;
+}
+
+bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat) {
+    int desiredRange = 0;
+    const ObjectBase* threat = closeThreatWhileHunting(launcher, knownThreat, &desiredRange);
     if (!threat) return false;
     // The established spacing helper, which issues one forced step and restores
     // Hunt after it. No Area Guard, no new target, no change to the tracked
@@ -811,8 +820,9 @@ void QuantBot::launchGroundHunt() {
             const auto& settings=getQuantBotConfig().getSettings(static_cast<int>(difficulty));
             const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
             requiredReady=(militaryValueLimit*threshold).lround();
-            // Wave size: the configured readiness percentage (duel labels L / Q: 150% / 60%).
-            if (const int percent=waveReadinessPercent(); percent!=100)
+            // Wave size: the configured readiness percentage (duel labels L / Q: 150% / 60%; D:
+            // 100% while outnumbered).
+            if (const int percent=launchReadinessPercent(); percent!=100)
                 requiredReady=int(ForceConcentrationPolicy::scaledReadiness(requiredReady,percent));
             int availableUnits=0;
             for (const auto& candidate : candidates) if (candidate.value>0) ++availableUnits;
@@ -820,6 +830,9 @@ void QuantBot::launchGroundHunt() {
             // units and three thousand credits of value.
             const bool viable=QuantBotBuildPolicy::viableMainWave(availableUnits,availableValue);
             if (availableValue<requiredReady || !viable) {
+                // A wave that is no longer ready stops waiting for the bundle: its next
+                // readiness starts a fresh 60 s wait rather than inheriting an old one.
+                bundleGateSince=0;
                 traceDecision("attack_deferred",AITelemetry::Record().set("reason","wave_readiness")
                     .set("available_value",availableValue).set("available_units",availableUnits)
                     .set("required_military",requiredReady).set("viable_main_wave",viable)
@@ -828,8 +841,10 @@ void QuantBot::launchGroundHunt() {
                     .set("posture",ArmyPosturePolicy::postureName(armyPosture)));
                 return;
             }
-            // Test-only bundling gate (W): a ready wave leaves once most of it stands in the bundle.
-            if (forceVariant(kForceBundle) && forceVariant(kForceBundleGate)) {
+            // Launch from the bundle (W, on by default): a ready wave leaves once most of it
+            // stands in the bundle - only while there is one and bundling owns the reserve.
+            if (forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
+                && (bundlePoint.isValid() || bundleCentre.isValid())) {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
                 for (const auto& candidate : candidates) ids.push_back(candidate.id);
@@ -3266,10 +3281,11 @@ void QuantBot::retreatAllUnits() {
             tryLaunchOrnithopterStrike(diffSettings, config);
         }
 
-        // Test-only bundling (B, docs/formations.md "Concentrating force"): the idle reserve
+        // Bundling (B, docs/formations.md "Concentrating force"; on by default): the idle reserve
         // gathers at the forward rally (with O: or the army's centre of mass, whichever is closer).
         const bool bundling=forceVariant(kForceBundle);
-        int bundleOrdersRemaining=ForceConcentrationPolicy::kBundleOrdersPerPass, bundleTiles=0;
+        int bundleTiles=0;
+        std::vector<BundleWalker> bundleWalkers;
         if (bundling) {
             forwardBundlePoint();
             int64_t sx=0, sy=0, n=0, reserve=0;
@@ -3380,10 +3396,8 @@ void QuantBot::retreatAllUnits() {
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
-                && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT) {
-                bundleUnit(pUnit,bundleTiles,&bundleOrdersRemaining);
-                continue;
-            }
+                && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT
+                && bundleUnit(pUnit,bundleTiles,bundleWalkers)) continue;
             if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
@@ -3558,6 +3572,8 @@ void QuantBot::retreatAllUnits() {
             }
         }
     }
+    // The pass's bundle orders, farthest first: the same units whatever the list order.
+    if (bundling) orderBundleWalkers(bundleWalkers,bundleTiles);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
         "ai.spice_list.builds",static_cast<int64_t>(spiceCache.builds),-1,false);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),

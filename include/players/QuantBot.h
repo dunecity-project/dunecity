@@ -893,23 +893,32 @@ private:
     /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
     /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
     /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
-    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F and C from
-    /// QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B and W
+    /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
     /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
+    /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
+    /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
+    /// smaller configured one).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
-        kForceFlank = 4096;
+        kForceFlank = 4096, kForceStrengthReadiness = 8192;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
-    /// The force bits in effect: the override if set, else the configured F and C.
+    /// The force bits in effect: the override if set, else the configured F, C, B and W.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Hard/Brutal.
     int waveReadinessPercent() const;
+    /// The readiness a launch uses now: waveReadinessPercent(), raised to 100 by D while the
+    /// house is outnumbered (outnumberedByObservedArmy()).
+    int launchReadinessPercent();
+    /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of
+    /// them, wherever they stand): ForceConcentrationPolicy::outnumbered. One unit-list pass.
+    bool outnumberedByObservedArmy() const;
     /// One pass of the force rules over the army (unit phase, after the hunt parties).
     void concentrateForces();
     /// Focus fire for one hunting ground unit; true if it was given a new target.
@@ -928,20 +937,37 @@ private:
     /// Sends \a ids to muster for \a building (joining its muster if there is one).
     void startMuster(const ObjectBase* building, const std::vector<Uint32>& ids);
     void updateMusters();
-    /// Bundling (kForceBundle, test-only): where the idle reserve gathers, chosen at most every
-    /// 30 s (bundleCycle). Not saved: making it a default needs bundlePoint, bundleCycle and
-    /// bundleGateSince in the save.
+    /// Bundling (kForceBundle; QuantBotConfig::force.bundle, on by default): where the idle
+    /// reserve gathers, chosen at most every 30 s (bundleCycle) or when it becomes unsafe.
+    /// Saved with bundleCentre and bundleGateSince (SAVEGAMEVERSION 9863): the throttle and
+    /// the gate's wait decide orders, so a reload must not re-run them early.
     Coord bundlePoint = Coord::Invalid();
-    /// With kForceBundleOld: the army's centre of mass this pass (the second gathering point).
+    /// With kForceBundleOld: the army's centre of mass at the last unit pass (the second
+    /// gathering point; the launch gate reads it between passes).
     Coord bundleCentre = Coord::Invalid();
     Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
     /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
     Uint32 bundleGateSince = 0;
     Coord forwardBundlePoint();
-    /// Sends one idle reserve unit to the bundle; true if it was given an order.
-    bool bundleUnit(const UnitBase* unit, int radius, int* orderBudget);
+    /// A withdrawal or recovery holds reinforcements at the protected shelter: bundling and
+    /// its launch gate stand aside for the home rally then.
+    bool reserveHeldHome() const {
+        return recoveryActive() && (ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) || localSquadWithdraw);
+    }
+    /// A reserve unit that has to walk to the bundle, ordered after the unit pass.
+    struct BundleWalker { Uint32 id; int distance; Coord at; };
+    /// Keeps an idle reserve unit posted at the bundle. False when bundling does not own the
+    /// unit (a role, a tracked wave member, a posture that holds reinforcements at home, no
+    /// bundle): the home rally decides then. A unit outside the bundle that can take an order
+    /// is appended to \a walkers.
+    bool bundleUnit(const UnitBase* unit, int radius, std::vector<BundleWalker>& walkers);
+    /// Orders at most kBundleOrdersPerPass of \a walkers to the bundle, farthest first (object
+    /// id on ties), whatever the order of the unit list.
+    void orderBundleWalkers(std::vector<BundleWalker>& walkers, int radius);
     /// Share of \a ids (value, basis points) standing within \a radius of the bundle.
     int bundledShareBps(const std::vector<Uint32>& ids, int radius);
+    void saveForceState(OutputStream& stream) const;
+    void loadForceState(InputStream& stream);
     /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
     /// sides of the objective, wait for each other and then attack it together.
     struct Split {
@@ -962,7 +988,7 @@ private:
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
             stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
-            splitReleases = 0, splitTimeouts = 0;
+            splitReleases = 0, splitTimeouts = 0, fullReadiness = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
@@ -1145,6 +1171,12 @@ private:
     /// launcher's band, never its whole range: an outranged enemy at the edge of
     /// that range is a target, not a threat.
     int launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const;
+    /// The enemy a hunting launcher has to step away from this pass (the escape's own
+    /// choice: \a knownThreat if it qualifies, else the nearest qualifying enemy in a bounded
+    /// tile box, lowest id on ties), or nullptr when the escape does not apply. \a desiredRange
+    /// receives the stand-off. Focus fire and converging leave such a launcher to the escape.
+    const ObjectBase* closeThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat = nullptr,
+                                              int* desiredRange = nullptr) const;
     /// Short close-range escape for a hunting launcher. \a knownThreat is the
     /// authoritative damager of a damage callback; without one the nearest
     /// qualifying closing enemy is used. Hunt and tracked army membership are

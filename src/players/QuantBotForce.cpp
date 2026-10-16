@@ -73,7 +73,8 @@ int64_t volleyOf(const UnitBase* unit) {
 int QuantBot::forceBits() const {
     if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
     const auto& force = getQuantBotConfig().force;
-    return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0);
+    return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
+        | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -81,6 +82,29 @@ int QuantBot::waveReadinessPercent() const {
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
     return std::clamp(getQuantBotConfig().force.waveReadinessPercent, 10, 300);
+}
+
+int QuantBot::launchReadinessPercent() {
+    const int percent = waveReadinessPercent();
+    if (percent >= 100 || !forceVariant(kForceStrengthReadiness) || !outnumberedByObservedArmy()) return percent;
+    ++forceStats.fullReadiness;
+    return 100;
+}
+
+bool QuantBot::outnumberedByObservedArmy() const {
+    const int myTeam = getHouse()->getTeamID();
+    int64_t own = 0, hostile = 0;
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive() || !unit->isAGroundUnit()
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        const bool mine = unit->getOwner() == getHouse();
+        if (!mine && (unit->getOwner()->getTeamID() == myTeam || !unit->isVisible(myTeam))) continue;
+        const int64_t value = CombatPowerPolicy::unitValue(
+            currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price,
+            unit->getHealth().lround(), unit->getMaxHealth());
+        (mine ? own : hostile) += value;
+    }
+    return Force::outnumbered(own, hostile);
 }
 
 bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies) {
@@ -186,15 +210,20 @@ void QuantBot::concentrateForces() {
                 && armed(target) && unit->isInWeaponRange(target)) fights.push_back(target->getLocation());
         }
     }
+    // A hunting launcher with an enemy already inside its close band belongs to the escape in
+    // the unit pass (escapeCloseThreatWhileHunting): an attack or hunt-toward order here would
+    // clear its spacing step. Once it stands off again it is an ordinary hunter and takes the
+    // focus target like everyone else.
+    auto escaping = [&](const UnitBase* unit) { return closeThreatWhileHunting(unit) != nullptr; };
     if (noOverkill) {
         std::vector<const UnitBase*> hunters;
-        for (const auto* unit : getUnitList()) if (hunter(unit)) hunters.push_back(unit);
+        for (const auto* unit : getUnitList()) if (hunter(unit) && !escaping(unit)) hunters.push_back(unit);
         std::sort(hunters.begin(), hunters.end(),
             [](const UnitBase* a, const UnitBase* b) { return a->getObjectID() < b->getObjectID(); });
         focusFireNoOverkill(hunters, enemies);
     }
     for (const auto* unit : getUnitList()) {
-        if (!hunter(unit)) continue;
+        if (!hunter(unit) || escaping(unit)) continue;
         if (focus && focusFire(unit, enemies)) continue;
         if (fights.empty() || unitRole(unit, {UnitRole::Wave}) != UnitRole::Wave || unit->formationContact()) continue;
         // Not fighting: the nearest fight of our army (ties to the first in list order, which
@@ -327,12 +356,13 @@ void QuantBot::updateMusters() {
         [](const Muster& muster) { return muster.members.empty(); }), musters.end());
 }
 
-// ---- Bundling the idle reserve (kForceBundle) ------------------------------------------------
+// ---- Bundling the idle reserve (kForceBundle, on by default) ---------------------------------
 //
 // Before 1.0.602 the idle army stood at a forward rally (75% own base + 25% enemy base) or at
-// its own centre of mass, so a wave left as one body. The candidate brings that back with the
-// observed enemy base only, a bounded tile search every 30 s and a capped number of orders per
-// pass; bundled troops keep no role, so base defence takes them like any other.
+// its own centre of mass, so a wave left as one body. Bundling brings that back with the
+// observed enemy base only, a bounded tile search every 30 s and at most kBundleOrdersPerPass
+// orders per pass, farthest first; bundled troops keep no role, so base defence takes them like
+// any other. The point, its clock and the launch gate's wait are saved (9863).
 
 Coord QuantBot::forwardBundlePoint() {
     const Uint32 now = getGameCycleCount();
@@ -362,27 +392,61 @@ Coord QuantBot::forwardBundlePoint() {
     return bundlePoint;
 }
 
-bool QuantBot::bundleUnit(const UnitBase* unit, int radius, int* orderBudget) {
-    if (!unit || !unit->isRespondable() || unit->hasATarget() || unit->wasForced() || unit->isMoving()
+bool QuantBot::bundleUnit(const UnitBase* unit, int radius, std::vector<BundleWalker>& walkers) {
+    if (!unit || !unit->isRespondable() || unit->hasATarget() || unit->wasForced()
         || unit->getAttackMode() == HUNT || unit->getAttackMode() == RETREAT || holdsOpeningPosition(unit)
         || unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Defence, UnitRole::ColonyGuard,
-                           UnitRole::Escort}) != UnitRole::Free) return false;
+                           UnitRole::Escort, UnitRole::Wave}) != UnitRole::Free) return false;
+    // A withdrawal or recovery brings reinforcements to the protected shelter: the home rally
+    // (moveToOptimalSquadPosition) decides then, exactly as without bundling.
+    if (reserveHeldHome()) return false;
     const Coord from = unit->getLocation();
     Coord at = bundlePoint;
     // The pre-1.0.602 rule: the closer of the forward rally and the army's centre of mass.
     if (bundleCentre.isValid() && (at.isInvalid() || tiles(from, bundleCentre) < tiles(from, at))) at = bundleCentre;
     if (at.isInvalid()) return false;
+    if (unit->isMoving()) return true;
     const_cast<UnitBase*>(unit)->setGuardPoint(at);
     if (unit->getAttackMode() != AREAGUARD) doSetAttackMode(unit, AREAGUARD);
-    if (tiles(from, at) <= radius) return false;
-    if (*orderBudget <= 0 || unit->hasPendingPathRequest() || currentGame->getPathRequestQueueSize() > 150) return false;
-    std::set<int64_t> reserved;
-    Coord slot = huntPartySlot(unit, at, radius, reserved);
-    if (slot.isInvalid()) slot = at;
-    doMove2Pos(unit, slot.x, slot.y, false);
-    --*orderBudget;
-    ++forceStats.bundleOrders;
+    if (tiles(from, at) <= radius || unit->hasPendingPathRequest()) return true;
+    walkers.push_back({unit->getObjectID(), tiles(from, at), at});
     return true;
+}
+
+void QuantBot::orderBundleWalkers(std::vector<BundleWalker>& walkers, int radius) {
+    if (walkers.empty() || currentGame->getPathRequestQueueSize() > 150) return;
+    std::sort(walkers.begin(), walkers.end(), [](const BundleWalker& a, const BundleWalker& b) {
+        return Force::bundleOrderFirst(a.distance, a.id, b.distance, b.id);
+    });
+    const size_t orders = std::min<size_t>(walkers.size(), Force::kBundleOrdersPerPass);
+    std::set<int64_t> reserved;
+    for (size_t i = 0; i < orders; ++i) {
+        const auto* unit = static_cast<const UnitBase*>(getObject(walkers[i].id));
+        Coord slot = huntPartySlot(unit, walkers[i].at, radius, reserved);
+        if (slot.isInvalid()) slot = walkers[i].at;
+        doMove2Pos(unit, slot.x, slot.y, false);
+        ++forceStats.bundleOrders;
+    }
+}
+
+void QuantBot::saveForceState(OutputStream& stream) const {
+    stream.writeSint32(bundlePoint.x);
+    stream.writeSint32(bundlePoint.y);
+    stream.writeSint32(bundleCentre.x);
+    stream.writeSint32(bundleCentre.y);
+    stream.writeUint32(bundleCycle);
+    stream.writeUint32(bundleGateSince);
+}
+
+void QuantBot::loadForceState(InputStream& stream) {
+    bundlePoint.x = stream.readSint32();
+    bundlePoint.y = stream.readSint32();
+    bundleCentre.x = stream.readSint32();
+    bundleCentre.y = stream.readSint32();
+    bundleCycle = stream.readUint32();
+    bundleGateSince = stream.readUint32();
+    const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };
+    if (!valid(bundlePoint) || !valid(bundleCentre)) throw std::runtime_error("Invalid force bundle state");
 }
 
 int QuantBot::bundledShareBps(const std::vector<Uint32>& ids, int radius) {

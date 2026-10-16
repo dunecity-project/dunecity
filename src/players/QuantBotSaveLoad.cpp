@@ -171,6 +171,10 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
     // SAVEGAMEVERSION 9862: hunt parties (Blob waves). An older save has none; its waves are
     // plain engine hunters and carry on as such.
     if (currentGame->getLoadedSavegameVersion() >= 9862) loadHuntParties(stream);
+    // SAVEGAMEVERSION 9863: the reserve bundle (point, centre, 30 s clock) and the launch gate's
+    // wait. An older save has none: the bundle is chosen afresh at the first unit pass and a
+    // ready wave starts a new wait, as at the start of a game.
+    if (currentGame->getLoadedSavegameVersion() >= 9863) loadForceState(stream);
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -300,6 +304,9 @@ void QuantBot::save(OutputStream& stream) const {
     // order and cannot be recomputed from the world; members are ordered sets, so the bytes
     // are identical on every client.
     saveHuntParties(stream);
+    // SAVEGAMEVERSION 9863. The bundle point is re-chosen only every 30 s and the launch gate
+    // waits at most 60 s from its first hold; both clocks decide orders, so a reload carries them.
+    saveForceState(stream);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

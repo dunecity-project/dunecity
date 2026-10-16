@@ -132,8 +132,9 @@ struct QuantBotConfig {
     RecoverySettings recovery;
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
-    /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent; optional
-    /// keys, the code defaults apply when absent. Hashed for multiplayer.
+    /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
+    /// LaunchFromBundle; optional keys, the code defaults apply when absent. Hashed for
+    /// multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -143,6 +144,12 @@ struct QuantBotConfig {
         /// The wave readiness and house attack threshold as a percentage of the difficulty's
         /// (100 = unchanged; smaller = smaller, more frequent waves). Clamped to 10-300.
         int waveReadinessPercent;
+        /// The idle reserve stands bundled at a forward rally a quarter of the way from the
+        /// assembly point to the observed enemy base (saved: SAVEGAMEVERSION 9863).
+        bool bundle;
+        /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
+        /// re-checked every 5 s and at most 60 s late.
+        bool launchFromBundle;
     };
     ForceSettings force;
 

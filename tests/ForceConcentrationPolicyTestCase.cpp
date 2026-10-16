@@ -107,6 +107,12 @@ TEST_CASE("Force: a staged wave attacks with local superiority; wave readiness s
     REQUIRE(scaledReadiness(10000, 150) == 15000);
     REQUIRE(scaledReadiness(10000, 60) == 6000);
     REQUIRE(scaledReadiness(-3, 150) == 0);
+    // Outnumbered (D): the observed enemy army is worth 125% of ours or more.
+    REQUIRE(outnumbered(10000, 12500));
+    REQUIRE_FALSE(outnumbered(10000, 12499));
+    REQUIRE(outnumbered(0, 1));
+    REQUIRE_FALSE(outnumbered(0, 0));
+    REQUIRE_FALSE(outnumbered(10000, 0));
 }
 
 TEST_CASE("Force: the reserve bundles a quarter of the way forward and the gate waits for 70%", "[ai][force]") {
@@ -120,6 +126,23 @@ TEST_CASE("Force: the reserve bundles a quarter of the way forward and the gate 
     REQUIRE(bundled(7000, 10000));
     REQUIRE_FALSE(bundled(6999, 10000));
     REQUIRE(bundled(0, 0));
+    // Bundle orders: farthest first, then the lower id; the same choice from any list order.
+    REQUIRE(bundleOrderFirst(20, 9, 10, 1));
+    REQUIRE_FALSE(bundleOrderFirst(10, 1, 20, 9));
+    REQUIRE(bundleOrderFirst(10, 1, 10, 2));
+    REQUIRE_FALSE(bundleOrderFirst(10, 2, 10, 1));
+    REQUIRE_FALSE(bundleOrderFirst(10, 1, 10, 1));
+    struct W { int distance; uint32_t id; };
+    std::vector<W> a{{5, 4}, {30, 7}, {30, 2}, {12, 9}, {5, 1}};
+    std::vector<W> b(a.rbegin(), a.rend());
+    auto order = [](std::vector<W>& v) {
+        std::sort(v.begin(), v.end(), [](const W& x, const W& y) { return bundleOrderFirst(x.distance, x.id, y.distance, y.id); });
+        std::vector<uint32_t> ids;
+        for (const auto& w : v) ids.push_back(w.id);
+        return ids;
+    };
+    REQUIRE(order(a) == std::vector<uint32_t>{2, 7, 9, 1, 4});
+    REQUIRE(order(b) == order(a));
 }
 
 TEST_CASE("Force: split release points are integer, symmetric and 90 degrees apart", "[ai][force]") {

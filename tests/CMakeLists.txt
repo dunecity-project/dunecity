@@ -836,20 +836,23 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # QuantBot force concentration defaults (docs/formations.md, "Concentrating force"):
         # Custom Hard/Brutal hunters focus the damaged enemy fighter in reach, a wave member not
         # fighting walks to its army's fight nearby, and a wave launches at 60% readiness; the
-        # orders do not depend on unit order, Medium is untouched, and the duel override 0 is
-        # the previous behaviour.
+        # idle reserve gathers at the bundle (capped orders, farthest first), a ready wave waits
+        # for it (at most 60 s) and launches from it, an attacked building pulls defenders out
+        # of it, and save/load mid-gather restores the bundle; the orders do not depend on unit
+        # order, Medium is untouched, and the duel override 0 is the previous behaviour.
         add_test(NAME quantbot_force_concentration COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --force-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
         set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
-        # already too close makes a hunting launcher move away over real game
-        # cycles, keeping engine Hunt, its tracked army membership and its
-        # firing range, while a distant enemy - even one that just hit it -
-        # produces no order, and human/repair/transit/defence authority, other
-        # hunters, Deviators, Easy/Medium and campaign games keep theirs.
+        # Custom Hard/Brutal launcher spacing while hunting, with the production force rules
+        # on: an enemy that is already too close makes a hunting launcher move away over real
+        # game cycles, keeping engine Hunt, its tracked army membership and its firing range,
+        # and focus fire gives it no order meanwhile; standing off, it takes and hits the focus
+        # target. A distant enemy - even one that just hit it - produces no escape, and
+        # human/repair/transit/defence authority, other hunters, Deviators, Easy/Medium and
+        # campaign games keep theirs.
         add_test(NAME quantbot_launcher_kiting COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
             --level 9 --mod dunecity

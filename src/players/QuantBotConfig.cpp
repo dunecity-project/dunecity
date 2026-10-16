@@ -249,12 +249,14 @@ QuantBotConfig::QuantBotConfig() {
     recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
     // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
-    // Measured in duels (docs/formations.md, "Concentrating force"): focus fire + converge +
-    // waves at 60% readiness beat the previous defaults 0.750 (95% CI 0.67-0.83) in 108 Hard
-    // games and 0.833 (0.69-0.94) in 36 Brutal games.
+    // Measured in duels (docs/formations.md, "Concentrating force", rounds 3 and 4): focus
+    // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
+    // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
     force.focusFire = true;
     force.converge = true;
     force.waveReadinessPercent = 60;
+    force.bundle = true;
+    force.launchFromBundle = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -524,6 +526,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
         iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
         iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
+        iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
+        iniFile.setBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -587,6 +591,8 @@ bool QuantBotConfig::load(const std::string& filepath) {
         force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
         force.waveReadinessPercent = std::clamp(
             iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
+        force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
+        force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
 
         bool needsSave = false;
 
@@ -999,6 +1005,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("focusFire", force.focusFire);
     addNamed("converge", force.converge);
     addNamed("waveReadinessPercent", force.waveReadinessPercent);
+    addNamed("bundle", force.bundle);
+    addNamed("launchFromBundle", force.launchFromBundle);
     configStr += "|/FORCE|";
 
 

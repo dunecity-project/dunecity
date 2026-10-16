@@ -46,7 +46,7 @@ PARTY_FIELDS = ('parties', 'gathered', 'gather_timeouts', 'releases', 'reforms',
 # are home kills, ours near ours home losses) and the force-candidate counters (QuantBot::forceStats).
 FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recalled', 'musters', 'muster_releases',
                 'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
-                'split_timeouts')
+                'split_timeouts', 'full_readiness')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
