@@ -34,6 +34,8 @@ void runArmyRecoveryProbe(Game& game) {
     bot->postureSince=0;
     getQuantBotConfig().recovery.enabled=true;
     getQuantBotConfig().recovery.frontBatteriesEnabled=true;
+    // The withdrawal machine is off by default; this fixture verifies it when enabled.
+    getQuantBotConfig().recovery.withdrawalsEnabled=true;
     require(bot->recoveryActive(),"Recovery gate refused Custom Brutal");
 
     if (std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) {

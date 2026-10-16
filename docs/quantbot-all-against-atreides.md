@@ -57,12 +57,28 @@ Building blocks in `run-campaign-balance.py`:
 1.0.833 and 1.0.842 play identical games (no 833→842 regression). With an idle human seat,
 1.0.842 loses one seed and needs 71.2 minutes on another. The regression arrived with army
 recovery (`d774f387`, 1.0.812): turning recovery off restores 6/6 wins in 29-34 minutes.
-On the branch, the front battery is limited to its 8-12 band, walls follow only the fixed-count
-turrets, and destroyed buildings count as kills in the posture trade. Five seeds now win in 32-37
-minutes. Seed 1430976924 still loses: a `severe_local_defeat` withdrawal at 10.2 minutes pulls
-the first wave home, and the four AI Player houses then snowball. The test therefore fails on the
-branch until the posture machine stops withdrawing winning-position Brutal armies
-(`HANDOVER.md`, 2026-10-16).
+Changes on the branch: the front battery is limited to its 8-12 band, walls follow only the
+fixed-count turrets, and destroyed buildings count as kills in the posture trade. With these,
+five seeds win in 32-37 minutes and seed 1430976924 still loses.
+
+The house-level withdrawals were then switched off one trigger at a time, each on all six seeds
+(game minutes per seed, in the table's order; L = lost):
+
+| withdrawal trigger disabled | per seed |
+|---|---|
+| severe local defeat | 36.5 35.3 34.4 31.7 L35.1 32.8 |
+| local squad pull-back | 36.5 35.3 34.4 31.7 L39.0 32.8 |
+| sustained attrition | 34.0 31.9 32.2 31.7 L45.4 32.8 |
+| core under attack | 36.5 35.3 34.4 31.7 L36.0 32.8 |
+| outnumbered dispatch gate | identical to the branch (never fired) |
+| all four withdrawal triggers | 34.0 31.9 32.2 31.7 32.8 32.8 |
+
+No single trigger is the cause. Together they cost a lost game and 2-5 minutes per win. The
+original design (`d774f387`) argued for them from fixtures only ("fixture success does not
+establish improved win rate"). Withdrawals are therefore off by default
+(`[Army Recovery] WithdrawalsEnabled`, default false). Rally, batteries, the recall machinery and
+the whole-army base defence are unchanged, and `quantbot_army_recovery` still verifies the
+withdrawal machine with the setting on.
 
 ## CI
 

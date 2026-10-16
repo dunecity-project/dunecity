@@ -1457,6 +1457,15 @@ void QuantBot::updateArmyPosture() {
     }
     localSquadWithdraw = localWithdrawSince != std::numeric_limits<Uint32>::max();
 
+    // Withdrawals are off by default (QuantBotConfig::RecoverySettings::withdrawalsEnabled):
+    // measured on six all-against-Atreides seeds, every withdrawal trigger together cost a
+    // lost game and 2-5 minutes per win, and no single trigger alone was the culprit.
+    if (!getQuantBotConfig().recovery.withdrawalsEnabled) {
+        situation.severeLocalDefeat = false;
+        situation.coreUnderAttack = false;
+        situation.windowCovered = false;
+        localSquadWithdraw = false;
+    }
     const auto previous = armyPosture;
     const auto decision = ArmyPosturePolicy::evaluate(armyPosture, postureSince, situation, thresholds);
     if (decision.changed) {
