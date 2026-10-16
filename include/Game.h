@@ -1059,6 +1059,10 @@ public:
         double unitMoveMsThisFrame = 0.0;
         double unitTurnMsThisFrame = 0.0;
         double unitVisibilityMsThisFrame = 0.0;
+        /// Whether UnitBase::update measures the phases above. The measurement reads the clock
+        /// around every phase of every unit and only feeds DuneCity-Performance.log; nothing in
+        /// the simulation reads it. Headless batch probes switch it off (docs/headless-performance.md).
+        bool unitPhases = true;
         int unitCount = 0;
         
         // Simulation timing for CPU load detection (post-vsync)

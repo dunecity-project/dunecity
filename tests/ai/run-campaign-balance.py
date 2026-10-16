@@ -9,6 +9,7 @@ and structured AI decision logs remain in --output-dir. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
+import fcntl
 import gzip
 import configparser
 import hashlib
@@ -16,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import tempfile
 
@@ -120,6 +122,10 @@ parser.add_argument('--duel-map-seed', type=int, default=1, help='Formation duel
 parser.add_argument('--duel-sides', help='Formation duel: house:shape,house:shape (e.g. atreides:box,harkonnen:wedge)')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
+parser.add_argument('--no-ai-telemetry', action='store_true',
+                    help='Batch measurement: no AI decision log (DUNECITY_AI_TELEMETRY=0), so no events.jsonl, no '
+                         'telemetry in summary.json and no telemetry-based wave-budget check. The simulation is the '
+                         'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md)')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
@@ -229,8 +235,7 @@ else:
                             '                              videoFlags | SDL_WINDOW_HIDDEN);')
     position = main.index('int main(')
     main = main[:position] + '#include "'+str(root/'tests/ai/campaign-balance-probe.inc')+'"\n' + main[position:]
-    source, obj = out/'balance-main.cpp', out/'balance-main.o'
-    source.write_text(main)
+    # Placeholders keep the commands, and so the cache key below, independent of --output-dir.
     compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
     for option in ('-include','-MT','-MF'):
         if option in compile_command:
@@ -238,18 +243,14 @@ else:
             del compile_command[position:position+2]
     for option in ('-MD','-MMD'):
         if option in compile_command: compile_command.remove(option)
-    compile_command[compile_command.index('-o')+1] = str(obj)
-    compile_command[compile_command.index('-c')+1] = str(source)
+    compile_command[compile_command.index('-o')+1] = '@OBJECT@'
+    compile_command[compile_command.index('-c')+1] = '@SOURCE@'
     compile_command.append('-fno-access-control')
-    app = out/'balance-probe.app/Contents'
-    (app/'MacOS').mkdir(parents=True)
-    (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
-    binary = app/'MacOS/balance-probe'
     link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
     link = link[link.index('&&')+1:]
     link = link[:link.index('&&')]
-    link[link.index('-o')+1] = str(binary)
-    link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+    link[link.index('-o')+1] = '@BINARY@'
+    link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
     if args.quantbot_object:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
@@ -264,9 +265,58 @@ else:
         link[position:position] = [str(path) for path in preserved]
         policy_comparison = [{'object': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
                              for path in preserved]
-    with (out/'build.log').open('w') as log:
-        subprocess.run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
-        subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+
+    # Every probe of a build tree compiles the same balance-main.cpp and links it with the
+    # same objects, so the binary is cached in the build tree (balance-probe-cache/) and
+    # reused while nothing it was made from has changed: the generated source and both
+    # commands (the key), and the size and modification time of every file the compiler
+    # read (its depfile) and every object and library on the link line (the manifest).
+    def stamp(path):
+        info = os.stat(path)
+        return [info.st_mtime_ns, info.st_size]
+    def current(manifest):
+        try:
+            return all(stamp(path) == value for path, value in json.loads(manifest.read_text()).items())
+        except (OSError, ValueError):
+            return False
+    cache = build/'balance-probe-cache'
+    cache.mkdir(exist_ok=True)
+    entry = cache/hashlib.sha256(json.dumps([main, compile_command, link]).encode()).hexdigest()[:24]
+    with open(cache/'.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)   # concurrent probes build one binary, once
+        if not current(entry/'manifest.json'):
+            shutil.rmtree(entry, ignore_errors=True)
+            staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
+            names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/'balance-main.o'),
+                     '@BINARY@': str(staging/'balance-probe')}
+            try:
+                (staging/'balance-main.cpp').write_text(main)
+                with (out/'build.log').open('w') as log:
+                    subprocess.run([names.get(arg, arg) for arg in compile_command] + ['-MD', '-MF', str(staging/'deps.d')],
+                                   cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+                    subprocess.run([names.get(arg, arg) for arg in link],
+                                   cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+                depfile = (staging/'deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
+                inputs = [Path(build, path).resolve() for path in shlex.split(depfile)
+                          if Path(path).name != 'balance-main.cpp']
+                inputs += [Path(build, arg).resolve() for arg in link
+                           if arg.endswith(('.o', '.a', '.dylib', '.tbd')) and Path(build, arg).is_file()]
+                (staging/'manifest.json').write_text(json.dumps({str(path): stamp(path) for path in inputs}))
+                os.rename(staging, entry)
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        else:
+            (out/'build.log').write_text(f'Reused {entry}\n')
+        os.utime(entry)
+        # Keep the four most recently used binaries (other configurations, e.g. --stats-ui-probe).
+        for stale in sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]:
+            shutil.rmtree(stale, ignore_errors=True)
+    app = out/'balance-probe.app/Contents'
+    (app/'MacOS').mkdir(parents=True)
+    (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
+    binary = app/'MacOS/balance-probe'
+    shutil.copy2(entry/'balance-probe', binary)
+    (out/'balance-main.cpp').write_text(main)
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
@@ -355,14 +405,16 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
+if args.no_ai_telemetry:
+    env['DUNECITY_AI_TELEMETRY'] = '0'
 with (out/'run.log').open('w') as log:
     subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
                    stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
 results = [line for line in (out/'run.log').read_text().splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
-events = next((out/'profile').rglob('events.jsonl'))
+events = None if args.no_ai_telemetry else next((out/'profile').rglob('events.jsonl'))
 metadata, attacks, final = None, [], []
-for line in events.open():
+for line in events.open() if events else ():
     row = json.loads(line)
     if row['event'] == 'session_start': metadata = row['data']
     if row['event'] == 'ground_hunt': attacks.append(row)
@@ -384,7 +436,7 @@ summary = {'result':results[0],'sourceCommit':source_commit,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,'enemy_controller':args.enemy_ai,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
-print('Telemetry:',events)
+print('Telemetry:',events or 'off (--no-ai-telemetry)')
 
 if args.require_win and 'outcome=won' not in results[0]:
     raise RuntimeError('Full-match acceptance requires victory: ' + results[0])
