@@ -148,17 +148,25 @@ private:
         return entry;
     };
 
+    // The frontier is a binary heap on f. Each slot carries a copy of its tile's f, so
+    // sifting compares slots without a scratch-buffer lookup per comparison; the copy is
+    // written wherever the tile's f is, and the comparisons, and so the heap layout, are
+    // exactly those of comparing the tile entries.
+    struct OpenEntry {
+        Coord coord;
+        FixPoint f;
+    };
+
     void trickleUp(size_t openListIndex) {
-        Coord bottom = openList[openListIndex];
-        FixPoint newf = getMapData(bottom).f;
+        const OpenEntry bottom = openList[openListIndex];
 
         size_t current = openListIndex;
         size_t parent = (openListIndex - 1)/2;
-        while (current > 0 && getMapData(openList[parent]).f > newf) {
+        while (current > 0 && openList[parent].f > bottom.f) {
 
             // copy parent to position of current
             openList[current] = openList[parent];
-            getMapData(openList[current]).openListIndex = current;
+            getMapData(openList[current].coord).openListIndex = current;
 
             // go up one level in the tree
             current = parent;
@@ -166,54 +174,56 @@ private:
         }
 
         openList[current] = bottom;
-        getMapData(openList[current]).openListIndex = current;
+        getMapData(bottom.coord).openListIndex = current;
     };
 
     void putOnOpenListIfBetter(const Coord& coord, const Coord& parentCoord, FixPoint g, FixPoint h) {
         FixPoint f = g + h;
 
-        if(getMapData(coord).bInOpenList == false) {
+        TileData& entry = getMapData(coord);
+        if(entry.bInOpenList == false) {
             // not yet in openlist => add at the end of the open list
-            getMapData(coord).g = g;
-            getMapData(coord).h = h;
-            getMapData(coord).f = f;
-            getMapData(coord).parentCoord = parentCoord;
-            getMapData(coord).bInOpenList = true;
-            openList.push_back(coord);
-            getMapData(coord).openListIndex = openList.size() - 1;
+            entry.g = g;
+            entry.h = h;
+            entry.f = f;
+            entry.parentCoord = parentCoord;
+            entry.bInOpenList = true;
+            openList.push_back({coord, f});
+            entry.openListIndex = openList.size() - 1;
 
             trickleUp(openList.size() - 1);
         } else {
             // already on openlist
-            if(f >= getMapData(coord).f) {
+            if(f >= entry.f) {
                 // new item is worse => don't change anything
                 return;
             } else {
                 // new item is better => replace
-                getMapData(coord).g = g;
-                getMapData(coord).h = h;
-                getMapData(coord).f = f;
-                getMapData(coord).parentCoord = parentCoord;
-                trickleUp(getMapData(coord).openListIndex);
+                entry.g = g;
+                entry.h = h;
+                entry.f = f;
+                entry.parentCoord = parentCoord;
+                openList[entry.openListIndex].f = f;
+                trickleUp(entry.openListIndex);
             }
         }
     };
 
     Coord extractMin() {
-        Coord ret = openList[0];
+        const Coord ret = openList[0].coord;
         getMapData(ret).bInOpenList = false;
 
         openList[0] = openList.back();
-        getMapData(openList[0]).openListIndex = 0;
+        getMapData(openList[0].coord).openListIndex = 0;
         openList.pop_back();
 
         if (openList.empty())
             return ret;
 
         size_t current = 0;
-        Coord top = openList[current];  // save root
-        FixPoint topf = getMapData(top).f;
-        while(current < openList.size()/2) {
+        const OpenEntry top = openList[current];  // save root
+        const size_t size = openList.size();
+        while(current < size/2) {
 
             size_t leftChild = 2*current+1;
             size_t rightChild = leftChild+1;
@@ -221,9 +231,9 @@ private:
             // find smaller child
             size_t smallerChild;
             FixPoint smallerChildf;
-            if(rightChild < openList.size()) {
-                FixPoint leftf = getMapData(openList[leftChild]).f;
-                FixPoint rightf = getMapData(openList[rightChild]).f;
+            if(rightChild < size) {
+                const FixPoint leftf = openList[leftChild].f;
+                const FixPoint rightf = openList[rightChild].f;
 
                 if(leftf < rightf) {
                     smallerChild = leftChild;
@@ -235,23 +245,23 @@ private:
             } else {
                 // there is only a left child
                 smallerChild = leftChild;
-                smallerChildf = getMapData(openList[leftChild]).f;
+                smallerChildf = openList[leftChild].f;
             }
 
             // top >= largerChild?
-            if(topf <= smallerChildf)
+            if(top.f <= smallerChildf)
                 break;
 
             // shift child up
             openList[current] = openList[smallerChild];
-            getMapData(openList[current]).openListIndex = current;
+            getMapData(openList[current].coord).openListIndex = current;
 
             // go down one level in the tree
             current = smallerChild;
         }
 
         openList[current] = top;
-        getMapData(openList[current]).openListIndex = current;
+        getMapData(top.coord).openListIndex = current;
 
         return ret;
     };
@@ -265,7 +275,7 @@ private:
     Coord bestCoord = Coord::Invalid();
     TileData* mapData = nullptr;
     Uint32 generation = 0;
-    std::vector<Coord> openList;
+    std::vector<OpenEntry> openList;
 
     // Loop state that used to be local to the constructor. All of it has to
     // survive a slice boundary for a resumed search to behave like a whole one.

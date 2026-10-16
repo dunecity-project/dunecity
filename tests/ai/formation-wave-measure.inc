@@ -22,6 +22,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace FormationWaveMeasure {
@@ -97,12 +98,36 @@ inline void report(const Wave& wave) {
             wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s);
 }
 
-/// Is this unit inside the enemy base area: within kTargetAreaTiles of a live enemy building?
-inline bool inTargetArea(const UnitBase* unit, int myTeam) {
+/// A live building's footprint, collected once per cycle for inTargetArea.
+struct Footprint {
+    int team;
+    Coord first, last;   ///< inclusive corner tiles
+};
+
+inline std::vector<Footprint> liveFootprints() {
+    std::vector<Footprint> footprints;
+    footprints.reserve(structureList.size());
     for (const auto* structure : structureList) {
-        if (structure->getOwner()->getTeamID() == myTeam || structure->getHealth() <= 0) continue;
-        if (blockDistance(unit->getLocation(), structure->getClosestPoint(unit->getLocation())).lround()
-                <= kTargetAreaTiles) return true;
+        if (structure->getHealth() <= 0) continue;
+        const Coord location = structure->getLocation();
+        footprints.push_back({structure->getOwner()->getTeamID(), location,
+                              location + structure->getStructureSize() - Coord(1, 1)});
+    }
+    return footprints;
+}
+
+/// Is this unit inside the enemy base area: within kTargetAreaTiles of a live enemy building?
+/// The building's closest tile is its footprint clamped to the unit (StructureBase::getClosestPoint).
+/// blockDistance is at least the larger axis offset, so a building more than kTargetAreaTiles
+/// away along either axis can never round to within reach and is skipped without the exact test.
+inline bool inTargetArea(const UnitBase* unit, int myTeam, const std::vector<Footprint>& footprints) {
+    const Coord at = unit->getLocation();
+    for (const Footprint& footprint : footprints) {
+        if (footprint.team == myTeam) continue;
+        const Coord closest(std::clamp(at.x, footprint.first.x, footprint.last.x),
+                            std::clamp(at.y, footprint.first.y, footprint.last.y));
+        if (std::abs(at.x - closest.x) > kTargetAreaTiles || std::abs(at.y - closest.y) > kTargetAreaTiles) continue;
+        if (blockDistance(at, closest).lround() <= kTargetAreaTiles) return true;
     }
     return false;
 }
@@ -136,8 +161,10 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
     std::vector<Wave> waves;
     std::map<const QuantBot*, Uint32> lastLaunch;
     std::map<const QuantBot*, std::set<Uint32>> knownMembers;
-    std::map<Uint32, Sint32> lastPrimaryTimer;
-    std::map<Uint32, Known> previous;        // every object last cycle, while a trade window is open
+    std::unordered_map<Uint32, Sint32> lastPrimaryTimer;
+    // Every object last cycle, while a trade window is open. Each vanished object is credited on
+    // its own, so the iteration order of these maps cannot change any total.
+    std::unordered_map<Uint32, Known> previous;
     int nextSample = kSampleMinutes;
 
     while (!game.finished && game.getGameCycleCount() < endCycle && !(stop && stop())) {
@@ -154,6 +181,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
 
         game.updateGameState();
         const Uint32 now = game.getGameCycleCount();
+        const std::vector<Footprint> footprints = liveFootprints();
 
         // New dispatches: a changed launch cycle with at least three new ground members.
         for (int h = 0; h < NUM_HOUSES; ++h) {
@@ -175,7 +203,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 for (const Uint32 id : bot->customWave.members) {
                     if (known.count(id)) continue;
                     const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(id));
-                    if (unit && unit->isAGroundUnit() && unit->isActive() && !inTargetArea(unit, myTeam)) {
+                    if (unit && unit->isAGroundUnit() && unit->isActive() && !inTargetArea(unit, myTeam, footprints)) {
                         wave.members.push_back(id);
                         wave.value[id] = priceOf(unit);
                         if (unit->isInFormation()) ++wave.formed;
@@ -204,7 +232,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 if (unit->isFormationForming()) ++forming;
                 if (unit->isInFormation()) ++inFormation;
                 if (!unit->isActive()) continue;
-                const bool inBase = inTargetArea(unit, myTeam);
+                const bool inBase = inTargetArea(unit, myTeam, footprints);
                 if (inBase && !wave.arrival.count(id)) wave.arrival[id] = now;
                 const auto last = lastPrimaryTimer.find(id);
                 const bool fired = last != lastPrimaryTimer.end() && unit->primaryWeaponTimer > last->second;
@@ -229,8 +257,9 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
 
         // Kill credit: an enemy of a wave that vanished this cycle within kKillCreditTiles of a
         // member that was alive at the start of the cycle, while that wave's trade window is open.
-        std::map<Uint32, Known> current;
+        std::unordered_map<Uint32, Known> current;
         if (tradeOpen || !previous.empty()) {
+            current.reserve(unitList.size() + structureList.size());
             for (const auto* unit : unitList)
                 if (unit->getHealth() > 0) current[unit->getObjectID()] = {unit->getLocation(), priceOf(unit), unit->getOwner()->getTeamID()};
             for (const auto* structure : structureList)
@@ -247,7 +276,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 }
             }
         }
-        previous = tradeOpen ? std::move(current) : std::map<Uint32, Known>{};
+        previous = tradeOpen ? std::move(current) : std::unordered_map<Uint32, Known>{};
 
         for (const auto* unit : unitList) lastPrimaryTimer[unit->getObjectID()] = unit->primaryWeaponTimer;
         if (now >= Uint32(MILLI2CYCLES(nextSample * 60000))) { sampleHouses(game, nextSample); nextSample += kSampleMinutes; }
