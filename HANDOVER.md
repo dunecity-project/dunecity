@@ -1,3 +1,26 @@
+## 2026-10-17 — QuantBot force concentration: 13 candidates screened, default unchanged (branch `feat/ai-blob-waves`, protocol 77, save 9862, not released)
+
+Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and
+defense". Research (Lanchester, UAlbertaBot/Steamhammer/PurpleWave, sharpy-sc2, OpenRA, AoE II, Red
+Alert, CircuitAI, FM 3-90), candidates, tables and decision: `docs/formations.md` ("Concentrating force").
+Raw data: `docs/formation-results/force/` (tags `p2` = decisive, `p1` = pre-regression-fix screen).
+
+- Merged `perf/headless-sim` (0510079e) and `fix/ai-regression-all-vs-atreides` (a70f8666); protocol
+  reconciled to 77 (76 = Blob waves, 77 = the regression fix), save stays 9862.
+- Built test-only candidates (`QuantBot::forceVariantOverride`, duel flags F/N/C/P/H/M/L/Q; Blob bits
+  s/e; `src/players/QuantBotForce.cpp`, pure rules `include/players/ForceConcentrationPolicy.h` with
+  `ForceConcentrationPolicyTestCase.cpp`): focus fire, NOK-AV focus fire, converge after contact, pool
+  defenders 2x, recall raiders, muster defenders, wave size 150%/60%, staged Blob (+superiority). Duel
+  harness: `/weak` label (half starting army, defence scenario), home trade and force counters per house.
+- Measured (Hard, 36 games each, p2): best FC 0.611 (0.44-0.78), F 0.583 (0.42-0.75), Q 0.556; all
+  others 0.47-0.53; none separates from None. p1: L (big waves) 0.000 in 8 games. Default unchanged.
+- Not done (request budget): 108-game + Brutal confirmation of FC/F, the `/weak` defence run, Stefan's
+  bundling / big-wave cause / two-angle split ideas.
+- Tests (one ctest -j3 run on a3c40b99, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* incl. `quantbot_all_against_atreides`
+  (213.7 s): 39/39 passed.
+
 ## 2026-10-16 — All-against-Atreides AI regression fixed: mandatory test passes 6/6 (branch `fix/ai-regression-all-vs-atreides`, not released)
 
 Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla

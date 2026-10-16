@@ -6,9 +6,8 @@
 #include <vector>
 
 // QuantBot force concentration (docs/formations.md, "Concentrating force"): the pure decisions
-// behind focus fire, converging on a fight, pooling and recalling defenders, staging and wave
-// size. The real-engine behaviour is covered by the quantbot_force_concentration probe
-// (tests/ai/force-concentration-probe.inc).
+// behind the test-only candidates - focus fire, converging on a fight, pooling and recalling
+// defenders, staging and wave size - measured in duels with tests/ai/formation-duel.py.
 
 using namespace ForceConcentrationPolicy;
 

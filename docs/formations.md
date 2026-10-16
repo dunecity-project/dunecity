@@ -118,6 +118,64 @@ None on Hard; the open problem was that after contact the members engage one at 
 | `e` (Blob, with `s`) | engage only with local superiority (d) | At the staging point the party attacks only if its power is 1.5x the visible enemy fighters and turrets within 12 tiles of the objective; else it holds up to 60 s, and waves launched meanwhile join it. |
 | `/weak` (label) | defence scenario | Half of that side's starting army is removed (every second ground fighter by id) before the first cycle. |
 
+### Results (duel harness, None as control)
+
+Hard 1v1, Random Skirmish mirrored maps 128/160/192, Fortress + 20,000-credit armies, seeds 7101 7202
+7303 7404 7505 7606, one house pair per seed, both sides: 36 games per pairing, 40 game minutes,
+time-outs adjudicated on a 1,000-credit unit trade. Raw data `docs/formation-results/force/games.csv`,
+`waves-by-shape.csv`; printed reports `report-p2.md`, `report-p1.md`. Reproduce:
+`formation-duel.py --results <dir> --tag p2 --pairs "none+F:none,..." --sizes 128 160 192 --seeds 7101 7202 7303 7404 7505 7606 --report`.
+
+**Tag `p2`** (code: this branch after merging `fix/ai-regression-all-vs-atreides` a70f8666 - house
+withdrawals off by default, front battery 8-12 - and `perf/headless-sim`; the None baseline changed
+with that merge, so only `p2` decides). Wave columns are the candidate's waves; None's waves in the same
+games engaged 7-9% within 10 s and traded 3.0-4.2 killed/lost in the first minute.
+
+| Candidate v None (Hard) | Games | Score | 95% CI | Elim. W-L / time-outs | Contact s | Engaged ≤10 s | Killed / lost 60 s | Structures lost / destroyed per game | Home kill / loss | Win min |
+|---|---|---|---|---|---|---|---|---|---|---|
+| F focus fire | 36 | 0.583 | 0.42-0.75 | 18-7 / 11 | 40 | 8% | 2.96 | 51.8 / 65.8 | 0.36 | 31.6 |
+| N attack value, no overkill | 36 | 0.472 | 0.31-0.64 | 11-7 / 18 | 33 | 8% | 3.76 | 45.3 / 41.8 | 0.51 | 28.2 |
+| C converge after contact | 36 | 0.500 | 0.33-0.67 | 9-12 / 15 | 34 | 9% | 3.29 | 53.7 / 37.5 | 0.48 | 31.8 |
+| FC | 36 | **0.611** | 0.44-0.78 | 12-8 / 16 | 35 | 9% | 4.58 | 33.6 / 45.2 | 0.36 | 31.4 |
+| NC | 36 | 0.528 | 0.36-0.69 | 12-6 / 18 | 39 | 8% | 3.11 | 43.1 / 40.8 | 0.39 | 31.1 |
+| P pool defenders 2x | 36 | 0.528 | 0.36-0.69 | 11-8 / 17 | 36 | 8% | 3.68 | 41.9 / 48.2 | 0.44 | 34.6 |
+| H recall raiders | 36 | 0.528 | 0.36-0.69 | 10-9 / 17 | 37 | 8% | 3.53 | 42.5 / 45.2 | 0.41 | 34.0 |
+| PH | 36 | 0.528 | 0.36-0.69 | 11-10 / 15 | 36 | 8% | 3.68 | 41.8 / 48.1 | 0.44 | 34.6 |
+| M muster defenders | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 44.9 / 44.9 | 0.42 | 34.0 |
+| Q smaller waves (60%) | 36 | 0.556 | 0.39-0.72 | 17-8 / 11 | - | - | - | 28.7 / 60.8 | 0.38 | 32.4 |
+| none/retreat (attack, fall back, reform) | 36 | 0.486 | 0.32-0.65 | 9-11 / 16 | - | - | - | 44.9 / 41.7 | 0.44 | 36.1 |
+| blob+s staged near the enemy | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 52.6 / 44.0 | 0.39 | 34.0 |
+| blob+se staged, superiority | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 53.1 / 44.1 | 0.40 | 34.3 |
+
+("-": in `report-p2.md`.) How often the rules fired per game: F 1,433 target switches, N 961, C ~5,000
+converge orders, P 45 pooled defenders, H 11 recalled raiders, M 4.2 musters, staged parties 0.7-0.9
+(contact with an armed enemy releases almost every staged blob before it reaches its staging point;
+the superiority hold fired 0.2 times a game).
+
+**Tag `p1`** (pre-merge baseline, withdrawals still on; stopped after 20-23 games per pairing when the
+regression fix landed): L (waves at 150% readiness) 0.000 in 8 games (0-3 eliminations, 5 time-outs,
+-50,924 value per game) - the only clear result, so it was dropped; every other candidate 0.40-0.68 with
+intervals across 0.5 (Q 0.682, H 0.591, F 0.565, blob+vs 0.400). Not used for the decision.
+
+**What the games show.** Nothing separates from None in 36 games. Focus fire with convergence (FC) is
+the best point estimate (0.611, first-minute trade 4.58 against None's 3.44 in the same games, 34 of our
+structures lost per game against 45 destroyed), and focus fire alone wins the most eliminations (18-7),
+but both intervals reach below 0.5. Convergence alone does not change how members engage (9% within 10 s
+against 8%): the members it redirects are those not yet fighting, and they still arrive at their own
+speed. The defence rules fire (P sends 45 defenders a game, H recalls 11 raiders) but do not move the
+home trade (0.41-0.44 against 0.36-0.51 for the others). Staging near the enemy almost never stages.
+
+**Decision: no change to the QuantBot default; `WaveFormation` stays None and every candidate stays a
+test-only switch** (`forceVariantOverride`, Blob bits `s`/`e`), because no candidate's 95% interval is
+above 0.5 on Hard. Protocol 77 / save 9862 unchanged by this round (no production AI decision changed).
+
+**Not done in this round (request budget):** the 108-game confirmation and the Brutal 36 of FC and F
+(the next step: `--pairs "none+FC:none,none+F:none" --all-houses` and `--difficulty brutal`), the
+`/weak` defence scenario (built and smoke-tested, not run), and Stefan's three new ideas from the parent
+(squad-centre bundling of idle troops as before 1.0.602, why big waves lose, a two-angle split attack).
+On L, the only evidence is `p1`: fewer attacks in 40 minutes and -50,924 value per game; its cause was
+not traced in replays.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
