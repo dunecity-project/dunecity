@@ -61,6 +61,19 @@ every house within 40 game minutes on all of them. Details and tables:
 - ctest -j3 at the final commit: dunelegacy_tests, game_command_regressions, network_wire_harness,
   formation_planner_tests, formation_movement_probe, rts_controls_probe, preplace_queue_probe,
   skirmish_generator_tests and all 30 quantbot_* tests: 38/38 passed, 431 s.
+- `save_scenario_export` failed in staging (1.0.843 merge, `build-int`) with "Workshop file is
+  missing or too large." Not caused by this branch (no diff to `src/mod`, `src/MapEditor` or
+  `tools/scenarios` since 1.0.842): the test reuses its work dir, and the output map's revision
+  sidecar (`fixture-world-current.ini.workshop.ini`, written by the passing 1.0.842 run on
+  2026-10-15) named revision `7404876f…`, which was no longer in the work-dir profile's
+  `workshop/revisions` (the registered disposable-asset cleanup removes those after a success).
+  `MapEditor::saveMap` → `Workshop::saveMap` called `store().get(hash)` on that sidecar hash and
+  threw, so the map could not be saved. Reproduced in this tree by moving the named revision
+  away. A real game bug too: any map whose cached revision is gone (cleared Workshop cache,
+  copied map folder) could not be saved. Fix: `Workshop::saveMap` treats the sidecar only as a
+  reuse hint; a missing or damaged revision means "save as a new revision". The selftest now
+  starts every export from a sidecar naming an absent revision and checks the exported map is
+  pinned to a revision in the store (fails on the old binary, passes on the fix).
 - Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
   from a 75 peer. Save 9861 unchanged. No version bump.
 

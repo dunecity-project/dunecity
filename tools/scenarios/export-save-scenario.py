@@ -27,6 +27,7 @@ Examples::
     tools/scenarios/export-save-scenario.py --selftest --work-dir /tmp/selftest
 """
 import argparse
+import configparser
 import hashlib
 import json
 import os
@@ -364,6 +365,13 @@ def main():
             })
             report['inputs']['fixture_map_sha256'] = hashlib.sha256(
                 fixture_map.read_bytes()).hexdigest()
+            # Overwriting a map whose revision sidecar names a revision the local Workshop
+            # store no longer holds (a cleared cache, or a cleaned-up work-dir profile) must
+            # still save it, as a new revision. Every selftest starts from such a sidecar.
+            sidecar = Path(str(output) + '.workshop.ini')
+            sidecar.write_text('; Workshop revision\n\n[Workshop]\nID=' + '0' * 32 + '\nVersion=1\n'
+                               'Hash=' + 'f' * 64 + '\nName=' + output.stem + '\nMod=dunecity\n'
+                               'Base=""\nImmutable=false\n')
 
         save_bytes = save.read_bytes()
         report['inputs']['save_sha256'] = hashlib.sha256(save_bytes).hexdigest()
@@ -384,6 +392,12 @@ def main():
         report['outputs']['scenario_bytes'] = output.stat().st_size
         report['outputs']['revision_sidecar'] = (
             str(output) + '.workshop.ini' if Path(str(output) + '.workshop.ini').exists() else None)
+        if arguments.selftest:
+            pinned = configparser.ConfigParser(interpolation=None)
+            pinned.read(str(output) + '.workshop.ini')
+            revision = pinned.get('Workshop', 'Hash', fallback='')
+            if not (profile / 'workshop/revisions' / revision / 'manifest').is_file():
+                raise RuntimeError('The exported map is not pinned to a revision in the store: ' + revision)
 
         run_phase(binary, work, profile, 'verify', {
             'SCENARIO_EXPORT_OUTPUT': str(output),
