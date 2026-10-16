@@ -949,6 +949,13 @@ private:
     /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
     Uint32 bundleGateSince = 0;
     Coord forwardBundlePoint();
+    /// The house attack threshold attack() starts from (credits of military value, before the
+    /// campaign adjustment and the wave readiness scaling).
+    int houseAttackThreshold() const;
+    /// Bundling waits until the house could attack: its military value reaches the house
+    /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
+    /// losses - the reserve keeps to the home rally and defends the base.
+    bool bundleArmyReady() const;
     /// A withdrawal or recovery holds reinforcements at the protected shelter: bundling and
     /// its launch gate stand aside for the home rally then.
     bool reserveHeldHome() const {

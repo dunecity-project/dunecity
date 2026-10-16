@@ -381,6 +381,25 @@ int QuantBot::emergencyResponseRadius(int threatValue) {
                       kEmergencyBandMin, kEmergencyBandMax);
 }
 
+int QuantBot::houseAttackThreshold() const {
+    // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
+    const QuantBotConfig& config = getQuantBotConfig();
+    const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+        ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
+    const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
+    const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
+    return vanillaCustom
+        ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
+        : (militaryValueLimit * threshold).lround();
+}
+
+bool QuantBot::bundleArmyReady() const {
+    // The house attack threshold at the configured wave readiness, exactly as attack() applies
+    // it (D's outnumbered raise aside): below it the reserve stays on the home rally.
+    const int64_t required = ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), waveReadinessPercent());
+    return militaryUnitValue() >= required;
+}
+
 
 void QuantBot::attack(int militaryValue) {
     AITelemetry::PerformanceScope perfScope("ai.attack", getGameCycleCount(), getHouse()->getHouseID());
@@ -419,12 +438,8 @@ void QuantBot::attack(int militaryValue) {
 	float attackThresholdPercent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
 		? diffSettings.attackThresholdPercent 
 		: config.attackThresholdPercent;
-
-	FixPoint attackThreshold = FixPoint(static_cast<int>(attackThresholdPercent * 100)) / 100;
 	const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
-	int requiredMilitary = vanillaCustom
-        ? DuneCity::vanillaAttackThreshold((militaryValueLimit * attackThreshold).lround(), static_cast<int>(difficulty))
-        : (militaryValueLimit * attackThreshold).lround();
+	int requiredMilitary = houseAttackThreshold();
     const bool campaign = isCampaignGameType(currentGame->gameType);
     if (campaign) requiredMilitary=campaignRequiredArmy(requiredMilitary);
     // Wave size (docs/formations.md, "Concentrating force"): the house threshold scales with
@@ -3281,9 +3296,10 @@ void QuantBot::retreatAllUnits() {
             tryLaunchOrnithopterStrike(diffSettings, config);
         }
 
-        // Bundling (B, docs/formations.md "Concentrating force"; on by default): the idle reserve
-        // gathers at the forward rally (with O: or the army's centre of mass, whichever is closer).
-        const bool bundling=forceVariant(kForceBundle);
+        // Bundling (B, docs/formations.md "Concentrating force"; on by default): once the house
+        // could attack, the idle reserve gathers at the forward rally (with O: or the army's
+        // centre of mass, whichever is closer); below that it keeps to the home rally.
+        const bool bundling=forceVariant(kForceBundle) && bundleArmyReady();
         int bundleTiles=0;
         std::vector<BundleWalker> bundleWalkers;
         if (bundling) {
