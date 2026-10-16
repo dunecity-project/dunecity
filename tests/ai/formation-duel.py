@@ -42,8 +42,12 @@ KEY = ('tag', 'difficulty', 'size', 'seed', 'house_a', 'shape_a', 'house_b', 'sh
 # Per house; the hunt-party counters (QuantBot::blobStats) are zero without parties.
 PARTY_FIELDS = ('parties', 'gathered', 'gather_timeouts', 'releases', 'reforms', 'fallbacks', 'fallback_returns',
                 'legs', 'dissolved', 'stalls', 'repairs')
+# Per house: the home trade (units destroyed within 12 tiles of a building - the enemy's near ours
+# are home kills, ours near ours home losses) and the force-candidate counters (QuantBot::forceStats).
+FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recalled', 'musters', 'muster_releases',
+                'stage_holds', 'staged')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units') + PARTY_FIELDS
+                'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
     f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
@@ -342,6 +346,8 @@ def export(args):
         s['waves'] += 1
         for field in ('members', 'kill60', 'loss60', 'survivors', 'lost_before_contact', 'shots30'):
             s[field] += number(wave[field])
+        if number(wave['contact_s'], -1) >= 0:
+            s['contact_s'] += number(wave['contact_s'])
         if number(wave['arrived']) >= 2:
             s['spread_waves'] += 1
             s['arrival_spread_s'] += number(wave['arrival_spread_s'])
@@ -358,7 +364,7 @@ def export(args):
             s['engaged10'] += number(wave.get('engaged10'))
     fields = ('tag', 'difficulty', 'size', 'seed', 'shape', 'waves', 'members', 'kill60', 'loss60', 'survivors',
               'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact',
-              'waves_10s', 'in_formation_10s', 'met_waves', 'met_members', 'together_at_contact', 'engaged10')
+              'waves_10s', 'in_formation_10s', 'met_waves', 'met_members', 'together_at_contact', 'engaged10', 'contact_s')
     with (target / 'waves-by-shape.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
@@ -384,7 +390,7 @@ def pairing_report(args):
     print('| Pairing | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | '
           'Median game min | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|')
-    wave_rows, party_rows = [], []
+    wave_rows, party_rows, defence_rows, force_rows = [], [], [], []
     for x, y in pairs(args):
         mine = [g for g in games if {g['shape_a'], g['shape_b']} == {x, y}]
         rows = [s for g in mine for s in sides(g, args.adjudicate) if s[0] == x]
@@ -398,6 +404,17 @@ def pairing_report(args):
               f'{statistics.mean(r[5] for r in rows):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | '
               f'{statistics.median(number(g["end_s"]) / 60 for g in mine):.1f} | {verdict} |')
         keys = {tuple(g[k] for k in KEY) for g in mine}
+        # Defence and pace, from x's side: structures lost (the opponent's kills), the home trade,
+        # how long x's eliminations took, and the per-game force-candidate counters.
+        wins = [number(g['end_s']) / 60 for g in mine for s in sides(g, args.adjudicate) if s[0] == x and s[5] == 1.0]
+        home_kill = sum(r[3]['home_kill'] for r in rows); home_loss = sum(r[3]['home_loss'] for r in rows)
+        defence_rows.append(f'| {x} v {y} | {statistics.mean(r[4]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{statistics.mean(r[3]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{home_loss / len(rows):.0f} | {home_kill / len(rows):.0f} | {home_kill / max(1, home_loss):.2f} | '
+                            f'{statistics.median(wins) if wins else 0:.1f} | {len(wins)} |')
+        if any(r[3][f] for r in rows for f in FORCE_FIELDS[2:]):
+            force_rows.append(f'| {x} v {y} | ' + ' | '.join(f'{statistics.mean(r[3][f] for r in rows):.1f}'
+                                                          for f in FORCE_FIELDS[2:]) + ' |')
         for shape in (x, y):
             sw = [wv for wv in waves if tuple(wv[k] for k in KEY) in keys and wv['shape'] == shape]
             members = sum(number(wv['members']) for wv in sw)
@@ -430,6 +447,17 @@ def pairing_report(args):
         print('| Pairing | Side | ' + ' | '.join(PARTY_FIELDS) + ' |')
         print('|---|---|' + '---|' * len(PARTY_FIELDS))
         print('\n'.join(party_rows))
+    print('\nDefence and pace, first side of each pairing (per game: own structures lost and enemy structures '
+          'destroyed; home trade = enemy value destroyed within 12 tiles of own buildings against own value lost '
+          'there; median minutes to an elimination win):\n')
+    print('| Pairing | Structures lost | Structures destroyed | Home loss | Home kill | Home kill / loss | Win min | Wins |')
+    print('|---|---|---|---|---|---|---|---|')
+    print('\n'.join(defence_rows))
+    if force_rows:
+        print('\nForce-candidate counters per game, first side (QuantBot::forceStats):\n')
+        print('| Pairing | ' + ' | '.join(FORCE_FIELDS[2:]) + ' |')
+        print('|---|' + '---|' * len(FORCE_FIELDS[2:]))
+        print('\n'.join(force_rows))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

@@ -255,6 +255,11 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
         const int price=currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
     };
+    // Test-only force candidates (docs/formations.md, "Concentrating force"): P counts the
+    // enemy within 12 tiles and sends twice it from up to 40 tiles; H brings the raiding army
+    // home when the troops nearby cannot answer; M has distant defenders muster first.
+    const bool pool=forceVariant(kForcePool), recall=forceVariant(kForceRecall), muster=forceVariant(kForceMuster);
+    const int threatTiles=pool ? ForceConcentrationPolicy::kPoolThreatTiles : kBaseScrambleContactTiles;
     int threat=value(intruder), committed=0;
     int held=0, forcedKept=0, alreadyScrambled=0, retuned=0;
     std::vector<SimpleArmyPolicy::Responder> candidates;
@@ -263,7 +268,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
         // The local threat: every visible enemy ground fighter at the building.
         if (unit->getOwner()->getTeamID()!=myTeam) {
             if (unit!=intruder && unit->canAttack() && !unit->isAFlyingUnit()
-                && unit->isVisible(myTeam) && atBuilding(unit->getLocation())) threat+=value(unit);
+                && unit->isVisible(myTeam) && distanceToBuilding(unit->getLocation())<=threatTiles) threat+=value(unit);
             continue;
         }
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()) continue;
@@ -277,6 +282,11 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
         if (unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free
             || static_cast<const GroundUnit*>(unit)->isAwaitingPickup()) { ++held; continue; }
         const Uint32 id=unit->getObjectID();
+        // Mustering for a building: committed to it, never re-ordered here.
+        if (!musters.empty()) if (const auto* own=musterOf(id)) {
+            if (own->building==building->getObjectID()) committed+=value(unit);
+            continue;
+        }
         // A scrambled unit is never scrambled again while it is on that job. If
         // that job is this building, it already counts towards the answer.
         if (unitRole(unit, {UnitRole::BaseDefence}) == UnitRole::BaseDefence) {
@@ -314,23 +324,42 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // "Closest" is bounded: the same threat-scaled band (12-40 tiles) that
     // limits every other emergency response, so one raid cannot pull troops
     // from the far side of the map.
-    const int band=emergencyResponseRadius(threat);
-    candidates.erase(std::remove_if(candidates.begin(),candidates.end(),
-        [&](const SimpleArmyPolicy::Responder& candidate) { return candidate.distance>band; }),
-        candidates.end());
-    // The nearest troops, until together with those already in the fight they
-    // outweigh the threat at the building.
-    const auto response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+    const int band=pool ? kEmergencyBandMax : emergencyResponseRadius(threat);
+    std::vector<Uint32> response;
+    int recalled=0;
+    if (pool || recall || muster) {
+        std::vector<ForceConcentrationPolicy::Responder> responders;
+        for (const auto& candidate : candidates) responders.push_back({candidate.id,candidate.value,candidate.distance});
+        const int64_t required=pool ? ForceConcentrationPolicy::poolRequired(threat) : SimpleArmyPolicy::responseValue(threat);
+        response=ForceConcentrationPolicy::pool(required,committed,responders,band,recall);
+        for (const auto& candidate : candidates)
+            if (candidate.distance>band && std::find(response.begin(),response.end(),candidate.id)!=response.end()) ++recalled;
+        forceStats.pooled+=int(response.size());
+        forceStats.recalled+=recalled;
+    } else {
+        candidates.erase(std::remove_if(candidates.begin(),candidates.end(),
+            [&](const SimpleArmyPolicy::Responder& candidate) { return candidate.distance>band; }),
+            candidates.end());
+        // The nearest troops, until together with those already in the fight they
+        // outweigh the threat at the building.
+        response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+    }
+    std::vector<Uint32> musterIds;
     // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
     // to the building's point nearest to itself at its own speed.
     for (const auto id : response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
         const Coord at=building->getClosestPoint(unit->getLocation());
+        if (muster && blockDistance(unit->getLocation(),at).lround()>ForceConcentrationPolicy::kMusterFromTiles) {
+            musterIds.push_back(id);
+            continue;
+        }
         doHuntToward(unit,at.x,at.y);
         defenceAssignments[id]=building->getObjectID();
         groundSquad.erase(id);
     }
+    if (!musterIds.empty()) startMuster(building,musterIds);
     const Coord contact=intruder->getLocation();
     if (!response.empty() || committed>0) traceDecision("base_scramble",AITelemetry::Record()
         .set("target",intruder->getObjectID()).set("building",building->getObjectID())
@@ -398,6 +427,9 @@ void QuantBot::attack(int militaryValue) {
         : (militaryValueLimit * attackThreshold).lround();
     const bool campaign = isCampaignGameType(currentGame->gameType);
     if (campaign) requiredMilitary=campaignRequiredArmy(requiredMilitary);
+    // Test-only wave-size candidates (L / Q): the house threshold scales with the wave's.
+    if (forceVariant(kForceBigWaves)) requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,150));
+    else if (forceVariant(kForceSmallWaves)) requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,60));
     if (militaryValue < requiredMilitary) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
         if (campaign || (vanillaCustom && difficulty == Difficulty::Brutal))
@@ -680,7 +712,7 @@ void QuantBot::launchGroundHunt() {
                 if (launcherItem(unit)) ++launchersHeldByDefence;
                 continue;
             }
-            if (inParty) continue;
+            if (inParty || (!musters.empty() && musterOf(unit->getObjectID()))) continue;
             if (unit->getAttackMode()==HUNT) {
                 existingHunters.push_back(unit->getObjectID());
                 if (launcherItem(unit)) ++launchersAlreadyHunting;
@@ -776,6 +808,9 @@ void QuantBot::launchGroundHunt() {
             const auto& settings=getQuantBotConfig().getSettings(static_cast<int>(difficulty));
             const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
             requiredReady=(militaryValueLimit*threshold).lround();
+            // Test-only wave-size candidates (L / Q): readiness at 150% / 60%.
+            if (forceVariant(kForceBigWaves)) requiredReady=int(ForceConcentrationPolicy::scaledReadiness(requiredReady,150));
+            else if (forceVariant(kForceSmallWaves)) requiredReady=int(ForceConcentrationPolicy::scaledReadiness(requiredReady,60));
             int availableUnits=0;
             for (const auto& candidate : candidates) if (candidate.value>0) ++availableUnits;
             // A viable main wave, not a patrol: the established minimum is six
@@ -3185,6 +3220,8 @@ void QuantBot::retreatAllUnits() {
         }
         // Hunt parties (Blob waves) after the recall: a recall dissolves them.
         updateHuntParties();
+        // Force concentration (test-only candidates, docs/formations.md "Concentrating force").
+        concentrateForces();
         int rallyOrdersRemaining=4;
         int combatCount=0;
         for (const auto* unit:getUnitList()) if (unit->getOwner()==getHouse() && unit->isActive()
@@ -3244,6 +3281,8 @@ void QuantBot::retreatAllUnits() {
             // reforming or falling back): no rally, kiting or prey assignment re-orders them.
             if (pUnit->getOwner() == getHouse() && huntPartyOf(pUnit->getObjectID())
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free) continue;
+            // A defender mustering for a base attack belongs to its muster.
+            if (pUnit->getOwner() == getHouse() && !musters.empty() && musterOf(pUnit->getObjectID())) continue;
             // Combat spacing applies to defenders and escorts too, before their
             // strategic-role early return. Guard orders already leave targets alone.
             if (!supportMode && pUnit->getOwner() == getHouse()

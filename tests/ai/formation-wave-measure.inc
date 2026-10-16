@@ -43,6 +43,14 @@ constexpr int kSampleMinutes = 5;
 constexpr int kTogetherTiles = 8;
 /// Members "arriving together": engaged within this long of the wave's contact.
 constexpr Uint32 kTogetherWindowCycles = MILLI2CYCLES(10 * 1000);
+/// Defence trade (docs/formations.md, "Concentrating force"): a unit destroyed this close to a
+/// building of its own house is a home loss for that house; this close to a building of another
+/// team it is a home kill for that building's house. Sampled every kHomeSampleCycles.
+constexpr int kHomeTiles = 12;
+constexpr Uint32 kHomeSampleCycles = 16;
+struct HomeTrade { int kill = 0, loss = 0; };
+/// Per house id, for FormationDuel::report.
+inline std::map<int, HomeTrade>& homeTrade() { static std::map<int, HomeTrade> trade; return trade; }
 
 struct Wave {
     int house = -1;
@@ -147,7 +155,19 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
     std::map<Uint32, Sint32> lastPrimaryTimer;
     std::map<Uint32, Known> previous;        // every object last cycle, while a trade window is open
     int nextSample = kSampleMinutes;
-
+    // Home trade: every ground unit at the last sample (location, value, owner house).
+    struct Home { Coord location; int value = 0; int house = -1; int team = -1; };
+    std::map<Uint32, Home> homeUnits;
+    auto homeOf = [](Coord at, int team, bool own) {
+        // The house whose building is within kHomeTiles: own team's (own) or another team's.
+        for (const auto* structure : structureList) {
+            if (structure->getHealth() <= 0 || !structure->getOwner()) continue;
+            if ((structure->getOwner()->getTeamID() == team) != own) continue;
+            if (blockDistance(at, structure->getClosestPoint(at)).lround() <= kHomeTiles)
+                return int(structure->getOwner()->getHouseID());
+        }
+        return -1;
+    };
     while (!game.finished && game.getGameCycleCount() < endCycle && !(stop && stop())) {
         // Where every live member of a wave in contact stood before this cycle, for kill credit.
         std::vector<std::pair<size_t, Coord>> memberSpots;
@@ -281,6 +301,22 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
 
         for (const auto* unit : unitList) lastPrimaryTimer[unit->getObjectID()] = unit->primaryWeaponTimer;
         if (now >= Uint32(MILLI2CYCLES(nextSample * 60000))) { sampleHouses(game, nextSample); nextSample += kSampleMinutes; }
+        if (now % kHomeSampleCycles == 0) {
+            std::map<Uint32, Home> current;
+            for (const auto* unit : unitList)
+                if (unit->getHealth() > 0 && unit->isActive() && unit->isAGroundUnit() && unit->getOwner())
+                    current[unit->getObjectID()] = {unit->getLocation(), priceOf(unit), int(unit->getOwner()->getHouseID()),
+                                                    unit->getOwner()->getTeamID()};
+            for (const auto& [id, known] : homeUnits) {
+                if (current.count(id)) continue;
+                const auto* still = game.getObjectManager().getObject(id);
+                if (still && still->getHealth() > 0) continue;     // inside a carryall or a bay
+                if (homeOf(known.location, known.team, true) == known.house) homeTrade()[known.house].loss += known.value;
+                const int defender = homeOf(known.location, known.team, false);
+                if (defender >= 0) homeTrade()[defender].kill += known.value;
+            }
+            homeUnits = std::move(current);
+        }
     }
 
     int reported = 0;

@@ -33,6 +33,7 @@ class Harvester;
 #include <players/CampaignDifficultyPolicy.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/BlobWavePolicy.h>
+#include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/SpecialUnitPolicy.h>
@@ -849,6 +850,9 @@ private:
         Uint32 progressCycle = 0;           ///< march: last cycle the anchor got closer
         Sint32 progressRemaining = std::numeric_limits<Sint32>::max();
         Uint8 fallbacks = 0;                ///< tactical fall-backs so far
+        /// Test-only (+e): cycle the staged party began holding for superiority (max: not
+        /// holding). Not saved: never set without the test-only override.
+        Uint32 holdSince = std::numeric_limits<Uint32>::max();
         std::set<Uint32> members;           ///< ordered: identical iteration on every peer
     };
     std::vector<BlobParty> blobParties;
@@ -865,7 +869,55 @@ private:
     /// below 60% stay with a party that has not met a fight yet instead of driving to repair).
     /// Never set by the game, not saved, not hashed.
     static constexpr int kBlobVehiclePace = 1, kBlobRealFight = 2, kBlobKeepDamaged = 4;
+    /// kBlobStage (+s): no gather at home; the blob marches in one leg to a staging point just
+    /// outside enemy reach near its objective, waits there for the rest and then attacks all
+    /// at once. kBlobSuperiority (+e, with +s): it attacks from the staging point only with
+    /// local superiority, else holds for reinforcements (later waves join it) for a while.
+    static constexpr int kBlobStage = 8, kBlobSuperiority = 16;
     int blobVariantOverride = 0;
+
+    // ---- Concentrating force (docs/formations.md, "Concentrating force") -----------------
+    /// Test-only candidates (tests/ai/formation-duel.py label flags, uppercase): bits of
+    /// kForceFocusFire (F: hunting ground units shoot the best target in reach - fighters
+    /// first, then the one with the fewest hit points), kForceConverge (C: wave members not
+    /// fighting join a fight of their army nearby), kForcePool (P: an attacked building gets
+    /// 2x the threat within 12 tiles from up to 40 tiles), kForceRecall (H: when the troops
+    /// nearby cannot answer a base attack, the raiding army comes home for it), kForceMuster
+    /// (M: distant defenders muster just outside the fight and engage together),
+    /// kForceBigWaves / kForceSmallWaves (L / Q: wave readiness 150% / 60%), kForceNoOverkill
+    /// (N: focus fire by attack value - the most enemy damage per hit point - without overkill,
+    /// in object-id order). Custom Hard/Brutal only. Never set by the game, not saved, not hashed.
+    static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
+        kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128;
+    int forceVariantOverride = 0;
+    bool forceVariant(int bit) const { return (forceVariantOverride & bit) != 0 && autonomousCustomHardBrutal(); }
+    /// One pass of the force rules over the army (unit phase, after the hunt parties).
+    void concentrateForces();
+    /// Focus fire for one hunting ground unit; true if it was given a new target.
+    bool focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies);
+    /// Attack-value focus fire without overkill over \a hunters (sorted by object id).
+    void focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, const std::vector<const ObjectBase*>& enemies);
+    /// Distant defenders gathering before they engage at an attacked building (kForceMuster).
+    struct Muster {
+        Uint32 building = NONE_ID;
+        Coord point = Coord::Invalid();
+        Uint32 since = 0;
+        std::set<Uint32> members;
+    };
+    std::vector<Muster> musters;
+    const Muster* musterOf(Uint32 id) const;
+    /// Sends \a ids to muster for \a building (joining its muster if there is one).
+    void startMuster(const ObjectBase* building, const std::vector<Uint32>& ids);
+    void updateMusters();
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct ForceStats {
+        int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
+            stageHolds = 0, staged = 0;
+    };
+    ForceStats forceStats;
+    /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
+    /// around its objective (ForceConcentrationPolicy::superior)?
+    bool huntPartySuperior(const BlobParty& party) const;
     /// Is \a contact (met at \a at) a real fight for this party rather than a lone scout?
     bool huntPartyRealFight(const BlobParty& party, const ObjectBase* contact) const;
     /// Sends the members nearest \a contact (at most three) to shoot it; the party marches on.
