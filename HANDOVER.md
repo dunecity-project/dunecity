@@ -1,3 +1,30 @@
+## 2026-10-16 — QuantBot Blob waves: measured, default stays None (branch `feat/ai-blob-waves`, save 9862 / protocol 76, not released)
+
+Stefan: gather the hunt party, march as one blob so trikes cannot run ahead, unblob on contact, reform,
+and make the damage retreat a short tactical fall-back to reform. Research (OpenRA squad leader/regroup,
+UAlbertaBot regroup position, sharpy-sc2, AoE II attack groups, BAR), design, tests and all tables:
+`docs/formations.md` ("Blob waves"). Raw data: `docs/formation-results/blob/` (tags `hard1`, `brutal1`).
+
+- Built: `WaveFormation = Blob` (optional key; code default stays None) makes a Custom Hard/Brutal
+  wave a hunt party (`src/players/QuantBotBlob.cpp`, `include/players/BlobWavePolicy.h`): gather at a
+  rally point towards the objective (90% quorum, blocked-stall rule, travel-time limit), march leg by leg
+  at the slowest member's pace (fast members wait at each leg end), release into engine Hunt on contact
+  (visible enemy within a member's huntTowardRange, or a hit), reform after 6 s quiet, tactical fall-back
+  8 tiles away from the threat when locally outmatched (1.3x for 4 s or 2x), replacing the local recall
+  home. Party state saved (9862); protocol 76. Test-only ablation switch `tacticalRetreatOverride`;
+  duel labels `blob`, `blob/noretreat`, `none/retreat`; new wave metrics `together_at_contact`, `engaged10`.
+- Measured (Hard, 108 games per pairing, sizes 128/160/192, seeds 7101-7606, all house pairs, both sides):
+  Blob v None **0.306 (0.22-0.39)**, loses; Blob without retreat 0.343 (0.26-0.44), loses; retreat without
+  Blob 0.486 (0.39-0.58), neutral. Brutal sample (36 games) Blob v None 0.444 (0.28-0.61). Blob keeps
+  waves together (50% v 22% of members at contact, arrival spread 71 v 100 s, survival 71% v 65%) but
+  reaches contact 21 s later and trades worse in the first minute (2.89 v 3.67 killed/lost).
+- Decision: `WaveFormation` default stays None; Blob remains selectable. Not done: a second iteration on
+  the release/engagement and a full Brutal run (request budget).
+- Tests (one ctest run, -j2, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* tests incl. the new
+  `quantbot_blob_waves`: 38/38 passed. Probe/duel scratch deleted; results kept.
+
 ## 2026-10-15 — 1.0.842 production release
 
 PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run

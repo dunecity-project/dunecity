@@ -7,6 +7,181 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
+
+Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
+gathering up all available units in the hunt party for an offensive would be good, because otherwise
+trikes run off ahead etc. it could blod up, move towards its desination and then unblob on making
+contact. i think we also have a need to get it to reform. i think the retreat we do on damage should
+be a tactical retreat back a bit to reform as a formation".
+
+### Research: how RTS AIs keep an army together
+
+- **OpenRA squad AI** ([`GroundStates.cs`](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/States/GroundStates.cs)):
+  a squad elects a *leader* - the unit nearest the squad's centre among the units with the most
+  restricted locomotor, so the others can follow it. While attack-moving, if fewer than all members
+  are within `units / 3` cells of the leader, the leader *stops* and the stragglers attack-move to
+  the leader ("units have different movement speeds, they get separated ... let them regroup into
+  tighter formation"); once together the squad attack-moves to the target and, near an enemy,
+  switches to an attack state where every unit attack-moves on its own. A squad that has not moved
+  for 2.5 s drops back to idle (stuck guard). Its flee state sends the squad to an own building -
+  a full retreat. *For QuantBot:* the anchor (leader) choice, "wait for the rear" cohesion and the
+  per-unit fight after contact are exactly Stefan's blob; the stuck guard is needed too.
+- **UAlbertaBot / Steamhammer (StarCraft: Brood War)** ([`Squad.cpp`](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/Squad.cpp),
+  [paper](https://davechurchill.ca/publications/pdf/cog19_buildorder.pdf)): every second the squad
+  simulates the local fight (SparCraft) when an enemy is in range; if it predicts a loss it
+  *regroups*: every unit moves to the regroup position, which is the squad unit closest to the
+  order's target that is **not** near an enemy - a short tactical step back to the front edge of
+  the safe part of the squad, not home. A 100-frame hysteresis stops it flipping back to attack.
+  *For QuantBot:* the tactical retreat should be a short fall-back to safe ground beside the party,
+  triggered by a local strength comparison, with hysteresis.
+- **sharpy-sc2** ([`group_combat_manager.py`](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/combat/group_combat_manager.py)):
+  own units are clustered (DBSCAN); a configurable share of the attackers must be together before
+  attacking (`regroup_percentage`), and a *faster* group regroups to a slower one. *For QuantBot:*
+  a gather quorum (not 100%: blocked units must not stall the attack) and fast units waiting.
+- **Age of Empires II AI** ([strategic numbers](https://airef.github.io/strategic-numbers/sn-index.html)):
+  attack groups gather before attacking (`sn-attack-group-gather-spacing`, default 4; units count as
+  formed within `sn-group-form-distance`, default 20, of the group commander chosen by
+  `sn-group-commander-selection-method`). *For QuantBot:* gather point plus a formed-distance test.
+- **Beyond All Reason / Spring** ([Move in Formation](https://www.beyondallreason.info/commands/move-in-formation)):
+  "faster units will move at the speed of the slowest units in the group". No primary source for an
+  AI regroup rule was found for BAR's bots, Total War or Command & Conquer beyond OpenRA's.
+- **Blob versus formation:** the earlier rounds here (below) found that rigid shapes lose to plain
+  Hunt, because a formation that keeps its shape into the fight fights with its front rows only; the
+  sources above all keep cohesion only *until* contact and then let every unit fight on its own.
+
+### What QuantBot does today (1.0.842, code read)
+
+- **Who goes:** Custom Hard/Brutal `launchGroundHunt()` is a whole-army dispatch: every available
+  ground fighter (not on a repair run, a live defence job, an escort or already hunting) once the
+  available value reaches the readiness threshold and a viable main wave (6 units, 3,000 credits).
+  They are tracked in `customWave`. Units already hunting join the tracked army unchanged.
+- **Why trikes run ahead:** each unit simply gets engine Hunt (`doSetAttackMode(HUNT)`): each one
+  walks at its own speed to its own nearest target (quad 1.28, tank 0.80, siege tank 0.64, trooper
+  0.48, soldier 0.24 px/cycle), so the fast ones arrive first and alone. Nothing waits.
+- **The retreat on damage today:** (1) per unit - a vehicle below 60% health with a repair yard is
+  sent to the repair yard (`onDamage` → `doRepair`), alone, wherever it is; (2) the squad - when
+  the enemy around the tracked army's centroid is 1.3x ours for 9 s (`localSquadWithdraw`) or 2x
+  (severe: a house emergency), or on sustained attrition / a core attack, `applyArmyPosture()`
+  recalls every tracked member to the protected shelter inside the base (forced moves, Area Guard);
+  the house then waits in Withdrawing/Recovering until it is ready to attack again.
+
+### Design as built
+
+`WaveFormation = Blob` (QuantBot Config.ini, optional key, code default unchanged: None) makes a
+Custom Hard/Brutal ground wave a **hunt party** (`QuantBot::BlobParty`, `src/players/QuantBotBlob.cpp`,
+pure rules in `include/players/BlobWavePolicy.h`). Who goes and when is unchanged; Easy/Medium,
+campaign waves and every other AI group move as None with Blob (`QuantBotConfig::formationShapeOf`).
+
+- **Gather:** the anchor is OpenRA's leader (the member nearest the members' centre, vehicles
+  first). The rally point is up to 6 tiles (a third of the way at most) from it towards the
+  objective, on standable ground in the anchor's vehicle terrain region
+  (`Map::vehicleTerrainRegion`) outside observed enemy weapon reach. Every member walks to its own
+  hashed tile around it in Area Guard. The party marches when 90% stand there; or when the rest
+  have all stopped (blocked), nobody arrived for 8 s and 60% are there; or at the latest after the
+  slowest member's straight-line travel time x1.5 + 4 s (8-60 s).
+- **Blob march (leg by leg):** each leg ends one leg (`max(8, 2 x blob radius)` tiles) from the
+  anchor towards the objective; every member walks to its own tile there in Area Guard; the fast ones
+  arrive first and **wait**; the next leg starts when 90% of the members that are not stragglers
+  (more than two legs plus the radius away) are there, or after the slowest member's travel time
+  (x1.5 + 4 s, at most 90 s). So the blob moves at its slowest member's pace and a fast member is at
+  most about two legs plus two radii from the slow ones. A blob that gets no closer for 60 s, or
+  comes within half a leg of the objective, is released.
+- **Release on contact (unblob):** a visible enemy fighter or building within any member's
+  `huntTowardRange()` (weapon or view range, the distance at which engine Hunt itself stops), or a
+  hit on any member, releases the party: members already in contact keep their target in Hunt, the
+  others hunt their way to the contact (`doHuntToward`), so every member fights as engine Hunt -
+  exactly None's fight, all members engaged.
+- **Reform:** when no enemy has been within reach of any member and nobody was hit for 6 s, the party
+  reforms around the anchor (a gather with a 30 s cap) and marches on to the next objective (the old
+  one if it still stands, else the wave's objective choice again).
+- **Tactical retreat:** during a fight, our ground fighters against the visible enemy fighters within
+  10 tiles of the anchor (the posture policy's 1.3x for 4 s, or 2x at once): the party falls back
+  8 tiles away from the threat, bent towards home (away from the threat counts twice), on a forced
+  move, then reforms there and marches again - at most 3 times per party. With the tactical retreat
+  on, the squad-level recall home (`localSquadWithdraw`) and the severe-local-defeat house emergency
+  are replaced by it; strategic attrition and core attacks still recall the whole army home, and
+  then the parties dissolve. Per-unit repair runs below 60% health are unchanged (see the results).
+- **Determinism:** parties are a vector in launch order, members ordered sets, every scan in a fixed
+  list/tile order with id tie-breaks, integer arithmetic only. Party state is saved
+  (SAVEGAMEVERSION 9862: phase, clocks, points, objective, fall-back count, members); a 9861 save
+  loads with no party. Protocol 76 (AI orders differ from a 75 peer).
+- **Ablation switches (test-only, not saved, not hashed):** `QuantBot::waveFormationOverride`
+  (Blob/None) and `QuantBot::tacticalRetreatOverride` (-1 with Blob only, 0 off, 1 also for plain
+  Hunt waves, which then track a party that only falls back and reforms). Duel labels: `blob`,
+  `blob/noretreat`, `none/retreat`.
+- **Tests:** `BlobWavePolicyTestCase.cpp` (dunelegacy_tests: radius/leg, gather quorum/stall/
+  timeout, leg quorum, straggler and travel limits, fast-lead bound, rally and fall-back geometry,
+  outmatch ratios, integer symmetry, Blob config/hash) and the real-engine probe
+  `quantbot_blob_waves` (`tests/ai/blob-wave-probe.inc`: gather of every available fighter, gather
+  timeout keeping stragglers, march with the fast-member lead within bound and below plain Hunt's,
+  release into Hunt on contact, reform after 6 s quiet, fall-back ~8 tiles away from the threat and
+  return to the march, order independence of party/orders/contact, save/load mid-gather, mid-march
+  and mid-reform with identical re-saved bytes, None unchanged).
+
+### Results (duel harness, None as control)
+
+`tests/ai/formation-duel.py` (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, 40 game
+minutes, time-outs adjudicated on a 1,000-credit unit trade), sizes 128/160/192, seeds 7101-7606,
+`--all-houses` (all three house pairs per seed) and both side assignments: **108 games per pairing**.
+Code: commit `0aba7ea8` (this branch). Raw data: `docs/formation-results/blob/games.csv`,
+`waves-by-shape.csv` (tags `hard1`, `brutal1`) and the printed reports `report-hard1.md`,
+`report-brutal1.md`; reproduce with `formation-duel.py --results <dir> --tag hard1 --pairs
+"blob:none,blob/noretreat:none,none/retreat:none" --sizes 128 160 192 --seeds 7101 7202 7303 7404 7505 7606 --report`.
+
+| Pairing (first side's score), Hard | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | Verdict |
+|---|---|---|---|---|---|---|---|
+| blob v none | 108 | 0.306 | 0.22-0.39 | 18-33 / 57 | 0.431 | -20,407 | loses to None |
+| blob/noretreat v none (blob without the tactical retreat) | 108 | 0.343 | 0.26-0.44 | 23-31 / 54 | 0.463 | -16,384 | loses to None |
+| none/retreat v none (tactical retreat without the blob) | 108 | 0.486 | 0.39-0.58 | 30-30 / 48 | 0.500 | -865 | not distinguishable |
+| blob v none, **Brutal** (one house pair per seed) | 36 | 0.444 | 0.28-0.61 | 8-11 / 17 | 0.458 | -3,688 | not distinguishable |
+
+Waves (every wave of the first side in those games; contact = first member engaging; together = living
+members within 8 tiles of the member nearest their centre at contact; engaged within 10 s of contact;
+first-minute value from contact; survival 5 min after launch), with None's waves in the same games:
+
+| Side (Hard) | Waves | Contact s (median) | Arrival spread s | Together at contact | Engaged ≤10 s | Killed / lost 60 s | Killed / lost | Survival | None in those games: together, K/L, survival |
+|---|---|---|---|---|---|---|---|---|---|
+| blob | 621 | 54 | 71 | 50% | 11% | 2,675 / 925 | 2.89 | 71% | 22%, 3.67, 65% |
+| blob/noretreat | 633 | 60 | 74 | 50% | 11% | 2,598 / 785 | 3.31 | 73% | 23%, 3.78, 64% |
+| none/retreat | 658 | 33 | 86 | 24% | 8% | 3,523 / 966 | 3.65 | 59% | 23%, 3.63, 59% |
+| blob (Brutal) | 196 | 58 | 75 | 49% | 10% | 2,819 / 855 | 3.30 | 75% | 20%, 3.40, 68% |
+
+How often the party steps fired, per game (Hard, Blob with retreat): 5.8 parties, 2.8 gathers that
+reached their quorum and 5.3 gathers/reforms that ended on their time limit, 26 legs, 17.8 releases,
+7.4 reforms, 0.9 tactical fall-backs (0.3 completed back into a reform before the house posture or a
+new fight took over), 0.7 stalled marches, 4.8 parties dissolved (too few members, no objective, or a
+house recall). The retreat-only ablation fell back 1.1 times per game. Per-unit repair orders for party
+members (onDamage calls, not distinct units): about 200 per game in every Blob variant.
+
+An earlier pilot of the first build (leaders waiting for the rear on a leash instead of legs; 36 games,
+one house pair per seed) scored 0.389 (0.22-0.56): the waiting leaders blocked the units behind them
+(6 stalled marches in one instrumented game), which is why the march became leg by leg.
+
+**What the games show.** The blob does what was asked of it - twice as many members are with the main
+body at first contact (50% against 22%), the arrival spread drops from 100 to 71 s, the fast units stay
+with the slow ones (probe: the largest fast-member lead on the march 4 tiles against 8 for plain Hunt)
+and more of the wave lives (71% against 65% after 5 minutes) - but it does not win fights. Contact comes
+21 s later (the gather and the slowest member's pace), and the first-minute trade is worse (2.89 against
+3.67 killed per lost): marching together does not make the members engage together (11% engage within
+10 s of contact, None 8%), because after the release every member is an engine hunter again and walks
+in at its own speed, while None's waves have been fighting (and killing harvesters and outposts) for
+longer. Removing the tactical retreat does not rescue the blob (0.343, the intervals overlap), and the
+tactical retreat on its own is neutral (0.486): it fires about once a game and replaces a recall that
+was also rare. On Brutal the blob is not separable from None in 36 games (0.444, 0.28-0.61).
+
+**Decision: QuantBot `WaveFormation` stays None.** Blob's interval is below 0.5 on Hard (0.22-0.39), so
+the condition for making it the default (Hard interval above 0.5 and not worse on Brutal) is not met.
+Blob stays available as a config value (`WaveFormation = Blob`) with its ablation switches for further
+work; nothing else in the game changes with None. Per-unit repair runs stay as they are: the data give
+no reason to replace them (the retreat-only variant, which keeps them, is level with None, and the
+repair counter could not be tied to wins or losses in this round).
+
+**Not done in this round** (stopped at the request budget): a second iteration on the release (for
+example holding the released blob's members to the contact for a few seconds so they engage together,
+or excluding foot infantry from the pace) and a full 108-game Brutal run; the Brutal sample above was run
+although Blob did not win on Hard.
+
 ## Form up where they stand, save 9861 / protocol 75
 
 Stefan: "when selecting men and then setting a formation, the troops should move into that

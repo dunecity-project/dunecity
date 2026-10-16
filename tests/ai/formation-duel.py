@@ -150,7 +150,8 @@ def play(args, scratch, binary, key):
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
     results = Path(args.results)
     if row['error']:
-        (results / f'failed-{"-".join(key)}.txt').write_text(
+        # Ablation labels carry a slash (blob/noretreat): keep the file name flat.
+        (results / f'failed-{"-".join(key).replace("/", "_")}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
