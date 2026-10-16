@@ -149,7 +149,15 @@
 // 9861: Form up where they stand (docs/formations.md): a save or replay may carry
 //       CMD_UNIT_FORMATION_MOVE commands of order kind FormUp, which a 9860 build refuses,
 //       so it must not load them. The layout is unchanged: a 9860 save loads as it is.
-#define SAVEGAMEVERSION     9861
+// 9862: QuantBot hunt parties (Blob waves, docs/formations.md): each party's phase, objective,
+//       rally/fall-back point, contact and gather clocks, fall-back count, members and the
+//       members waiting for the rear, appended to the QuantBot block. A 9861 save loads with no
+//       party: its waves carry on as plain engine hunters.
+// 9863: QuantBot force concentration (docs/formations.md, "Round 4"): the reserve bundle point,
+//       the army-centre gathering point, the bundle's 30 s re-choice clock and the launch
+//       gate's first-hold cycle, appended to the QuantBot block. A 9862 save loads with no
+//       bundle: it is chosen afresh at the first unit pass.
+#define SAVEGAMEVERSION     9863
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

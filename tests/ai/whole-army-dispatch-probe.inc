@@ -24,6 +24,10 @@ void runWholeArmyDispatchProbe(Game& game) {
     for(const auto& player:owner->getPlayerList())
         if(auto* candidate=dynamic_cast<QuantBot*>(player.get()))bot=candidate;
     require(bot,"Whole-army fixture missing bot");
+    // The wave fixtures stand where they are spawned: the bundle launch gate (on by default)
+    // would hold them up to 60 s. Bundling and the gate have their own probe
+    // (quantbot_force_concentration); this one keeps the other production force rules.
+    bot->forceVariantOverride=QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceSmallWaves;
 
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;

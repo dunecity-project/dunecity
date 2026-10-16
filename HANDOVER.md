@@ -1,3 +1,92 @@
+## 2026-10-17 — QuantBot default now BWFCQ (bundled reserve + launch from the bundle), launcher kiting fixed with force rules on, defence traced (branch `feat/ai-blob-waves`, protocol 79, save 9863, not released)
+
+Stefan: optimise how QuantBot concentrates force on attack and defence. Tables and causes:
+`docs/formations.md` ("Round 4"); data `docs/formation-results/force/round4/` (720 duels, tags r4h r4b
+r4d r4hd r4f r4fb).
+
+- **Default BWFCQ**: new optional `[Force Concentration]` keys `Bundle`, `LaunchFromBundle` (code default
+  true, hashed); `forceBits()` adds B|W. Final code: Hard 108 v previous rules 0.870 (0.81-0.93), v FCQ
+  0.676 (0.58-0.76), Brutal 36 0.931 (0.85-1.00); `quantbot_all_against_atreides` 6/6 (30.8 31.7 33.4
+  30.3 34.4 31.7 min).
+- **Saved state (9863, gated; 9862 loads with no bundle)**: `bundlePoint`, `bundleCentre`, `bundleCycle`,
+  `bundleGateSince` appended after the hunt parties (`saveForceState`/`loadForceState`). Protocol 79.
+- **Bundling rules**: at most 12 orders per pass after the unit pass, farthest first then lowest id
+  (order-independent); never wave members/defenders/guards/escorts; stands aside while recovery holds
+  reinforcements home; only once the house could attack (`bundleArmyReady()`, fixes the no-spice
+  low-cash opening); the gate waits only with a bundle and resets when the wave stops being ready.
+- **Launcher kiting**: `concentrateForces()` skips a hunting launcher whose escape applies
+  (`closeThreatWhileHunting()` split out of the escape). `quantbot_launcher_kiting` now runs with the
+  production rules and checks no focus order during the escape and the focus target hit after it.
+- **Defence**: FCQ's `/weak` losses come from 60% waves sent while outnumbered (lost in the field, army
+  collapses, base falls after minute 34), not an empty base. Test-only D (full readiness while the visible
+  enemy army is >=125% of ours): /weak 0.389 v 0.333 (36 games, not separable), Hard 0.889; not kept.
+  Next: 72-108 `/weak` games BWFCQD v BWFCQ.
+- Probes: `quantbot_force_concentration` section 6 (bundle orders, order independence, gather, gate hold
+  and 60 s timeout, defence pulls from the bundle, launch from it, save/load mid-gather and while the gate
+  waits); dispatch/recovery/blob probes pin F|C|Q.
+- Tests (one ctest -j3 run, Release `build`, final code): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl. all_against_atreides,
+  force_concentration and launcher_kiting: 40/40 passed (503 s).
+
+## 2026-10-17 — QuantBot default now focus fire + converge + 60% waves (FCQ); bundling + launch gate (BWFCQ) measured better, test-only (branch `feat/ai-blob-waves`, protocol 78, save 9862, not released)
+
+Stefan: "optimise how the ai concentrates forces on attack and defense"; bring back squad-centre bundling,
+explain why big waves lose, try splitting forces and attacking from two angles. Tables, causes and
+decision: `docs/formations.md` ("Round 3"). Data and reports: `docs/formation-results/force/round3/`
+(1,692 duels: tags p3 p4 p5 h1 b1 b2 d1).
+
+- **Default changed** (`QuantBotConfig::force`, new optional INI section `[Force Concentration]`:
+  `FocusFire=true`, `Converge=true`, `WaveReadinessPercent=60`; hashed; Custom Hard/Brutal only):
+  FCQ v previous rules 0.750 (95% CI 0.67-0.83) in 108 Hard games, 0.833 (0.69-0.94) in 36 Brutal;
+  all-against-Atreides 6/6 (31.9 27.8 31.4 31.4 33.9 27.9 min). `QuantBot::forceVariantOverride`
+  now defaults to `kNoForceOverride` (config); the duel harness always sets it, so label `none` = the
+  previous rules. `waveReadinessPercent()` replaces the L/Q branches. Protocol 78 (pinned in
+  `NetworkManagerTestCase`); no saved state.
+- **New test-only flags**: B (idle reserve bundled at a forward rally 25% towards the observed enemy
+  base), O (pre-1.0.602 rule: closer of that rally and the army's centre of mass), W (wave waits for
+  70% in the bundle, max 60 s), S (two halves from 90 degrees apart, release together), T (70/30 main
+  + flank). Pure rules + tests in `ForceConcentrationPolicy.h` / `ForceConcentrationPolicyTestCase.cpp`.
+- **Results**: BWFCQ 0.852 (0.78-0.92, 108 Hard), 0.944 Brutal (36), beats FCQ head-to-head 0.750
+  (0.67-0.82, 108). O 0.750, BW 0.722, B 0.611 (36 each). Splits do not help (S 0.556, T 0.444, SFCQ
+  0.639). L 0.431: cause is tempo - the 150% house threshold (30,000 on 128 maps against a ~21,000
+  starting army) skips the opening strike and is not reached while defending; 3.4 waves/game v 7.5,
+  first at 19.9 v 10.7 min, 55 v 28 structures lost. Defence (`/weak`): no rule separates from None
+  (0.333); FCQ is lowest (0.250, 61 structures lost) - watch it.
+- **Next step**: make BWFCQ the default - save `bundlePoint`/`bundleCycle`/`bundleGateSince`
+  (save 9863, gated), add bundling/gate checks to `quantbot_force_concentration`, re-run
+  all-against-Atreides, add `BundleReserve`/`BundleLaunchGate` keys.
+- New probe `quantbot_force_concentration` (`--force-probe`, `tests/ai/force-concentration-probe.inc`).
+  `quantbot_launcher_kiting` sets override 0 (focus fire gives a hunting launcher its own attack order).
+  Harness: flags B O W S T, counters bundle_orders/gate_holds/gate_timeouts/splits/split_releases/
+  split_timeouts; `append` rewrites a CSV whose header is older.
+- Tests (one ctest -j3 run, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl.
+  `quantbot_all_against_atreides` and the new `quantbot_force_concentration`: 40/40 passed (1017 s).
+
+## 2026-10-17 — QuantBot force concentration: 13 candidates screened, default unchanged (branch `feat/ai-blob-waves`, protocol 77, save 9862, not released)
+
+Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and
+defense". Research (Lanchester, UAlbertaBot/Steamhammer/PurpleWave, sharpy-sc2, OpenRA, AoE II, Red
+Alert, CircuitAI, FM 3-90), candidates, tables and decision: `docs/formations.md` ("Concentrating force").
+Raw data: `docs/formation-results/force/` (tags `p2` = decisive, `p1` = pre-regression-fix screen).
+
+- Merged `perf/headless-sim` (0510079e) and `fix/ai-regression-all-vs-atreides` (a70f8666); protocol
+  reconciled to 77 (76 = Blob waves, 77 = the regression fix), save stays 9862.
+- Built test-only candidates (`QuantBot::forceVariantOverride`, duel flags F/N/C/P/H/M/L/Q; Blob bits
+  s/e; `src/players/QuantBotForce.cpp`, pure rules `include/players/ForceConcentrationPolicy.h` with
+  `ForceConcentrationPolicyTestCase.cpp`): focus fire, NOK-AV focus fire, converge after contact, pool
+  defenders 2x, recall raiders, muster defenders, wave size 150%/60%, staged Blob (+superiority). Duel
+  harness: `/weak` label (half starting army, defence scenario), home trade and force counters per house.
+- Measured (Hard, 36 games each, p2): best FC 0.611 (0.44-0.78), F 0.583 (0.42-0.75), Q 0.556; all
+  others 0.47-0.53; none separates from None. p1: L (big waves) 0.000 in 8 games. Default unchanged.
+- Not done (request budget): 108-game + Brutal confirmation of FC/F, the `/weak` defence run, Stefan's
+  bundling / big-wave cause / two-angle split ideas.
+- Tests (one ctest -j3 run on a3c40b99, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* incl. `quantbot_all_against_atreides`
+  (213.7 s): 39/39 passed.
 ## 2026-10-17 — local 1.0.843 verified and installed on the MBA
 
 Staging `integrate/feature-batch` = released 1.0.842 + `fix/ai-regression-all-vs-atreides`
@@ -89,6 +178,37 @@ every house within 40 game minutes on all of them. Details and tables:
   at 93d1a5bc: 94/94 passed, 1347 s.
 - Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
   from a 75 peer. Save 9861 unchanged. No version bump.
+
+## 2026-10-16 — QuantBot Blob waves: measured, default stays None (branch `feat/ai-blob-waves`, save 9862 / protocol 76, not released)
+
+Stefan: gather the hunt party, march as one blob so trikes cannot run ahead, unblob on contact, reform,
+and make the damage retreat a short tactical fall-back to reform. Research (OpenRA squad leader/regroup,
+UAlbertaBot regroup position, sharpy-sc2, AoE II attack groups, BAR), design, tests and all tables:
+`docs/formations.md` ("Blob waves"). Raw data: `docs/formation-results/blob/` (tags `hard1`, `brutal1`).
+
+- Built: `WaveFormation = Blob` (optional key; code default stays None) makes a Custom Hard/Brutal
+  wave a hunt party (`src/players/QuantBotBlob.cpp`, `include/players/BlobWavePolicy.h`): gather at a
+  rally point towards the objective (90% quorum, blocked-stall rule, travel-time limit), march leg by leg
+  at the slowest member's pace (fast members wait at each leg end), release into engine Hunt on contact
+  (visible enemy within a member's huntTowardRange, or a hit), reform after 6 s quiet, tactical fall-back
+  8 tiles away from the threat when locally outmatched (1.3x for 4 s or 2x), replacing the local recall
+  home. Party state saved (9862); protocol 76. Test-only ablation switch `tacticalRetreatOverride`;
+  duel labels `blob`, `blob/noretreat`, `none/retreat`; new wave metrics `together_at_contact`, `engaged10`.
+- Measured (Hard, 108 games per pairing, sizes 128/160/192, seeds 7101-7606, all house pairs, both sides):
+  Blob v None **0.306 (0.22-0.39)**, loses; Blob without retreat 0.343 (0.26-0.44), loses; retreat without
+  Blob 0.486 (0.39-0.58), neutral. Brutal sample (36 games) Blob v None 0.444 (0.28-0.61). Blob keeps
+  waves together (50% v 22% of members at contact, arrival spread 71 v 100 s, survival 71% v 65%) but
+  reaches contact 21 s later and trades worse in the first minute (2.89 v 3.67 killed/lost).
+- Decision: `WaveFormation` default stays None; Blob remains selectable. Not done: a second iteration on
+  the release/engagement and a full Brutal run (request budget).
+- Second round (commit `57d2b973`, test-only `blobVariantOverride`, labels `blob+v|r|k`): 36-game Hard
+  screen of vehicle pace, release-only-on-a-real-fight and keep-damaged-members variants: best blob+v
+  0.417 (0.25-0.58), none beats None. Table and open ideas in `docs/formations.md` (second round).
+  The same acceptance list re-run on `57d2b973` (ctest -j2): 38/38 passed.
+- Tests (one ctest run, -j2, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* tests incl. the new
+  `quantbot_blob_waves`: 38/38 passed. Probe/duel scratch deleted; results kept.
 
 ## 2026-10-16 — Faster headless simulation batches (branch `perf/headless-sim`, not released)
 

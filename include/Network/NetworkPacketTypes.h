@@ -205,12 +205,25 @@
 //     slot is also the member's form-up tile, so the group walks straight into its shape
 //     without a march. A 74 peer refuses the kind and would leave the units where they are.
 //     Save 9861.
-// 76: reserved by feat/ai-blob-waves (QuantBot blob waves, save 9862).
+// 76: QuantBot hunt parties (Blob waves). WaveFormation accepts Blob: a Custom Hard/Brutal
+//     QuantBot wave gathers, marches as one blob, releases into Hunt on contact, reforms and
+//     falls back a short way to reform; its party state is saved. A 75 peer would order the
+//     same AI units differently and desynchronise. Save 9862.
 // 77: QuantBot AI decisions change, no saved state or command change: the Custom Hard/Brutal
 //     front battery stays in the 8-12 band, walls follow only the fixed-count defence
 //     turrets, and a harvester override of 0 is "no ceiling" for every AI (QuantBot initial
-//     limit, Mentat). A 75 peer would order different buildings and desync. Save 9861.
-#define NETWORK_PROTOCOL_VERSION            77
+//     limit, Mentat). A 76 peer would order different buildings and desync. Save 9862.
+// 78: QuantBot force concentration defaults, no saved state or command change: Custom
+//     Hard/Brutal hunters focus fire, wave members not yet fighting converge on a fight of
+//     their army nearby, and waves launch at 60% of the former readiness ([Force
+//     Concentration] in QuantBot Config, hashed). A 77 peer would order the same AI units
+//     differently and desync. Save 9862.
+// 79: QuantBot force concentration round 4: the Custom Hard/Brutal idle reserve bundles at a
+//     forward rally and ready waves launch from the bundle ([Force Concentration] Bundle,
+//     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
+//     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
+//     would order the same AI units differently and desync. Save 9863.
+#define NETWORK_PROTOCOL_VERSION            79
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

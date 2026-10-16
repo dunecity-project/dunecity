@@ -32,6 +32,8 @@ class Harvester;
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
 #include <players/ArmyPosturePolicy.h>
+#include <players/BlobWavePolicy.h>
+#include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/SpecialUnitPolicy.h>
@@ -826,6 +828,226 @@ private:
     int waveFormationOverride = kNoWaveFormationOverride;
     /// The attack-wave shape this player uses: the override if set, else the config value.
     int waveFormationShape() const;
+
+    // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
+    //
+    // A Custom Hard/Brutal ground wave with WaveFormation=Blob is a hunt party: it gathers at a
+    // rally point towards its objective, marches as one blob leg by leg (the fast members wait
+    // at each leg's end for the rest), releases into engine Hunt on contact, reforms when the
+    // fight is quiet and, when locally outmatched, falls back a few tiles to reform instead of
+    // going home (the tactical retreat). Saved under the SAVEGAMEVERSION 9862 gate.
+    struct BlobParty {
+        BlobWavePolicy::Phase phase = BlobWavePolicy::Phase::Gather;
+        Uint32 since = 0;                   ///< cycle the phase (or the march's leg) began
+        Uint32 objective = NONE_ID;         ///< what the march heads for
+        Coord goal = Coord::Invalid();      ///< the march's destination (objective's nearest point)
+        Coord rally = Coord::Invalid();     ///< gather, reform or fall-back point; the leg's end
+        Coord threat = Coord::Invalid();    ///< where the last contact was
+        Uint32 lastContact = 0;             ///< last cycle a member was in contact or hit
+        Uint32 lastArrival = 0;             ///< gather/reform: last cycle the gathered count grew
+        Uint32 gathered = 0;                ///< gather/reform: that count
+        Uint32 legCycles = 0;               ///< time limit of the current gather, reform or leg
+        Uint32 outmatchedSince = std::numeric_limits<Uint32>::max();
+        Uint32 progressCycle = 0;           ///< march: last cycle the anchor got closer
+        Sint32 progressRemaining = std::numeric_limits<Sint32>::max();
+        Uint8 fallbacks = 0;                ///< tactical fall-backs so far
+        /// Test-only (+e): cycle the staged party began holding for superiority (max: not
+        /// holding). Not saved: never set without the test-only override.
+        Uint32 holdSince = std::numeric_limits<Uint32>::max();
+        std::set<Uint32> members;           ///< ordered: identical iteration on every peer
+    };
+    std::vector<BlobParty> blobParties;
+    /// Corruption bound for a loaded party list, not a design limit (one party per launch).
+    static constexpr Uint32 kBlobPartyLimit = 256;
+    /// Test-only (tests/ai/formation-duel.py ablations): -1 = the tactical fall-back runs with
+    /// Blob waves, 0 = never, 1 = also for plain Hunt waves. Never set by the game, not saved,
+    /// not hashed.
+    int tacticalRetreatOverride = -1;
+    /// Test-only Blob-wave variants (tests/ai/formation-duel.py, label suffix +v/+r/+k): bits of
+    /// kBlobVehiclePace (foot infantry neither sets the pace nor holds a gather or leg; 75%
+    /// quorum), kBlobRealFight (only a real fight releases the blob; a lone scout or harvester
+    /// is shot by the nearest members while the blob marches on) and kBlobKeepDamaged (members
+    /// below 60% stay with a party that has not met a fight yet instead of driving to repair).
+    /// Never set by the game, not saved, not hashed.
+    static constexpr int kBlobVehiclePace = 1, kBlobRealFight = 2, kBlobKeepDamaged = 4;
+    /// kBlobStage (+s): no gather at home; the blob marches in one leg to a staging point just
+    /// outside enemy reach near its objective, waits there for the rest and then attacks all
+    /// at once. kBlobSuperiority (+e, with +s): it attacks from the staging point only with
+    /// local superiority, else holds for reinforcements (later waves join it) for a while.
+    static constexpr int kBlobStage = 8, kBlobSuperiority = 16;
+    int blobVariantOverride = 0;
+
+    // ---- Concentrating force (docs/formations.md, "Concentrating force") -----------------
+    /// The rules as bits (tests/ai/formation-duel.py label flags, uppercase): bits of
+    /// kForceFocusFire (F: hunting ground units shoot the best target in reach - fighters
+    /// first, then the one with the fewest hit points), kForceConverge (C: wave members not
+    /// fighting join a fight of their army nearby), kForcePool (P: an attacked building gets
+    /// 2x the threat within 12 tiles from up to 40 tiles), kForceRecall (H: when the troops
+    /// nearby cannot answer a base attack, the raiding army comes home for it), kForceMuster
+    /// (M: distant defenders muster just outside the fight and engage together),
+    /// kForceBigWaves / kForceSmallWaves (L / Q: wave readiness 150% / 60%), kForceNoOverkill
+    /// (N: focus fire by attack value - the most enemy damage per hit point - without overkill,
+    /// in object-id order), kForceBundle (B: the idle reserve keeps bundled at a forward rally a
+    /// quarter of the way to the observed enemy base), kForceBundleOld (O, with B: the pre-1.0.602
+    /// rule - the closer of that rally and the army's centre of mass), kForceBundleGate (W, with
+    /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
+    /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
+    /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B and W
+    /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
+    /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
+    /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
+    /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
+    /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
+    /// smaller configured one).
+    static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
+        kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
+        kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
+        kForceFlank = 4096, kForceStrengthReadiness = 8192;
+    static constexpr int kNoForceOverride = -1;
+    int forceVariantOverride = kNoForceOverride;
+    /// The force bits in effect: the override if set, else the configured F, C, B and W.
+    int forceBits() const;
+    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
+    /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
+    /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
+    /// Hard/Brutal.
+    int waveReadinessPercent() const;
+    /// The readiness a launch uses now: waveReadinessPercent(), raised to 100 by D while the
+    /// house is outnumbered (outnumberedByObservedArmy()).
+    int launchReadinessPercent();
+    /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of
+    /// them, wherever they stand): ForceConcentrationPolicy::outnumbered. One unit-list pass.
+    bool outnumberedByObservedArmy() const;
+    /// One pass of the force rules over the army (unit phase, after the hunt parties).
+    void concentrateForces();
+    /// Focus fire for one hunting ground unit; true if it was given a new target.
+    bool focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies);
+    /// Attack-value focus fire without overkill over \a hunters (sorted by object id).
+    void focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, const std::vector<const ObjectBase*>& enemies);
+    /// Distant defenders gathering before they engage at an attacked building (kForceMuster).
+    struct Muster {
+        Uint32 building = NONE_ID;
+        Coord point = Coord::Invalid();
+        Uint32 since = 0;
+        std::set<Uint32> members;
+    };
+    std::vector<Muster> musters;
+    const Muster* musterOf(Uint32 id) const;
+    /// Sends \a ids to muster for \a building (joining its muster if there is one).
+    void startMuster(const ObjectBase* building, const std::vector<Uint32>& ids);
+    void updateMusters();
+    /// Bundling (kForceBundle; QuantBotConfig::force.bundle, on by default): where the idle
+    /// reserve gathers, chosen at most every 30 s (bundleCycle) or when it becomes unsafe.
+    /// Saved with bundleCentre and bundleGateSince (SAVEGAMEVERSION 9863): the throttle and
+    /// the gate's wait decide orders, so a reload must not re-run them early.
+    Coord bundlePoint = Coord::Invalid();
+    /// With kForceBundleOld: the army's centre of mass at the last unit pass (the second
+    /// gathering point; the launch gate reads it between passes).
+    Coord bundleCentre = Coord::Invalid();
+    Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
+    /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
+    Uint32 bundleGateSince = 0;
+    Coord forwardBundlePoint();
+    /// The house attack threshold attack() starts from (credits of military value, before the
+    /// campaign adjustment and the wave readiness scaling).
+    int houseAttackThreshold() const;
+    /// Bundling waits until the house could attack: its military value reaches the house
+    /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
+    /// losses - the reserve keeps to the home rally and defends the base.
+    bool bundleArmyReady() const;
+    /// A withdrawal or recovery holds reinforcements at the protected shelter: bundling and
+    /// its launch gate stand aside for the home rally then.
+    bool reserveHeldHome() const {
+        return recoveryActive() && (ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) || localSquadWithdraw);
+    }
+    /// A reserve unit that has to walk to the bundle, ordered after the unit pass.
+    struct BundleWalker { Uint32 id; int distance; Coord at; };
+    /// Keeps an idle reserve unit posted at the bundle. False when bundling does not own the
+    /// unit (a role, a tracked wave member, a posture that holds reinforcements at home, no
+    /// bundle): the home rally decides then. A unit outside the bundle that can take an order
+    /// is appended to \a walkers.
+    bool bundleUnit(const UnitBase* unit, int radius, std::vector<BundleWalker>& walkers);
+    /// Orders at most kBundleOrdersPerPass of \a walkers to the bundle, farthest first (object
+    /// id on ties), whatever the order of the unit list.
+    void orderBundleWalkers(std::vector<BundleWalker>& walkers, int radius);
+    /// Share of \a ids (value, basis points) standing within \a radius of the bundle.
+    int bundledShareBps(const std::vector<Uint32>& ids, int radius);
+    void saveForceState(OutputStream& stream) const;
+    void loadForceState(InputStream& stream);
+    /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
+    /// sides of the objective, wait for each other and then attack it together.
+    struct Split {
+        Uint32 since = 0;
+        Uint32 objective = NONE_ID;
+        Coord target = Coord::Invalid();
+        Coord point[2] = {Coord::Invalid(), Coord::Invalid()};
+        std::set<Uint32> members[2];
+    };
+    std::vector<Split> splits;
+    const Split* splitOf(Uint32 id) const;
+    /// Splits the launched ground units; false (nothing ordered) when the wave cannot split.
+    bool startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    void updateSplits();
+    /// Held by a force controller (a split group or a muster): no rally or regroup orders.
+    bool forceHeld(Uint32 id) const { return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)); }
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct ForceStats {
+        int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
+            stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
+            splitReleases = 0, splitTimeouts = 0, fullReadiness = 0;
+    };
+    ForceStats forceStats;
+    /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
+    /// around its objective (ForceConcentrationPolicy::superior)?
+    bool huntPartySuperior(const BlobParty& party) const;
+    /// Is \a contact (met at \a at) a real fight for this party rather than a lone scout?
+    bool huntPartyRealFight(const BlobParty& party, const ObjectBase* contact) const;
+    /// Sends the members nearest \a contact (at most three) to shoot it; the party marches on.
+    void huntPartySkirmish(const BlobParty& party, const ObjectBase* contact);
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct BlobStats {
+        int parties = 0, gathered = 0, gatherTimeouts = 0, releases = 0, reforms = 0, fallbacks = 0,
+            fallbackReturns = 0, legs = 0, dissolved = 0, stalls = 0, repairs = 0;
+    };
+    BlobStats blobStats;
+    /// This house's waves gather and march as a blob (WaveFormation=Blob, Custom Hard/Brutal).
+    bool blobMarch() const;
+    /// This house's hunt parties fall back a few tiles to reform when locally outmatched.
+    bool tacticalRetreat() const;
+    /// Hunt parties run at all (either of the two above).
+    bool huntParties() const { return blobMarch() || tacticalRetreat(); }
+    /// The party \a id belongs to, or nullptr.
+    BlobParty* huntPartyOf(Uint32 id);
+    const BlobParty* huntPartyOf(Uint32 id) const;
+    /// Makes the launched ground units one hunt party heading for \a objective.
+    void startHuntParty(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    /// One pass over every party (the unit phase of update()).
+    void updateHuntParties();
+    /// A member was hit: a gathering, marching or reforming party releases into the fight.
+    void huntPartyMemberHit(const UnitBase* unit, const ObjectBase* damager);
+    /// Ends a party; \a hunt gives its idle members engine Hunt (as None would have).
+    void dissolveHuntParty(BlobParty& party, bool hunt, const char* reason);
+    void releaseHuntParty(BlobParty& party, Coord contact, const char* reason);
+    void startPartyMarch(BlobParty& party);
+    void startPartyLeg(BlobParty& party, const UnitBase* anchor);
+    void startPartyGather(BlobParty& party, BlobWavePolicy::Phase phase, Coord point);
+    void startPartyFallback(BlobParty& party);
+    /// Sends every active member to its own tile around \a point in Area Guard; \a onlyIdle
+    /// re-sends only members that stand idle away from it.
+    void sendHuntParty(const BlobParty& party, Coord point, bool forced, bool onlyIdle);
+    /// The member closest to the members' centroid (vehicles first), or nullptr.
+    const UnitBase* huntPartyAnchor(const BlobParty& party) const;
+    /// A usable rally/leg/fall-back tile near \a desired that a party standing at \a anchor can
+    /// reach; \a safe also keeps it out of observed enemy weapon reach.
+    Coord huntPartyPoint(Coord desired, const UnitBase* anchor, bool safe) const;
+    /// A tile within \a radius of \a centre for \a unit not yet in \a reserved, or Coord::Invalid().
+    Coord huntPartySlot(const UnitBase* unit, Coord centre, int radius, std::set<int64_t>& reserved) const;
+    /// The visible enemy nearest the anchor within a member's huntTowardRange(), or nullptr.
+    const ObjectBase* huntPartyContact(const BlobParty& party, const UnitBase* anchor) const;
+    const ObjectBase* huntPartyObjective(const BlobParty& party, const UnitBase* anchor) const;
+    void saveHuntParties(OutputStream& stream) const;
+    void loadHuntParties(InputStream& stream);
     /// Tracked Custom wave. Same type as the campaign wave, so membership,
     /// objective and save/load are the proven ones.
     CampaignDifficultyPolicy::Wave customWave;
@@ -956,6 +1178,12 @@ private:
     /// launcher's band, never its whole range: an outranged enemy at the edge of
     /// that range is a target, not a threat.
     int launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const;
+    /// The enemy a hunting launcher has to step away from this pass (the escape's own
+    /// choice: \a knownThreat if it qualifies, else the nearest qualifying enemy in a bounded
+    /// tile box, lowest id on ties), or nullptr when the escape does not apply. \a desiredRange
+    /// receives the stand-off. Focus fire and converging leave such a launcher to the escape.
+    const ObjectBase* closeThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat = nullptr,
+                                              int* desiredRange = nullptr) const;
     /// Short close-range escape for a hunting launcher. \a knownThreat is the
     /// authoritative damager of a damage callback; without one the nearest
     /// qualifying closing enemy is used. Hunt and tracked army membership are

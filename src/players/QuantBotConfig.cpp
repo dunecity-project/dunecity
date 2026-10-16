@@ -248,6 +248,16 @@ QuantBotConfig::QuantBotConfig() {
     recovery.frontBatteriesEnabled = true;
     recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
+    // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
+    // Measured in duels (docs/formations.md, "Concentrating force", rounds 3 and 4): focus
+    // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
+    // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
+    force.focusFire = true;
+    force.converge = true;
+    force.waveReadinessPercent = 60;
+    force.bundle = true;
+    force.launchFromBundle = true;
+
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
@@ -388,12 +398,14 @@ int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
     };
     const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
+    if (key == "BLOB") return kWaveFormationBlob;
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (key == compact(FormationPlanner::shapeName(shape))) return static_cast<int>(shape);
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
+    if (value == kWaveFormationBlob) return "Blob";
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (static_cast<int>(shape) == value) return FormationPlanner::shapeName(shape);
     return "None";
@@ -510,6 +522,13 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
 
+        // === FORCE CONCENTRATION ===
+        iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
+        iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
+        iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
+        iniFile.setBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
         savePriorities(iniFile, "Unit Priorities", unitPriorities);
@@ -568,6 +587,12 @@ bool QuantBotConfig::load(const std::string& filepath) {
             if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
             else waveFormation = parsed;
         }
+        force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
+        force.waveReadinessPercent = std::clamp(
+            iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
+        force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
+        force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
 
         bool needsSave = false;
 
@@ -976,6 +1001,13 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("frontBatteries", recovery.frontBatteriesEnabled);
     addNamed("withdrawals", recovery.withdrawalsEnabled);
     configStr += "|/REC|";
+    configStr += "|FORCE";
+    addNamed("focusFire", force.focusFire);
+    addNamed("converge", force.converge);
+    addNamed("waveReadinessPercent", force.waveReadinessPercent);
+    addNamed("bundle", force.bundle);
+    addNamed("launchFromBundle", force.launchFromBundle);
+    configStr += "|/FORCE|";
 
 
     // Use FNV-1a hash (consistent across platforms and compilers)

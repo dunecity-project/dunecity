@@ -354,7 +354,8 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
 } // namespace
 
 int Player::aiFormationShape() {
-    return getQuantBotConfig().waveFormation;
+    // Blob is a QuantBot hunt-party behaviour, not a shape: every other AI group moves as None.
+    return QuantBotConfig::formationShapeOf(getQuantBotConfig().waveFormation);
 }
 
 void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced, int shape) const {

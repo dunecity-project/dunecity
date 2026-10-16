@@ -95,6 +95,9 @@ public:
     // not invalidate it; detailed routes still use the ordinary pathfinder.
     void invalidateTerrainConnectivity() noexcept { vehicleTerrainRegions.clear(); }
     bool terrainAttackReachable(const ObjectBase& seeker, const ObjectBase& target) const;
+    /// The terrain-connected vehicle region of a tile (0 = a mountain or off the map): two tiles
+    /// with the same nonzero region are connected for vehicles, ignoring occupants.
+    int vehicleTerrainRegion(const Coord& at) const;
     void restoreObserverPathingRevision(Uint32 revision) noexcept { pathingRevision=revision; }
 
     Sint32 getSizeX() const noexcept {

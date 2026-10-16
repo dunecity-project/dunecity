@@ -29,21 +29,32 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
-# The control and the five kept shapes (the research rounds also played combined, line, wedge, vee, diamond).
-SHAPES = ('none', 'box', 'pincer', 'column', 'staggered', 'echelon')
+# The control, Blob waves (hunt parties) and the five kept shapes (the research rounds also played
+# combined, line, wedge, vee, diamond). A label may carry a Blob-wave ablation: blob/noretreat (no
+# tactical fall-back), none/retreat (the fall-back for plain Hunt waves).
+SHAPES = ('none', 'blob', 'box', 'pincer', 'column', 'staggered', 'echelon')
 SIZES = (64, 128, 192)
 SEEDS = (7101, 7202, 7303)
 # The two houses of a game, by the seed's position in --seeds (sonic tanks, devastators and
 # deviators all appear).
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 KEY = ('tag', 'difficulty', 'size', 'seed', 'house_a', 'shape_a', 'house_b', 'shape_b')
+# Per house; the hunt-party counters (QuantBot::blobStats) are zero without parties.
+PARTY_FIELDS = ('parties', 'gathered', 'gather_timeouts', 'releases', 'reforms', 'fallbacks', 'fallback_returns',
+                'legs', 'dissolved', 'stalls', 'repairs')
+# Per house: the home trade (units destroyed within 12 tiles of a building - the enemy's near ours
+# are home kills, ours near ours home losses) and the force-candidate counters (QuantBot::forceStats).
+FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recalled', 'musters', 'muster_releases',
+                'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
+                'split_timeouts', 'full_readiness')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units')
+                'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
     f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
                'arrival_spread_s', 'shots30', 'loss60', 'kill60', 'survivors', 'lost_before_contact', 'formed',
-               'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s')
+               'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s', 'together_at_contact',
+               'engaged10')
 HOUSE_NUMBERS = {'harkonnen': '0', 'atreides': '1', 'ordos': '2'}
 lock = threading.Lock()
 
@@ -63,6 +74,16 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            with path.open(newline='') as handle:
+                header = next(csv.reader(handle), [])
+            if list(header) != list(fields):
+                # Written by an older harness: rewrite it with the current columns (missing ones empty).
+                old = read(path)
+                with path.open('w', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(old)
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)
             if new:
@@ -146,7 +167,8 @@ def play(args, scratch, binary, key):
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
     results = Path(args.results)
     if row['error']:
-        (results / f'failed-{"-".join(key)}.txt').write_text(
+        # Ablation labels carry a slash (blob/noretreat): keep the file name flat.
+        (results / f'failed-{"-".join(key).replace("/", "_")}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
@@ -201,8 +223,8 @@ def sides(game, margin):
     result = []
     for me, them in (('a', 'b'), ('b', 'a')):
         house = HOUSE_NUMBERS[game[f'house_{me}']]
-        own = {f: number(game[f'{f}_{me}']) for f in HOUSE_FIELDS}
-        other = {f: number(game[f'{f}_{them}']) for f in HOUSE_FIELDS}
+        own = {f: number(game.get(f'{f}_{me}')) for f in HOUSE_FIELDS}
+        other = {f: number(game.get(f'{f}_{them}')) for f in HOUSE_FIELDS}
         strict = 0.5 if winner in ('', '-1') else (1.0 if winner == house else 0.0)
         score = strict
         if strict == 0.5:
@@ -340,6 +362,8 @@ def export(args):
         s['waves'] += 1
         for field in ('members', 'kill60', 'loss60', 'survivors', 'lost_before_contact', 'shots30'):
             s[field] += number(wave[field])
+        if number(wave['contact_s'], -1) >= 0:
+            s['contact_s'] += number(wave['contact_s'])
         if number(wave['arrived']) >= 2:
             s['spread_waves'] += 1
             s['arrival_spread_s'] += number(wave['arrival_spread_s'])
@@ -349,9 +373,14 @@ def export(args):
         if number(wave.get('in_formation_10s'), -1) >= 0:
             s['waves_10s'] += 1
             s['in_formation_10s'] += number(wave['in_formation_10s'])
+        if number(wave.get('together_at_contact'), -1) >= 0:
+            s['met_waves'] += 1
+            s['met_members'] += number(wave['members'])
+            s['together_at_contact'] += number(wave['together_at_contact'])
+            s['engaged10'] += number(wave.get('engaged10'))
     fields = ('tag', 'difficulty', 'size', 'seed', 'shape', 'waves', 'members', 'kill60', 'loss60', 'survivors',
               'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact',
-              'waves_10s', 'in_formation_10s')
+              'waves_10s', 'in_formation_10s', 'met_waves', 'met_members', 'together_at_contact', 'engaged10', 'contact_s')
     with (target / 'waves-by-shape.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
@@ -361,8 +390,10 @@ def export(args):
 
 
 def pairing_report(args):
-    """Per pairing (--pairs x:y), from x's side: the score, eliminations and game length, and the
-    waves of both sides (formation at contact and 10 s later, first-minute trade, survival)."""
+    """Per pairing (--pairs x:y), from x's side: the score, eliminations and game length; the
+    waves of both sides (arrival spread, members together at contact and engaged within 10 s of
+    it, formation at contact and 10 s later, first-minute trade, survival); and how often the
+    hunt-party steps fired per game."""
     results = Path(args.results)
     tags, sizes, seeds = set(args.tag.split(',')), {str(s) for s in args.sizes}, {str(s) for s in args.seeds}
     def wanted(row):
@@ -375,7 +406,7 @@ def pairing_report(args):
     print('| Pairing | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | '
           'Median game min | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|')
-    wave_rows = []
+    wave_rows, party_rows, defence_rows, force_rows = [], [], [], []
     for x, y in pairs(args):
         mine = [g for g in games if {g['shape_a'], g['shape_b']} == {x, y}]
         rows = [s for g in mine for s in sides(g, args.adjudicate) if s[0] == x]
@@ -389,23 +420,60 @@ def pairing_report(args):
               f'{statistics.mean(r[5] for r in rows):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | '
               f'{statistics.median(number(g["end_s"]) / 60 for g in mine):.1f} | {verdict} |')
         keys = {tuple(g[k] for k in KEY) for g in mine}
+        # Defence and pace, from x's side: structures lost (the opponent's kills), the home trade,
+        # how long x's eliminations took, and the per-game force-candidate counters.
+        wins = [number(g['end_s']) / 60 for g in mine for s in sides(g, args.adjudicate) if s[0] == x and s[5] == 1.0]
+        home_kill = sum(r[3]['home_kill'] for r in rows); home_loss = sum(r[3]['home_loss'] for r in rows)
+        defence_rows.append(f'| {x} v {y} | {statistics.mean(r[4]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{statistics.mean(r[3]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{home_loss / len(rows):.0f} | {home_kill / len(rows):.0f} | {home_kill / max(1, home_loss):.2f} | '
+                            f'{statistics.median(wins) if wins else 0:.1f} | {len(wins)} |')
+        if any(r[3][f] for r in rows for f in FORCE_FIELDS[2:]):
+            force_rows.append(f'| {x} v {y} | ' + ' | '.join(f'{statistics.mean(r[3][f] for r in rows):.1f}'
+                                                          for f in FORCE_FIELDS[2:]) + ' |')
         for shape in (x, y):
             sw = [wv for wv in waves if tuple(wv[k] for k in KEY) in keys and wv['shape'] == shape]
             members = sum(number(wv['members']) for wv in sw)
             kill = sum(number(wv['kill60']) for wv in sw); loss = sum(number(wv['loss60']) for wv in sw)
-            contact = [wv for wv in sw if number(wv['in_formation_at_contact'], -1) >= 0]
-            later = [wv for wv in sw if number(wv.get('in_formation_10s'), -1) >= 0]
-            share = lambda ws, f: 100 * sum(number(wv[f]) for wv in ws) / max(1, sum(number(wv['members']) for wv in ws))
+            met = [wv for wv in sw if number(wv['contact_s'], -1) >= 0]
+            contact = [number(wv['contact_s']) for wv in met]
+            spread = [number(wv['arrival_spread_s']) for wv in sw if number(wv['arrived']) >= 2]
+            share = lambda ws, f: 100 * sum(number(wv.get(f)) for wv in ws) / max(1, sum(number(wv['members']) for wv in ws))
+            formed = [wv for wv in sw if number(wv['in_formation_at_contact'], -1) >= 0]
             wave_rows.append(f'| {x} v {y} | {shape} | {len(sw)} | {members / max(1, len(sw)):.1f} | '
-                             f'{share(contact, "in_formation_at_contact"):.0f}% | {share(later, "in_formation_10s"):.0f}% | '
+                             f'{statistics.median(contact) if contact else 0:.0f} | {statistics.mean(spread) if spread else 0:.0f} | '
+                             f'{share([wv for wv in met if number(wv.get("together_at_contact"), -1) >= 0], "together_at_contact"):.0f}% | '
+                             f'{share([wv for wv in met if number(wv.get("engaged10"), -1) >= 0], "engaged10"):.0f}% | '
+                             f'{share(formed, "in_formation_at_contact"):.0f}% | '
                              f'{kill / max(1, len(sw)):.0f} | {loss / max(1, len(sw)):.0f} | {kill / max(1, loss):.2f} | '
                              f'{100 * sum(number(wv["survivors"]) for wv in sw) / max(1, members):.0f}% |')
-    print('\nWaves of both sides (members in formation at contact and 10 s later as a share of members; first-minute '
-          'value killed and lost from contact; members alive 5 min after launch):\n')
-    print('| Pairing | Side | Waves | Members / wave | In formation at contact | In formation +10 s | Killed 60 s | '
-          'Lost 60 s | Killed / lost | Survival |')
-    print('|---|---|---|---|---|---|---|---|---|---|')
+            own = [s[3] for g in mine for s in sides(g, args.adjudicate) if s[0] == shape]
+            if own and any(o['parties'] for o in own):
+                per = lambda f: statistics.mean(o[f] for o in own)
+                party_rows.append(f'| {x} v {y} | {shape} | ' + ' | '.join(f'{per(f):.1f}' for f in PARTY_FIELDS) + ' |')
+    print('\nWaves of both sides (median contact time after launch; base-arrival spread; living members within 8 '
+          'tiles of the main body at contact and members engaging within 10 s of contact, as a share of members; '
+          'first-minute value killed and lost from contact; members alive 5 min after launch):\n')
+    print('| Pairing | Side | Waves | Members / wave | Contact s | Arrival spread s | Together at contact | '
+          'Engaged within 10 s | In formation at contact | Killed 60 s | Lost 60 s | Killed / lost | Survival |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     print('\n'.join(wave_rows))
+    if party_rows:
+        print('\nHunt-party steps per game (QuantBot::blobStats):\n')
+        print('| Pairing | Side | ' + ' | '.join(PARTY_FIELDS) + ' |')
+        print('|---|---|' + '---|' * len(PARTY_FIELDS))
+        print('\n'.join(party_rows))
+    print('\nDefence and pace, first side of each pairing (per game: own structures lost and enemy structures '
+          'destroyed; home trade = enemy value destroyed within 12 tiles of own buildings against own value lost '
+          'there; median minutes to an elimination win):\n')
+    print('| Pairing | Structures lost | Structures destroyed | Home loss | Home kill | Home kill / loss | Win min | Wins |')
+    print('|---|---|---|---|---|---|---|---|')
+    print('\n'.join(defence_rows))
+    if force_rows:
+        print('\nForce-candidate counters per game, first side (QuantBot::forceStats):\n')
+        print('| Pairing | ' + ' | '.join(FORCE_FIELDS[2:]) + ' |')
+        print('|---|' + '---|' * len(FORCE_FIELDS[2:]))
+        print('\n'.join(force_rows))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

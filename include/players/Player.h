@@ -279,7 +279,8 @@ protected:
     /**
         The formation shape the AI players use (docs/formations.md): QuantBot Config.ini
         [General Behavior] WaveFormation - a FormationPlanner::Shape id, or
-        QuantBotConfig::kWaveFormationNone (the default) for plain per-unit orders.
+        QuantBotConfig::kWaveFormationNone (the default) for plain per-unit orders. Blob is
+        QuantBot's own hunt-party behaviour, not a shape, so it reads as None here.
     */
     static int aiFormationShape();
 

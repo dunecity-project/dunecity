@@ -7,6 +7,595 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Concentrating force on attack and defence (branch `feat/ai-blob-waves`)
+
+Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and
+defense". Everything before this (shapes, fighting in formation, Blob waves and their variants) lost to
+None on Hard; the open problem was that after contact the members engage one at a time (9-11% within
+10 s). This round looks beyond formations: how strong bots and players win army fights.
+
+### Research: how bots and doctrine concentrate force
+
+- **Lanchester's square law** (F. W. Lanchester, *Aircraft in Warfare*, 1916, ch. V "The Principle of
+  Concentration. The N-Square Law", [archive.org](https://archive.org/details/aircraftinwarfar00lancrich)):
+  with aimed fire, strength grows with the square of the numbers. Blue 1,000 meeting Red's 500 + 500 one
+  after the other loses about 134 in the first fight and 293 in all; met together, the two Reds are a
+  match. Stanescu, Barriga & Buro, "Using Lanchester Attrition Laws for Combat Prediction in StarCraft"
+  (AIIDE 2015, [PDF](https://cdn.aaai.org/ojs/12780/12780-52-16297-1-2-20201228.pdf)) fit an exponent of
+  1.56 for StarCraft battles and note that focus fire is the same law at the micro level: killing a unit
+  sooner removes its gun sooner. *For QuantBot:* a wave that arrives in pieces fights several small
+  battles it loses; both arriving together and focus fire should pay.
+- **UAlbertaBot** (StarCraft BW, [CombatCommander.cpp](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/CombatCommander.cpp),
+  [Squad.cpp](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/Squad.cpp)):
+  every combat unit is in one main attack squad; each 10 frames it simulates the local fight (SparCraft,
+  300 px around the unit nearest the target) and regroups on a predicted loss, at the squad unit nearest
+  the target that is not within 400 px of an enemy (a forward point, not home), with 100 frames of
+  hysteresis. Defence: 2 defenders per enemy unit, nearest first. Targeting: threats before buildings.
+  Its simulation scripts are NOK-AV: Churchill, Saffidine & Buro, "Fast Heuristic Search for RTS Game
+  Combat Scenarios" (AIIDE 2012, [PDF](https://cdn.aaai.org/ojs/12527/12527-52-16049-1-2-20201228.pdf)):
+  attack the enemy with the highest damage per hit point and never one already assigned lethal damage -
+  "the only script ... that exhibits true collaborative behaviour" and the best tested.
+- **Steamhammer** ([Squad.cpp](https://github.com/kant2002/steamhammer/blob/master/Steamhammer/Source/Squad.cpp),
+  [CombatCommander.cpp](https://github.com/kant2002/steamhammer/blob/master/Steamhammer/Source/CombatCommander.cpp)):
+  the squad is split into clusters; a cluster not near the enemy joins the nearest cluster closer to the
+  goal, only the lead cluster advances; attack/retreat by simulation smoothed with an exponential average
+  (0.15, attack at 0.5); never retreat near its own firing defences or base. Defence is sized by weighted
+  enemy strength (2 per medium, 4 per heavy unit), starts at 19 tiles and ends at 29.
+- **PurpleWave** ([JudgmentModifiers.scala](https://github.com/dgant/PurpleWave/blob/master/src/Information/Battles/Types/JudgmentModifiers.scala)):
+  reluctant to leave a fight it has entered, patient before starting one ("patience will tend to let us
+  gather more force"), fights harder near home; engages in arcs facing the threat.
+- **sharpy-sc2** ([default_micro_methods.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/combat/default_micro_methods.py),
+  [zone_attack.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/zone_attack.py),
+  [zone_defense.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/zone_defense.py)):
+  attacks at 1.2x the known enemy power; only a group holding 75% of the army's power attacks, the others
+  join it; retreats when the local enemy x0.8 matches it within 18 tiles; defence sends 1.5x the attackers'
+  power, nearest first; focus fire scores damaged high-value targets, +3 for the current target, x0.1 when
+  lethal damage is already assigned.
+- **OpenRA squad AI** (also the Dune 2000 mod; [SquadManagerBotModule.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/SquadManagerBotModule.cs),
+  [GroundStates.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/States/GroundStates.cs),
+  [AttackOrFleeFuzzy.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/AttackOrFleeFuzzy.cs)):
+  all idle units go once there are `SquadSize` (d2k 6/8/10) + random 0-30; the leader waits until every
+  unit is within units/3 cells; attack or flee by fuzzy rules on relative health, power and speed; never
+  flees with an own building within 10 cells. Defence: every idle base unit that can reach the attacker
+  joins one protection squad, and squads within 15 cells retarget onto it.
+- **Age of Empires II** ([strategic numbers](https://airef.github.io/strategic-numbers/sn-details.html)):
+  attack groups gather to a gather point before tasking (`sn-attack-group-gather-spacing` 4,
+  `sn-group-form-distance` 20); 75% of soldiers attack; outside the town 50% of the units within 25 tiles
+  answer an attack. No primary source for AoE IV's AI was found.
+- **Command & Conquer: Red Alert** ([TEAM.CPP](https://github.com/electronicarts/CnC_Remastered_Collection/blob/master/REDALERT/TEAM.CPP),
+  [HOUSE.CPP](https://github.com/electronicarts/CnC_Remastered_Collection/blob/master/REDALERT/HOUSE.CPP)):
+  scripted teams hold until laggers more than 2 cells away catch up, start only at full strength and
+  regroup at a safe repair building at a third of their strength - but the skirmish attack is the
+  counter-example, each armed unit hunting on its own with 75% probability (a trickle).
+- **Spring / BAR (CircuitAI)** ([MilitaryManager.cpp](https://github.com/rlcevg/CircuitAI/blob/barbarian/src/circuit/module/MilitaryManager.cpp),
+  [DefendTask.cpp](https://github.com/rlcevg/CircuitAI/blob/barbarian/src/circuit/task/fighter/DefendTask.cpp)):
+  new attackers wait in a defend task until their power reaches the strongest enemy group's; defence near
+  the base accepts up to 4x the threat. No primary source for Total War's battle AI was found.
+- **Doctrine.** US Army FM 3-90 ([ch. 2](https://www.globalsecurity.org/military/library/policy/army/fm/3-90/ch2.htm)):
+  "piecemeal commitment subjects the smaller committed forces to defeat in detail"; the defender masses
+  the effects of its combat power and counterattacks with its reserve ([ch. 8](https://www.globalsecurity.org/military/library/policy/army/fm/3-90/ch8.htm)).
+  ADP 3-0 ([PDF](https://irp.fas.org/doddir/army/adp3_0.pdf)): interior lines let a central reserve reach
+  any threatened point sooner than the attacker can switch.
+
+### What QuantBot does today (code read)
+
+- **Attack.** Every 90 s (`AttackTimerMs`) `attack()` checks the house's military value against
+  `AttackThresholdPercent` of the military limit (Custom Hard: the global 0.40; Brutal: its own 0.25) and
+  the outnumbered dispatch gate (hold while the observed enemy front is 1.5x ours, unless 80% of the limit
+  is healthy and deployable). `launchGroundHunt()` then sends the whole available ground army - every
+  fighter not repairing, defending or escorting - once it is worth the difficulty's threshold (Hard 0.30,
+  Brutal 0.25 of the limit) and a viable main wave (6 units, 3,000 credits). `AttackForceMilitaryValueRatio`
+  (Hard 0.5, Brutal 0.6) is the share of the ground army an Easy/Medium Custom wave commits; the Hard/Brutal
+  whole-army dispatch does not use it. Each member gets engine Hunt: it walks at its own speed to the
+  nearest visible enemy anywhere and shoots the nearest target (no focus fire).
+- **Defence.** A hit on one of our buildings (or an attacker in range of one, re-checked every unit pass)
+  calls `scrambleWholeArmyToDefend` (Custom Hard/Brutal, since 1.0.832): the threat is the attacker plus the
+  visible enemy fighters within 8 tiles of the building; the nearest free troops - wave members hunting
+  elsewhere included - within a band of 12 tiles + 1 per 500 credits of threat (at most 40) are sent until,
+  with the troops already fighting there, they are worth 1.25x the threat; each hunts its way to the
+  building's nearest point at its own speed. Workers and other contacts get the district response
+  (`scrambleUnitsAndDefend`: the same 1.25x, debounced per 8x8-tile district for 2 s). The army posture
+  recalls the tracked wave to the protected shelter on strategic attrition, a core attack or a local
+  1.3x disadvantage for 9 s, and colony guards hold threatened colonies while recovery is active.
+
+### Candidates (test-only switches)
+
+`QuantBot::forceVariantOverride` (duel label flags in upper case) and two more Blob bits
+(`blobVariantOverride`, lower case); none is set by the game, saved or hashed. Rules as pure functions in
+`include/players/ForceConcentrationPolicy.h` (`ForceConcentrationPolicyTestCase.cpp`), the code in
+`src/players/QuantBotForce.cpp`, `scrambleWholeArmyToDefend` and `QuantBotBlob.cpp`.
+
+| Flag | Candidate (task item) | Rule as built |
+|---|---|---|
+| `F` | focus fire (c) | Every unit pass each hunting ground fighter (wave member or base defender) takes the best enemy in its weapon range: fighters, then turrets, then workers, then buildings (walls never), fewest hit points first, lowest id; it leaves a target it can still shoot only for a better class or 75% of its hit points. |
+| `N` | focus fire, attack value without overkill (c) | NOK-AV: the target with the most damage per hit point (weapon damage / reload x1000, cross-multiplied), fighters first; a target already assigned a lethal volley by the units shooting it is skipped; units in object-id order; switch only out of reach, when overkilled, for a better class or a third more value. |
+| `C` | coordinated engage after contact (b) | A wave member that is not fighting walks (hunt-toward) to the nearest fight of its army within 24 tiles - a hunter of ours shooting an armed enemy in its reach - unless its own target is no further than the fight + 4 tiles. |
+| `P` | pool defenders by strength (h) | The threat counts enemy fighters within 12 tiles of the attacked building (not 8); the defence sends 2x it (not 1.25x), nearest first, from up to 40 tiles whatever the threat. |
+| `H` | recall raiders on a real base attack (i) | When the troops within the band cannot reach the requirement, the nearest troops beyond it - the raiding army - come home for it; a raid the troops nearby can answer recalls nobody. |
+| `M` | gather defenders outside the fight (h) | Defenders sent from more than 14 tiles muster 8 tiles from the building on their side of it, out of enemy reach, and engage together at 75% there, on contact, or after 15 s. |
+| `L` / `Q` | larger, rarer / smaller, more frequent waves (f) | Wave readiness (and the house attack threshold) at 150% / 60%. |
+| `s` (Blob) | consolidate near the enemy (a) | No gather at home: the blob marches in one leg to a staging point 12 tiles short of its objective, outside observed enemy reach; only an armed enemy in reach releases it on the way; at the staging point it waits for the rest (quorum, or the slowest member's travel time, at most 120 s) and then attacks all at once. |
+| `e` (Blob, with `s`) | engage only with local superiority (d) | At the staging point the party attacks only if its power is 1.5x the visible enemy fighters and turrets within 12 tiles of the objective; else it holds up to 60 s, and waves launched meanwhile join it. |
+| `/weak` (label) | defence scenario | Half of that side's starting army is removed (every second ground fighter by id) before the first cycle. |
+
+### Results (duel harness, None as control)
+
+Hard 1v1, Random Skirmish mirrored maps 128/160/192, Fortress + 20,000-credit armies, seeds 7101 7202
+7303 7404 7505 7606, one house pair per seed, both sides: 36 games per pairing, 40 game minutes,
+time-outs adjudicated on a 1,000-credit unit trade. Raw data `docs/formation-results/force/games.csv`,
+`waves-by-shape.csv`; printed reports `report-p2.md`, `report-p1.md`. Reproduce:
+`formation-duel.py --results <dir> --tag p2 --pairs "none+F:none,..." --sizes 128 160 192 --seeds 7101 7202 7303 7404 7505 7606 --report`.
+
+**Tag `p2`** (code: this branch after merging `fix/ai-regression-all-vs-atreides` a70f8666 - house
+withdrawals off by default, front battery 8-12 - and `perf/headless-sim`; the None baseline changed
+with that merge, so only `p2` decides). Wave columns are the candidate's waves; None's waves in the same
+games engaged 7-9% within 10 s and traded 3.0-4.2 killed/lost in the first minute.
+
+| Candidate v None (Hard) | Games | Score | 95% CI | Elim. W-L / time-outs | Contact s | Engaged ≤10 s | Killed / lost 60 s | Structures lost / destroyed per game | Home kill / loss | Win min |
+|---|---|---|---|---|---|---|---|---|---|---|
+| F focus fire | 36 | 0.583 | 0.42-0.75 | 18-7 / 11 | 40 | 8% | 2.96 | 51.8 / 65.8 | 0.36 | 31.6 |
+| N attack value, no overkill | 36 | 0.472 | 0.31-0.64 | 11-7 / 18 | 33 | 8% | 3.76 | 45.3 / 41.8 | 0.51 | 28.2 |
+| C converge after contact | 36 | 0.500 | 0.33-0.67 | 9-12 / 15 | 34 | 9% | 3.29 | 53.7 / 37.5 | 0.48 | 31.8 |
+| FC | 36 | **0.611** | 0.44-0.78 | 12-8 / 16 | 35 | 9% | 4.58 | 33.6 / 45.2 | 0.36 | 31.4 |
+| NC | 36 | 0.528 | 0.36-0.69 | 12-6 / 18 | 39 | 8% | 3.11 | 43.1 / 40.8 | 0.39 | 31.1 |
+| P pool defenders 2x | 36 | 0.528 | 0.36-0.69 | 11-8 / 17 | 36 | 8% | 3.68 | 41.9 / 48.2 | 0.44 | 34.6 |
+| H recall raiders | 36 | 0.528 | 0.36-0.69 | 10-9 / 17 | 37 | 8% | 3.53 | 42.5 / 45.2 | 0.41 | 34.0 |
+| PH | 36 | 0.528 | 0.36-0.69 | 11-10 / 15 | 36 | 8% | 3.68 | 41.8 / 48.1 | 0.44 | 34.6 |
+| M muster defenders | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 44.9 / 44.9 | 0.42 | 34.0 |
+| Q smaller waves (60%) | 36 | 0.556 | 0.39-0.72 | 17-8 / 11 | - | - | - | 28.7 / 60.8 | 0.38 | 32.4 |
+| none/retreat (attack, fall back, reform) | 36 | 0.486 | 0.32-0.65 | 9-11 / 16 | - | - | - | 44.9 / 41.7 | 0.44 | 36.1 |
+| blob+s staged near the enemy | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 52.6 / 44.0 | 0.39 | 34.0 |
+| blob+se staged, superiority | 36 | 0.500 | 0.33-0.67 | 10-10 / 16 | - | - | - | 53.1 / 44.1 | 0.40 | 34.3 |
+
+("-": in `report-p2.md`.) How often the rules fired per game: F 1,433 target switches, N 961, C ~5,000
+converge orders, P 45 pooled defenders, H 11 recalled raiders, M 4.2 musters, staged parties 0.7-0.9
+(contact with an armed enemy releases almost every staged blob before it reaches its staging point;
+the superiority hold fired 0.2 times a game).
+
+**Tag `p1`** (pre-merge baseline, withdrawals still on; stopped after 20-23 games per pairing when the
+regression fix landed): L (waves at 150% readiness) 0.000 in 8 games (0-3 eliminations, 5 time-outs,
+-50,924 value per game) - the only clear result, so it was dropped; every other candidate 0.40-0.68 with
+intervals across 0.5 (Q 0.682, H 0.591, F 0.565, blob+vs 0.400). Not used for the decision.
+
+**What the games show.** Nothing separates from None in 36 games. Focus fire with convergence (FC) is
+the best point estimate (0.611, first-minute trade 4.58 against None's 3.44 in the same games, 34 of our
+structures lost per game against 45 destroyed), and focus fire alone wins the most eliminations (18-7),
+but both intervals reach below 0.5. Convergence alone does not change how members engage (9% within 10 s
+against 8%): the members it redirects are those not yet fighting, and they still arrive at their own
+speed. The defence rules fire (P sends 45 defenders a game, H recalls 11 raiders) but do not move the
+home trade (0.41-0.44 against 0.36-0.51 for the others). Staging near the enemy almost never stages.
+
+**Decision: no change to the QuantBot default; `WaveFormation` stays None and every candidate stays a
+test-only switch** (`forceVariantOverride`, Blob bits `s`/`e`), because no candidate's 95% interval is
+above 0.5 on Hard. Protocol 77 / save 9862 unchanged by this round (no production AI decision changed).
+
+**Not done in this round (request budget):** the 108-game confirmation and the Brutal 36 of FC and F
+(the next step: `--pairs "none+FC:none,none+F:none" --all-houses` and `--difficulty brutal`), the
+`/weak` defence scenario (built and smoke-tested, not run), and Stefan's three new ideas from the parent
+(squad-centre bundling of idle troops as before 1.0.602, why big waves lose, a two-angle split attack).
+On L, the only evidence is `p1`: fewer attacks in 40 minutes and -50,924 value per game; its cause was
+not traced in replays.
+
+(The `p2` decision above is superseded by round 3 below.)
+
+### Round 3: confirmation, Stefan's ideas, defence, and the new default (protocol 78)
+
+Same harness and maps (Hard unless stated, sizes 128/160/192, seeds 7101-7606; "108 games" =
+`--all-houses`, every seed with all three house pairs). Raw data and printed reports:
+`docs/formation-results/force/round3/` (`games.csv`, `waves-by-shape.csv`, `report-*.md`). Tags: `p3`
+confirmation, `p4` Stefan's ideas, `p5` combinations, `h1` head-to-head against FCQ, `b1`/`b2` Brutal,
+`d1` defence. Code: this branch with the new test-only flags (unflagged games bit-identical to before,
+checked with the probe digest).
+
+New test-only flags (`QuantBot::forceVariantOverride`, rules in `ForceConcentrationPolicy.h`, code in
+`QuantBotForce.cpp`, `bundleUnit` called from the unit pass, the gate in `launchGroundHunt`):
+
+| Flag | Idea | Rule as built |
+|---|---|---|
+| `B` | squad bundling (Stefan) | The idle reserve (ground fighters not hunting, defending, repairing, escorting or human-controlled) gathers at a forward rally a quarter of the way from the house's assembly point to the observed enemy base (the pre-1.0.602 75%/25% rally, observed bases only), re-chosen every 30 s or when it becomes unsafe; at most 12 orders per pass, units already inside the radius or walking are left alone. Bundled units keep no role, so base defence takes them as before. |
+| `O` (with B) | old squad centre | The closer of that rally and the army's centre of mass (every ground fighter, hunters included) - the v1.0.520 `moveToOptimalSquadPosition` rule. |
+| `W` (with B) | launch from the bundle | A ready wave launches only once 70% of its value stands in the bundle; re-checked every 5 s, at most 60 s late. |
+| `S` | two-angle attack | The wave splits in two value halves (by which release point each member is nearer) that walk in Area Guard to release points 14 tiles from the objective at +-45 degrees off the approach (90 degrees apart); both then hunt towards the objective at once when 75% of each group has arrived, when 25% of one group is already fighting (the other hunts towards that fight), or after 120 s. |
+| `T` | main force + flank | As S with 70% head-on and 30% from 90 degrees (the nearer side). |
+
+Results (score from the first side; engaged = members engaging within 10 s of contact; trade = value
+killed / lost in the first minute after contact; contact = median seconds from launch):
+
+| Candidate v None | Games | Score | 95% CI | Elim. W-L / time-outs | Engaged ≤10 s | Trade 60 s | Contact s | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| F | 108 | 0.588 | 0.49-0.68 | 45-24 / 39 | 8% | 3.63 | 39 | not distinguishable |
+| FC | 108 | 0.546 | 0.45-0.63 | 33-31 / 44 | 9% | 4.30 | 40 | not distinguishable |
+| Q (60% waves) | 108 | 0.611 | 0.52-0.69 | 54-22 / 32 | 9% | 3.74 | 58 | beats None |
+| **FCQ** | **108** | **0.750** | **0.67-0.83** | 62-12 / 34 | 9% | 4.13 | 56 | **beats None** |
+| FCQ, Brutal | 36 | 0.833 | 0.69-0.94 | 23-3 / 10 | | | | beats None |
+| Q, Brutal | 36 | 0.667 | 0.50-0.81 | 17-8 / 11 | | | | not distinguishable |
+| B | 36 | 0.611 | 0.44-0.78 | 17-9 / 10 | 11% | 3.90 | 21 | not distinguishable |
+| O | 36 | 0.750 | 0.61-0.89 | 18-3 / 15 | 10% | 4.51 | 21 | beats None |
+| BW | 36 | 0.722 | 0.58-0.86 | 18-4 / 14 | 10% | 4.16 | 19 | beats None |
+| BFC | 36 | 0.681 | 0.53-0.82 | 17-5 / 14 | 11% | 4.32 | 20 | beats None |
+| BWFC | 36 | 0.722 | 0.56-0.86 | 21-3 / 12 | 12% | 4.75 | 21 | beats None |
+| L (150% waves) | 36 | 0.431 | 0.28-0.58 | 5-16 / 15 | 7% | 4.44 | 22 | not distinguishable |
+| LBW | 36 | 0.569 | 0.40-0.72 | 11-10 / 15 | 9% | 4.85 | 13 | not distinguishable |
+| LFC | 36 | 0.306 | 0.17-0.47 | 4-16 / 16 | 7% | 3.74 | 26 | loses to None |
+| S | 36 | 0.556 | 0.39-0.72 | 13-11 / 12 | 8% | 3.19 | 34 | not distinguishable |
+| T | 36 | 0.444 | 0.28-0.61 | 9-13 / 14 | 9% | 2.95 | 29 | not distinguishable |
+| SFC | 36 | 0.528 | 0.36-0.69 | 12-10 / 14 | 8% | 3.42 | 31 | not distinguishable |
+| TFC | 36 | 0.611 | 0.44-0.75 | 16-7 / 13 | 9% | 3.43 | 35 | not distinguishable |
+| OFCQ | 36 | 0.806 | 0.67-0.92 | 26-2 / 8 | 11% | 3.98 | 35 | beats None |
+| OWFCQ | 36 | 0.694 | 0.53-0.83 | 22-3 / 11 | 9% | 3.83 | 30 | beats None |
+| SFCQ | 36 | 0.639 | 0.47-0.81 | 21-6 / 9 | 9% | 3.34 | 47 | not distinguishable |
+| **BWFCQ** | **108** | **0.852** | **0.78-0.92** | 74-3 / 31 | 11% | 4.40 | 33 | **beats None** |
+| BWFCQ, Brutal | 36 | 0.944 | 0.86-1.00 | 29-0 / 7 | | | | beats None |
+| OFCQ v FCQ | 36 | 0.583 | 0.42-0.75 | 18-10 / 8 | 11% | 2.51 | 32 | not distinguishable |
+| **BWFCQ v FCQ** | **108** | **0.750** | **0.67-0.82** | 64-14 / 30 | 14% | 3.11 | 27 | **beats FCQ** |
+
+(None's own waves in these games: engaged 8-10% within 10 s, first-minute trade 1.7-3.6, contact 23-40 s.)
+
+**Why big waves (L) lose.** Not piecemeal arrival - L's waves are the most cohesive (67% survive, 4.4
+trade). L scales the house attack threshold with the wave: on 128 maps Hard needs 30,000 of military
+value (150% of 20,000) where the starting army is ~21,000, so L skips the opening strike, the enemy's
+starting army hits L's base first, and L's army - bled by defending (traced game 128/7101: 21,350 at
+1.3 min, 6,900 at 9 min, at most 29,570) - stays below 30,000 for 20 minutes; it attacked once in 33
+minutes and lost (the None mirror attacked at 1.3 min with 72 units). Over the 36 `p4` games L launched
+3.4 waves a game against None's 7.5, its first at a median 19.9 minutes (None 10.7), and lost 55
+structures a game (None 28). Tempo, not cohesion: the enemy keeps the initiative while L waits.
+Bundling helps big waves (LBW 0.569, its own structure losses 35) but they still trail; focus fire
+does not (LFC 0.306).
+
+**Split attacks (S, T).** Rarely reach their release points: in a traced game both splits were released
+early because one group met the enemy army on the way (25% fighting), so the other group arrived
+later - the piecemeal fight they were meant to avoid. Contact comes later (34-47 s), the first-minute
+trade is worse (2.95-3.43 against 3.6-4.5 for one body), and no split variant separates from None;
+splitting FCQ costs it (SFCQ 0.639 v FCQ 0.750). One concentrated wave is better.
+
+**Squad bundling (B/O/W).** Stefan's idea works: the reserve standing a quarter of the way forward
+shortens the next wave's walk (contact 19-21 s against 33-56 s) and waves leave as one body (W: 46-58
+members a wave). B alone is not distinguishable (0.611), O and BW beat None in 36 games, and bundling
+on top of FCQ is the best rule measured: BWFCQ 0.852 in 108 Hard games, 0.944 in 36 Brutal, and 0.750
+(0.67-0.82) head-to-head against FCQ in 108 games. Engaged within 10 s rose only to 11-14%; what
+bundling buys is a shorter, single approach, not simultaneous engagement.
+
+**Defence (`/weak`, the side starts with half its army, against plain None; per game, first side):**
+
+| Candidate (weak side) | Score | 95% CI | Structures lost | Structures destroyed | Home kill / loss | Wins |
+|---|---|---|---|---|---|---|
+| None | 0.333 | 0.19-0.50 | 53.2 | 25.1 | 0.49 | 4 |
+| P | 0.333 | 0.19-0.50 | 53.4 | 25.4 | 0.52 | 4 |
+| H | 0.333 | 0.19-0.50 | 53.5 | 25.4 | 0.48 | 4 |
+| PH | 0.333 | 0.19-0.50 | 53.6 | 25.5 | 0.53 | 4 |
+| M | 0.333 | 0.19-0.50 | 53.7 | 24.9 | 0.51 | 4 |
+| B | 0.361 | 0.22-0.53 | 51.9 | 40.9 | 0.32 | 8 |
+| O | 0.389 | 0.22-0.56 | 52.9 | 24.7 | 0.51 | 3 |
+| FC | 0.361 | 0.22-0.53 | 51.5 | 13.5 | 0.48 | 2 |
+| FCQ | 0.250 | 0.11-0.39 | 60.8 | 24.3 | 0.50 | 3 |
+| BWFCQ | 0.333 | 0.19-0.50 | 55.0 | 40.7 | 0.50 | 6 |
+
+36 games each. The weak base survived (not eliminated) in 18 games with None, P, PH and FC, 17 with H,
+M, O and BWFCQ, 20 with B, 18 with FCQ - no rule separates: the defence rules (P, H, M) do not
+change the outcome of a half-army start, and none of the attack rules makes defence better. FCQ is the
+one to watch: as the weak side it scores 0.250 (8 points under None, intervals overlap) and loses 61
+structures a game - most likely (not traced) because its smaller, earlier waves leave the already
+outnumbered base emptier.
+
+**Decision (applied): the QuantBot default is FCQ** - focus fire, converging on fights and waves at 60%
+readiness, new optional `[Force Concentration]` keys in QuantBot Config (`FocusFire`, `Converge`,
+`WaveReadinessPercent`; code defaults true, true, 60; hashed). It meets the rule: 108 Hard games
+0.750 (0.67-0.83), Brutal 0.833 (0.69-0.94), `quantbot_all_against_atreides` 6/6 (31.9 27.8 31.4 31.4
+33.9 27.9 minutes against 34.0 31.9 32.2 31.7 32.8 32.8 before). `WaveFormation` stays None. No saved
+state (focus fire and converging are stateless per pass); protocol 78, save 9862. The duel harness sets
+the override for every label, so `none` in the duels stays the previous rules.
+
+**Next: BWFCQ.** It is better (above) but bundling has state between passes (the bundle point, its
+30 s clock and the gate's wait), so as a default it needs those in the save (9863, gated), a real-engine
+probe for bundling and the gate, and the all-against-Atreides match - not done in this round (request
+budget). Its defence result is no worse than None's (0.333). Test-only until then. (Done in round 4.)
+
+### Round 4: BWFCQ made shippable and the default, launcher kiting, defence (protocol 79, save 9863)
+
+Same harness, maps and seeds as round 3. Data and printed reports: `docs/formation-results/force/round4/`
+(`games.csv`, `waves-by-shape.csv`, `report-r4h.md` Hard, `report-r4b.md` Brutal, `report-r4d.md`
+defence, `report-r4hd.md` Hard with D; 468 games).
+
+**Launcher kiting with the force rules on.** `quantbot_launcher_kiting` had set the force override to 0
+because focus fire gives a hunting launcher an unforced attack order. The real conflict: focus fire and
+converging run in `concentrateForces()` before the unit pass, so a launcher with an enemy already in its
+close band got an attack (or hunt-toward) order that cleared its path and destination, and the escape
+then had to re-order it in the same pass (or, with the path queue stressed, the attack order stood and the
+launcher fought at point-blank range). Fix: `closeThreatWhileHunting()` (the escape's own threat search,
+bounded tile box, nearest then lowest id) is split out of `escapeCloseThreatWhileHunting()`, and
+`concentrateForces()` skips every hunter it returns a threat for - the pass belongs to the escape. A
+launcher standing off again is an ordinary hunter and takes the focus target. The probe now runs with
+the production rules and checks: an escaping launcher gets the forced step and no focus-fire order (the
+focus counter does not move), and standing off it takes the damaged tank in range rather than the
+healthy one and its rockets land on it (2 shots, hit within 750 cycles, Hard and Brutal); a tank beside a
+non-launcher hunter may be given as an unforced attack (focus fire) but nothing is kited. The fixture
+fixes the launcher's facing at the start of the escape section for both difficulties (a 180-degree turn
+costs two of its eight passes).
+
+**Bundling made shippable.** Optional `[Force Concentration]` keys `Bundle` and `LaunchFromBundle`
+(code defaults true, hashed; `forceBits()` adds B and W from them). Changes against the round-3 test-only
+rule:
+- Saved (SAVEGAMEVERSION 9863, appended to the QuantBot block after the hunt parties): `bundlePoint` (x,y),
+  `bundleCentre` (x,y; the O variant's centre of mass), `bundleCycle` (the 30 s re-choice clock) and
+  `bundleGateSince` (the launch gate's first hold). A 9862 save loads with no bundle (chosen afresh at the
+  first unit pass, the gate starts a new wait). Load rejects a point off the map.
+- Order-independent and bounded: the unit pass only posts a reserve unit (guard point, Area Guard) and
+  collects the ones that must walk; after the pass at most 12 get a move, farthest from the bundle first,
+  lowest id on ties (`ForceConcentrationPolicy::bundleOrderFirst`), into slots reserved for the whole
+  batch. Point search: a ring of at most 17x17 tiles every 30 s (or when the point becomes unsafe).
+- Bundling never takes a tracked wave member, a defender, colony guard, escort, repair or human unit, and
+  stands aside (as does the launch gate) while a withdrawal or recovery holds reinforcements at home;
+  bundled units keep no role, so base defence takes them like any other unit.
+- The gate only waits when a bundle exists, and a wave that stops being ready drops its wait.
+
+Probe `quantbot_force_concentration` section 6 (real engine, 16 idle tanks): one pass gives exactly 12
+bundle orders to the 12 farthest, the same units for a reversed unit list; the bundle point keeps inside
+30 s and is re-chosen after it; a ready wave scattered at home is held (re-check in 5 s) and launches
+after 60 s; save/load while the gate waits and mid-gather restores all four fields and re-saves the same
+bytes (661), a 9862 load has no bundle; all 16 gather within 36 game s; an attack on a wind trap next to
+the bundle pulls 2 defenders out of it (Hunt, kept on the next pass); the 14 left launch from the bundle
+(no hold).
+
+**Bundling waits for house readiness.** With bundling as first built, `quantbot_no_spice_income_low-cash`
+failed: both Brutal QuantBots built 3 lots instead of 4 in 12 minutes (with `Bundle=false` it passed),
+because the starting army walked to the forward bundle in the opening. Bundling therefore applies only
+while the house could attack (`bundleArmyReady()`: military value at least the house attack threshold
+at the configured readiness, the figure `attack()` uses - shared as `houseAttackThreshold()`); below it
+the reserve keeps to the home rally. `quantbot_whole_army_dispatch`, `quantbot_army_recovery` and
+`quantbot_blob_waves` spawn ready waves where they test them, so they pin FCQ (override F|C|Q); the gate
+is covered by `quantbot_force_concentration`.
+
+**Results (BWFCQ = the new default; `none` = the rules before protocol 78).** Final code (tags `r4f`,
+`r4fb`); `r4h`/`r4b` are the same rule before the readiness condition:
+
+| Pairing | Games | Score | 95% CI | Elim. W-L / time-outs | Verdict |
+|---|---|---|---|---|---|
+| BWFCQ v none, Hard (final) | 108 | **0.870** | 0.81-0.93 | 81-3 / 24 | beats none |
+| BWFCQ v FCQ, Hard (final) | 108 | **0.676** | 0.58-0.76 | 57-15 / 36 | beats FCQ |
+| BWFCQ v none, Brutal (final) | 36 | **0.931** | 0.85-1.00 | 28-0 / 8 | beats none |
+| BWFCQ v none, Hard (r4h) | 108 | 0.880 | 0.82-0.94 | 82-3 / 23 | beats none |
+| BWFCQ v FCQ, Hard (r4h) | 108 | 0.713 | 0.63-0.80 | 59-17 / 32 | beats FCQ |
+| BWFCQ v none, Brutal (r4b) | 36 | 0.917 | 0.81-1.00 | 31-0 / 5 | beats none |
+| BWFCQD v none, Hard (r4hd) | 108 | 0.889 | 0.82-0.94 | 81-3 / 24 | beats none |
+
+`quantbot_all_against_atreides` with the final default: 6/6, 30.8 31.7 33.4 30.3 34.4 31.7 minutes (seeds
+1756374161 906213928 41562270 1841712204 1430976924 1804669015; FCQ: 31.9 27.8 31.4 31.4 33.9 27.9).
+
+**Defence (`/weak`): why FCQ did worst.** Traced with the AI log (160/7202 Atreides and 192/7404
+Harkonnen as the weak side against None, where round 3's FCQ lost 153 and 130 structures and None 1
+and 10; reproduced: FCQ 95 and 167, None 1 and 0). Not an empty base: there was no base scramble at all
+before minute 34. The cause is the 60% readiness while outnumbered. The weak FCQ house launched 8-9 waves
+of 13-20k (first at 9.4-10.8 min) into an enemy army of 31-70k, lost each in the field, and its army
+fell from 42-54k (minute 18-24) to 3-5k by minute 34; only then did the enemy waves take the base (1 and
+0 structures lost before minute 34, 94 and 167 in the last six minutes). The None weak house waited for full
+readiness, sent 5-10 waves of 22-38k, kept an army of 44-46k to the end and lost 0-1 structures. The
+outnumbered dispatch gate fired 5 times around minute 9.7 (own 14.2M against 22.9M observed) and then
+stopped deferring once the enemy army was out of view.
+
+Candidate D (test-only, duel flag `D`, `kForceStrengthReadiness`): while the visible enemy mobile ground
+army (health-weighted value) is worth 125% of ours or more, a wave waits for full (100%) readiness instead
+of the configured 60% (`launchReadinessPercent()`, one unit-list pass per attack check; stateless).
+
+| Weak side v none (36 games each, tag `r4d`, before the readiness condition) | Score | 95% CI | Structures lost | Structures destroyed | Home kill / loss | Wins |
+|---|---|---|---|---|---|---|
+| BWFCQ | 0.333 | 0.19-0.50 | 55.2 | 27.4 | 0.61 | 5 |
+| BWFCQD | 0.389 | 0.22-0.56 | 53.9 | 38.0 | 0.41 | 5 |
+| FCQD | 0.361 | 0.19-0.53 | 52.5 | 19.2 | 0.48 | 2 |
+
+(Round 3, older code: None 0.333 / 53.2 lost, FCQ 0.250 / 60.8.) D points the right way (FCQD loses 52.5
+structures against FCQ's 60.8 in round 3; BWFCQD 0.389 against BWFCQ 0.333) and costs nothing on attack
+(Hard 0.889 v 0.880), but no difference separates in 36 games, so **D is not kept as a default** (stays
+a test-only flag); the next step is a 72-108-game `/weak` run of BWFCQD v BWFCQ.
+
+**Decision (applied): the QuantBot default is BWFCQ** (`Bundle=true`, `LaunchFromBundle=true` on top of
+FCQ). Protocol 79 (bundling, the gate and the launcher fix change AI orders), save 9863.
+
+## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
+
+Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
+gathering up all available units in the hunt party for an offensive would be good, because otherwise
+trikes run off ahead etc. it could blod up, move towards its desination and then unblob on making
+contact. i think we also have a need to get it to reform. i think the retreat we do on damage should
+be a tactical retreat back a bit to reform as a formation".
+
+### Research: how RTS AIs keep an army together
+
+- **OpenRA squad AI** ([`GroundStates.cs`](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/States/GroundStates.cs)):
+  a squad elects a *leader* - the unit nearest the squad's centre among the units with the most
+  restricted locomotor, so the others can follow it. While attack-moving, if fewer than all members
+  are within `units / 3` cells of the leader, the leader *stops* and the stragglers attack-move to
+  the leader ("units have different movement speeds, they get separated ... let them regroup into
+  tighter formation"); once together the squad attack-moves to the target and, near an enemy,
+  switches to an attack state where every unit attack-moves on its own. A squad that has not moved
+  for 2.5 s drops back to idle (stuck guard). Its flee state sends the squad to an own building -
+  a full retreat. *For QuantBot:* the anchor (leader) choice, "wait for the rear" cohesion and the
+  per-unit fight after contact are exactly Stefan's blob; the stuck guard is needed too.
+- **UAlbertaBot / Steamhammer (StarCraft: Brood War)** ([`Squad.cpp`](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/Squad.cpp),
+  [paper](https://davechurchill.ca/publications/pdf/cog19_buildorder.pdf)): every second the squad
+  simulates the local fight (SparCraft) when an enemy is in range; if it predicts a loss it
+  *regroups*: every unit moves to the regroup position, which is the squad unit closest to the
+  order's target that is **not** near an enemy - a short tactical step back to the front edge of
+  the safe part of the squad, not home. A 100-frame hysteresis stops it flipping back to attack.
+  *For QuantBot:* the tactical retreat should be a short fall-back to safe ground beside the party,
+  triggered by a local strength comparison, with hysteresis.
+- **sharpy-sc2** ([`group_combat_manager.py`](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/combat/group_combat_manager.py)):
+  own units are clustered (DBSCAN); a configurable share of the attackers must be together before
+  attacking (`regroup_percentage`), and a *faster* group regroups to a slower one. *For QuantBot:*
+  a gather quorum (not 100%: blocked units must not stall the attack) and fast units waiting.
+- **Age of Empires II AI** ([strategic numbers](https://airef.github.io/strategic-numbers/sn-index.html)):
+  attack groups gather before attacking (`sn-attack-group-gather-spacing`, default 4; units count as
+  formed within `sn-group-form-distance`, default 20, of the group commander chosen by
+  `sn-group-commander-selection-method`). *For QuantBot:* gather point plus a formed-distance test.
+- **Beyond All Reason / Spring** ([Move in Formation](https://www.beyondallreason.info/commands/move-in-formation)):
+  "faster units will move at the speed of the slowest units in the group". No primary source for an
+  AI regroup rule was found for BAR's bots, Total War or Command & Conquer beyond OpenRA's.
+- **Blob versus formation:** the earlier rounds here (below) found that rigid shapes lose to plain
+  Hunt, because a formation that keeps its shape into the fight fights with its front rows only; the
+  sources above all keep cohesion only *until* contact and then let every unit fight on its own.
+
+### What QuantBot does today (1.0.842, code read)
+
+- **Who goes:** Custom Hard/Brutal `launchGroundHunt()` is a whole-army dispatch: every available
+  ground fighter (not on a repair run, a live defence job, an escort or already hunting) once the
+  available value reaches the readiness threshold and a viable main wave (6 units, 3,000 credits).
+  They are tracked in `customWave`. Units already hunting join the tracked army unchanged.
+- **Why trikes run ahead:** each unit simply gets engine Hunt (`doSetAttackMode(HUNT)`): each one
+  walks at its own speed to its own nearest target (quad 1.28, tank 0.80, siege tank 0.64, trooper
+  0.48, soldier 0.24 px/cycle), so the fast ones arrive first and alone. Nothing waits.
+- **The retreat on damage today:** (1) per unit - a vehicle below 60% health with a repair yard is
+  sent to the repair yard (`onDamage` → `doRepair`), alone, wherever it is; (2) the squad - when
+  the enemy around the tracked army's centroid is 1.3x ours for 9 s (`localSquadWithdraw`) or 2x
+  (severe: a house emergency), or on sustained attrition / a core attack, `applyArmyPosture()`
+  recalls every tracked member to the protected shelter inside the base (forced moves, Area Guard);
+  the house then waits in Withdrawing/Recovering until it is ready to attack again.
+
+### Design as built
+
+`WaveFormation = Blob` (QuantBot Config.ini, optional key, code default unchanged: None) makes a
+Custom Hard/Brutal ground wave a **hunt party** (`QuantBot::BlobParty`, `src/players/QuantBotBlob.cpp`,
+pure rules in `include/players/BlobWavePolicy.h`). Who goes and when is unchanged; Easy/Medium,
+campaign waves and every other AI group move as None with Blob (`QuantBotConfig::formationShapeOf`).
+
+- **Gather:** the anchor is OpenRA's leader (the member nearest the members' centre, vehicles
+  first). The rally point is up to 6 tiles (a third of the way at most) from it towards the
+  objective, on standable ground in the anchor's vehicle terrain region
+  (`Map::vehicleTerrainRegion`) outside observed enemy weapon reach. Every member walks to its own
+  hashed tile around it in Area Guard. The party marches when 90% stand there; or when the rest
+  have all stopped (blocked), nobody arrived for 8 s and 60% are there; or at the latest after the
+  slowest member's straight-line travel time x1.5 + 4 s (8-60 s).
+- **Blob march (leg by leg):** each leg ends one leg (`max(8, 2 x blob radius)` tiles) from the
+  anchor towards the objective; every member walks to its own tile there in Area Guard; the fast ones
+  arrive first and **wait**; the next leg starts when 90% of the members that are not stragglers
+  (more than two legs plus the radius away) are there, or after the slowest member's travel time
+  (x1.5 + 4 s, at most 90 s). So the blob moves at its slowest member's pace and a fast member is at
+  most about two legs plus two radii from the slow ones. A blob that gets no closer for 60 s, or
+  comes within half a leg of the objective, is released.
+- **Release on contact (unblob):** a visible enemy fighter or building within any member's
+  `huntTowardRange()` (weapon or view range, the distance at which engine Hunt itself stops), or a
+  hit on any member, releases the party: members already in contact keep their target in Hunt, the
+  others hunt their way to the contact (`doHuntToward`), so every member fights as engine Hunt -
+  exactly None's fight, all members engaged.
+- **Reform:** when no enemy has been within reach of any member and nobody was hit for 6 s, the party
+  reforms around the anchor (a gather with a 30 s cap) and marches on to the next objective (the old
+  one if it still stands, else the wave's objective choice again).
+- **Tactical retreat:** during a fight, our ground fighters against the visible enemy fighters within
+  10 tiles of the anchor (the posture policy's 1.3x for 4 s, or 2x at once): the party falls back
+  8 tiles away from the threat, bent towards home (away from the threat counts twice), on a forced
+  move, then reforms there and marches again - at most 3 times per party. With the tactical retreat
+  on, the squad-level recall home (`localSquadWithdraw`) and the severe-local-defeat house emergency
+  are replaced by it; strategic attrition and core attacks still recall the whole army home, and
+  then the parties dissolve. Per-unit repair runs below 60% health are unchanged (see the results).
+- **Determinism:** parties are a vector in launch order, members ordered sets, every scan in a fixed
+  list/tile order with id tie-breaks, integer arithmetic only. Party state is saved
+  (SAVEGAMEVERSION 9862: phase, clocks, points, objective, fall-back count, members); a 9861 save
+  loads with no party. Protocol 76 (AI orders differ from a 75 peer).
+- **Ablation switches (test-only, not saved, not hashed):** `QuantBot::waveFormationOverride`
+  (Blob/None) and `QuantBot::tacticalRetreatOverride` (-1 with Blob only, 0 off, 1 also for plain
+  Hunt waves, which then track a party that only falls back and reforms). Duel labels: `blob`,
+  `blob/noretreat`, `none/retreat`.
+- **Tests:** `BlobWavePolicyTestCase.cpp` (dunelegacy_tests: radius/leg, gather quorum/stall/
+  timeout, leg quorum, straggler and travel limits, fast-lead bound, rally and fall-back geometry,
+  outmatch ratios, integer symmetry, Blob config/hash) and the real-engine probe
+  `quantbot_blob_waves` (`tests/ai/blob-wave-probe.inc`: gather of every available fighter, gather
+  timeout keeping stragglers, march with the fast-member lead within bound and below plain Hunt's,
+  release into Hunt on contact, reform after 6 s quiet, fall-back ~8 tiles away from the threat and
+  return to the march, order independence of party/orders/contact, save/load mid-gather, mid-march
+  and mid-reform with identical re-saved bytes, None unchanged).
+
+### Results (duel harness, None as control)
+
+`tests/ai/formation-duel.py` (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, 40 game
+minutes, time-outs adjudicated on a 1,000-credit unit trade), sizes 128/160/192, seeds 7101-7606,
+`--all-houses` (all three house pairs per seed) and both side assignments: **108 games per pairing**.
+Code: commit `0aba7ea8` (this branch). Raw data: `docs/formation-results/blob/games.csv`,
+`waves-by-shape.csv` (tags `hard1`, `brutal1`) and the printed reports `report-hard1.md`,
+`report-brutal1.md`; reproduce with `formation-duel.py --results <dir> --tag hard1 --pairs
+"blob:none,blob/noretreat:none,none/retreat:none" --sizes 128 160 192 --seeds 7101 7202 7303 7404 7505 7606 --report`.
+
+| Pairing (first side's score), Hard | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | Verdict |
+|---|---|---|---|---|---|---|---|
+| blob v none | 108 | 0.306 | 0.22-0.39 | 18-33 / 57 | 0.431 | -20,407 | loses to None |
+| blob/noretreat v none (blob without the tactical retreat) | 108 | 0.343 | 0.26-0.44 | 23-31 / 54 | 0.463 | -16,384 | loses to None |
+| none/retreat v none (tactical retreat without the blob) | 108 | 0.486 | 0.39-0.58 | 30-30 / 48 | 0.500 | -865 | not distinguishable |
+| blob v none, **Brutal** (one house pair per seed) | 36 | 0.444 | 0.28-0.61 | 8-11 / 17 | 0.458 | -3,688 | not distinguishable |
+
+Waves (every wave of the first side in those games; contact = first member engaging; together = living
+members within 8 tiles of the member nearest their centre at contact; engaged within 10 s of contact;
+first-minute value from contact; survival 5 min after launch), with None's waves in the same games:
+
+| Side (Hard) | Waves | Contact s (median) | Arrival spread s | Together at contact | Engaged ≤10 s | Killed / lost 60 s | Killed / lost | Survival | None in those games: together, K/L, survival |
+|---|---|---|---|---|---|---|---|---|---|
+| blob | 621 | 54 | 71 | 50% | 11% | 2,675 / 925 | 2.89 | 71% | 22%, 3.67, 65% |
+| blob/noretreat | 633 | 60 | 74 | 50% | 11% | 2,598 / 785 | 3.31 | 73% | 23%, 3.78, 64% |
+| none/retreat | 658 | 33 | 86 | 24% | 8% | 3,523 / 966 | 3.65 | 59% | 23%, 3.63, 59% |
+| blob (Brutal) | 196 | 58 | 75 | 49% | 10% | 2,819 / 855 | 3.30 | 75% | 20%, 3.40, 68% |
+
+How often the party steps fired, per game (Hard, Blob with retreat): 5.8 parties, 2.8 gathers that
+reached their quorum and 5.3 gathers/reforms that ended on their time limit, 26 legs, 17.8 releases,
+7.4 reforms, 0.9 tactical fall-backs (0.3 completed back into a reform before the house posture or a
+new fight took over), 0.7 stalled marches, 4.8 parties dissolved (too few members, no objective, or a
+house recall). The retreat-only ablation fell back 1.1 times per game. Per-unit repair orders for party
+members (onDamage calls, not distinct units): about 200 per game in every Blob variant.
+
+An earlier pilot of the first build (leaders waiting for the rear on a leash instead of legs; 36 games,
+one house pair per seed) scored 0.389 (0.22-0.56): the waiting leaders blocked the units behind them
+(6 stalled marches in one instrumented game), which is why the march became leg by leg.
+
+**What the games show.** The blob does what was asked of it - twice as many members are with the main
+body at first contact (50% against 22%), the arrival spread drops from 100 to 71 s, the fast units stay
+with the slow ones (probe: the largest fast-member lead on the march 4 tiles against 8 for plain Hunt)
+and more of the wave lives (71% against 65% after 5 minutes) - but it does not win fights. Contact comes
+21 s later (the gather and the slowest member's pace), and the first-minute trade is worse (2.89 against
+3.67 killed per lost): marching together does not make the members engage together (11% engage within
+10 s of contact, None 8%), because after the release every member is an engine hunter again and walks
+in at its own speed, while None's waves have been fighting (and killing harvesters and outposts) for
+longer. Removing the tactical retreat does not rescue the blob (0.343, the intervals overlap), and the
+tactical retreat on its own is neutral (0.486): it fires about once a game and replaces a recall that
+was also rare. On Brutal the blob is not separable from None in 36 games (0.444, 0.28-0.61).
+
+**Decision: QuantBot `WaveFormation` stays None.** Blob's interval is below 0.5 on Hard (0.22-0.39), so
+the condition for making it the default (Hard interval above 0.5 and not worse on Brutal) is not met.
+Blob stays available as a config value (`WaveFormation = Blob`) with its ablation switches for further
+work; nothing else in the game changes with None. Per-unit repair runs stay as they are: the data give
+no reason to replace them (the retreat-only variant, which keeps them, is level with None, and the
+repair counter could not be tied to wins or losses in this round).
+
+### Second round: Blob variants (36-game screen, tag `pilot2`, commit `57d2b973`)
+
+Test-only bits `QuantBot::blobVariantOverride`, duel label flags after `+`: **v** = vehicle pace (foot
+infantry neither sets the pace nor holds a gather or leg; 75% quorum instead of 90%), **r** = release
+only on a real fight (a building, or visible enemy fighters within 10 tiles of the contact worth at
+least a quarter of the party; a lone scout or a single hit is shot by the three nearest members while
+the blob marches on), **k** = a member below 60% health stays with a party that has not met a fight yet
+instead of driving to the repair yard. Also fixed for every Blob variant: a damaged party member is no
+longer pulled back to the squad rally by the old "rotate damaged units" rule. Hard, sizes 128/160/192,
+seeds 7101-7606, one house pair per seed, both sides (36 games; 15 games of the last two pairings
+failed on the 1,800 s wall limit with 7 parallel jobs and are left out, so `blob+vrk/noretreat` has 21).
+Report: `docs/formation-results/blob/report-pilot2.md`.
+
+| Candidate v None (Hard) | Games | Score | 95% CI | Contact s | Engaged ≤10 s | Killed / lost 60 s | Releases / game |
+|---|---|---|---|---|---|---|---|
+| blob (round 1, 108 games) | 108 | 0.306 | 0.22-0.39 | 54 | 11% | 2.89 | 17.8 |
+| blob+v | 36 | 0.417 | 0.25-0.58 | 71 | 11% | 3.50 | 19.4 |
+| blob+r | 36 | 0.361 | 0.22-0.53 | 54 | 9% | 2.94 | 8.6 |
+| blob+vr | 36 | 0.361 | 0.22-0.53 | 71 | 11% | 2.75 | 8.4 |
+| blob+vrk | 36 | 0.347 | 0.21-0.50 | 67 | 11% | 2.32 | 9.4 |
+| blob+vrk/noretreat | 21 | 0.333 | 0.14-0.52 | 58 | 10% | 2.64 | 8.8 |
+
+None of the variants beats None; none is separable from the first Blob either. Vehicle pace brings the
+first-minute trade level with None (3.50 against 3.51) but still reaches contact later. Releasing only on
+a real fight halves the release/reform churn (19 to 9 per game) but trades worse: the scouts it ignores
+are what None's waves kill early. Keeping damaged members makes the trade worse still. The members still
+engage piecemeal after the release (9-11% within 10 s, None 8%). **Decision unchanged: `WaveFormation`
+stays None**; Blob and the variant switches stay opt-in/test-only.
+
+**Open (handed on):** a coordinated engage after the release (all members converge on the threat centroid
+at the blob's pace before free combat), a concave on the last leg, consolidating near the enemy then
+attacking all at once, planner shapes for the approach only, attack-then-reorganise, an engage decision by
+local strength, and focus fire. A new variant is one bit in `QuantBot::blobVariantOverride`
+(`include/players/QuantBot.h`), its rule in `src/players/QuantBotBlob.cpp`, and a flag letter in
+`tests/ai/formation-duel.inc` (`sidesFromEnv`); labels then run as `--pairs "blob+<flags>:none"`.
+
 ## Form up where they stand, save 9861 / protocol 75
 
 Stefan: "when selecting men and then setting a formation, the troops should move into that

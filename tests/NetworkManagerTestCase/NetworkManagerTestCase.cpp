@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 77;
+static constexpr int kWireProtocolVersion = 79;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -73,10 +73,15 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 73 adds formation shapes and hunting in formation (CMD_UNIT_FORMATION_HUNT) and save 9859.
     // 74 changes formation roles and pacing (harvesters out, form-up, one-speed march) and save 9860.
     // 75 adds the form-up in place (CMD_UNIT_FORMATION_MOVE order kind FormUp) and save 9861.
-    // 76 is reserved by feat/ai-blob-waves. 77 bounds the QuantBot front battery, decouples
-    // walls from it, credits destroyed buildings to the posture trade and makes a harvester
-    // override of 0 "no ceiling" for every AI; save 9861 unchanged.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 77);
+    // 76 adds QuantBot hunt parties (WaveFormation Blob, Blob waves) and save 9862.
+    // 77 bounds the QuantBot front battery, decouples walls from it, credits destroyed
+    // buildings to the posture trade and makes a harvester override of 0 "no ceiling" for
+    // every AI; no saved state change.
+    // 78 makes QuantBot focus fire, converge on fights and launch waves at 60% readiness by
+    // default (QuantBot Config [Force Concentration]); no saved state change.
+    // 79 bundles the QuantBot idle reserve forward, launches waves from the bundle and keeps a
+    // hunting launcher's escape out of focus fire; save 9863 (the bundle and the gate's wait).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 79);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

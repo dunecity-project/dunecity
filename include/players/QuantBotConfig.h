@@ -131,20 +131,52 @@ struct QuantBotConfig {
     };
     RecoverySettings recovery;
 
+    /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
+    /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
+    /// LaunchFromBundle; optional keys, the code defaults apply when absent. Hashed for
+    /// multiplayer.
+    struct ForceSettings {
+        /// Hunting ground fighters shoot the best target in reach: fighters first, then the
+        /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
+        bool focusFire;
+        /// Wave members not yet fighting join a fight of their army within 24 tiles.
+        bool converge;
+        /// The wave readiness and house attack threshold as a percentage of the difficulty's
+        /// (100 = unchanged; smaller = smaller, more frequent waves). Clamped to 10-300.
+        int waveReadinessPercent;
+        /// The idle reserve stands bundled at a forward rally a quarter of the way from the
+        /// assembly point to the observed enemy base (saved: SAVEGAMEVERSION 9863).
+        bool bundle;
+        /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
+        /// re-checked every 5 s and at most 60 s late.
+        bool launchFromBundle;
+    };
+    ForceSettings force;
+
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
-    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, otherwise the
-    /// FormationPlanner::Shape index the wave marches in as a hunting formation.
-    /// INI: [General Behavior] WaveFormation = None (default) | Box | Pincer | Column | Staggered | Echelon.
+    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
+    /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into
+    /// engine Hunt on contact ("Blob waves"); otherwise the FormationPlanner::Shape index the wave
+    /// marches in as a hunting formation.
+    /// INI: [General Behavior] WaveFormation = None (default) | Blob | Box | Pincer | Column | Staggered | Echelon.
     static constexpr int kWaveFormationNone = -1;
+    /// Not a FormationPlanner::Shape: never passed to the planner (formationShapeOf()).
+    static constexpr int kWaveFormationBlob = -3;
     int waveFormation;
-    /// "None" or a kept shape name (case-insensitive) to a waveFormation
+    /// "None", "Blob" or a kept shape name (case-insensitive) to a waveFormation
     /// value; anything else returns 'fallback'.
     static int parseWaveFormation(const std::string& name, int fallback);
     static const char* waveFormationName(int value);
+    /// The planner shape a waveFormation value stands for, for every formation move that is
+    /// not a QuantBot hunt party (AIPlayer, CampaignAIPlayer, QuantBot's recall and campaign
+    /// waves): Blob is not a shape, so it moves those groups like None.
+    static int formationShapeOf(int waveFormation) {
+        return waveFormation == kWaveFormationBlob ? kWaveFormationNone : waveFormation;
+    }
 
     // Priority tables (configurable)
     const TargetPriority& getStructurePriority(int structureID) const;

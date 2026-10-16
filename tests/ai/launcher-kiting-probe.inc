@@ -21,6 +21,9 @@
 //   4. Rocket infantry share the same out-of-range aircraft filter - a different,
 //      shorter-range projectile with the same selection problem - and a Trooper's
 //      SmallRocket really removes Ornithopter hit points.
+//   5. With the production force rules on (focus fire, converge): a launcher with a too-close
+//      enemy gets the escape step and no focus-fire order; standing off, it takes the focus
+//      target (the damaged fighter in its range) and actually hits it from its position.
 #include <Bullet.h>
 #include <units/AirUnit.h>
 
@@ -47,6 +50,10 @@ void runLauncherKitingProbe(Game& game) {
     bot->attrition.reset();
     bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
     bot->postureSince=0;
+    // The production force rules stay on (QuantBotConfig::force: focus fire and converge): focus
+    // fire must never take a launcher out of its spacing step, and a launcher that fires still
+    // prefers the focus target (checked below).
+    bot->forceVariantOverride=QuantBot::kNoForceOverride;
     getQuantBotConfig().recovery.enabled=true;
 
     // ---- Free ground, large enough for a stand-off and a real retreat -------
@@ -144,6 +151,8 @@ void runLauncherKitingProbe(Game& game) {
             publish();
         };
 
+        UnitBase* focusVictim=nullptr;      // Section 2b's damaged tank, parked off-stage between uses.
+        int sectionOnePose=-1;              // The launcher's facing when section 1 first starts.
         for(const auto difficulty:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
             bot->difficulty=difficulty;
             require(bot->recoveryActive(),"Launcher fixture difficulty is not a whole-army difficulty");
@@ -163,6 +172,11 @@ void runLauncherKitingProbe(Game& game) {
             // ---- 1. An ordinary AI pass: the gap actually opens ------------
             closer->setLocation(origin+Coord(21,20));
             hunt(launcher,origin+Coord(20,20));
+            // Same pose for every difficulty: the launcher turns before it walks (180 degrees cost
+            // two of the passes below), and the earlier sections leave it facing their targets.
+            if(sectionOnePose<0) sectionOnePose=launcher->getAngle();
+            else launcher->setAngle(sectionOnePose);
+            require(launcher->getAngle()==sectionOnePose,"Fixture launcher pose was not restored");
             closer->doAttackObject(launcher,true);
             require(closer->getTarget()==launcher && closer->isInWeaponRange(launcher),
                 "Fixture enemy is not shooting the launcher");
@@ -254,10 +268,86 @@ void runLauncherKitingProbe(Game& game) {
             require(launcher->getDestination()==idle && !launcher->wasForced()
                 && launcher->getAttackMode()==HUNT,
                 "A hit from a distant enemy retreated a hunting launcher");
+            // An enemy inside the launcher's range but outside the close band is a target, not a
+            // threat: no escape step. With focus fire on, the pass may hand it to the launcher as
+            // its target (an unforced attack, no move); nothing else.
+            const Coord standing=launcher->getLocation();
             bot->checkAllUnits();
-            require(launcher->getDestination()==idle && !launcher->wasForced()
-                && launcher->getAttackMode()==HUNT,
+            require(!launcher->wasForced() && launcher->getAttackMode()==HUNT
+                && (launcher->getDestination()==idle || launcher->getTarget()==closer),
                 "An ordinary pass moved a launcher that no enemy was close to");
+            tick(30);
+            require(launcher->getLocation()==standing,
+                "A launcher with only a target in its range walked off its firing position");
+
+            // ---- 2b. Focus fire never overrides the escape -----------------
+            // A too-close tank and a damaged tank further out, both inside the launcher's range:
+            // the pass belongs to the escape (a forced step away, no attack order on the damaged
+            // one); standing off again, the launcher takes the focus target (the damaged fighter,
+            // not the nearer healthy one) and its rockets land on it.
+            if(!focusVictim) {
+                focusVictim=spawn(enemy,Unit_Tank,Coord(38,6));
+                publish();
+            }
+            auto park=[&](UnitBase* unit,Coord at) {
+                unit->setLocation(origin+at);
+                unit->doSetAttackMode(STOP);
+                unit->setTarget(nullptr);
+                unit->setForced(false);
+            };
+            park(focusVictim,Coord(20,27));
+            focusVictim->setHealth(focusVictim->getMaxHealth()/2);
+            park(closer,Coord(21,20));
+            hunt(launcher,origin+Coord(20,20));
+            require(bot->forceVariant(QuantBot::kForceFocusFire),
+                "The launcher fixture is not running with focus fire on");
+            require(launcher->isInWeaponRange(focusVictim)
+                && bot->launcherEscapeRange(launcher,focusVictim)==0,
+                "Fixture focus target is not an in-range, non-threatening enemy");
+            const int switchesBefore=bot->forceStats.focusSwitches;
+            bot->checkAllUnits();
+            require(launcher->wasForced() && launcher->getAttackMode()==HUNT
+                && blockDistance(launcher->getDestination(),closer->getLocation()).lround()>gap(launcher,closer),
+                "Focus fire took a launcher out of its close-range escape");
+            require(bot->forceStats.focusSwitches==switchesBefore && launcher->getTarget()!=focusVictim,
+                "Focus fire gave an escaping launcher an attack order");
+            park(closer,Coord(20+band+2,20));
+            hunt(launcher,origin+Coord(20,20));
+            require(bot->launcherEscapeRange(launcher,closer)==0 && launcher->isInWeaponRange(closer),
+                "Fixture healthy tank is not an in-range, non-threatening enemy");
+            bot->checkAllUnits();
+            require(launcher->getTarget()==focusVictim && !launcher->wasForced()
+                && launcher->getAttackMode()==HUNT,
+                "A standing-off launcher did not take the focus target");
+            const FixPoint victimBefore=focusVictim->getHealth(), healthyBefore=closer->getHealth();
+            int focusTicks=0;
+            std::set<const Bullet*> focusShots;
+            while(focusTicks<1200 && focusVictim->getHealth()>=victimBefore) {
+                bot->checkAllUnits();
+                for(int i=0;i<30;++i) {
+                    tick(1);
+                    for(const auto* shot:bulletList)
+                        if(shot->shooterID==launcher->getObjectID()) focusShots.insert(shot);
+                }
+                focusTicks+=30;
+            }
+            SDL_Log("LAUNCHER_KITE_DIAG: difficulty=%d focus ticks=%d shots=%d victim=%d->%d healthy=%d->%d"
+                " gap=%d target_is_victim=%d forced=%d mode=%d",
+                int(difficulty),focusTicks,int(focusShots.size()),victimBefore.lround(),
+                focusVictim->getHealth().lround(),healthyBefore.lround(),closer->getHealth().lround(),
+                gap(launcher,focusVictim),int(launcher->getTarget()==focusVictim),
+                int(launcher->wasForced()),int(launcher->getAttackMode()));
+            require(focusVictim->getHealth()<victimBefore,
+                "The launcher never hit its focus target");
+            require(closer->getHealth()==healthyBefore,
+                "The launcher fired on the healthy tank instead of the focus target");
+            require(!launcher->wasForced() && launcher->getAttackMode()==HUNT
+                && launcher->getLocation()==origin+Coord(20,20),
+                "The launcher left its firing position while shooting its focus target");
+            park(focusVictim,Coord(38,6));
+            focusVictim->setHealth(focusVictim->getMaxHealth());
+            closer->setHealth(closer->getMaxHealth());
+            hunt(launcher,origin+Coord(20,20));
 
             // ---- 3. Authority that outranks fresh offence ------------------
             closer->setLocation(origin+Coord(21,20));
@@ -403,7 +493,11 @@ void runLauncherKitingProbe(Game& game) {
                     "A hunting attacker other than a launcher was kited");
                 const Coord destination=unit->getDestination();
                 bot->checkAllUnits();
-                require(unit->getAttackMode()==HUNT && unit->getDestination()==destination,
+                // Not kited and still in Hunt; focus fire may hand the tank the enemy beside it as
+                // an unforced attack (the Deviator is never focused).
+                require(unit->getAttackMode()==HUNT && !unit->wasForced()
+                    && (unit->getDestination()==destination
+                        || (unit==tank && unit->getTarget()==closer)),
                     "An ordinary pass took a hunting attacker out of engine Hunt");
             }
 
