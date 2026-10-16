@@ -659,7 +659,10 @@ void QuantBot::launchGroundHunt() {
         const bool ground=unit->isAGroundUnit();
         if (ground) groundArmyValue+=price;
         if (wholeArmy) {
-            if (ground && (unit->getAttackMode()==HUNT
+            // A hunt party's members (Blob waves) are committed while they gather, march, wait
+            // for the rear or fall back, whatever attack mode that leaves them in.
+            const bool inParty=huntPartyOf(unit->getObjectID())!=nullptr;
+            if (ground && (unit->getAttackMode()==HUNT || inParty
                 || unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave)) {
                 ++groundCommittedUnits; groundCommittedValue+=price;
             }
@@ -677,6 +680,7 @@ void QuantBot::launchGroundHunt() {
                 if (launcherItem(unit)) ++launchersHeldByDefence;
                 continue;
             }
+            if (inParty) continue;
             if (unit->getAttackMode()==HUNT) {
                 existingHunters.push_back(unit->getObjectID());
                 if (launcherItem(unit)) ++launchersAlreadyHunting;
@@ -850,9 +854,13 @@ void QuantBot::launchGroundHunt() {
     }
     // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
     // what is decided exactly as without them; only how the ground members travel
-    // changes. With WaveFormation=None every unit gets the per-unit order below.
-    const int waveShape=waveFormationShape();
+    // changes. With WaveFormation=None every unit gets the per-unit order below. Blob is not
+    // a shape: a Custom Hard/Brutal wave becomes a hunt party (startHuntParty, "Blob waves"),
+    // every other wave moves as None.
+    const int waveShape=QuantBotConfig::formationShapeOf(waveFormationShape());
     const bool formationWave=waveShape!=QuantBotConfig::kWaveFormationNone;
+    const bool partyWave=trackedCustomWave && wholeArmy && huntParties();
+    std::vector<const UnitBase*> partyUnits;
     // The Hard/Brutal campaign flank detour: a point beside the half-way mark, 8 tiles
     // off the line from 'start' to the objective; invalid when the trip is short or the
     // point cannot be stood on.
@@ -892,6 +900,7 @@ void QuantBot::launchGroundHunt() {
             else doSetAttackMode(unit,HUNT);
         } else if (unit->isAGroundUnit()) {
             if (formationWave) hunters.push_back(unit);
+            else if (partyWave) partyUnits.push_back(unit);
             else doSetAttackMode(unit,HUNT);
         }
         if (launcherItem(unit)) ++launcherDispatched;
@@ -962,6 +971,7 @@ void QuantBot::launchGroundHunt() {
             }
         }
     }
+    if (!partyUnits.empty()) startHuntParty(partyUnits,observedFront);
     if (count==0) return; // An empty house checking readiness is not an attack.
     if (limited && profile.limitedWave) {
         attackTimer=MILLI2CYCLES(CampaignDifficultyPolicy::repeatDelayMs(
@@ -971,7 +981,8 @@ void QuantBot::launchGroundHunt() {
             .set("reason","next_wave_after_dispatch"));
     }
     traceDecision("ground_hunt",AITelemetry::Record().set("members",count).set("value",value)
-        .set("wave_formation",QuantBotConfig::waveFormationName(waveShape))
+        .set("wave_formation",QuantBotConfig::waveFormationName(waveFormationShape()))
+        .set("hunt_party",int(partyUnits.size()))
         .set("formation_members",formationMembers)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
@@ -1440,7 +1451,9 @@ void QuantBot::updateArmyPosture() {
     // A few stragglers or an empty centroid are not the main army. Local defeat
     // can change its posture only when at least one fifth of its tracked power
     // is actually there, as well as meeting the material floor.
-    situation.severeLocalDefeat = local.severe && survey.waveMembers > 0 && materialCohort;
+    // With the tactical retreat a locally overwhelmed hunt party falls back a few tiles to
+    // reform (updateHuntParties) instead of the whole house withdrawing home.
+    situation.severeLocalDefeat = local.severe && survey.waveMembers > 0 && materialCohort && !tacticalRetreat();
     // Sustained local withdrawal intent. Once it starts, it holds until the
     // squad is actually home or the house is ready again: otherwise the enemy
     // drifting one tile outside the measuring radius let the same units resume
@@ -1554,7 +1567,7 @@ void QuantBot::updateCustomWave() {
         // still belongs with this active army when its observed ground front is
         // reachable. This fallback never recruits a new home reserve or replaces
         // combat, a manual order, repair, a retreat or a live defense assignment.
-        if (usableGroundFront && wholeArmyBaseDefence()
+        if (usableGroundFront && wholeArmyBaseDefence() && !huntPartyOf(unit->getObjectID())
             && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
             && !localSquadWithdraw && unit->isActive() && unit->isRespondable()
             && (unit->getItemID()==Unit_Launcher || unit->getItemID()==Unit_EliteLauncher)
@@ -1585,13 +1598,16 @@ void QuantBot::updateCustomWave() {
         // Withdrawing and recovering keep their members: the recall is driven
         // off exactly this list, and a unit standing at the shelter is still
         // the wave that is being brought home.
-        if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
+        // A hunt party's members gather, wait for the rear and reform standing still on
+        // purpose (Blob waves): they stay committed while the party lasts.
+        const bool inParty = huntPartyOf(unit->getObjectID()) != nullptr;
+        if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) && !inParty
             && unit->isActive() && unit->getAttackMode() != HUNT
             && !unit->hasATarget() && !unit->isMoving() && !unit->wasForced()
             && unitRole(unit, {UnitRole::Defence}) == UnitRole::Free) {
             it = customWave.members.erase(it); continue;
         }
-        if (unit->isActive() && !unit->hasATarget() && !unit->isMoving()
+        if (!inParty && unit->isActive() && !unit->hasATarget() && !unit->isMoving()
             && customWave.launched != 0 && now >= customWave.launched
             && now - customWave.launched >= sortieCycles) {
             it = customWave.members.erase(it); continue;
@@ -2128,7 +2144,9 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
     if (!recoveryActive()) return;
     // The house posture recalls everything; a locally outmatched squad pulls
     // itself back even while the house is still offensive.
-    if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) && !localSquadWithdraw) return;
+    // With the tactical retreat a local disadvantage is a hunt party's short fall-back
+    // (updateHuntParties), not a recall home; the house posture still recalls everything.
+    if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) && (!localSquadWithdraw || tacticalRetreat())) return;
     const Coord rally = protectedRally;
     if (rally.isInvalid()) return;
     if (orderBudget <= 0) return;
@@ -2219,7 +2237,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
     // rules and no other unit's destination; anyone else keeps the slot withdrawUnit() chose.
     // Ids in order, so every peer agrees. They come home together at the slowest one's pace.
     // Who is recalled is unchanged.
-    const int recallShape = waveFormationShape();
+    const int recallShape = QuantBotConfig::formationShapeOf(waveFormationShape());
     const bool recallInFormation = recallShape != QuantBotConfig::kWaveFormationNone;
     if (recallInFormation && static_cast<int>(recalled.size()) >= FormationOrders::kMinAIGroup) {
         const auto plan = FormationOrders::planGroup(recalled, rally, FormationPlanner::shapeFromId(recallShape));
@@ -3165,6 +3183,8 @@ void QuantBot::retreatAllUnits() {
             // the two together stay inside one configured order budget.
             assignColonyGuards(recallBudget);
         }
+        // Hunt parties (Blob waves) after the recall: a recall dissolves them.
+        updateHuntParties();
         int rallyOrdersRemaining=4;
         int combatCount=0;
         for (const auto* unit:getUnitList()) if (unit->getOwner()==getHouse() && unit->isActive()
@@ -3220,6 +3240,10 @@ void QuantBot::retreatAllUnits() {
             // scans cannot kite them, assign prey, crush targets or regroup them.
             // Repair and emergency defence were handled before this point.
             if (engineHuntAttack(pUnit) && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free) continue;
+            // A hunt party's members belong to their party (gathering, waiting for the rear,
+            // reforming or falling back): no rally, kiting or prey assignment re-orders them.
+            if (pUnit->getOwner() == getHouse() && huntPartyOf(pUnit->getObjectID())
+                && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free) continue;
             // Combat spacing applies to defenders and escorts too, before their
             // strategic-role early return. Guard orders already leave targets alone.
             if (!supportMode && pUnit->getOwner() == getHouse()

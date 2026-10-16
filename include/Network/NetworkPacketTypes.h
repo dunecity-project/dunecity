@@ -205,7 +205,11 @@
 //     slot is also the member's form-up tile, so the group walks straight into its shape
 //     without a march. A 74 peer refuses the kind and would leave the units where they are.
 //     Save 9861.
-#define NETWORK_PROTOCOL_VERSION            75
+// 76: QuantBot hunt parties (Blob waves). WaveFormation accepts Blob: a Custom Hard/Brutal
+//     QuantBot wave gathers, marches as one blob, releases into Hunt on contact, reforms and
+//     falls back a short way to reform; its party state is saved. A 75 peer would order the
+//     same AI units differently and desynchronise. Save 9862.
+#define NETWORK_PROTOCOL_VERSION            76
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

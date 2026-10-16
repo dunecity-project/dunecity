@@ -39,6 +39,10 @@ constexpr Uint32 kTradeWindowCycles = MILLI2CYCLES(60 * 1000);
 constexpr int kKillCreditTiles = 10;
 /// Army value samples, every this many game minutes.
 constexpr int kSampleMinutes = 5;
+/// Members "together" at contact: within this many tiles of the member nearest their centre.
+constexpr int kTogetherTiles = 8;
+/// Members "arriving together": engaged within this long of the wave's contact.
+constexpr Uint32 kTogetherWindowCycles = MILLI2CYCLES(10 * 1000);
 
 struct Wave {
     int house = -1;
@@ -56,6 +60,7 @@ struct Wave {
     Uint32 formationEnd = 0;            ///< first cycle no member was in a formation
     int inFormationAtContact = -1;      ///< members in formation on the contact cycle
     int inFormation10s = -1;            ///< members in formation 10 s after the contact
+    int togetherAtContact = -1;         ///< living members within kTogetherTiles of the anchor at contact
     int lossValue = 0;                  ///< member value destroyed in the trade window
     int killValue = 0;                  ///< enemy value destroyed near the wave in the trade window
     int survivors = -1;                 ///< members alive at the end of the wave window
@@ -86,15 +91,18 @@ inline double spreadOf(const std::map<Uint32, Uint32>& times) {
 inline void report(const Wave& wave) {
     int lostBeforeContact = 0;
     for (const auto& [id, cycle] : wave.died) if (wave.contact == 0 || cycle < wave.contact) ++lostBeforeContact;
+    int engaged10 = 0;
+    for (const auto& [id, cycle] : wave.engaged) if (wave.contact != 0 && cycle <= wave.contact + kTogetherWindowCycles) ++engaged10;
     SDL_Log("FORMATION_WAVE: house=%d launched=%u members=%zu engaged=%zu arrived=%zu lost=%zu "
             "contact_s=%.1f engage_spread_s=%.1f arrival_spread_s=%.1f shots30=%d loss60=%d kill60=%d "
             "survivors=%d lost_before_contact=%d formed=%d formup_s=%.1f formation_end_s=%.1f "
-            "in_formation_at_contact=%d in_formation_10s=%d",
+            "in_formation_at_contact=%d in_formation_10s=%d together_at_contact=%d engaged10=%d",
             wave.house, wave.launched, wave.members.size(), wave.engaged.size(), wave.arrival.size(),
             wave.died.size(), since(wave.contact, wave.launched), spreadOf(wave.engaged), spreadOf(wave.arrival),
             wave.shots, wave.lossValue, wave.killValue, wave.survivors, lostBeforeContact, wave.formed,
             wave.formed && wave.sawForming ? since(wave.formUpEnd, wave.launched) : -1.0,
-            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s);
+            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s,
+            wave.togetherAtContact, wave.contact != 0 ? engaged10 : -1);
 }
 
 /// Is this unit inside the enemy base area: within kTargetAreaTiles of a live enemy building?
@@ -214,7 +222,29 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 }
                 if (fired && wave.contact != 0 && now < wave.contact + kContactWindowCycles) ++wave.shots;
             }
-            if (wave.contact == now) wave.inFormationAtContact = inFormation;
+            if (wave.contact == now) {
+                wave.inFormationAtContact = inFormation;
+                // How many members are with the main body when the wave first meets the enemy.
+                std::vector<Coord> at;
+                for (const Uint32 id : wave.members) {
+                    const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(id));
+                    if (unit && unit->getHealth() > 0 && unit->isActive()) at.push_back(unit->getLocation());
+                }
+                int together = 0;
+                if (!at.empty()) {
+                    Sint64 sx = 0, sy = 0;
+                    for (const Coord& p : at) { sx += p.x; sy += p.y; }
+                    const Sint64 n = Sint64(at.size());
+                    Coord anchor = at.front();
+                    Sint64 best = -1;
+                    for (const Coord& p : at) {
+                        const Sint64 dx = p.x * n - sx, dy = p.y * n - sy, d = dx * dx + dy * dy;
+                        if (best < 0 || d < best) { best = d; anchor = p; }
+                    }
+                    for (const Coord& p : at) if (blockDistance(anchor, p).lround() <= kTogetherTiles) ++together;
+                }
+                wave.togetherAtContact = together;
+            }
             if (wave.contact != 0 && now == wave.contact + Uint32(MILLI2CYCLES(10000))) wave.inFormation10s = inFormation;
             if (forming > 0) wave.sawForming = true;
             if (wave.sawForming && wave.formUpEnd == 0 && forming == 0) wave.formUpEnd = now;

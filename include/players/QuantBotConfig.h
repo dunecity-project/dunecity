@@ -132,15 +132,25 @@ struct QuantBotConfig {
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
-    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, otherwise the
-    /// FormationPlanner::Shape index the wave marches in as a hunting formation.
-    /// INI: [General Behavior] WaveFormation = None (default) | Box | Pincer | Column | Staggered | Echelon.
+    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
+    /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into
+    /// engine Hunt on contact ("Blob waves"); otherwise the FormationPlanner::Shape index the wave
+    /// marches in as a hunting formation.
+    /// INI: [General Behavior] WaveFormation = None (default) | Blob | Box | Pincer | Column | Staggered | Echelon.
     static constexpr int kWaveFormationNone = -1;
+    /// Not a FormationPlanner::Shape: never passed to the planner (formationShapeOf()).
+    static constexpr int kWaveFormationBlob = -3;
     int waveFormation;
-    /// "None" or a kept shape name (case-insensitive) to a waveFormation
+    /// "None", "Blob" or a kept shape name (case-insensitive) to a waveFormation
     /// value; anything else returns 'fallback'.
     static int parseWaveFormation(const std::string& name, int fallback);
     static const char* waveFormationName(int value);
+    /// The planner shape a waveFormation value stands for, for every formation move that is
+    /// not a QuantBot hunt party (AIPlayer, CampaignAIPlayer, QuantBot's recall and campaign
+    /// waves): Blob is not a shape, so it moves those groups like None.
+    static int formationShapeOf(int waveFormation) {
+        return waveFormation == kWaveFormationBlob ? kWaveFormationNone : waveFormation;
+    }
 
     // Priority tables (configurable)
     const TargetPriority& getStructurePriority(int structureID) const;

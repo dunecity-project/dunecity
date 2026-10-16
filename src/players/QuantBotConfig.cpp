@@ -385,12 +385,14 @@ int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
     };
     const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
+    if (key == "BLOB") return kWaveFormationBlob;
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (key == compact(FormationPlanner::shapeName(shape))) return static_cast<int>(shape);
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
+    if (value == kWaveFormationBlob) return "Blob";
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (static_cast<int>(shape) == value) return FormationPlanner::shapeName(shape);
     return "None";

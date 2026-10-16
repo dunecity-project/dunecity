@@ -161,6 +161,12 @@ void Map::ensureTerrainConnectivity() const {
     }
 }
 
+int Map::vehicleTerrainRegion(const Coord& at) const {
+    if (!tileExists(at)) return 0;
+    ensureTerrainConnectivity();
+    return vehicleTerrainRegions[tile_index(at.x,at.y)];
+}
+
 bool Map::terrainAttackReachable(const ObjectBase& seeker, const ObjectBase& target) const {
     // Infantry climb mountains; flying/underground units have their own rules.
     if (!seeker.isAGroundUnit() || seeker.isInfantry() || seeker.getItemID()==Unit_Sandworm) return true;

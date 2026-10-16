@@ -54,6 +54,7 @@
 #include "sidebar-grid-probe.inc"
 #include "formation-wave-measure.inc"
 #include "wave-formation-probe.inc"
+#include "blob-wave-probe.inc"
 #include "formation-duel.inc"
 
 int runCampaignBalanceProbe() {
@@ -267,6 +268,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_WAVE_FORMATION_PROBE")) {
         runWaveFormationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_BLOB_WAVE_PROBE")) {
+        runBlobWaveProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_LAUNCHER_KITING_PROBE")) {

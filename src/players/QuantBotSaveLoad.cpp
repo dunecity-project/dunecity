@@ -168,6 +168,9 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
             if(id!=NONE_ID) customWave.members.insert(id);
         }
     }
+    // SAVEGAMEVERSION 9862: hunt parties (Blob waves). An older save has none; its waves are
+    // plain engine hunters and carry on as such.
+    if (currentGame->getLoadedSavegameVersion() >= 9862) loadHuntParties(stream);
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -293,6 +296,10 @@ void QuantBot::save(OutputStream& stream) const {
     stream.writeUint32(customWave.front);
     stream.writeUint32(static_cast<Uint32>(customWave.members.size()));
     for (const auto id : customWave.members) stream.writeUint32(id);
+    // SAVEGAMEVERSION 9862. A party's phase, its points and clocks decide every member's next
+    // order and cannot be recomputed from the world; members are ordered sets, so the bytes
+    // are identical on every client.
+    saveHuntParties(stream);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

@@ -32,6 +32,7 @@ class Harvester;
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
 #include <players/ArmyPosturePolicy.h>
+#include <players/BlobWavePolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/SpecialUnitPolicy.h>
@@ -825,6 +826,81 @@ private:
     int waveFormationOverride = kNoWaveFormationOverride;
     /// The attack-wave shape this player uses: the override if set, else the config value.
     int waveFormationShape() const;
+
+    // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
+    //
+    // A Custom Hard/Brutal ground wave with WaveFormation=Blob is a hunt party: it gathers at a
+    // rally point towards its objective, marches as one blob leg by leg (the fast members wait
+    // at each leg's end for the rest), releases into engine Hunt on contact, reforms when the
+    // fight is quiet and, when locally outmatched, falls back a few tiles to reform instead of
+    // going home (the tactical retreat). Saved under the SAVEGAMEVERSION 9862 gate.
+    struct BlobParty {
+        BlobWavePolicy::Phase phase = BlobWavePolicy::Phase::Gather;
+        Uint32 since = 0;                   ///< cycle the phase (or the march's leg) began
+        Uint32 objective = NONE_ID;         ///< what the march heads for
+        Coord goal = Coord::Invalid();      ///< the march's destination (objective's nearest point)
+        Coord rally = Coord::Invalid();     ///< gather, reform or fall-back point; the leg's end
+        Coord threat = Coord::Invalid();    ///< where the last contact was
+        Uint32 lastContact = 0;             ///< last cycle a member was in contact or hit
+        Uint32 lastArrival = 0;             ///< gather/reform: last cycle the gathered count grew
+        Uint32 gathered = 0;                ///< gather/reform: that count
+        Uint32 legCycles = 0;               ///< time limit of the current gather, reform or leg
+        Uint32 outmatchedSince = std::numeric_limits<Uint32>::max();
+        Uint32 progressCycle = 0;           ///< march: last cycle the anchor got closer
+        Sint32 progressRemaining = std::numeric_limits<Sint32>::max();
+        Uint8 fallbacks = 0;                ///< tactical fall-backs so far
+        std::set<Uint32> members;           ///< ordered: identical iteration on every peer
+    };
+    std::vector<BlobParty> blobParties;
+    /// Corruption bound for a loaded party list, not a design limit (one party per launch).
+    static constexpr Uint32 kBlobPartyLimit = 256;
+    /// Test-only (tests/ai/formation-duel.py ablations): -1 = the tactical fall-back runs with
+    /// Blob waves, 0 = never, 1 = also for plain Hunt waves. Never set by the game, not saved,
+    /// not hashed.
+    int tacticalRetreatOverride = -1;
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct BlobStats {
+        int parties = 0, gathered = 0, gatherTimeouts = 0, releases = 0, reforms = 0, fallbacks = 0,
+            fallbackReturns = 0, legs = 0, dissolved = 0, stalls = 0, repairs = 0;
+    };
+    BlobStats blobStats;
+    /// This house's waves gather and march as a blob (WaveFormation=Blob, Custom Hard/Brutal).
+    bool blobMarch() const;
+    /// This house's hunt parties fall back a few tiles to reform when locally outmatched.
+    bool tacticalRetreat() const;
+    /// Hunt parties run at all (either of the two above).
+    bool huntParties() const { return blobMarch() || tacticalRetreat(); }
+    /// The party \a id belongs to, or nullptr.
+    BlobParty* huntPartyOf(Uint32 id);
+    const BlobParty* huntPartyOf(Uint32 id) const;
+    /// Makes the launched ground units one hunt party heading for \a objective.
+    void startHuntParty(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    /// One pass over every party (the unit phase of update()).
+    void updateHuntParties();
+    /// A member was hit: a gathering, marching or reforming party releases into the fight.
+    void huntPartyMemberHit(const UnitBase* unit, const ObjectBase* damager);
+    /// Ends a party; \a hunt gives its idle members engine Hunt (as None would have).
+    void dissolveHuntParty(BlobParty& party, bool hunt, const char* reason);
+    void releaseHuntParty(BlobParty& party, Coord contact, const char* reason);
+    void startPartyMarch(BlobParty& party);
+    void startPartyLeg(BlobParty& party, const UnitBase* anchor);
+    void startPartyGather(BlobParty& party, BlobWavePolicy::Phase phase, Coord point);
+    void startPartyFallback(BlobParty& party);
+    /// Sends every active member to its own tile around \a point in Area Guard; \a onlyIdle
+    /// re-sends only members that stand idle away from it.
+    void sendHuntParty(const BlobParty& party, Coord point, bool forced, bool onlyIdle);
+    /// The member closest to the members' centroid (vehicles first), or nullptr.
+    const UnitBase* huntPartyAnchor(const BlobParty& party) const;
+    /// A usable rally/leg/fall-back tile near \a desired that a party standing at \a anchor can
+    /// reach; \a safe also keeps it out of observed enemy weapon reach.
+    Coord huntPartyPoint(Coord desired, const UnitBase* anchor, bool safe) const;
+    /// A tile within \a radius of \a centre for \a unit not yet in \a reserved, or Coord::Invalid().
+    Coord huntPartySlot(const UnitBase* unit, Coord centre, int radius, std::set<int64_t>& reserved) const;
+    /// The visible enemy nearest the anchor within a member's huntTowardRange(), or nullptr.
+    const ObjectBase* huntPartyContact(const BlobParty& party, const UnitBase* anchor) const;
+    const ObjectBase* huntPartyObjective(const BlobParty& party, const UnitBase* anchor) const;
+    void saveHuntParties(OutputStream& stream) const;
+    void loadHuntParties(InputStream& stream);
     /// Tracked Custom wave. Same type as the campaign wave, so membership,
     /// objective and save/load are the proven ones.
     CampaignDifficultyPolicy::Wave customWave;

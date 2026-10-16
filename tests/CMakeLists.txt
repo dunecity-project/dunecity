@@ -33,6 +33,7 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp
+        BlobWavePolicyTestCase.cpp
         FormationPlannerTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
@@ -819,6 +820,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wave-formation-probe)
         set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot hunt parties (docs/formations.md, Blob waves): a mixed Hard wave with
+        # WaveFormation Blob gathers every available fighter at a rally point, marches leg by
+        # leg with its fast members kept near the slow ones, releases into engine Hunt on
+        # contact, reforms when quiet, falls back a short way when overwhelmed and returns; the
+        # gather times out on stragglers; party orders do not depend on unit order; the party
+        # survives a save and load mid-gather, mid-march and mid-reform; None keeps today's orders.
+        add_test(NAME quantbot_blob_waves COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --blob-wave-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/blob-wave-probe)
+        set_tests_properties(quantbot_blob_waves PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
         # already too close makes a hunting launcher move away over real game
         # cycles, keeping engine Hunt, its tracked army membership and its

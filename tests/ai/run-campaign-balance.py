@@ -111,6 +111,8 @@ parser.add_argument('--wave-formation',
                     help='QuantBot attack-wave formation for this run, by its INI name (default: the QuantBot Config.ini value)')
 parser.add_argument('--wave-formation-probe', action='store_true',
                     help='Verify QuantBot attack waves launch and march as hunting formations in the configured shape')
+parser.add_argument('--blob-wave-probe', action='store_true',
+                    help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -252,7 +254,7 @@ else:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
         split = [f'/players/QuantBot{part}.cpp.o' for part in
-                 ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Air', 'Harvesters')]
+                 ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Blob', 'Air', 'Harvesters')]
         present = [arg for arg in link if any(arg.endswith(name) for name in split)]
         if len(present) != len(split):
             raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')
@@ -332,6 +334,7 @@ if args.whole_army_probe: env['BALANCE_WHOLE_ARMY_PROBE'] = '1'
 if args.formation_measure: env['BALANCE_FORMATION_MEASURE'] = '1'
 if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
+if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.duel_map_size:
     env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
     env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)

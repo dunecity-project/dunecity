@@ -806,6 +806,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		if (pGroundUnit->isAwaitingPickup()) {
 			return;
 		}
+        // A hit on a hunt party's member is contact (Blob waves): a gathering, marching or
+        // reforming party unblobs into the fight before the per-unit reactions below.
+        if (damage>0 && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID())
+            huntPartyMemberHit(pGroundUnit, pDamager);
 
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
@@ -916,6 +920,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 					// spending the pass on a repair order the engine will refuse.
 					&& pGroundUnit->isEligibleForRepair()
 					) {
+					if (huntPartyOf(pGroundUnit->getObjectID())) ++blobStats.repairs;
 					doRepair(pGroundUnit);
 				}
 
