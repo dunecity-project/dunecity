@@ -1,3 +1,15 @@
+## 2026-10-17 — local 1.0.844 installed on the MBA
+
+Staging = 1.0.843 + `feat/ai-blob-waves` (5c65342d): QuantBot default BWFCQ (bundled forward reserve,
+waves launch from the bundle, focus fire, converge, 60% wave readiness), Blob waves opt-in, five
+formation research rounds. Protocol 79, save 9863 (1.0.843 cannot load its saves or join its games).
+`agent-workspace stage verify` at 7b8860bf: build, check-build-deps and CTest 96/96 serial passed
+(`quantbot_all_against_atreides` 84 s, `quantbot_force_concentration`). Package: executable SHA256
+8941dfbb100fb0f17fa2faabd771aeb981a4e83c520ece4814ec8a18940ea2ea, no Homebrew/local links,
+signature and runtime check passed; installed on the MBA 2026-10-17 07:50 AEDT, 1.0.843 at
+/Applications/.dunecity-backup-before-1.0.844-20261017-075022/. Not pushed or published.
+Open: defence while outnumbered (test-only D rule, needs a 72–108 game `/weak` run).
+
 ## 2026-10-17 — QuantBot default now BWFCQ (bundled reserve + launch from the bundle), launcher kiting fixed with force rules on, defence traced (branch `feat/ai-blob-waves`, protocol 79, save 9863, not released)
 
 Stefan: optimise how QuantBot concentrates force on attack and defence. Tables and causes:
