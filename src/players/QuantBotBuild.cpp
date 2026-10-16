@@ -561,8 +561,7 @@ void QuantBot::build(int militaryValue) {
             && market.getPrice(Unit_Harvester) > 0
             && market.getPrice(Unit_Harvester) < data[Unit_Harvester][houseID].price
             && getHouse()->getMaxHarvesters() > 0) target = getHouse()->getMaxHarvesters();
-        const int overrideLimit = getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-        if (overrideLimit > 0) target = std::min(target, overrideLimit);
+        if (getHouse()->getMaxHarvesters() > 0) target = std::min(target, getHouse()->getMaxHarvesters());
         return std::max(0, target-itemCount[Unit_Harvester]) * data[Unit_Harvester][houseID].price;
     };
     auto needsFirstTransport = [&]() {
@@ -3705,8 +3704,6 @@ void QuantBot::build(int militaryValue) {
                         if (bargainWorkers) {
                             if (getHouse()->getMaxHarvesters() > 0)
                                 workerTarget = getHouse()->getMaxHarvesters();
-                            const int overrideLimit = getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-                            if (overrideLimit > 0) workerTarget = std::min(workerTarget, overrideLimit);
                         }
                         // The shared reservation protects the next construction,
                         // transport or combat order. Spend the remainder on useful
@@ -4083,7 +4080,7 @@ void QuantBot::build(int militaryValue) {
 									const int batteryTurrets = frontBatteryGoal(
 										RocketTurretPolicy::coverageTurretCap(coverageDemand),
 										itemCount[Structure_Refinery], itemCount[Structure_HeavyFactory],
-										itemCount[Structure_RepairYard], lastSurvey);
+										itemCount[Structure_RepairYard]);
 									const int requiredTurrets = std::max(counterAirTurrets, batteryTurrets);
 								const bool ixExpected = data[Structure_IX][houseID].enabled
 									&& data[Structure_IX][houseID].techLevel <= currentGame->techLevel;
@@ -5405,8 +5402,11 @@ void QuantBot::build(int militaryValue) {
                         && data[Structure_RocketTurret][houseID].techLevel <= currentGame->techLevel;
                     const Uint32 defenceTurret = rocketTech ? Structure_RocketTurret : Structure_GunTurret;
                     const int desiredDefenceTurrets = 1 + productionBuildings / 3;
-                    const int desiredWalls = 2 + (itemCount[Structure_GunTurret]
-                        + itemCount[Structure_RocketTurret]) * 2;
+                    // Short wall lines for the turrets this rule builds, not one pair per
+                    // emplacement of a counter-air or front battery: that grew with every
+                    // battery turret into a hundred walls on a rich base.
+                    const int desiredWalls = 2 + std::min(itemCount[Structure_GunTurret]
+                        + itemCount[Structure_RocketTurret], desiredDefenceTurrets) * 2;
                     if (itemCount[defenceTurret] < desiredDefenceTurrets
                         && campaignAvailableToBuild(pBuilder,defenceTurret)
                         && (!rocketTech || hasPowerBufferForTurret())

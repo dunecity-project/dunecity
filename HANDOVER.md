@@ -1,3 +1,40 @@
+## 2026-10-16 — All-against-Atreides AI regression: mandatory test, partial fix (branch `fix/ai-regression-all-vs-atreides`, not released)
+
+Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla
+"All against Atreides" game against four AI Player (hard) houses. His saved game at 47 minutes
+(`quantsucks.dls`), continued headless, wins at 88.3 minutes. New mandatory ctest
+`quantbot_all_against_atreides` replays his exact setup on six seeds, and Atreides must eliminate
+every house within 40 game minutes on all of them. See `docs/quantbot-all-against-atreides.md`
+for the version table and the AGENTS.md/CLAUDE.md rule.
+
+- Not an 833→842 regression: 1.0.833 and 1.0.842 play bit-identical games. 1.0.796 wins 6/6 in
+  32-37 minutes. 1.0.820 needs up to 69.5, and 1.0.842 loses one seed and needs 42-43 (spectator)
+  or 71 (human seat). Disabling army recovery (`d774f387`, 1.0.812) in 1.0.842 gives 6/6 in
+  28.7-33.9, and disabling only its front batteries gives 6/6 in 30.6-38.8.
+- Causes found: (1) the front-battery goal grew with base size, not with the threat. Atreides'
+  100,000-credit base ordered 91 rocket turrets (goal 45→107). (2) The wall rule then wanted
+  2 walls per turret, so 95 walls. Together they diverted about 30,000 credits from the army
+  during minutes 10-20, when the AI Player houses grow from 13k to 117k. (3) The posture trade
+  counted only mobile kills, so assaulting turret-defended bases read as a bad trade and the
+  army kept withdrawing from beaten houses.
+- Fixed: the battery stays in its 8-12 band (`FrontBatteryPolicy::batteryGoal`). Walls follow only
+  the fixed-count defence turrets. Destroyed hostile buildings are credited to the attrition ledger
+  (`Player::onHostileStructureDestroyed`).
+- Suspect #1 (harvester override 0) checked: the engine and the QuantBot runtime already treated
+  0 as unlimited, which matches the tooltip. Only the QuantBot initial limit, Mentat (0 harvesters)
+  and the campaign ally limit disagreed. All readers now use `GameOptionsClass::harvesterCeiling()`,
+  and the INI comment is corrected. This is not the cause of the slow wins, and neither is
+  Stefan's profile: his vanilla mod files match the bundled ones byte for byte (only `mod.ini`
+  formatting differs).
+  On the branch, harvester override -1 (unchecked) and 0 play bit-identical games on all six
+  seeds (same win times, same loss on 1430976924).
+- Still open: seed 1430976924 still loses. A `severe_local_defeat` withdrawal at 10.2 minutes
+  recalls the first wave, and the AI Player houses snowball. The other five seeds win in 31.7-36.5.
+  The test is meant to fail until the posture machine stops pulling home a Brutal army that is
+  ahead on the house-wide balance. Next step: measure posture-only ablations against the six seeds.
+- Protocol 77 (76 is reserved by `feat/ai-blob-waves`). AI decisions differ from a 75 peer. Save
+  9861 unchanged.
+
 ## 2026-10-15 — 1.0.842 production release
 
 PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run

@@ -2398,21 +2398,10 @@ ArmyPosturePolicy::DispatchGate QuantBot::offensiveDispatchGate(const ArmySurvey
         militaryValueLimit, survey.deployableValue, thresholds);
 }
 
-int QuantBot::frontBatteryGoal(int coverageCap, int refineries, int heavyFactories,
-                               int repairYards, const ArmySurvey& survey) const {
+int QuantBot::frontBatteryGoal(int coverageCap, int refineries, int heavyFactories, int repairYards) const {
     if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return 0;
-    const bool economy = FrontBatteryPolicy::economyReady(refineries, heavyFactories, repairYards);
-    // Observed front pressure as a share of what we can bring to bear. Honest
-    // observation, clamped; it raises the goal, it does not predict a battle.
-    int frontThreatBps = 0;
-    // Defence sizing is about everything that can hit the base, aircraft
-    // included: a battery is precisely what answers them.
-    const int64_t hostile = CombatPowerPolicy::hostileThreatToGround(survey.hostileFront);
-    if (hostile > 0) {
-        const int64_t holding = std::max<int64_t>(1, survey.deployable.holding());
-        frontThreatBps = int(std::min<int64_t>(10000, hostile * 10000 / holding));
-    }
-    return FrontBatteryPolicy::batteryGoal(coverageCap, economy, frontThreatBps);
+    return FrontBatteryPolicy::batteryGoal(coverageCap,
+        FrontBatteryPolicy::economyReady(refineries, heavyFactories, repairYards));
 }
 
 Coord QuantBot::observedFrontDirection(Coord anchor) const {

@@ -398,11 +398,11 @@ void Mentat::update() {
 				initialItemCount[Structure_Refinery], diffSettings.refineryMinimum);
 		}
 		
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 		
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -507,11 +507,11 @@ void Mentat::update() {
 			diffSettings.harvesterLimitCustomMediumMap, diffSettings.militaryValueLimitCustomMediumMap,
 			diffSettings.harvesterLimitCustomLargeMap, diffSettings.militaryValueLimitCustomLargeMap);
 		
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 		
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -587,12 +587,12 @@ void Mentat::update() {
 	
 	int baseHarvesterLimit = harvesterLimit;
 	
-	// Check if harvester override is set in game options
-	int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
+	// A game options ceiling (unchecked or 0: none, as for the engine) replaces the default
+	const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
 	
-	if (harvesterOverride >= 0) {
-		// Use the game options override
-		baseHarvesterLimit = harvesterOverride;
+	if (harvesterCeiling > 0) {
+		// Use the game options ceiling
+		baseHarvesterLimit = harvesterCeiling;
 	} else if (gameMode == GameMode::Custom) {
 		// Custom mode: Use map size defaults from ObjectData.ini
 		const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();

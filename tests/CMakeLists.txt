@@ -837,6 +837,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
         set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
+        # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
+        # (local spectator) against four AI Player (hard) houses, his Game Options (unit and
+        # harvester overrides 0). Atreides must eliminate every house within 40 game minutes
+        # on all six seeds; 1.0.796 does so (32-37 min), 1.0.812-1.0.842 lose or take 42-71.
+        # docs/quantbot-all-against-atreides.md.
+        add_test(NAME quantbot_all_against_atreides COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 40
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
+        set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three

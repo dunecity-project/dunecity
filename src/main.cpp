@@ -741,7 +741,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Killed Sandworms Drop Spice = false     # If true, killed sandworms drop some spice\n"
                                 "Manual Carryall Drops = false           # If true, player can request carryall to transport units\n"
                                 "Maximum Number of Units Override = 0    # Override the maximum number of units each house is allowed to build (-1 = use map default, 0 = unlimited, >0 = specific limit)\n"
-                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 = use map size defaults from ObjectData.ini, >=0 = specific limit)\n";
+                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 or 0 = unlimited, each AI picks its own target; >0 = specific limit)\n";
 
     // replace player name, language, server port and metaserver
     std::string playername = getDefaultPlayerName();
