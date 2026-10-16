@@ -7,6 +7,117 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Concentrating force on attack and defence (branch `feat/ai-blob-waves`)
+
+Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and
+defense". Everything before this (shapes, fighting in formation, Blob waves and their variants) lost to
+None on Hard; the open problem was that after contact the members engage one at a time (9-11% within
+10 s). This round looks beyond formations: how strong bots and players win army fights.
+
+### Research: how bots and doctrine concentrate force
+
+- **Lanchester's square law** (F. W. Lanchester, *Aircraft in Warfare*, 1916, ch. V "The Principle of
+  Concentration. The N-Square Law", [archive.org](https://archive.org/details/aircraftinwarfar00lancrich)):
+  with aimed fire, strength grows with the square of the numbers. Blue 1,000 meeting Red's 500 + 500 one
+  after the other loses about 134 in the first fight and 293 in all; met together, the two Reds are a
+  match. Stanescu, Barriga & Buro, "Using Lanchester Attrition Laws for Combat Prediction in StarCraft"
+  (AIIDE 2015, [PDF](https://cdn.aaai.org/ojs/12780/12780-52-16297-1-2-20201228.pdf)) fit an exponent of
+  1.56 for StarCraft battles and note that focus fire is the same law at the micro level: killing a unit
+  sooner removes its gun sooner. *For QuantBot:* a wave that arrives in pieces fights several small
+  battles it loses; both arriving together and focus fire should pay.
+- **UAlbertaBot** (StarCraft BW, [CombatCommander.cpp](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/CombatCommander.cpp),
+  [Squad.cpp](https://github.com/davechurchill/ualbertabot/blob/master/UAlbertaBot/Source/Squad.cpp)):
+  every combat unit is in one main attack squad; each 10 frames it simulates the local fight (SparCraft,
+  300 px around the unit nearest the target) and regroups on a predicted loss, at the squad unit nearest
+  the target that is not within 400 px of an enemy (a forward point, not home), with 100 frames of
+  hysteresis. Defence: 2 defenders per enemy unit, nearest first. Targeting: threats before buildings.
+  Its simulation scripts are NOK-AV: Churchill, Saffidine & Buro, "Fast Heuristic Search for RTS Game
+  Combat Scenarios" (AIIDE 2012, [PDF](https://cdn.aaai.org/ojs/12527/12527-52-16049-1-2-20201228.pdf)):
+  attack the enemy with the highest damage per hit point and never one already assigned lethal damage -
+  "the only script ... that exhibits true collaborative behaviour" and the best tested.
+- **Steamhammer** ([Squad.cpp](https://github.com/kant2002/steamhammer/blob/master/Steamhammer/Source/Squad.cpp),
+  [CombatCommander.cpp](https://github.com/kant2002/steamhammer/blob/master/Steamhammer/Source/CombatCommander.cpp)):
+  the squad is split into clusters; a cluster not near the enemy joins the nearest cluster closer to the
+  goal, only the lead cluster advances; attack/retreat by simulation smoothed with an exponential average
+  (0.15, attack at 0.5); never retreat near its own firing defences or base. Defence is sized by weighted
+  enemy strength (2 per medium, 4 per heavy unit), starts at 19 tiles and ends at 29.
+- **PurpleWave** ([JudgmentModifiers.scala](https://github.com/dgant/PurpleWave/blob/master/src/Information/Battles/Types/JudgmentModifiers.scala)):
+  reluctant to leave a fight it has entered, patient before starting one ("patience will tend to let us
+  gather more force"), fights harder near home; engages in arcs facing the threat.
+- **sharpy-sc2** ([default_micro_methods.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/combat/default_micro_methods.py),
+  [zone_attack.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/zone_attack.py),
+  [zone_defense.py](https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/zone_defense.py)):
+  attacks at 1.2x the known enemy power; only a group holding 75% of the army's power attacks, the others
+  join it; retreats when the local enemy x0.8 matches it within 18 tiles; defence sends 1.5x the attackers'
+  power, nearest first; focus fire scores damaged high-value targets, +3 for the current target, x0.1 when
+  lethal damage is already assigned.
+- **OpenRA squad AI** (also the Dune 2000 mod; [SquadManagerBotModule.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/SquadManagerBotModule.cs),
+  [GroundStates.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/States/GroundStates.cs),
+  [AttackOrFleeFuzzy.cs](https://github.com/OpenRA/OpenRA/blob/bleed/OpenRA.Mods.Common/Traits/BotModules/Squads/AttackOrFleeFuzzy.cs)):
+  all idle units go once there are `SquadSize` (d2k 6/8/10) + random 0-30; the leader waits until every
+  unit is within units/3 cells; attack or flee by fuzzy rules on relative health, power and speed; never
+  flees with an own building within 10 cells. Defence: every idle base unit that can reach the attacker
+  joins one protection squad, and squads within 15 cells retarget onto it.
+- **Age of Empires II** ([strategic numbers](https://airef.github.io/strategic-numbers/sn-details.html)):
+  attack groups gather to a gather point before tasking (`sn-attack-group-gather-spacing` 4,
+  `sn-group-form-distance` 20); 75% of soldiers attack; outside the town 50% of the units within 25 tiles
+  answer an attack. No primary source for AoE IV's AI was found.
+- **Command & Conquer: Red Alert** ([TEAM.CPP](https://github.com/electronicarts/CnC_Remastered_Collection/blob/master/REDALERT/TEAM.CPP),
+  [HOUSE.CPP](https://github.com/electronicarts/CnC_Remastered_Collection/blob/master/REDALERT/HOUSE.CPP)):
+  scripted teams hold until laggers more than 2 cells away catch up, start only at full strength and
+  regroup at a safe repair building at a third of their strength - but the skirmish attack is the
+  counter-example, each armed unit hunting on its own with 75% probability (a trickle).
+- **Spring / BAR (CircuitAI)** ([MilitaryManager.cpp](https://github.com/rlcevg/CircuitAI/blob/barbarian/src/circuit/module/MilitaryManager.cpp),
+  [DefendTask.cpp](https://github.com/rlcevg/CircuitAI/blob/barbarian/src/circuit/task/fighter/DefendTask.cpp)):
+  new attackers wait in a defend task until their power reaches the strongest enemy group's; defence near
+  the base accepts up to 4x the threat. No primary source for Total War's battle AI was found.
+- **Doctrine.** US Army FM 3-90 ([ch. 2](https://www.globalsecurity.org/military/library/policy/army/fm/3-90/ch2.htm)):
+  "piecemeal commitment subjects the smaller committed forces to defeat in detail"; the defender masses
+  the effects of its combat power and counterattacks with its reserve ([ch. 8](https://www.globalsecurity.org/military/library/policy/army/fm/3-90/ch8.htm)).
+  ADP 3-0 ([PDF](https://irp.fas.org/doddir/army/adp3_0.pdf)): interior lines let a central reserve reach
+  any threatened point sooner than the attacker can switch.
+
+### What QuantBot does today (code read)
+
+- **Attack.** Every 90 s (`AttackTimerMs`) `attack()` checks the house's military value against
+  `AttackThresholdPercent` of the military limit (Custom Hard: the global 0.40; Brutal: its own 0.25) and
+  the outnumbered dispatch gate (hold while the observed enemy front is 1.5x ours, unless 80% of the limit
+  is healthy and deployable). `launchGroundHunt()` then sends the whole available ground army - every
+  fighter not repairing, defending or escorting - once it is worth the difficulty's threshold (Hard 0.30,
+  Brutal 0.25 of the limit) and a viable main wave (6 units, 3,000 credits). `AttackForceMilitaryValueRatio`
+  (Hard 0.5, Brutal 0.6) is the share of the ground army an Easy/Medium Custom wave commits; the Hard/Brutal
+  whole-army dispatch does not use it. Each member gets engine Hunt: it walks at its own speed to the
+  nearest visible enemy anywhere and shoots the nearest target (no focus fire).
+- **Defence.** A hit on one of our buildings (or an attacker in range of one, re-checked every unit pass)
+  calls `scrambleWholeArmyToDefend` (Custom Hard/Brutal, since 1.0.832): the threat is the attacker plus the
+  visible enemy fighters within 8 tiles of the building; the nearest free troops - wave members hunting
+  elsewhere included - within a band of 12 tiles + 1 per 500 credits of threat (at most 40) are sent until,
+  with the troops already fighting there, they are worth 1.25x the threat; each hunts its way to the
+  building's nearest point at its own speed. Workers and other contacts get the district response
+  (`scrambleUnitsAndDefend`: the same 1.25x, debounced per 8x8-tile district for 2 s). The army posture
+  recalls the tracked wave to the protected shelter on strategic attrition, a core attack or a local
+  1.3x disadvantage for 9 s, and colony guards hold threatened colonies while recovery is active.
+
+### Candidates (test-only switches)
+
+`QuantBot::forceVariantOverride` (duel label flags in upper case) and two more Blob bits
+(`blobVariantOverride`, lower case); none is set by the game, saved or hashed. Rules as pure functions in
+`include/players/ForceConcentrationPolicy.h` (`ForceConcentrationPolicyTestCase.cpp`), the code in
+`src/players/QuantBotForce.cpp`, `scrambleWholeArmyToDefend` and `QuantBotBlob.cpp`.
+
+| Flag | Candidate (task item) | Rule as built |
+|---|---|---|
+| `F` | focus fire (c) | Every unit pass each hunting ground fighter (wave member or base defender) takes the best enemy in its weapon range: fighters, then turrets, then workers, then buildings (walls never), fewest hit points first, lowest id; it leaves a target it can still shoot only for a better class or 75% of its hit points. |
+| `N` | focus fire, attack value without overkill (c) | NOK-AV: the target with the most damage per hit point (weapon damage / reload x1000, cross-multiplied), fighters first; a target already assigned a lethal volley by the units shooting it is skipped; units in object-id order; switch only out of reach, when overkilled, for a better class or a third more value. |
+| `C` | coordinated engage after contact (b) | A wave member that is not fighting walks (hunt-toward) to the nearest fight of its army within 24 tiles - a hunter of ours shooting an armed enemy in its reach - unless its own target is no further than the fight + 4 tiles. |
+| `P` | pool defenders by strength (h) | The threat counts enemy fighters within 12 tiles of the attacked building (not 8); the defence sends 2x it (not 1.25x), nearest first, from up to 40 tiles whatever the threat. |
+| `H` | recall raiders on a real base attack (i) | When the troops within the band cannot reach the requirement, the nearest troops beyond it - the raiding army - come home for it; a raid the troops nearby can answer recalls nobody. |
+| `M` | gather defenders outside the fight (h) | Defenders sent from more than 14 tiles muster 8 tiles from the building on their side of it, out of enemy reach, and engage together at 75% there, on contact, or after 15 s. |
+| `L` / `Q` | larger, rarer / smaller, more frequent waves (f) | Wave readiness (and the house attack threshold) at 150% / 60%. |
+| `s` (Blob) | consolidate near the enemy (a) | No gather at home: the blob marches in one leg to a staging point 12 tiles short of its objective, outside observed enemy reach; only an armed enemy in reach releases it on the way; at the staging point it waits for the rest (quorum, or the slowest member's travel time, at most 120 s) and then attacks all at once. |
+| `e` (Blob, with `s`) | engage only with local superiority (d) | At the staging point the party attacks only if its power is 1.5x the visible enemy fighters and turrets within 12 tiles of the objective; else it holds up to 60 s, and waves launched meanwhile join it. |
+| `/weak` (label) | defence scenario | Half of that side's starting army is removed (every second ground fighter by id) before the first cycle. |
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
