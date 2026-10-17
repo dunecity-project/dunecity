@@ -74,7 +74,8 @@ int QuantBot::forceBits() const {
     if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
     const auto& force = getQuantBotConfig().force;
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
-        | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0);
+        | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
+        | (force.openingReadiness ? kForceOpeningReadiness : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {

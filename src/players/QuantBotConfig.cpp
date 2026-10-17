@@ -257,6 +257,9 @@ QuantBotConfig::QuantBotConfig() {
     force.waveReadinessPercent = 60;
     force.bundle = true;
     force.launchFromBundle = true;
+    // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
+    // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
+    force.openingReadiness = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -528,6 +531,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
         iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
         iniFile.setBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+        iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -593,6 +597,7 @@ bool QuantBotConfig::load(const std::string& filepath) {
             iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
         force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
         force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+        force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
 
         bool needsSave = false;
 
@@ -1007,6 +1012,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("waveReadinessPercent", force.waveReadinessPercent);
     addNamed("bundle", force.bundle);
     addNamed("launchFromBundle", force.launchFromBundle);
+    addNamed("openingReadiness", force.openingReadiness);
     configStr += "|/FORCE|";
 
 

@@ -223,11 +223,13 @@
 //     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
 //     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
 //     would order the same AI units differently and desync. Save 9863.
-// 81: Formation march without jams, no saved state or command change: a marching member that
-//     fell behind routes round a member keeping the pace rather than queueing behind it, and a
-//     member waiting for a laggard gives way to a formation-mate stepping onto its tile (it
-//     may be planned through). An 80 peer would move the same formation differently and
-//     desync. Save unchanged.
+// 81: Formation march without jams, and QuantBot opening readiness; no saved state or command
+//     change. A marching member that fell behind routes round a member keeping the pace rather
+//     than queueing behind it, and a member waiting for a laggard gives way to a formation-mate
+//     stepping onto its tile (it may be planned through). A Custom Hard/Brutal QuantBot whose
+//     starting army cannot launch a wave (a Construction Yard start) holds its first ground
+//     wave for full readiness ([Force Concentration] OpeningReadiness, hashed). An 80 peer
+//     would move the same units differently and desync. Save unchanged.
 #define NETWORK_PROTOCOL_VERSION            81
 
 // Mod transfer limits

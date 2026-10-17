@@ -893,22 +893,23 @@ private:
     /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
     /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
     /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
-    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B and W
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W and E
     /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
     /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
     /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
-    /// smaller configured one). kForceOpeningReadiness (E, test-only: a house that started without
-    /// an army able to launch a wave - a Construction Yard start - holds its first ground wave for
-    /// full readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
+    /// smaller configured one). kForceOpeningReadiness (E, [Force Concentration] OpeningReadiness,
+    /// default on since protocol 81: a house that started without an army able to launch a wave -
+    /// a Construction Yard start - holds its first ground wave for full readiness;
+    /// ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceOpeningReadiness = 16384;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
-    /// The force bits in effect: the override if set, else the configured F, C, B and W.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W and E.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's

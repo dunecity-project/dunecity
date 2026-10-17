@@ -133,7 +133,7 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle; optional keys, the code defaults apply when absent. Hashed for
+    /// LaunchFromBundle, OpeningReadiness; optional keys, the code defaults apply when absent. Hashed for
     /// multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -150,6 +150,11 @@ struct QuantBotConfig {
         /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
         /// re-checked every 5 s and at most 60 s late.
         bool launchFromBundle;
+        /// A house whose starting army cannot launch a wave at WaveReadinessPercent (a
+        /// Construction Yard start, not a Fortress with an army) holds its first ground wave
+        /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
+        /// "Scenario tests").
+        bool openingReadiness;
     };
     ForceSettings force;
 
