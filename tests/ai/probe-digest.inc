@@ -10,6 +10,7 @@
 #include <network/GameStateDigest.h>
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 
 namespace ProbeDigest {
@@ -50,11 +51,51 @@ inline Uint32 interval() {
     return cycles;
 }
 
+/// BALANCE_DIGEST_DUMP=FILE: with every digest, append the state it covers, one line per house and
+/// object, so two builds whose digests differ can be diffed to the first differing field.
+inline void dump(Game& game, std::uint64_t digest) {
+    static const char* path = std::getenv("BALANCE_DIGEST_DUMP");
+    if (path == nullptr || path[0] == '\0') return;
+    FILE* out = std::fopen(path, "a");
+    if (out == nullptr) return;
+    const GameStateDigest::Digest lockstep = game.computeStateDigest();
+    std::fprintf(out, "C cycle=%u seed=%u objects=%u objectHash=%016llx houseHash=%016llx digest=%016llx\n",
+                 lockstep.gameCycle, lockstep.randomSeed, lockstep.objectCount,
+                 static_cast<unsigned long long>(lockstep.objectHash),
+                 static_cast<unsigned long long>(lockstep.houseHash), static_cast<unsigned long long>(digest));
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* house = game.getHouse(static_cast<HOUSETYPE>(h));
+        if (house == nullptr) continue;
+        std::fprintf(out, "H %u house=%d stored=%lld starting=%lld city=%lld structures=%d units=%d\n",
+                     lockstep.gameCycle, h, static_cast<long long>(house->getStoredCredits().getRawValue()),
+                     static_cast<long long>(house->getStartingCredits().getRawValue()),
+                     static_cast<long long>(house->getCityCredits().getRawValue()),
+                     house->getNumStructures(), house->getNumUnits());
+    }
+    game.getObjectManager().forEachObject([&](Uint32 objectID, const ObjectBase* object) {
+        if (object == nullptr) return;
+        std::fprintf(out, "O %u id=%u item=%d original=%d owner=%d health=%lld tile=%d,%d real=%lld,%lld angle=%lld "
+                          "dest=%d,%d target=%u\n",
+                     lockstep.gameCycle, objectID, object->getItemID(), object->getOriginalHouseID(),
+                     object->getOwner() != nullptr ? object->getOwner()->getHouseID() : -1,
+                     static_cast<long long>(object->getHealth().getRawValue()),
+                     object->getLocation().x, object->getLocation().y,
+                     static_cast<long long>(object->getRealX().getRawValue()),
+                     static_cast<long long>(object->getRealY().getRawValue()),
+                     static_cast<long long>(object->angle.getRawValue()),
+                     object->getDestination().x, object->getDestination().y, object->target.getObjectID());
+    });
+    std::fclose(out);
+}
+
 /// Logs a digest when the current cycle is on the interval.
 inline void periodic(Game& game) {
     const Uint32 cycle = game.getGameCycleCount();
-    if (interval() != 0 && cycle % interval() == 0)
-        SDL_Log("PROBE_DIGEST: cycle=%u digest=%016llx", cycle, static_cast<unsigned long long>(deep(game)));
+    if (interval() != 0 && cycle % interval() == 0) {
+        const std::uint64_t digest = deep(game);
+        SDL_Log("PROBE_DIGEST: cycle=%u digest=%016llx", cycle, static_cast<unsigned long long>(digest));
+        dump(game, digest);
+    }
 }
 
 /// The final digest, whatever the interval.

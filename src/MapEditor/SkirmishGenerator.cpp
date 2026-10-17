@@ -403,6 +403,15 @@ int distanceToRect2(const Rect& r, int x, int y) {
     return dx * dx + dy * dy;
 }
 
+/// A random tile, x drawn before y. Not Coord(random.rand(..), random.rand(..)): the order in
+/// which function arguments are evaluated is unspecified (clang: left to right, MSVC: right to
+/// left), so the same seed generated a different map on Windows than on macOS and the browser.
+Coord randomTile(Random& random, int size) {
+    const int x = static_cast<int>(random.rand(0, size - 1));
+    const int y = static_cast<int>(random.rand(0, size - 1));
+    return Coord(x, y);
+}
+
 /// The map editor's spot walk: @a steps random unit steps from @a at, clamped to the map.
 template<class Visit>
 void walk(Random& random, int size, Coord at, int steps, Visit visit) {
@@ -497,7 +506,7 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
     // Rock islands scattered over the sand.
     const int islands = std::max(2, area / 2048);
     for(int i = 0; i < islands; ++i) {
-        const Coord at(random.rand(0, size - 1), random.rand(0, size - 1));
+        const Coord at = randomTile(random, size);
         const int steps = static_cast<int>(random.rand(15, 70)) * size / 128 + 8;
         walk(random, size, at, steps, [&](int x, int y) { paintMirrored(map, *mirror, x, y, Terrain_Rock, onSand); });
     }
@@ -654,8 +663,7 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     auto onThin = [](TERRAINTYPE t) { return t == Terrain_Spice; };
     int spice = spiceTiles(map);
     for(size_t field = 0; spice < walkTarget && field < 96; ++field) {
-        const Coord at = field < seeds.size() ? seeds[field]
-                                              : Coord(random.rand(0, size - 1), random.rand(0, size - 1));
+        const Coord at = field < seeds.size() ? seeds[field] : randomTile(random, size);
         const int steps = spotSize * static_cast<int>(random.rand(2, 5)) / 8;
         walk(random, size, at, steps, [&](int x, int y) {
             if(isSandTile(map(x, y))) paintMirrored(map, *mirror, x, y, Terrain_Spice, onSand);

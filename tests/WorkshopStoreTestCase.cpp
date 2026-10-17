@@ -152,3 +152,25 @@ TEST_CASE("Repeated map metadata updates replace complete INI values", "[worksho
     const std::string text((std::istreambuf_iterator<char>(input)), {});
     REQUIRE(text.find("; keep comment")!=std::string::npos);
 }
+
+#include <mod/BundledGameOptions.h>
+TEST_CASE("Bundled GameOptions.ini reaches the disk byte for byte with LF line endings", "[workshop][installer]") {
+    // The installer identity hashes BundledGameOptions::vanilla()/city(); ModManager seeds the
+    // vanilla and dunecity mods with BundledGameOptions::write. A CRLF file (text-mode stream on
+    // Windows) left the bundled mods unrecognised there.
+    Fixture f;
+    for(const std::string& text : {BundledGameOptions::vanilla(), BundledGameOptions::city()}) {
+        REQUIRE(text.find('\r')==std::string::npos);
+        const auto path=f.source/"GameOptions.ini";
+        f.write("GameOptions.ini",std::string(4096,'x')+"\r\n");   // a longer, stale file is replaced
+        REQUIRE(BundledGameOptions::write(path,text));
+        std::ifstream input(path,std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+        REQUIRE(bytes.find('\r')==std::string::npos);
+        REQUIRE(bytes==text);
+        REQUIRE(Workshop::hashBytes(bytes)==Workshop::hashBytes(text));
+    }
+    REQUIRE(BundledGameOptions::vanilla().find("City Effects = false\n")!=std::string::npos);
+    REQUIRE(BundledGameOptions::city().find("City Effects = true\n")!=std::string::npos);
+    REQUIRE_FALSE(BundledGameOptions::write(f.root/"missing"/"GameOptions.ini",BundledGameOptions::vanilla()));
+}

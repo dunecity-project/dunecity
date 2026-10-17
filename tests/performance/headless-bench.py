@@ -4,8 +4,8 @@
 Plays a fixed set of Random Skirmish 1v1 QuantBot duels (the formation-duel.py setup: mirrored
 map, Fortress bases, 20,000-credit armies, Hard on both sides, WaveFormation None) through
 run-campaign-balance.py with one prebuilt probe binary, at one or more parallelism levels.
-Every game records wall time, CPU time (user+sys of the runner and the probe), peak RSS, the
-probe's own setup/loop split and game cycles per second, and its PROBE_DIGEST lines
+Every game records wall time, CPU time (user+sys of the runner and the probe), peak memory (RSS;
+on Windows peak commit), the probe's own setup/loop split and game cycles per second, and its PROBE_DIGEST lines
 (tests/ai/probe-digest.inc). Results are appended to --results as JSON lines.
 
   headless-bench.py --jobs 1,2,4 --results R.jsonl          # build a probe from --build-dir, then measure
@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import statistics
+import struct
 import subprocess
 import sys
 import time
@@ -28,7 +29,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import require_free_space, scratch_dir  # noqa: E402
+from probe_profile import probe_binary, require_free_space, scratch_dir  # noqa: E402
 
 # size, map/match seed, house:shape,house:shape (formation-duel.py's houses for these seeds).
 GAMES = (('128', '7101', 'atreides:none,harkonnen:none'),
@@ -36,16 +37,54 @@ GAMES = (('128', '7101', 'atreides:none,harkonnen:none'),
          ('192', '7303', 'harkonnen:none,ordos:none'))
 
 
+def run_measured(command, console):
+    """Run command (the runner, which starts the probe) with output to console. Returns the
+    exit code, the CPU seconds of it and its children, and the largest peak memory in MiB."""
+    with console.open('w') as handle:
+        if sys.platform != 'win32':
+            process = subprocess.Popen(command, cwd=root, stdout=handle, stderr=subprocess.STDOUT)
+            _, status, usage = os.wait4(process.pid, 0)
+            # macOS reports ru_maxrss in bytes: the largest of the runner and the probe.
+            rss = usage.ru_maxrss / (1 << 20) if sys.platform == 'darwin' else usage.ru_maxrss / 1024
+            return os.waitstatus_to_exitcode(status), usage.ru_utime + usage.ru_stime, round(rss)
+        # Windows: a job object accounts for the runner and the probe it starts (children join
+        # their parent's job). Memory is the largest process's peak commit, not its working set.
+        import ctypes
+        handle_type = ctypes.c_void_p
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.CreateJobObjectW.restype = handle_type
+        kernel32.OpenProcess.restype = handle_type
+        kernel32.AssignProcessToJobObject.argtypes = (handle_type, handle_type)
+        kernel32.QueryInformationJobObject.argtypes = (handle_type, ctypes.c_int, ctypes.c_void_p,
+                                                       ctypes.c_uint32, ctypes.c_void_p)
+        kernel32.CloseHandle.argtypes = (handle_type,)
+        job = kernel32.CreateJobObjectW(None, None)
+        process = subprocess.Popen(command, cwd=root, stdout=handle, stderr=subprocess.STDOUT)
+        own = kernel32.OpenProcess(0x0101, False, process.pid)   # PROCESS_SET_QUOTA | PROCESS_TERMINATE
+        if not job or not own or not kernel32.AssignProcessToJobObject(job, own):
+            raise OSError(ctypes.get_last_error(), 'Could not account the game in a job object')
+        kernel32.CloseHandle(own)
+        returncode = process.wait()
+        accounting = ctypes.create_string_buffer(48)    # JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
+        limits = ctypes.create_string_buffer(144)       # JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+        kernel32.QueryInformationJobObject(job, 1, accounting, 48, None)
+        kernel32.QueryInformationJobObject(job, 9, limits, 144, None)
+        kernel32.CloseHandle(job)
+        user, system = struct.unpack_from('<qq', accounting.raw, 0)        # 100 ns units
+        peak_process = struct.unpack_from('<Q', limits.raw, 128)[0]       # PeakProcessMemoryUsed
+        return returncode, (user + system) / 1e7, round(peak_process / (1 << 20))
+
+
 def build_probe(args, scratch):
     probe = scratch / 'probe'
     shutil.rmtree(probe, ignore_errors=True)
-    subprocess.run(['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
+    subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:none,harkonnen:none', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256'],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
-    return probe / 'balance-probe.app/Contents/MacOS/balance-probe'
+    return probe_binary(probe)
 
 
 def field(line, name):
@@ -59,7 +98,7 @@ def play(args, scratch, probe, game, jobs, index):
     size, seed, sides = game
     out = scratch / f'{args.label}-j{jobs}-{index}-{size}-{seed}'
     shutil.rmtree(out, ignore_errors=True)
-    command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
+    command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
                '--prebuilt-probe', str(probe), '--output-dir', str(out), '--duel-map-size', size,
                '--duel-map-seed', seed, '--duel-sides', sides, '--local-spectator', '--enemy-difficulty', 'hard',
                '--partner-difficulty', 'hard', '--minutes', str(args.minutes), '--seed', seed,
@@ -69,11 +108,9 @@ def play(args, scratch, probe, game, jobs, index):
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
     started = time.time()
-    console = out.with_suffix('.out')
-    with console.open('w') as handle:
-        process = subprocess.Popen(command, cwd=root, stdout=handle, stderr=subprocess.STDOUT)
-        _, status, usage = os.wait4(process.pid, 0)
-    returncode = os.waitstatus_to_exitcode(status)
+    # Not with_suffix: a dotted --label (1.0.845) would give every game the same console file.
+    console = out.parent / (out.name + '.out')
+    returncode, cpu, peak_mib = run_measured(command, console)
     output = console.read_text(errors='replace')
     console.unlink()
     wall = time.time() - started
@@ -84,9 +121,7 @@ def play(args, scratch, probe, game, jobs, index):
     row = {'label': args.label, 'jobs': jobs, 'size': size, 'seed': seed, 'sides': sides, 'minutes': args.minutes,
            'path_workers': args.path_workers, 'ai_telemetry': args.ai_telemetry,
            'rc': returncode, 'wall_s': round(wall, 2),
-           'cpu_s': round(usage.ru_utime + usage.ru_stime, 2),
-           # macOS reports ru_maxrss in bytes: the largest of the runner and the probe.
-           'max_rss_mib': round(usage.ru_maxrss / (1 << 20) if sys.platform == 'darwin' else usage.ru_maxrss / 1024),
+           'cpu_s': round(cpu, 2), 'max_rss_mib': peak_mib,
            'setup_ms': int(field(timing, 'setup_ms') or 0), 'loop_ms': int(field(timing, 'loop_ms') or 0),
            'cycles': int(field(timing, 'cycles') or 0), 'cycles_per_s': int(field(timing, 'cycles_per_s') or 0),
            'winner': field(result, 'winner'), 'end_s': field(result, 'end_s'),

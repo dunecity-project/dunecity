@@ -32,7 +32,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import finish_game, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
 
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
 # The control, Blob waves (hunt parties) and the five kept shapes (the research rounds also played
@@ -126,17 +126,21 @@ def schedule(args):
 
 def build_probe(args, scratch):
     probe = scratch / 'probe'
-    binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
-    if binary.exists() and not args.rebuild:
-        return binary
+    if not args.rebuild:
+        try:
+            binary = probe_binary(probe)
+            if binary.exists():
+                return binary
+        except OSError:
+            pass
     shutil.rmtree(probe, ignore_errors=True)
-    subprocess.run(['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:box,harkonnen:box', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256'],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
-    return binary
+    return probe_binary(probe)
 
 
 def play(args, scratch, binary, key):
@@ -145,7 +149,7 @@ def play(args, scratch, binary, key):
     # another's (none+F), whose clean-up then deletes it mid-game.
     out = scratch / '-'.join(key).replace('/', '_')
     shutil.rmtree(out, ignore_errors=True)
-    command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
                '--duel-map-seed', seed, '--duel-sides', f'{house_a}:{shape_a},{house_b}:{shape_b}',
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,

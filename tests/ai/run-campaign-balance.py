@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run real campaign AI with a fixed seed, isolated profile and no human commands.
 
-Uses the existing macOS Ninja build. Access-control relaxation is restricted to
+Uses the existing Ninja build (macOS: clang; Windows: MSVC objects, with the probe's
+main compiled by clang-cl). Access-control relaxation is restricted to
 this diagnostic executable; no test hooks are compiled into the shipped game.
 --attack-percent sets the legacy Easy fraction (zero disables dispatch); campaign
 Easy/Medium use the half-army policy plus per-house wave caps. Results
@@ -12,7 +13,7 @@ comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
 import atexit
-import fcntl
+import ctypes
 import gzip
 import configparser
 import hashlib
@@ -24,10 +25,91 @@ import shutil
 import subprocess
 import sys
 import tempfile
+WINDOWS = sys.platform == 'win32'
+if not WINDOWS:
+    import fcntl
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import copy_revisions, discard_profile_assets, prune_runs  # noqa: E402
+
+
+def windows_argv(command):
+    """Split a Windows command line exactly as the MSVC runtime does."""
+    from ctypes import wintypes
+    split = ctypes.WinDLL('shell32').CommandLineToArgvW
+    split.restype = ctypes.POINTER(wintypes.LPWSTR)
+    split.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int))
+    count = ctypes.c_int()
+    argv = split(command, ctypes.byref(count))
+    try:
+        return [argv[i] for i in range(count.value)]
+    finally:
+        ctypes.WinDLL('kernel32').LocalFree(argv)
+
+
+def windows_probe_commands(build):
+    """main.cpp's compile command, retargeted to clang-cl (MSVC has no -fno-access-control;
+    clang-cl objects are ABI-compatible with the MSVC ones), the game's link command and its
+    output directory. Placeholders as for macOS; @STAGING@ takes the link's side outputs."""
+    database = json.loads(subprocess.check_output(['ninja', '-C', str(build), '-t', 'compdb', '-x'], text=True))
+    def output(entry):
+        return entry.get('output', '').replace('\\', '/')
+    main_object = '/dunecity.dir/main.cpp.obj'   # src/CMakeFiles/dunecity.dir/main.cpp.obj
+    compile_entry = next(e for e in database if ('/' + output(e)).endswith(main_object))
+    link_entry = next(e for e in database if output(e).endswith('/dunecity.exe') and 'vs_link_exe' in e['command'])
+    compile_command = windows_argv(compile_entry['command'])
+    if Path(compile_command[0]).name.lower().startswith('sccache'):
+        compile_command = compile_command[1:]
+    clang = os.environ.get('DUNECITY_CLANG_CL') or shutil.which('clang-cl')
+    if not clang:
+        # Visual Studio's "C++ Clang tools": VC/Tools/Llvm beside VC/Tools/MSVC/<version>/bin/Hostx64/x64/cl.exe.
+        clang = str(Path(compile_command[0]).parents[5] / 'Llvm/x64/bin/clang-cl.exe')
+    if not Path(clang).is_file():
+        raise RuntimeError('clang-cl not found; install the Visual Studio C++ Clang tools or set DUNECITY_CLANG_CL.')
+    command = [clang]
+    for arg in compile_command[1:]:
+        if arg == '/showIncludes' or arg.startswith('/Fd'):
+            continue
+        command.append('/Fo@OBJECT@' if arg.startswith('/Fo') else arg)
+    command[command.index(next(a for a in command if a in ('-c', '/c'))) + 1] = '@SOURCE@'
+    command += ['-Xclang', '-fno-access-control']
+    # cmd.exe /C "cd . && cmake -E vs_link_exe ... -- link.exe ... && <post-build steps>": only the link.
+    text = link_entry['command']
+    if '/C "' in text:
+        text = text[text.index('/C "') + 4:text.rindex('"')]
+    segment = next(s for s in text.split(' && ') if 'vs_link_exe' in s or 'link.exe' in s.lower())
+    link = []
+    for arg in windows_argv(segment):
+        lower = arg.lower()
+        if arg.startswith('--intdir='):
+            arg = '--intdir=@STAGING@'
+        elif lower.startswith('/out:'):
+            arg = '/out:@BINARY@'
+        elif lower.startswith('/implib:'):
+            arg = '/implib:@STAGING@\\balance-probe.lib'
+        elif lower.startswith('/pdb:'):
+            arg = '/pdb:@STAGING@\\balance-probe.pdb'
+        elif arg.replace('\\', '/').endswith(main_object):
+            arg = '@OBJECT@'
+        link.append(arg)
+    if '@OBJECT@' not in link or '/out:@BINARY@' not in link:
+        raise RuntimeError('Unexpected Windows link command for dunecity.exe.')
+    return command, link, (build / output(link_entry)).parent
+
+
+def lock_exclusive(handle):
+    if WINDOWS:
+        import msvcrt
+        while True:
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                continue   # LK_LOCK gives up after ten seconds; keep waiting
+    fcntl.flock(handle, fcntl.LOCK_EX)
+
+
 house_names = ('harkonnen','atreides','ordos','fremen','sardaukar','mercenary','neutral','rebels','custom','wildspade','kleshmersh','tharpique')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
@@ -267,10 +349,8 @@ if args.prebuilt_probe:
     if not binary.is_file():
         parser.error('--prebuilt-probe must name an existing balance-probe binary.')
 else:
-    subprocess.run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
-    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-    commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
-    main = (root/'src/main.cpp').read_text()
+    subprocess.run([sys.executable,str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
+    main = (root/'src/main.cpp').read_text(encoding='utf-8')
     needle = 'int menuResult = MainMenu().showMenu();'
     if main.count(needle) != 1:
         raise RuntimeError('Main-menu injection point changed.')
@@ -287,29 +367,38 @@ else:
         main = main.replace('                              videoFlags);',
                             '                              videoFlags | SDL_WINDOW_HIDDEN);')
     position = main.index('int main(')
-    main = main[:position] + '#include "'+str(root/'tests/ai/campaign-balance-probe.inc')+'"\n' + main[position:]
+    probe_includes = ['tests/ai/windows-probe-compat.inc'] if WINDOWS else []
+    probe_includes.append('tests/ai/campaign-balance-probe.inc')
+    main = main[:position] + ''.join('#include "'+(root/name).as_posix()+'"\n' for name in probe_includes) + main[position:]
     # Placeholders keep the commands, and so the cache key below, independent of --output-dir.
-    compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
-    for option in ('-include','-MT','-MF'):
-        if option in compile_command:
-            position = compile_command.index(option)
-            del compile_command[position:position+2]
-    for option in ('-MD','-MMD'):
-        if option in compile_command: compile_command.remove(option)
-    compile_command[compile_command.index('-o')+1] = '@OBJECT@'
-    compile_command[compile_command.index('-c')+1] = '@SOURCE@'
-    compile_command.append('-fno-access-control')
-    link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
-    link = link[link.index('&&')+1:]
-    link = link[:link.index('&&')]
-    link[link.index('-o')+1] = '@BINARY@'
-    link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
+    if WINDOWS:
+        compile_command, link, game_dir = windows_probe_commands(build)
+        object_suffix, link_inputs = '.obj', ('.obj', '.lib')
+    else:
+        target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+        commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
+        compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
+        for option in ('-include','-MT','-MF'):
+            if option in compile_command:
+                position = compile_command.index(option)
+                del compile_command[position:position+2]
+        for option in ('-MD','-MMD'):
+            if option in compile_command: compile_command.remove(option)
+        compile_command[compile_command.index('-o')+1] = '@OBJECT@'
+        compile_command[compile_command.index('-c')+1] = '@SOURCE@'
+        compile_command.append('-fno-access-control')
+        link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
+        link = link[link.index('&&')+1:]
+        link = link[:link.index('&&')]
+        link[link.index('-o')+1] = '@BINARY@'
+        link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
+        object_suffix, link_inputs = '.o', ('.o', '.a', '.dylib', '.tbd')
     if args.quantbot_object:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
-        split = [f'/players/QuantBot{part}.cpp.o' for part in
+        split = [f'/players/QuantBot{part}.cpp{object_suffix}' for part in
                  ('', 'SaveLoad', 'Colonisation', 'Build', 'Placement', 'Army', 'Blob', 'Air', 'Harvesters')]
-        present = [arg for arg in link if any(arg.endswith(name) for name in split)]
+        present = [arg for arg in link if any(arg.replace('\\', '/').endswith(name) for name in split)]
         if len(present) != len(split):
             raise RuntimeError('Expected the QuantBot subsystem objects in the diagnostic link.')
         preserved = [path.resolve() for path in args.quantbot_object]
@@ -335,46 +424,83 @@ else:
     cache = build/'balance-probe-cache'
     cache.mkdir(exist_ok=True)
     entry = cache/hashlib.sha256(json.dumps([main, compile_command, link]).encode()).hexdigest()[:24]
+    executable = 'balance-probe.exe' if WINDOWS else 'balance-probe'
     with open(cache/'.lock', 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)   # concurrent probes build one binary, once
+        lock_exclusive(lock)   # concurrent probes build one binary, once
+        rebuilt = False
         if not current(entry/'manifest.json'):
             shutil.rmtree(entry, ignore_errors=True)
             staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
-            names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/'balance-main.o'),
-                     '@BINARY@': str(staging/'balance-probe')}
+            names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/('balance-main'+object_suffix)),
+                     '@BINARY@': str(staging/executable), '@STAGING@': str(staging)}
+            def fill(arg):
+                for placeholder, value in names.items():
+                    arg = arg.replace(placeholder, value)
+                return arg
             try:
-                (staging/'balance-main.cpp').write_text(main)
+                (staging/'balance-main.cpp').write_text(main, encoding='utf-8')
                 with (out/'build.log').open('w') as log:
-                    subprocess.run([names.get(arg, arg) for arg in compile_command] + ['-MD', '-MF', str(staging/'deps.d')],
+                    if WINDOWS:
+                        # clang-cl reports the headers it read like cl.exe: "Note: including file: <path>".
+                        done = subprocess.run([fill(arg) for arg in compile_command] + ['/showIncludes'],
+                                              cwd=build,capture_output=True,text=True,errors='replace')
+                        log.write(done.stdout + done.stderr)
+                        log.flush()
+                        if done.returncode:
+                            raise subprocess.CalledProcessError(done.returncode, compile_command)
+                        prefix = 'Note: including file:'
+                        headers = [line[len(prefix):].strip() for line in (done.stdout + done.stderr).splitlines()
+                                   if line.startswith(prefix)]
+                    else:
+                        subprocess.run([fill(arg) for arg in compile_command] + ['-MD', '-MF', str(staging/'deps.d')],
+                                       cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+                    subprocess.run([fill(arg) for arg in link],
                                    cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
-                    subprocess.run([names.get(arg, arg) for arg in link],
-                                   cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
-                depfile = (staging/'deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
-                inputs = [Path(build, path).resolve() for path in shlex.split(depfile)
-                          if Path(path).name != 'balance-main.cpp']
+                if not WINDOWS:
+                    depfile = (staging/'deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
+                    headers = [path for path in shlex.split(depfile) if Path(path).name != 'balance-main.cpp']
+                inputs = [Path(build, path).resolve() for path in headers]
                 inputs += [Path(build, arg).resolve() for arg in link
-                           if arg.endswith(('.o', '.a', '.dylib', '.tbd')) and Path(build, arg).is_file()]
+                           if arg.lower().endswith(link_inputs) and Path(build, arg).is_file()]
                 (staging/'manifest.json').write_text(json.dumps({str(path): stamp(path) for path in inputs}))
                 os.rename(staging, entry)
+                rebuilt = True
             finally:
                 shutil.rmtree(staging, ignore_errors=True)
         else:
             (out/'build.log').write_text(f'Reused {entry}\n')
         os.utime(entry)
         # Keep the four most recently used binaries (other configurations, e.g. --stats-ui-probe).
-        for stale in sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]:
+        stale_entries = sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]
+        for stale in stale_entries:
             shutil.rmtree(stale, ignore_errors=True)
-    app = out/'balance-probe.app/Contents'
-    (app/'MacOS').mkdir(parents=True)
-    (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
-    binary = app/'MacOS/balance-probe'
-    shutil.copy2(entry/'balance-probe', binary)
-    (out/'balance-main.cpp').write_text(main)
+        if WINDOWS:
+            # Windows finds the game data beside the executable (SDL_GetBasePath), so the probe
+            # runs from the game's own output directory rather than a per-run copy.
+            for stale in stale_entries:
+                (game_dir/f'balance-probe-{stale.name}.exe').unlink(missing_ok=True)
+            binary = game_dir/f'balance-probe-{entry.name}.exe'
+            if rebuilt or not binary.is_file():
+                shutil.copy2(entry/executable, binary)
+    if WINDOWS:
+        (out/'balance-probe-path.txt').write_text(str(binary) + '\n')
+    else:
+        app = out/'balance-probe.app/Contents'
+        (app/'MacOS').mkdir(parents=True)
+        (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
+        binary = app/'MacOS/balance-probe'
+        shutil.copy2(entry/'balance-probe', binary)
+    (out/'balance-main.cpp').write_text(main, encoding='utf-8')
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
+if WINDOWS:
+    # The game asks for an accelerated renderer (Direct3D 11 on Windows), which the dummy video
+    # driver cannot provide in SDL2; macOS's sdl2-compat (SDL3) falls back to software by itself.
+    # The environment outranks the game's SDL_SetHint, and a hinted driver is used whatever the flags.
+    env['SDL_RENDER_DRIVER'] = 'software'
 if args.rocket_turrets_need_power is not None:
     env['BALANCE_ROCKET_TURRETS_NEED_POWER'] = str(int(args.rocket_turrets_need_power))
 if args.concrete_required is not None:
