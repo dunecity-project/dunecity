@@ -1,3 +1,18 @@
+## 2026-10-17 — local 1.0.846 installed on the MBA
+
+Staging = 1.0.845 + `chore/windows-runner` (348ee7e0: Random Skirmish and ambient-helicopter RNG draw
+order, LF GameOptions.ini, DUNECITY_USERDIR on Windows, MSVC probe harness; Mac maps byte-identical) +
+`test/formation-scenarios` (c4a31da7: formation march without jams, `[Force Concentration]
+OpeningReadiness` on by default (bit 4194304, duel letter I), vanilla-match and formation-bench
+harnesses, scenario results). Protocol 81, save 9864 (1.0.845 saves load). `agent-workspace stage
+verify` at 0247442f: build, check-build-deps and CTest 96/96 serial passed
+(`quantbot_all_against_atreides` 89 s). Package: executable SHA256
+69d100e854c97d7643ffcd0a3f7c21625bc78e5203831e3d3e4f4d3d27555908, no Homebrew/local links, signature
+and runtime check passed. Installed on the MBA 2026-10-17 20:11 AEDT; 1.0.845 at
+/Applications/.dunecity-backup-before-1.0.846-20261017-201151/. Not pushed or published.
+Runners: Mac mini `dunecity-queue` (launchd); MacBook Pro `dunecity-pro`, MacBook Air `dunecity-air`,
+Windows PC `ssh dunecity-win` (C:\dunecity) — all at older commits; re-sync and parity-check before use.
+
 ## 2026-10-17 — 1.0.846 integration: formation scenarios merged with 1.0.845 staging (branch `test/formation-scenarios`, protocol 81, save 9864, not released)
 
 FormationMerge merged `integrate/feature-batch` into `test/formation-scenarios` in
