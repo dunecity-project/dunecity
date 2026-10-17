@@ -1,3 +1,18 @@
+## 2026-10-17 — local 1.0.845 installed on the MBA
+
+Staging = 1.0.844 + `feat/ai-blob-waves` (85b423d4: perimeter hold, perimeter rocket turrets, sized
+defence; AI units step off planned building sites; save 9864 split so 1.0.844 saves load) +
+`chore/housekeeping` (6d4c7428: leased probe scratch, per-game cleanup, disk guard,
+prune-merged-worktrees). Protocol 80, save 9864. `agent-workspace stage verify` at 149bbea5: build,
+check-build-deps and CTest 96/96 serial passed (`quantbot_all_against_atreides` 154 s). Package:
+executable SHA256 c96bcfa9f8524fb7371f7bd2fae4d8eb804fc4c2b97d54230a497acdde516d37, no Homebrew/local
+links, signature and runtime check passed. Installed on the MBA 2026-10-17 ~17:48 AEDT. Incident:
+`/Applications/dunecity.app` (1.0.844) was already missing when the install ran (the `mv` to the
+backup folder failed, nothing was lost by the install); a 1.0.842 game had been started at 17:36
+from `/Applications/.dunecity-backup-before-1.0.843-20261017-011302/`. AirRunner (MBA runner setup)
+states it touched only ~/dunecity-runner; the cause is unknown. Remaining backups: 1.0.843, 1.0.842.
+Not pushed or published.
+
 ## 2026-10-17 — QuantBot footprint rule: AI units move off planned building sites; perimeter hold now also in the city simulation (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
 
 Stefan: "fix the dune mod issue - when the ai places buildings in the queue to be built then the ai units
