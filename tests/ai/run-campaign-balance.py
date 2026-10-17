@@ -216,6 +216,9 @@ parser.add_argument('--blob-wave-probe', action='store_true',
                     help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
 parser.add_argument('--force-probe', action='store_true',
                     help='Verify the QuantBot force-concentration defaults: focus fire, converging on a fight, 60%% waves')
+parser.add_argument('--strategy-probe', action='store_true',
+                    help='Verify QuantBot strategies: peers and reloads agree on the pick, mixes follow their priors '
+                         '(needs --custom-map, a multi-house map, for the lockstep and save/load checks)')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -260,6 +263,8 @@ if args.quantbot_object and not all(path.is_file() for path in args.quantbot_obj
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
+if args.strategy_probe and (not args.custom_map or args.prebuilt_probe):
+    parser.error('--strategy-probe needs --custom-map and builds its own probe binary.')
 if not args.custom_map and (args.roster or args.house not in house_names[:3]):
     parser.error('Explicit rosters and additional houses require --custom-map.')
 roster = []
@@ -354,7 +359,8 @@ else:
     needle = 'int menuResult = MainMenu().showMenu();'
     if main.count(needle) != 1:
         raise RuntimeError('Main-menu injection point changed.')
-    main = main.replace(needle,'int menuResult = runCampaignBalanceProbe();')
+    main = main.replace(needle,'int menuResult = runQuantBotStrategyProbe();' if args.strategy_probe
+                        else 'int menuResult = runCampaignBalanceProbe();')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
     if args.stats_ui_probe or args.sidebar_grid_probe:
         # Exercise the requested logical viewport even on a smaller/headless host.
@@ -369,6 +375,7 @@ else:
     position = main.index('int main(')
     probe_includes = ['tests/ai/windows-probe-compat.inc'] if WINDOWS else []
     probe_includes.append('tests/ai/campaign-balance-probe.inc')
+    if args.strategy_probe: probe_includes.append('tests/ai/strategy-probe.inc')
     main = main[:position] + ''.join('#include "'+(root/name).as_posix()+'"\n' for name in probe_includes) + main[position:]
     # Placeholders keep the commands, and so the cache key below, independent of --output-dir.
     if WINDOWS:
