@@ -4,7 +4,7 @@ Stefan: "add spectator mode to skirmish". Worktree ~/Documents/projects/dunecity
 Details: `docs/skirmish-generator.md`, "Spectate".
 
 - Single-player Random Skirmish has a **Spectate** checkbox and a **Your house AI** box (Players
-  column; the box is enabled only while spectating, default QuantBot Medium, same list as the
+  column; the AI row is shown only while Spectate is ticked, default QuantBot Medium, same list as the
   Allies/Enemies AI). It reuses Custom Game's offline Spectate: `RandomSkirmish::makeInit(result,
   rules, params)` calls `setLocalSpectator(true)` and seats that AI where the human sat, so every
   house is AI and the game observes (whole map, inspect, no orders). The player's rows stay live:

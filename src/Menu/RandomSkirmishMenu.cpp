@@ -254,9 +254,10 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         enemiesAlliedBox.setText(_("Enemies are allied"));
         // Custom Game's offline Spectate: an AI takes the player's seat and the player watches.
         spectateBox.setText(_("Spectate"));
-        spectateBox.setTooltipText(_("Watch an AI-vs-AI match. Your house is played by the AI chosen below, with "
-                                     "its partner, base, army and city as set; you get the whole map and can "
-                                     "inspect any building, but give no orders."));
+        spectateBox.setTooltipText(_("Watch an AI-vs-AI match. Your house is played by the AI you choose in "
+                                     "\"Your house AI\" (shown while this is ticked), with its partner, base, "
+                                     "army and city as set; you get the whole map and can inspect any "
+                                     "building, but give no orders."));
         spectateBox.setOnClick([this]() { onSpectateChanged(); });
         fillAI(spectateAIBox);
         spectateAIBox.setTooltipText(_("The AI that plays your house while you spectate."));
@@ -291,6 +292,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, "", &enemiesAlliedBox);
         addRow(1, row++, "", &spectateBox);
         addRow(1, row++, _("Your house AI"), &spectateAIBox);
+        spectateAICaption = &captions[usedCaptions - 1];
         addHeader(1, row++, _("Allies start with"));
         addRow(1, row++, _("AI"), &allyAIBox);
         addRow(1, row++, _("Base"), &allyBaseBox);
@@ -483,7 +485,11 @@ void RandomSkirmishMenu::onSpectateChanged() {
     // Every "You start with" row keeps its meaning: the watched house still starts with that
     // partner, base, army and city. Only who plays it changes.
     const bool watch = spectateBox.isChecked();
+    // Like the City rows of a non-city mod, a row that does not apply is hidden, not greyed:
+    // a drop-down has no disabled look.
+    spectateAIBox.setVisible(watch);
     spectateAIBox.setEnabled(watch);
+    if(spectateAICaption != nullptr) spectateAICaption->setVisible(watch);
     if(playerHeader != nullptr) playerHeader->setText(watch ? _("Your house starts with") : _("You start with"));
 }
 

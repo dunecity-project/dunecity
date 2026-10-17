@@ -96,7 +96,9 @@ AI where the human would sit, and the game observes exactly as a spectated Custo
 map visible, inspect any building, no orders; `Game::setupSpectatorView`). Local only: the flag is
 never serialized or sent, and no protocol, save or map format changed.
 
-- **Your house AI** (right below Spectate, enabled only while it is on): the AI that plays the
+- **Your house AI** (right below Spectate, shown only while it is ticked; hidden otherwise, as the
+  City rows are for a non-city mod, because a drop-down has no disabled look; Spectate's tooltip
+  says where the choice appears): the AI that plays the
   watched house, from the same list as the Allies/Enemies AI boxes (no helpers, no human);
   default QuantBot Medium. Chosen over reusing the AI partner box because the partner keeps its
   own meaning and a separate box keeps the difficulty explicit; an unknown or helper class in the
@@ -358,15 +360,16 @@ generated", and "random settings on army and city must apply equally to each pla
     the player's house, power 300/200.
   - **spectate** (DuneCity 96, Ordos + 1 ally + 2 allied enemies, seed 20261018, Small player base
     with a 1,000-person city, qBotSupportMedium partner): on the real screen Spectate starts off
-    with Your house AI disabled; clicking it enables the AI box and renames the header, the
-    player's rows stay enabled, and the box lists no helper or human (screenshot
+    with a tooltip and the Your house AI row hidden (screenshot
+    `random-skirmish-spectate-off-1024x768.bmp`); clicking it shows the AI row and renames the
+    header, the player's rows stay enabled, and the box lists no helper or human (screenshot
     `random-skirmish-spectate-1024x768.bmp`). The init `prepareStart` builds (Start's own step)
     is a local-spectator one with no `HumanPlayer`; the match is observed (`localObserver`, local
     view = the unregistered `OBSERVER_PLAYER_ID`), holds 4 houses with no human player anywhere,
     Ordos played by qBotHard + qBotSupportMedium with its Construction Yard, and runs one game
     minute (3,750 cycles) with a clean log, still observing (in-game frame `ingame-spectator.png`,
     "Spectating" label and full minimap). A new screen restores Spectate and QuantBot Hard;
-    clicking Spectate off disables the box, and Start's init then seats the human and the partner
+    clicking Spectate off hides the AI row again, and Start's init then seats the human and the partner
     in Ordos and the human controls it; Spectate off is remembered. The multiplayer screen
     (mp-lobby) has neither control.
   - **render:** whole-map PNGs (4 px per tile) and measurements of two editor random maps and

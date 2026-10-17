@@ -442,7 +442,9 @@ void runSpectate() {
         RandomSkirmishMenu menu;
         skirmishRequire(menu.spectateBox.getParent() != nullptr && menu.spectateBox.isVisible() && !menu.spectateBox.isChecked(),
                         "Spectate is not offered, or starts on, in a fresh profile");
-        skirmishRequire(!menu.spectateAIBox.isEnabled(), "The house AI choice is enabled while not spectating");
+        skirmishRequire(!menu.spectateAIBox.isVisible() && !menu.spectateAIBox.isEnabled() && !menu.spectateAICaption->isVisible(),
+                        "The house AI row is shown while not spectating");
+        skirmishRequire(!menu.spectateBox.getTooltipText().empty(), "Spectate has no tooltip");
         for(size_t i = 0; i < menu.availableMods.size(); ++i)
             if(menu.availableMods[i].name == "dunecity") { menu.modBox.setSelectedItem(static_cast<int>(i)); menu.onModChanged(); }
         probeSelect(menu.sizeBox, 96);
@@ -455,8 +457,10 @@ void runSpectate() {
         probeSelect(menu.playerCityBox, 1);
         menu.seedBox.setText("20261018");
         menu.fixedSeedBox.setChecked(true);
+        skirmishCapture(menu, "random-skirmish-spectate-off");
         click(menu.spectateBox);
-        skirmishRequire(menu.spectateBox.isChecked() && menu.spectateAIBox.isEnabled(), "Clicking Spectate did not enable the house AI choice");
+        skirmishRequire(menu.spectateBox.isChecked() && menu.spectateAIBox.isVisible() && menu.spectateAIBox.isEnabled()
+                        && menu.spectateAICaption->isVisible(), "Clicking Spectate did not show the house AI choice");
         skirmishRequire(menu.playerHeader->getText() == _("Your house starts with"), "The player's start header does not follow Spectate");
         // The player's start rows stay live: the watched house still starts with them.
         skirmishRequire(menu.partnerBox.isEnabled() && menu.playerBaseBox.isEnabled() && menu.playerArmyBox.isEnabled(),
@@ -511,11 +515,11 @@ void runSpectate() {
     GameInitSettings played;
     {
         RandomSkirmishMenu again;
-        skirmishRequire(again.spectateBox.isChecked() && again.spectateAIBox.isEnabled()
+        skirmishRequire(again.spectateBox.isChecked() && again.spectateAIBox.isVisible() && again.spectateAIBox.isEnabled()
                         && again.spectateAIBox.getSelectedEntryIntData() == PlayerFactory::getIndexByPlayerClass("qBotHard"),
                         "Spectate and its house AI were not remembered");
         click(again.spectateBox);
-        skirmishRequire(!again.spectateBox.isChecked() && !again.spectateAIBox.isEnabled()
+        skirmishRequire(!again.spectateBox.isChecked() && !again.spectateAIBox.isVisible() && !again.spectateAICaption->isVisible()
                         && again.playerHeader->getText() == _("You start with"), "Clicking Spectate off did not restore the player's rows");
         skirmishRequire(again.prepareStart(played), "Start could not prepare the played match");
     }
