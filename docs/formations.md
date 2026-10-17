@@ -417,7 +417,7 @@ New test-only flags (rules in `ForceConcentrationPolicy.h`, code in `QuantBotFor
 | (all) | enemy estimate | Every enemy mobile ground fighter seen is remembered at its health-weighted value; the dead are dropped, the unseen after 5 minutes. "Outnumbered" = that memory is worth 125% of our ground army. |
 | `E` | D on the memory | D (full readiness while outnumbered) measured on the memory instead of what is visible now. |
 | `G` | fight at home (b) | While outnumbered no wave leaves (attack check deferred, re-checked in 15 s) and the reserve holds the protected rally under turret cover; the next check after a won defence launches as usual. |
-| `V` | hold the perimeter (Stefan) | As G, but the reserve holds the enemy-facing base perimeter: from the base centre along the observed front direction, the outermost own building within 24 tiles, plus 3 tiles (a standable tile within 6). Not in the city simulation (see below). |
+| `V` | hold the perimeter (Stefan) | As G, but the reserve holds the enemy-facing base perimeter: from the base centre along the observed front direction, the outermost own building within 24 tiles, plus 3 tiles (a standable tile within 6). In the city simulation too, with the footprint rule ("Planned sites and the army" below). |
 | `U` | perimeter turrets (Stefan) | While outnumbered, one rocket turret per build pass on the perimeter band (4 tiles inside to 2 beyond the outermost building, 12 tiles either side of the front line; the battery's spacing and corridor rules), one per 1,000 credits of the enemy's lead, at most 8 there, only above the economy reserve + 250 + 500 for units; a wind trap first when turrets need power. Nothing once not outnumbered. |
 | `A` + `/k<pct>` | strength-aware waves (a) | A ready wave leaves only when its value is k% of the memory (k 80/100/120); else it keeps bundling. |
 | `R` | home reserve (c) | While the memory exceeds our army, the share it exceeds it by (at most half) stays home, nearest the protected rally first. |
@@ -475,13 +475,10 @@ its 60% wave at minute 1.7 takes a half-army base in 8 minutes.
 
 `quantbot_all_against_atreides` with UVX: 6/6, 29.3 33.0 33.9 33.5 30.7 30.3 minutes (BWFCQ: 30.8 31.7 33.4
 30.3 34.4 31.7). `quantbot_no_spice_income_low-cash` (city simulation) failed with all three on (house 0
-built no Industrial zone); it passed with V off, with X off, and with V excluded from the city simulation.
-The traced failing game does *not* show the army standing on lots: no placement failed for blocked ground
-(`no_site` 3 against 2 in the passing game), but the two games diverge from the first slab at 0.3 minutes
-(another site), house 0 had 127 base scrambles against 51 and sat on about 110 spendable credits from minute
-1.7 to 4.6 with no placement - the hold changed where the opening army stood and how it fought, and the cash
-for the R/I opening went into that. The hold therefore does not apply in the city simulation (measured
-duels are vanilla, unaffected); the exact chain was not traced further.
+built no Industrial zone); it passed with V off, with X off, and with V excluded from the city simulation,
+which is what the first commit shipped. The cause was traced afterwards ("Planned sites and the army"
+below): the holding army stood on base rock that the AI's site search counted as occupied. With the
+footprint rule the hold applies in the city simulation as well.
 
 **Decision (applied): the QuantBot default is BWFCQ + UVX** - new optional `[Force Concentration]` keys
 `PerimeterHold`, `PerimeterTurrets`, `SizedDefence` (code defaults true, hashed; `forceBits()` adds V, U,
@@ -492,11 +489,70 @@ outnumbered verdict are derived once per cycle and not saved. Protocol 80. D, E,
 test-only. Probe `quantbot_force_concentration` section 7: memory (seen, kept out of sight, dead dropped,
 forgotten after 5 min), outnumbered 9 v 2 tanks garrisons with the perimeter turret goal of the policy,
 the perimeter lies beyond every own building towards the observed enemy base and is the house anchor
-(the protected rally in the city simulation), the turret site is on the band and legal (none when the
+(in the city simulation too), the turret site is on the band and legal (none when the
 band has no legal ground), the attack check is held, save/load of the memory and a muster re-saves the
 same bytes, a 9863 save in the 1.0.844 layout (the same block without the 9864 trailer) loads with its
 bundle and no memory and re-saves as 9864, a 9862 load has neither, a worker raid of 4 tanks against 2
-is declined and one of 1 tank gets 1.5x (2 tanks).
+is declined and one of 1 tank gets 1.5x (2 tanks). Section 8 checks the footprint rule.
+
+### Planned sites and the army: the footprint rule (protocol 80, no save change)
+
+Stefan: "fix the dune mod issue - when the ai places buildings in the queue to be built then the ai
+units need to move off those tiles". A general rule for every QuantBot in every mode, not a city-mode
+exception:
+
+- **Own units are traffic to the site search.** `QuantBot::placeableAmongOwnUnits` is the engine's
+  `Map::okayToPlaceStructure` with units ignored, plus the footprint itself: no mountain, no structure,
+  no unit of another house, and no own unit that cannot leave (`ownUnitCannotLeave`: unresponsive, or
+  ordered off with a forced move yet standing with no path coming). It replaces the unit-blocking check
+  in `findPlaceLocation`, `findPlaceLocationSimple`, the turret, perimeter-turret, city service and city
+  turret searches, the foundation planner's paveable-tile test and the finished building's own checks
+  (planned site, planned slab). A *substitute* prepared footprint is still only taken when it is free
+  now: the planned site is the one that waits.
+- **Planned sites are kept clear.** Every unit pass, `keepPlannedSitesClear()` walks every yard's
+  reservation (`reservedStructures`, yard id order) and asks own units standing idle or holding on the
+  footprint off it through `ConstructionYard::moveOwnUnitsOffPlot(idleOnly)` - the pre-placement
+  queue's rule for the player's planned plots (`Player::doMoveOwnUnitsOffPlot`): a forced move to the
+  nearest free tile beside the footprint (`Map::findDeploySpot` from the unit, seeded from the cycle,
+  bounded); units walking through are left alone.
+- **A finished building waits for its own units.** If own units stand on the site when the building is
+  ready, they are asked off and the site and reservation are kept (front of the yard's place list); it
+  is placed on plan once they have left. A unit that was ordered off and cannot leave makes the site
+  illegal, so the next pass plans another one - the wait is bounded.
+- **Slots skip planned sites** (`onPlannedSite`, every yard's reservation): the perimeter point, the
+  bundle point, `huntPartySlot` (bundle walkers, musters, hunt parties), `withdrawUnit` (recalls, colony
+  guards), the assembly slots, the recall formation slots and the home regroup.
+
+**Cause of the low-cash failure (hold on in the city simulation, seed 148680876, traced).** House 0's
+troops held base rock while it planned. `Map::okayToPlaceStructure` counts units, so at cycle 25 the
+production-room survey (`findPlaceLocation(HeavyFactory)`) found no factory site
+(`base_production_room_blocked` 1, against 0 with the hold off); at cycle 4,925, still blocked with
+`free_base_rock` 36 (61 once the troops moved), `city_vehicle_production_bootstrap` spent 400 of 423
+credits on a Radar, and the house sat on 16-113 credits for 3.3 minutes and never funded its
+Industrial zone. The first slab site already differed at 0.3 minutes because the windtrap's preferred
+footprint had troops on it. With only the site search fixed a second house stalled 2,500 cycles on
+`foundation_incomplete` (the foundation planner called unit-occupied tiles unpaveable); fixed too.
+The 127 v 51 base scrambles are the army fighting at the edge, not a cash sink.
+
+**Measured** (final code, `run-no-spice-city-progress.py` criteria on 8 seeds each: 148680876, 11, 22,
+33, 44, 55, 66, 77; "gate" = the same code with the hold excluded from the city simulation):
+
+| Map | Arm | Runs passing | Houses meeting the R/I opening | City net income | Zones built | Houses alive |
+|---|---|---|---|---|---|---|
+| 64x64 3 vs 1, no spice, low cash | hold | 8/8 | 32/32 | 210,261 | 253 | 25/32 |
+| 64x64 3 vs 1, no spice, low cash | gate | 7/8 | 31/32 | 212,625 | 316 | 29/32 |
+| 192x192 DuneCity, no spice | hold | 8/8 | 32/32 | 192,522 | 544 | 32/32 |
+| 192x192 DuneCity, no spice | gate | 8/8 | 32/32 | 192,453 | 543 | 32/32 |
+
+City income is the same with the hold (net per surviving low-cash house 7,991 v 7,108); the low-cash
+arm builds fewer lots mainly because more houses are eliminated in that Brutal 3 v 1 brawl (7 v 3;
+zones per surviving house 8.8 v 9.9), a military outcome over 8 seeds rather than an economic stall.
+**Decision (applied): no city-simulation gate; the hold applies everywhere.** Probe
+`quantbot_force_concentration` section 8: our own tank on a wind trap site does not make it unplaceable
+for the AI, another house's trooper does; holding/bundle slots around the site skip the footprint; an
+idle tank on the planned site is sent beside it and leaves (173 cycles); the wind trap finished while
+another tank stands on its site waits with its site and reservation kept, the tank is asked off, and the
+wind trap is then placed exactly on the planned site.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

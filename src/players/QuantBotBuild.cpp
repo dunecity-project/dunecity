@@ -1627,8 +1627,9 @@ void QuantBot::build(int militaryValue) {
                 const auto* occupant=tile->getNonInfantryGroundObject();
                 const bool cleared=occupant && std::find(clearedZones.begin(),clearedZones.end(),
                     occupant->getObjectID())!=clearedZones.end();
+                // Our own traffic does not stop paving (the footprint rule).
                 state.paveable=tile->isRock() && !tile->isMountain()
-                    && (!tile->isBlocked() || cleared) && (!tile->hasCityZone() || cleared);
+                    && (!tileBlocksOwnPlacement(tile) || cleared) && (!tile->hasCityZone() || cleared);
                 state.inBuildRange=getMap().isWithinBuildRange(x,y,getHouse());
                 return state;
             });
@@ -6011,10 +6012,10 @@ void QuantBot::build(int militaryValue) {
                             if (!getMap().tileExists(x, y)) return false;
                             const Tile* tile = getMap().getTile(x, y);
                             if (tile->isRoad() || !tile->isRock() || tile->isMountain()
-                                || tile->isBlocked() || tile->hasCityZone()) return false;
+                                || tile->hasCityZone()) return false;
                         }
-                        return getMap().okayToPlaceStructure(site.x, site.y, span.x, span.y,
-                            false, getHouse(), false, slab);
+                        // Nothing standing on it but our own traffic (the footprint rule).
+                        return placeableAmongOwnUnits(site.x, site.y, span.x, span.y, slab);
                     };
 
 					// Check if we have a pre-stored location (from concrete pre-placement)
@@ -6024,7 +6025,7 @@ void QuantBot::build(int militaryValue) {
 
 						// Verify the location is still valid
 						if ((!placingSlab || plannedSlabLegal(itemToBePlaced, location))
-                            && getMap().okayToPlaceStructure(location.x, location.y, itemsize.x, itemsize.y, false, getHouse(), false, itemToBePlaced)
+                            && placeableAmongOwnUnits(location.x, location.y, itemsize.x, itemsize.y, itemToBePlaced)
                             && (itemToBePlaced != Structure_Road || !getMap().getTile(location.x,location.y)->isRoadConnection())
                             && cityRoadImpact(getMap(), location.x, location.y, itemsize.x, itemsize.y, itemToBePlaced).preservesConnections
                             && !overlapsReservedStructure(location.x, location.y, itemsize.x, itemsize.y)
@@ -6222,7 +6223,9 @@ void QuantBot::build(int militaryValue) {
                             if (!footprintPrepared(location)) {
                                 // Same legality the planned site had to satisfy:
                                 // real engine placement, no reservation overlap,
-                                // ground access, roads and neighbouring lots.
+                                // ground access, roads and neighbouring lots. A
+                                // substitute is only taken if it is free now: the
+                                // planned site is the one that waits for our units.
                                 auto usableSite=[&](const Coord& site) {
                                     return footprintPrepared(site)
                                         && getMap().okayToPlaceStructure(site.x,site.y,span.x,span.y,
@@ -6257,6 +6260,24 @@ void QuantBot::build(int militaryValue) {
                                     // it was planned for.
                                     tracePlacementIssue("placement_unprepared","footprint_not_prepared",location);
                                 }
+                            }
+                        }
+                        // The footprint rule: our own units on the site are asked off it, as the
+                        // pre-placement queue asks them off a planned plot, and the building waits
+                        // for them instead of moving elsewhere. A unit that was ordered off and
+                        // cannot leave makes the site illegal (placeableAmongOwnUnits), so the
+                        // next pass plans another one.
+                        if (location.isValid()) {
+                            const Coord span = getStructureSize(itemToBePlaced);
+                            if (ownUnitsOnFootprint(location.x, location.y, span.x, span.y)) {
+                                doMoveOwnUnitsOffPlot(pConstYard, itemToBePlaced, location.x, location.y);
+                                if (placeLocations.empty() || placeLocations.front() != location)
+                                    placeLocations.push_front(location);
+                                if (!placingSlab && itemToBePlaced != Structure_Road)
+                                    reservedStructures[planningBuilder] = {itemToBePlaced, location};
+                                if (emitStatsLog) tracePlacementIssue("placement_deferred", "own_units_leaving_site", location);
+                                location = Coord::Invalid();
+                                placementIssueHandled = true;
                             }
                         }
 						if (location.isValid()) {

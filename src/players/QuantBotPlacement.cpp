@@ -244,6 +244,77 @@ bool QuantBot::overlapsReservedStructure(int x, int y, int width, int height) co
     return false;
 }
 
+bool QuantBot::ownUnitCannotLeave(const UnitBase* unit) const {
+    // Ordered away (a forced move) yet standing with no path coming: the walk off the site
+    // failed, so the site waits for nothing and is planned elsewhere instead.
+    return !unit->isRespondable()
+        || (unit->wasForced() && !unit->isMoving() && !unit->hasPendingPathRequest()
+            && unit->getDestination().isValid() && unit->getDestination() != unit->getLocation());
+}
+
+bool QuantBot::tileBlocksOwnPlacement(const Tile* tile) const {
+    if (tile->isMountain() || tile->hasAStructure()) return true;
+    if (tile->hasANonInfantryGroundObject()) {
+        const auto* unit = dynamic_cast<const UnitBase*>(tile->getNonInfantryGroundObject());
+        if (!unit || unit->getOwner() != getHouse() || ownUnitCannotLeave(unit)) return true;
+    }
+    for (const Uint32 id : tile->getInfantryList()) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || unit->getOwner() != getHouse() || ownUnitCannotLeave(unit)) return true;
+    }
+    return false;
+}
+
+bool QuantBot::placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const {
+    // The engine check with units ignored (which also skips its structure test), then the
+    // footprint itself: no mountain or structure, and nobody but our own leaving traffic.
+    if (!getMap().okayToPlaceStructure(x, y, width, height, false,
+            item == Structure_ConstructionYard ? nullptr : getHouse(), true, item)) return false;
+    for (int ty = y; ty < y + height; ++ty)
+        for (int tx = x; tx < x + width; ++tx)
+            if (tileBlocksOwnPlacement(getMap().getTile(tx, ty))) return false;
+    return true;
+}
+
+bool QuantBot::ownUnitsOnFootprint(int x, int y, int width, int height) const {
+    for (int ty = y; ty < y + height; ++ty)
+        for (int tx = x; tx < x + width; ++tx) {
+            if (!getMap().tileExists(tx, ty)) continue;
+            const Tile* tile = getMap().getTile(tx, ty);
+            if (tile->hasANonInfantryGroundObject()) {
+                const auto* object = tile->getNonInfantryGroundObject();
+                if (object && object->isAUnit() && object->getOwner() == getHouse()) return true;
+            }
+            for (const Uint32 id : tile->getInfantryList()) {
+                const auto* object = getObject(id);
+                if (object && object->getOwner() == getHouse()) return true;
+            }
+        }
+    return false;
+}
+
+bool QuantBot::onPlannedSite(Coord p) const {
+    for (const auto& entry : reservedStructures) {
+        const auto size = getStructureSize(entry.second.item);
+        if (CityPlacementPolicy::overlaps(p.x, p.y, 1, 1, entry.second.location.x, entry.second.location.y,
+                size.x, size.y)) return true;
+    }
+    return false;
+}
+
+void QuantBot::keepPlannedSitesClear() {
+    // Every yard's planned site, in yard id order (the map's), so every peer issues the same
+    // orders. Units walking through are left alone; idle and holding units are sent to the
+    // nearest free tile beside the site.
+    for (const auto& [builderID, plan] : reservedStructures) {
+        const auto* yard = dynamic_cast<const ConstructionYard*>(getObject(builderID));
+        if (!yard || yard->getOwner() != getHouse() || !plan.location.isValid()) continue;
+        const Coord size = getStructureSize(plan.item);
+        if (!ownUnitsOnFootprint(plan.location.x, plan.location.y, size.x, size.y)) continue;
+        doMoveOwnUnitsOffPlot(yard, plan.item, plan.location.x, plan.location.y);
+    }
+}
+
 namespace {
 bool needsGroundExit(Uint32 item) {
     return item == Structure_HeavyFactory || item == Structure_LightFactory
@@ -661,14 +732,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 ++buildRangeSkipped;
                 continue;
             }
-            // First check if this location is valid for building
-			if (getMap().okayToPlaceStructure(placeLocationX, placeLocationY, newSizeX, newSizeY,
-				false, (itemID == Structure_ConstructionYard) ? nullptr : getHouse(), false, itemID)) {
+            // First check if this location is valid for building. Our own units standing
+            // there are traffic (the footprint rule): they are asked off once it is planned.
+			if (placeableAmongOwnUnits(placeLocationX, placeLocationY, newSizeX, newSizeY, itemID)) {
 
                 // A zone may spill onto sand, but slabs cannot. When foundations
                 // are enabled, choose a footprint that can actually be prepared.
                 if (cityZonePlacement && getGameInitSettings().getGameOptions().concreteRequired
-                    && !getMap().okayToPlaceStructure(placeLocationX,placeLocationY,newSizeX,newSizeY,false,getHouse())) continue;
+                    && !getMap().okayToPlaceStructure(placeLocationX,placeLocationY,newSizeX,newSizeY,false,getHouse(),true)) continue;
                 ++candidates;
                 if (overlapsReservedStructure(placeLocationX, placeLocationY, newSizeX, newSizeY)) { ++reservedRejected; continue; }
                 if ((cityZonePlacement || planningCityProductionPlots)
@@ -1407,9 +1478,8 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
 	// Check every tile on the map for valid placement
 	for (int x = 0; x <= getMap().getSizeX() - newSizeX; x++) {
 		for (int y = 0; y <= getMap().getSizeY() - newSizeY; y++) {
-			// First check if this location is valid for building
-			if (getMap().okayToPlaceStructure(x, y, newSizeX, newSizeY, false,
-				(itemID == Structure_ConstructionYard) ? nullptr : getHouse(), false, itemID)) {
+			// First check if this location is valid for building (own units are traffic)
+			if (placeableAmongOwnUnits(x, y, newSizeX, newSizeY, itemID)) {
 
                 if (overlapsReservedStructure(x, y, newSizeX, newSizeY)
                     || !preservesGroundAccess(itemID,Coord(x,y))) continue;
@@ -1577,7 +1647,7 @@ Coord QuantBot::findPerimeterTurretLocation() {
             const int along = int((int64_t(dx) * p.forward.x + int64_t(dy) * p.forward.y) / p.length);
             const int across = int((int64_t(dy) * p.forward.x - int64_t(dx) * p.forward.y) / p.length);
             if (!Force::onPerimeterBand(along, across, p.depth)) continue;
-            if (!getMap().okayToPlaceStructure(x, y, 1, 1, false, getHouse(), false, Structure_RocketTurret)) continue;
+            if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
             if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
             if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
             if (currentGame->isCitySimEnabled()
@@ -1831,7 +1901,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
             const int x=cell%w, y=cell/w;
             if (x>w-size.x || y>h-size.y) continue;
             if (!candidates[y*w+x] || overlapsReservedStructure(x,y,size.x,size.y)
-                || !getMap().okayToPlaceStructure(x,y,size.x,size.y,false,getHouse(),false,item)
+                || !placeableAmongOwnUnits(x,y,size.x,size.y,item)
                 || !preservesGroundAccess(item,Coord(x,y))) continue;
             const auto road = cityRoadImpact(getMap(),x,y,size.x,size.y,item);
             if (!road.preservesConnections || (item == Structure_RocketTurret && road.junctionBonus <= 0)
@@ -2068,7 +2138,7 @@ Coord QuantBot::findCityTurretPlaceLocation(Uint32 itemID, int* defenseScore, in
     for (int cell=scan.begin;cell<scan.end;++cell) {
         const int x=cell%w, y=cell/w;
         if (!candidates[y*w+x] || overlapsReservedStructure(x, y, 1, 1)) continue;
-        if (!getMap().okayToPlaceStructure(x, y, 1, 1, false, getHouse(), false, itemID)) continue;
+        if (!placeableAmongOwnUnits(x, y, 1, 1, itemID)) continue;
         if (!preservesGroundAccess(itemID,Coord(x,y))) continue;
         const auto roads = cityRoadImpact(getMap(), x, y, 1, 1, itemID);
         if (!roads.preservesConnections
@@ -2539,11 +2609,10 @@ Coord QuantBot::findPlaceLocationSimple(Uint32 itemID) {
 	// Check every tile on the map for valid placement
 	for (int x = 0; x <= getMap().getSizeX() - newSizeX; x++) {
 		for (int y = 0; y <= getMap().getSizeY() - newSizeY; y++) {
-			// First check if this location is valid for building
-			if (getMap().okayToPlaceStructure(x, y, newSizeX, newSizeY, false,
-				(itemID == Structure_ConstructionYard) ? nullptr : getHouse(), false, itemID)) {
+			// First check if this location is valid for building (own units are traffic)
+			if (placeableAmongOwnUnits(x, y, newSizeX, newSizeY, itemID)) {
                 if (DuneCity::isCityZoneStructure(itemID) && getGameInitSettings().getGameOptions().concreteRequired
-                    && !getMap().okayToPlaceStructure(x,y,newSizeX,newSizeY,false,getHouse())) continue;
+                    && !getMap().okayToPlaceStructure(x,y,newSizeX,newSizeY,false,getHouse(),true)) continue;
                 if (!preservesGroundAccess(itemID,Coord(x,y))) continue;
 
 				FixPoint score = 0;

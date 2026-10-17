@@ -2203,10 +2203,11 @@ Coord QuantBot::armyAssemblyAnchor() const {
     }
     // Perimeter hold (V, docs/formations.md "Round 5"): while outnumbered the army stands on
     // the enemy-facing base perimeter and meets attackers there (only the garrison holds it: a
-    // withdrawal or recovery still comes in to the shelter). Not in the city simulation, where
-    // that edge is the ground the city's next lots are placed on.
+    // withdrawal or recovery still comes in to the shelter). In the city simulation too: the
+    // footprint rule keeps the holding troops off planned sites and out of the site search
+    // ("Planned sites and the army").
     if (garrisoned() && forceVariant(kForcePerimeterHold) && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
-        && !localSquadWithdraw && !currentGame->isCitySimEnabled()) {
+        && !localSquadWithdraw) {
         const Coord perimeterPoint = perimeter().point;
         if (perimeterPoint.isValid()) return perimeterPoint;
     }
@@ -2273,7 +2274,7 @@ std::vector<Coord> QuantBot::assemblySlots(Coord anchor, int radius) const {
         // be reordered on every pass.
         if (blockDistance(anchor, p).lround() > r) continue;
         const auto* tile = getMap().getTile(p);
-        if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom()) continue;
+        if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom() || onPlannedSite(p)) continue;
         if (!offensiveAssemblySlot(p)) continue;
         if (dangerAt(p) != 0) continue;
         slots.push_back(p);
@@ -2302,7 +2303,7 @@ bool QuantBot::withdrawUnit(const UnitBase* unit, Coord anchor, int radius,
         const Coord p = anchor + Coord(dx, dy);
         return getMap().tileExists(p) && blockDistance(anchor, p).lround() <= arrival
             && (!reserved || !reserved->count(key(p)))
-            && !getMap().getTile(p)->isSpiceBloom()
+            && !getMap().getTile(p)->isSpiceBloom() && !onPlannedSite(p)
             && unit->canPass(p.x, p.y) && dangerAt(p) == 0;
     };
     // The hashed scatter comes FIRST, and the bare anchor is only a last
@@ -2456,7 +2457,7 @@ void QuantBot::applyArmyPosture(int& orderBudget) {
             const int64_t k = tileKey(p);
             if (taken.count(k) || reserved.count(k)
                 || blockDistance(rally, p).lround() > std::max(1, radius)
-                || getMap().getTile(p)->isSpiceBloom() || !unit->canPass(p.x, p.y) || dangerAt(p) != 0) continue;
+                || getMap().getTile(p)->isSpiceBloom() || onPlannedSite(p) || !unit->canPass(p.x, p.y) || dangerAt(p) != 0) continue;
             doMove2Pos(unit, p.x, p.y, true);
             if (--taken[tileKey(current)] == 0) taken.erase(tileKey(current));
             ++taken[k];
@@ -3159,7 +3160,7 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     if (*orderBudget<=0 || currentGame->getPathRequestQueueSize()>150) return;
     const auto offset=SimpleArmyPolicy::rallyOffset(unit->getObjectID(),radius.lround(),[&](int x,int y) {
         const Coord p=regroup+Coord(x,y);
-        return getMap().tileExists(p) && unit->canPass(p.x,p.y) && dangerAt(p)==0
+        return getMap().tileExists(p) && unit->canPass(p.x,p.y) && dangerAt(p)==0 && !onPlannedSite(p)
             && (!recoveryHold || offensiveAssemblySlot(p));
     });
     if (!offset) return;

@@ -22,6 +22,11 @@
 //      most, and launches from the bundle once 70% stand there; an attack on a building pulls
 //      defenders out of the bundle; save/load mid-gather and while the gate waits restores the
 //      bundle exactly and re-saves the same bytes; a 9862 save has no bundle.
+//   8. Planned sites and the army (the footprint rule): our own tank on a site does not make it
+//      unplaceable for the AI's site search, another house's unit does; holding/bundle slots skip
+//      a planned site; an idle tank on it is sent to a free tile beside it and leaves; a building
+//      finished while a tank stands on its site waits (site and reservation kept), the tank is
+//      asked off, and the building is then placed exactly on its planned site.
 void runForceConcentrationProbe(Game& game) {
     auto require=[](bool ok,const char* why){
         if(!ok){SDL_Log("FORCE_PROBE_FAIL: %s",why);throw std::runtime_error(why);}
@@ -530,8 +535,8 @@ void runForceConcentrationProbe(Game& game) {
             require(along(perimeter.point)>=perimeter.depth-Force::kPerimeterInnerTiles
                 && !currentGameMap->getTile(perimeter.point)->hasAStructure(),
                 "The perimeter point is not on the enemy-facing edge of the base");
-            // The garrison holds the perimeter (the house anchor, with the posture machine on);
-            // in the city simulation it holds the protected rally (the edge is where lots go).
+            // The garrison holds the perimeter (the house anchor, with the posture machine on), in
+            // the city simulation too: the footprint rule keeps it off planned sites (section 8).
             getQuantBotConfig().recovery.enabled=true;
             bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
             bot->localSquadWithdraw=false;
@@ -541,10 +546,8 @@ void runForceConcentrationProbe(Game& game) {
             game.citySimEnabled_=true;
             const Coord cityAnchor=bot->armyAssemblyAnchor();
             game.citySimEnabled_=savedCitySim;
-            require(vanillaAnchor==perimeter.point && bot->reserveHeldHome(),
+            require(vanillaAnchor==perimeter.point && cityAnchor==perimeter.point && bot->reserveHeldHome(),
                 "The outnumbered reserve does not hold the perimeter");
-            require(cityAnchor!=perimeter.point && (bot->protectedRally.isInvalid() || cityAnchor==bot->protectedRally),
-                "The outnumbered reserve holds the perimeter in the city simulation");
             getQuantBotConfig().recovery.enabled=false;
             // A perimeter turret site: on the band and legal, and none when the band has no
             // legal ground at all (rock that is free and in build range).
@@ -656,6 +659,130 @@ void runForceConcentrationProbe(Game& game) {
             bot->defenceAssignments.clear();
             bot->enemySightings.clear();
             retireAll();
+        }
+
+        // ---- 8. Planned sites and the army (the footprint rule) ------------------------------
+        {
+            bot->forceVariantOverride=QuantBot::kNoForceOverride;
+            bot->customWave.members.clear();
+            bot->defenceAssignments.clear();
+            // Clear rock for a yard and the wind trap beside it (with a tile of margin), no enemy
+            // within 14 tiles: the fixture uses origin + (3..9, 7..10).
+            origin=Coord::Invalid();
+            for(int y=0;y+12<currentGameMap->getSizeY() && origin.isInvalid();++y)
+                for(int x=0;x+11<currentGameMap->getSizeX() && origin.isInvalid();++x) {
+                    bool clear=true;
+                    for(const Coord& at:enemyThings)
+                        if(std::max(std::abs(at.x-(x+6)),std::abs(at.y-(y+8)))<14) { clear=false; break; }
+                    for(int dy=6;dy<=11 && clear;++dy) for(int dx=2;dx<=10 && clear;++dx) {
+                        const auto* tile=currentGameMap->getTile(x+dx,y+dy);
+                        if(!tile->isRock() || tile->isMountain() || tile->hasAGroundObject()
+                            || tile->hasCityZone() || tile->isRoad()) clear=false;
+                    }
+                    if(clear) origin=Coord(x,y);
+                }
+            require(origin.isValid(),"Footprint fixture needs clear rock away from the enemy");
+            // Without required concrete the finished building has no reason to prefer a prepared
+            // footprint elsewhere: it goes exactly where it was planned, or waits.
+            const bool savedConcrete=game.getGameInitSettings().getGameOptions().concreteRequired;
+            auto setConcrete=[&](bool required) {
+                auto options=game.getGameInitSettings().getGameOptions();
+                options.concreteRequired=required;
+                game.gameInitSettings.setGameOptions(options);
+            };
+            setConcrete(false);
+            try {
+                auto* yard=dynamic_cast<ConstructionYard*>(place(owner,Structure_ConstructionYard,Coord(4,8)));
+                require(yard,"Fixture construction yard placement failed");
+                const Coord site=origin+Coord(7,8);
+                const Coord size=getStructureSize(Structure_WindTrap);
+                auto onSite=[&](Coord p){ return p.x>=site.x && p.x<site.x+size.x && p.y>=site.y && p.y<site.y+size.y; };
+                auto idleHere=[&](UnitBase* unit){
+                    bot->doSetAttackMode(unit,AREAGUARD);
+                    bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                    unit->setForced(false);
+                };
+                auto* tank=spawn(owner,Unit_Tank,Coord(8,9));
+                publish();
+
+                // The site search: our own tank is traffic, another house's unit is not.
+                require(!currentGameMap->okayToPlaceStructure(site.x,site.y,size.x,size.y,false,owner,false,Structure_WindTrap)
+                    && bot->placeableAmongOwnUnits(site.x,site.y,size.x,size.y,Structure_WindTrap),
+                    "Our own tank standing on a site made it unplaceable for the AI");
+                auto* intruder=spawn(enemy,Unit_Trooper,Coord(7,8));
+                publish();
+                require(!bot->placeableAmongOwnUnits(site.x,site.y,size.x,size.y,Structure_WindTrap),
+                    "Another house's unit on a site did not block it");
+                intruder->setHealth(0);
+                game.processObjects(); ++game.gameCycleCount; publish();
+
+                // Planned: holding, bundle and muster slots skip the footprint.
+                bot->reservedStructures[yard->getObjectID()]={Structure_WindTrap,site};
+                require(bot->onPlannedSite(site) && bot->onPlannedSite(site+Coord(1,1))
+                    && !bot->onPlannedSite(site+Coord(2,0)) && !bot->onPlannedSite(site+Coord(0,-1)),
+                    "The planned site is not the wind trap's footprint");
+                {
+                    std::set<int64_t> taken;
+                    for(int i=0;i<12;++i) {
+                        const Coord slot=bot->huntPartySlot(tank,site+Coord(1,1),2,taken);
+                        require(slot.isInvalid() || !onSite(slot),"A holding or bundle slot was put on a planned site");
+                    }
+                }
+
+                // An idle tank on it is sent to a free tile beside it and leaves.
+                idleHere(tank);
+                bot->keepPlannedSitesClear();
+                require(tank->wasForced() && tank->getDestination().isValid() && !onSite(tank->getDestination()),
+                    "An idle tank on a planned site was not sent off it");
+                int cycles=0;
+                for(;cycles<MILLI2CYCLES(20000) && (onSite(tank->getLocation()) || tank->isMoving());++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(!onSite(tank->getLocation()),"The tank never left the planned site");
+                SDL_Log("FORCE_PROBE: footprint idle tank left the site in %d cycles to %d,%d",cycles,
+                    tank->getX(),tank->getY());
+
+                // The building is finished while another tank stands on the site: it waits and the
+                // tank is asked off; once the tank has left it is placed exactly where it was planned.
+                bot->doProduceItem(yard,Structure_WindTrap);
+                for(cycles=0;cycles<MILLI2CYCLES(180000) && !yard->isWaitingToPlace();++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(yard->isWaitingToPlace() && yard->getCurrentProducedItem()==Structure_WindTrap,
+                    "The fixture wind trap did not finish");
+                auto* blocker=spawn(owner,Unit_Tank,Coord(7,8));
+                publish();
+                idleHere(blocker);
+                bot->reservedStructures[yard->getObjectID()]={Structure_WindTrap,site};
+                auto& planned=bot->builderPlaceLocations[yard->getObjectID()];
+                planned.assign(1,site);
+                bot->build(bot->militaryUnitValue());
+                require(!currentGameMap->getTile(site)->hasAStructure() && yard->isWaitingToPlace(),
+                    "The finished wind trap did not wait for our tank on its site");
+                require(!planned.empty() && planned.front()==site
+                    && bot->reservedStructures.count(yard->getObjectID())
+                    && bot->reservedStructures.at(yard->getObjectID()).location==site,
+                    "The waiting wind trap lost its planned site");
+                require(blocker->wasForced() && blocker->getDestination().isValid() && !onSite(blocker->getDestination()),
+                    "The tank on the finished building's site was not sent off it");
+                for(cycles=0;cycles<MILLI2CYCLES(20000) && (onSite(blocker->getLocation()) || blocker->isMoving());++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(!onSite(blocker->getLocation()),"The tank never left the finished building's site");
+                publish();
+                bot->build(bot->militaryUnitValue());
+                const auto* placed=currentGameMap->getTile(site)->getGroundObject();
+                require(placed && placed->isAStructure() && placed->getItemID()==Structure_WindTrap
+                    && placed->getOwner()==owner && placed->getLocation()==site,
+                    "The wind trap was not placed on its planned site");
+                fixtureStructureIds.push_back(placed->getObjectID());
+                SDL_Log("FORCE_PROBE: footprint wind trap placed on plan at %d,%d after the tank left (%d cycles)",
+                    site.x,site.y,cycles);
+                bot->reservedStructures.erase(yard->getObjectID());
+                bot->builderPlaceLocations.erase(yard->getObjectID());
+                retireAll();
+            } catch(...) { setConcrete(savedConcrete); throw; }
+            setConcrete(savedConcrete);
         }
     } catch(...) {
         getQuantBotConfig().recovery.enabled=savedRecovery;

@@ -237,7 +237,7 @@ const QuantBot::Perimeter& QuantBot::perimeter() const {
     auto usable = [&](Coord p) {
         if (!getMap().tileExists(p)) return false;
         const auto* tile = getMap().getTile(p);
-        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom();
+        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && !onPlannedSite(p);
     };
     for (int ring = 0; ring <= 6 && perimeterCache.point.isInvalid(); ++ring)
         for (int dy = -ring; dy <= ring && perimeterCache.point.isInvalid(); ++dy)
@@ -538,7 +538,8 @@ Coord QuantBot::forwardBundlePoint() {
     auto usable = [&](Coord p) {
         if (!getMap().tileExists(p)) return false;
         const auto* tile = getMap().getTile(p);
-        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0;
+        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0
+            && !onPlannedSite(p);
     };
     bundlePoint = Coord::Invalid();
     for (int ring = 0; ring <= 8 && bundlePoint.isInvalid(); ++ring)

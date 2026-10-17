@@ -1,3 +1,38 @@
+## 2026-10-17 — QuantBot footprint rule: AI units move off planned building sites; perimeter hold now also in the city simulation (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
+
+Stefan: "fix the dune mod issue - when the ai places buildings in the queue to be built then the ai units
+need to move off those tiles". Details, trace and table: `docs/formations.md` ("Planned sites and the army").
+
+- **Rule (every QuantBot, every mode)**: own ground units are traffic to the site search
+  (`QuantBot::placeableAmongOwnUnits`: engine check with units ignored; mountains, structures, other houses'
+  units and own units that were ordered off but cannot leave still block) - findPlaceLocation(+Simple),
+  turret/perimeter-turret/city service/city turret searches, foundation planner paving, planned site and slab
+  checks; a prepared *substitute* footprint must be free now. Every unit pass `keepPlannedSitesClear()` asks
+  idle/holding units on any yard's reserved site off it via `ConstructionYard::moveOwnUnitsOffPlot(idleOnly)`
+  (the pre-placement queue's path, now public; `Player::doMoveOwnUnitsOffPlot`). A finished building whose
+  site has own units waits (site + reservation kept) and is placed on plan once they leave. Perimeter, bundle,
+  muster/hunt-party, recall, guard, assembly and regroup slots skip planned sites (`onPlannedSite`).
+- **City-mode exclusion of the perimeter hold removed.** Cause of the `quantbot_no_spice_income_low-cash`
+  failure: holding troops on base rock made `Map::okayToPlaceStructure` (counts units) reject sites - the
+  production-room survey reported no factory site from cycle 25, so at cycle 4,925
+  `city_vehicle_production_bootstrap` spent 400 of 423 credits on a Radar and house 0 sat on 16-113 credits
+  for 3.3 min with no Industrial zone; with the search alone fixed another house stalled 2,500 cycles on
+  `foundation_incomplete` (planner treated unit tiles as unpaveable), also fixed. A/B on 8 seeds per map
+  (same code, hold v city gate): low-cash 8/8 v 7/8 runs pass, city net 210,261 v 212,625, zones 253 v 316,
+  houses alive 25 v 29 (zones per surviving house 8.8 v 9.9); 192x192 DuneCity 8/8 v 8/8, net 192,522 v
+  192,453. No gate kept.
+- **Probe** `quantbot_force_concentration` section 8: own tank on a wind trap site does not make it
+  unplaceable, an enemy trooper does; slots skip the site; an idle tank is sent off (173 cycles); a wind trap
+  finished while a tank stands on its site waits, the tank is asked off, and it is placed on the planned site.
+  Section 7 now expects the perimeter anchor in the city simulation too.
+- Protocol 80 comment notes the rule (unreleased 80 = this branch). No save change.
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, preplace_queue_tests, preplace_queue_probe,
+  game_command_regressions, save_scenario_export, save_scenario_input_preservation, formation_planner_tests,
+  formation_movement_probe and all 32 quantbot_* incl. force_concentration, no_spice_income_low-cash and
+  all_against_atreides: 40/40 (an intermediate run failed opening-economy vanilla/Dune2R until the prepared
+  substitute footprint was required to be free now). all-against-Atreides 6/6: 38.6 33.9 34.9 30.2 31.8
+  31.1 min (round 5: 29.3 33.0 33.9 33.5 30.7 30.3).
+
 ## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
 
 Stefan: optimise how QuantBot concentrates force on defence; "you can build up rocket turrets"; "defend at

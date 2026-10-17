@@ -748,6 +748,26 @@ private:
     void recordLostColonists();
     Uint32 planningBuilder = NONE_ID;
     bool overlapsReservedStructure(int x, int y, int width, int height) const;
+    // ---- The footprint rule (docs/formations.md "Planned sites and the army") --------------
+    // This house's own ground units are traffic on a site it plans, not an obstacle: the site
+    // is chosen as if they were not there, they are asked off it (the pre-placement queue's
+    // idle-unit rule) and the finished building waits for them while they leave. Another
+    // house's unit, a structure, or an own unit that was ordered away and cannot leave still
+    // blocks the site.
+    /// An own unit standing here is in the way for good: unresponsive, or ordered away and stuck.
+    bool ownUnitCannotLeave(const UnitBase* unit) const;
+    /// A mountain, a structure, another house's unit or an own unit that cannot leave.
+    bool tileBlocksOwnPlacement(const Tile* tile) const;
+    /// Map::okayToPlaceStructure with own leaving-capable units ignored (other units, structures
+    /// and mountains still block). tilesRequired/item as the engine check.
+    bool placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const;
+    /// Does any unit of this house stand on the footprint?
+    bool ownUnitsOnFootprint(int x, int y, int width, int height) const;
+    /// Is p inside any planned site of this house (every yard's reservation)? Holding, bundle,
+    /// muster, recall and guard slots skip such tiles.
+    bool onPlannedSite(Coord p) const;
+    /// Once per unit pass: idle own units standing on a planned site are asked off it.
+    void keepPlannedSitesClear();
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;

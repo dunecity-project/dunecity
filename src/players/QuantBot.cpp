@@ -673,6 +673,8 @@ void QuantBot::update() {
 
     updateCampaignWave();
 	checkAllUnits();
+    // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
+    keepPlannedSitesClear();
 
 	// Phased custom single-player handled the whole timer block on its own build
 	// phase above and returned; reaching here means this is the unit phase (or a

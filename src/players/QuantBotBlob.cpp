@@ -129,7 +129,7 @@ Coord QuantBot::huntPartySlot(const UnitBase* unit, Coord centre, int radius, st
     auto usable = [&](int dx, int dy) {
         const Coord p = centre + Coord(dx, dy);
         if (!getMap().tileExists(p) || tiles(centre, p) > r || reserved.count(key(p))) return false;
-        return !getMap().getTile(p)->isSpiceBloom() && unit->canPass(p.x, p.y);
+        return !getMap().getTile(p)->isSpiceBloom() && !onPlannedSite(p) && unit->canPass(p.x, p.y);
     };
     Coord slot = Coord::Invalid();
     // The established hashed scatter first (as withdrawUnit()), so members spread over the

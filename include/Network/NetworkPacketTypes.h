@@ -229,7 +229,10 @@
 //     1.5x the threat with the bundle first, distant defenders muster, and a worker raid the
 //     troops in reach cannot match gets nobody ([Force Concentration] PerimeterHold,
 //     PerimeterTurrets, SizedDefence, hashed; the remembered army and the musters are saved,
-//     9864). A 79 peer would order the same AI units differently and desync. Save 9864.
+//     9864). Also the footprint rule: own units are traffic to the AI's site search, idle ones
+//     are asked off planned sites, a finished building waits for them, and the hold applies in
+//     the city simulation. A 79 peer would order the same AI units differently and desync.
+//     Save 9864.
 #define NETWORK_PROTOCOL_VERSION            80
 
 // Mod transfer limits
