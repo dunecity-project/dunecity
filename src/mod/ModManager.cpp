@@ -16,6 +16,7 @@
  */
 
 #include <mod/ModManager.h>
+#include <mod/BundledGameOptions.h>
 #include <mod/Workshop.h>
 #include <mod/ModPayloadIntegrity.h>
 #include <mod/ModTransferValidation.h>
@@ -68,50 +69,6 @@ static const char* QUANTBOT_CONFIG_DEFAULT = "QuantBot Config.ini.default";
 static const char* CUSTOM_HOUSE_CONFIG = "CustomHouse.ini";
 
 namespace {
-std::string vanillaOptions() {
-    std::ostringstream out;
-    out << "# Vanilla Game Options (default values)\n";
-    out << "[Game Options]\n";
-    out << "Game Speed = 16\n";
-    out << "Concrete Required = true\n";
-    out << "Fog of War = false\n";
-    out << "Start with Explored Map = false\n";
-    out << "Instant Build = false\n";
-    out << "Only One Palace = false\n";
-    out << "Rocket-Turrets Need Power = false\n";
-    out << "Sandworms Respawn = false\n";
-    out << "Killed Sandworms Drop Spice = false\n";
-    out << "Manual Carryall Drops = false\n";
-    out << "Maximum Number of Units Override = 0\n";
-    out << "Maximum Number of Harvesters Override = -1\n";
-    out << "City Effects = false\n";
-    return out.str();
-}
-std::string cityOptions() {
-    std::ostringstream out;
-    out << "# Dune City Game Options (default values)\n";
-    out << "[Game Options]\n";
-    out << "Game Speed = 16\n";
-    out << "Concrete Required = false\n";
-    out << "Fog of War = false\n";
-    out << "Start with Explored Map = true\n";
-    out << "Instant Build = false\n";
-    out << "Only One Palace = false\n";
-    out << "Rocket-Turrets Need Power = true\n";
-    out << "Sandworms Respawn = true\n";
-    out << "Killed Sandworms Drop Spice = true\n";
-    // Dune City plays with large armies on crowded maps, where the carryall is the only way out of
-    // a deadlock a human player cannot micro around. Vanilla, Tornie and Dune2R keep the original
-    // default. A player's own choice for this mod lives in the config's "Game Options dunecity"
-    // section and is layered over this file, so an explicit false is never overwritten by a reseed.
-    out << "Manual Carryall Drops = true\n";
-    out << "Maximum Number of Units Override = 0\n";
-    out << "Maximum Number of Harvesters Override = -1\n";
-    out << "Immortal Human Player = false\n";
-    out << "City Effects = true\n";  // dunecity mod opts in
-    return out.str();
-}
-
 std::filesystem::path findBundledModPath(const std::string& modName) {
     const std::filesystem::path dataRoot = getDuneLegacyDataDir();
     const std::filesystem::path candidates[] = {
@@ -449,7 +406,7 @@ std::string ModManager::installerContentHash(const std::string& name) const {
             expectedMetadata.setStringValue("Mod", "Game Version", VERSION);
             expectedMetadata.setStringValue("Mod", "Base Mod", "");
             expectedMetadata.setBoolValue("Mod", "Enables City Mode", city);
-            expected[GAME_OPTIONS_FILE] = Workshop::hashBytes(city ? cityOptions() : vanillaOptions());
+            expected[GAME_OPTIONS_FILE] = Workshop::hashBytes(city ? BundledGameOptions::city() : BundledGameOptions::vanilla());
         } else {
             const auto bundled = findBundledModPath(name);
             expected = collect(bundled);
@@ -459,7 +416,7 @@ std::string ModManager::installerContentHash(const std::string& name) const {
         const fs::path defaults = getInstallConfigPath();
         if(!expected.count(OBJECT_DATA_FILE)) expected[OBJECT_DATA_FILE] = digest(defaults / OBJECT_DATA_DEFAULT);
         if(!expected.count(QUANTBOT_CONFIG_FILE)) expected[QUANTBOT_CONFIG_FILE] = digest(defaults / QUANTBOT_CONFIG_DEFAULT);
-        if(!expected.count(GAME_OPTIONS_FILE)) expected[GAME_OPTIONS_FILE] = Workshop::hashBytes(vanillaOptions());
+        if(!expected.count(GAME_OPTIONS_FILE)) expected[GAME_OPTIONS_FILE] = Workshop::hashBytes(BundledGameOptions::vanilla());
         if(!fs::is_regular_file(installed / MOD_INI_FILE)
            || metadata(INIFile((installed / MOD_INI_FILE).string())) != expectedValues) return {};
         auto actual = collect(installed);
@@ -1571,12 +1528,7 @@ void ModManager::seedVanillaFromDefaults() {
     
     // Create GameOptions.ini with defaults (extracted from Dune Legacy.ini defaults)
     std::string gameOptionsPath = vanillaPath + "/" + GAME_OPTIONS_FILE;
-    // Binary: the installer identity hashes these exact bytes (vanillaOptions()); a text-mode
-    // stream writes CRLF on Windows, which made the bundled mod unrecognised there.
-    std::ofstream gameOptionsFile(gameOptionsPath, std::ios::binary | std::ios::trunc);
-    if (gameOptionsFile.is_open()) {
-        gameOptionsFile << vanillaOptions();
-        gameOptionsFile.close();
+    if (BundledGameOptions::write(gameOptionsPath, BundledGameOptions::vanilla())) {
         SDL_Log("ModManager: Created %s", GAME_OPTIONS_FILE);
     }
     
@@ -1625,10 +1577,7 @@ void ModManager::seedDunecityFromDefaults() {
     // (open map, sandworm respawn/spice, concrete required, rocket-turrets
     // need power). The city-mode toggle itself lives in mod.ini.
     std::string gameOptionsPath = dunecityPath + "/" + GAME_OPTIONS_FILE;
-    std::ofstream gameOptionsFile(gameOptionsPath, std::ios::binary | std::ios::trunc);
-    if (gameOptionsFile.is_open()) {
-        gameOptionsFile << cityOptions();
-        gameOptionsFile.close();
+    if (BundledGameOptions::write(gameOptionsPath, BundledGameOptions::city())) {
         SDL_Log("ModManager: Created %s (dunecity)", GAME_OPTIONS_FILE);
     }
 
