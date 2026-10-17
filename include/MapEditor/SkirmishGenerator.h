@@ -126,6 +126,11 @@ struct Params {
     Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 9;              ///< everything unlocked by default
+    /// Menu only, single player: watch the match. @a spectateClass plays the player's house
+    /// (with its AI partner, base, army and city as configured), every house is AI, and the
+    /// local player observes as Custom Game's Spectate does. The generated map is unchanged.
+    bool spectate = false;
+    std::string spectateClass = "qBotMedium";
 
     /// Multiplayer random map: @a starts generic start positions written as [Player1]..[PlayerN],
     /// every one with @a startSide's base, army and city; houses, players and teams are chosen
@@ -139,7 +144,7 @@ struct Params {
     void clamp(int houseCount);
     /// Last-used parameters, section "Random Skirmish" of the configuration file. The
     /// multiplayer screen keeps its own Mirrored starts choice (on by default) and never
-    /// writes the mod, which there is the host's.
+    /// writes the mod or Spectate, which there are the host's and the lobby's.
     void load(const INIFile& config);
     void save(INIFile& config) const;
 };

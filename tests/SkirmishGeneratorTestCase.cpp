@@ -579,6 +579,42 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     REQUIRE(fallback.seed == Params().seed);
 }
 
+TEST_CASE("Random skirmish: Spectate is remembered, single player only, and leaves the map alone", "[skirmish][generator]") {
+    INIFile config(false, std::string());
+    Params watch = params(96, 1, 2, Mode::DuneCity, 8, 20261018u);
+    watch.mod = "dunecity";
+    REQUIRE_FALSE(watch.spectate);
+    REQUIRE(watch.spectateClass == "qBotMedium");
+    watch.spectate = true; watch.spectateClass = "qBotHard";
+    watch.save(config);
+    Params back;
+    back.load(config);
+    REQUIRE(back.spectate); REQUIRE(back.spectateClass == "qBotHard");
+    // Watching changes who plays the player's house, never the generated map.
+    Params play = watch;
+    play.spectate = false;
+    REQUIRE(generate(watch, city()).ini == generate(play, city()).ini);
+    // The hosted screen neither reads nor writes it; the single-player choice survives a hosted visit.
+    Params hosted;
+    hosted.multiplayer = true;
+    hosted.load(config);
+    REQUIRE_FALSE(hosted.spectate);
+    hosted.spectate = true;
+    hosted.clamp(8);
+    REQUIRE_FALSE(hosted.spectate);
+    hosted.spectateClass = "AIPlayerEasy";
+    hosted.save(config);
+    Params again;
+    again.load(config);
+    REQUIRE(again.spectate); REQUIRE(again.spectateClass == "qBotHard");
+    // An empty class from a hand-edited file falls back to the default AI.
+    config.setStringValue("Random Skirmish", "Spectate AI", "");
+    Params empty;
+    empty.load(config);
+    empty.clamp(8);
+    REQUIRE(empty.spectateClass == "qBotMedium");
+}
+
 namespace {
 
 bool rockLike(TERRAINTYPE t) { return t == Terrain_Rock || t == Terrain_Mountain; }

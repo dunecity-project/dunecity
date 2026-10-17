@@ -16,6 +16,7 @@
 #include <ScreenBorder.h>
 #include <Tile.h>
 #include <players/Player.h>
+#include <players/HumanPlayer.h>
 #include <structures/StructureBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
@@ -206,7 +207,7 @@ void runMatch(const std::string& name, bool smoke) {
     skirmishRequire(SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode)).ini == result.ini,
                     "Generation is not deterministic against the live ObjectData");
     std::ofstream(probeOut(name + ".ini"), std::ios::binary) << result.ini;   // reviewable artifact
-    GameInitSettings init = RandomSkirmish::makeInit(result, effectiveGameOptions);
+    GameInitSettings init = RandomSkirmish::makeInit(result, effectiveGameOptions, params);
     init.randomSeed = params.seed;    // Test-only access, provided by -fno-access-control.
     auto game = startMatch(init);
     checkLoaded(*game, result, params);
@@ -420,6 +421,128 @@ void runMenu() {
 }
 
 /**
+    Spectate, through the real Random Skirmish screen and its Start step (prepareStart is everything
+    Start does before the blocking game loop): clicking Spectate enables the house-AI choice; the
+    start is a local-spectator one with no human anywhere, the player's house played by the chosen
+    AI plus its partner, every house AI; the match runs as an observed game. The choice is
+    remembered, and clicking Spectate off gives the player's seat back to the human.
+*/
+void runSpectate() {
+    const auto click = [](Button& button) {
+        button.handleMouseLeft(1, 1, true);
+        button.handleMouseLeft(1, 1, false);
+    };
+    const auto classesOf = [](const House* house) {
+        std::vector<std::string> classes;
+        for(const auto& player : house->getPlayerList()) classes.push_back(player->getPlayerclass());
+        return classes;
+    };
+    GameInitSettings watched;
+    {
+        RandomSkirmishMenu menu;
+        skirmishRequire(menu.spectateBox.getParent() != nullptr && menu.spectateBox.isVisible() && !menu.spectateBox.isChecked(),
+                        "Spectate is not offered, or starts on, in a fresh profile");
+        skirmishRequire(!menu.spectateAIBox.isVisible() && !menu.spectateAIBox.isEnabled() && !menu.spectateAICaption->isVisible(),
+                        "The house AI row is shown while not spectating");
+        skirmishRequire(!menu.spectateBox.getTooltipText().empty(), "Spectate has no tooltip");
+        for(size_t i = 0; i < menu.availableMods.size(); ++i)
+            if(menu.availableMods[i].name == "dunecity") { menu.modBox.setSelectedItem(static_cast<int>(i)); menu.onModChanged(); }
+        probeSelect(menu.sizeBox, 96);
+        probeSelect(menu.houseBox, HOUSE_ORDOS);
+        probeSelect(menu.alliesBox, 1);
+        probeSelect(menu.enemiesBox, 2);
+        menu.onPlayersChanged(false);
+        probeSelect(menu.partnerBox, PlayerFactory::getIndexByPlayerClass("qBotSupportMedium"));
+        probeSelect(menu.playerBaseBox, static_cast<int>(BaseSize::Small));
+        probeSelect(menu.playerCityBox, 1);
+        menu.seedBox.setText("20261018");
+        menu.fixedSeedBox.setChecked(true);
+        skirmishCapture(menu, "random-skirmish-spectate-off");
+        click(menu.spectateBox);
+        skirmishRequire(menu.spectateBox.isChecked() && menu.spectateAIBox.isVisible() && menu.spectateAIBox.isEnabled()
+                        && menu.spectateAICaption->isVisible(), "Clicking Spectate did not show the house AI choice");
+        skirmishRequire(menu.playerHeader->getText() == _("Your house starts with"), "The player's start header does not follow Spectate");
+        // The player's start rows stay live: the watched house still starts with them.
+        skirmishRequire(menu.partnerBox.isEnabled() && menu.playerBaseBox.isEnabled() && menu.playerArmyBox.isEnabled(),
+                        "Spectate disabled the watched house's start rows");
+        for(int i = 0; i < menu.spectateAIBox.getNumEntries(); ++i) {
+            const std::string c = PlayerFactory::getByIndex(menu.spectateAIBox.getEntryIntData(i))->getPlayerClass();
+            skirmishRequire(c != HUMANPLAYERCLASS && c.find("Support") == std::string::npos, "The house AI choice offers " + c);
+        }
+        probeSelect(menu.spectateAIBox, PlayerFactory::getIndexByPlayerClass("qBotHard"));
+        skirmishCapture(menu, "random-skirmish-spectate");
+        skirmishRequire(menu.prepareStart(watched), "Start could not prepare the spectated match");
+    }
+    skirmishRequire(watched.isLocalSpectator(), "The spectated start is not a local-spectator start");
+    for(const auto& info : watched.getHouseInfoList())
+        for(const auto& player : info.playerInfoList)
+            skirmishRequire(player.playerClass != HUMANPLAYERCLASS, "A spectated start seats a human");
+
+    // The observed match: every house AI, the player's house the chosen AI plus its partner.
+    {
+        auto game = startMatch(watched);
+        skirmishRequire(game->isObserving() && game->localObserver, "The spectated match is not observed");
+        skirmishRequire(pLocalPlayer != nullptr && pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID,
+                        "The local view is not the unregistered observer");
+        int houses = 0;
+        for(int h = 0; h < NUM_HOUSES; ++h) {
+            const House* house = game->getHouse(h);
+            if(house == nullptr) continue;
+            ++houses;
+            for(const auto& player : house->getPlayerList())
+                skirmishRequire(dynamic_cast<const HumanPlayer*>(player.get()) == nullptr, "A house has a human player while spectating");
+        }
+        skirmishRequire(houses == 4, "The spectated match does not hold the player's house, one ally and two enemies");
+        skirmishRequire(classesOf(game->getHouse(HOUSE_ORDOS)) == std::vector<std::string>{"qBotHard", "qBotSupportMedium"},
+                        "The watched house is not played by the chosen AI and its partner");
+        const StructureBase* yard = nullptr;
+        for(const StructureBase* s : structureList)
+            if(s->getOwner()->getHouseID() == HOUSE_ORDOS && s->getItemID() == Structure_ConstructionYard) yard = s;
+        skirmishRequire(yard != nullptr, "The watched house did not get its configured base");
+        SDL_Log("SKIRMISH_PROBE: spectated match loaded, %d houses, all AI, watched house Ordos qBotHard+qBotSupportMedium", houses);
+        SDL_Log("SKIRMISH_SMOKE_BEGIN: spectated");
+        const Uint32 cycles = MILLI2CYCLES(60 * 1000);
+        while(!game->finished && game->getGameCycleCount() < cycles) game->updateGameState();
+        SDL_Log("SKIRMISH_SMOKE_END: cycle=%u finished=%d", game->getGameCycleCount(), game->finished ? 1 : 0);
+        skirmishRequire(!game->finished && game->getGameCycleCount() >= cycles, "The spectated match did not run its minute");
+        skirmishRequire(game->isObserving() && pLocalPlayer->getPlayerID() == Player::OBSERVER_PLAYER_ID, "Observation ended while playing");
+        captureGame(*game, "ingame-spectator", Coord(yard->getLocation().x + 1, yard->getLocation().y + 1));
+        SDL_Log("SKIRMISH_PROBE: spectated match ran %u cycles", game->getGameCycleCount());
+        endMatch(game);
+    }
+
+    // Remembered; clicking Spectate off gives the seat back to the human.
+    GameInitSettings played;
+    {
+        RandomSkirmishMenu again;
+        skirmishRequire(again.spectateBox.isChecked() && again.spectateAIBox.isVisible() && again.spectateAIBox.isEnabled()
+                        && again.spectateAIBox.getSelectedEntryIntData() == PlayerFactory::getIndexByPlayerClass("qBotHard"),
+                        "Spectate and its house AI were not remembered");
+        click(again.spectateBox);
+        skirmishRequire(!again.spectateBox.isChecked() && !again.spectateAIBox.isVisible() && !again.spectateAICaption->isVisible()
+                        && again.playerHeader->getText() == _("You start with"), "Clicking Spectate off did not restore the player's rows");
+        skirmishRequire(again.prepareStart(played), "Start could not prepare the played match");
+    }
+    skirmishRequire(!played.isLocalSpectator(), "Turning Spectate off still starts a spectator match");
+    {
+        auto game = startMatch(played);
+        skirmishRequire(!game->isObserving(), "The played match is observed");
+        const House* own = game->getHouse(HOUSE_ORDOS);
+        skirmishRequire(own != nullptr && classesOf(own) == std::vector<std::string>{HUMANPLAYERCLASS, "qBotSupportMedium"},
+                        "The player's house does not hold the human and the partner again");
+        skirmishRequire(dynamic_cast<HumanPlayer*>(pLocalPlayer) != nullptr && pLocalPlayer->getHouse() == own
+                        && pLocalPlayer->getPlayername() == settings.general.playerName, "The human does not control the player's house");
+        for(int i = 0; i < 100; ++i) game->updateGameState();
+        SDL_Log("SKIRMISH_PROBE: Spectate off seats %s in Ordos with its partner", settings.general.playerName.c_str());
+        endMatch(game);
+    }
+    {
+        RandomSkirmishMenu third;
+        skirmishRequire(!third.spectateBox.isChecked(), "Spectate off was not remembered");
+    }
+}
+
+/**
     Multiplayer Random map, host side and a second peer, against the real menus and engine:
     Custom Game (LAN host) offers Random map...; its screen has no allies/enemies/AI rows and
     mirrors starts by default; Next saves an open-start map to MP User Maps; the host's map
@@ -445,6 +568,7 @@ void runMultiplayerLobby() {
         RandomSkirmishMenu menu(std::string("dunecity"));
         for(Widget* hidden : std::initializer_list<Widget*>{&menu.alliesBox, &menu.enemiesBox, &menu.enemiesAlliedBox, &menu.houseBox,
                                                             &menu.partnerBox, &menu.allyAIBox, &menu.enemyAIBox, &menu.modBox,
+                                                            &menu.spectateBox, &menu.spectateAIBox,
                                                             &menu.rulesButton, &menu.saveButton, &menu.startButton})
             skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
         skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
@@ -624,6 +748,7 @@ int runSkirmishProbe() {
     if(kind == "menu") runMenu();
     else if(kind == "mp-lobby") runMultiplayerLobby();
     else if(kind == "legacy-map") runLegacyMap();
+    else if(kind == "spectate") runSpectate();
     else if(kind == "render") runRender();
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());

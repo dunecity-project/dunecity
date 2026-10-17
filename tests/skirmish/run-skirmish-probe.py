@@ -20,6 +20,10 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/skirmis
                partner in the house: two players, base on positive power, in-game screenshots,
                smoke run
   partner-quantbot a full qBotMedium partner in the player's house loads
+  spectate     the screen's Spectate (DuneCity 96, Ordos + 1 ally + 2 enemies, qBotHard with a
+               qBotSupportMedium partner): Start's init is a local-spectator one with no human,
+               the observed match has only AI houses and runs a minute (screen and in-game
+               screenshots); the choice is remembered and Spectate off seats the human again
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
 
@@ -41,7 +45,7 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--cases', default='menu,mp-lobby,legacy-map,vanilla-1v1,allied-2v3,city-192,stefan-128,'
-                                       'partner-support,partner-quantbot,render')
+                                       'partner-support,partner-quantbot,spectate,render')
 parser.add_argument('--keep', action='store_true', help='Keep profiles and saves (screenshots are always kept)')
 parser.add_argument('--render-save', type=Path, help='render: also draw the map this saved match (.dls) started from')
 parser.add_argument('--render-tag', default='current', help='render: file-name prefix of the generated maps')
@@ -126,8 +130,8 @@ for case in args.cases.split(','):
             bad = [line for line in played.splitlines()[1:] if problem.search(line) and not startup_noise.search(line)]
             if bad:
                 raise RuntimeError(f'{label}: {len(bad)} problem line(s) in the played minute, first: {bad[0]}')
-        # mp-lobby reports the menus before its match loads: scan up to its first digest instead.
-        marker = 'digest at cycle' if case == 'mp-lobby' else 'SKIRMISH_PROBE:'
+        # mp-lobby and spectate report the menus before their match loads: scan up to the match instead.
+        marker = {'mp-lobby': 'digest at cycle', 'spectate': 'spectated match loaded'}.get(case, 'SKIRMISH_PROBE:')
         loaded = text.split(marker, 1)[0] if marker in text else text
         map_warnings = [line for line in loaded.splitlines()
                         if re.search(r'- Random (\d+v\d+|\d+ starts).*?\d+:|Invalid or occupied|Invalid (unit|building|house|position)|refused zone', line)]

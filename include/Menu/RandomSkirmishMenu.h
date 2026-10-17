@@ -44,14 +44,18 @@ bool activateMod(const std::string& modName);
 SkirmishGenerator::Mode modeForMod(const std::string& modName);
 /// Prices, power and availability from the active mod's ObjectData.
 SkirmishGenerator::Catalogue loadCatalogue(SkirmishGenerator::Mode mode);
-/// The CustomGame start: the generated map text plus the generated roster.
-GameInitSettings makeInit(const SkirmishGenerator::Result& result, const SettingsClass::GameOptionsClass& rules);
+/// The CustomGame start: the generated map text plus the generated roster. With
+/// @a params.spectate the player's seat goes to @a params.spectateClass and the start is a local
+/// spectator one (Custom Game's offline Spectate).
+GameInitSettings makeInit(const SkirmishGenerator::Result& result, const SettingsClass::GameOptionsClass& rules,
+                          const SkirmishGenerator::Params& params);
 /// Write the map into the user multiplayer maps directory; returns the path or "" on failure.
 std::string saveMap(const SkirmishGenerator::Result& result);
 }
 
 /**
-    The Random Skirmish screen. Single player (the default) starts the generated match itself.
+    The Random Skirmish screen. Single player (the default) starts the generated match itself,
+    played or, with Spectate, watched as Custom Game's offline Spectate watches an all-AI match.
     Multiplayer mode (Custom Game > Random map...) is the host's map step: map settings, credits,
     tech level, the number of start positions and one Base / Army / City for every start, played
     with the host's mod. Next saves the map to the user multiplayer maps and closes; the host's
@@ -71,6 +75,9 @@ public:
 private:
     RandomSkirmishMenu(bool multiplayer, const std::string& hostMod);
     void onStart();
+    /// What Start does before it plays: generate, remember the choices (rolling the next seed)
+    /// and build the match start; false if the match cannot start.
+    bool prepareStart(GameInitSettings& init);
     void onSaveMap();
     /// Multiplayer mode: generate, save to the user multiplayer maps and hand the path back.
     void onCreateMap();
@@ -84,6 +91,8 @@ private:
     /// Allies or enemies moved: the other one gives way so their sum stays within the cap.
     void onPlayersChanged(bool alliesMoved = true);
     void onModChanged();
+    /// Spectate toggled: the AI that plays the watched house is chosen only while watching.
+    void onSpectateChanged();
     /// The mod selected in the Mod box, or "" when none is listed.
     std::string selectedMod() const;
 
@@ -104,13 +113,15 @@ private:
     StaticContainer windowWidget;
     Label title;
     Label statusLabel;
-    std::array<Label, 30> captions;
+    std::array<Label, 32> captions;
     int usedCaptions = 0;
     int rowPitch = 25;                       ///< row height + gap; shrinks on short screens
     Label* allyCityCaption = nullptr;
     Label* enemyCityCaption = nullptr;
     Label* playerCityCaption = nullptr;
     Label* startCityCaption = nullptr;
+    Label* playerHeader = nullptr;           ///< "You start with", or "Your house starts with" while watching
+    Label* spectateAICaption = nullptr;      ///< "Your house AI", shown only while spectating
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.
     Slider sizeBox, rockBox, spiceBox;
@@ -126,6 +137,8 @@ private:
     std::vector<ModInfo> availableMods;      ///< Mod box entries; entry data is the index
     Slider alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;
+    Checkbox spectateBox;                    ///< single player: watch an all-AI match (Custom Game's Spectate)
+    DropDownBox spectateAIBox;               ///< the AI that plays the player's house while watching
 
     DropDownBox partnerBox, allyAIBox, enemyAIBox;
     Slider playerBaseBox, playerArmyBox, playerCityBox;
