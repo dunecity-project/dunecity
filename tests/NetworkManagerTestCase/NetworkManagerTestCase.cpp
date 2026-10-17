@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 79;
+static constexpr int kWireProtocolVersion = 81;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -81,7 +81,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // default (QuantBot Config [Force Concentration]); no saved state change.
     // 79 bundles the QuantBot idle reserve forward, launches waves from the bundle and keeps a
     // hunting launcher's escape out of focus fire; save 9863 (the bundle and the gate's wait).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 79);
+    // 81 unjams the formation march (laggards route round members keeping the pace, members
+    // waiting for a laggard give way to a mate stepping onto their tile); no saved state change.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 81);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

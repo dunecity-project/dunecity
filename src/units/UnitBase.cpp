@@ -3014,11 +3014,20 @@ void UnitBase::updateVisibleUnits() {
 }
 
 bool UnitBase::marchesWith(const UnitBase* other) const {
-    // Both members of one formation on its march (not forming up), the other one not waiting
-    // for a member that fell behind: it moves on at the pace, so it is no obstacle.
-    return other != nullptr && other != this && formationGroup != 0 && formationFormUp.isInvalid()
-        && other->formationGroup == formationGroup && other->owner == owner && other->formationFormUp.isInvalid()
-        && other->formationMarch != FormationPlanner::March::Hold;
+    // Both members of one formation on its march (not forming up): the other one moves on, so it
+    // is no obstacle - this unit waits behind it and plans its routes through it. A member holding
+    // for one that fell behind counts while it has a next step: FormationOrders::update() makes it
+    // give way to a mate stepping onto its tile. But a unit that fell behind its place (Recover)
+    // routes round a member keeping the pace: following it, it could never close the gap.
+    if(other == nullptr || other == this || formationGroup == 0 || formationFormUp.isValid()
+       || other->formationGroup != formationGroup || other->owner != owner || other->formationFormUp.isValid())
+        return false;
+    switch(other->formationMarch) {
+        case FormationPlanner::March::Hold: return other->nextSpotFound;
+        case FormationPlanner::March::Pace: return formationMarch != FormationPlanner::March::Recover;
+        case FormationPlanner::March::Recover:
+        default: return true;
+    }
 }
 
 bool UnitBase::canPathThrough(int xPos, int yPos) const {
