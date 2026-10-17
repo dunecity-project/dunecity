@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <players/QuantBotBuildPolicy.h>
+
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotStrategy.h>
 #include <players/UnitMixPolicy.h>
@@ -241,4 +243,19 @@ TEST_CASE("Strategy: a mix is the prior the learning starts from, not a frozen m
     const auto counter = UnitMixPolicy::normalize(counterPrior(0, 10000, 0, 0));
     REQUIRE(counter[2] > counter[0]);
     REQUIRE(counter[1] > counter[7]);
+}
+
+TEST_CASE("Strategy: an Air strategy unlocks ornithopters before the first carryall", "[ai][strategy]") {
+    QuantBotBuildPolicy::AirProductionState air;
+    air.carryallAvailable = true;
+    air.carryallPrice = 800;
+    air.carryallTarget = 1;
+    air.canUpgrade = true;
+    air.spendable = 600;
+    // The learned default saves for its first carryall; an Air strategy upgrades first.
+    REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::None);
+    air.airStrategy = true;
+    REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::Upgrade);
+    air.ornithopterAvailable = true;
+    REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::None);
 }

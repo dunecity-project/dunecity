@@ -102,7 +102,7 @@ def keep(game, args):
 
 
 def full(label):
-    return label if label in ('default', 'none', 'ai') or '@' in label or '+' in label else f'default@{label}'
+    return label if label in ('default', 'none', 'ai') or any(c in label for c in '@+#') else f'default@{label}'
 
 
 def short(label):

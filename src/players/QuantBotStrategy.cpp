@@ -221,7 +221,7 @@ const TempoProfile& profile(Tempo tempo) {
         tempoProfile(0, 6, 3000),                     // Base: the configured readiness (60%)
         tempoProfile(35, 4, 2000),                    // Swarm: many smaller waves after a full opening
         tempoProfile(100, 6, 3000),                   // Timing: every wave at full readiness
-        tempoProfile(15, 4, 1200, true, false, 12),   // Rush: light factory first, early small waves, 12 minutes
+        tempoProfile(15, 4, 1200, true, false, 20),   // Rush: light factory first, early small waves, 20 minutes
         tempoProfile(20, 3, 1500),                    // Flood: more pressure than Swarm
     };
     return profiles[std::min(static_cast<size_t>(tempo), kTempoCount - 1)];

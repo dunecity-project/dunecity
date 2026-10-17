@@ -3417,6 +3417,7 @@ void QuantBot::build(int militaryValue) {
                     air.vehiclePlanValue = vehiclePlanValue;
                     air.airCommittedValue = ornithopterValue;
                     air.airTargetBps = unitMix[4];
+                    air.airStrategy = strategyMixProfile && strategyMixProfile->prior[4] > 0;
                     const auto decision = QuantBotBuildPolicy::chooseAirProduction(air);
                     if (emitStatsLog && AITelemetry::log().enabled()) {
                         traceDecision("air_production_decision", AITelemetry::Record()
