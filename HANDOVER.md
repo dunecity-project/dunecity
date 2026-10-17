@@ -18,13 +18,129 @@ data `docs/formation-results/scenarios/` (raw samples/waves stay out of git). Co
   (-33..-17), march +10% of pace; canyon Pincer 0/12 -> 11/12; 10-unit armies unchanged. Still slow: big
   form-up 30-65 s, re-forming behind obstacles (38-73% of pace) - design, not jams.
 - **Approach shapes (fixed march)**: Staggered v BWFCQ Fortress Hard 0.861, Brutal 0.861, CY Hard 0.511, but
-  CY Brutal 0.381 (0.29-0.47, 113 games) -> **no approach default**, WaveFormation stays None. Rejected
+  CY Brutal 0.413 (0.33-0.49, 150 games) -> **no approach default**, WaveFormation stays None. Rejected
   QuantBot-only `ApproachFormation` patch not committed. Remaining CY Brutal games queued (`ac1-brutal-mini`
   into /private/tmp/dunecity-work/local_16397/formation-finish-bench-*/ap-cy-brutal-mini).
 - Tests at fac6d0d6 (ctest, <=3 jobs): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
   game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
   menu_navigation_probe, all 32 quantbot_* incl. quantbot_all_against_atreides: all passed.
 - Protocol: DefenceFinish owns 80 (save 9864); this branch uses 81 - the integrator reconciles.
+
+## 2026-10-17 — local 1.0.845 installed on the MBA
+
+Staging = 1.0.844 + `feat/ai-blob-waves` (85b423d4: perimeter hold, perimeter rocket turrets, sized
+defence; AI units step off planned building sites; save 9864 split so 1.0.844 saves load) +
+`chore/housekeeping` (6d4c7428: leased probe scratch, per-game cleanup, disk guard,
+prune-merged-worktrees). Protocol 80, save 9864. `agent-workspace stage verify` at 149bbea5: build,
+check-build-deps and CTest 96/96 serial passed (`quantbot_all_against_atreides` 154 s). Package:
+executable SHA256 c96bcfa9f8524fb7371f7bd2fae4d8eb804fc4c2b97d54230a497acdde516d37, no Homebrew/local
+links, signature and runtime check passed. Installed on the MBA 2026-10-17 ~17:48 AEDT. Incident:
+`/Applications/dunecity.app` (1.0.844) was already missing when the install ran (the `mv` to the
+backup folder failed, nothing was lost by the install); a 1.0.842 game had been started at 17:36
+from `/Applications/.dunecity-backup-before-1.0.843-20261017-011302/`. AirRunner (MBA runner setup)
+states it touched only ~/dunecity-runner; the cause is unknown. Remaining backups: 1.0.843, 1.0.842.
+Not pushed or published.
+
+## 2026-10-17 — QuantBot footprint rule: AI units move off planned building sites; perimeter hold now also in the city simulation (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
+
+Stefan: "fix the dune mod issue - when the ai places buildings in the queue to be built then the ai units
+need to move off those tiles". Details, trace and table: `docs/formations.md` ("Planned sites and the army").
+
+- **Rule (every QuantBot, every mode)**: own ground units are traffic to the site search
+  (`QuantBot::placeableAmongOwnUnits`: engine check with units ignored; mountains, structures, other houses'
+  units and own units that were ordered off but cannot leave still block) - findPlaceLocation(+Simple),
+  turret/perimeter-turret/city service/city turret searches, foundation planner paving, planned site and slab
+  checks; a prepared *substitute* footprint must be free now. Every unit pass `keepPlannedSitesClear()` asks
+  idle/holding units on any yard's reserved site off it via `ConstructionYard::moveOwnUnitsOffPlot(idleOnly)`
+  (the pre-placement queue's path, now public; `Player::doMoveOwnUnitsOffPlot`). A finished building whose
+  site has own units waits (site + reservation kept) and is placed on plan once they leave. Perimeter, bundle,
+  muster/hunt-party, recall, guard, assembly and regroup slots skip planned sites (`onPlannedSite`).
+- **City-mode exclusion of the perimeter hold removed.** Cause of the `quantbot_no_spice_income_low-cash`
+  failure: holding troops on base rock made `Map::okayToPlaceStructure` (counts units) reject sites - the
+  production-room survey reported no factory site from cycle 25, so at cycle 4,925
+  `city_vehicle_production_bootstrap` spent 400 of 423 credits on a Radar and house 0 sat on 16-113 credits
+  for 3.3 min with no Industrial zone; with the search alone fixed another house stalled 2,500 cycles on
+  `foundation_incomplete` (planner treated unit tiles as unpaveable), also fixed. A/B on 8 seeds per map
+  (same code, hold v city gate): low-cash 8/8 v 7/8 runs pass, city net 210,261 v 212,625, zones 253 v 316,
+  houses alive 25 v 29 (zones per surviving house 8.8 v 9.9); 192x192 DuneCity 8/8 v 8/8, net 192,522 v
+  192,453. No gate kept.
+- **Probe** `quantbot_force_concentration` section 8: own tank on a wind trap site does not make it
+  unplaceable, an enemy trooper does; slots skip the site; an idle tank is sent off (173 cycles); a wind trap
+  finished while a tank stands on its site waits, the tank is asked off, and it is placed on the planned site.
+  Section 7 now expects the perimeter anchor in the city simulation too.
+- Protocol 80 comment notes the rule (unreleased 80 = this branch). No save change.
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, preplace_queue_tests, preplace_queue_probe,
+  game_command_regressions, save_scenario_export, save_scenario_input_preservation, formation_planner_tests,
+  formation_movement_probe and all 32 quantbot_* incl. force_concentration, no_spice_income_low-cash and
+  all_against_atreides: 40/40 (an intermediate run failed opening-economy vanilla/Dune2R until the prepared
+  substitute footprint was required to be free now). all-against-Atreides 6/6: 38.6 33.9 34.9 30.2 31.8
+  31.1 min (round 5: 29.3 33.0 33.9 33.5 30.7 30.3). Seed 1756374161 went 29.3 -> 38.6 (re-measured on the
+  previous commit e6b2910d: 29.28), so 8 more seeds (11..88) on both: this commit 30.3 31.7 33.7 30.7 29.5
+  31.0 32.2 30.7 (mean 31.2, 8/8), e6b2910d 31.5 29.2 33.1 30.6 40.6 31.1 29.3 36.2 (mean 32.7, 7/8):
+  no systematic slowdown, seed-level chaos; the first default seed now has 1.4 min of margin.
+
+## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
+
+Stefan: optimise how QuantBot concentrates force on defence; "you can build up rocket turrets"; "defend at
+the base perimeter". Merged `integrate/feature-batch` (1.0.844) first. Tables, causes and decision:
+`docs/formations.md` ("Round 5"); data `docs/formation-results/force/round5/` (1,620 duels).
+
+- **D confirmed not useful**: `/weak` v old rules 108 games 0.310 v BWFCQ 0.306 (paired +0.005); v BWFCQ both
+  0.037; Hard 0.870. Traced cause of weak-side losses: the army fights out of turret cover (forward bundle,
+  harvest-field defence answered piecemeal at 1.25x of what is visible).
+- **New default UVX** (`[Force Concentration]` `PerimeterHold`, `PerimeterTurrets`, `SizedDefence`, code
+  default true, hashed): a remembered enemy army (seen fighters, dead dropped, unseen forgotten after 5 min);
+  while it is worth 125% of ours no wave leaves and the reserve holds the enemy-facing base perimeter (not in
+  the city simulation); perimeter rocket turrets (one per 1,000 credits of the enemy's lead, max 8, above the
+  economy reserve + 750); defences count the enemy within 12 tiles and send 1.5x, bundle first, distant
+  building defenders muster, unanswerable worker raids get nobody.
+- **Measured**: `/weak` v old rules 108: 0.426 (0.33-0.52) v BWFCQ 0.306, paired +0.120 (+0.03..+0.21), 21
+  better / 8 worse, structures lost 53 v 61; Hard v old rules 0.926 (BWFCQ 0.870), Brutal 0.944 (0.931), Hard
+  head-to-head v BWFCQ 0.528 (0.44-0.62); all-against-Atreides 6/6 (29.3 33.0 33.9 33.5 30.7 30.3 min).
+  Rejected (test-only): E, G, A (k80/100/120), R, Y, D.
+- **Saved under SAVEGAMEVERSION 9864** (1.0.844 writes 9863, so the new state has its own gate): the
+  remembered enemy army and the musters, after the 9863 bundle; a 9863 (1.0.844) save loads with neither
+  (probe: the 1.0.844 layout loads and re-saves as 9864). Protocol 80; both pinned in tests.
+- City simulation: the perimeter hold made `quantbot_no_spice_income_low-cash` fail; the traced game shows
+  no blocked placements (so not "army on the lots") but a diverged opening, 127 v 51 base scrambles and a
+  cash stall; the hold is off in the city simulation.
+- **Harness**: army value at minutes 10/20/30 per side; new counters; flat run directories (slash labels
+  had deleted each other's runs).
+- Open: against a full BWFCQ attacker the half-army side still loses its base in ~8 min (0.046); perimeter
+  turrets are rarely affordable for the weak house (0.9 a game).
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, save_scenario_export, save_scenario_input_preservation and all 32 quantbot_*: 41/42 then
+  `quantbot_force_concentration` failed on the new city-simulation exclusion (probe expectation); probe fixed,
+  rebuilt, then force_concentration, dunelegacy_tests, launcher_kiting, no_spice_income_low-cash 4/4 passed.
+## 2026-10-17 — disk housekeeping: leased game scratch, probe profile bulk, merged-worktree pruning (branch `chore/housekeeping`, test harness only, no protocol/save change)
+
+claw.local fell to 33 GB free (agents' `/private/tmp` game scratch, CTest `--repeatable` runs,
+probe profiles in build trees, merged worktrees' builds); ~68 GB reclaimed by hand, incl. 38
+generated probe run directories (5.3 GB) in staging `build-int` (Stefan approved; log
+`~/.local/state/agent-workspace/reports/manual-reclaim-2026-10-17-build-int-probes.json`).
+
+- One helper, `tests/performance/probe_profile.py`: `scratch_dir` (leased run under
+  `/private/tmp/dunecity-work/<owner>/` via the installed agent-workspace `scratch.py`; private temp
+  dir elsewhere; deleted on success, kept 72 h as failed), `finish_game` (delete a game's directory
+  once its rows are written; failures keep logs/saves/replay only, max 5 per batch),
+  `require_free_space` (`agent-scratch guard`, 25 GB), `discard_profile_assets`, `prune_runs`,
+  `copy_revisions` (only the revisions a save or `ws-*` mod pins, never the whole store or the
+  owner token).
+- Users: formation-duel, formation-wave-matrix, headless-bench (no fixed `/tmp` default; `--results`
+  required), run-all-against-atreides, run-campaign-balance (profile bulk dropped when any run ends;
+  `--repeatable` keeps 3 runs), run-no-spice-city-progress, run-active-tile-probe, the pathfinding/AI
+  cache/simulation probes and `tools/scenarios/export-save-scenario.py` (`--keep-profile-assets`).
+- `scripts/prune-merged-worktrees.sh`: dry run lists worktrees merged into `integrate/feature-batch`
+  or `origin/main` that are clean and idle, with build sizes; `--apply` deletes their `build*/`,
+  `--remove-worktree` also the worktree. AGENTS.md/CLAUDE.md: delete your `build*/` once merged.
+- Proof: 4 Hard duels (64/128, seed 7101, none:blob, 6 min, `--jobs 4`) ran in
+  `/private/tmp/dunecity-work/omp_..._HousekeepingFinish/formation-duel-*`, gone after; 2 forced
+  failures (`--wall-timeout 3`) kept a 14 MB failed batch with two small game dirs. Probe dirs after
+  ctest are 12-21 MB (were 90-350 MB). Tests (worktree Release `build`, ctest -j2):
+  save_scenario_export, save_scenario_input_preservation, active_tile_probe, quantbot_no_spice_city,
+  quantbot_force_concentration, quantbot_launcher_kiting, quantbot_all_against_atreides: 7/7
+  passed; `tests/test_probe_profile_lifecycle.py` 11/11.
 
 ## 2026-10-17 — local 1.0.844 installed on the MBA
 

@@ -191,6 +191,94 @@ inline int openingReadiness(int percent, bool launched, int64_t initialArmy, int
     return initialArmy < scaledReadiness(required, percent) ? 100 : percent;
 }
 
+// ---- Defence while outnumbered (round 5) -------------------------------------------------------
+
+/// The remembered enemy army forgets a fighter not seen for this long.
+constexpr int kSightingMemoryMs = 300000;
+
+/// Does a wave worth \a wave launch against an estimated enemy army of \a enemy, needing
+/// \a ratioBps of it (kForceStrengthWaves)? Nothing known is no reason to wait.
+inline bool strongEnough(int64_t wave, int64_t enemy, int ratioBps) {
+    return enemy <= 0 || std::max<int64_t>(0, wave) * 10000 >= enemy * std::max(0, ratioBps);
+}
+
+/// The most of an available wave a house keeps home (kForceReserve) ...
+constexpr int kReserveMaxBps = 5000;
+/// ... the share by which the enemy estimate exceeds our army, capped at kReserveMaxBps.
+inline int reserveShareBps(int64_t own, int64_t enemy) {
+    if (enemy <= 0 || enemy <= own) return 0;
+    return int(std::min<int64_t>(kReserveMaxBps, (enemy - std::max<int64_t>(0, own)) * 10000 / enemy));
+}
+
+/// A sized defence (kForceSizedDefence) sends this share of the threat within kPoolThreatTiles
+/// from up to this far ...
+constexpr int kSizedResponseBps = 15000;
+constexpr int kSizedBandTiles = 40;
+inline int64_t sizedRequired(int64_t threat) { return std::max<int64_t>(0, threat) * kSizedResponseBps / 10000; }
+
+struct SizedResponder {
+    uint32_t id = 0;
+    int64_t value = 0;
+    int distance = 0;       ///< tiles to the defended object
+    bool bundled = false;   ///< standing in the bundle (the reserve kept for this)
+};
+
+/// ... the bundle first, then the nearest (ties by id), until with \a committed they reach
+/// \a required; nobody beyond \a band unless bundled.
+inline std::vector<uint32_t> sizedPool(int64_t required, int64_t committed, std::vector<SizedResponder> candidates,
+                                       int band) {
+    std::stable_sort(candidates.begin(), candidates.end(), [](const SizedResponder& a, const SizedResponder& b) {
+        if (a.bundled != b.bundled) return a.bundled;
+        return a.distance != b.distance ? a.distance < b.distance : a.id < b.id;
+    });
+    std::vector<uint32_t> selected;
+    int64_t value = std::max<int64_t>(0, committed);
+    for (const auto& candidate : candidates) {
+        if (value >= required) break;
+        if (candidate.value <= 0 || (candidate.distance > band && !candidate.bundled)) continue;
+        selected.push_back(candidate.id);
+        value += candidate.value;
+    }
+    return selected;
+}
+
+/// A worker under attack is answered only when \a committed plus everything in reach
+/// (\a reachable) at least matches the \a threat: a smaller answer is fed to the enemy piecemeal.
+inline bool answerable(int64_t threat, int64_t committed, int64_t reachable) {
+    return std::max<int64_t>(0, committed) + std::max<int64_t>(0, reachable) >= std::max<int64_t>(0, threat);
+}
+
+// ---- Defending at the base perimeter (round 5) ---------------------------------------------------
+
+/// The base whose perimeter is held: own buildings this close to the base centre ...
+constexpr int kPerimeterBaseTiles = 24;
+/// ... the army holds this far beyond the outermost one on the enemy side (V) ...
+constexpr int kPerimeterStandoffTiles = 3;
+/// ... and threat turrets (U) stand in the band from kPerimeterInnerTiles inside that outermost
+/// building to kPerimeterOuterTiles beyond it, at most kPerimeterHalfWidth tiles to either side of
+/// the front line through the base centre.
+constexpr int kPerimeterInnerTiles = 4;
+constexpr int kPerimeterOuterTiles = 2;
+constexpr int kPerimeterHalfWidth = 12;
+/// One threat turret per this many credits by which the enemy estimate exceeds our army, at
+/// most kPerimeterTurretsMax on the perimeter; credits for units are kept above the price.
+constexpr int kPerimeterCreditsPerTurret = 1000;
+constexpr int kPerimeterTurretsMax = 8;
+constexpr int kPerimeterUnitReserve = 500;
+
+/// Perimeter turrets wanted while the estimate (\a enemy) outnumbers \a own.
+inline int perimeterTurretGoal(int64_t own, int64_t enemy) {
+    if (!outnumbered(own, enemy)) return 0;
+    return int(std::min<int64_t>(kPerimeterTurretsMax, (enemy - std::max<int64_t>(0, own)) / kPerimeterCreditsPerTurret));
+}
+
+/// Is an offset (\a along, \a across: tiles along and across the front from the base centre) on
+/// the perimeter band of a base \a depth tiles deep?
+inline bool onPerimeterBand(int along, int across, int depth) {
+    return along >= depth - kPerimeterInnerTiles && along <= depth + kPerimeterOuterTiles
+        && std::abs(across) <= kPerimeterHalfWidth;
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy

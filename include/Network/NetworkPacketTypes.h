@@ -223,13 +223,23 @@
 //     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
 //     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
 //     would order the same AI units differently and desync. Save 9863.
+// 80: QuantBot force concentration round 5, defence while outnumbered: a remembered enemy
+//     army; while it outnumbers ours no Custom Hard/Brutal wave leaves, the reserve holds the
+//     enemy-facing base perimeter and rocket turrets are added there; defences are sized at
+//     1.5x the threat with the bundle first, distant defenders muster, and a worker raid the
+//     troops in reach cannot match gets nobody ([Force Concentration] PerimeterHold,
+//     PerimeterTurrets, SizedDefence, hashed; the remembered army and the musters are saved,
+//     9864). Also the footprint rule: own units are traffic to the AI's site search, idle ones
+//     are asked off planned sites, a finished building waits for them, and the hold applies in
+//     the city simulation. A 79 peer would order the same AI units differently and desync.
+//     Save 9864.
 // 81: Formation march without jams, and QuantBot opening readiness; no saved state or command
 //     change. A marching member that fell behind routes round a member keeping the pace rather
 //     than queueing behind it, and a member waiting for a laggard gives way to a formation-mate
 //     stepping onto its tile (it may be planned through). A Custom Hard/Brutal QuantBot whose
 //     starting army cannot launch a wave (a Construction Yard start) holds its first ground
 //     wave for full readiness ([Force Concentration] OpeningReadiness, hashed). An 80 peer
-//     would move the same units differently and desync. Save unchanged.
+//     would move the same units differently and desync. Save 9864 unchanged.
 #define NETWORK_PROTOCOL_VERSION            81
 
 // Mod transfer limits

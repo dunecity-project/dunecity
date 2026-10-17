@@ -39,7 +39,7 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import prepare_profile  # noqa: E402
+from probe_profile import discard_profile_assets, prepare_profile  # noqa: E402
 
 TARGET = 'bin/dunecity.app/Contents/MacOS/dunecity'
 NEEDLE = 'int menuResult = MainMenu().showMenu();'
@@ -122,6 +122,9 @@ def parse_arguments():
                         help='Fail unless the reloaded scenario holds at least this many units')
     parser.add_argument('--keep-going', action='store_true',
                         help='Write the report even when a phase fails')
+    parser.add_argument('--keep-profile-assets', action='store_true',
+                        help="Keep the work profile's regenerated mods and workshop revisions after a "
+                             'successful run (deleted by default; logs, facts and the report stay)')
     arguments = parser.parse_args()
     if not arguments.selftest and arguments.save is None:
         parser.error('--save is required unless --selftest is given.')
@@ -329,7 +332,7 @@ def main():
 
     binary = build_probe(build, work)
     profile = work / 'profile'
-    active_mod = prepare_profile(profile, arguments.profile_from)
+    active_mod = prepare_profile(profile, arguments.profile_from, [] if arguments.selftest else [save])
     if active_mod:
         print('SCENARIO_EXPORT_PROFILE: active_mod=' + active_mod)
 
@@ -430,6 +433,10 @@ def main():
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
     print('SCENARIO_EXPORT_REPORT: ' + str(report_path))
     print('SCENARIO_EXPORT_SCENARIO: ' + str(output))
+    if not arguments.keep_profile_assets:
+        # ~70 MB of bundled mods and captured revisions per run, which the engine
+        # reinstalls and recaptures on the next run.
+        discard_profile_assets(profile)
     return 0
 
 

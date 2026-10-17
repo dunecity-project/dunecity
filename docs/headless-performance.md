@@ -9,8 +9,10 @@ below was checked to give bit-identical games (see "Determinism").
 
 ```sh
 # Duels: defaults are already the fast settings (one path thread per game, no AI log,
-# biggest maps first). Pick --jobs from the table below.
-python3 tests/ai/formation-duel.py --scratch /tmp/duels --results /tmp/duels/results --jobs 8 ...
+# biggest maps first). Pick --jobs from the table below (at most 4 while other agents run
+# games). Without --scratch the batch runs in leased scratch under /private/tmp/dunecity-work,
+# deleted when it succeeds; it refuses to start below 25 GB free (DUNECITY_MIN_FREE_GB).
+python3 tests/ai/formation-duel.py --results ~/Documents/projects/outputs/duels --jobs 4 ...
 
 # Benchmark a build: three fixed Hard duels (128/7101, 160/7202, 192/7303, 20 game minutes)
 python3 tests/performance/headless-bench.py --jobs 1,4,8 --label mine --results /tmp/b.jsonl

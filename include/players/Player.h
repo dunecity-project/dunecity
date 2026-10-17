@@ -239,6 +239,16 @@ protected:
     bool doPlaceStructure(const ConstructionYard* pConstYard, int x, int y) const;
 
     /**
+        Asks this player's idle units standing on a planned site off it, as the pre-placement
+        queue does for its plots (ConstructionYard::moveOwnUnitsOffPlot with idleOnly).
+        \param  pConstYard  the construction yard the site is planned for
+        \param  itemID      the structure planned there (its footprint)
+        \param  x           the x coordinate of the site (in tile coordinates)
+        \param  y           the y coordinate of the site (in tile coordinates)
+    */
+    void doMoveOwnUnitsOffPlot(const ConstructionYard* pConstYard, Uint32 itemID, int x, int y) const;
+
+    /**
         Activate the special palace weapon Fremen or Saboteur. For the Deathhand see doLaunchDeathhand.
         \param  pPalace the palace to activate the special weapon of
     */

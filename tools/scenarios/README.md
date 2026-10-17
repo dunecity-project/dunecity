@@ -15,13 +15,18 @@ python3 tools/scenarios/export-save-scenario.py \
 ```
 
 The source profile must contain the save's exact mod revision. Only mod folders,
-settings and revision content are copied into an isolated profile; publisher
+settings and the workshop revisions the save and the installed `ws-*` mods pin are
+copied into an isolated profile (never the whole revision store); publisher
 credentials and publication queues are excluded. A missing revision fails offline
 before any download dialog. SDL uses dummy drivers, the intro is disabled and
 the diagnostic metaserver is loopback. Each load uses a separate engine process.
 The input save is read only. Output defaults to refusing an existing file;
 `--force` replaces the requested scenario, while input/output/report path
-collisions are refused. Use a dedicated scratch directory.
+collisions are refused. Use a dedicated scratch directory; on claw.local take a
+leased one (`agent-scratch new --project dunecity --purpose scenario-export`, then
+`agent-scratch finish PATH` once the scenario and report are copied out). A
+successful run deletes the work profile's regenerated mods and revisions unless
+`--keep-profile-assets`.
 
 The report records source/save hashes, tool hashes, world counts by faction,
 health and ownership checks, unit relocations, reset orders and startup road

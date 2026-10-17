@@ -28,6 +28,7 @@ import random
 import shutil
 import statistics
 import subprocess
+import sys
 import threading
 import time
 from collections import defaultdict
@@ -35,6 +36,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import finish_game, require_free_space, scratch_dir  # noqa: E402
+
 MAP_DIR = root / 'data/maps/multiplayer'
 # Short names of the bundled maps used by the scenario tests (any other file stem in MAP_DIR
 # also works: the part after the last ' - ', lower case, spaces as hyphens, e.g. face-off).
@@ -183,7 +187,7 @@ def play(args, scratch, binary, key):
     if row['error']:
         (results / f'failed-{out.name}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
-        shutil.rmtree(out, ignore_errors=True)
+        finish_game(scratch, out, True)
         return row
     numbers = {HOUSE_NUMBERS[h]: h for h, _ in sides}
     place = places([(HOUSE_NUMBERS[h], l) for h, l in sides], eliminated)
@@ -215,29 +219,29 @@ def play(args, scratch, binary, key):
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
     append(results / 'games.csv', GAME_FIELDS, [row])
-    shutil.rmtree(out, ignore_errors=True)
+    finish_game(scratch, out, False)
     return row
 
 
 def run(args):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    scratch = Path(args.scratch)
-    scratch.mkdir(parents=True, exist_ok=True)
     done = {tuple(r[k] for k in KEY) for r in read(results / 'games.csv')}
     todo = [key for key in schedule(args) if key not in done]
     print(f'{len(todo)} games to play ({len(done)} already in games.csv)', flush=True)
     if not todo:
         return
-    binary = build_probe(args, scratch)
-    started = time.time()
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
-        for count, future in enumerate(as_completed(futures), 1):
-            row = future.result()
-            print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["map"]}/{row["seed"]} {row["sides"]} -> '
-                  f'{row["winner_label"] or "time-out"} ({row["end_s"]} s game, {row["wall_s"]} s wall)'
-                  f'{" " + row["error"] if row["error"] else ""}', flush=True)
+    require_free_space()
+    with scratch_dir('vanilla-match', args.scratch) as scratch:
+        binary = build_probe(args, scratch)
+        started = time.time()
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
+            for count, future in enumerate(as_completed(futures), 1):
+                row = future.result()
+                print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["map"]}/{row["seed"]} {row["sides"]} -> '
+                      f'{row["winner_label"] or "time-out"} ({row["end_s"]} s game, {row["wall_s"]} s wall)'
+                      f'{" " + row["error"] if row["error"] else ""}', flush=True)
 
 
 # ---- Report ---------------------------------------------------------------------------
@@ -436,7 +440,8 @@ def report(args):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--results', required=True, help='Directory for games.csv, houses.csv, samples.csv, waves.csv')
-parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories')
+parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
+                                      '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--tag', default='cy1', help='Label of the code variant being measured')
 parser.add_argument('--tags', nargs='+', help='Report: the tags to include (default --tag)')
 parser.add_argument('--difficulty', choices=('hard', 'brutal'), default='hard')
@@ -461,6 +466,4 @@ if bool(args.pairs) == bool(args.ffa):
 if args.report:
     report(args)
 else:
-    if not args.scratch:
-        parser.error('--scratch is required to play.')
     run(args)

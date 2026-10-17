@@ -133,8 +133,8 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, OpeningReadiness; optional keys, the code defaults apply when absent. Hashed for
-    /// multiplayer.
+    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness; optional
+    /// keys, the code defaults apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -150,6 +150,16 @@ struct QuantBotConfig {
         /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
         /// re-checked every 5 s and at most 60 s late.
         bool launchFromBundle;
+        /// While the remembered enemy army is worth 125% of ours, no wave leaves and the
+        /// reserve holds the enemy-facing base perimeter (round 5; the memory is saved, 9864).
+        bool perimeterHold;
+        /// While outnumbered so, rocket turrets go up on that perimeter: one per 1,000 credits
+        /// of the enemy's lead, at most eight there, never below the economy and unit reserve.
+        bool perimeterTurrets;
+        /// Defences count the enemy within 12 tiles and send 1.5x it, the bundle first; distant
+        /// defenders of a building muster first (saved, 9864); a worker raid the troops in reach
+        /// cannot match gets nobody.
+        bool sizedDefence;
         /// A house whose starting army cannot launch a wave at WaveReadinessPercent (a
         /// Construction Yard start, not a Fortress with an army) holds its first ground wave
         /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,

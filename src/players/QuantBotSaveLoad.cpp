@@ -175,6 +175,10 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
     // wait. An older save has none: the bundle is chosen afresh at the first unit pass and a
     // ready wave starts a new wait, as at the start of a game.
     if (currentGame->getLoadedSavegameVersion() >= 9863) loadForceState(stream);
+    // SAVEGAMEVERSION 9864: the remembered enemy army and the defence musters. A 9863 save (1.0.844)
+    // has neither: the enemy army is learned again from what is seen and no defender is mustering.
+    if (currentGame->getLoadedSavegameVersion() >= 9864) loadDefenceMemory(stream);
+    else { enemySightings.clear(); musters.clear(); }
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -307,6 +311,9 @@ void QuantBot::save(OutputStream& stream) const {
     // SAVEGAMEVERSION 9863. The bundle point is re-chosen only every 30 s and the launch gate
     // waits at most 60 s from its first hold; both clocks decide orders, so a reload carries them.
     saveForceState(stream);
+    // SAVEGAMEVERSION 9864. The remembered enemy army (the perimeter hold and turrets read it)
+    // and the musters (who engages when) cannot be recomputed from the world.
+    saveDefenceMemory(stream);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

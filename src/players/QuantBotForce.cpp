@@ -75,7 +75,8 @@ int QuantBot::forceBits() const {
     const auto& force = getQuantBotConfig().force;
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
-        | (force.openingReadiness ? kForceOpeningReadiness : 0);
+        | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
+        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -87,7 +88,7 @@ int QuantBot::waveReadinessPercent() const {
 
 int QuantBot::openingReadinessPercent() const {
     const int percent = waveReadinessPercent();
-    // E: a house that started without an army able to launch a wave (a Construction Yard start,
+    // I: a house that started without an army able to launch a wave (a Construction Yard start,
     // not a Fortress with a starting army) holds its first wave until full readiness: small
     // early waves into a base that is building its defence died there (docs/formations.md,
     // "Scenario tests"). A starting army that can strike keeps the smaller readiness.
@@ -98,26 +99,185 @@ int QuantBot::openingReadinessPercent() const {
 int QuantBot::launchReadinessPercent() {
     const int percent = waveReadinessPercent();
     if (percent >= 100) return percent;
-    if (openingReadinessPercent() < 100 && (!forceVariant(kForceStrengthReadiness) || !outnumberedByObservedArmy()))
+    if (openingReadinessPercent() < 100
+        && !(forceVariant(kForceStrengthReadiness)
+             && (forceVariant(kForceEstimate) ? outnumberedByEstimate() : outnumberedByObservedArmy())))
         return percent;
     ++forceStats.fullReadiness;
     return 100;
 }
 
+namespace {
+
+/// A mobile ground fighter (what the army comparisons count), alive and on the map.
+bool groundFighter(const UnitBase* unit) {
+    return unit->getOwner() && unit->getHealth() > 0 && unit->isActive() && unit->isAGroundUnit()
+        && unit->canAttack() && mobileCombatItem(unit->getItemID());
+}
+
+int64_t healthValue(const UnitBase* unit) {
+    return CombatPowerPolicy::unitValue(currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price,
+                                        unit->getHealth().lround(), unit->getMaxHealth());
+}
+
+} // namespace
+
 bool QuantBot::outnumberedByObservedArmy() const {
     const int myTeam = getHouse()->getTeamID();
     int64_t own = 0, hostile = 0;
     for (const auto* unit : getUnitList()) {
-        if (!unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive() || !unit->isAGroundUnit()
-            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        if (!groundFighter(unit)) continue;
         const bool mine = unit->getOwner() == getHouse();
         if (!mine && (unit->getOwner()->getTeamID() == myTeam || !unit->isVisible(myTeam))) continue;
-        const int64_t value = CombatPowerPolicy::unitValue(
-            currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price,
-            unit->getHealth().lround(), unit->getMaxHealth());
-        (mine ? own : hostile) += value;
+        (mine ? own : hostile) += healthValue(unit);
     }
     return Force::outnumbered(own, hostile);
+}
+
+void QuantBot::updateEnemySightings() {
+    const int myTeam = getHouse()->getTeamID();
+    const Uint32 now = getGameCycleCount();
+    for (const auto* unit : getUnitList())
+        if (groundFighter(unit) && unit->getOwner()->getTeamID() != myTeam && unit->isVisible(myTeam))
+            enemySightings[unit->getObjectID()] = {healthValue(unit), now};
+    // Forget the dead, the captured and the long unseen (id order: the same on every peer).
+    const Uint32 memory = Uint32(MILLI2CYCLES(Force::kSightingMemoryMs));
+    for (auto it = enemySightings.begin(); it != enemySightings.end();) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(it->first));
+        const bool gone = !unit || unit->getHealth() <= 0 || !unit->getOwner() || unit->getOwner()->getTeamID() == myTeam
+            || ArmyPosturePolicy::elapsed(now, it->second.cycle) > memory;
+        it = gone ? enemySightings.erase(it) : std::next(it);
+    }
+}
+
+int64_t QuantBot::enemyArmyEstimate() const {
+    int64_t total = 0;
+    for (const auto& [id, sighting] : enemySightings) total += sighting.value;
+    return total;
+}
+
+int64_t QuantBot::ownGroundArmyValue() const {
+    int64_t own = 0;
+    for (const auto* unit : getUnitList())
+        if (unit->getOwner() == getHouse() && groundFighter(unit)) own += healthValue(unit);
+    return own;
+}
+
+bool QuantBot::outnumberedByEstimate() const {
+    const Uint32 now = getGameCycleCount();
+    if (estimateCycle != now) {
+        estimateCycle = now;
+        estimateOutnumbered = Force::outnumbered(ownGroundArmyValue(), enemyArmyEstimate());
+    }
+    return estimateOutnumbered;
+}
+
+int64_t QuantBot::groundValueOf(const std::vector<Uint32>& ids) const {
+    int64_t total = 0;
+    for (const Uint32 id : ids)
+        if (const auto* unit = dynamic_cast<const UnitBase*>(getObject(id)); unit && unit->getHealth() > 0)
+            total += healthValue(unit);
+    return total;
+}
+
+std::vector<Uint32> QuantBot::homeReserve(const std::vector<Uint32>& ids) const {
+    std::vector<Uint32> kept;
+    const int share = Force::reserveShareBps(ownGroundArmyValue(), enemyArmyEstimate());
+    if (share <= 0) return kept;
+    const Coord home = protectedRally.isValid() ? protectedRally : findBaseCentre(getHouse()->getHouseID());
+    if (home.isInvalid()) return kept;
+    struct Entry { Uint32 id; int distance; int64_t value; };
+    std::vector<Entry> entries;
+    int64_t total = 0;
+    for (const Uint32 id : ids) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || unit->getHealth() <= 0) continue;
+        const int64_t value = healthValue(unit);
+        entries.push_back({id, tiles(unit->getLocation(), home), value});
+        total += value;
+    }
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return a.distance != b.distance ? a.distance < b.distance : a.id < b.id;
+    });
+    int64_t value = 0;
+    for (const auto& entry : entries) {
+        if (value * 10000 >= total * share) break;
+        kept.push_back(entry.id);
+        value += entry.value;
+    }
+    return kept;
+}
+
+bool QuantBot::standsInBundle(const UnitBase* unit) const {
+    if (!unit) return false;
+    constexpr int kBundledTiles = 8;
+    const Coord at = unit->getLocation();
+    return (bundlePoint.isValid() && tiles(at, bundlePoint) <= kBundledTiles)
+        || (bundleCentre.isValid() && tiles(at, bundleCentre) <= kBundledTiles);
+}
+
+// ---- Defending at the base perimeter (round 5: U and V, on by default) -----------------------
+
+const QuantBot::Perimeter& QuantBot::perimeter() const {
+    const Uint32 now = getGameCycleCount();
+    if (perimeterCycle == now) return perimeterCache;
+    perimeterCycle = now;
+    perimeterCache = Perimeter{};
+    const Coord anchor = findBaseCentre(getHouse()->getHouseID());
+    if (anchor.isInvalid()) return perimeterCache;
+    const Coord forward = observedFrontDirection(anchor);
+    const int length = int(Force::isqrt(int64_t(forward.x) * forward.x + int64_t(forward.y) * forward.y));
+    if (length <= 0) return perimeterCache;
+    // The outermost own building of this base along the front (structure list order; the
+    // maximum does not depend on it).
+    int depth = 0;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || tiles(structure->getLocation(), anchor) > Force::kPerimeterBaseTiles) continue;
+        const Coord size = getStructureSize(structure->getItemID());
+        for (const Coord corner : {structure->getLocation(), structure->getLocation() + size - Coord(1, 1)}) {
+            const int along = int((int64_t(corner.x - anchor.x) * forward.x + int64_t(corner.y - anchor.y) * forward.y)
+                                  / length);
+            depth = std::max(depth, along);
+        }
+    }
+    perimeterCache.anchor = anchor;
+    perimeterCache.forward = forward;
+    perimeterCache.length = length;
+    perimeterCache.depth = depth;
+    const int reach = depth + Force::kPerimeterStandoffTiles;
+    const Coord desired(anchor.x + int(int64_t(forward.x) * reach / length), anchor.y + int(int64_t(forward.y) * reach / length));
+    auto usable = [&](Coord p) {
+        if (!getMap().tileExists(p)) return false;
+        const auto* tile = getMap().getTile(p);
+        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && !onPlannedSite(p);
+    };
+    for (int ring = 0; ring <= 6 && perimeterCache.point.isInvalid(); ++ring)
+        for (int dy = -ring; dy <= ring && perimeterCache.point.isInvalid(); ++dy)
+            for (int dx = -ring; dx <= ring && perimeterCache.point.isInvalid(); ++dx)
+                if (std::max(std::abs(dx), std::abs(dy)) == ring && usable(desired + Coord(dx, dy)))
+                    perimeterCache.point = desired + Coord(dx, dy);
+    return perimeterCache;
+}
+
+int QuantBot::perimeterTurretGoal() const {
+    if (!forceVariant(kForceThreatTurrets)) return 0;
+    return Force::perimeterTurretGoal(ownGroundArmyValue(), enemyArmyEstimate());
+}
+
+int QuantBot::perimeterTurrets() const {
+    const Perimeter& p = perimeter();
+    if (p.length <= 0) return 0;
+    int count = 0;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || structure->getItemID() != Structure_RocketTurret) continue;
+        const int dx = structure->getLocation().x - p.anchor.x, dy = structure->getLocation().y - p.anchor.y;
+        const int along = int((int64_t(dx) * p.forward.x + int64_t(dy) * p.forward.y) / p.length);
+        const int across = int((int64_t(dy) * p.forward.x - int64_t(dx) * p.forward.y) / p.length);
+        if (Force::onPerimeterBand(along, across, p.depth)) ++count;
+    }
+    return count;
 }
 
 bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies) {
@@ -391,7 +551,8 @@ Coord QuantBot::forwardBundlePoint() {
     auto usable = [&](Coord p) {
         if (!getMap().tileExists(p)) return false;
         const auto* tile = getMap().getTile(p);
-        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0;
+        return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0
+            && !onPlannedSite(p);
     };
     bundlePoint = Coord::Invalid();
     for (int ring = 0; ring <= 8 && bundlePoint.isInvalid(); ++ring)
@@ -451,6 +612,25 @@ void QuantBot::saveForceState(OutputStream& stream) const {
     stream.writeUint32(bundleGateSince);
 }
 
+void QuantBot::saveDefenceMemory(OutputStream& stream) const {
+    // The remembered enemy army (id order) and the musters (creation order).
+    stream.writeUint32(Uint32(enemySightings.size()));
+    for (const auto& [id, sighting] : enemySightings) {
+        stream.writeUint32(id);
+        stream.writeSint64(sighting.value);
+        stream.writeUint32(sighting.cycle);
+    }
+    stream.writeUint32(Uint32(musters.size()));
+    for (const auto& muster : musters) {
+        stream.writeUint32(muster.building);
+        stream.writeSint32(muster.point.x);
+        stream.writeSint32(muster.point.y);
+        stream.writeUint32(muster.since);
+        stream.writeUint32(Uint32(muster.members.size()));
+        for (const Uint32 id : muster.members) stream.writeUint32(id);
+    }
+}
+
 void QuantBot::loadForceState(InputStream& stream) {
     bundlePoint.x = stream.readSint32();
     bundlePoint.y = stream.readSint32();
@@ -460,6 +640,37 @@ void QuantBot::loadForceState(InputStream& stream) {
     bundleGateSince = stream.readUint32();
     const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };
     if (!valid(bundlePoint) || !valid(bundleCentre)) throw std::runtime_error("Invalid force bundle state");
+    estimateCycle = perimeterCycle = std::numeric_limits<Uint32>::max();
+}
+
+void QuantBot::loadDefenceMemory(InputStream& stream) {
+    constexpr Uint32 kMaxEntries = 65536;
+    enemySightings.clear();
+    const Uint32 sightings = stream.readUint32();
+    if (sightings > kMaxEntries) throw std::runtime_error("Invalid force sightings");
+    for (Uint32 i = 0; i < sightings; ++i) {
+        const Uint32 id = stream.readUint32();
+        Sighting sighting;
+        sighting.value = stream.readSint64();
+        sighting.cycle = stream.readUint32();
+        if (sighting.value < 0 || !enemySightings.emplace(id, sighting).second)
+            throw std::runtime_error("Invalid force sighting");
+    }
+    musters.clear();
+    const Uint32 count = stream.readUint32();
+    if (count > kMaxEntries) throw std::runtime_error("Invalid force musters");
+    for (Uint32 i = 0; i < count; ++i) {
+        Muster muster;
+        muster.building = stream.readUint32();
+        muster.point.x = stream.readSint32();
+        muster.point.y = stream.readSint32();
+        muster.since = stream.readUint32();
+        const Uint32 members = stream.readUint32();
+        if (members > kMaxEntries || !getMap().tileExists(muster.point)) throw std::runtime_error("Invalid force muster");
+        for (Uint32 m = 0; m < members; ++m) muster.members.insert(stream.readUint32());
+        musters.push_back(std::move(muster));
+    }
+    estimateCycle = perimeterCycle = std::numeric_limits<Uint32>::max();
 }
 
 int QuantBot::bundledShareBps(const std::vector<Uint32>& ids, int radius) {

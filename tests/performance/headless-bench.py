@@ -8,8 +8,8 @@ Every game records wall time, CPU time (user+sys of the runner and the probe), p
 probe's own setup/loop split and game cycles per second, and its PROBE_DIGEST lines
 (tests/ai/probe-digest.inc). Results are appended to --results as JSON lines.
 
-  headless-bench.py --jobs 1,2,4                 # build a probe from --build-dir, then measure
-  headless-bench.py --probe P --jobs 4 --label after
+  headless-bench.py --jobs 1,2,4 --results R.jsonl          # build a probe from --build-dir, then measure
+  headless-bench.py --probe P --jobs 4 --label after --results R.jsonl
   headless-bench.py --summary R.jsonl            # games/hour, per-game wall, cycles/s, RSS
   headless-bench.py --compare A.jsonl B.jsonl    # identical digests and results, game by game
 
@@ -27,6 +27,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import require_free_space, scratch_dir  # noqa: E402
+
 # size, map/match seed, house:shape,house:shape (formation-duel.py's houses for these seeds).
 GAMES = (('128', '7101', 'atreides:none,harkonnen:none'),
          ('160', '7202', 'ordos:none,atreides:none'),
@@ -100,8 +103,14 @@ def play(args, scratch, probe, game, jobs, index):
 
 
 def measure(args):
-    scratch = Path(args.scratch)
-    scratch.mkdir(parents=True, exist_ok=True)
+    if not args.results:
+        sys.exit('--results is required to measure.')
+    require_free_space()
+    with scratch_dir('headless-bench', args.scratch) as scratch:
+        measure_in(args, scratch)
+
+
+def measure_in(args, scratch):
     probe = Path(args.probe).resolve() if args.probe else build_probe(args, scratch)
     games = [GAMES[int(i)] for i in args.games.split(',')]
     results = Path(args.results)
@@ -172,9 +181,10 @@ parser.add_argument('--games', default='0,1,2', help='Indices into the fixed gam
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--jobs', default='1', help='Comma-separated parallelism levels to measure')
 parser.add_argument('--rounds', type=int, default=1, help='Plays each game this many times per level (min)')
-parser.add_argument('--scratch', default='/tmp/dunecity-headless-bench')
-parser.add_argument('--results', default='/tmp/dunecity-headless-bench/results.jsonl')
-parser.add_argument('--keep', action='store_true', help='Keep each run directory')
+parser.add_argument('--scratch', help='Directory for the probe and run directories '
+                                      '(default: leased agent scratch, removed after a successful run)')
+parser.add_argument('--results', help='JSON-lines file the rows are appended to (required to measure)')
+parser.add_argument('--keep', action='store_true', help='Keep each run directory (use with --scratch)')
 parser.add_argument('--path-workers', type=int, default=1,
                     help='DUNECITY_PATH_WORKERS for every game (1: inline, as formation-duel.py; 0: the engine default)')
 parser.add_argument('--ai-telemetry', action='store_true', help='Keep the AI decision log (as ctest probes do)')

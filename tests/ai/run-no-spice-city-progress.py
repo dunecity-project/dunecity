@@ -13,15 +13,21 @@ import configparser
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import prune_runs  # noqa: E402
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--build-dir', type=Path, required=True)
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--map', choices=('dunecity', 'low-cash'), required=True)
 args = parser.parse_args()
 args.output_dir.mkdir(parents=True, exist_ok=True)
+# Each CTest run gets a fresh directory; keep the two previous ones, not every run ever.
+prune_runs(args.output_dir, args.map + '-', 2)
 out = Path(tempfile.mkdtemp(prefix=args.map + '-', dir=args.output_dir))
 source = root / 'data/maps/singleplayer' / (
     '4P - 192x192 - DuneCity.ini' if args.map == 'dunecity'

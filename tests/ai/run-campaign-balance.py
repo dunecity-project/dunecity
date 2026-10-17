@@ -5,10 +5,13 @@ Uses the existing macOS Ninja build. Access-control relaxation is restricted to
 this diagnostic executable; no test hooks are compiled into the shipped game.
 --attack-percent sets the legacy Easy fraction (zero disables dispatch); campaign
 Easy/Medium use the half-army policy plus per-house wave caps. Results
-and structured AI decision logs remain in --output-dir. This is a simulation
+and structured AI decision logs remain in --output-dir; when the run ends
+(passed or failed) the profile's regenerated bulk (bundled mods, captured
+workshop revisions) is deleted unless --keep-profile-assets. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
 """
 import argparse
+import atexit
 import fcntl
 import gzip
 import configparser
@@ -19,9 +22,12 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import copy_revisions, discard_profile_assets, prune_runs  # noqa: E402
 house_names = ('harkonnen','atreides','ordos','fremen','sardaukar','mercenary','neutral','rebels','custom','wildspade','kleshmersh','tharpique')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
@@ -30,6 +36,10 @@ parser.add_argument('--quantbot-object', type=Path, nargs='+',
                          'QuantBot.cpp and its subsystem files')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--repeatable', action='store_true', help='Keep each CTest run in a fresh subdirectory')
+parser.add_argument('--keep-runs', type=int, default=3,
+                    help='With --repeatable: how many earlier run-* directories to keep (oldest removed first)')
+parser.add_argument('--keep-profile-assets', action='store_true',
+                    help="Keep the profile's bundled mods and workshop revisions after a successful run")
 parser.add_argument('--custom-map', type=Path, help='Run all occupied slots of a custom map instead of the campaign')
 parser.add_argument('--free-for-all', action='store_true', help='Give each custom-map house its own team')
 parser.add_argument('--capture-mib', type=int, default=1024, help='Diagnostic capture allowance; shipped default is unchanged')
@@ -240,9 +250,15 @@ except subprocess.CalledProcessError:
     source_commit, source_modified = 'unavailable', None
 if args.repeatable:
     out.mkdir(parents=True, exist_ok=True)
+    # CTest reruns used to accumulate every run (~80 MB each) forever.
+    prune_runs(out, 'run-', max(0, args.keep_runs - 1))
     out = Path(tempfile.mkdtemp(prefix='run-', dir=out))
 else:
     out.mkdir(parents=True, exist_ok=False)
+if not args.keep_profile_assets:
+    # Success or failure, the profile's regenerated bulk is never evidence; logs, saves,
+    # replays and the AI decision log stay.
+    atexit.register(discard_profile_assets, out/'profile')
 policy_comparison = None
 if args.prebuilt_probe:
     # A probe binary built by an earlier run of this script from the same tree (formation-duel.py
@@ -373,9 +389,10 @@ if args.elimination_match: env['BALANCE_ELIMINATION_MATCH'] = '1'
 if args.load_save:
     env['BALANCE_LOAD_SAVE'] = str(args.load_save.resolve())
     # A player's save pins the Workshop revisions of its mod and map; his profile's
-    # workshop/revisions supply them without a metaserver download.
+    # workshop/revisions supply them without a metaserver download. Only those
+    # revisions are cloned, never the whole store or the publisher's owner token.
     if args.save_profile:
-        shutil.copytree(args.save_profile/'workshop', out/'profile'/'workshop', dirs_exist_ok=True)
+        copy_revisions(args.save_profile, out/'profile', [args.load_save])
 (out/'setup.json').write_text(json.dumps({**vars(args), 'resolved_roster': roster,
                                        'policy_comparison': policy_comparison}, default=str, indent=2)+'\n')
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'

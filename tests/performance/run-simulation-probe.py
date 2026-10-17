@@ -84,7 +84,7 @@ with (out/'build.log').open('w') as log:
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 profile = out/'profile'
 with managed_profile(profile):
-    active = prepare_profile(profile, args.profile_from)
+    active = prepare_profile(profile, args.profile_from, [args.save])
     if active: print('SIM_PROBE_PROFILE: active_mod='+active)
     if args.diagnostics:
         config=configparser.ConfigParser(interpolation=None,strict=False)

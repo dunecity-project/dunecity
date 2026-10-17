@@ -14,7 +14,9 @@ pairwise. Terrains (generated INI maps, 96x48):
   air        open sand; B is three Ornithopters hunting A, which attack-moves across the map
 
 Writes <results>/bench.csv (one row per trial, appended per terrain run) and --report prints the
-tables used in docs/formations.md. The probe binary is built once into --output-dir.
+tables used in docs/formations.md. The probe binary is built once into --output-dir (default: leased
+agent scratch, removed after a successful batch); each run's directory is deleted once its rows are
+written (with --trace-s its run.log is copied to <results>/trace-<terrain>-<comp>.log first).
 """
 import argparse
 import csv
@@ -22,12 +24,17 @@ import os
 import random
 import shlex
 import statistics
+import shutil
 import subprocess
+import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import finish_game, require_free_space, scratch_dir  # noqa: E402
+
 W, H = 96, 48
 SHAPES = ('off', 'hunt', 'box', 'pincer', 'column', 'staggered', 'echelon')
 FIELDS = ('terrain', 'comp', 'mode', 'trial', 'shape', 'a_units', 'b_units', 'a_value', 'b_value', 'a_lost', 'b_lost',
@@ -120,35 +127,43 @@ def run_one(args, binary, out, terrain, comps):
                BENCH_MODES=','.join(args.modes if terrain != 'air' else ['hold']), BENCH_TRIALS=str(args.trials),
                BENCH_LINE_X=str(line), BENCH_LIMIT_S=str(args.limit), BENCH_TRACE_S=str(args.trace_s))
     log = work / 'run.log'
-    with log.open('w') as handle:
-        subprocess.run([str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=handle,
-                       stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
+    try:
+        with log.open('w') as handle:
+            subprocess.run([str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=handle,
+                           stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
+        text = log.read_text(errors='replace')
+        if 'FORMATION_BENCH_DONE' not in text:
+            raise RuntimeError(f'Bench run {work} did not finish')
+    except Exception:
+        finish_game(out, work, True)
+        raise
     rows = []
-    for l in log.read_text(errors='replace').splitlines():
+    for l in text.splitlines():
         if 'FORMATION_BENCH:' in l:
             rows.append(dict(part.split('=', 1) for part in l.split('FORMATION_BENCH:', 1)[1].split() if '=' in part))
-    if 'FORMATION_BENCH_DONE' not in log.read_text(errors='replace'):
-        raise RuntimeError(f'Bench run {work} did not finish')
-    return rows
+    if args.trace_s:
+        shutil.copyfile(log, Path(args.results) / f'trace-{work.name}.log')
+    return rows, work
 
 
 def play(args):
-    out = args.output_dir.resolve()
-    out.mkdir(parents=True, exist_ok=True)
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    binary = build(args, out)
-    runs = [(terrain, [comp]) for terrain in args.terrains for comp in (args.air_comps if terrain == 'air' else args.comps)]
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        for rows in pool.map(lambda r: run_one(args, binary, out, *r), runs):
-            path = results / 'bench.csv'
-            new = not path.exists()
-            with path.open('a', newline='') as handle:
-                writer = csv.DictWriter(handle, fieldnames=FIELDS, extrasaction='ignore')
-                if new:
-                    writer.writeheader()
-                writer.writerows(rows)
-            print(f'{rows[0]["terrain"]}/{rows[0]["comp"]}: {len(rows)} trials', flush=True)
+    require_free_space()
+    with scratch_dir('formation-bench', args.output_dir) as out:
+        binary = build(args, out)
+        runs = [(terrain, [comp]) for terrain in args.terrains for comp in (args.air_comps if terrain == 'air' else args.comps)]
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            for rows, work in pool.map(lambda r: run_one(args, binary, out, *r), runs):
+                path = results / 'bench.csv'
+                new = not path.exists()
+                with path.open('a', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=FIELDS, extrasaction='ignore')
+                    if new:
+                        writer.writeheader()
+                    writer.writerows(rows)
+                finish_game(out, work, False)
+                print(f'{rows[0]["terrain"]}/{rows[0]["comp"]}: {len(rows)} trials', flush=True)
 
 
 def f(value):
@@ -224,7 +239,8 @@ def report(args):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
-parser.add_argument('--output-dir', type=Path, help='Probe binary and per-run directories (logs, maps)')
+parser.add_argument('--output-dir', type=Path, help='Probe binary and per-run directories (logs, maps) '
+                                                     '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--results', required=True, help='Directory for bench.csv')
 parser.add_argument('--terrains', nargs='+', default=['open'], choices=('open', 'canyon', 'obstacles', 'air'))
 parser.add_argument('--comps', nargs='+', default=['tanks', 'mixed', 'sonic', 'light', 'heavy', 'big'])
@@ -243,6 +259,4 @@ args = parser.parse_args()
 if args.report:
     report(args)
 else:
-    if not args.output_dir:
-        parser.error('--output-dir is required to play.')
     play(args)

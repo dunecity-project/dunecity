@@ -600,6 +600,10 @@ void QuantBot::update() {
 		return;
 	}
 
+    // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
+    // R, U and V read it), before anything this pass consults it.
+    if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
+                     | kForcePerimeterHold)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front
     // battery with it. It is therefore evaluated on every pass this house
@@ -669,6 +673,8 @@ void QuantBot::update() {
 
     updateCampaignWave();
 	checkAllUnits();
+    // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
+    keepPlannedSitesClear();
 
 	// Phased custom single-player handled the whole timer block on its own build
 	// phase above and returned; reaching here means this is the unit phase (or a
@@ -708,6 +714,7 @@ uint64_t QuantBot::traceDecision(const std::string& event, AITelemetry::Record d
 }
 
 void QuantBot::onObjectWasBuilt(const ObjectBase* pObject) {
+    if (pObject && pObject->getItemID() == Structure_RocketTurret) ++forceStats.turretsBuilt;
     if (pObject) traceDecision("object_built", AITelemetry::Record().set("item", pObject->getItemID())
         .set("object", pObject->getObjectID()).set("x", pObject->getLocation().x).set("y", pObject->getLocation().y));
 }
@@ -717,6 +724,7 @@ void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
     if (currentGame
             && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall)
         recentStructureLosses.push_back({location, getStructureSize(itemID), getGameCycleCount(), static_cast<Uint32>(itemID)});
+    if (itemID == Structure_RocketTurret) ++forceStats.turretsLost;
     dangerUpdated = std::numeric_limits<Uint32>::max();
     traceDecision("structure_lost", AITelemetry::Record().set("item", itemID).set("x", location.x).set("y", location.y));
 }

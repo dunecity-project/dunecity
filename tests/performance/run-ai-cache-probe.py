@@ -63,7 +63,7 @@ with (out/'build.log').open('w') as log:
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 profile = out/'profile'
 with managed_profile(profile):
-    active = prepare_profile(profile, args.profile_from)
+    active = prepare_profile(profile, args.profile_from, [args.save])
     if active: print('AI_CACHE_PROBE_PROFILE: active_mod='+active)
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                AI_CACHE_PROBE_SAVE=str(args.save.resolve()))

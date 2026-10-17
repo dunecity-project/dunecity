@@ -81,10 +81,13 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // default (QuantBot Config [Force Concentration]); no saved state change.
     // 79 bundles the QuantBot idle reserve forward, launches waves from the bundle and keeps a
     // hunting launcher's escape out of focus fire; save 9863 (the bundle and the gate's wait).
+    // 80 holds the QuantBot army on the base perimeter while a remembered enemy army
+    // outnumbers it, adds perimeter rocket turrets then and sizes defences at 1.5x the threat;
+    // save 9864 (the remembered army and the musters).
     // 81 unjams the formation march (laggards route round members keeping the pace, members
     // waiting for a laggard give way to a mate stepping onto their tile) and makes a QuantBot
     // without a striking starting army hold its first wave for full readiness ([Force
-    // Concentration] OpeningReadiness); no saved state change.
+    // Concentration] OpeningReadiness); no saved state change (9864).
     REQUIRE(NETWORK_PROTOCOL_VERSION == 81);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
