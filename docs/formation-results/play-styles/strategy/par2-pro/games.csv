@@ -1,0 +1,13 @@
+tag,difficulty,map,seed,sides,players,winner,winner_label,end_s,waves,wall_s,error
+par,hard,x-factor,8101,atreides:default#Learned-Base|harkonnen:default#Learned-Swarm,2,0,default#Learned-Swarm,801.7,1,7,
+par,hard,x-factor,8101,atreides:default#Learned-Timing|harkonnen:default#Learned-Base,2,0,default#Learned-Base,684.8,0,7,
+par,hard,x-factor,8101,atreides:default#Learned-Base|harkonnen:default#QuadMass-Base,2,0,default#QuadMass-Base,684.8,0,8,
+par,hard,x-factor,8101,atreides:default#Learned-Base|harkonnen:default#Learned-Timing,2,0,default#Learned-Timing,684.8,0,8,
+par,hard,x-factor,8101,atreides:default#QuadMass-Base|harkonnen:default#Learned-Base,2,0,default#Learned-Base,684.8,0,8,
+par,hard,x-factor,8101,atreides:default#Learned-Swarm|harkonnen:default#Learned-Base,2,1,default#Learned-Swarm,1190.9,0,8,
+par,hard,sihaya-pip,8101,atreides:default#Learned-Swarm|harkonnen:default#Learned-Base,2,1,default#Learned-Swarm,2052.3,14,15,
+par,hard,sihaya-pip,8101,atreides:default#Learned-Timing|harkonnen:default#Learned-Base,2,0,default#Learned-Base,1589.4,6,9,
+par,hard,sihaya-pip,8101,atreides:default#Learned-Base|harkonnen:default#Learned-Swarm,2,1,default#Learned-Base,2616.7,16,19,
+par,hard,sihaya-pip,8101,atreides:default#Learned-Base|harkonnen:default#Learned-Timing,2,0,default#Learned-Timing,2357.9,11,13,
+par,hard,sihaya-pip,8101,atreides:default#QuadMass-Base|harkonnen:default#Learned-Base,2,0,default#Learned-Base,2447.8,13,13,
+par,hard,sihaya-pip,8101,atreides:default#Learned-Base|harkonnen:default#QuadMass-Base,2,0,default#QuadMass-Base,2886.5,21,16,

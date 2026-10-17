@@ -4,6 +4,12 @@ Stefan: "do another round of ai work, testing additional play styles against eac
 the updates and recommendations for ai play". Branch `feat/ai-play-styles` (from staging 688fd077 =
 local 1.0.846: QuantBot default B W F C Q + U V X + I, WaveFormation None; protocol 81, save 9864).
 
+**Update (branch `feat/ai-strategy-mix`, protocol 82, save 9865): see section 6.** Unit mix and tempo are
+now two production strategy factors with their own weighted, multiplayer-deterministic random pick. The
+finished round-robin, Brutal and swarm-confirmation runs of this round are in 6.1. The default changes to
+the learned mix with the **Swarm** tempo, the only strategy measured above 1.0.846. `Mode=Random` plays the
+measured weights: it gives more variety and was level with 1.0.846 in the measurements.
+
 **Result in one paragraph.** Eleven styles were built as test-only per-player overrides and played
 2,406 recorded games (Fortress duels and Construction Yard starts on six bundled maps, Hard) on the mini,
 MacBook Pro and Windows PC. The 1.0.846 default (BASE) is hard to beat: no fixed army composition and
@@ -221,3 +227,235 @@ swarm/timing/siege v BASE) and the extra 108 swarm-v-BASE CY games (`c1c-air` on
 run `/weak` (`formation-duel.py --pairs "default@swarm/weak:none"`, against BASE's 0.42) and
 `quantbot_all_against_atreides` with `WaveReadinessPercent=35`, then make it the default (protocol 82).
 
+
+## 6. Strategies: unit mix x tempo (production, protocol 82, save 9865)
+
+Stefan: "the ai should try different unit ratio strategies and one could even be massing say quads etc";
+"add that, separate thing to simulate - we need controls for both"; "still allow the ai to 'learn' better
+ratios based on unit performance per current logic". Branch `feat/ai-strategy-mix` (from `c8fcaaa8`).
+
+### 6.1 The play-style runs finished
+
+All of these are CY, Hard. Scores are against BASE.
+- **swarm, pooled** (screen, round-robin and the Air's 108 `c1c-air` games): **0.58 (0.52-0.64), n=270**.
+- **Round-robin, 94 games per cell.** Row means: swarm 0.606, BASE 0.526, timing 0.505, boom 0.453,
+  siege 0.465, rush 0.447. swarm beats rush 0.61, boom 0.63 and siege 0.61, each with its interval
+  above 0.5. There is still no cycle.
+- **Fortress round-robin** (`r1f`, 14-16 games per cell): row means swarm 0.586, rush 0.559, BASE 0.557,
+  siege 0.529, boom 0.409, timing 0.361.
+- **Brutal** (`b1c-w`, 24 games each): swarm 0.54, siege 0.54, timing 0.50.
+
+### 6.2 Mechanism
+
+**Factors.** `QuantBotStrategy` (`include/players/QuantBotStrategy.h`, `src/players/QuantBotStrategy.cpp`)
+has two factors:
+- **Mix:** Learned, QuadMass, TrikeSwarm, TankMass, Artillery, Specials, Air, Infantry, Counter.
+- **Tempo:** Base, Swarm, Timing, Rush, Flood.
+
+**Config.** `[Strategy]` in QuantBot Config.ini. The keys are optional, never written by `save()`, and hashed:
+- `Mode = Random | Fixed:<Mix>,<Tempo>`. The default is `Fixed:Learned,Swarm`.
+- `MixWeights = Learned:50,QuadMass:15,Counter:10,Artillery:10,Air:10,TrikeSwarm:5` (the defaults).
+- `TempoWeights = Swarm:80,Flood:20` (the defaults).
+- A malformed value keeps the previous one and is logged. Values are `name:weight` because INIFile
+  rejects a second `=`.
+
+**Determinism.**
+- Each factor is picked once by `QuantBotStrategy::pick(settings, seed, house, eligible)`.
+- The draw is SplitMix64 over the game's random seed (`GameInitSettings::getRandomSeed()`), the house id
+  and a per-factor salt. No simulation RNG draw, clock or local setting is involved, and the result
+  does not depend on the order bots are created or updated.
+- The pick happens at the bot's first `update()` (`QuantBot::pickStrategy`).
+- It is saved (SAVEGAMEVERSION 9865: picked flag, mix, tempo). A 9864 save loads unpicked and is picked
+  by the same function.
+- Telemetry: the `strategy` decision plus a `QUANTBOT_STRATEGY:` log line. Harness `houses.csv` has a
+  `strategy` column.
+
+**Where strategies apply.** Custom Hard/Brutal only (`autonomousCustomHardBrutal()`). Every other bot
+plays Learned/Base.
+
+**Eligibility.** A mix needs at least half of its prior's weight in slots the house can build
+(ObjectData builder/tech level). Harkonnen therefore never draws Air or TrikeSwarm, and a fixed mix the
+house cannot field becomes Learned. Infantry needs a buildable infantry unit.
+
+**A mix is the prior, not a frozen composition.** The strategy's ratios replace the configured opening
+mix (`defaults`), which `UnitMixPolicy::allocate` blends combat evidence into (QuantBotBuild.cpp). The
+learning is unchanged:
+- Before evidence, production follows the prior.
+- On vanilla maps the evidence blend moves production toward what performs as the lost value grows
+  against the fielded army.
+- `holdPercent` (100 for every mix) can make a prior hold longer.
+
+**Other per-strategy rules.**
+- **Counter:** its prior is the counter of the remembered enemy army (`enemyCounterPrior`).
+- **Infantry:** 35% of the army on foot; Custom vanilla then founds a barracks and a WOR.
+- **Air:** unlocks ornithopters by upgrading the Hi-Tech Factory first. It pays from credits the reserves
+  hold back, because otherwise the upgrade never happened.
+
+| Mix | Starting ratios (tank, siege, launcher, special, ornithopter, trike, raider, quad) | Notes |
+|---|---|---|
+| Learned | configured opening (1.0.846) | |
+| QuadMass | 20 / 0 / 0 / 0 / 0 / 0 / 10 / 70 | raider trikes only for Ordos |
+| TrikeSwarm | 10 / 0 / 0 / 0 / 0 / 45 / 45 / 0 | not Harkonnen |
+| TankMass | 70 / 15 / 15 / 0 / 0 / 0 / 0 / 0 | |
+| Artillery | 20 / 45 / 35 / 0 / 0 / 0 / 0 / 0 | Ordos launchers masked |
+| Specials | 25 / 15 / 10 / 50 / 0 / 0 / 0 / 0 | Devastator / Sonic Tank / Deviator |
+| Air | 15 / 10 / 15 / 0 / 60 / 0 / 0 / 0 | not Harkonnen |
+| Infantry | configured opening, infantry 35% | |
+| Counter | counter of the remembered enemy army | |
+
+| Tempo | Wave readiness | Smallest wave | Other |
+|---|---|---|---|
+| Base | configured (60%) | 6 units / 3,000 | 1.0.846 |
+| Swarm | 35% | 4 / 2,000 | = the play-style `swarm` (replays bit-identical) |
+| Timing | 100% | 6 / 3,000 | |
+| Rush | 15% | 4 / 1,200 | light factory first, no repair-yard wait, no full-readiness opening; first 20 minutes |
+| Flood | 20% | 3 / 1,500 | |
+
+**Harness labels.**
+- `default#<Mix>-<Tempo>` plays a fixed strategy and `default#random` plays the config's weights;
+  `default#Learned-Base` is BASE.
+- `default#<Mix>-<Tempo>-fixed` is the "strategy fixed" arm: the test-only style mix at 100%, which
+  holds the ratios against the learning.
+- `tests/ai/play-styles/*-fixed*.ini`, `*-swarm.ini` and `flood.ini` are the earlier fixed arms.
+
+**Parity.** These games matched the reference row for row:
+- 1.0.846 BASE and the `@swarm`/`@timing` styles replayed bit-identical through `#Learned-Base`,
+  `#Learned-Swarm` and `#Learned-Timing` (`par-old`/`par-new`, 16 games against `s1c`).
+- MacBook Pro and Air matched the mini, including QuadMass (`par2-*`).
+- Windows matched apart from the known ±0.1 s `end_s` (`par-win`).
+
+### 6.3 Experiments
+
+All of these are CY starts on the six bundled maps, Hard, all three house pairs, both sides, against BASE.
+Scores are from the strategy's side, with the play-style scoring rules and 95% bootstrap intervals; bold
+means the interval excludes 0.5. A house that cannot field a mix plays Learned; those games are counted
+under the strategy actually played. Data: `docs/formation-results/play-styles/strategy/<tag>/`.
+
+**(a) Mix experiment.** Tempo is held at Base (control = Learned/Base = BASE). Seeds 10202 (mini),
+10303 (PC) and 10404 (mini).
+
+| Mix (prior + learning), Base tempo | Score v BASE |
+|---|---|
+| Artillery | 0.54 (0.44-0.63) n=108 |
+| Specials | 0.53 (0.44-0.62) n=108 |
+| Air (Atreides/Ordos) | 0.52 (0.38-0.67) n=48 |
+| QuadMass | 0.50 (0.41-0.59) n=108 |
+| TrikeSwarm (Atreides/Ordos) | 0.48 (0.37-0.59) n=72 |
+| Counter | 0.46 (0.38-0.56) n=108 |
+| Infantry | 0.45 (0.36-0.55) n=108 |
+| TankMass | 0.42 (0.33-0.52) n=108 |
+
+**(b) Tempo experiment.** The mix is held at Learned (control = Base tempo = BASE). Seeds 10202 and 10303
+(Air) are pooled with the bit-identical play-style runs.
+
+| Tempo, Learned mix | Score v BASE |
+|---|---|
+| Swarm | **0.57** (0.52-0.62) n=352 |
+| Flood | 0.53 (0.44-0.62) n=108 |
+| Rush | 0.49 (0.36-0.61) n=72 |
+| Timing | 0.46 (0.40-0.53) n=240 |
+
+**(c) Factorial: every mix x Swarm.** Seeds 10202 and 10303 (Pro). The third seed, `mC3-air` on the
+Air, was not collected: the Air went offline.
+
+| Mix | x Base | x Swarm | Swarm effect |
+|---|---|---|---|
+| Learned | 0.50 (BASE) | **0.57** | +0.07 |
+| QuadMass | 0.50 | 0.54 (0.43-0.65) n=72 | +0.04 |
+| Air | 0.52 | 0.52 (0.38-0.67) n=48 | 0 |
+| Counter | 0.46 | 0.51 (0.40-0.62) n=72 | +0.05 |
+| Artillery | 0.54 | 0.49 (0.38-0.61) n=72 | -0.05 |
+| Infantry | 0.45 | 0.49 (0.36-0.60) n=72 | +0.04 |
+| TrikeSwarm | 0.48 | 0.48 (0.33-0.62) n=48 | 0 |
+| TankMass | 0.42 | 0.46 (0.35-0.57) n=72 | +0.04 |
+| Specials | 0.53 | 0.44 (0.33-0.56) n=72 | -0.09 |
+
+Main effects: tempo matters more than mix. Swarm adds about +0.04 to +0.07 to the cheap and mixed armies
+(Learned, QuadMass, Counter, TankMass, Infantry). It costs the slow heavy priors (Specials -0.09,
+Artillery -0.05): slow units in small early waves die piecemeal. No mix improves on Learned x Swarm, and
+none of the interactions has an interval that excludes 0. QuadMass is the clearest pairing: level at Base,
+0.54 with Swarm, and 0.61 (0.44-0.78) on Brutal.
+
+**(d) Prior + learning v fixed v learned.** All scores are against BASE. The "fixed" arms hold the ratios
+(the old styles at 70%, the new `-fixed` arms at 100%).
+
+| Mix | Fixed, Base | Prior + learning, Base | Fixed, Swarm | Prior + learning, Swarm |
+|---|---|---|---|---|
+| QuadMass | 0.53 n=36 | 0.50 n=108 | 0.42 n=36 | 0.54 n=72 |
+| TrikeSwarm | 0.39 n=36 | 0.48 n=72 | 0.50 n=36 | 0.48 n=48 |
+| TankMass (armor) | **0.28** n=64 | 0.42 n=108 | 0.36 n=36 | 0.46 n=72 |
+| Artillery (siege) | 0.46 n=158 | 0.54 n=108 | 0.53 n=36 | 0.49 n=72 |
+| Specials (heavy) | **0.34** n=64 | 0.53 n=108 | 0.42 n=36 | 0.44 n=72 |
+| Air | 0.42 n=64 | 0.52 n=48 | 0.42 n=36 | 0.52 n=48 |
+| Counter (60% blend) | 0.45 n=64 | 0.46 n=108 | - | 0.51 n=72 |
+
+The learning matters. Every fixed heavy composition lost: armor 0.28 and heavy 0.34, each with its
+interval below 0.5. As priors with the learning on, the same ratios are level with BASE (0.42-0.54). The
+earlier result that fixed compositions lose was mostly the mix being held, not the tempo; Swarm adds a
+little to the fixed arms too (armor 0.28 -> 0.36, heavy 0.34 -> 0.42, siege 0.46 -> 0.53).
+
+**(e) Brutal (top 3 + random), seed 11404, all houses (PC, mini):**
+- QuadMass-Swarm 0.61 (0.44-0.78) n=36.
+- Learned-Swarm 0.53 (0.40-0.67) n=60 (with `b1c-w`).
+- Counter-Swarm 0.47 (0.31-0.64) n=36.
+- The random bot 0.58 (0.42-0.75) n=36.
+
+### 6.4 The random-strategy bot
+
+**Weights and why.**
+- **Tempo:** Swarm is the only tempo above BASE. Flood is level (0.53) and is kept at 20 for variety.
+  Timing and Rush are left out.
+- **Mix:** Learned is half the weight because Learned x Swarm is the best cell. The rest goes to the
+  mixes level with it under Swarm: QuadMass 15 (best mix x Swarm, best Brutal), Counter 10, Artillery 10,
+  Air 10 and TrikeSwarm 5 (Air and TrikeSwarm fall back to Learned for Harkonnen).
+- **Left out:** TankMass and Infantry (below BASE at Base tempo) and Specials (0.44 with Swarm).
+- **Expected score** from the cells: 0.54 against BASE.
+
+Results, CY:
+
+| Random bot (`default#random`) | Score | Notes |
+|---|---|---|
+| v BASE, Pro `rC-pro` | 0.51 (0.42-0.60) n=108 | 3 seeds, all houses: only 9 distinct (seed, house) picks; its 3 Learned-Swarm picks scored 0.33 |
+| v BASE, Pro `rC2-pro` | 0.58 (0.50-0.66) n=144 | 12 seeds: 24 picks |
+| **v BASE, pooled** | **0.55 (0.49-0.61) n=252** | Learned-Swarm alone: 0.57 (0.52-0.62) n=352 |
+| v `none` (old rules) | **0.62** (0.53-0.71) n=108 | BASE v none 0.56 |
+| Fortress v BASE (`rF`) | 0.47 (0.31-0.64) n=36 | |
+| `/weak` v none | 0.46 n=36 | BASE `/weak` 0.42 |
+| Brutal v BASE | 0.58 (0.42-0.75) n=36 | |
+
+In the pooled games, the picks the random bot played scored: Air-Swarm 0.62 (24), Counter-Swarm 0.62 (24),
+QuadMass-Swarm 0.57 (30), Learned-Flood 0.56 (54), Learned-Swarm 0.44 (90).
+
+**Decision (the stated default rule).** The random bot's pooled interval reaches 0.49, so it does not
+qualify as the default. The single winner does:
+- **Learned-Swarm on CY:** 0.57 (0.52-0.62), n=352.
+- **Fortress:** 0.58 (0.42-0.75) over 36 games on this branch (`sF-pro`); pooled with the 72 earlier
+  games, 0.55 (0.45-0.64), n=108.
+- **Brutal:** 0.53 (0.40-0.67), n=60.
+- **`/weak`:** 0.43 (0.28-0.58) against `none`, n=36, so not worse than BASE `/weak` (0.42).
+- **`quantbot_all_against_atreides`:** passes.
+
+So the default is `Mode=Fixed:Learned,Swarm`. `Mode=Random` keeps the measured weights for anyone who
+wants the AI to vary. The tradeoff is about 0.02 of expected score against BASE (0.55 v 0.57), not
+significant at these sample sizes. Every pick in the random pool is level with or above BASE, so it is a
+safe "more varied" setting, and it was the stronger bot against the old rules (0.62).
+
+**Not done** (this round's request budget):
+- **Round-robin among the new strategies:** none was run. The counter structure therefore rests on the
+  play-style round-robin (6.1), which has no cycle.
+- **Mid-game strategy switch:** not built, because no cycle was found to exploit.
+- **mC3-air:** the third factorial seed on the Air was not collected (the Air was offline).
+- **4-player FFA:** `--ffa default#random,default#Learned-Base,default#Learned-Swarm,none` on Four Chambers
+  and Equilibrium (`rX-pro` on the Pro). Only 8 of 16 games had finished when this was written; they are
+  not analysed. The first mini attempt failed: duplicate labels in `--ffa` collide in the run directory.
+
+### 6.5 Recommendations
+
+- **Default:** learned mix, Swarm tempo. Players get a full-strength first attack, then frequent smaller
+  waves (35% readiness) and a mix that adapts to theirs.
+- **For variety, set `Mode=Random`.** Each house then plays its own mix/tempo per game, the same on every
+  peer. Examples: quad swarms, artillery behind tanks, ornithopter wings for Atreides/Ordos, or a mix
+  built to counter the army it has seen.
+- **Mixes stay priors.** A fixed composition loses to the learning; keep `holdPercent` at 100 unless a
+  mix measures better held.
+- **Avoid Specials with Swarm, TankMass, Infantry and the Timing tempo.**
