@@ -197,3 +197,46 @@ TEST_CASE("Force: a split attacks when both groups are there or one is fighting"
     REQUIRE_FALSE(splitFighting(1, 8));
     REQUIRE_FALSE(splitFighting(0, 0));
 }
+
+TEST_CASE("Force: strength-aware waves and the home reserve follow the enemy estimate", "[ai][force]") {
+    REQUIRE(strongEnough(10000, 10000, 10000));
+    REQUIRE_FALSE(strongEnough(9999, 10000, 10000));
+    REQUIRE(strongEnough(8000, 10000, 8000));
+    REQUIRE(strongEnough(0, 0, 12000));
+    REQUIRE(reserveShareBps(10000, 10000) == 0);
+    REQUIRE(reserveShareBps(12000, 10000) == 0);
+    REQUIRE(reserveShareBps(8000, 10000) == 2000);
+    REQUIRE(reserveShareBps(1000, 10000) == kReserveMaxBps);
+    REQUIRE(reserveShareBps(5000, 0) == 0);
+}
+
+TEST_CASE("Force: a sized defence takes the bundle first, then the nearest, and declines a lost cause", "[ai][force]") {
+    REQUIRE(sizedRequired(1000) == 1500);
+    REQUIRE(sizedRequired(-1) == 0);
+    const std::vector<SizedResponder> troops{{5, 600, 30, false}, {2, 500, 10, false}, {9, 800, 60, true},
+                                             {4, 400, 50, false}, {7, 0, 5, true}};
+    // The bundled troop comes first even from beyond the band; the zero-value one is skipped.
+    REQUIRE(sizedPool(1200, 0, troops, 40) == std::vector<uint32_t>{9, 2});
+    // Beyond the band and not bundled: never.
+    REQUIRE(sizedPool(5000, 0, troops, 40) == std::vector<uint32_t>{9, 2, 5});
+    REQUIRE(sizedPool(1000, 900, troops, 40) == std::vector<uint32_t>{9});
+    auto reversed = troops;
+    std::reverse(reversed.begin(), reversed.end());
+    REQUIRE(sizedPool(5000, 0, reversed, 40) == sizedPool(5000, 0, troops, 40));
+    REQUIRE(answerable(1000, 400, 600));
+    REQUIRE_FALSE(answerable(1000, 400, 599));
+}
+
+TEST_CASE("Force: perimeter turrets follow the enemy's lead and stand on the enemy-side band", "[ai][force]") {
+    REQUIRE(perimeterTurretGoal(10000, 12499) == 0);       // not outnumbered
+    REQUIRE(perimeterTurretGoal(10000, 12500) == 2);
+    REQUIRE(perimeterTurretGoal(10000, 15999) == 5);
+    REQUIRE(perimeterTurretGoal(1000, 90000) == kPerimeterTurretsMax);
+    REQUIRE(perimeterTurretGoal(0, 0) == 0);
+    REQUIRE(onPerimeterBand(10, 0, 10));
+    REQUIRE(onPerimeterBand(6, kPerimeterHalfWidth, 10));
+    REQUIRE(onPerimeterBand(12, -kPerimeterHalfWidth, 10));
+    REQUIRE_FALSE(onPerimeterBand(5, 0, 10));               // inside the base
+    REQUIRE_FALSE(onPerimeterBand(13, 0, 10));              // out in the field
+    REQUIRE_FALSE(onPerimeterBand(10, kPerimeterHalfWidth + 1, 10));
+}

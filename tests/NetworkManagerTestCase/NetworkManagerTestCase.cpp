@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 79;
+static constexpr int kWireProtocolVersion = 80;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -81,7 +81,10 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // default (QuantBot Config [Force Concentration]); no saved state change.
     // 79 bundles the QuantBot idle reserve forward, launches waves from the bundle and keeps a
     // hunting launcher's escape out of focus fire; save 9863 (the bundle and the gate's wait).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 79);
+    // 80 holds the QuantBot army on the base perimeter while a remembered enemy army
+    // outnumbers it, adds perimeter rocket turrets then and sizes defences at 1.5x the threat;
+    // save 9864 (the remembered army and the musters).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 80);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

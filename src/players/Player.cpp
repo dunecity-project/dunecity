@@ -256,6 +256,12 @@ bool Player::doPlaceStructure(const ConstructionYard* pConstYard, int x, int y) 
     }
 }
 
+void Player::doMoveOwnUnitsOffPlot(const ConstructionYard* pConstYard, Uint32 itemID, int x, int y) const {
+    if(pConstYard->getOwner() == getHouse() && pConstYard->isActive()) {
+        const_cast<ConstructionYard*>(pConstYard)->moveOwnUnitsOffPlot(itemID, x, y, true);
+    }
+}
+
 void Player::doSpecialWeapon(const Palace* pPalace) const {
     if(pPalace->getOwner() == getHouse() && pPalace->isActive()) {
         const_cast<Palace*>(pPalace)->doSpecialWeapon();

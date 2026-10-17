@@ -22,6 +22,11 @@
 //      most, and launches from the bundle once 70% stand there; an attack on a building pulls
 //      defenders out of the bundle; save/load mid-gather and while the gate waits restores the
 //      bundle exactly and re-saves the same bytes; a 9862 save has no bundle.
+//   8. Planned sites and the army (the footprint rule): our own tank on a site does not make it
+//      unplaceable for the AI's site search, another house's unit does; holding/bundle slots skip
+//      a planned site; an idle tank on it is sent to a free tile beside it and leaves; a building
+//      finished while a tank stands on its site waits (site and reservation kept), the tank is
+//      asked off, and the building is then placed exactly on its planned site.
 void runForceConcentrationProbe(Game& game) {
     auto require=[](bool ok,const char* why){
         if(!ok){SDL_Log("FORCE_PROBE_FAIL: %s",why);throw std::runtime_error(why);}
@@ -48,14 +53,18 @@ void runForceConcentrationProbe(Game& game) {
     // ---- 1. Defaults -----------------------------------------------------------------------
     const QuantBotConfig defaults;
     require(defaults.force.focusFire && defaults.force.converge && defaults.force.waveReadinessPercent==60
-        && defaults.force.bundle && defaults.force.launchFromBundle,
-        "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it");
+        && defaults.force.bundle && defaults.force.launchFromBundle && defaults.force.perimeterHold
+        && defaults.force.perimeterTurrets && defaults.force.sizedDefence,
+        "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it"
+        " + perimeter hold + perimeter turrets + sized defence");
     const auto& loaded=getQuantBotConfig();
     require(loaded.force.focusFire && loaded.force.converge && loaded.force.waveReadinessPercent==60
-        && loaded.force.bundle && loaded.force.launchFromBundle,
+        && loaded.force.bundle && loaded.force.launchFromBundle && loaded.force.perimeterHold
+        && loaded.force.perimeterTurrets && loaded.force.sizedDefence,
         "The shipped QuantBot configuration did not load the force defaults");
     require(bot->forceBits()==(QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceBundle
-            |QuantBot::kForceBundleGate) && bot->waveReadinessPercent()==60,
+            |QuantBot::kForceBundleGate|QuantBot::kForcePerimeterHold|QuantBot::kForceThreatTurrets
+            |QuantBot::kForceSizedDefence) && bot->waveReadinessPercent()==60,
         "Custom Hard does not use the configured force rules");
     bot->difficulty=QuantBot::Difficulty::Medium;
     require(!bot->forceVariant(QuantBot::kForceFocusFire) && bot->waveReadinessPercent()==100,
@@ -461,6 +470,319 @@ void runForceConcentrationProbe(Game& game) {
                 "A ready wave standing in the bundle did not launch from it");
             bot->defenceAssignments.clear();
             retireAll();
+        }
+
+        // ---- 7. Round 5: the remembered enemy army, the perimeter hold and turrets, sized defence --
+        {
+            namespace Force=ForceConcentrationPolicy;
+            bot->forceVariantOverride=QuantBot::kNoForceOverride;
+            bot->customWave.members.clear();
+            bot->defenceAssignments.clear();
+            bot->defenceResponseCycles.clear();
+            bot->enemySightings.clear();
+            bot->musters.clear();
+            const Coord bundleArea=origin;
+            origin=clearArea(bundleArea,40);
+            require(origin.isValid(),"Round 5 fixture needs a third clear 40x24 area");
+            auto step=[&]{ game.processObjects(); ++game.gameCycleCount; publish(); };
+            std::vector<UnitBase*> ours, theirs;
+            for(const int y:{6,9}) ours.push_back(spawn(owner,Unit_Tank,Coord(3,y)));
+            for(int i=0;i<10;++i) theirs.push_back(spawn(enemy,Unit_Tank,Coord(28+2*(i%5),4+3*(i/5))));
+            publish();
+
+            // The memory: everything seen is remembered, also once out of sight; the dead are
+            // forgotten at once and the unseen after kSightingMemoryMs.
+            bot->updateEnemySightings();
+            require(bot->enemySightings.size()==theirs.size(),"The visible enemy army was not remembered");
+            theirs[0]->setVisible(owner->getTeamID(),false);
+            bot->updateEnemySightings();
+            require(bot->enemySightings.count(theirs[0]->getObjectID()),"An enemy out of sight was forgotten at once");
+            theirs[1]->setHealth(0);
+            step();
+            bot->updateEnemySightings();
+            require(bot->enemySightings.size()==theirs.size()-1 && !bot->enemySightings.count(rosterIds.at(theirs[1])),
+                "A dead enemy was still remembered");
+            game.gameCycleCount+=MILLI2CYCLES(Force::kSightingMemoryMs)+1;
+            bot->updateEnemySightings();
+            require(!bot->enemySightings.count(theirs[0]->getObjectID()) && bot->enemySightings.size()==theirs.size()-2,
+                "An enemy unseen for the whole memory was still remembered");
+            theirs[0]->setVisible(owner->getTeamID(),true);
+            bot->updateEnemySightings();
+            SDL_Log("FORCE_PROBE: memory remembered=%zu estimate=%lld own=%lld",bot->enemySightings.size(),
+                (long long)bot->enemyArmyEstimate(),(long long)bot->ownGroundArmyValue());
+
+            // Outnumbered (9 tanks against 2): garrisoned, perimeter turrets wanted.
+            ++game.gameCycleCount;
+            require(bot->outnumberedByEstimate() && bot->garrisoned(),"Nine remembered tanks against two did not outnumber us");
+            const int goal=bot->perimeterTurretGoal();
+            require(goal>0 && goal==Force::perimeterTurretGoal(bot->ownGroundArmyValue(),bot->enemyArmyEstimate()),
+                "The perimeter turret goal does not follow the enemy's lead");
+
+            // The perimeter: towards the observed enemy base, beyond the outermost own building.
+            const auto savedBases=bot->visibleEnemyBases;
+            bot->visibleEnemyBases={bot->findBaseCentre(enemy->getHouseID())};
+            ++game.gameCycleCount;
+            const QuantBot::Perimeter perimeter=bot->perimeter();
+            require(perimeter.length>0 && perimeter.point.isValid(),"No perimeter towards the observed enemy base");
+            auto along=[&](Coord at){ return int((int64_t(at.x-perimeter.anchor.x)*perimeter.forward.x
+                + int64_t(at.y-perimeter.anchor.y)*perimeter.forward.y)/perimeter.length); };
+            auto across=[&](Coord at){ return int((int64_t(at.y-perimeter.anchor.y)*perimeter.forward.x
+                - int64_t(at.x-perimeter.anchor.x)*perimeter.forward.y)/perimeter.length); };
+            for(const auto* structure:structureList)
+                if(structure->getOwner()==owner && structure->getHealth()>0
+                    && blockDistance(structure->getLocation(),perimeter.anchor).lround()<=Force::kPerimeterBaseTiles)
+                    require(along(structure->getLocation())<=perimeter.depth,"A building stands beyond the perimeter depth");
+            require(along(perimeter.point)>=perimeter.depth-Force::kPerimeterInnerTiles
+                && !currentGameMap->getTile(perimeter.point)->hasAStructure(),
+                "The perimeter point is not on the enemy-facing edge of the base");
+            // The garrison holds the perimeter (the house anchor, with the posture machine on), in
+            // the city simulation too: the footprint rule keeps it off planned sites (section 8).
+            getQuantBotConfig().recovery.enabled=true;
+            bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
+            bot->localSquadWithdraw=false;
+            const bool savedCitySim=game.citySimEnabled_;
+            game.citySimEnabled_=false;
+            const Coord vanillaAnchor=bot->armyAssemblyAnchor();
+            game.citySimEnabled_=true;
+            const Coord cityAnchor=bot->armyAssemblyAnchor();
+            game.citySimEnabled_=savedCitySim;
+            require(vanillaAnchor==perimeter.point && cityAnchor==perimeter.point && bot->reserveHeldHome(),
+                "The outnumbered reserve does not hold the perimeter");
+            getQuantBotConfig().recovery.enabled=false;
+            // A perimeter turret site: on the band and legal, and none when the band has no
+            // legal ground at all (rock that is free and in build range).
+            int legalBand=0;
+            for(int y=perimeter.anchor.y-40;y<=perimeter.anchor.y+40;++y)
+                for(int x=perimeter.anchor.x-40;x<=perimeter.anchor.x+40;++x)
+                    if(currentGameMap->tileExists(x,y)
+                        && Force::onPerimeterBand(along(Coord(x,y)),across(Coord(x,y)),perimeter.depth)
+                        && currentGameMap->okayToPlaceStructure(x,y,1,1,false,owner,false,Structure_RocketTurret)) ++legalBand;
+            const Coord site=bot->findPerimeterTurretLocation();
+            SDL_Log("FORCE_PROBE: perimeter anchor=%d,%d forward=%d,%d depth=%d point=%d,%d site=%d,%d legal_band=%d goal=%d",
+                perimeter.anchor.x,perimeter.anchor.y,perimeter.forward.x,perimeter.forward.y,perimeter.depth,
+                perimeter.point.x,perimeter.point.y,site.x,site.y,legalBand,goal);
+            if(site.isValid())
+                require(Force::onPerimeterBand(along(site),across(site),perimeter.depth)
+                    && currentGameMap->okayToPlaceStructure(site.x,site.y,1,1,false,owner,false,Structure_RocketTurret),
+                    "The perimeter turret site is off the band or not legal");
+            else require(legalBand==0,"No perimeter turret site although the band has legal ground");
+            // No wave leaves while outnumbered.
+            if(owner->getNumItems(Structure_RepairYard)==0)
+                require(place(owner,Structure_RepairYard,Coord(10,16)),"Fixture repair yard placement failed");
+            bot->militaryValueLimit=1000;
+            bot->forceStats=QuantBot::ForceStats();
+            bot->attack(1000000);
+            for(auto* unit:ours) require(unit->getAttackMode()!=HUNT,"A wave left while outnumbered");
+            require(bot->forceStats.garrisonHolds==1,"The outnumbered attack check was not held by the garrison");
+
+            // Save/load carries the memory and the musters byte for byte; 9862 has neither.
+            QuantBot::Muster muster;
+            muster.building=theirs[2]->getObjectID();
+            muster.point=origin+Coord(12,8);
+            muster.since=game.getGameCycleCount();
+            muster.members={ours[0]->getObjectID()};
+            bot->musters.push_back(muster);
+            {
+                OMemoryStream out; out.open();
+                bot->save(out);
+                const std::string bytes(out.getData(),out.getDataLength());
+                const Uint32 savedVersion=currentGame->loadedSavegameVersion;
+                currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                IMemoryStream in(bytes.data(),bytes.size());
+                QuantBot restored(in,owner);
+                bool same=restored.enemySightings.size()==bot->enemySightings.size() && restored.musters.size()==1
+                    && restored.musters[0].building==muster.building && restored.musters[0].point==muster.point
+                    && restored.musters[0].since==muster.since && restored.musters[0].members==muster.members;
+                for(const auto& [id,sighting]:bot->enemySightings) {
+                    const auto found=restored.enemySightings.find(id);
+                    same=same && found!=restored.enemySightings.end() && found->second.value==sighting.value
+                        && found->second.cycle==sighting.cycle;
+                }
+                require(same,"A save and load changed the remembered enemy army or the musters");
+                OMemoryStream again; again.open();
+                restored.save(again);
+                require(std::string(again.getData(),again.getDataLength())==bytes,
+                    "Re-saving the loaded memory and musters produced different bytes");
+                // A 9863 save as 1.0.844 wrote it: the same QuantBot block without the 9864
+                // trailer (the memory and the musters, written last). It loads with the bundle and
+                // neither, and the loaded bot re-saves as a 9864 save that loads again.
+                OMemoryStream trailer; trailer.open();
+                bot->saveDefenceMemory(trailer);
+                require(trailer.getDataLength()<bytes.size(),"The 9864 trailer is not part of the save");
+                const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength());
+                currentGame->loadedSavegameVersion=9863;
+                IMemoryStream oldIn(bytes9863.data(),bytes9863.size());
+                QuantBot old(oldIn,owner);
+                require(old.enemySightings.empty() && old.musters.empty() && old.bundlePoint==bot->bundlePoint
+                    && old.bundleCycle==bot->bundleCycle && old.bundleGateSince==bot->bundleGateSince,
+                    "A 9863 (1.0.844) save did not load with its bundle and no enemy memory");
+                OMemoryStream upgraded; upgraded.open();
+                old.save(upgraded);
+                currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                IMemoryStream upgradedIn(upgraded.getData(),upgraded.getDataLength());
+                QuantBot reloaded(upgradedIn,owner);
+                require(reloaded.enemySightings.empty() && reloaded.musters.empty() && reloaded.bundlePoint==bot->bundlePoint
+                    && upgraded.getDataLength()==bytes9863.size()+8,
+                    "A loaded 9863 save did not re-save as a 9864 save with an empty memory");
+                currentGame->loadedSavegameVersion=9862;
+                IMemoryStream legacyIn(bytes.data(),bytes.size());
+                QuantBot legacy(legacyIn,owner);
+                require(legacy.enemySightings.empty() && legacy.musters.empty(),"A 9862 save invented an enemy memory");
+                currentGame->loadedSavegameVersion=savedVersion;
+                SDL_Log("FORCE_PROBE: memory save_load sightings=%zu musters=1 bytes=%zu",bot->enemySightings.size(),bytes.size());
+            }
+            bot->musters.clear();
+
+            // A worker raid the troops in reach cannot match gets nobody; one they can gets 1.5x.
+            auto* harvester=spawn(owner,Unit_Harvester,Coord(8,18));
+            for(int i=2;i<10;++i) { theirs[i]->setHealth(0); }
+            step();
+            std::vector<UnitBase*> raiders;
+            for(int i=0;i<4;++i) raiders.push_back(spawn(enemy,Unit_Tank,Coord(12+i,20)));
+            publish();
+            for(auto* raider:raiders) raider->doAttackObject(harvester,true);
+            bot->forceStats=QuantBot::ForceStats();
+            bot->defenceResponseCycles.clear();
+            bot->scrambleUnitsAndDefend(raiders[0],false,harvester);
+            for(auto* unit:ours) require(!bot->defenceAssignments.count(unit->getObjectID()),"A lost cause was answered piecemeal");
+            require(bot->forceStats.declinedResponses==1,"A worker raid out of reach of a match was not declined");
+            for(int i=1;i<4;++i) raiders[i]->setHealth(0);
+            step();
+            bot->defenceResponseCycles.clear();
+            bot->scrambleUnitsAndDefend(raiders[0],false,harvester);
+            int answered=0;
+            for(auto* unit:ours) answered+=bot->defenceAssignments.count(unit->getObjectID());
+            SDL_Log("FORCE_PROBE: sized worker declined=%d answered=%d",bot->forceStats.declinedResponses,answered);
+            require(answered==2 && bot->forceStats.sizedResponses==2,
+                "A worker raid the troops can match did not get 1.5x the threat");
+            bot->visibleEnemyBases=savedBases;
+            bot->defenceAssignments.clear();
+            bot->enemySightings.clear();
+            retireAll();
+        }
+
+        // ---- 8. Planned sites and the army (the footprint rule) ------------------------------
+        {
+            bot->forceVariantOverride=QuantBot::kNoForceOverride;
+            bot->customWave.members.clear();
+            bot->defenceAssignments.clear();
+            // Clear rock for a yard and the wind trap beside it (with a tile of margin), no enemy
+            // within 14 tiles: the fixture uses origin + (3..9, 7..10).
+            origin=Coord::Invalid();
+            for(int y=0;y+12<currentGameMap->getSizeY() && origin.isInvalid();++y)
+                for(int x=0;x+11<currentGameMap->getSizeX() && origin.isInvalid();++x) {
+                    bool clear=true;
+                    for(const Coord& at:enemyThings)
+                        if(std::max(std::abs(at.x-(x+6)),std::abs(at.y-(y+8)))<14) { clear=false; break; }
+                    for(int dy=6;dy<=11 && clear;++dy) for(int dx=2;dx<=10 && clear;++dx) {
+                        const auto* tile=currentGameMap->getTile(x+dx,y+dy);
+                        if(!tile->isRock() || tile->isMountain() || tile->hasAGroundObject()
+                            || tile->hasCityZone() || tile->isRoad()) clear=false;
+                    }
+                    if(clear) origin=Coord(x,y);
+                }
+            require(origin.isValid(),"Footprint fixture needs clear rock away from the enemy");
+            // Without required concrete the finished building has no reason to prefer a prepared
+            // footprint elsewhere: it goes exactly where it was planned, or waits.
+            const bool savedConcrete=game.getGameInitSettings().getGameOptions().concreteRequired;
+            auto setConcrete=[&](bool required) {
+                auto options=game.getGameInitSettings().getGameOptions();
+                options.concreteRequired=required;
+                game.gameInitSettings.setGameOptions(options);
+            };
+            setConcrete(false);
+            try {
+                auto* yard=dynamic_cast<ConstructionYard*>(place(owner,Structure_ConstructionYard,Coord(4,8)));
+                require(yard,"Fixture construction yard placement failed");
+                const Coord site=origin+Coord(7,8);
+                const Coord size=getStructureSize(Structure_WindTrap);
+                auto onSite=[&](Coord p){ return p.x>=site.x && p.x<site.x+size.x && p.y>=site.y && p.y<site.y+size.y; };
+                auto idleHere=[&](UnitBase* unit){
+                    bot->doSetAttackMode(unit,AREAGUARD);
+                    bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                    unit->setForced(false);
+                };
+                auto* tank=spawn(owner,Unit_Tank,Coord(8,9));
+                publish();
+
+                // The site search: our own tank is traffic, another house's unit is not.
+                require(!currentGameMap->okayToPlaceStructure(site.x,site.y,size.x,size.y,false,owner,false,Structure_WindTrap)
+                    && bot->placeableAmongOwnUnits(site.x,site.y,size.x,size.y,Structure_WindTrap),
+                    "Our own tank standing on a site made it unplaceable for the AI");
+                auto* intruder=spawn(enemy,Unit_Trooper,Coord(7,8));
+                publish();
+                require(!bot->placeableAmongOwnUnits(site.x,site.y,size.x,size.y,Structure_WindTrap),
+                    "Another house's unit on a site did not block it");
+                intruder->setHealth(0);
+                game.processObjects(); ++game.gameCycleCount; publish();
+
+                // Planned: holding, bundle and muster slots skip the footprint.
+                bot->reservedStructures[yard->getObjectID()]={Structure_WindTrap,site};
+                require(bot->onPlannedSite(site) && bot->onPlannedSite(site+Coord(1,1))
+                    && !bot->onPlannedSite(site+Coord(2,0)) && !bot->onPlannedSite(site+Coord(0,-1)),
+                    "The planned site is not the wind trap's footprint");
+                {
+                    std::set<int64_t> taken;
+                    for(int i=0;i<12;++i) {
+                        const Coord slot=bot->huntPartySlot(tank,site+Coord(1,1),2,taken);
+                        require(slot.isInvalid() || !onSite(slot),"A holding or bundle slot was put on a planned site");
+                    }
+                }
+
+                // An idle tank on it is sent to a free tile beside it and leaves.
+                idleHere(tank);
+                bot->keepPlannedSitesClear();
+                require(tank->wasForced() && tank->getDestination().isValid() && !onSite(tank->getDestination()),
+                    "An idle tank on a planned site was not sent off it");
+                int cycles=0;
+                for(;cycles<MILLI2CYCLES(20000) && (onSite(tank->getLocation()) || tank->isMoving());++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(!onSite(tank->getLocation()),"The tank never left the planned site");
+                SDL_Log("FORCE_PROBE: footprint idle tank left the site in %d cycles to %d,%d",cycles,
+                    tank->getX(),tank->getY());
+
+                // The building is finished while another tank stands on the site: it waits and the
+                // tank is asked off; once the tank has left it is placed exactly where it was planned.
+                bot->doProduceItem(yard,Structure_WindTrap);
+                for(cycles=0;cycles<MILLI2CYCLES(180000) && !yard->isWaitingToPlace();++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(yard->isWaitingToPlace() && yard->getCurrentProducedItem()==Structure_WindTrap,
+                    "The fixture wind trap did not finish");
+                auto* blocker=spawn(owner,Unit_Tank,Coord(7,8));
+                publish();
+                idleHere(blocker);
+                bot->reservedStructures[yard->getObjectID()]={Structure_WindTrap,site};
+                auto& planned=bot->builderPlaceLocations[yard->getObjectID()];
+                planned.assign(1,site);
+                bot->build(bot->militaryUnitValue());
+                require(!currentGameMap->getTile(site)->hasAStructure() && yard->isWaitingToPlace(),
+                    "The finished wind trap did not wait for our tank on its site");
+                require(!planned.empty() && planned.front()==site
+                    && bot->reservedStructures.count(yard->getObjectID())
+                    && bot->reservedStructures.at(yard->getObjectID()).location==site,
+                    "The waiting wind trap lost its planned site");
+                require(blocker->wasForced() && blocker->getDestination().isValid() && !onSite(blocker->getDestination()),
+                    "The tank on the finished building's site was not sent off it");
+                for(cycles=0;cycles<MILLI2CYCLES(20000) && (onSite(blocker->getLocation()) || blocker->isMoving());++cycles) {
+                    game.processObjects(); ++game.gameCycleCount;
+                }
+                require(!onSite(blocker->getLocation()),"The tank never left the finished building's site");
+                publish();
+                bot->build(bot->militaryUnitValue());
+                const auto* placed=currentGameMap->getTile(site)->getGroundObject();
+                require(placed && placed->isAStructure() && placed->getItemID()==Structure_WindTrap
+                    && placed->getOwner()==owner && placed->getLocation()==site,
+                    "The wind trap was not placed on its planned site");
+                fixtureStructureIds.push_back(placed->getObjectID());
+                SDL_Log("FORCE_PROBE: footprint wind trap placed on plan at %d,%d after the tank left (%d cycles)",
+                    site.x,site.y,cycles);
+                bot->reservedStructures.erase(yard->getObjectID());
+                bot->builderPlaceLocations.erase(yard->getObjectID());
+                retireAll();
+            } catch(...) { setConcrete(savedConcrete); throw; }
+            setConcrete(savedConcrete);
         }
     } catch(...) {
         getQuantBotConfig().recovery.enabled=savedRecovery;

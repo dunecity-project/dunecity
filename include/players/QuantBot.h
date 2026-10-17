@@ -748,6 +748,26 @@ private:
     void recordLostColonists();
     Uint32 planningBuilder = NONE_ID;
     bool overlapsReservedStructure(int x, int y, int width, int height) const;
+    // ---- The footprint rule (docs/formations.md "Planned sites and the army") --------------
+    // This house's own ground units are traffic on a site it plans, not an obstacle: the site
+    // is chosen as if they were not there, they are asked off it (the pre-placement queue's
+    // idle-unit rule) and the finished building waits for them while they leave. Another
+    // house's unit, a structure, or an own unit that was ordered away and cannot leave still
+    // blocks the site.
+    /// An own unit standing here is in the way for good: unresponsive, or ordered away and stuck.
+    bool ownUnitCannotLeave(const UnitBase* unit) const;
+    /// A mountain, a structure, another house's unit or an own unit that cannot leave.
+    bool tileBlocksOwnPlacement(const Tile* tile) const;
+    /// Map::okayToPlaceStructure with own leaving-capable units ignored (other units, structures
+    /// and mountains still block). tilesRequired/item as the engine check.
+    bool placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const;
+    /// Does any unit of this house stand on the footprint?
+    bool ownUnitsOnFootprint(int x, int y, int width, int height) const;
+    /// Is p inside any planned site of this house (every yard's reservation)? Holding, bundle,
+    /// muster, recall and guard slots skip such tiles.
+    bool onPlannedSite(Coord p) const;
+    /// Once per unit pass: idle own units standing on a planned site are asked off it.
+    void keepPlannedSitesClear();
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
@@ -899,13 +919,30 @@ private:
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
     /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
-    /// smaller configured one).
+    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U, V and X
+    /// are taken from QuantBotConfig::force, the others are test-only):
+    /// kForceEstimate (E: D measures the remembered enemy army,
+    /// enemyArmyEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
+    /// that estimate outnumbers us, no wave launches and the reserve holds the protected
+    /// rally under turret cover; the enemy attacks into it), kForceStrengthWaves (A: a ready
+    /// wave launches only when its value is forceStrengthBps of the estimate), kForceReserve
+    /// (R: while the estimate exceeds our army, the share it exceeds it by - at most half -
+    /// stays home, the units nearest the protected rally), kForceSizedDefence (X: a defence
+    /// counts the enemy within 12 tiles, sends 1.5x it from up to 40 tiles with the bundle
+    /// first, distant defenders muster for a building, and a worker under attack gets nobody
+    /// when the troops in reach cannot match the threat) and kForceFallBack (Y: a wave
+    /// locally outmatched for the configured time falls back to the protected rally - the
+    /// recovery's local withdrawal, which is off with withdrawals - and relaunches from there).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
-        kForceFlank = 4096, kForceStrengthReadiness = 8192;
+        kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
+        kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
+        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
+    /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
+    int forceStrengthBps = 10000;
     /// The force bits in effect: the override if set, else the configured F, C, B and W.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
@@ -914,11 +951,57 @@ private:
     /// Hard/Brutal.
     int waveReadinessPercent() const;
     /// The readiness a launch uses now: waveReadinessPercent(), raised to 100 by D while the
-    /// house is outnumbered (outnumberedByObservedArmy()).
+    /// house is outnumbered (outnumberedByObservedArmy(), with E outnumberedByEstimate()).
     int launchReadinessPercent();
     /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of
     /// them, wherever they stand): ForceConcentrationPolicy::outnumbered. One unit-list pass.
     bool outnumberedByObservedArmy() const;
+    /// The remembered enemy army: every enemy mobile ground fighter seen within the last
+    /// kSightingMemoryMs that still exists, at its health-weighted value when last seen.
+    struct Sighting { int64_t value = 0; Uint32 cycle = 0; };
+    std::map<Uint32, Sighting> enemySightings;
+    /// Records the visible enemy fighters and forgets the dead and the long unseen (unit pass).
+    void updateEnemySightings();
+    int64_t enemyArmyEstimate() const;
+    /// Health-weighted value of our own mobile ground fighters.
+    int64_t ownGroundArmyValue() const;
+    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyArmyEstimate(),
+    /// once per cycle.
+    bool outnumberedByEstimate() const;
+    mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
+    mutable bool estimateOutnumbered = false;
+    /// kForceGarrison (G) or kForcePerimeterHold (V) in effect now: outnumbered by the
+    /// estimate, so no wave leaves and the reserve holds at home - G at the protected rally,
+    /// V on the base perimeter facing the enemy (perimeterPoint()).
+    bool garrisoned() const { return forceVariant(kForceGarrison | kForcePerimeterHold) && outnumberedByEstimate(); }
+    /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
+    /// base centre along the observed front direction, the farthest own building within
+    /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
+    /// beyond it (point). Derived from the world once per cycle; invalid without a base or a front.
+    struct Perimeter {
+        Coord anchor = Coord::Invalid(), forward = Coord(0, 0), point = Coord::Invalid();
+        int length = 0;         ///< isqrt of |forward|^2
+        int depth = 0;          ///< tiles from the anchor to the outermost building, along forward
+    };
+    const Perimeter& perimeter() const;
+    mutable Perimeter perimeterCache;
+    mutable Uint32 perimeterCycle = std::numeric_limits<Uint32>::max();
+    /// kForceThreatTurrets (U): rocket turrets wanted on the perimeter now - one per
+    /// kPerimeterCreditsPerTurret of the estimate's lead over our army, at most
+    /// kPerimeterTurretsMax, none when we are not outnumbered.
+    int perimeterTurretGoal() const;
+    /// Our rocket turrets standing on the perimeter band.
+    int perimeterTurrets() const;
+    /// A legal rocket-turret site on the perimeter band (bounded box, deterministic), or invalid.
+    Coord findPerimeterTurretLocation();
+    /// Health-weighted value of the living units among \a ids.
+    int64_t groundValueOf(const std::vector<Uint32>& ids) const;
+    /// kForceReserve: of a wave about to launch (\a ids), the units that stay home -
+    /// ForceConcentrationPolicy::reserveShareBps of its value, nearest the protected rally first
+    /// (ties by id). Empty when we are not outnumbered.
+    std::vector<Uint32> homeReserve(const std::vector<Uint32>& ids) const;
+    /// Does \a unit stand in the bundle (within 8 tiles of the bundle point or centre)?
+    bool standsInBundle(const UnitBase* unit) const;
     /// One pass of the force rules over the army (unit phase, after the hunt parties).
     void concentrateForces();
     /// Focus fire for one hunting ground unit; true if it was given a new target.
@@ -956,10 +1039,11 @@ private:
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.
     bool bundleArmyReady() const;
-    /// A withdrawal or recovery holds reinforcements at the protected shelter: bundling and
-    /// its launch gate stand aside for the home rally then.
+    /// A withdrawal or recovery holds reinforcements at the protected shelter (so does the
+    /// garrison, kForceGarrison): bundling and its launch gate stand aside for the home rally then.
     bool reserveHeldHome() const {
-        return recoveryActive() && (ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) || localSquadWithdraw);
+        return recoveryActive() && (ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) || localSquadWithdraw
+                                    || garrisoned());
     }
     /// A reserve unit that has to walk to the bundle, ordered after the unit pass.
     struct BundleWalker { Uint32 id; int distance; Coord at; };
@@ -975,6 +1059,9 @@ private:
     int bundledShareBps(const std::vector<Uint32>& ids, int radius);
     void saveForceState(OutputStream& stream) const;
     void loadForceState(InputStream& stream);
+    /// The remembered enemy army and the musters (SAVEGAMEVERSION 9864); a 9863 save has neither.
+    void saveDefenceMemory(OutputStream& stream) const;
+    void loadDefenceMemory(InputStream& stream);
     /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
     /// sides of the objective, wait for each other and then attack it together.
     struct Split {
@@ -995,7 +1082,9 @@ private:
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
             stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
-            splitReleases = 0, splitTimeouts = 0, fullReadiness = 0;
+            splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
+            reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
+            turretsBuilt = 0, turretsLost = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
