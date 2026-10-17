@@ -251,11 +251,16 @@ TEST_CASE("Strategy: an Air strategy unlocks ornithopters before the first carry
     air.carryallPrice = 800;
     air.carryallTarget = 1;
     air.canUpgrade = true;
-    air.spendable = 600;
-    // The learned default saves for its first carryall; an Air strategy upgrades first.
+    air.spendable = 0;   // all of it held back by the economy reserve
+    air.credits = 900;
+    // The learned default saves for its first carryall; an Air strategy upgrades first, out of its
+    // credits even while the economy reserve takes every spendable credit.
     REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::None);
     air.airStrategy = true;
     REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::Upgrade);
+    air.credits = 400;
+    REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::None);
+    air.credits = 900;
     air.ornithopterAvailable = true;
     REQUIRE(QuantBotBuildPolicy::chooseAirProduction(air).order == QuantBotBuildPolicy::AirOrder::None);
 }

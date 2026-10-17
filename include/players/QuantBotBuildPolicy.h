@@ -220,8 +220,10 @@ struct AirProductionState {
     int armyValue = 0, armyLimit = 0, vehiclePlanValue = 0;
     int airCommittedValue = 0, airTargetBps = 0;
     /// An Air mix strategy (docs/ai-play-styles.md, "Strategies"): unlock ornithopters by the
-    /// factory upgrade before anything else this factory would do.
+    /// factory upgrade before anything else this factory would do, out of the house's credits
+    /// (the economy reserve would otherwise hold the upgrade back all game).
     bool airStrategy = false;
+    int credits = 0;
 };
 enum class AirOrder { None, Ornithopter, Carryall, Upgrade };
 struct AirDecision { AirOrder order; const char* reason; };
@@ -229,7 +231,7 @@ inline AirDecision chooseAirProduction(const AirProductionState& s) {
     if (s.upgrading) return {AirOrder::None, "factory_upgrading"};
     if (s.busy) return {AirOrder::None, "factory_busy"};
     if (s.airLimit) return {AirOrder::None, "air_unit_limit"};
-    if (s.airStrategy && !s.ornithopterAvailable && s.canUpgrade && s.spendable > 500)
+    if (s.airStrategy && !s.ornithopterAvailable && s.canUpgrade && s.credits > 500)
         return {AirOrder::Upgrade, "air_strategy_upgrade"};
     const bool carryallDue = s.carryallAvailable && s.carryalls < s.carryallTarget
         && s.carryallPrice > 0 && s.spendable >= s.carryallPrice;
