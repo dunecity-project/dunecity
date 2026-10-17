@@ -15,10 +15,17 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Test-only QuantBot play styles (docs/ai-play-styles.md): the behaviours of QuantBot::PlayStyle
-// that no QuantBot Config.ini key can express - a style composition, counter-composition and
-// harvester raids. The harness (tests/ai/formation-duel.inc) sets QuantBot::playStyle; the game
-// never does, so every real game keeps the inert defaults.
+// QuantBot strategies and the test-only play styles (docs/ai-play-styles.md).
+//
+// Strategies (production): the unit-mix strategy and tempo of QuantBot::strategy, picked once per
+// game by QuantBotStrategy::pick from the game seed, the house and the hashed config, and saved.
+// The mix is the prior the learned unit mix starts from (QuantBotBuild.cpp), the tempo the wave
+// readiness and the smallest wave (QuantBotForce.cpp, QuantBotArmy.cpp).
+//
+// Play styles (test-only): the behaviours of QuantBot::PlayStyle that no QuantBot Config.ini key
+// can express - a style composition, counter-composition and harvester raids. The harness
+// (tests/ai/formation-duel.inc) sets QuantBot::playStyle; the game never does, so every real game
+// keeps the inert defaults.
 //
 // Deterministic: scans run in the fixed unit list order, raiders are kept in id order, and only
 // integer arithmetic decides.
@@ -50,6 +57,85 @@ const QuantBot::PlayStyle& QuantBot::style() const {
     return autonomousCustomHardBrutal() ? playStyle : inert;
 }
 
+void QuantBot::pickStrategy() {
+    if (strategyPicked || currentGame == nullptr || getHouse() == nullptr) return;
+    const int houseID = getHouse()->getHouseID();
+    auto buildable = [&](Uint32 item) {
+        const auto& spec = currentGame->objectData.data[item][houseID];
+        return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
+            && spec.techLevel <= currentGame->techLevel;
+    };
+    std::array<bool, 8> slots{};
+    const std::array<Uint32, 8> items = {Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Devastator,
+        Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
+    for (size_t i = 0; i < items.size(); ++i) slots[i] = buildable(items[i]);
+    slots[3] = buildable(Unit_Devastator) || buildable(Unit_SonicTank) || buildable(Unit_Deviator);
+    const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
+        || buildable(Unit_Trooper) || buildable(Unit_Troopers);
+    const bool active = autonomousCustomHardBrutal();
+    const Uint32 seed = currentGame->getGameInitSettings().getRandomSeed();
+    strategy = active ? QuantBotStrategy::pick(botConfig().strategy, seed, houseID,
+                                                QuantBotStrategy::eligibleMixes(slots, infantry))
+                      : QuantBotStrategy::Choice{};
+    strategyPicked = true;
+    SDL_Log("QUANTBOT_STRATEGY: house=%d mix=%s tempo=%s mode=%s active=%d", houseID,
+            QuantBotStrategy::name(strategy.mix), QuantBotStrategy::name(strategy.tempo),
+            QuantBotStrategy::modeText(botConfig().strategy).c_str(), int(active));
+    if (AITelemetry::log().enabled())
+        traceDecision("strategy", AITelemetry::Record().set("mix", QuantBotStrategy::name(strategy.mix))
+            .set("tempo", QuantBotStrategy::name(strategy.tempo))
+            .set("mode", QuantBotStrategy::modeText(botConfig().strategy))
+            .set("mix_weights", QuantBotStrategy::weightsText(botConfig().strategy.mixWeights))
+            .set("tempo_weights", QuantBotStrategy::weightsText(botConfig().strategy.tempoWeights))
+            .set("seed", int64_t(seed)).set("active", active));
+}
+
+const QuantBotStrategy::MixProfile* QuantBot::strategyMix() const {
+    if (!strategyPicked || strategy.mix == QuantBotStrategy::Mix::Learned || !autonomousCustomHardBrutal()) return nullptr;
+    return &QuantBotStrategy::profile(strategy.mix);
+}
+
+const QuantBotStrategy::TempoProfile* QuantBot::strategyTempo() const {
+    if (!strategyPicked || strategy.tempo == QuantBotStrategy::Tempo::Base || !autonomousCustomHardBrutal()) return nullptr;
+    const auto& tempo = QuantBotStrategy::profile(strategy.tempo);
+    if (tempo.minutes > 0 && getGameCycleCount() >= Uint32(MILLI2CYCLES(tempo.minutes * 60000))) return nullptr;
+    return &tempo;
+}
+
+bool QuantBot::lightFirstOpening() const {
+    if (style().active()) return style().lightFirst;
+    const auto* tempo = strategyTempo();
+    return tempo && tempo->lightFirst;
+}
+
+int QuantBot::minWaveUnits() const {
+    if (style().active()) return style().minWaveUnits;
+    const auto* tempo = strategyTempo();
+    return tempo ? tempo->minWaveUnits : PlayStyle{}.minWaveUnits;
+}
+
+int QuantBot::minWaveValue() const {
+    if (style().active()) return style().minWaveValue;
+    const auto* tempo = strategyTempo();
+    return tempo ? tempo->minWaveValue : PlayStyle{}.minWaveValue;
+}
+
+UnitMixPolicy::Weights QuantBot::enemyCounterPrior() const {
+    // The remembered enemy ground army by class, plus the hostile wing in sight.
+    int64_t light = 0, armour = 0, launchers = 0;
+    for (const auto& [id, sighting] : enemySightings) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit) continue;
+        const Uint32 item = unit->getItemID();
+        if (launcherItem(item)) launchers += sighting.value;
+        else if (lightItem(item)) light += sighting.value;
+        else armour += sighting.value;
+    }
+    const int64_t air = int64_t(visibleHostileAircraft())
+        * std::max(1, currentGame->objectData.data[Unit_Ornithopter][getHouse()->getHouseID()].price);
+    return QuantBotStrategy::counterPrior(light, armour, launchers, air);
+}
+
 UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const std::array<bool,8>& available) const {
     const PlayStyle& s = style();
     UnitMixPolicy::Mix result = mix;
@@ -67,31 +153,8 @@ UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const 
     if (s.mixBps > 0 && (s.mixMinutes <= 0 || getGameCycleCount() < Uint32(MILLI2CYCLES(s.mixMinutes * 60000))))
         blend(s.mix, s.mixBps);
     if (s.counterBps > 0) {
-        // The remembered enemy ground army by class, plus the hostile wing in sight.
-        int64_t light = 0, armour = 0, launchers = 0, total = 0;
-        for (const auto& [id, sighting] : enemySightings) {
-            const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
-            if (!unit) continue;
-            const Uint32 item = unit->getItemID();
-            if (launcherItem(item)) launchers += sighting.value;
-            else if (lightItem(item)) light += sighting.value;
-            else armour += sighting.value;
-            total += sighting.value;
-        }
-        const int64_t air = int64_t(visibleHostileAircraft())
-            * std::max(1, currentGame->objectData.data[Unit_Ornithopter][getHouse()->getHouseID()].price);
-        total += air;
-        if (total > 0) {
-            auto share = [&](int64_t part, int64_t weight) { return part * weight / total; };
-            UnitMixPolicy::Weights counter{};
-            counter[0] = 2000 + share(light, 6000) + share(launchers, 3000);                  // tanks
-            counter[1] = 1000 + share(armour, 3000) + share(light, 3000);                     // siege tanks
-            counter[2] = 1000 + share(armour, 6000) + share(air, 6000);                       // launchers
-            counter[3] = 1500;                                                                // special
-            counter[4] = 500 + share(armour, 2000);                                           // ornithopters
-            counter[7] = 500 + share(launchers, 4000);                                        // quads
-            blend(counter, s.counterBps);
-        }
+        const auto counter = enemyCounterPrior();
+        if (*std::max_element(counter.begin(), counter.end()) > 0) blend(counter, s.counterBps);
     }
     return result;
 }

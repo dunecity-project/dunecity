@@ -40,6 +40,8 @@ target_sources(dunelegacy_tests
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
         ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
+        ${CMAKE_SOURCE_DIR}/src/players/QuantBotStrategy.cpp
+        QuantBotStrategyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
         QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp

@@ -894,6 +894,25 @@ private:
     bool raidWithStyle(const UnitBase* raider);
     /// The unit mix with the style mix and counter-composition applied (unit production).
     UnitMixPolicy::Mix styledUnitMix(const UnitMixPolicy::Mix& mix, const std::array<bool,8>& available) const;
+    /// The strategy this house plays (QuantBotStrategy; docs/ai-play-styles.md, "Strategies"):
+    /// picked once by pickStrategy() from the game seed, the house and the config, saved
+    /// (SAVEGAMEVERSION 9865); a 9864 save picks it afresh by the same function.
+    QuantBotStrategy::Choice strategy;
+    bool strategyPicked = false;
+    /// Picks the strategy if none is set (first update of a new game or a pre-9865 load).
+    void pickStrategy();
+    /// The strategy's mix / tempo while it applies (Custom Hard/Brutal; the tempo within its
+    /// minutes), else null: the learned default and the configured readiness.
+    const QuantBotStrategy::MixProfile* strategyMix() const;
+    const QuantBotStrategy::TempoProfile* strategyTempo() const;
+    /// The opening and wave rules of the style (if a test style is active) or else the tempo.
+    bool lightFirstOpening() const;
+    int minWaveUnits() const;
+    int minWaveValue() const;
+    /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.
+    bool infantryStrategy() const { const auto* mix = strategyMix(); return mix && mix->infantryPercent > 0; }
+    /// QuantBotStrategy::counterPrior of the remembered enemy army and the hostile wing in sight.
+    UnitMixPolicy::Weights enemyCounterPrior() const;
     /// Test-only (tests/ai/formation-duel.py): this player's attack-wave shape instead of
     /// QuantBotConfig::waveFormation, so two QuantBots of one match can march in different
     /// shapes. Never set by the game, not saved and not part of the config hash; production

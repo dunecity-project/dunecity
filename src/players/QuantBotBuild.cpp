@@ -1346,6 +1346,9 @@ void QuantBot::build(int militaryValue) {
 		case Difficulty::Brutal:
 			break;
 	}
+    // An Infantry mix strategy fields its own share on foot (docs/ai-play-styles.md, "Strategies").
+    const QuantBotStrategy::MixProfile* strategyMixProfile = strategyMix();
+    if (strategyMixProfile && strategyMixProfile->infantryPercent > 0) infantryPercent = strategyMixProfile->infantryPercent;
 
     constexpr std::array<Uint32,8> mixItems = {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
         Unit_SonicTank, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
@@ -1400,6 +1403,13 @@ void QuantBot::build(int militaryValue) {
     for (size_t i=0; i<5; ++i) configuredWeights[i] = configured[i];
     const auto openingMix = UnitMixPolicy::openingMix(currentGame->techLevel, configuredWeights, available);
     for (size_t i=0; i<8; ++i) defaults[i] = openingMix[i];
+    // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
+    // of the remembered enemy army); the learning below blends combat evidence into it exactly
+    // as it does into the configured opening.
+    if (strategyMixProfile)
+        defaults = QuantBotStrategy::applyPrior(defaults,
+            strategyMixProfile->counter ? enemyCounterPrior() : strategyMixProfile->prior,
+            strategyMixProfile->priorBps, available);
     int64_t totalDamage = 0, totalRewardMilli = 0, totalLostValue = 0;
     for (size_t i=0; i<8; ++i) {
         const Uint32 item = mixItems[i];
@@ -1442,8 +1452,11 @@ void QuantBot::build(int militaryValue) {
     const auto allocationWeights = UnitMixPolicy::sharpenScores(scores);
     const auto rawMix = UnitMixPolicy::normalize(allocationWeights);
     const int performanceConfidenceBps = UnitMixPolicy::evidenceConfidenceBps(totalLostValue, militaryValue);
+    // The strategy's hold scales the fielded army the evidence is weighed against (100 = as is).
+    const int64_t priorArmyValue = strategyMixProfile
+        ? int64_t(militaryValue) * strategyMixProfile->holdPercent / 100 : int64_t(militaryValue);
     auto unitMix = UnitMixPolicy::allocate(scores, defaults, learningUnitMix, vanillaEconomy,
-                                                  totalLostValue, militaryValue);
+                                                  totalLostValue, priorArmyValue);
     // Test-only play styles (docs/ai-play-styles.md): inert in every real game.
     unitMix = styledUnitMix(unitMix, available);
     // Damage-based learning does not value air deterrence, so protect a minimum
@@ -4890,10 +4903,11 @@ void QuantBot::build(int militaryValue) {
 					itemID = Structure_Refinery; structureRule = "refinery_economy";
 				}
 
-				// Test-only rush opening (docs/ai-play-styles.md): light production right after
-				// the first refinery, ahead of repairs, radar and the heavy factory.
+				// Light-first opening (Rush tempo, or the test rush style; docs/ai-play-styles.md):
+				// light production right after the first refinery, ahead of repairs, radar and the
+				// heavy factory.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic && !isCitySim
-					&& style().lightFirst
+					&& lightFirstOpening()
 					&& itemCount[Structure_LightFactory] == 0
 					&& campaignAvailableToBuild(pBuilder,Structure_LightFactory)
 					&& money > 500) {
@@ -5124,7 +5138,7 @@ void QuantBot::build(int militaryValue) {
 				// Custom vanilla invests in vehicle production; retain infantry
 				// infrastructure for campaign and other-mod build policies.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic && !isCitySim
-                    && !(vanillaEconomy && gameMode == GameMode::Custom)
+                    && (!(vanillaEconomy && gameMode == GameMode::Custom) || infantryStrategy())
 					&& itemCount[Structure_Barracks] == 0
 					&& campaignAvailableToBuild(pBuilder,Structure_Barracks)
 					&& money > 400) {
@@ -5139,7 +5153,7 @@ void QuantBot::build(int militaryValue) {
 				// troop content, or with no room left in the infantry quota, is not worth
 				// founding at all.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
-                    && !(vanillaEconomy && gameMode == GameMode::Custom)
+                    && (!(vanillaEconomy && gameMode == GameMode::Custom) || infantryStrategy())
 					&& (!isCitySim || (cityAntiAirInfantryDemand && cityTroopContentExists()
 						&& !openingWorkersNeeded()
                         && int64_t(money) >= data[Structure_WOR][houseID].price + cityWorCashReserve))

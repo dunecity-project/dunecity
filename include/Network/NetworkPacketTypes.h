@@ -240,7 +240,12 @@
 //     starting army cannot launch a wave (a Construction Yard start) holds its first ground
 //     wave for full readiness ([Force Concentration] OpeningReadiness, hashed). An 80 peer
 //     would move the same units differently and desync. Save 9864 unchanged.
-#define NETWORK_PROTOCOL_VERSION            81
+// 82: QuantBot strategies (docs/ai-play-styles.md, "Strategies"): every Custom Hard/Brutal
+//     QuantBot plays a unit-mix strategy and a tempo picked once from the game seed, its house and
+//     [Strategy] Mode / MixWeights / TempoWeights (hashed); the mix is the prior its learned unit
+//     mix starts from, the tempo its wave readiness. An 81 peer would build and attack
+//     differently and desync. Save 9865 (the strategy).
+#define NETWORK_PROTOCOL_VERSION            82
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

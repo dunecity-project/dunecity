@@ -498,7 +498,7 @@ void QuantBot::attack(int militaryValue) {
 
 	// Campaign attacks must remain possible after losing a repair yard, or on
     // scenarios where it cannot be built. Repair remains useful, not mandatory.
-	if (!campaign && !style().lightFirst && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
+	if (!campaign && !lightFirstOpening() && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
 		traceDecision("attack_deferred", AITelemetry::Record().set("reason", "repair_prerequisite"));
 		logDebug("Don't attack. Wait until you have a repair yard.");
 		return;
@@ -894,7 +894,7 @@ void QuantBot::launchGroundHunt() {
             for (const auto& candidate : candidates) if (candidate.value>0) ++availableUnits;
             // A viable main wave, not a patrol: the established minimum is six
             // units and three thousand credits of value (a test-only play style may change it).
-            const bool viable=availableUnits>=style().minWaveUnits && availableValue>=style().minWaveValue;
+            const bool viable=availableUnits>=minWaveUnits() && availableValue>=minWaveValue();
             if (availableValue<requiredReady || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
@@ -960,7 +960,7 @@ void QuantBot::launchGroundHunt() {
                         if (std::find(kept.begin(),kept.end(),candidate.id)!=kept.end()) keptValue+=candidate.value;
                         else { ++leftUnits; leftValue+=candidate.value; }
                     }
-                    if (leftUnits<style().minWaveUnits || leftValue<style().minWaveValue) {
+                    if (leftUnits<minWaveUnits() || leftValue<minWaveValue()) {
                         attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
                         traceDecision("attack_deferred",AITelemetry::Record().set("reason","home_reserve")
                             .set("kept_value",keptValue).set("left_value",leftValue));

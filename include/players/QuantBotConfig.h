@@ -20,6 +20,7 @@
 
 #include <DataTypes.h>
 #include <data.h>
+#include <players/QuantBotStrategy.h>
 
 #include <map>
 #include <string>
@@ -169,6 +170,12 @@ struct QuantBotConfig {
         bool openingReadiness;
     };
     ForceSettings force;
+
+    /// The strategy each Custom Hard/Brutal QuantBot plays (docs/ai-play-styles.md,
+    /// "Strategies"): a unit-mix strategy and a tempo, each picked once per game from weights.
+    /// INI: [Strategy] Mode = Random | Fixed:<mix>,<tempo>, MixWeights, TempoWeights; optional
+    /// keys (not written by save()), the code defaults apply when absent. Hashed for multiplayer.
+    QuantBotStrategy::Settings strategy;
 
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)

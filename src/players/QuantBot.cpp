@@ -243,6 +243,9 @@ void QuantBot::update() {
         && isCampaignGameType(currentGame->gameType) && attackTimer > MILLI2CYCLES(60000))
         attackTimer = 0;
 
+    // The strategy (docs/ai-play-styles.md, "Strategies"): once, from the seed, house and config.
+    pickStrategy();
+
     if (campaignCityEconomy() && !campaignBaselineCaptured && initialMilitaryValue>=0) noteCampaignOriginalState(true);
 
 	if (initialMilitaryValue < 0) {
@@ -603,7 +606,8 @@ void QuantBot::update() {
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
     // R, U and V read it), before anything this pass consults it.
     if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
-                     | kForcePerimeterHold) || style().counterBps > 0) updateEnemySightings();
+                     | kForcePerimeterHold) || style().counterBps > 0
+        || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front
     // battery with it. It is therefore evaluated on every pass this house

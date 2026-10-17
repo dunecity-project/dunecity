@@ -83,6 +83,9 @@ int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomHardBrutal()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    // The tempo of the strategy (docs/ai-play-styles.md, "Strategies"); Base keeps the config's.
+    const auto* tempo = strategyTempo();
+    if (tempo && tempo->readinessPercent > 0) return std::clamp(tempo->readinessPercent, 10, 300);
     return std::clamp(botConfig().force.waveReadinessPercent, 10, 300);
 }
 
@@ -93,6 +96,8 @@ int QuantBot::openingReadinessPercent() const {
     // early waves into a base that is building its defence died there (docs/formations.md,
     // "Scenario tests"). A starting army that can strike keeps the smaller readiness.
     if (!forceVariant(kForceOpeningReadiness)) return percent;
+    // A Rush tempo launches its opening at its own readiness.
+    if (const auto* tempo = strategyTempo(); tempo && !tempo->openingReadiness) return percent;
     return Force::openingReadiness(percent, customWave.launched != 0, initialMilitaryValue, houseAttackThreshold());
 }
 

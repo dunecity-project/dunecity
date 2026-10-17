@@ -630,6 +630,24 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
     force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
     force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+    // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
+    if (iniFile.hasKey("Strategy", "Mode")) {
+        const std::string mode = iniFile.getStringValue("Strategy", "Mode");
+        if (!QuantBotStrategy::parseMode(mode, strategy))
+            SDL_Log("QuantBot config: invalid [Strategy] Mode '%s', keeping %s", mode.c_str(), QuantBotStrategy::modeText(strategy).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "MixWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "MixWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.mixWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] MixWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.mixWeights).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "TempoWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "TempoWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.tempoWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] TempoWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.tempoWeights).c_str());
+    }
 
     bool needsSave = false;
 
@@ -1037,6 +1055,15 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("sizedDefence", force.sizedDefence);
     addNamed("openingReadiness", force.openingReadiness);
     configStr += "|/FORCE|";
+    configStr += "|STRATEGY";
+    addNamed("random", strategy.random);
+    addNamed("fixedMix", static_cast<int>(strategy.fixedMix));
+    addNamed("fixedTempo", static_cast<int>(strategy.fixedTempo));
+    for (size_t i = 0; i < strategy.mixWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Mix>(i)), strategy.mixWeights[i]);
+    for (size_t i = 0; i < strategy.tempoWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Tempo>(i)), strategy.tempoWeights[i]);
+    configStr += "|/STRATEGY|";
 
 
     // Use FNV-1a hash (consistent across platforms and compilers)

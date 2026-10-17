@@ -17,8 +17,10 @@ Modes:
                      Sardaukar, two houses per label, all six partitions per seed.
   --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
 
-Labels: as formation-duel.py, plus "default" (the configured rules) and a test-only play style
-suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush.
+Labels: as formation-duel.py, plus "default" (the configured rules), a test-only play style
+suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush, and a
+strategy suffix #random or #<Mix>-<Tempo>[-fixed], e.g. default#QuadMass-Swarm (houses.csv records
+the strategy each house played).
 
 Each game appends a row to games.csv, its houses to houses.csv, a per-minute sample of every
 house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv
@@ -60,7 +62,7 @@ KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
 GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
-                     'gate_holds', 'gate_timeouts', 'raid_orders')
+                     'gate_holds', 'gate_timeouts', 'raid_orders', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')
