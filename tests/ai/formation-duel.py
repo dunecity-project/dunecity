@@ -12,7 +12,9 @@ cancel within a pair.
 One probe binary is built first (run-campaign-balance.py), then the games run in parallel
 processes. Each game appends one row to games.csv and its waves to waves.csv, and its run
 directory is deleted straight away; games already in games.csv are skipped, so an interrupted
-round-robin resumes. --report prints the markdown tables used in docs/formations.md.
+round-robin resumes. Without --scratch the batch runs in leased agent scratch, removed when it
+succeeds, and refuses to start below the free-space floor (DUNECITY_MIN_FREE_GB, 25 GB).
+--report prints the markdown tables used in docs/formations.md.
 """
 import argparse
 import csv
@@ -21,6 +23,7 @@ import random
 import shutil
 import statistics
 import subprocess
+import sys
 import threading
 import time
 from collections import defaultdict
@@ -28,6 +31,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import finish_game, require_free_space, scratch_dir  # noqa: E402
+
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
 # The control, Blob waves (hunt parties) and the five kept shapes (the research rounds also played
 # combined, line, wedge, vee, diamond). A label may carry a Blob-wave ablation: blob/noretreat (no
@@ -185,15 +191,13 @@ def play(args, scratch, binary, key):
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
         append(results / 'games.csv', GAME_FIELDS, [row])
-    shutil.rmtree(out, ignore_errors=True)
+    finish_game(scratch, out, bool(row['error']))
     return row
 
 
 def run(args):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    scratch = Path(args.scratch)
-    scratch.mkdir(parents=True, exist_ok=True)
     done = {tuple(r[k] for k in KEY) for r in read(results / 'games.csv')}
     todo = [key for key in schedule(args) if key not in done]
     # Still a whole seed at a time, but the biggest maps of a seed first: they take longest,
@@ -202,18 +206,20 @@ def run(args):
     print(f'{len(todo)} games to play ({len(done)} already in games.csv)', flush=True)
     if not todo:
         return
-    binary = build_probe(args, scratch)
-    started = time.time()
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
-        for count, future in enumerate(as_completed(futures), 1):
-            row = future.result()
-            winner = {HOUSE_NUMBERS[row['house_a']]: row['shape_a'], HOUSE_NUMBERS[row['house_b']]: row['shape_b']}.get(
-                row['winner'], 'time-out')
-            print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["size"]}/{row["seed"]} '
-                  f'{row["house_a"]}:{row["shape_a"]} v {row["house_b"]}:{row["shape_b"]} -> {winner} '
-                  f'({row["end_s"]} s game, {row["wall_s"]} s wall){" " + row["error"] if row["error"] else ""}',
-                  flush=True)
+    require_free_space()
+    with scratch_dir('formation-duel', args.scratch) as scratch:
+        binary = build_probe(args, scratch)
+        started = time.time()
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
+            for count, future in enumerate(as_completed(futures), 1):
+                row = future.result()
+                winner = {HOUSE_NUMBERS[row['house_a']]: row['shape_a'],
+                          HOUSE_NUMBERS[row['house_b']]: row['shape_b']}.get(row['winner'], 'time-out')
+                print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["size"]}/{row["seed"]} '
+                      f'{row["house_a"]}:{row["shape_a"]} v {row["house_b"]}:{row["shape_b"]} -> {winner} '
+                      f'({row["end_s"]} s game, {row["wall_s"]} s wall){" " + row["error"] if row["error"] else ""}',
+                      flush=True)
 
 
 # ---- Report ---------------------------------------------------------------------------
@@ -495,7 +501,8 @@ def pairing_report(args):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--results', required=True, help='Directory for games.csv and waves.csv')
-parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories')
+parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
+                                      '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--tag', default='round1', help='Label of the code variant being measured')
 parser.add_argument('--difficulty', choices=('hard', 'brutal'), default='hard')
 parser.add_argument('--minutes', type=int, default=40, help='Game minutes before a game is a time-out')
@@ -524,6 +531,4 @@ if args.report:
 elif args.export:
     export(args)
 else:
-    if not args.scratch:
-        parser.error('--scratch is required to play.')
     run(args)
