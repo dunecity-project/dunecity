@@ -653,7 +653,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
             REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(static_cast<int>(shape)), 7)
                     == static_cast<int>(shape));
     }
-    SECTION("the force concentration settings are hashed, bundling and the perimeter defence on by default") {
+    SECTION("the force concentration settings are hashed, bundling, the perimeter defence and opening readiness on by default") {
         REQUIRE(baseline.force.focusFire);
         REQUIRE(baseline.force.converge);
         REQUIRE(baseline.force.waveReadinessPercent == 60);
@@ -662,6 +662,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(baseline.force.perimeterHold);
         REQUIRE(baseline.force.perimeterTurrets);
         REQUIRE(baseline.force.sizedDefence);
+        REQUIRE(baseline.force.openingReadiness);
         REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
@@ -670,6 +671,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterHold = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = false; }));
     }
 }
 

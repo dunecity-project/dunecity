@@ -913,7 +913,7 @@ private:
     /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
     /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
     /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
-    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B and W
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, V, X and I
     /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
     /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
@@ -933,24 +933,31 @@ private:
     /// when the troops in reach cannot match the threat) and kForceFallBack (Y: a wave
     /// locally outmatched for the configured time falls back to the protected rally - the
     /// recovery's local withdrawal, which is off with withdrawals - and relaunches from there).
+    /// kForceOpeningReadiness (I - recorded as E before the 1.0.846 merge - [Force Concentration]
+    /// OpeningReadiness, default on since protocol 81: a house that started without an army able
+    /// to launch a wave - a Construction Yard start - holds its first ground wave for full
+    /// readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152;
+        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
     int forceStrengthBps = 10000;
-    /// The force bits in effect: the override if set, else the configured F, C, B and W.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X and I.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Hard/Brutal.
     int waveReadinessPercent() const;
-    /// The readiness a launch uses now: waveReadinessPercent(), raised to 100 by D while the
+    /// The readiness before any outnumbered raise: waveReadinessPercent(), or 100 under I while
+    /// the house has not launched a ground wave yet (the opening).
+    int openingReadinessPercent() const;
+    /// The readiness a launch uses now: openingReadinessPercent(), raised to 100 by D while the
     /// house is outnumbered (outnumberedByObservedArmy(), with E outnumberedByEstimate()).
     int launchReadinessPercent();
     /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of

@@ -59,6 +59,7 @@
 #include "formation-duel.inc"
 #include "probe-digest.inc"
 #include "elimination-match.inc"
+#include "vanilla-match.inc"
 #include <FileClasses/INIFile.h>
 
 int runCampaignBalanceProbe() {
@@ -123,6 +124,9 @@ int runCampaignBalanceProbe() {
         init=FormationDuel::makeInit(std::atoi(std::getenv("BALANCE_DUEL_MAP_SIZE")),
             static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
     }
+    // Vanilla match: the custom map's slots, one side (QuantBot flags or AI Player) per house.
+    const std::vector<FormationDuel::Side> matchSides=VanillaMatch::sidesFromEnv();
+    if(!matchSides.empty() && (!customMap || duel)) throw std::runtime_error("A vanilla match needs a custom map");
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Continue a saved match instead (its own seed, roster and options).
     const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
@@ -150,8 +154,15 @@ int runCampaignBalanceProbe() {
         if (h==humanHouse && !localSpectator) info.addPlayerInfo({settings.general.playerName,"HumanPlayer"});
         // The pre-placement and sidebar grid probes drive the human house alone: a partner
         // AI would order and place from the same yards.
-        if (!((std::getenv("BALANCE_PREPLACE_PROBE") || std::getenv("BALANCE_SIDEBAR_GRID_PROBE")) && h==humanHouse))
-            info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),h==humanHouse ? partnerClass : enemyClass});
+        if (!((std::getenv("BALANCE_PREPLACE_PROBE") || std::getenv("BALANCE_SIDEBAR_GRID_PROBE")) && h==humanHouse)) {
+            std::string playerClass = h==humanHouse ? partnerClass : enemyClass;
+            if (!matchSides.empty()) {
+                const auto side = std::find_if(matchSides.begin(), matchSides.end(), [h=h](const auto& s) { return s.house == h; });
+                if (side == matchSides.end()) throw std::runtime_error("A roster house has no vanilla match side");
+                playerClass = VanillaMatch::playerClass(*side, enemy);
+            }
+            info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),playerClass});
+        }
         // Give every row a different delivery income factor, as a host would in the lobby, so
         // the probe can check which house ended up with which - including that no row picked
         // up a neighbour's rate. Matches SpiceIncomeProbe::assignedFactors.
@@ -366,6 +377,8 @@ int runCampaignBalanceProbe() {
         FormationDuel::report(*game, duelSides);
     } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
         FormationWaveMeasure::run(*game, end, [&]() { ProbeDigest::periodic(*game); return false; });
+    } else if (!matchSides.empty()) {
+        VanillaMatch::run(*game, end, matchSides);
     } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {
         outcome = EliminationMatch::run(*game, end, humanHouse);
     } else {

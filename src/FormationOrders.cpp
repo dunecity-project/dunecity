@@ -402,6 +402,34 @@ void update() {
         unit->setFormationMarch(FormationPlanner::marchState(remaining - group.leastRemaining,
             group.laneWait ? 0 : group.mostRemaining - remaining));
     }
+    // A holding member in the way of a formation-mate that wants to step onto its tile gives way:
+    // it keeps the pace for this cycle, so the member behind can close up. Without it, members
+    // waiting in a chokepoint for the ones still behind it blocked their only way through: a
+    // 22-unit Box or Pincer never got through a 5-tile canyon gap (docs/formations.md,
+    // "Scenario tests").
+    // Repeated until no further holder is released, so a file of holders steps on together.
+    // Tiles and the unit list decide everything: identical on every peer.
+    std::map<std::pair<int, int>, UnitBase*> holders;
+    std::vector<const UnitBase*> pushing;
+    for(UnitBase* unit : unitList) {
+        if(!unit->isInFormation() || unit->isFormationForming()) continue;
+        if(unit->getFormationMarch() == FormationPlanner::March::Hold)
+            holders[{unit->getLocation().x, unit->getLocation().y}] = unit;
+        else if(!unit->isMoving() && unit->hasNextSpot())
+            pushing.push_back(unit);
+    }
+    while(!pushing.empty() && !holders.empty()) {
+        std::vector<const UnitBase*> released;
+        for(const UnitBase* unit : pushing) {
+            const auto it = holders.find({unit->getNextSpot().x, unit->getNextSpot().y});
+            if(it == holders.end() || it->second->getFormationGroup() != unit->getFormationGroup()) continue;
+            UnitBase* holder = it->second;
+            holders.erase(it);
+            holder->setFormationMarch(FormationPlanner::March::Pace);
+            if(holder->hasNextSpot()) released.push_back(holder);
+        }
+        pushing = std::move(released);
+    }
 }
 
 } // namespace FormationOrders

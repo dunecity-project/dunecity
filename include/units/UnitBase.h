@@ -358,8 +358,9 @@ public:
     /// Route planning: canPass, or the tile holds a marching member of this unit's marching
     /// formation (marchesWith), which moves on at the same pace.
     bool canPathThrough(int xPos, int yPos) const;
-    /// Are this unit and 'other' marching in the same formation, 'other' not waiting for a
-    /// member that fell behind? Then this unit waits behind it rather than routing round it.
+    /// Are this unit and 'other' marching in the same formation, 'other' moving on (keeping the
+    /// pace, recovering, or holding with a next step to give way on)? Then this unit waits behind
+    /// it rather than routing round it - unless this unit fell behind and 'other' keeps the pace.
     bool marchesWith(const UnitBase* other) const;
 
     virtual bool hasBumpyMovementOnRock() const { return false; }

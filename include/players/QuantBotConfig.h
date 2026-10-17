@@ -133,8 +133,8 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence; optional keys, the code
-    /// defaults apply when absent. Hashed for multiplayer.
+    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness; optional
+    /// keys, the code defaults apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -160,6 +160,11 @@ struct QuantBotConfig {
         /// defenders of a building muster first (saved, 9864); a worker raid the troops in reach
         /// cannot match gets nobody.
         bool sizedDefence;
+        /// A house whose starting army cannot launch a wave at WaveReadinessPercent (a
+        /// Construction Yard start, not a Fortress with an army) holds its first ground wave
+        /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
+        /// "Scenario tests").
+        bool openingReadiness;
     };
     ForceSettings force;
 

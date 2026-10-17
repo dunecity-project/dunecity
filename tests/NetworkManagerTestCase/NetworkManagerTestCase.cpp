@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 80;
+static constexpr int kWireProtocolVersion = 81;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -84,7 +84,11 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 80 holds the QuantBot army on the base perimeter while a remembered enemy army
     // outnumbers it, adds perimeter rocket turrets then and sizes defences at 1.5x the threat;
     // save 9864 (the remembered army and the musters).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 80);
+    // 81 unjams the formation march (laggards route round members keeping the pace, members
+    // waiting for a laggard give way to a mate stepping onto their tile) and makes a QuantBot
+    // without a striking starting army hold its first wave for full readiness ([Force
+    // Concentration] OpeningReadiness); no saved state change (9864).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 81);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

@@ -115,6 +115,18 @@ TEST_CASE("Force: a staged wave attacks with local superiority; wave readiness s
     REQUIRE_FALSE(outnumbered(10000, 0));
 }
 
+TEST_CASE("Force: a Construction Yard start holds its first wave for full readiness", "[ai][force]") {
+    // Hard on a 128 map: house threshold 20,000, waves at 60% (12,000).
+    REQUIRE(openingReadiness(60, false, 3800, 20000) == 100);     // MCV and a few units
+    REQUIRE(openingReadiness(60, false, 0, 20000) == 100);
+    REQUIRE(openingReadiness(60, false, 11999, 20000) == 100);
+    REQUIRE(openingReadiness(60, false, 12000, 20000) == 60);     // a starting army that can strike
+    REQUIRE(openingReadiness(60, false, 21000, 24000) == 60);     // Fortress on a huge map
+    REQUIRE(openingReadiness(60, true, 0, 20000) == 60);          // from the first wave on
+    REQUIRE(openingReadiness(100, false, 0, 20000) == 100);
+    REQUIRE(openingReadiness(150, false, 0, 20000) == 150);
+}
+
 TEST_CASE("Force: the reserve bundles a quarter of the way forward and the gate waits for 70%", "[ai][force]") {
     REQUIRE(along(40, 120, kBundleForwardPercent) == 60);
     REQUIRE(along(120, 40, kBundleForwardPercent) == 100);

@@ -262,6 +262,9 @@ QuantBotConfig::QuantBotConfig() {
     force.perimeterHold = true;
     force.perimeterTurrets = true;
     force.sizedDefence = true;
+    // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
+    // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
+    force.openingReadiness = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -536,6 +539,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
         iniFile.setBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
         iniFile.setBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
+        iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -604,6 +608,7 @@ bool QuantBotConfig::load(const std::string& filepath) {
         force.perimeterHold = iniFile.getBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
         force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
         force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
+        force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
 
         bool needsSave = false;
 
@@ -1021,6 +1026,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("perimeterHold", force.perimeterHold);
     addNamed("perimeterTurrets", force.perimeterTurrets);
     addNamed("sizedDefence", force.sizedDefence);
+    addNamed("openingReadiness", force.openingReadiness);
     configStr += "|/FORCE|";
 
 

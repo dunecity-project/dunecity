@@ -431,9 +431,10 @@ int QuantBot::houseAttackThreshold() const {
 }
 
 bool QuantBot::bundleArmyReady() const {
-    // The house attack threshold at the configured wave readiness, exactly as attack() applies
-    // it (D's outnumbered raise aside): below it the reserve stays on the home rally.
-    const int64_t required = ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), waveReadinessPercent());
+    // The house attack threshold at the configured wave readiness (100% under I before the first
+    // wave), exactly as attack() applies it (D's outnumbered raise aside): below it the reserve
+    // stays on the home rally.
+    const int64_t required = ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
     return militaryUnitValue() >= required;
 }
 

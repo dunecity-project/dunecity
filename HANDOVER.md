@@ -1,3 +1,66 @@
+## 2026-10-17 — 1.0.846 integration: formation scenarios merged with 1.0.845 staging (branch `test/formation-scenarios`, protocol 81, save 9864, not released)
+
+FormationMerge merged `integrate/feature-batch` into `test/formation-scenarios` in
+~/Documents/projects/dunecity-formation-tests: d497b083 (1.0.845 = UVX defence, footprint rule, save 9864,
+housekeeping) and 1846f69c (f3d4ca04, Windows crossplay fixes; clean). Both sides kept; details and table:
+`docs/formations.md` "C. The 1.0.846 merge"; data `docs/formation-results/scenarios/merge-846/`.
+
+- **Protocol 81** (one past 1.0.845's 80; comment chain lists 80 = UVX/footprint, 81 = march fix + opening
+  readiness), **save 9864** unchanged. Config: `[Force Concentration]` PerimeterHold, PerimeterTurrets,
+  SizedDefence, OpeningReadiness all hashed and default on; `forceBits()` = F C B W U V X I.
+- **Flag clash resolved**: both branches used bit 16384 / duel letter E. Released 1.0.845 keeps
+  `kForceEstimate` = 16384 = `E`; opening readiness is now `kForceOpeningReadiness` = 4194304, duel label flag
+  **`I`** (scenario data before the merge records it as `E`). `launchReadinessPercent()` combines both: full
+  readiness under I's opening hold or under D while outnumbered (E: by the estimate).
+- Harness: `vanilla-match.py` and `run-formation-bench.py` use the leased scratch helper (scratch optional,
+  per-run cleanup, disk guard; bench `--trace-s` logs are copied to results); `vanilla-match.py` also has the
+  Windows probe-path port (`probe_binary`, `sys.executable`) like `formation-duel.py`.
+- FormationFinish's batches that ran from this worktree during the merge (prebuilt probes): `fe1` (Fortress
+  Brutal, BWFCQE v BWFCQ, 36) 0.500, identical by size - E inert at Brutal; `ac1-brutal-mini` last 60 CY Brutal
+  games added (all 360: Staggered 0.428 (0.36-0.49), Column 0.472 (0.40-0.54)). Columns checked, no failed or
+  malformed rows, none dropped.
+- **Tests** (worktree Release `build`, check-build-deps before/after, ctest -j3), at d497b083 and again at
+  1846f69c: dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions,
+  rts_controls_probe, rts_controls_tests, skirmish_generator_tests, menu_navigation_probe,
+  preplace_queue_probe, save_scenario_export, save_scenario_input_preservation and all 32 quantbot_*:
+  43/43 passed both times. `quantbot_force_concentration` ran every section (opening hold in the waves
+  section, memory save/load incl. the 9863 load, footprint). `quantbot_all_against_atreides` 6/6: 30.4 31.3
+  32.9 29.1 33.0 33.9 min (identical both runs).
+- **Behaviour checks (mini queue, Hard)**: Fortress BWFCQUVXI v none 108 0.889 (0.82-0.94; 1.0.845 0.926),
+  I inert (`full_readiness` 0); `/weak` v none 108 0.417 (0.33-0.51; 1.0.845 0.426; I off on merged code
+  0.343); CY BWFCQUVXI v BWFCQUVX 216 0.519 (0.45-0.59; pre-merge E v BWFCQ on the same games 0.583);
+  control BWFCQI v BWFCQ 72 0.597 (0.49-0.71). Nothing clearly off; I's CY edge over a UVX opponent may be
+  smaller (UVX already stops outnumbered waves). CY, the control and the first 36 games of `m846h`/`m846w`
+  ran at d497b083, the rest at 1846f69c (Mac simulation unchanged by the Windows fixes).
+
+## 2026-10-17 — Scenario tests, formation march fix, QuantBot opening readiness (branch `test/formation-scenarios`, protocol 81, save 9863 unchanged)
+
+Stefan: "think of some more tests we can do on troop formations and run them. also make sure you are playing
+some vanilla games from a construction yard start". Tables: `docs/formations.md`, "Scenario tests"; compact
+data `docs/formation-results/scenarios/` (raw samples/waves stay out of git). Commits on e9885232 (1.0.844):
+947e4aab harness + data + test-only flag E; 37f195b2 march fix; fac6d0d6 E default; then docs/data.
+
+- **CY start (vanilla bundled maps)**: BWFCQ v previous rules Hard 360 0.562, Brutal 180 0.600; FFA 4P place
+  2.38 v 2.62; v AI Player 0.983. Sihaya-Lauper 0.306: 60% readiness sends a small first wave into a base
+  building its defence.
+- **E = opening readiness, now the default** (`[Force Concentration] OpeningReadiness`, code default on,
+  hashed): a house whose starting army cannot launch a wave holds its first wave for full readiness. CY
+  BWFCQE v BWFCQ Hard 180 0.561, Brutal 180 0.572, pooled 0.567 (0.52-0.61); Fortress duels 36 identical
+  (`full_readiness` 0). Brutal Fortress identity check (36) queued on the mini (`fe1-brutal`).
+- **March fix (protocol 81)**: two jams, not a slow pace - a laggard queued behind a pace-keeping mate in its
+  file (order inversion), and holders blocking a chokepoint. Recover members route round Pace mates; holders
+  with a next step are mates and give way (`FormationOrders::update()`). Bench big/hold contact -25 s
+  (-33..-17), march +10% of pace; canyon Pincer 0/12 -> 11/12; 10-unit armies unchanged. Still slow: big
+  form-up 30-65 s, re-forming behind obstacles (38-73% of pace) - design, not jams.
+- **Approach shapes (fixed march)**: Staggered v BWFCQ Fortress Hard 0.861, Brutal 0.861, CY Hard 0.511, but
+  CY Brutal 0.413 (0.33-0.49, 150 games) -> **no approach default**, WaveFormation stays None. Rejected
+  QuantBot-only `ApproachFormation` patch not committed. Remaining CY Brutal games queued (`ac1-brutal-mini`
+  into /private/tmp/dunecity-work/local_16397/formation-finish-bench-*/ap-cy-brutal-mini).
+- Tests at fac6d0d6 (ctest, <=3 jobs): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, all 32 quantbot_* incl. quantbot_all_against_atreides: all passed.
+- Protocol: DefenceFinish owns 80 (save 9864); this branch uses 81 - the integrator reconciles.
+
 ## 2026-10-17 — local 1.0.845 installed on the MBA
 
 Staging = 1.0.844 + `feat/ai-blob-waves` (85b423d4: perimeter hold, perimeter rocket turrets, sized

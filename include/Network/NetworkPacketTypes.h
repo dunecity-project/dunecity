@@ -233,7 +233,14 @@
 //     are asked off planned sites, a finished building waits for them, and the hold applies in
 //     the city simulation. A 79 peer would order the same AI units differently and desync.
 //     Save 9864.
-#define NETWORK_PROTOCOL_VERSION            80
+// 81: Formation march without jams, and QuantBot opening readiness; no saved state or command
+//     change. A marching member that fell behind routes round a member keeping the pace rather
+//     than queueing behind it, and a member waiting for a laggard gives way to a formation-mate
+//     stepping onto its tile (it may be planned through). A Custom Hard/Brutal QuantBot whose
+//     starting army cannot launch a wave (a Construction Yard start) holds its first ground
+//     wave for full readiness ([Force Concentration] OpeningReadiness, hashed). An 80 peer
+//     would move the same units differently and desync. Save 9864 unchanged.
+#define NETWORK_PROTOCOL_VERSION            81
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

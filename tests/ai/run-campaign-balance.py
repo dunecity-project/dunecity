@@ -221,6 +221,10 @@ parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192,
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
 parser.add_argument('--duel-map-seed', type=int, default=1, help='Formation duel: the Random Skirmish map seed')
 parser.add_argument('--duel-sides', help='Formation duel: house:shape,house:shape (e.g. atreides:box,harkonnen:wedge)')
+parser.add_argument('--match-sides',
+                    help='Vanilla match on --custom-map (vanilla-match.py): house:label per map slot in slot order, '
+                         'each house its own team; label = a duel label (none, none+BWFCQ, ...) for a QuantBot of '
+                         '--enemy-difficulty, or ai for the AI Player of it')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
 parser.add_argument('--no-ai-telemetry', action='store_true',
@@ -250,6 +254,8 @@ if args.game_options and not args.game_options.is_file():
     parser.error('--game-options must name an existing INI file.')
 if bool(args.duel_map_size) != bool(args.duel_sides) or (args.duel_map_size and args.custom_map):
     parser.error('A formation duel needs --duel-map-size and --duel-sides and no --custom-map.')
+if args.match_sides and (not args.custom_map or args.roster or args.free_for_all):
+    parser.error('--match-sides needs --custom-map and replaces --roster/--free-for-all.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
@@ -303,9 +309,27 @@ if args.custom_map:
         roster=requested
     if args.free_for_all:
         roster = [(house, i + 1) for i, (house, _) in enumerate(roster)]
+    if args.match_sides:
+        try:
+            sides = [(names.index(house.lower()), label) for house, label in
+                     (side.split(':', 1) for side in args.match_sides.split(','))]
+        except ValueError:
+            parser.error('--match-sides must be house:label,house:label with known houses.')
+        if len(sides) != len(roster) or len({h for h, _ in sides}) != len(sides):
+            parser.error(f'--match-sides needs one distinct house per map slot ({len(roster)}).')
+        if any(label == 'ai' for _, label in sides) and args.enemy_difficulty == 'brutal':
+            parser.error('AI Player has no Brutal controller.')
+        roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
+        if names.index(args.house) not in {h for h, _ in roster}:
+            parser.error('--house must be one of the --match-sides houses.')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
-source_commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
-source_modified = bool(subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip())
+# Provenance only (summary.json): a worktree whose git directory cannot be read still runs.
+try:
+    source_commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
+    source_modified = bool(subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True,
+                                                   stderr=subprocess.DEVNULL).strip())
+except subprocess.CalledProcessError:
+    source_commit, source_modified = 'unavailable', None
 if args.repeatable:
     out.mkdir(parents=True, exist_ok=True)
     # CTest reruns used to accumulate every run (~80 MB each) forever.
@@ -550,6 +574,8 @@ if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
+if args.match_sides:
+    env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
 if args.duel_map_size:
     env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
     env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)

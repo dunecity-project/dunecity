@@ -54,17 +54,17 @@ void runForceConcentrationProbe(Game& game) {
     const QuantBotConfig defaults;
     require(defaults.force.focusFire && defaults.force.converge && defaults.force.waveReadinessPercent==60
         && defaults.force.bundle && defaults.force.launchFromBundle && defaults.force.perimeterHold
-        && defaults.force.perimeterTurrets && defaults.force.sizedDefence,
+        && defaults.force.perimeterTurrets && defaults.force.sizedDefence && defaults.force.openingReadiness,
         "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it"
-        " + perimeter hold + perimeter turrets + sized defence");
+        " + perimeter hold + perimeter turrets + sized defence + opening readiness");
     const auto& loaded=getQuantBotConfig();
     require(loaded.force.focusFire && loaded.force.converge && loaded.force.waveReadinessPercent==60
         && loaded.force.bundle && loaded.force.launchFromBundle && loaded.force.perimeterHold
-        && loaded.force.perimeterTurrets && loaded.force.sizedDefence,
+        && loaded.force.perimeterTurrets && loaded.force.sizedDefence && loaded.force.openingReadiness,
         "The shipped QuantBot configuration did not load the force defaults");
     require(bot->forceBits()==(QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceBundle
             |QuantBot::kForceBundleGate|QuantBot::kForcePerimeterHold|QuantBot::kForceThreatTurrets
-            |QuantBot::kForceSizedDefence) && bot->waveReadinessPercent()==60,
+            |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness) && bot->waveReadinessPercent()==60,
         "Custom Hard does not use the configured force rules");
     bot->difficulty=QuantBot::Difficulty::Medium;
     require(!bot->forceVariant(QuantBot::kForceFocusFire) && bot->waveReadinessPercent()==100,
@@ -267,7 +267,19 @@ void runForceConcentrationProbe(Game& game) {
                 return hunters;
             };
             require(launch(0)==0,"The previous 100% readiness launched an army below it");
+            // I (default): a house that started without an army able to strike (a Construction
+            // Yard start) holds its first ground wave for full readiness; from then on, 60%.
+            const int savedInitial=bot->initialMilitaryValue;
+            const Uint32 savedLaunched=bot->customWave.launched;
+            bot->initialMilitaryValue=0;
+            bot->customWave.launched=0;
+            require(launch(QuantBot::kNoForceOverride)==0,"The opening readiness launched a first wave below full readiness");
+            bot->initialMilitaryValue=value;
+            require(launch(QuantBot::kNoForceOverride)==int(army.size()),"A starting army able to strike did not launch at 60%");
+            bot->initialMilitaryValue=0;
+            bot->customWave.launched=std::max<Uint32>(1,savedLaunched);
             require(launch(QuantBot::kNoForceOverride)==int(army.size()),"The 60% default did not launch the ready army");
+            bot->initialMilitaryValue=savedInitial;
             bot->forceVariantOverride=QuantBot::kNoForceOverride;
             SDL_Log("FORCE_PROBE: waves value=%d limit=%d threshold=%.2f",value,bot->militaryValueLimit,threshold);
             retireAll();

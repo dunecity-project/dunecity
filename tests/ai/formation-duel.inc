@@ -25,17 +25,20 @@ struct Side {
     int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged),
                                 ///< +s (stage near the enemy), +e (stage only with local superiority)
     int force = 0;              ///< QuantBot::forceVariantOverride bits from the uppercase flags (+F, +C, +P, +H, +M, +L, +Q,
-                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +V)
+                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +V, +I)
     int strengthBps = 10000;    ///< QuantBot::forceStrengthBps from /k<percent> (A's k)
     bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
+    bool aiPlayer = false;      ///< label "ai": the classic AI Player controls this house (vanilla matches only)
 };
 
-/// BALANCE_DUEL_SIDES: "house:shape[+flags][/variant...],house:...", houses by number, shapes by
-/// INI name (None, Blob or a kept shape). Variants: /retreat turns the tactical fall-back on,
-/// /noretreat off (without one the game's: on with Blob only); /weak halves the starting army.
-inline std::vector<Side> sidesFromEnv() {
+/// "house:shape[+flags][/variant...],house:...", houses by number, shapes by INI name (None, Blob
+/// or a kept shape). Variants: /retreat turns the tactical fall-back on, /noretreat off (without
+/// one the game's: on with Blob only); /weak halves the starting army. With allowAI the label "ai"
+/// is the classic AI Player instead of a QuantBot (vanilla-match.py), and any number of sides
+/// (two or more) may be given.
+inline std::vector<Side> parseSides(const std::string& text, bool allowAI) {
     std::vector<Side> sides;
-    std::istringstream input(std::getenv("BALANCE_DUEL_SIDES") ? std::getenv("BALANCE_DUEL_SIDES") : "");
+    std::istringstream input(text);
     std::string entry;
     while (std::getline(input, entry, ',')) {
         const auto colon = entry.find(':');
@@ -43,6 +46,11 @@ inline std::vector<Side> sidesFromEnv() {
         Side side;
         side.house = std::stoi(entry.substr(0, colon));
         side.label = entry.substr(colon + 1);
+        if (allowAI && side.label == "ai") {
+            side.aiPlayer = true;
+            sides.push_back(side);
+            continue;
+        }
         std::string shape = side.label;
         auto slash = shape.find('/');
         if (slash != std::string::npos) {
@@ -89,6 +97,7 @@ inline std::vector<Side> sidesFromEnv() {
                 else if (flag == 'Y') side.force |= QuantBot::kForceFallBack;
                 else if (flag == 'U') side.force |= QuantBot::kForceThreatTurrets;
                 else if (flag == 'V') side.force |= QuantBot::kForcePerimeterHold;
+                else if (flag == 'I') side.force |= QuantBot::kForceOpeningReadiness;
                 else throw std::runtime_error("Unknown duel variant flag: " + entry);
             }
             shape = shape.substr(0, plus);
@@ -97,8 +106,16 @@ inline std::vector<Side> sidesFromEnv() {
         if (side.shape == INT_MIN) throw std::runtime_error("Unknown duel wave formation: " + entry);
         sides.push_back(side);
     }
-    if (sides.size() != 2 || sides[0].house == sides[1].house) throw std::runtime_error("A duel needs two different houses");
+    for (size_t i = 0; i < sides.size(); ++i)
+        for (size_t j = i + 1; j < sides.size(); ++j)
+            if (sides[i].house == sides[j].house) throw std::runtime_error("Two sides share a house");
+    if (sides.size() < 2 || (!allowAI && sides.size() != 2)) throw std::runtime_error("A duel needs two different houses");
     return sides;
+}
+
+/// BALANCE_DUEL_SIDES: the two sides of a generated-map duel (parseSides).
+inline std::vector<Side> sidesFromEnv() {
+    return parseSides(std::getenv("BALANCE_DUEL_SIDES") ? std::getenv("BALANCE_DUEL_SIDES") : "", false);
 }
 
 /// The generated map and the two-QuantBot roster (teams 1 and 2, the starts assigned by the
@@ -149,7 +166,8 @@ inline void applyShapes(Game& game, const std::vector<Side>& sides) {
                 bot->forceStrengthBps = side.strengthBps;
                 ++bots;
             }
-        if (bots != 1) throw std::runtime_error("A duel house does not have exactly one QuantBot");
+        if (bots != (side.aiPlayer ? 0 : 1))
+            throw std::runtime_error(side.aiPlayer ? "An AI Player side has a QuantBot" : "A duel house does not have exactly one QuantBot");
         if (!side.weak) continue;
         std::vector<Uint32> fighters;
         for (const auto* unit : unitList)
