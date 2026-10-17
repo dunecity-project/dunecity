@@ -1571,7 +1571,9 @@ void ModManager::seedVanillaFromDefaults() {
     
     // Create GameOptions.ini with defaults (extracted from Dune Legacy.ini defaults)
     std::string gameOptionsPath = vanillaPath + "/" + GAME_OPTIONS_FILE;
-    std::ofstream gameOptionsFile(gameOptionsPath);
+    // Binary: the installer identity hashes these exact bytes (vanillaOptions()); a text-mode
+    // stream writes CRLF on Windows, which made the bundled mod unrecognised there.
+    std::ofstream gameOptionsFile(gameOptionsPath, std::ios::binary | std::ios::trunc);
     if (gameOptionsFile.is_open()) {
         gameOptionsFile << vanillaOptions();
         gameOptionsFile.close();
@@ -1623,7 +1625,7 @@ void ModManager::seedDunecityFromDefaults() {
     // (open map, sandworm respawn/spice, concrete required, rocket-turrets
     // need power). The city-mode toggle itself lives in mod.ini.
     std::string gameOptionsPath = dunecityPath + "/" + GAME_OPTIONS_FILE;
-    std::ofstream gameOptionsFile(gameOptionsPath);
+    std::ofstream gameOptionsFile(gameOptionsPath, std::ios::binary | std::ios::trunc);
     if (gameOptionsFile.is_open()) {
         gameOptionsFile << cityOptions();
         gameOptionsFile.close();

@@ -128,7 +128,8 @@ EM_JS(int, dunecityReadRelayDevelopmentParameter, (), {
 #define HAS_ASYNC
 #endif
 
-#if defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ )
+// clang-cl defines __clang__ but uses the MSVC ABI and library, which have no <cxxabi.h>.
+#if !defined(_MSC_VER) && (defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ ))
 #include <cxxabi.h>
 inline std::string demangleSymbol(const char* symbolname) {
     int status = 0;
