@@ -45,6 +45,7 @@ class Harvester;
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <memory>
 #include <array>
 #include <optional>
 #include <vector>
@@ -840,6 +841,78 @@ private:
     ArmyPosturePolicy::Posture armyPosture = ArmyPosturePolicy::Posture::Offensive;
     Uint32 postureSince = 0;
     ArmyPosturePolicy::AttritionLedger attrition;
+    /// Test-only (tests/ai play styles, docs/ai-play-styles.md): this player's own copy of the
+    /// QuantBot config with a style's keys applied (QuantBotConfig::applyOverrides), so two
+    /// QuantBots of one match can play different styles. Never set by the game, not saved and
+    /// not part of the config hash; null = the one global config, as in every real game.
+    std::shared_ptr<const QuantBotConfig> configOverride;
+    /// The config this player plays by: configOverride if set, else getQuantBotConfig().
+    const QuantBotConfig& botConfig() const { return configOverride ? *configOverride : getQuantBotConfig(); }
+    /// Test-only play-style behaviours a config key cannot express (tests/ai play styles,
+    /// `[Play Style]` in a tests/ai/play-styles/*.ini file; docs/ai-play-styles.md). The
+    /// defaults are inert: every real game plays with them. Custom Hard/Brutal only. Never set by
+    /// the game, not saved, not hashed.
+    struct PlayStyle {
+        /// Share (basis points) of the final unit mix taken from `mix` (0 = the learned mix only).
+        int mixBps = 0;
+        /// The style's composition over the mix slots (tank, siege tank, launcher, special,
+        /// ornithopter, trike, raider trike, quad); unavailable slots are dropped.
+        UnitMixPolicy::Weights mix{};
+        /// Game minutes the style mix applies for (0 = the whole game).
+        int mixMinutes = 0;
+        /// Counter-composition: blend the mix towards the counters of the remembered enemy army
+        /// (light -> tanks, armour -> launchers and siege, launchers -> quads and tanks, air -> launchers).
+        int counterBps = 0;
+        /// Rush opening: the light factory right after the first refinery, before every other
+        /// structure, and ground waves do not wait for a repair yard.
+        bool lightFirst = false;
+        /// A viable main wave (default 6 units and 3,000 credits).
+        int minWaveUnits = 6, minWaveValue = 3000;
+        /// Baseline rocket turrets after the repair yard (default 2).
+        int rocketTurrets = 2;
+        /// Harvest as if no other house shared the spice (more harvesters and refineries).
+        bool greedyHarvest = false;
+        /// Refineries beyond the harvester-driven target.
+        int extraRefineries = 0;
+        /// Construction yards (incl. MCVs) the house keeps at least once a heavy factory stands.
+        int minYards = 0;
+        /// Light vehicles kept raiding: each hunts the nearest enemy harvester (else refinery).
+        int raidUnits = 0;
+        bool active() const {
+            return mixBps > 0 || counterBps > 0 || lightFirst || minWaveUnits != 6 || minWaveValue != 3000
+                || rocketTurrets != 2 || greedyHarvest || extraRefineries > 0 || minYards > 0 || raidUnits > 0;
+        }
+    };
+    PlayStyle playStyle;
+    /// playStyle if this is a Custom Hard/Brutal QuantBot, else the inert defaults.
+    const PlayStyle& style() const;
+    /// The raiders of PlayStyle::raidUnits (id order; runtime only, not saved).
+    std::set<Uint32> styleRaiders;
+    /// Re-selects the raiders (unit pass): drops the lost and busy, tops up with free light vehicles.
+    void updateStyleRaiders();
+    /// Orders a raider at the nearest enemy harvester (else refinery); false if it has no prey.
+    bool raidWithStyle(const UnitBase* raider);
+    /// The unit mix with the style mix and counter-composition applied (unit production).
+    UnitMixPolicy::Mix styledUnitMix(const UnitMixPolicy::Mix& mix, const std::array<bool,8>& available) const;
+    /// The strategy this house plays (QuantBotStrategy; docs/ai-play-styles.md, "Strategies"):
+    /// picked once by pickStrategy() from the game seed, the house and the config, saved
+    /// (SAVEGAMEVERSION 9865); a 9864 save picks it afresh by the same function.
+    QuantBotStrategy::Choice strategy;
+    bool strategyPicked = false;
+    /// Picks the strategy if none is set (first update of a new game or a pre-9865 load).
+    void pickStrategy();
+    /// The strategy's mix / tempo while it applies (Custom Hard/Brutal; the tempo within its
+    /// minutes), else null: the learned default and the configured readiness.
+    const QuantBotStrategy::MixProfile* strategyMix() const;
+    const QuantBotStrategy::TempoProfile* strategyTempo() const;
+    /// The opening and wave rules of the style (if a test style is active) or else the tempo.
+    bool lightFirstOpening() const;
+    int minWaveUnits() const;
+    int minWaveValue() const;
+    /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.
+    bool infantryStrategy() const { const auto* mix = strategyMix(); return mix && mix->infantryPercent > 0; }
+    /// QuantBotStrategy::counterPrior of the remembered enemy army and the hostile wing in sight.
+    UnitMixPolicy::Weights enemyCounterPrior() const;
     /// Test-only (tests/ai/formation-duel.py): this player's attack-wave shape instead of
     /// QuantBotConfig::waveFormation, so two QuantBots of one match can march in different
     /// shapes. Never set by the game, not saved and not part of the config hash; production
@@ -1091,7 +1164,7 @@ private:
             stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
-            turretsBuilt = 0, turretsLost = 0;
+            turretsBuilt = 0, turretsLost = 0, raidOrders = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets

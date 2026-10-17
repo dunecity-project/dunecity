@@ -104,7 +104,7 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 	// This prevents desync issues in multiplayer games
 	buildTimer = (getHouse()->getHouseID() % 4) * 50;  // 0-150 cycles stagger
 
-    const QuantBotConfig& config = getQuantBotConfig();
+    const QuantBotConfig& config = botConfig();
 
     attackTimer = SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
         currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
@@ -229,7 +229,7 @@ void QuantBot::update() {
     if (isAlliedWithHuman() && gameMode == GameMode::Campaign) {
         gameMode = GameMode::Custom;
         initialMilitaryValue = -1;
-        const auto& config = getQuantBotConfig();
+        const auto& config = botConfig();
         attackTimer = supportMode ? std::numeric_limits<Sint32>::max()
             : isCampaignGameType(currentGame->gameType) ? 0
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
@@ -242,6 +242,9 @@ void QuantBot::update() {
     if (!supportMode && difficulty != Difficulty::Defend && isAlliedWithHuman()
         && isCampaignGameType(currentGame->gameType) && attackTimer > MILLI2CYCLES(60000))
         attackTimer = 0;
+
+    // The strategy (docs/ai-play-styles.md, "Strategies"): once, from the seed, house and config.
+    pickStrategy();
 
     if (campaignCityEconomy() && !campaignBaselineCaptured && initialMilitaryValue>=0) noteCampaignOriginalState(true);
 
@@ -289,7 +292,7 @@ void QuantBot::update() {
 
 
 	// Get config for this difficulty
-	const QuantBotConfig& config = getQuantBotConfig();
+	const QuantBotConfig& config = botConfig();
 	const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
 	// Log which config this QuantBot is using
@@ -531,7 +534,7 @@ void QuantBot::update() {
 
 	// Continuously adjust harvester limit based on remaining spice (both Campaign and Custom modes)
 	// This runs every cycle to dynamically reduce harvester targets as spice depletes
-	const QuantBotConfig& config = getQuantBotConfig();
+	const QuantBotConfig& config = botConfig();
 	const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
     // No lobby ceiling (unchecked or 0) means no engine ceiling. Start with the remaining
@@ -603,7 +606,8 @@ void QuantBot::update() {
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
     // R, U and V read it), before anything this pass consults it.
     if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
-                     | kForcePerimeterHold)) updateEnemySightings();
+                     | kForcePerimeterHold) || style().counterBps > 0
+        || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front
     // battery with it. It is therefore evaluated on every pass this house

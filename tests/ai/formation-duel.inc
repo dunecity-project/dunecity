@@ -10,6 +10,10 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <MapEditor/SkirmishGenerator.h>
 #include <players/QuantBot.h>
+#include <players/SimpleArmyPolicy.h>
+#include <FileClasses/INIFile.h>
+
+#include <memory>
 
 #include <sstream>
 #include <string>
@@ -29,13 +33,18 @@ struct Side {
     int strengthBps = 10000;    ///< QuantBot::forceStrengthBps from /k<percent> (A's k)
     bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
     bool aiPlayer = false;      ///< label "ai": the classic AI Player controls this house (vanilla matches only)
+    bool configured = false;    ///< shape "default": the configured rules (no force or formation override)
+    std::string style;          ///< @style: tests/ai/play-styles/<style>.ini (docs/ai-play-styles.md)
+    std::string strategy;       ///< #strategy: "random" or "<Mix>-<Tempo>[-fixed]" (applyStrategy)
 };
 
-/// "house:shape[+flags][/variant...],house:...", houses by number, shapes by INI name (None, Blob
-/// or a kept shape). Variants: /retreat turns the tactical fall-back on, /noretreat off (without
-/// one the game's: on with Blob only); /weak halves the starting army. With allowAI the label "ai"
-/// is the classic AI Player instead of a QuantBot (vanilla-match.py), and any number of sides
-/// (two or more) may be given.
+/// "house:shape[+flags][@style][#strategy][/variant...],house:...", houses by number, shapes by INI
+/// name (None, Blob or a kept shape) or "default" (the configured rules as the game plays them: no
+/// force or formation override, no flags). @style plays that test-only play style on top (its config
+/// keys and [Play Style] behaviours, applyStyle); #strategy sets this bot's [Strategy] (applyStrategy).
+/// Variants: /retreat turns the tactical fall-back on, /noretreat off (without one the game's: on
+/// with Blob only); /weak halves the starting army. With allowAI the label "ai" is the classic AI
+/// Player instead of a QuantBot (vanilla-match.py), and any number of sides (two or more) may be given.
 inline std::vector<Side> parseSides(const std::string& text, bool allowAI) {
     std::vector<Side> sides;
     std::istringstream input(text);
@@ -66,6 +75,26 @@ inline std::vector<Side> parseSides(const std::string& text, bool allowAI) {
                     side.strengthBps = std::stoi(variant.substr(1)) * 100;
                 else throw std::runtime_error("Unknown duel variant: " + entry);
             }
+        }
+        const auto hash = shape.find('#');
+        if (hash != std::string::npos) {
+            side.strategy = shape.substr(hash + 1);
+            shape = shape.substr(0, hash);
+            if (side.strategy.empty() || side.strategy.find_first_not_of(
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-") != std::string::npos)
+                throw std::runtime_error("Invalid strategy: " + entry);
+        }
+        const auto at = shape.find('@');
+        if (at != std::string::npos) {
+            side.style = shape.substr(at + 1);
+            shape = shape.substr(0, at);
+            if (side.style.empty() || side.style.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-_") != std::string::npos)
+                throw std::runtime_error("Invalid play style: " + entry);
+        }
+        if (shape == "default") {
+            side.configured = true;
+            sides.push_back(side);
+            continue;
         }
         const auto plus = shape.find('+');
         if (plus != std::string::npos) {
@@ -149,9 +178,93 @@ inline GameInitSettings makeInit(int mapSize, Uint32 mapSeed, const std::vector<
     return init;
 }
 
-/// Gives each side's QuantBot its wave shape and its ablations (test-only), and halves a /weak
-/// side's starting army: every second ground fighter by object id is removed before the first
-/// cycle (the composition stays; the base, harvesters and MCVs are untouched).
+/// A play style (docs/ai-play-styles.md): BALANCE_STYLE_DIR/<style>.ini. Its QuantBot Config keys
+/// apply over the global config in a copy only this bot plays by (QuantBot::configOverride), its
+/// [Play Style] section sets the behaviours no config key expresses (QuantBot::PlayStyle). Test-only:
+/// neither is saved or hashed, and the game never sets them.
+inline void applyStyle(QuantBot& bot, const std::string& style) {
+    const char* dir = std::getenv("BALANCE_STYLE_DIR");
+    if (!dir) throw std::runtime_error("A play style needs BALANCE_STYLE_DIR");
+    const std::string path = std::string(dir) + "/" + style + ".ini";
+    auto config = std::make_shared<QuantBotConfig>(getQuantBotConfig());
+    if (!config->applyOverrides(path)) throw std::runtime_error("Unknown play style: " + path);
+    bot.configOverride = config;
+    const INIFile ini(path);
+    const std::string section = "Play Style";
+    QuantBot::PlayStyle s;
+    s.mixBps = ini.getIntValue(section, "MixBps", s.mixBps);
+    {
+        std::istringstream mix(ini.getStringValue(section, "Mix", ""));
+        std::string value;
+        for (size_t i = 0; i < s.mix.size() && std::getline(mix, value, ','); ++i) s.mix[i] = std::stoll(value);
+    }
+    s.mixMinutes = ini.getIntValue(section, "MixMinutes", s.mixMinutes);
+    s.counterBps = ini.getIntValue(section, "CounterBps", s.counterBps);
+    s.lightFirst = ini.getBoolValue(section, "LightFirst", s.lightFirst);
+    s.minWaveUnits = ini.getIntValue(section, "MinWaveUnits", s.minWaveUnits);
+    s.minWaveValue = ini.getIntValue(section, "MinWaveValue", s.minWaveValue);
+    s.rocketTurrets = ini.getIntValue(section, "RocketTurrets", s.rocketTurrets);
+    s.greedyHarvest = ini.getBoolValue(section, "GreedyHarvest", s.greedyHarvest);
+    s.extraRefineries = ini.getIntValue(section, "ExtraRefineries", s.extraRefineries);
+    s.minYards = ini.getIntValue(section, "MinYards", s.minYards);
+    s.raidUnits = ini.getIntValue(section, "RaidUnits", s.raidUnits);
+    bot.playStyle = s;
+    // The constructor drew the first attack delay from the global config.
+    if (config->attackTimerMs != getQuantBotConfig().attackTimerMs)
+        bot.attackTimer = SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config->attackTimerMs),
+            currentGame->getGameInitSettings().getRandomSeed(), currentGame->getGameCycleCount(),
+            bot.getHouse()->getHouseID());
+    SDL_Log("PLAY_STYLE: house=%d style=%s mix_bps=%d counter_bps=%d light_first=%d raid=%d turrets=%d greedy=%d "
+            "extra_refineries=%d min_yards=%d wave=%d/%d readiness=%d opening=%d timer_ms=%d",
+            bot.getHouse()->getHouseID(), style.c_str(), s.mixBps, s.counterBps, int(s.lightFirst), s.raidUnits,
+            s.rocketTurrets, int(s.greedyHarvest), s.extraRefineries, s.minYards, s.minWaveUnits, s.minWaveValue,
+            config->force.waveReadinessPercent, int(config->force.openingReadiness), config->attackTimerMs);
+}
+
+/// A strategy (docs/ai-play-styles.md, "Strategies") for this bot only: "random" = [Strategy]
+/// Mode=Random with the config's weights, "<Mix>-<Tempo>" = Mode=Fixed:<Mix>,<Tempo>, and
+/// "<Mix>-<Tempo>-fixed" additionally holds the mix's ratios against the learning (the test-only
+/// style mix at 100%, the "strategy fixed" arm) and plays the tempo's wave rules with it. Applied
+/// over the bot's style config if it has one; test-only like applyStyle.
+inline void applyStrategy(QuantBot& bot, const std::string& text) {
+    auto config = std::make_shared<QuantBotConfig>(bot.configOverride ? *bot.configOverride : getQuantBotConfig());
+    bool fixed = false;
+    if (text == "random") {
+        config->strategy.random = true;
+    } else {
+        std::vector<std::string> parts;
+        std::istringstream input(text);
+        std::string part;
+        while (std::getline(input, part, '-')) parts.push_back(part);
+        QuantBotStrategy::Mix mix;
+        QuantBotStrategy::Tempo tempo;
+        if (parts.size() < 2 || parts.size() > 3 || !QuantBotStrategy::parse(parts[0], mix)
+            || !QuantBotStrategy::parse(parts[1], tempo) || (parts.size() == 3 && parts[2] != "fixed"))
+            throw std::runtime_error("Unknown strategy: " + text);
+        config->strategy.random = false;
+        config->strategy.fixedMix = mix;
+        config->strategy.fixedTempo = tempo;
+        fixed = parts.size() == 3;
+        if (fixed) {
+            const auto& profile = QuantBotStrategy::profile(mix);
+            const auto& waves = QuantBotStrategy::profile(tempo);
+            QuantBot::PlayStyle s = bot.playStyle;
+            if (profile.counter) s.counterBps = 10000;
+            else if (profile.priorBps > 0) { s.mix = profile.prior; s.mixBps = 10000; }
+            s.lightFirst = waves.lightFirst;
+            s.minWaveUnits = waves.minWaveUnits;
+            s.minWaveValue = waves.minWaveValue;
+            bot.playStyle = s;
+        }
+    }
+    bot.configOverride = config;
+    SDL_Log("PLAY_STRATEGY: house=%d strategy=%s mode=%s fixed=%d", bot.getHouse()->getHouseID(), text.c_str(),
+            QuantBotStrategy::modeText(config->strategy).c_str(), int(fixed));
+}
+
+/// Gives each side's QuantBot its wave shape and its ablations (test-only), its play style, and
+/// halves a /weak side's starting army: every second ground fighter by object id is removed
+/// before the first cycle (the composition stays; the base, harvesters and MCVs are untouched).
 inline void applyShapes(Game& game, const std::vector<Side>& sides) {
     for (const Side& side : sides) {
         House* house = game.getHouse(side.house);
@@ -159,11 +272,15 @@ inline void applyShapes(Game& game, const std::vector<Side>& sides) {
         int bots = 0;
         for (const auto& player : house->getPlayerList())
             if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
-                bot->waveFormationOverride = side.shape;
+                if (!side.configured) {
+                    bot->waveFormationOverride = side.shape;
+                    bot->blobVariantOverride = side.variant;
+                    bot->forceVariantOverride = side.force;
+                    bot->forceStrengthBps = side.strengthBps;
+                }
                 bot->tacticalRetreatOverride = side.retreat;
-                bot->blobVariantOverride = side.variant;
-                bot->forceVariantOverride = side.force;
-                bot->forceStrengthBps = side.strengthBps;
+                if (!side.style.empty()) applyStyle(*bot, side.style);
+                if (!side.strategy.empty()) applyStrategy(*bot, side.strategy);
                 ++bots;
             }
         if (bots != (side.aiPlayer ? 0 : 1))
@@ -204,8 +321,12 @@ inline void report(Game& game, const std::vector<Side>& sides) {
         if (house->isAlive()) { ++alive; winner = side.house; }
         QuantBot::BlobStats stats;
         QuantBot::ForceStats force;
+        std::string strategy;
         for (const auto& player : house->getPlayerList())
-            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) { stats = bot->blobStats; force = bot->forceStats; }
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                stats = bot->blobStats; force = bot->forceStats;
+                strategy = std::string(QuantBotStrategy::name(bot->strategy.mix)) + "-" + QuantBotStrategy::name(bot->strategy.tempo);
+            }
         const auto home = FormationWaveMeasure::homeTrade()[side.house];
         SDL_Log("FORMATION_DUEL_HOUSE: house=%d shape=%s alive=%d kill_value=%d loss_value=%d structures_destroyed=%d "
                 "units_destroyed=%d structures=%d army_value=%d army_units=%d parties=%d gathered=%d gather_timeouts=%d "
@@ -214,7 +335,7 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "stage_holds=%d staged=%d bundle_orders=%d gate_holds=%d gate_timeouts=%d splits=%d split_releases=%d "
                 "split_timeouts=%d full_readiness=%d garrison_holds=%d strength_holds=%d reserve_kept=%d "
                 "sized_responses=%d declined_responses=%d fall_backs=%d perimeter_turret_orders=%d turrets_built=%d "
-                "turrets_lost=%d",
+                "turrets_lost=%d raid_orders=%d strategy=%s",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
@@ -223,7 +344,8 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 force.musterReleases, force.stageHolds, force.staged, force.bundleOrders, force.gateHolds, force.gateTimeouts,
                 force.splits, force.splitReleases, force.splitTimeouts, force.fullReadiness, force.garrisonHolds,
                 force.strengthHolds, force.reserveKept, force.sizedResponses, force.declinedResponses, force.fallBacks,
-                force.perimeterTurretOrders, force.turretsBuilt, force.turretsLost);
+                force.perimeterTurretOrders, force.turretsBuilt, force.turretsLost, force.raidOrders,
+                strategy.empty() ? "none" : strategy.c_str());
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,
             FormationWaveMeasure::seconds(game.getGameCycleCount()));

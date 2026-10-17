@@ -1,0 +1,9 @@
+tag,difficulty,map,seed,sides,players,winner,winner_label,end_s,waves,wall_s,error
+par,hard,x-factor,8101,atreides:default|harkonnen:default@timing,2,0,default@timing,684.8,0,4,
+par,hard,x-factor,8101,atreides:default|harkonnen:default@swarm,2,0,default@swarm,801.7,1,4,
+par,hard,x-factor,8101,atreides:default@timing|harkonnen:default,2,0,default,684.8,0,5,
+par,hard,x-factor,8101,atreides:default@swarm|harkonnen:default,2,1,default@swarm,1190.9,0,5,
+par,hard,sihaya-pip,8101,atreides:default@timing|harkonnen:default,2,0,default,1589.4,6,10,
+par,hard,sihaya-pip,8101,atreides:default@swarm|harkonnen:default,2,1,default@swarm,2052.3,14,12,
+par,hard,sihaya-pip,8101,atreides:default|harkonnen:default@timing,2,0,default@timing,2357.9,11,13,
+par,hard,sihaya-pip,8101,atreides:default|harkonnen:default@swarm,2,1,default,2616.7,16,15,

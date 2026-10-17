@@ -570,53 +570,7 @@ bool QuantBotConfig::load(const std::string& filepath) {
         }
         
         INIFile iniFile(filepath);
-        
-        // === LOAD DIFFICULTY SETTINGS ===
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Defend", defend);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Easy", easy);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Medium", medium);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Hard", hard);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Brutal", brutal);
-        
-        // === UNIT RATIOS (single set for all difficulties) ===
-        loadUnitRatios(iniFile, "Unit Ratios", "Atreides", unitRatios.atreides);
-        loadUnitRatios(iniFile, "Unit Ratios", "Harkonnen", unitRatios.harkonnen);
-        loadUnitRatios(iniFile, "Unit Ratios", "Ordos", unitRatios.ordos);
-        loadUnitRatios(iniFile, "Unit Ratios", "Fremen", unitRatios.fremen);
-        loadUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
-        loadUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
-        
-        // === LOAD ARMY RECOVERY AND FRONT BATTERIES ===
-        loadRecoverySettings(iniFile, "Army Recovery", recovery);
-
-        // === LOAD GENERAL BEHAVIOR ===
-        attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
-        attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
-        minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
-        {
-            const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
-            const int parsed = parseWaveFormation(shape, INT_MIN);
-            if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
-            else waveFormation = parsed;
-        }
-        force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
-        force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
-        force.waveReadinessPercent = std::clamp(
-            iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
-        force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
-        force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
-        force.perimeterHold = iniFile.getBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
-        force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
-        force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
-        force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
-
-        bool needsSave = false;
-
-        // === LOAD TARGET PRIORITIES ===
-        loadPriorities(iniFile, "Structure Priorities", structurePriorities, normalizedStructureNames, needsSave);
-        loadPriorities(iniFile, "Unit Priorities", unitPriorities, normalizedUnitNames, needsSave);
-
-        if (needsSave) {
+        if (readFrom(iniFile)) {
             save(filepath);
         }
         
@@ -628,6 +582,79 @@ bool QuantBotConfig::load(const std::string& filepath) {
         SDL_Log("Using default QuantBot configuration");
         return false;
     }
+}
+
+bool QuantBotConfig::applyOverrides(const std::string& filepath) {
+    if (!existsFile(filepath)) return false;
+    INIFile iniFile(filepath);
+    readFrom(iniFile);
+    return true;
+}
+
+bool QuantBotConfig::readFrom(const INIFile& iniFile) {
+    // === LOAD DIFFICULTY SETTINGS ===
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Defend", defend);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Easy", easy);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Medium", medium);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Hard", hard);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Brutal", brutal);
+    
+    // === UNIT RATIOS (single set for all difficulties) ===
+    loadUnitRatios(iniFile, "Unit Ratios", "Atreides", unitRatios.atreides);
+    loadUnitRatios(iniFile, "Unit Ratios", "Harkonnen", unitRatios.harkonnen);
+    loadUnitRatios(iniFile, "Unit Ratios", "Ordos", unitRatios.ordos);
+    loadUnitRatios(iniFile, "Unit Ratios", "Fremen", unitRatios.fremen);
+    loadUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
+    loadUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
+    
+    // === LOAD ARMY RECOVERY AND FRONT BATTERIES ===
+    loadRecoverySettings(iniFile, "Army Recovery", recovery);
+
+    // === LOAD GENERAL BEHAVIOR ===
+    attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
+    attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
+    minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
+    {
+        const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
+        const int parsed = parseWaveFormation(shape, INT_MIN);
+        if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
+        else waveFormation = parsed;
+    }
+    force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+    force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
+    force.waveReadinessPercent = std::clamp(
+        iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
+    force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
+    force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+    force.perimeterHold = iniFile.getBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
+    force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
+    force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
+    force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+    // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
+    if (iniFile.hasKey("Strategy", "Mode")) {
+        const std::string mode = iniFile.getStringValue("Strategy", "Mode");
+        if (!QuantBotStrategy::parseMode(mode, strategy))
+            SDL_Log("QuantBot config: invalid [Strategy] Mode '%s', keeping %s", mode.c_str(), QuantBotStrategy::modeText(strategy).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "MixWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "MixWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.mixWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] MixWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.mixWeights).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "TempoWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "TempoWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.tempoWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] TempoWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.tempoWeights).c_str());
+    }
+
+    bool needsSave = false;
+
+    // === LOAD TARGET PRIORITIES ===
+    loadPriorities(iniFile, "Structure Priorities", structurePriorities, normalizedStructureNames, needsSave);
+    loadPriorities(iniFile, "Unit Priorities", unitPriorities, normalizedUnitNames, needsSave);
+    return needsSave;
 }
 
 const QuantBotConfig::DifficultySettings& QuantBotConfig::getSettings(int difficulty) const {
@@ -1028,6 +1055,15 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("sizedDefence", force.sizedDefence);
     addNamed("openingReadiness", force.openingReadiness);
     configStr += "|/FORCE|";
+    configStr += "|STRATEGY";
+    addNamed("random", strategy.random);
+    addNamed("fixedMix", static_cast<int>(strategy.fixedMix));
+    addNamed("fixedTempo", static_cast<int>(strategy.fixedTempo));
+    for (size_t i = 0; i < strategy.mixWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Mix>(i)), strategy.mixWeights[i]);
+    for (size_t i = 0; i < strategy.tempoWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Tempo>(i)), strategy.tempoWeights[i]);
+    configStr += "|/STRATEGY|";
 
 
     // Use FNV-1a hash (consistent across platforms and compilers)

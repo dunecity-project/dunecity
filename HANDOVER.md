@@ -1,3 +1,66 @@
+## 2026-10-18 — QuantBot strategies: unit mix x tempo, deterministic random pick; default Learned/Swarm (branch `feat/ai-strategy-mix`, protocol 82, save 9865, not released)
+
+Stefan asked for different unit-ratio strategies, separate controls for mix and tempo, and the learning kept.
+Write-up: `docs/ai-play-styles.md` section 6; data `docs/formation-results/play-styles/strategy/<tag>/`;
+raw results in ~/Documents/projects/dunecity-results/strategy-mix.
+
+- **Code.** `QuantBotStrategy` (mixes Learned/QuadMass/TrikeSwarm/TankMass/Artillery/Specials/Air/
+  Infantry/Counter; tempos Base/Swarm/Timing/Rush/Flood).
+  - **Config:** `[Strategy] Mode=Random|Fixed:<Mix>,<Tempo>`, `MixWeights=Name:w,...`,
+    `TempoWeights=...`. Optional, hashed, not written by save().
+  - **Pick:** a pure SplitMix64 of game seed + house + salt at the first update, saved in 9865; a 9864
+    save picks afresh by the same function.
+  - **Mix = prior:** it replaces the opening mix that `UnitMixPolicy::allocate` blends evidence into, so
+    the learning is unchanged.
+  - **Air** upgrades the Hi-Tech Factory first, from reserve-held credits.
+  - **Infantry** founds a barracks and a WOR in Custom vanilla.
+  - **Harness:** `#<Mix>-<Tempo>[-fixed]` and `#random` labels; houses.csv has a `strategy` column.
+  - **Default:** `Fixed:Learned,Swarm`. Random weights: Learned 50 / QuadMass 15 / Counter 10 /
+    Artillery 10 / Air 10 / TrikeSwarm 5; Swarm 80 / Flood 20.
+- **Measured (CY Hard v BASE = 1.0.846).**
+  - **Tempos:** Swarm 0.57 (0.52-0.62, n=352) is the only one above BASE.
+  - **Mixes** (prior + learning, Base tempo): all level, 0.42-0.54. Fixed heavy compositions lost
+    (armor 0.28, heavy 0.34), so the learning matters.
+  - **Mix x Swarm:** none beats Learned x Swarm; QuadMass x Swarm 0.54, and 0.61 on Brutal.
+  - **Random bot:** 0.55 (0.49-0.61, n=252), so it misses the default rule.
+  - **Learned/Swarm:** passes the rule. Fortress 0.55 (n=108), Brutal 0.53 (n=60), /weak 0.43 v
+    BASE's 0.42, all-against-Atreides passes.
+- **Tests.** `ctest -j3` with the required regex: 43/43 at 283e33f8 (incl. the new `quantbot_strategy`
+  probe, `quantbot_all_against_atreides`, dunelegacy_tests with `[strategy]`).
+- **Not done:**
+  - the strategy round-robin;
+  - a mid-game switch;
+  - the Air's `mC3-air` (Air offline; pull it with `dunecity-air pull mC3-air`);
+  - the FFA, if it is not in the doc.
+- **Infra:**
+  - The mini queue daemon lost ~/Documents access at ~10:04: jobs hung with `getcwd: Operation not
+    permitted`. Those jobs were cancelled, the work moved to the Pro, and ctest was run directly.
+  - The PC rebooted at 09:05 and its batch was resumed.
+  - `dunecity-pro/air sync` were fixed: the bundle carries the branch ref and the fetch names it.
+
+## 2026-10-18 — QuantBot play styles: research, 11 test-only styles, screen + round-robin (branch `feat/ai-play-styles`, protocol 81 / save 9864 unchanged, not released)
+
+Stefan: "do another round of ai work, testing additional play styles against each other then summarise the
+updates and recommendations for ai play". Full write-up: `docs/ai-play-styles.md`; data
+`docs/formation-results/play-styles/<tag>/` (raw samples/waves in ~/Documents/projects/dunecity-results/play-styles).
+
+- **Mechanism (test-only, inert in real games; 1.0.846 reference games replayed bit-identical):**
+  `QuantBot::configOverride` + `botConfig()` (every QuantBot config read; `QuantBotConfig::applyOverrides`),
+  `QuantBot::PlayStyle` (`src/players/QuantBotStyle.cpp`: style mix, counter-composition, light-first rush,
+  wave minimum, baseline turrets, greedy harvest/extra refineries/yard floor, harvester raiders). Labels
+  `default` (configured rules) and `@style` (`tests/ai/play-styles/*.ini`); `--house-offset`, 4-label
+  `--ffa`, `tests/ai/play-style-matrix.py`.
+- **Results (Hard, 2,406 games: mini 1,197, Pro 712, PC 497; Air on battery):** no fixed composition or
+  build-order style beats BASE (armor 0.28 and heavy 0.34 lose on CY; turtle 0.19, raid 0.14, boom 0.33 lose
+  Fortress). **swarm** (full opening, then 35% waves) v BASE: CY 0.59 (0.51-0.67, ~145 games), Fortress
+  0.52 (0.38-0.67); it tops the round-robin (68-76 games per cell so far). No rock-paper-scissors cycle, so
+  no style-selection rule.
+- **Decision: default unchanged** (swarm lacks Brutal, all-against-Atreides and `/weak`). Still running when
+  this was written: round-robin `r1c-m`/`r1c-m2`/`r1f` (mini queue), `r1c-pro` (Pro), Brutal `b1c-w` (PC),
+  swarm confirmation `c1c-air` (Air); pull with `~/Documents/projects/dunecity-results/play-styles/pull.sh`
+  (+ `b1c-w`, `dunecity-air pull c1c-air`). Not built/tested with ctest this round (no production change).
+- `dunecity-pro/air sync` failed ("couldn't find remote ref HEAD": the bundle has no HEAD ref); synced with
+  an explicit refspec instead (`/private/tmp/dunecity-work/omp_PlayStyles/sync-mac.sh`).
 ## 2026-10-18 — Random Skirmish Spectate (branch `feat/skirmish-spectator`, from staging 688fd077 = 1.0.846; not released)
 
 Stefan: "add spectator mode to skirmish". Worktree ~/Documents/projects/dunecity-skirmish-spectator.

@@ -467,7 +467,7 @@ void QuantBot::build(int militaryValue) {
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
     const int mapSpiceHarvesterTarget = vanillaEconomy
-        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, campaignEconomyPush ? 1 : spiceCompetitors, harvesterLimit)
+        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, (campaignEconomyPush || style().greedyHarvest) ? 1 : spiceCompetitors, harvesterLimit)
         : citySpiceWorkerTarget;
     const int spiceHarvesterTarget = citySimEnabled ? mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
@@ -1165,7 +1165,7 @@ void QuantBot::build(int militaryValue) {
                     getHouse()->getKillValue(), getHouse()->getLossValue(), lastCalculatedSpice, getHouse()->getNumItems(Unit_Harvester), harvesterLimit);
             } else {
                 // Campaign mode - include initial military value and multiplier
-                const QuantBotConfig& config = getQuantBotConfig();
+                const QuantBotConfig& config = botConfig();
                 const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
                 logDebug("Stats: %d  crdt: %d  mVal: %d/%d (init: %d, mult: %.1fx)  built: %d  kill: %d  loss: %d hvstr: %d/%d",
                     attackTimer, getHouse()->getCredits(), militaryValue, militaryValueLimit, initialMilitaryValue, diffSettings.militaryValueMultiplier,
@@ -1346,11 +1346,14 @@ void QuantBot::build(int militaryValue) {
 		case Difficulty::Brutal:
 			break;
 	}
+    // An Infantry mix strategy fields its own share on foot (docs/ai-play-styles.md, "Strategies").
+    const QuantBotStrategy::MixProfile* strategyMixProfile = strategyMix();
+    if (strategyMixProfile && strategyMixProfile->infantryPercent > 0) infantryPercent = strategyMixProfile->infantryPercent;
 
     constexpr std::array<Uint32,8> mixItems = {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
         Unit_SonicTank, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
     UnitMixPolicy::Weights damage{}, rewardMilli{}, killBonusMilli{}, lostValue{}, scores{}, defaults{}, prices{}, lossMilli{};
-    const auto& ratios = getQuantBotConfig().getRatios(houseID);
+    const auto& ratios = botConfig().getRatios(houseID);
     const std::array<int,5> configured = {static_cast<int>(ratios.tank*10000),
         static_cast<int>(ratios.siegeTank*10000), static_cast<int>(ratios.launcher*10000),
         static_cast<int>(ratios.special*10000), static_cast<int>(ratios.ornithopter*10000)};
@@ -1400,6 +1403,13 @@ void QuantBot::build(int militaryValue) {
     for (size_t i=0; i<5; ++i) configuredWeights[i] = configured[i];
     const auto openingMix = UnitMixPolicy::openingMix(currentGame->techLevel, configuredWeights, available);
     for (size_t i=0; i<8; ++i) defaults[i] = openingMix[i];
+    // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
+    // of the remembered enemy army); the learning below blends combat evidence into it exactly
+    // as it does into the configured opening.
+    if (strategyMixProfile)
+        defaults = QuantBotStrategy::applyPrior(defaults,
+            strategyMixProfile->counter ? enemyCounterPrior() : strategyMixProfile->prior,
+            strategyMixProfile->priorBps, available);
     int64_t totalDamage = 0, totalRewardMilli = 0, totalLostValue = 0;
     for (size_t i=0; i<8; ++i) {
         const Uint32 item = mixItems[i];
@@ -1442,8 +1452,13 @@ void QuantBot::build(int militaryValue) {
     const auto allocationWeights = UnitMixPolicy::sharpenScores(scores);
     const auto rawMix = UnitMixPolicy::normalize(allocationWeights);
     const int performanceConfidenceBps = UnitMixPolicy::evidenceConfidenceBps(totalLostValue, militaryValue);
+    // The strategy's hold scales the fielded army the evidence is weighed against (100 = as is).
+    const int64_t priorArmyValue = strategyMixProfile
+        ? int64_t(militaryValue) * strategyMixProfile->holdPercent / 100 : int64_t(militaryValue);
     auto unitMix = UnitMixPolicy::allocate(scores, defaults, learningUnitMix, vanillaEconomy,
-                                                  totalLostValue, militaryValue);
+                                                  totalLostValue, priorArmyValue);
+    // Test-only play styles (docs/ai-play-styles.md): inert in every real game.
+    unitMix = styledUnitMix(unitMix, available);
     // Damage-based learning does not value air deterrence, so protect a minimum
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and
@@ -3402,6 +3417,8 @@ void QuantBot::build(int militaryValue) {
                     air.vehiclePlanValue = vehiclePlanValue;
                     air.airCommittedValue = ornithopterValue;
                     air.airTargetBps = unitMix[4];
+                    air.airStrategy = strategyMixProfile && strategyMixProfile->prior[4] > 0;
+                    air.credits = getHouse()->getCredits();
                     const auto decision = QuantBotBuildPolicy::chooseAirProduction(air);
                     if (emitStatsLog && AITelemetry::log().enabled()) {
                         traceDecision("air_production_decision", AITelemetry::Record()
@@ -3420,7 +3437,15 @@ void QuantBot::build(int militaryValue) {
                     }
                     using AirOrder = QuantBotBuildPolicy::AirOrder;
                     if (decision.order == AirOrder::Upgrade) {
-                        if (pBuilder->getHealth() >= pBuilder->getMaxHealth()) upgradeWithLogging(__LINE__);
+                        if (pBuilder->getHealth() >= pBuilder->getMaxHealth()) {
+                            // An Air strategy's unlock may use credits the reserves hold back, as
+                            // the starport recovery does, never cash already charged this pass.
+                            const bool airUnlock = air.airStrategy && !air.ornithopterAvailable;
+                            const int heldCash = airUnlock ? std::max(0, getHouse()->getCredits() - money) : 0;
+                            money += heldCash;
+                            upgradeWithLogging(__LINE__);
+                            money -= heldCash;
+                        }
                         else doRepair(pBuilder);
                     } else if (decision.order == AirOrder::Ornithopter || decision.order == AirOrder::Carryall) {
                         const Uint32 item = decision.order == AirOrder::Ornithopter ? Unit_Ornithopter : Unit_Carryall;
@@ -3451,18 +3476,24 @@ void QuantBot::build(int militaryValue) {
                         && !getHouse()->isGroundUnitLimitReached()
                         && (expansionProducer || QuantBotBuildPolicy::canFundCityYard(cityMcvCash, data[Unit_MCV][houseID].price,
                             itemCount[Structure_ConstructionYard] + itemCount[Unit_MCV], cityYardTarget, cityWorkingReserve));
+                    // Test-only expansion style (docs/ai-play-styles.md): keep at least
+                    // PlayStyle::minYards yards once the first heavy factory stands.
+                    const int styleYardShortfall = vanillaEconomy && gameMode == GameMode::Custom
+                        && itemCount[Structure_HeavyFactory] > 0
+                        ? style().minYards - itemCount[Structure_ConstructionYard] - itemCount[Unit_MCV] : 0;
                     const bool prioritizeMcv = prioritizeCityMcv || (vanillaEconomy && gameMode == GameMode::Custom
                         && !getHouse()->isGroundUnitLimitReached()
-                        && DuneCity::prioritizeVanillaMcv(money, getHouse()->getNumItems(Unit_Harvester),
-                            itemCount[Structure_ConstructionYard], itemCount[Unit_MCV], data[Unit_MCV][houseID].price));
+                        && (DuneCity::prioritizeVanillaMcv(money, getHouse()->getNumItems(Unit_Harvester),
+                            itemCount[Structure_ConstructionYard], itemCount[Unit_MCV], data[Unit_MCV][houseID].price)
+                            || (styleYardShortfall > 0 && money >= data[Unit_MCV][houseID].price + 1000)));
                     // A built-out city needs one yard it cannot express as a
                     // capacity shortfall, so the factory may still unlock MCV
                     // production for it.
                     const int mcvShortfall = citySimEnabled
                         ? std::max(colonisationNeeded ? 1 : 0,
                             cityYardTarget - itemCount[Structure_ConstructionYard] - itemCount[Unit_MCV])
-                        : DuneCity::vanillaMcvShortfall(money, getHouse()->getNumItems(Unit_Harvester),
-                            itemCount[Structure_ConstructionYard], itemCount[Unit_MCV]);
+                        : std::max(styleYardShortfall, DuneCity::vanillaMcvShortfall(money, getHouse()->getNumItems(Unit_Harvester),
+                            itemCount[Structure_ConstructionYard], itemCount[Unit_MCV]));
                     if (emitStatsLog && AITelemetry::log().enabled())
                         traceDecision("factory_economy_priority",AITelemetry::Record()
                             .set("builder",pBuilder->getObjectID()).set("harvesters_committed",itemCount[Unit_Harvester])
@@ -4882,6 +4913,16 @@ void QuantBot::build(int militaryValue) {
 					itemID = Structure_Refinery; structureRule = "refinery_economy";
 				}
 
+				// Light-first opening (Rush tempo, or the test rush style; docs/ai-play-styles.md):
+				// light production right after the first refinery, ahead of repairs, radar and the
+				// heavy factory.
+				if (itemID == NONE_ID && !skipRemainingStructureLogic && !isCitySim
+					&& lightFirstOpening()
+					&& itemCount[Structure_LightFactory] == 0
+					&& campaignAvailableToBuild(pBuilder,Structure_LightFactory)
+					&& money > 500) {
+					itemID = Structure_LightFactory; structureRule = "style_light_first";
+				}
                 // Establish repairs before more factories/tech consume the opening
                 // grant. Count queued yards to avoid duplicate orders from parallel CYs.
                 if (itemID == NONE_ID && !skipRemainingStructureLogic
@@ -4903,6 +4944,7 @@ void QuantBot::build(int militaryValue) {
 					&& !lowSpiceEconomy
 					&& itemCount[Structure_Refinery] < (vanillaEconomy
                         ? QuantBotBuildPolicy::desiredSpiceRefineries(spiceHarvesterTarget, itemCount[Unit_Harvester])
+                            + style().extraRefineries
                         : itemCount[Unit_Harvester] / 3)
 			&& campaignAvailableToBuild(pBuilder,Structure_Refinery)
 			&& !(gameMode == GameMode::Campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && itemCount[Structure_Refinery] >= 2 && itemCount[Structure_RepairYard] == 0 && currentGame && currentGame->techLevel >= 5)) {
@@ -5106,7 +5148,7 @@ void QuantBot::build(int militaryValue) {
 				// Custom vanilla invests in vehicle production; retain infantry
 				// infrastructure for campaign and other-mod build policies.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic && !isCitySim
-                    && !(vanillaEconomy && gameMode == GameMode::Custom)
+                    && (!(vanillaEconomy && gameMode == GameMode::Custom) || infantryStrategy())
 					&& itemCount[Structure_Barracks] == 0
 					&& campaignAvailableToBuild(pBuilder,Structure_Barracks)
 					&& money > 400) {
@@ -5121,7 +5163,7 @@ void QuantBot::build(int militaryValue) {
 				// troop content, or with no room left in the infantry quota, is not worth
 				// founding at all.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
-                    && !(vanillaEconomy && gameMode == GameMode::Custom)
+                    && (!(vanillaEconomy && gameMode == GameMode::Custom) || infantryStrategy())
 					&& (!isCitySim || (cityAntiAirInfantryDemand && cityTroopContentExists()
 						&& !openingWorkersNeeded()
                         && int64_t(money) >= data[Structure_WOR][houseID].price + cityWorCashReserve))
@@ -5153,7 +5195,7 @@ void QuantBot::build(int militaryValue) {
 					&& ((currentGame && currentGame->isCitySimEnabled() && money > 500)
 						|| (itemCount[Structure_RepairYard] > 0
 							&& (itemCount[Structure_StarPort] > 0 || itemCount[Structure_HeavyFactory] > 0)
-							&& itemCount[Structure_RocketTurret] < 2
+							&& itemCount[Structure_RocketTurret] < style().rocketTurrets
                     && (!vanillaEconomy || money > economyReserve + data[Structure_RocketTurret][houseID].price)))) {
 					if (pBuilder->getHealth() < pBuilder->getMaxHealth() && !pBuilder->isRepairing()) {
 						doRepair(pBuilder);
@@ -5192,7 +5234,7 @@ void QuantBot::build(int militaryValue) {
 				// 8b. Two baseline rocket turrets after repair yard (requires CY level 2)
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
 					&& itemCount[Structure_RepairYard] > 0
-					&& itemCount[Structure_RocketTurret] < 2
+					&& itemCount[Structure_RocketTurret] < style().rocketTurrets
 					&& (itemCount[Structure_StarPort] > 0 || itemCount[Structure_HeavyFactory] > 0)
 					&& hasPowerBufferForTurret()
 					&& pBuilder->getCurrentUpgradeLevel() >= 2

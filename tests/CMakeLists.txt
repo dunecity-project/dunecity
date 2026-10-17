@@ -40,6 +40,8 @@ target_sources(dunelegacy_tests
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
         ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
+        ${CMAKE_SOURCE_DIR}/src/players/QuantBotStrategy.cpp
+        QuantBotStrategyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
         QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
@@ -846,6 +848,18 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
         set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot strategies (docs/ai-play-styles.md, "Strategies"), tests/ai/strategy-probe.inc:
+        # two peers of the same four-house vanilla game pick the same seeded strategies and stay
+        # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks
+        # it, the checkpoint load continues to the host's digest); every mix strategy's production
+        # passes play its prior before combat evidence, favour its lead slots and still learn;
+        # Learned/Base plays exactly the configured default's game.
+        add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
+            --mod vanilla --seed 486409243 --no-ai-telemetry --path-workers 1
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 64x64 - Four Chambers.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategy-probe)
+        set_tests_properties(quantbot_strategy PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         # Custom Hard/Brutal launcher spacing while hunting, with the production force rules
         # on: an enemy that is already too close makes a hunting launcher move away over real
         # game cycles, keeping engine Hunt, its tracked army membership and its firing range,

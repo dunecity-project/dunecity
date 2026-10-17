@@ -20,10 +20,13 @@
 
 #include <DataTypes.h>
 #include <data.h>
+#include <players/QuantBotStrategy.h>
 
 #include <map>
 #include <string>
 #include <unordered_map>
+
+class INIFile;
 
 /**
  * Configuration structure for QuantBot AI behavior.
@@ -168,6 +171,12 @@ struct QuantBotConfig {
     };
     ForceSettings force;
 
+    /// The strategy each Custom Hard/Brutal QuantBot plays (docs/ai-play-styles.md,
+    /// "Strategies"): a unit-mix strategy and a tempo, each picked once per game from weights.
+    /// INI: [Strategy] Mode = Random | Fixed:<mix>,<tempo>, MixWeights, TempoWeights; optional
+    /// keys (not written by save()), the code defaults apply when absent. Hashed for multiplayer.
+    QuantBotStrategy::Settings strategy;
+
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
@@ -204,6 +213,11 @@ struct QuantBotConfig {
     
     // Load from INI file (creates default file if not exists)
     bool load(const std::string& filepath);
+
+    /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this
+    /// config - any QuantBot Config.ini key, the others keep their values - without creating or
+    /// writing the file. False if the file does not exist.
+    bool applyOverrides(const std::string& filepath);
     
     // Save to INI file
     bool save(const std::string& filepath) const;
@@ -222,6 +236,10 @@ struct QuantBotConfig {
     static std::string normalizeKey(const std::string& value);
 
 private:
+    /// Reads every key present in iniFile over the current values; true if the priority tables
+    /// differ from the file's (load() then rewrites it).
+    bool readFrom(const INIFile& iniFile);
+
     void registerStructurePriority(int structureID, const std::string& name, int build, int target);
     void registerUnitPriority(int unitID, const std::string& name, int build, int target);
 

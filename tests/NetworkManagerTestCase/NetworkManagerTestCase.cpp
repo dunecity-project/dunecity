@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 81;
+static constexpr int kWireProtocolVersion = 82;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -88,7 +88,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // waiting for a laggard give way to a mate stepping onto their tile) and makes a QuantBot
     // without a striking starting army hold its first wave for full readiness ([Force
     // Concentration] OpeningReadiness); no saved state change (9864).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 81);
+    // 82 gives every Custom Hard/Brutal QuantBot a unit-mix strategy and a tempo picked from the
+    // game seed, its house and [Strategy] (hashed); save 9865 (the strategy).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 82);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

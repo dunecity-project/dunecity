@@ -179,6 +179,20 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
     // has neither: the enemy army is learned again from what is seen and no defender is mustering.
     if (currentGame->getLoadedSavegameVersion() >= 9864) loadDefenceMemory(stream);
     else { enemySightings.clear(); musters.clear(); }
+    // SAVEGAMEVERSION 9865: the strategy (docs/ai-play-styles.md, "Strategies"). A 9864 save has
+    // none: the first update picks it by the same pure function of seed, house and config.
+    if (currentGame->getLoadedSavegameVersion() >= 9865) {
+        strategyPicked = stream.readBool();
+        const Uint8 mix = stream.readUint8();
+        const Uint8 tempo = stream.readUint8();
+        if (mix >= QuantBotStrategy::kMixCount || tempo >= QuantBotStrategy::kTempoCount)
+            throw std::runtime_error("Invalid QuantBot strategy");
+        strategy.mix = static_cast<QuantBotStrategy::Mix>(mix);
+        strategy.tempo = static_cast<QuantBotStrategy::Tempo>(tempo);
+    } else {
+        strategyPicked = false;
+        strategy = QuantBotStrategy::Choice{};
+    }
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -314,6 +328,11 @@ void QuantBot::save(OutputStream& stream) const {
     // SAVEGAMEVERSION 9864. The remembered enemy army (the perimeter hold and turrets read it)
     // and the musters (who engages when) cannot be recomputed from the world.
     saveDefenceMemory(stream);
+    // SAVEGAMEVERSION 9865. The strategy was picked under the config the game started with; a
+    // reload keeps playing it whatever config is loaded then.
+    stream.writeBool(strategyPicked);
+    stream.writeUint8(static_cast<Uint8>(strategy.mix));
+    stream.writeUint8(static_cast<Uint8>(strategy.tempo));
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

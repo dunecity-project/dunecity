@@ -53,7 +53,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9862 adds the QuantBot hunt parties (Blob waves).
     // 9863 adds the QuantBot reserve bundle and the launch gate's wait (force concentration).
     // 9864 adds the QuantBot remembered enemy army and defence musters (defence while outnumbered).
-    REQUIRE(SAVEGAMEVERSION == 9864);
+    // 9865 adds the QuantBot strategy (unit-mix strategy and tempo).
+    REQUIRE(SAVEGAMEVERSION == 9865);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

@@ -54,9 +54,9 @@ FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recal
                 'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
                 'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
                 'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
-                'turrets_lost')
+                'turrets_lost', 'raid_orders')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
+                'army_value', 'army_units', 'strategy') + PARTY_FIELDS + FORCE_FIELDS
 # The army value curve: each side's mobile armed value at these game minutes (the 5-minute
 # FORMATION_HOUSE samples; after the game ended, the value at the end).
 CURVE_MINUTES = (10, 20, 30)
@@ -114,7 +114,7 @@ def pairs(args):
 def schedule(args):
     """Every game of the round-robin, a whole seed at a time so partial results stay balanced."""
     games = []
-    for index, seed in enumerate(args.seeds):
+    for index, seed in enumerate(args.seeds, args.house_offset):
         houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
         for house_a, house_b in houses:
             for size in args.sizes:
@@ -518,6 +518,9 @@ parser.add_argument('--versus', help='Play only the pairs that include this shap
 parser.add_argument('--pairs', help='Play (and report) exactly these shape pairs: x:y,x:y')
 parser.add_argument('--all-houses', action='store_true',
                     help='Play every seed with all three house pairs (three times the games) instead of one pair per seed')
+parser.add_argument('--house-offset', type=int, default=0,
+                    help='The house pair of the first seed (the pair cycles with the seed\'s position plus this), '
+                         'so a run split by seed across machines plays the pairs the whole list would')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
 parser.add_argument('--path-workers', type=int, default=1,
                     help='Pathfinding threads per game (DUNECITY_PATH_WORKERS). 1, inline, gives the most games per '
