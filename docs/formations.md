@@ -390,7 +390,7 @@ a test-only flag); the next step is a 72-108-game `/weak` run of BWFCQD v BWFCQ.
 **Decision (applied): the QuantBot default is BWFCQ** (`Bundle=true`, `LaunchFromBundle=true` on top of
 FCQ). Protocol 79 (bundling, the gate and the launcher fix change AI orders), save 9863.
 
-### Round 5: defence while outnumbered - hold the perimeter, perimeter turrets, sized defence (protocol 80, save 9863)
+### Round 5: defence while outnumbered - hold the perimeter, perimeter turrets, sized defence (protocol 80, save 9864)
 
 Same harness, maps and seeds (Hard unless stated; `/weak` = that side starts with half its army; "108" =
 `--all-houses`). Data: `docs/formation-results/force/round5/` (`games.csv` 1,620 games, `waves-by-shape.csv`,
@@ -417,7 +417,7 @@ New test-only flags (rules in `ForceConcentrationPolicy.h`, code in `QuantBotFor
 | (all) | enemy estimate | Every enemy mobile ground fighter seen is remembered at its health-weighted value; the dead are dropped, the unseen after 5 minutes. "Outnumbered" = that memory is worth 125% of our ground army. |
 | `E` | D on the memory | D (full readiness while outnumbered) measured on the memory instead of what is visible now. |
 | `G` | fight at home (b) | While outnumbered no wave leaves (attack check deferred, re-checked in 15 s) and the reserve holds the protected rally under turret cover; the next check after a won defence launches as usual. |
-| `V` | hold the perimeter (Stefan) | As G, but the reserve holds the enemy-facing base perimeter: from the base centre along the observed front direction, the outermost own building within 24 tiles, plus 3 tiles (a standable tile within 6). Not in the city simulation (there that edge is where the next lots go). |
+| `V` | hold the perimeter (Stefan) | As G, but the reserve holds the enemy-facing base perimeter: from the base centre along the observed front direction, the outermost own building within 24 tiles, plus 3 tiles (a standable tile within 6). Not in the city simulation (see below). |
 | `U` | perimeter turrets (Stefan) | While outnumbered, one rocket turret per build pass on the perimeter band (4 tiles inside to 2 beyond the outermost building, 12 tiles either side of the front line; the battery's spacing and corridor rules), one per 1,000 credits of the enemy's lead, at most 8 there, only above the economy reserve + 250 + 500 for units; a wind trap first when turrets need power. Nothing once not outnumbered. |
 | `A` + `/k<pct>` | strength-aware waves (a) | A ready wave leaves only when its value is k% of the memory (k 80/100/120); else it keeps bundling. |
 | `R` | home reserve (c) | While the memory exceeds our army, the share it exceeds it by (at most half) stays home, nearest the protected rally first. |
@@ -474,21 +474,29 @@ its 60% wave at minute 1.7 takes a half-army base in 8 minutes.
 | UVX v BWFCQ, Hard | 108 | 0.528 | 0.44-0.62 | 38-35 / 35 | - |
 
 `quantbot_all_against_atreides` with UVX: 6/6, 29.3 33.0 33.9 33.5 30.7 30.3 minutes (BWFCQ: 30.8 31.7 33.4
-30.3 34.4 31.7). `quantbot_no_spice_income_low-cash` failed with the perimeter hold in the city simulation
-(the army stood on the edge where the city places its next lots; with V off or X off it passed); the
-hold therefore does not apply in the city simulation (measured duels are vanilla, unaffected).
+30.3 34.4 31.7). `quantbot_no_spice_income_low-cash` (city simulation) failed with all three on (house 0
+built no Industrial zone); it passed with V off, with X off, and with V excluded from the city simulation.
+The traced failing game does *not* show the army standing on lots: no placement failed for blocked ground
+(`no_site` 3 against 2 in the passing game), but the two games diverge from the first slab at 0.3 minutes
+(another site), house 0 had 127 base scrambles against 51 and sat on about 110 spendable credits from minute
+1.7 to 4.6 with no placement - the hold changed where the opening army stood and how it fought, and the cash
+for the R/I opening went into that. The hold therefore does not apply in the city simulation (measured
+duels are vanilla, unaffected); the exact chain was not traced further.
 
 **Decision (applied): the QuantBot default is BWFCQ + UVX** - new optional `[Force Concentration]` keys
 `PerimeterHold`, `PerimeterTurrets`, `SizedDefence` (code defaults true, hashed; `forceBits()` adds V, U,
-X). Saved (9863, no release used it; a 1.0.844 9863 save does not load): the remembered enemy army (id,
-value, cycle; id order) and the musters (building, point, clock, members). The perimeter and the
+X). Saved under SAVEGAMEVERSION 9864 (1.0.844 is installed and writes 9863, so the new state is its own
+gate): the remembered enemy army (id, value, cycle; id order) and the musters (building, point, clock,
+members), written after the 9863 bundle; a 9863 save loads with neither. The perimeter and the
 outnumbered verdict are derived once per cycle and not saved. Protocol 80. D, E, G, A, R and Y stay
 test-only. Probe `quantbot_force_concentration` section 7: memory (seen, kept out of sight, dead dropped,
 forgotten after 5 min), outnumbered 9 v 2 tanks garrisons with the perimeter turret goal of the policy,
-the perimeter lies beyond every own building towards the observed enemy base and is the house anchor,
-the turret site is on the band and legal (none when the band has no legal ground), the attack check is
-held, save/load of the memory and a muster re-saves the same bytes (a 9862 load has neither), a worker
-raid of 4 tanks against 2 is declined and one of 1 tank gets 1.5x (2 tanks).
+the perimeter lies beyond every own building towards the observed enemy base and is the house anchor
+(the protected rally in the city simulation), the turret site is on the band and legal (none when the
+band has no legal ground), the attack check is held, save/load of the memory and a muster re-saves the
+same bytes, a 9863 save in the 1.0.844 layout (the same block without the 9864 trailer) loads with its
+bundle and no memory and re-saves as 9864, a 9862 load has neither, a worker raid of 4 tanks against 2
+is declined and one of 1 tank gets 1.5x (2 tanks).
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

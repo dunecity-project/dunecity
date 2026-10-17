@@ -1039,6 +1039,9 @@ private:
     int bundledShareBps(const std::vector<Uint32>& ids, int radius);
     void saveForceState(OutputStream& stream) const;
     void loadForceState(InputStream& stream);
+    /// The remembered enemy army and the musters (SAVEGAMEVERSION 9864); a 9863 save has neither.
+    void saveDefenceMemory(OutputStream& stream) const;
+    void loadDefenceMemory(InputStream& stream);
     /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
     /// sides of the objective, wait for each other and then attack it together.
     struct Split {

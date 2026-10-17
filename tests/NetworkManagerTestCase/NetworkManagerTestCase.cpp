@@ -83,7 +83,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // hunting launcher's escape out of focus fire; save 9863 (the bundle and the gate's wait).
     // 80 holds the QuantBot army on the base perimeter while a remembered enemy army
     // outnumbers it, adds perimeter rocket turrets then and sizes defences at 1.5x the threat;
-    // save 9863 (the remembered army and the musters).
+    // save 9864 (the remembered army and the musters).
     REQUIRE(NETWORK_PROTOCOL_VERSION == 80);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

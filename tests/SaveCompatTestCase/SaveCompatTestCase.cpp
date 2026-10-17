@@ -52,7 +52,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
     // 9862 adds the QuantBot hunt parties (Blob waves).
     // 9863 adds the QuantBot reserve bundle and the launch gate's wait (force concentration).
-    REQUIRE(SAVEGAMEVERSION == 9863);
+    // 9864 adds the QuantBot remembered enemy army and defence musters (defence while outnumbered).
+    REQUIRE(SAVEGAMEVERSION == 9864);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

@@ -151,13 +151,13 @@ struct QuantBotConfig {
         /// re-checked every 5 s and at most 60 s late.
         bool launchFromBundle;
         /// While the remembered enemy army is worth 125% of ours, no wave leaves and the
-        /// reserve holds the enemy-facing base perimeter (round 5; the memory is saved, 9863).
+        /// reserve holds the enemy-facing base perimeter (round 5; the memory is saved, 9864).
         bool perimeterHold;
         /// While outnumbered so, rocket turrets go up on that perimeter: one per 1,000 credits
         /// of the enemy's lead, at most eight there, never below the economy and unit reserve.
         bool perimeterTurrets;
         /// Defences count the enemy within 12 tiles and send 1.5x it, the bundle first; distant
-        /// defenders of a building muster first (saved, 9863); a worker raid the troops in reach
+        /// defenders of a building muster first (saved, 9864); a worker raid the troops in reach
         /// cannot match gets nobody.
         bool sizedDefence;
     };

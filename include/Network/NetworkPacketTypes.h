@@ -229,7 +229,7 @@
 //     1.5x the threat with the bundle first, distant defenders muster, and a worker raid the
 //     troops in reach cannot match gets nobody ([Force Concentration] PerimeterHold,
 //     PerimeterTurrets, SizedDefence, hashed; the remembered army and the musters are saved,
-//     9863). A 79 peer would order the same AI units differently and desync. Save 9863.
+//     9864). A 79 peer would order the same AI units differently and desync. Save 9864.
 #define NETWORK_PROTOCOL_VERSION            80
 
 // Mod transfer limits

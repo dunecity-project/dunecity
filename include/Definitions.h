@@ -157,7 +157,11 @@
 //       the army-centre gathering point, the bundle's 30 s re-choice clock and the launch
 //       gate's first-hold cycle, appended to the QuantBot block. A 9862 save loads with no
 //       bundle: it is chosen afresh at the first unit pass.
-#define SAVEGAMEVERSION     9863
+// 9864: QuantBot defence while outnumbered (docs/formations.md, "Round 5"): the remembered
+//       enemy army (each sighted fighter's id, value and last-seen cycle) and the defence
+//       musters (building, point, clock, members), appended to the QuantBot block after the
+//       bundle. A 9863 save (1.0.844) loads with no memory and no muster.
+#define SAVEGAMEVERSION     9864
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

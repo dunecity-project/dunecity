@@ -596,7 +596,10 @@ void QuantBot::saveForceState(OutputStream& stream) const {
     stream.writeSint32(bundleCentre.y);
     stream.writeUint32(bundleCycle);
     stream.writeUint32(bundleGateSince);
-    // Round 5: the remembered enemy army (id order) and the musters (creation order).
+}
+
+void QuantBot::saveDefenceMemory(OutputStream& stream) const {
+    // The remembered enemy army (id order) and the musters (creation order).
     stream.writeUint32(Uint32(enemySightings.size()));
     for (const auto& [id, sighting] : enemySightings) {
         stream.writeUint32(id);
@@ -623,6 +626,10 @@ void QuantBot::loadForceState(InputStream& stream) {
     bundleGateSince = stream.readUint32();
     const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };
     if (!valid(bundlePoint) || !valid(bundleCentre)) throw std::runtime_error("Invalid force bundle state");
+    estimateCycle = perimeterCycle = std::numeric_limits<Uint32>::max();
+}
+
+void QuantBot::loadDefenceMemory(InputStream& stream) {
     constexpr Uint32 kMaxEntries = 65536;
     enemySightings.clear();
     const Uint32 sightings = stream.readUint32();

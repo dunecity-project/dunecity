@@ -600,6 +600,27 @@ void runForceConcentrationProbe(Game& game) {
                 restored.save(again);
                 require(std::string(again.getData(),again.getDataLength())==bytes,
                     "Re-saving the loaded memory and musters produced different bytes");
+                // A 9863 save as 1.0.844 wrote it: the same QuantBot block without the 9864
+                // trailer (the memory and the musters, written last). It loads with the bundle and
+                // neither, and the loaded bot re-saves as a 9864 save that loads again.
+                OMemoryStream trailer; trailer.open();
+                bot->saveDefenceMemory(trailer);
+                require(trailer.getDataLength()<bytes.size(),"The 9864 trailer is not part of the save");
+                const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength());
+                currentGame->loadedSavegameVersion=9863;
+                IMemoryStream oldIn(bytes9863.data(),bytes9863.size());
+                QuantBot old(oldIn,owner);
+                require(old.enemySightings.empty() && old.musters.empty() && old.bundlePoint==bot->bundlePoint
+                    && old.bundleCycle==bot->bundleCycle && old.bundleGateSince==bot->bundleGateSince,
+                    "A 9863 (1.0.844) save did not load with its bundle and no enemy memory");
+                OMemoryStream upgraded; upgraded.open();
+                old.save(upgraded);
+                currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                IMemoryStream upgradedIn(upgraded.getData(),upgraded.getDataLength());
+                QuantBot reloaded(upgradedIn,owner);
+                require(reloaded.enemySightings.empty() && reloaded.musters.empty() && reloaded.bundlePoint==bot->bundlePoint
+                    && upgraded.getDataLength()==bytes9863.size()+8,
+                    "A loaded 9863 save did not re-save as a 9864 save with an empty memory");
                 currentGame->loadedSavegameVersion=9862;
                 IMemoryStream legacyIn(bytes.data(),bytes.size());
                 QuantBot legacy(legacyIn,owner);

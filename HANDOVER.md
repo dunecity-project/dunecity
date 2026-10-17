@@ -1,4 +1,4 @@
-## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9863, not released)
+## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
 
 Stefan: optimise how QuantBot concentrates force on defence; "you can build up rocket turrets"; "defend at
 the base perimeter". Merged `integrate/feature-batch` (1.0.844) first. Tables, causes and decision:
@@ -17,8 +17,12 @@ the base perimeter". Merged `integrate/feature-batch` (1.0.844) first. Tables, c
   better / 8 worse, structures lost 53 v 61; Hard v old rules 0.926 (BWFCQ 0.870), Brutal 0.944 (0.931), Hard
   head-to-head v BWFCQ 0.528 (0.44-0.62); all-against-Atreides 6/6 (29.3 33.0 33.9 33.5 30.7 30.3 min).
   Rejected (test-only): E, G, A (k80/100/120), R, Y, D.
-- **Saved (9863 appended; a 1.0.844 save no longer loads)**: the remembered enemy army and the musters.
-  Protocol 80 (pinned in `NetworkManagerTestCase`).
+- **Saved under SAVEGAMEVERSION 9864** (1.0.844 writes 9863, so the new state has its own gate): the
+  remembered enemy army and the musters, after the 9863 bundle; a 9863 (1.0.844) save loads with neither
+  (probe: the 1.0.844 layout loads and re-saves as 9864). Protocol 80; both pinned in tests.
+- City simulation: the perimeter hold made `quantbot_no_spice_income_low-cash` fail; the traced game shows
+  no blocked placements (so not "army on the lots") but a diverged opening, 127 v 51 base scrambles and a
+  cash stall; the hold is off in the city simulation.
 - **Harness**: army value at minutes 10/20/30 per side; new counters; flat run directories (slash labels
   had deleted each other's runs).
 - Open: against a full BWFCQ attacker the half-army side still loses its base in ~8 min (0.046); perimeter
