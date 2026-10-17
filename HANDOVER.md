@@ -1,3 +1,27 @@
+## 2026-10-18 — Random Skirmish Spectate (branch `feat/skirmish-spectator`, from staging 688fd077 = 1.0.846; not released)
+
+Stefan: "add spectator mode to skirmish". Worktree ~/Documents/projects/dunecity-skirmish-spectator.
+Details: `docs/skirmish-generator.md`, "Spectate".
+
+- Single-player Random Skirmish has a **Spectate** checkbox and a **Your house AI** box (Players
+  column; the box is enabled only while spectating, default QuantBot Medium, same list as the
+  Allies/Enemies AI). It reuses Custom Game's offline Spectate: `RandomSkirmish::makeInit(result,
+  rules, params)` calls `setLocalSpectator(true)` and seats that AI where the human sat, so every
+  house is AI and the game observes (whole map, inspect, no orders). The player's rows stay live:
+  "Your house" is the watched house and "Your house starts with" (renamed while watching) still
+  gives it its partner, Base, Army and City. Map INI unchanged by Spectate.
+- `[Random Skirmish]` `Spectate` / `Spectate AI`, single player only; the multiplayer Random Map
+  screen has neither control, never reads/writes the keys, and `Params::clamp` forces it off there.
+  No protocol, save or map-format change. Start's pre-game step is now
+  `RandomSkirmishMenu::prepareStart`, which the probe drives.
+- Tests (worktree Release `build`, check-build-deps before/after, ctest -j3): skirmish_generator_tests
+  (new Spectate persistence/map-identity case), dunelegacy_tests, bundled_city_eight_slot_startup,
+  bundled_three_way_startup, menu_navigation_probe, skirmish_generator_probe (new `spectate` case:
+  no human, local-spectator init, observed 4-house all-AI match runs 3,750 cycles, Spectate off
+  seats the human again; mp-lobby checks the hosted screen has no Spectate),
+  retina_resolution_probe: 7/7 passed. Screenshots: /tmp/dunecity-skirmish-spectator/
+  `random-skirmish-spectate-1024x768.png`, `ingame-spectator.png`.
+
 ## 2026-10-17 — local 1.0.846 installed on the MBA
 
 Staging = 1.0.845 + `chore/windows-runner` (348ee7e0: Random Skirmish and ambient-helicopter RNG draw

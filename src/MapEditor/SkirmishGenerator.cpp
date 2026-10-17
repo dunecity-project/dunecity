@@ -1129,6 +1129,9 @@ void Params::clamp(int houseCount) {
         if(side->playerClass.empty() && side != &playerSide && side != &startSide) side->playerClass = "qBotMedium";
     }
     startSide.playerClass.clear();     // a start's controller is chosen in the lobby
+    // Watching is a single-player choice; a hosted map's players and observers are the lobby's.
+    if(multiplayer) spectate = false;
+    if(spectateClass.empty()) spectateClass = "qBotMedium";
     allies = std::clamp(allies, 0, kMaxAllies);
     enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
     houseCount = std::max(2, houseCount);
@@ -1164,6 +1167,8 @@ void Params::load(const INIFile& config) {
         mode = static_cast<Mode>(config.getIntValue(kSection, "Mode", indexOf(mode)));
         // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
         mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
+        spectate = config.getBoolValue(kSection, "Spectate", spectate);
+        spectateClass = config.getStringValue(kSection, "Spectate AI", spectateClass);
     }
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
@@ -1193,6 +1198,8 @@ void Params::save(INIFile& config) const {
     if(!multiplayer) {
         config.setIntValue(kSection, "Mode", indexOf(mode));
         config.setStringValue(kSection, "Mod", mod);
+        config.setBoolValue(kSection, "Spectate", spectate);
+        config.setStringValue(kSection, "Spectate AI", spectateClass);
     }
     config.setIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {

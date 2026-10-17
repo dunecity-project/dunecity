@@ -60,24 +60,33 @@ Catalogue loadCatalogue(Mode mode) {
     return makeCatalogue(*data, mode == Mode::DuneCity);
 }
 
-GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules) {
+GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules, const Params& params) {
     // A partner AI shares the player's house, as a Custom Game's second player slot does.
     bool sharedHouse = false;
     for(const HouseSetup& house : result.houses)
         sharedHouse = sharedHouse || (house.role == Role::Human && PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr);
     GameInitSettings init(result.name, result.ini, sharedHouse, rules);
+    // Custom Game's offline Spectate: the human seat goes to an AI and the local player only
+    // watches. Local to this machine; never serialized or sent anywhere.
+    init.setLocalSpectator(params.spectate);
     for(const HouseSetup& house : result.houses) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(house.house), house.team);
+        const std::string houseName = getHouseNameByNumber(static_cast<HOUSETYPE>(house.house));
         if(house.role == Role::Human) {
-            info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
-            if(PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr) {
-                info.addPlayerInfo(GameInitSettings::PlayerInfo(getHouseNameByNumber(static_cast<HOUSETYPE>(house.house)),
-                                                                house.partnerClass));
+            if(params.spectate) {
+                // The house's own AI, as the Allies/Enemies AI boxes offer it: not a helper, not a human.
+                const std::string& wanted = params.spectateClass;
+                const bool usable = PlayerFactory::getByPlayerClass(wanted) != nullptr && wanted != HUMANPLAYERCLASS
+                                    && wanted.find("Support") == std::string::npos;
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, usable ? wanted : std::string(DEFAULTAIPLAYERCLASS)));
+            } else {
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
             }
+            if(PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr)
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, house.partnerClass));
         } else {
             const auto* player = PlayerFactory::getByPlayerClass(house.playerClass);
-            info.addPlayerInfo(GameInitSettings::PlayerInfo(getHouseNameByNumber(static_cast<HOUSETYPE>(house.house)),
-                player ? house.playerClass : std::string(DEFAULTAIPLAYERCLASS)));
+            info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, player ? house.playerClass : std::string(DEFAULTAIPLAYERCLASS)));
         }
         init.addHouseInfo(info);
     }
@@ -243,6 +252,14 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         alliesBox.setOnSelectionChange([this](bool) { onPlayersChanged(true); });
         enemiesBox.setOnSelectionChange([this](bool) { onPlayersChanged(false); });
         enemiesAlliedBox.setText(_("Enemies are allied"));
+        // Custom Game's offline Spectate: an AI takes the player's seat and the player watches.
+        spectateBox.setText(_("Spectate"));
+        spectateBox.setTooltipText(_("Watch an AI-vs-AI match. Your house is played by the AI chosen below, with "
+                                     "its partner, base, army and city as set; you get the whole map and can "
+                                     "inspect any building, but give no orders."));
+        spectateBox.setOnClick([this]() { onSpectateChanged(); });
+        fillAI(spectateAIBox);
+        spectateAIBox.setTooltipText(_("The AI that plays your house while you spectate."));
 
         fillAI(allyAIBox);
         fillAI(enemyAIBox);
@@ -260,6 +277,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
         addHeader(0, row++, _("You start with"));
+        playerHeader = &captions[usedCaptions - 1];
         addRow(0, row++, _("AI partner"), &partnerBox);
         addRow(0, row++, _("Base"), &playerBaseBox);
         addRow(0, row++, _("Army (credits)"), &playerArmyBox);
@@ -271,6 +289,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, _("Allies"), &alliesBox);
         addRow(1, row++, _("Enemies"), &enemiesBox);
         addRow(1, row++, "", &enemiesAlliedBox);
+        addRow(1, row++, "", &spectateBox);
+        addRow(1, row++, _("Your house AI"), &spectateAIBox);
         addHeader(1, row++, _("Allies start with"));
         addRow(1, row++, _("AI"), &allyAIBox);
         addRow(1, row++, _("Base"), &allyBaseBox);
@@ -398,6 +418,13 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(playerBaseBox, static_cast<int>(params.playerSide.base));
     selectData(playerArmyBox, params.playerSide.army);
     selectData(playerCityBox, params.playerSide.city);
+    spectateBox.setChecked(params.spectate);
+    // The watched house's AI; a class the box does not list (a helper, an old name) falls back to qBotMedium.
+    const int spectateAI = PlayerFactory::getIndexByPlayerClass(params.spectateClass);
+    bool listed = false;
+    for(int i = 0; i < spectateAIBox.getNumEntries(); ++i) listed = listed || spectateAIBox.getEntryIntData(i) == spectateAI;
+    selectData(spectateAIBox, listed ? spectateAI : PlayerFactory::getIndexByPlayerClass("qBotMedium"));
+    onSpectateChanged();
     // Multiplayer: the number of starts and what every one of them begins with.
     selectData(startsBox, params.starts);
     selectData(startBaseBox, static_cast<int>(params.startSide.base));
@@ -452,6 +479,14 @@ void RandomSkirmishMenu::onModChanged() {
     startCityBox.setEnabled(city);
 }
 
+void RandomSkirmishMenu::onSpectateChanged() {
+    // Every "You start with" row keeps its meaning: the watched house still starts with that
+    // partner, base, army and city. Only who plays it changes.
+    const bool watch = spectateBox.isChecked();
+    spectateAIBox.setEnabled(watch);
+    if(playerHeader != nullptr) playerHeader->setText(watch ? _("Your house starts with") : _("You start with"));
+}
+
 void RandomSkirmishMenu::onNewSeed() {
     seedBox.setText(std::to_string(freshSeed()));
 }
@@ -498,6 +533,9 @@ Params RandomSkirmishMenu::readParams() const {
     params.playerSide.base = static_cast<BaseSize>(playerBaseBox.getSelectedEntryIntData());
     params.playerSide.army = playerArmyBox.getSelectedEntryIntData();
     params.playerSide.city = playerCityBox.getSelectedEntryIntData();
+    params.spectate = spectateBox.isChecked();
+    const auto* watchedAI = PlayerFactory::getByIndex(spectateAIBox.getSelectedEntryIntData());
+    if(watchedAI != nullptr) params.spectateClass = watchedAI->getPlayerClass();
     params.clamp(houseCount);
     return params;
 }
@@ -536,16 +574,22 @@ bool RandomSkirmishMenu::generate(Params& params, Result& result) {
     return true;
 }
 
-void RandomSkirmishMenu::onStart() {
+bool RandomSkirmishMenu::prepareStart(GameInitSettings& init) {
     Params params;
     Result result;
-    if(!generate(params, result)) return;
-    const GameInitSettings init = RandomSkirmish::makeInit(result, matchRules());
+    if(!generate(params, result)) return false;
+    init = RandomSkirmish::makeInit(result, matchRules(), params);
     if(!params.fixedSeed) {
         // The next visit offers a new map; this one stays reproducible from its name.
         params.seed = freshSeed();
         remember(params);
     }
+    return true;
+}
+
+void RandomSkirmishMenu::onStart() {
+    GameInitSettings init;
+    if(!prepareStart(init)) return;
     startSinglePlayerGame(init);
     quit();
 }
