@@ -158,7 +158,7 @@ TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai
     };
     REQUIRE(differs([](QuantBotConfig& c){ c.strategy.random = !c.strategy.random; }));
     REQUIRE(differs([](QuantBotConfig& c){ c.strategy.fixedMix = Mix::QuadMass; }));
-    REQUIRE(differs([](QuantBotConfig& c){ c.strategy.fixedTempo = Tempo::Swarm; }));
+    REQUIRE(differs([](QuantBotConfig& c){ c.strategy.fixedTempo = Tempo::Timing; }));
     for (size_t i = 0; i < kMixCount; ++i) {
         QuantBotConfig changed;
         changed.strategy.mixWeights[i] += 1;
