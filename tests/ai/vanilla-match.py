@@ -126,7 +126,7 @@ def schedule(args):
                     sides = '|'.join(f'{h}:{first if h in group else second}' for h in FFA_HOUSES)
                     games.append((args.tag, args.difficulty, name, str(seed), sides))
         return games
-    for index, seed in enumerate(args.seeds):
+    for index, seed in enumerate(args.seeds, args.house_offset):
         houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
         for house_a, house_b in houses:
             for name in args.maps:
@@ -471,6 +471,9 @@ parser.add_argument('--seeds', nargs='+', type=int, default=[8101, 8202, 8303, 8
 parser.add_argument('--pairs', help='1v1 label pairs x:y,x:y (each played with both assignments)')
 parser.add_argument('--ffa', help='Four-player free-for-all: two labels x,y, two houses each')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
+parser.add_argument('--house-offset', type=int, default=0,
+                    help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
+                         'so a run split by seed across machines plays the pairs the whole list would')
 parser.add_argument('--jobs', type=int, default=4, help='Games played in parallel')
 parser.add_argument('--ai-telemetry', action='store_true', help='Keep the AI decision log (events.jsonl)')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
