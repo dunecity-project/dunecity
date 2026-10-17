@@ -31,7 +31,10 @@ need to move off those tiles". Details, trace and table: `docs/formations.md` ("
   formation_movement_probe and all 32 quantbot_* incl. force_concentration, no_spice_income_low-cash and
   all_against_atreides: 40/40 (an intermediate run failed opening-economy vanilla/Dune2R until the prepared
   substitute footprint was required to be free now). all-against-Atreides 6/6: 38.6 33.9 34.9 30.2 31.8
-  31.1 min (round 5: 29.3 33.0 33.9 33.5 30.7 30.3).
+  31.1 min (round 5: 29.3 33.0 33.9 33.5 30.7 30.3). Seed 1756374161 went 29.3 -> 38.6 (re-measured on the
+  previous commit e6b2910d: 29.28), so 8 more seeds (11..88) on both: this commit 30.3 31.7 33.7 30.7 29.5
+  31.0 32.2 30.7 (mean 31.2, 8/8), e6b2910d 31.5 29.2 33.1 30.6 40.6 31.1 29.3 36.2 (mean 32.7, 7/8):
+  no systematic slowdown, seed-level chaos; the first default seed now has 1.4 min of margin.
 
 ## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
 
