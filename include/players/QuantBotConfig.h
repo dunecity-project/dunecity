@@ -25,6 +25,8 @@
 #include <string>
 #include <unordered_map>
 
+class INIFile;
+
 /**
  * Configuration structure for QuantBot AI behavior.
  * All settings can be customized via "QuantBot Config.ini" in the user config directory.
@@ -204,6 +206,11 @@ struct QuantBotConfig {
     
     // Load from INI file (creates default file if not exists)
     bool load(const std::string& filepath);
+
+    /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this
+    /// config - any QuantBot Config.ini key, the others keep their values - without creating or
+    /// writing the file. False if the file does not exist.
+    bool applyOverrides(const std::string& filepath);
     
     // Save to INI file
     bool save(const std::string& filepath) const;
@@ -222,6 +229,10 @@ struct QuantBotConfig {
     static std::string normalizeKey(const std::string& value);
 
 private:
+    /// Reads every key present in iniFile over the current values; true if the priority tables
+    /// differ from the file's (load() then rewrites it).
+    bool readFrom(const INIFile& iniFile);
+
     void registerStructurePriority(int structureID, const std::string& name, int build, int target);
     void registerUnitPriority(int unitID, const std::string& name, int build, int target);
 

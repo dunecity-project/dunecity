@@ -62,7 +62,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
                 || object->getItemID()==Unit_RebelHarvester);
     };
     if (!clearingSpice && (isProtectedAsset(protectedAsset) || isProtectedAsset(victim))) {
-        const auto& config=getQuantBotConfig();
+        const auto& config=botConfig();
         tryLaunchOrnithopterStrike(config.getSettings(static_cast<int>(difficulty)),config,
             isProtectedAsset(protectedAsset) ? intruder : nullptr,
             isProtectedAsset(protectedAsset) && protectedAsset->isAStructure());
@@ -420,7 +420,7 @@ int QuantBot::emergencyResponseRadius(int threatValue) {
 
 int QuantBot::houseAttackThreshold() const {
     // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
-    const QuantBotConfig& config = getQuantBotConfig();
+    const QuantBotConfig& config = botConfig();
     const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
@@ -448,7 +448,7 @@ void QuantBot::attack(int militaryValue) {
     if (isCampaignEnemy() && !campaignCanLaunch()) return;
 
     // Get config for this difficulty
-    const QuantBotConfig& config = getQuantBotConfig();
+    const QuantBotConfig& config = botConfig();
     const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
     if (isCampaignEnemy()) attackTimer=0;
@@ -498,7 +498,7 @@ void QuantBot::attack(int militaryValue) {
 
 	// Campaign attacks must remain possible after losing a repair yard, or on
     // scenarios where it cannot be built. Repair remains useful, not mandatory.
-	if (!campaign && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
+	if (!campaign && !style().lightFirst && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
 		traceDecision("attack_deferred", AITelemetry::Record().set("reason", "repair_prerequisite"));
 		logDebug("Don't attack. Wait until you have a repair yard.");
 		return;
@@ -709,7 +709,7 @@ bool QuantBot::escapeCloseThreatWhileHunting(const UnitBase* launcher, const Obj
 }
 
 int QuantBot::waveFormationShape() const {
-    return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : getQuantBotConfig().waveFormation;
+    return waveFormationOverride != kNoWaveFormationOverride ? waveFormationOverride : botConfig().waveFormation;
 }
 
 void QuantBot::launchGroundHunt() {
@@ -721,7 +721,7 @@ void QuantBot::launchGroundHunt() {
         : CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
     // Caps apply to this dispatch. The roster separately tracks all survivors.
     CampaignDifficultyPolicy::Pressure pressure;
-    const float ratio = getQuantBotConfig().getSettings(static_cast<int>(difficulty)).attackForceMilitaryValueRatio;
+    const float ratio = botConfig().getSettings(static_cast<int>(difficulty)).attackForceMilitaryValueRatio;
     int percent = std::isfinite(ratio) ? static_cast<int>(std::clamp(ratio,0.0f,1.0f)*100.0f+0.5f) : 0;
     // Campaign roles define commitment even with older saved config defaults.
     // Keep an explicit zero as the opt-out; each house uses its own difficulty.
@@ -789,6 +789,8 @@ void QuantBot::launchGroundHunt() {
                 continue;
             }
             if (inParty || (!musters.empty() && musterOf(unit->getObjectID()))) continue;
+            // Test-only raiders (docs/ai-play-styles.md) keep raiding.
+            if (styleRaiders.count(unit->getObjectID())) continue;
             if (unit->getAttackMode()==HUNT) {
                 existingHunters.push_back(unit->getObjectID());
                 if (launcherItem(unit)) ++launchersAlreadyHunting;
@@ -839,7 +841,7 @@ void QuantBot::launchGroundHunt() {
     const int customBudget=SimpleArmyPolicy::attackBudget(groundArmyValue,percent);
     std::vector<Uint32> selected;
     if (limited) {
-        const auto& settings=getQuantBotConfig().getSettings(static_cast<int>(difficulty));
+        const auto& settings=botConfig().getSettings(static_cast<int>(difficulty));
         const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
         requiredReady=campaignRequiredArmy((militaryValueLimit*threshold).lround());
         // Away, injured, repairing and busy troops cannot assemble a new wave.
@@ -881,7 +883,7 @@ void QuantBot::launchGroundHunt() {
         // until it is a full wave again, instead of trickling forward.
         // Easy and Medium keep their established small-wave behaviour exactly.
         if (wholeArmy) {
-            const auto& settings=getQuantBotConfig().getSettings(static_cast<int>(difficulty));
+            const auto& settings=botConfig().getSettings(static_cast<int>(difficulty));
             const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
             requiredReady=(militaryValueLimit*threshold).lround();
             // Wave size: the configured readiness percentage (duel labels L / Q: 150% / 60%; D:
@@ -891,8 +893,8 @@ void QuantBot::launchGroundHunt() {
             int availableUnits=0;
             for (const auto& candidate : candidates) if (candidate.value>0) ++availableUnits;
             // A viable main wave, not a patrol: the established minimum is six
-            // units and three thousand credits of value.
-            const bool viable=QuantBotBuildPolicy::viableMainWave(availableUnits,availableValue);
+            // units and three thousand credits of value (a test-only play style may change it).
+            const bool viable=availableUnits>=style().minWaveUnits && availableValue>=style().minWaveValue;
             if (availableValue<requiredReady || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
@@ -958,7 +960,7 @@ void QuantBot::launchGroundHunt() {
                         if (std::find(kept.begin(),kept.end(),candidate.id)!=kept.end()) keptValue+=candidate.value;
                         else { ++leftUnits; leftValue+=candidate.value; }
                     }
-                    if (!QuantBotBuildPolicy::viableMainWave(leftUnits,leftValue)) {
+                    if (leftUnits<style().minWaveUnits || leftValue<style().minWaveValue) {
                         attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
                         traceDecision("attack_deferred",AITelemetry::Record().set("reason","home_reserve")
                             .set("kept_value",keptValue).set("left_value",leftValue));
@@ -1213,11 +1215,11 @@ bool QuantBot::recoveryActive() const {
     if (supportMode || gameMode != GameMode::Custom) return false;
     if (currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return false;
     if (difficulty != Difficulty::Hard && difficulty != Difficulty::Brutal) return false;
-    return getQuantBotConfig().recovery.enabled;
+    return botConfig().recovery.enabled;
 }
 
 ArmyPosturePolicy::Thresholds QuantBot::postureThresholds() const {
-    const auto& settings = getQuantBotConfig().recovery;
+    const auto& settings = botConfig().recovery;
     ArmyPosturePolicy::Thresholds t;
     t.windowCycles = static_cast<Uint32>(std::max(1, MILLI2CYCLES(std::max(1000, settings.attritionWindowMs))));
     t.sampleStrideCycles = std::max<Uint32>(1, t.windowCycles / 8);
@@ -1596,7 +1598,7 @@ void QuantBot::updateArmyPosture() {
     // main-wave credit floor underneath it - plus the established
     // outnumbered/80%-of-configured dispatch gate. A legitimately outnumbered
     // house below that 80% therefore keeps waiting rather than being pushed out.
-    const auto& releaseSettings = getQuantBotConfig().getSettings(static_cast<int>(difficulty));
+    const auto& releaseSettings = botConfig().getSettings(static_cast<int>(difficulty));
     const FixPoint releasePercent =
         FixPoint(static_cast<int>(releaseSettings.attackThresholdPercent * 100)) / 100;
     const int64_t attackThresholdValue = (militaryValueLimit * releasePercent).lround();
@@ -1658,7 +1660,7 @@ void QuantBot::updateArmyPosture() {
     // lost game and 2-5 minutes per win, and no single trigger alone was the culprit.
     // Fall-back (Y, test-only, docs/formations.md "Round 5") keeps the local withdrawal alone:
     // a wave outmatched where it stands comes back to the protected rally and relaunches.
-    if (!getQuantBotConfig().recovery.withdrawalsEnabled) {
+    if (!botConfig().recovery.withdrawalsEnabled) {
         situation.severeLocalDefeat = false;
         situation.coreUnderAttack = false;
         situation.windowCovered = false;
@@ -2623,7 +2625,7 @@ ArmyPosturePolicy::DispatchGate QuantBot::offensiveDispatchGate(const ArmySurvey
 }
 
 int QuantBot::frontBatteryGoal(int coverageCap, int refineries, int heavyFactories, int repairYards) const {
-    if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return 0;
+    if (!recoveryActive() || !botConfig().recovery.frontBatteriesEnabled) return 0;
     return FrontBatteryPolicy::batteryGoal(coverageCap,
         FrontBatteryPolicy::economyReady(refineries, heavyFactories, repairYards));
 }
@@ -3230,7 +3232,7 @@ void QuantBot::retreatAllUnits() {
         // these units again.
         if (!openingDispersal.empty() && getGameCycleCount()>=openingDispersalUntil) openingDispersal.clear();
         if (!supportMode) squadRallyLocation = findSquadRallyLocation();
-        const QuantBotConfig& config = getQuantBotConfig();
+        const QuantBotConfig& config = botConfig();
         const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
         // Recheck active base attacks before regrouping, including units already
         // moving away. Damage callbacks alone miss newly arrived defenders.
@@ -3371,7 +3373,7 @@ void QuantBot::retreatAllUnits() {
         // withdrawal that moves four units per pass cannot bring a large army
         // home: the configured budget plus the fair cursor is what bounds this.
         if (recoveryActive()) {
-            int recallBudget = std::max(0, getQuantBotConfig().recovery.recallOrdersPerPass);
+            int recallBudget = std::max(0, botConfig().recovery.recallOrdersPerPass);
             applyArmyPosture(recallBudget);
             // A threatened colony gets its finite reserve from what the recall
             // did not need, so colony defence can never outbid a withdrawal and
@@ -3382,6 +3384,8 @@ void QuantBot::retreatAllUnits() {
         updateHuntParties();
         // Force concentration (test-only candidates, docs/formations.md "Concentrating force").
         concentrateForces();
+        // Test-only harvester raids (docs/ai-play-styles.md; none in a real game).
+        updateStyleRaiders();
         int rallyOrdersRemaining=4;
         int combatCount=0;
         for (const auto* unit:getUnitList()) if (unit->getOwner()==getHouse() && unit->isActive()
@@ -3451,6 +3455,7 @@ void QuantBot::retreatAllUnits() {
             // fights at its own range again. Hunt, tracked membership and engine
             // target acquisition are all kept.
             if (escapeCloseThreatWhileHunting(pUnit)) continue;
+            if (!styleRaiders.empty() && styleRaiders.count(pUnit->getObjectID()) && raidWithStyle(pUnit)) continue;
             // Dispatched Custom attackers belong to engine Hunt. Ordinary
             // scans cannot kite them, assign prey, crush targets or regroup them.
             // Repair and emergency defence were handled before this point.

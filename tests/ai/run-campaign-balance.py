@@ -574,6 +574,8 @@ if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
+# Play styles (label suffix @style, docs/ai-play-styles.md) are read from here by the probe.
+env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
 if args.match_sides:
     env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
 if args.duel_map_size:

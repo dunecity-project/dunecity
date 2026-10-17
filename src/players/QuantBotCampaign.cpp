@@ -84,7 +84,7 @@ void QuantBot::noteCampaignOriginalState(bool legacySave) {
         }
     }
     campaignBaseline.refineries=refineries;
-    const auto& settings=getQuantBotConfig().getSettings(int(difficulty));
+    const auto& settings=botConfig().getSettings(int(difficulty));
     int allowedRefineries=difficulty==Difficulty::Hard && getGameInitSettings().getMission()>=21 ? 2 : refineries;
     allowedRefineries=std::max(allowedRefineries,settings.refineryMinimum);
     int allowance=std::max(0,settings.harvesterLimitPerRefineryMultiplier*allowedRefineries);

@@ -1437,7 +1437,7 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
     // which is derived from where the workers are standing and is therefore not
     // a front at all.
     const bool battery = recoveryActive() && itemID == Structure_RocketTurret
-        && getQuantBotConfig().recovery.frontBatteriesEnabled && baseCenter.isValid();
+        && botConfig().recovery.frontBatteriesEnabled && baseCenter.isValid();
     if (battery) baseCenter = batteryAnchor();
     Coord forward(0, 0);
     if (battery) forward = observedFrontDirection(baseCenter);
@@ -2243,7 +2243,7 @@ bool QuantBot::batteryClearanceZones(Coord pos, std::vector<Uint32>& zones, Coor
     // nothing else: no campaign, no support role, no Easy/Medium, no human and
     // no house a human shares, and only while the battery feature is on.
     if (!currentGame || !currentGame->isCitySimEnabled()) return false;
-    if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return false;
+    if (!recoveryActive() || !botConfig().recovery.frontBatteriesEnabled) return false;
     if (!getHouse() || !getHouse()->isAI()) return false;
     const auto* sim = currentGame->getCitySimulation();
     if (!sim || !sim->isInitialized()) return false;
@@ -2318,7 +2318,7 @@ Coord QuantBot::findBatteryClearanceSite(Coord requiredSite) {
     if (!revalidating && batteryClearanceCache) return *batteryClearanceCache;
     if (!revalidating) batteryClearanceCache = Coord::Invalid();
     if (!currentGame || !currentGame->isCitySimEnabled()) return Coord::Invalid();
-    if (!recoveryActive() || !getQuantBotConfig().recovery.frontBatteriesEnabled) return Coord::Invalid();
+    if (!recoveryActive() || !botConfig().recovery.frontBatteriesEnabled) return Coord::Invalid();
     if (!getHouse() || !getHouse()->isAI()) return Coord::Invalid();
     const auto* sim = currentGame->getCitySimulation();
     if (!sim || !sim->isInitialized()) return Coord::Invalid();

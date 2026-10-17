@@ -72,7 +72,7 @@ int64_t volleyOf(const UnitBase* unit) {
 
 int QuantBot::forceBits() const {
     if (forceVariantOverride != kNoForceOverride) return forceVariantOverride;
-    const auto& force = getQuantBotConfig().force;
+    const auto& force = botConfig().force;
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
         | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
@@ -83,7 +83,7 @@ int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomHardBrutal()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
-    return std::clamp(getQuantBotConfig().force.waveReadinessPercent, 10, 300);
+    return std::clamp(botConfig().force.waveReadinessPercent, 10, 300);
 }
 
 int QuantBot::openingReadinessPercent() const {

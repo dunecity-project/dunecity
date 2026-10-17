@@ -54,7 +54,7 @@ FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recal
                 'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
                 'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
                 'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
-                'turrets_lost')
+                'turrets_lost', 'raid_orders')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
 # The army value curve: each side's mobile armed value at these game minutes (the 5-minute

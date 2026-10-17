@@ -15,6 +15,10 @@ Modes:
                      --all-houses), both label assignments.
   --ffa x,y          four-player free-for-all on the 4P --maps: Harkonnen, Atreides, Ordos and
                      Sardaukar, two houses per label, all six partitions per seed.
+  --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
+
+Labels: as formation-duel.py, plus "default" (the configured rules) and a test-only play style
+suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush.
 
 Each game appends a row to games.csv, its houses to houses.csv, a per-minute sample of every
 house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv
@@ -56,7 +60,7 @@ KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
 GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
-                     'gate_holds', 'gate_timeouts')
+                     'gate_holds', 'gate_timeouts', 'raid_orders')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')
@@ -105,7 +109,16 @@ def side_list(sides):
 def schedule(args):
     games = []
     if args.ffa:
-        first, second = args.ffa.split(',')
+        labels = args.ffa.split(',')
+        if len(labels) == 4:
+            # Four labels, one per house: the four rotations, so every label plays every house.
+            for seed in args.seeds:
+                for name in args.maps:
+                    for shift in range(4):
+                        sides = '|'.join(f'{h}:{labels[(i + shift) % 4]}' for i, h in enumerate(FFA_HOUSES))
+                        games.append((args.tag, args.difficulty, name, str(seed), sides))
+            return games
+        first, second = labels
         partitions = [group for group in itertools.combinations(FFA_HOUSES, 2)]
         for seed in args.seeds:
             for name in args.maps:
@@ -394,7 +407,7 @@ def wave_table(args, waves, games):
 
 
 def report_ffa(args, games, houses):
-    first, second = args.ffa.split(',')
+    labels = args.ffa.split(',')
     rows = [h for h in houses if h['tag'] in args.tags and h['difficulty'] == args.difficulty]
     valid = {tuple(g[k] for k in KEY) for g in games if not g['error'] and g['players'] != '2'}
     rows = [h for h in rows if tuple(h[k] for k in KEY) in valid]
@@ -403,7 +416,7 @@ def report_ffa(args, games, houses):
     print('|---|---|---|---|---|---|---|---|')
     win_label = {tuple(g[k] for k in KEY): g['winner_label'] for g in games}
     for name in sorted({h['map'] for h in rows}) + ['all']:
-        for label in (first, second):
+        for label in labels:
             group = [h for h in rows if h['label'] == label and (name == 'all' or h['map'] == name)]
             if not group:
                 continue
@@ -414,14 +427,15 @@ def report_ffa(args, games, houses):
                   f'{statistics.mean(number(h["kill_value"]) for h in group):.0f} / '
                   f'{statistics.mean(number(h["loss_value"]) for h in group):.0f} |')
     # Place as a score: 1 for first, 0 for last, per house; interval over games.
-    per_game = defaultdict(list)
-    for h in rows:
-        if h['label'] == first:
-            per_game[tuple(h[k] for k in KEY)].append((4 - number(h['place'])) / 3)
-    scores = [statistics.mean(v) for v in per_game.values()]
-    if scores:
-        print(f'\n{first}: place score (1 = first, 0 = last; mean of its two houses per game) {fmt_ci(scores)} '
-              f'over {len(scores)} games')
+    for label in labels if len(labels) > 2 else labels[:1]:
+        per_game = defaultdict(list)
+        for h in rows:
+            if h['label'] == label:
+                per_game[tuple(h[k] for k in KEY)].append((4 - number(h['place'])) / 3)
+        scores = [statistics.mean(v) for v in per_game.values()]
+        if scores:
+            print(f'\n{label}: place score (1 = first, 0 = last; mean of its houses per game) {fmt_ci(scores)} '
+                  f'over {len(scores)} games')
     timeouts = sum(1 for g in games if tuple(g[k] for k in KEY) in valid and not g['winner_label'])
     print(f'Time-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
 
