@@ -131,7 +131,7 @@ Font* FontManager::getDisplayFont(const std::string& text, unsigned int fontSize
                 // files keep usable labels. Avoid repeating the warning per size.
                 displayFontUnavailable = true;
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "Classic Desert display font unavailable; using the normal font: %s", error.what());
+                    "Lapis Enamel display font unavailable; using the normal font: %s", error.what());
             }
         }
         if(!displayFontUnavailable && iter->second->canRenderText(text)) {

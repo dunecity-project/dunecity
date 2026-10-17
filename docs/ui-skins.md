@@ -3,16 +3,20 @@
 ## Using the setting
 
 Open **Settings → Graphics → UI Skin** in the main menu. Choose **Modern**
-or **Classic Desert**, then **Apply**. Applying rebuilds the interface through
+or **Lapis Enamel**, then **Apply**. Applying rebuilds the interface through
 the existing menu reinitialization path; reopening Settings shows the saved
 choice. Back discards a preview without changing the active style.
 
 Modern remains the default for existing and new profiles. A missing or invalid
-`[Video] UI Skin` value also selects Modern (`0`); Classic Desert is `1`.
+`[Video] UI Skin` value also selects Modern (`0`); Lapis Enamel is `1`.
+ID `1` was labelled Classic Desert in the earlier local candidates, so existing
+preferences keep the approved appearance without migration. **Classic Desert**
+is reserved for a separate, original-DuneLegacy-inspired design; there is no
+unfinished third option in the dropdown.
 The small Dune City sample previews both the chosen skin and Colors setting
 without changing the live menus before Apply.
 
-Classic Desert reuses the original FAME/SCREEN desert artwork. Its buttons have
+Lapis Enamel reuses the original FAME/SCREEN desert artwork. Its buttons have
 sand-grained brass-gold faces, carved raised/recessed borders and small end
 fittings when enough label space is available. Standard button lettering uses
 deep lapis-blue faces and a fine one-pixel pale-gold relief, without a heavy
@@ -43,18 +47,18 @@ Native-resolution fixes already present in 1.0.829 are retained unchanged.
 Skin selection is a local preference; it is not synchronized to other players.
 
 For the classic unscaled 1080p view, choose **1920×1080**, **Native (1:1)**
-Interface Size and **Zoom 1x** separately. Choosing Classic Desert by itself
+Interface Size and **Zoom 1x** separately. Choosing Lapis Enamel by itself
 does not alter any of those display choices or Dune2R's mod-specific scale.
 
-## Classic display lettering
+## Lapis display lettering
 
 The shipped face is unmodified **Righteous Regular**, rendered at 80% horizontal
 width for the taller proportions of the Lapis-inspired mockup. This is a real
 font, not text baked into button images. Only the display face uses light
 hinting/antialiasing and a transparent, straight-alpha compression intermediate;
-the default font's existing rendering path stays unchanged. Classic buttons uppercase ASCII while
-leaving UTF-8 byte sequences intact. Buttons at least 28 pixels high use the
-display face with measured fitting; labels at least 22 pixels use it for large
+the default font's existing rendering path stays unchanged. Lapis buttons
+uppercase ASCII while leaving UTF-8 byte sequences intact. Buttons at least
+28 pixels high use the display face with measured fitting; labels at least 22 pixels use it for large
 headings. Small body text and black-outlined labels over world/Mentat artwork
 keep Philosopher. Modern keeps its existing font and colors.
 
@@ -75,20 +79,35 @@ The complete copyright and SIL Open Font License 1.1 accompany it in
 `data/Righteous-OFL.txt`; the font binary/name are unchanged. Windows install
 rules explicitly include both loose files, since neither is a LEGACY.PAK entry.
 
+## Original DuneLegacy references for Classic Desert
+
+Lapis Enamel is the approved new blue/gold treatment, not a reproduction of
+the historical interface. The separate Classic Desert design is still at the
+reference stage. A genuine main-menu/options pair appears in this
+[2019 hands-on review of the DuneLegacy 0.96.3 AmigaOS port](https://oldschoolgameblog.com/2019/12/02/gaming-on-amigaos-4-1-dune-legacy-dune-legacy-team-zettmaster-and-big-h/).
+The archived official 0.98.6.3 release also includes `extra-menu-option.png`,
+showing the red-lettered settings screen with ochre controls, small bevels,
+the original desert texture and sculpted gold framing.
+
+The intended future work is appearance-only: mimic those original controls
+and lettering while retaining current tabs, campaign/co-op features, editors,
+navigation and settings. Do not replace current menus with historical feature
+sets, relabel Lapis as faithful Classic, or expose an unfinished third choice.
+
 ## Implementation and verification
 
 `MenuPalette.h` defines validated themes and contrast-safe label colors.
 `DuneStyle` captures a theme per instance so a preview cannot alter the active
 theme. Startup loads the preference before graphics caches are constructed.
-Classic backgrounds use original bitmap resources; the safe fallback is a gold
+Lapis backgrounds use original bitmap resources; the safe fallback is a gold
 fill when an original texture is unavailable. Applying in Settings reconstructs
 the cached UI rather than leaving old-theme widgets behind.
 
-The `classic_desert_ui_tests` CTest covers theme defaults, invalid values,
-Modern palette preservation, Classic contrast, preview isolation, preference
-storage and independence from interface/world scaling. Button palette checks
+The historically named `classic_desert_ui_tests` CTest covers theme defaults,
+invalid values, Modern palette preservation, Lapis contrast, preview isolation,
+preference storage and independence from interface/world scaling. Button palette checks
 also cover lapis-blue/pale-gold colors, the deeper pressed-state ink, High Contrast and
-unchanged Modern colors. The renderer fixture checks opaque textured Classic
+unchanged Modern colors. The renderer fixture checks opaque textured Lapis
 button faces, real glyph/shadow bounds and normal/pressed/focused states at
 280×34 and 70×22 in both text palettes; Modern interiors remain flat. Font checks
 verify the bundled typeface actually loads, display/default measurement and
@@ -158,3 +177,10 @@ metrics, brass artwork, layout and Modern appearance remain unchanged. All 11
 Windows CTest suites pass (Classic subset: seven cases, 352 assertions), as do
 the four-resolution SDL skin-switch/HUD/pause matrix and portable runtime check.
 This remains local-only, with previous portable candidates preserved.
+
+Local 1.0.837 gives the approved appearance its own visible **Lapis Enamel**
+name. Saved ID `1`, default selection and rendering are unchanged. The native
+probe asserts the names and IDs, rejects an unfinished Classic Desert entry,
+and verifies saved selection, preview/Back and Apply/reinitialization. The full
+Windows build, all 11 CTest suites, the four-resolution SDL matrix and separate
+portable runtime check pass. Classic Desert remains a planned distinct skin.

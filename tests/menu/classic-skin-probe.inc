@@ -284,7 +284,7 @@ struct ClassicUISkinProbe {
             require(SDL_BlitSurface(backdrop.get(), nullptr, sheet.get(), &destination) == 0,
                     "Placing the diagnostic backdrop failed");
             auto heading = standard.createLabelSurface(300, 24,
-                {skin ? "Classic Desert" : "Modern"}, 14,
+                {skin ? "Lapis Enamel" : "Modern"}, 14,
                 static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
             require(heading != nullptr, "Rendering the button state sheet heading failed");
             destination = {skin * 320 + 10, 0, 300, 24};
@@ -423,7 +423,13 @@ struct ClassicUISkinProbe {
         require(menu.uiSkinDropDownBox.getNumEntries() == 2
                 && menu.uiSkinDropDownBox.getEntryIntData(0) == 0
                 && menu.uiSkinDropDownBox.getEntryIntData(1) == 1,
-                "Modern and Classic Desert choices are missing or misidentified");
+                "Modern and Lapis Enamel choices are missing or misidentified");
+        require(menu.uiSkinDropDownBox.getEntry(0) == _("Modern")
+                && menu.uiSkinDropDownBox.getEntry(1) == _("Lapis Enamel"),
+                "The Lapis Enamel label no longer maps to the existing saved UI skin ID 1");
+        for(unsigned int index : {0u, 1u})
+            require(menu.uiSkinDropDownBox.getEntry(index) != _("Classic Desert"),
+                    "An unfinished Classic Desert option is still visible");
         require(menu.uiSkinDropDownBox.getSelectedEntryIntData() == settings.video.uiSkin,
                 "Reopening Options lost the UI skin selection");
         require(menu.interfaceSizeDropDownBox.getSelectedEntryIntData() == settings.video.interfaceHeight,

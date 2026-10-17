@@ -306,7 +306,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     uiSkinHBox.addWidget(Spacer::create(), 0.5);
     uiSkinHBox.addWidget(optionLabel(_("UI Skin")), 190);
     uiSkinDropDownBox.addEntry(_("Modern"), 0);
-    uiSkinDropDownBox.addEntry(_("Classic Desert"), 1);
+    uiSkinDropDownBox.addEntry(_("Lapis Enamel"), 1);
     uiSkinDropDownBox.setSelectedItem(validatedUISkin(settings.video.uiSkin));
     uiSkinDropDownBox.setOnSelectionChange([this](bool interactive) {
         updatePalettePreview();

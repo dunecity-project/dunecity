@@ -47,7 +47,7 @@ void checkActiveTheme(const MenuTheme::Theme& expected) {
 
 TEST_CASE("UI skin preference defaults to Modern and validates independently of colors", "[menu][ui-skin]") {
     // Existing profiles keep Stefan's current appearance; only an explicit 1
-    // selects Classic Desert. Bad INI values must not leak into theme lookup.
+    // selects Lapis Enamel. Bad INI values must not leak into theme lookup.
     constexpr auto modern = MenuTheme::themeForUISkin(0);
     static_assert(modern.background == COLOR_RGB(20,24,32));
     static_assert(menuPalette(0, 0).foreground == COLOR_RGB(250,248,240));
@@ -97,7 +97,7 @@ TEST_CASE("Modern UI skin retains the exact existing palette", "[menu][ui-skin][
     }
 }
 
-TEST_CASE("Classic Desert uses bright ochre panels and readable dark labels", "[menu][ui-skin][accessibility]") {
+TEST_CASE("Lapis Enamel uses bright ochre panels and readable dark labels", "[menu][ui-skin][accessibility]") {
     const auto classic = MenuTheme::themeForUISkin(1);
     const auto modern = MenuTheme::themeForUISkin(0);
     for(const Uint32 color : {classic.background, classic.control, classic.pressed}) {

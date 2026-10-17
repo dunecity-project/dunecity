@@ -1,3 +1,45 @@
+## 2026-10-16 — local 1.0.837: name the approved skin Lapis Enamel
+
+The user approved the blue/gold 1.0.836 appearance, asked to name its selector
+entry Lapis Enamel instead of Classic Desert, and requested genuine original
+DuneLegacy UI references before developing a separate Classic Desert skin.
+The dropdown is now Modern (`0`) / Lapis Enamel (`1`). Existing ID `1` settings
+retain exactly the same theme; no new setting, placeholder option or migration
+is needed. The optional-font warning and template comment use the new name.
+Internal historic Classic helper/test identifiers remain for compatibility.
+
+No rendering, font metrics, controls/navigation, world graphics, gameplay,
+zoom, Dune2R scaling, save or network logic changes. The official version helper
+sets all three version declarations to 1.0.837. This is another local candidate
+on the existing production 1.0.832 base, not a current-upstream integration.
+The source tree started clean at e2ed24e. The full Windows Release build passes;
+a final incremental game build also includes the generated-profile template's
+renamed description. All 11 CTest suites pass (core: 1004 passed, four opt-in
+cases skipped, 10,238,839 assertions; theme subset: seven cases, 352 assertions).
+The actual SDL Modern → Lapis → Modern matrix passes at 640×480, 854×480,
+1280×720 and Native 1920×1080, including selector labels/IDs, no unfinished
+Classic option, preview/Back, Apply/reinitialization/persistence and static
+construction-yard HUD/pause rendering. This is component/software-renderer
+evidence, not live gameplay certification. The 84 PNGs are in the ignored
+`build-windows-candidate/lapis-ui-probe-837/captures` tree.
+
+The separate `build-windows-portable-837` install passes its desktop runtime
+check (exit 0). Its executable matches the final rebuilt target: SHA256
+`0B264B0AAE8639CF7426B9C03629023E04888CD6CFFE14267184BB939BC98D05`.
+Font, full OFL notice and template copies match source/development output.
+The previous 1.0.836 portable retains its recorded executable hash. No push,
+PR, tag, publication or device installation has been performed.
+
+Authentic reference material was located in the archived original website:
+the 0.98.6.3 release's `extra-menu-option.png` shows red lettering, ochre fills,
+small bevels and the original FAME desert frame; the gallery also contains
+genuine older HUD/statistics captures. A 2019 hands-on review identifies and
+shows the original 0.96.3 main menu/options on AmigaOS; its public source is
+linked in `docs/ui-skins.md`. These are historical captures, not generated
+mockups. A future Classic Desert should mimic their appearance while retaining
+all current UI features. No separate Classic Desert rendering is implemented
+in this naming-only iteration.
+
 ## 2026-10-13 — local 1.0.836: return to Lapis Enamel
 
 The user play-tested 1.0.835 and rejected its copper/dark-shadow lettering as
