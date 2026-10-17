@@ -37,6 +37,9 @@ For deeper background only when needed:
 - Edit files under `~/development/dunecity` only unless explicitly instructed.
 - `../simcity` is read-only Micropolis reference.
 - Do not hand-edit generated/imported assets unless the task is specifically about the asset pipeline.
+- Disk hygiene (see AGENTS.md): delete your worktree's `build*/` once its branch is merged
+  (`scripts/prune-merged-worktrees.sh` lists them); game batches use leased scratch under
+  `/private/tmp/dunecity-work`, never long-lived ad-hoc `/tmp` directories.
 
 ## Likely touch points
 

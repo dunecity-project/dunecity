@@ -15,8 +15,11 @@ a slow win is the regression Stefan reported, so "eventually wins" is not enough
 Each seed prints winner, game time, Atreides' credits/army/harvester curve, enemies alive,
 attack waves launched (ground_hunt: count, size) and defence responses (defence_response,
 base_scramble). Results and logs stay under --output-dir. The attack and defence lines are read
-from the AI decision log, so it stays on unless --no-ai-telemetry; path search runs inline
-(--path-workers 1), the fastest setting when the matches fill the cores (docs/headless-performance.md).
+from the AI decision log, so it stays on unless --no-ai-telemetry; once a finished seed's lines
+are in results.json its decision log (70-110 MB) is deleted unless --keep-telemetry. Path search
+runs inline (--path-workers 1), the fastest setting when the matches fill the cores
+(docs/headless-performance.md). A batch refuses to start below the free-space floor
+(DUNECITY_MIN_FREE_GB, default 25 GB).
 """
 import argparse
 import json
@@ -28,6 +31,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import discard_profile_assets, require_free_space  # noqa: E402
+
 MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
 OPTIONS = root / 'tests/ai/all-against-atreides-options.ini'
 ATREIDES = 1
@@ -59,7 +65,10 @@ parser.add_argument('--path-workers', type=int, default=1,
                     help='Pathfinding threads per match (DUNECITY_PATH_WORKERS); results are identical for any count')
 parser.add_argument('--no-ai-telemetry', action='store_true',
                     help='No AI decision log: ~3%% less CPU, but no attack/defence lines in the report')
+parser.add_argument('--keep-telemetry', action='store_true',
+                    help="Keep each finished seed's AI decision log after its lines were extracted")
 args = parser.parse_args()
+require_free_space()
 cap = args.minutes or int(args.win_minutes) + 1
 out = args.output_dir.resolve()
 shutil.rmtree(out, ignore_errors=True)
@@ -114,10 +123,15 @@ def play(seed):
             recalls += row['event'] == 'army_recall'
     minutes = float(result['minutes']) if result else None
     won = bool(result) and result['winner_team'] == result['team']
-    return {'seed': seed, 'won': won, 'minutes': minutes, 'wall_s': wall, 'result': result,
+    game = {'seed': seed, 'won': won, 'minutes': minutes, 'wall_s': wall, 'result': result,
             'error': '' if run.returncode == 0 and result else f'rc={run.returncode}: {run.stderr[-600:]}',
             'samples': samples, 'attacks': attacks, 'defence_responses': defences, 'base_scrambles': scrambles,
             'army_recalls': recalls}
+    if match.is_dir():
+        (match / 'result.json').write_text(json.dumps(game, indent=1) + '\n')
+        if not game['error'] and not args.keep_telemetry:
+            discard_profile_assets(match / 'profile', telemetry=True)
+    return game
 
 
 def report(game):

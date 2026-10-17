@@ -18,6 +18,28 @@ points to `dunecity-quantbot-split` and must not be reused here. The older gener
 registered staging lane. Keep separate trees for genuinely different toolchains
 or sanitizer configurations. Do not copy or relocate configured CMake trees.
 
+### Disk hygiene (worktrees, builds, game scratch)
+
+- One configured build tree per active worktree. When your branch is merged into
+  `integrate/feature-batch` or `origin/main`, delete that worktree's `build*/` and,
+  if it is clean, the worktree. `scripts/prune-merged-worktrees.sh` (dry run by
+  default) lists merged, clean, idle worktrees with their build sizes; `--apply`
+  deletes their build trees, `--remove-worktree` also removes those worktrees
+  (branches are kept). Never apply it to a worktree another agent is using.
+- Game batches (formation-duel, formation-wave-matrix, headless-bench,
+  run-all-against-atreides) run `agent-scratch guard` first (refuse below 25 GB free)
+  and, unless you pass `--scratch`, run in leased scratch under
+  `/private/tmp/dunecity-work`, all through `tests/performance/probe_profile.py`.
+  Each game's directory is deleted as soon as its rows are written; a failed game
+  keeps its logs, saves and replay (not mods, workshop revisions or the decision log)
+  in `<scratch>/failed`, at most 5 per batch, and the batch is kept 72 h as failed.
+  Probe profiles drop their regenerated mods/revisions when a run ends, and copy only
+  the workshop revisions a save or `ws-*` mod pins, never the whole store. Keep results
+  in `--results`, never in scratch. Ad-hoc scratch: `agent-scratch new --project
+  dunecity --purpose X` and `agent-scratch finish PATH` (or `--failed`). The hourly
+  sweep removes dead owners' scratch and idle `/private/tmp` agent scratch
+  (`agent-scratch sweep --dry-run`).
+
 ## Read first
 
 1. **`HANDOVER.md`** — state of the current, uncommitted work: what was fixed, what is still

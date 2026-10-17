@@ -1,3 +1,32 @@
+## 2026-10-17 — disk housekeeping: leased game scratch, probe profile bulk, merged-worktree pruning (branch `chore/housekeeping`, test harness only, no protocol/save change)
+
+claw.local fell to 33 GB free (agents' `/private/tmp` game scratch, CTest `--repeatable` runs,
+probe profiles in build trees, merged worktrees' builds); ~68 GB reclaimed by hand, incl. 38
+generated probe run directories (5.3 GB) in staging `build-int` (Stefan approved; log
+`~/.local/state/agent-workspace/reports/manual-reclaim-2026-10-17-build-int-probes.json`).
+
+- One helper, `tests/performance/probe_profile.py`: `scratch_dir` (leased run under
+  `/private/tmp/dunecity-work/<owner>/` via the installed agent-workspace `scratch.py`; private temp
+  dir elsewhere; deleted on success, kept 72 h as failed), `finish_game` (delete a game's directory
+  once its rows are written; failures keep logs/saves/replay only, max 5 per batch),
+  `require_free_space` (`agent-scratch guard`, 25 GB), `discard_profile_assets`, `prune_runs`,
+  `copy_revisions` (only the revisions a save or `ws-*` mod pins, never the whole store or the
+  owner token).
+- Users: formation-duel, formation-wave-matrix, headless-bench (no fixed `/tmp` default; `--results`
+  required), run-all-against-atreides, run-campaign-balance (profile bulk dropped when any run ends;
+  `--repeatable` keeps 3 runs), run-no-spice-city-progress, run-active-tile-probe, the pathfinding/AI
+  cache/simulation probes and `tools/scenarios/export-save-scenario.py` (`--keep-profile-assets`).
+- `scripts/prune-merged-worktrees.sh`: dry run lists worktrees merged into `integrate/feature-batch`
+  or `origin/main` that are clean and idle, with build sizes; `--apply` deletes their `build*/`,
+  `--remove-worktree` also the worktree. AGENTS.md/CLAUDE.md: delete your `build*/` once merged.
+- Proof: 4 Hard duels (64/128, seed 7101, none:blob, 6 min, `--jobs 4`) ran in
+  `/private/tmp/dunecity-work/omp_..._HousekeepingFinish/formation-duel-*`, gone after; 2 forced
+  failures (`--wall-timeout 3`) kept a 14 MB failed batch with two small game dirs. Probe dirs after
+  ctest are 12-21 MB (were 90-350 MB). Tests (worktree Release `build`, ctest -j2):
+  save_scenario_export, save_scenario_input_preservation, active_tile_probe, quantbot_no_spice_city,
+  quantbot_force_concentration, quantbot_launcher_kiting, quantbot_all_against_atreides: 7/7
+  passed; `tests/test_probe_profile_lifecycle.py` 11/11.
+
 ## 2026-10-17 — local 1.0.844 installed on the MBA
 
 Staging = 1.0.843 + `feat/ai-blob-waves` (5c65342d): QuantBot default BWFCQ (bundled forward reserve,
