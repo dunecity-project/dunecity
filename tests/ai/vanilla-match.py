@@ -37,7 +37,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import finish_game, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
 
 MAP_DIR = root / 'data/maps/multiplayer'
 # Short names of the bundled maps used by the scenario tests (any other file stem in MAP_DIR
@@ -126,17 +126,21 @@ def schedule(args):
 
 def build_probe(args, scratch):
     probe = scratch / 'probe'
-    binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
-    if binary.exists() and not args.rebuild:
-        return binary
+    if not args.rebuild:
+        try:
+            binary = probe_binary(probe)
+            if binary.exists():
+                return binary
+        except OSError:
+            pass
     shutil.rmtree(probe, ignore_errors=True)
-    subprocess.run(['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--custom-map', str(map_path('x-factor')),
                     '--match-sides', 'harkonnen:none,atreides:none', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256', '--no-ai-telemetry'],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
-    return binary
+    return probe_binary(probe)
 
 
 def places(sides, eliminated):
@@ -159,7 +163,7 @@ def play(args, scratch, binary, key):
     sides = side_list(sides_text)
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
     shutil.rmtree(out, ignore_errors=True)
-    command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--custom-map', str(map_path(name)),
                '--house', sides[0][0], '--match-sides', ','.join(f'{h}:{l}' for h, l in sides),
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,

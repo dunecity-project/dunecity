@@ -101,6 +101,7 @@ start against a 60% strike of 12-14.4k) keeps BWFCQ exactly.
 | Pairing | Games | Score | 95% CI | Elim. W-L / time-outs | Notes |
 |---|---|---|---|---|---|
 | Fortress duels, BWFCQE v BWFCQ, Hard (128/160/192, seeds 7101-7606) | 36 | 0.500 | 0.33-0.67 | 9-9 / 18 | `full_readiness` 0 on both sides; all 18 label-swapped pairs identical: E is inert |
+| Fortress duels, BWFCQE v BWFCQ, Brutal (same maps and seeds, `fe1`) | 36 | 0.500 | 0.33-0.67 | 14-14 / 8 | 0.50 at every size: E is inert at Brutal too |
 | CY set, BWFCQE v BWFCQ, Hard (5 maps, seeds 8101-8606, all house pairs) | 180 | **0.561** | 0.48-0.63 | 101-78 / 1 | Pip 0.722; first wave 18.8 v 15.4 min, trade 3.90 v 3.33 |
 | CY set, BWFCQE v BWFCQ, Brutal | 180 | **0.572** | 0.49-0.64 | 103-77 / 0 | Pip 0.750, Soolin 0.611, Penny 0.444; first wave 20.3 v 15.9 min, trade 4.22 v 3.28 |
 | CY set, Hard + Brutal | 360 | **0.567** | 0.52-0.61 | 204-155 / 1 | |
@@ -228,14 +229,15 @@ the MacBook Air runner, digest parity with the mini checked):**
 
 | Pairing v BWFCQ | Fortress Hard (108) | Fortress Brutal (36) | CY Hard (180) | CY Brutal |
 |---|---|---|---|---|
-| Staggered+BWFCQ | **0.861** (0.80-0.93), 72-6 / 30 | **0.861** (0.72-0.97), 29-1 / 6 | 0.511 (0.44-0.59), 90-87 / 3 | **0.413** (0.33-0.49), 150 games, 62-88 |
-| Column+BWFCQ | **0.741** (0.65-0.81), 60-12 / 36 | **0.806** (0.67-0.92), 24-3 / 9 | 0.506 (0.43-0.58), 89-88 / 3 | 0.460 (0.38-0.54), 150 games, 69-81 |
+| Staggered+BWFCQ | **0.861** (0.80-0.93), 72-6 / 30 | **0.861** (0.72-0.97), 29-1 / 6 | 0.511 (0.44-0.59), 90-87 / 3 | **0.428** (0.36-0.49), 180 games, 77-103 |
+| Column+BWFCQ | **0.741** (0.65-0.81), 60-12 / 36 | **0.806** (0.67-0.92), 24-3 / 9 | 0.506 (0.43-0.58), 89-88 / 3 | 0.472 (0.40-0.54), 180 games, 84-95 / 1 |
 
-(CY Brutal: 300 of 360 games when measured - seeds 8101-8303 from the Air and part of 8404-8606 from the
-mini; the rest is queued on the mini as `ac1-brutal-mini`.) **Decision: no approach default.** The rule was
+(CY Brutal: all 360 games - seeds 8101-8303 from the Air, 8404-8606 from the mini; the last 60 of
+`ac1-brutal-mini` finished during the 1.0.846 merge with the probe built before it, all rows complete, no
+failed games.) **Decision: no approach default.** The rule was
 "the best shape becomes the QuantBot default only if it beats BWFCQ with its 95% interval above 0.5 on
 Fortress Hard and is not worse on CY and Brutal". Staggered, the best on Fortress, is clearly worse on
-Construction Yard starts at Brutal (structures lost 30.5 v destroyed 22.1 per game): with a Fortress army
+Construction Yard starts at Brutal (structures lost 29.4 v destroyed 22.8 per game): with a Fortress army
 the shaped approach wins the big opening battles, from a CY start the slower, formed-up approach of small
 early Brutal waves loses. Column is level on CY and not clearly worse at Brutal but is not the best shape;
 WaveFormation stays None. A QuantBot-only `[Force Concentration] ApproachFormation` (shape for waves
@@ -247,6 +249,27 @@ second wave on, or only when the wave's value exceeds the opening army (Fortress
 distinguishable. Long thin maps (128x31 CY above): Pip 0.667, Servalan 0.583, Restal 0.556, Sammy 0.417,
 Lauper 0.306 - the bundle point a quarter of the way along a 128-tile strip is no problem in itself; the
 losses there come from the early 60% waves (E fixes Lauper: 0.778).
+
+### C. The 1.0.846 merge: opening readiness (I) with the round 5 defence (UVX)
+
+`test/formation-scenarios` merged `integrate/feature-batch` (1.0.845: UVX default, footprint rule, save
+9864; then the Windows crossplay fixes). The merged default is BWFCQ + UVX + I (opening readiness, label
+flag `I` - `E` stays round 5's estimate). Protocol 81, save 9864. Checks on the mini, merged code, Hard
+(data `docs/formation-results/scenarios/merge-846/`; time-outs adjudicated as elsewhere):
+
+| Check | Games | Score | 95% CI | Reference |
+|---|---|---|---|---|
+| Fortress duels, BWFCQUVXI v none (`m846h`, all house pairs) | 108 | **0.889** | 0.82-0.94 | 1.0.845 BWFCQUVX v none 0.926 (0.87-0.97); `full_readiness` 0 in all 108: I inert with a Fortress army |
+| `/weak` duels, BWFCQUVXI/weak v none (`m846w`) | 108 | **0.417** | 0.33-0.51 | 1.0.845 0.426 (0.33-0.52); merged code with I off (`m846w0`) 0.343 (0.25-0.44) |
+| CY start, 12 maps, seeds 8101-8303, all house pairs, BWFCQUVXI v BWFCQUVX (`m846cy`) | 216 | **0.519** | 0.45-0.59 | pre-merge BWFCQE v BWFCQ (`op1`) on the same 216 games 0.583 (time-outs 1/2); Lauper 0.778, Pip 0.722 |
+| CY control, BWFCQI v BWFCQ (`m846cyc`, 72 of those games) | 72 | 0.597 | 0.49-0.71 | `op1` on the same games 0.653 (time-outs 1/2) |
+
+Neither side broke: the defence keeps its `/weak` and Fortress results, and I still holds the first wave on
+CY starts (first wave 17.2 v 14.3 min) and still wins against plain BWFCQ. Against a UVX opponent its edge
+looks smaller (0.519 v 0.583 on the same games, within noise): while the remembered enemy army outnumbers
+it a UVX house no longer sends small waves into the enemy base, part of what I fixed. With a halved
+(`/weak`) Fortress army I applies too (the start is below a 60% wave: `full_readiness` in all 36 first
+games) and is neutral to slightly positive there.
 
 
 ## Concentrating force on attack and defence (branch `feat/ai-blob-waves`)
