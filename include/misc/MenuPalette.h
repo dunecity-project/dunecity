@@ -10,7 +10,7 @@ inline constexpr int validatedMenuPalette(int value) {
 
 // Appearance is a local UI preference, not a mod, sprite skin or world scale.
 inline constexpr int validatedUISkin(int value) {
-    return value == 1 ? 1 : 0;
+    return value >= 0 && value <= 2 ? value : 0;
 }
 
 namespace MenuTheme {
@@ -27,6 +27,10 @@ struct Theme {
 };
 
 inline constexpr Theme themeForUISkin(int value) {
+    if(validatedUISkin(value) == 2)
+        return Theme{COLOR_RGB(207,157,47), COLOR_RGB(214,161,26), COLOR_RGB(210,154,24),
+                     COLOR_RGB(112,70,13), COLOR_RGB(100,37,0), COLOR_RGB(100,37,0),
+                     COLOR_RGB(105,69,21), COLOR_RGB(255,220,128), COLOR_RGB(133,85,18)};
     return validatedUISkin(value) == 1
         ? Theme{COLOR_RGB(207,157,47), COLOR_RGB(223,177,66), COLOR_RGB(188,135,34),
                 COLOR_RGB(112,70,13), COLOR_RGB(103,45,6), COLOR_RGB(60,32,7),
@@ -63,8 +67,16 @@ inline void setUISkin(int value) {
     edgeDark = theme.edgeDark;
 }
 
-inline bool isClassicDesert() {
-    return uiSkin == 1;
+inline constexpr bool isDesertUISkin(int value = uiSkin) {
+    return validatedUISkin(value) != 0;
+}
+
+inline constexpr bool isLapisEnamel(int value = uiSkin) {
+    return validatedUISkin(value) == 1;
+}
+
+inline constexpr bool isClassicDesert(int value = uiSkin) {
+    return validatedUISkin(value) == 2;
 }
 
 inline double textLuminance(Uint32 color) {
@@ -86,8 +98,8 @@ inline double textContrast(Uint32 foreground, Uint32 backgroundColor) {
 inline Uint32 readableText(Uint32 color, int skin = uiSkin) {
     auto c=RGBA2SDL(color);
     const int brightness = 299*c.r+587*c.g+114*c.b;
-    if(validatedUISkin(skin) == 1) {
-        const auto classic = themeForUISkin(1);
+    if(isDesertUISkin(skin)) {
+        const auto classic = themeForUISkin(skin);
         for(int attempt = 0; attempt < 16; ++attempt) {
             const auto candidate = COLOR_RGBA(c.r, c.g, c.b, c.a);
             if(textContrast(candidate, classic.background) >= 4.5
@@ -111,10 +123,10 @@ struct MenuPalette {
 };
 
 inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin) {
-    return validatedUISkin(skin) == 1
+    return MenuTheme::isDesertUISkin(skin)
         ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
-                                                     : MenuTheme::themeForUISkin(1).text,
-                      COLOR_TRANSPARENT}
+                                                     : MenuTheme::themeForUISkin(skin).text,
+                      MenuTheme::isClassicDesert(skin) ? COLOR_RGB(255,225,144) : COLOR_TRANSPARENT}
         : MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_WHITE
                                                      : MenuTheme::themeForUISkin(0).text,
                       COLOR_TRANSPARENT};
@@ -126,6 +138,12 @@ inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin
 // against both normal and recessed central brass surfaces.
 inline constexpr MenuPalette buttonPalette(int value, int skin = MenuTheme::uiSkin,
                                            bool pressed = false) {
+    // Classic Desert keeps the original serif face and flat ochre controls.
+    // Burnt-orange ink is dark enough to stand on its own against the gold.
+    if(MenuTheme::isClassicDesert(skin))
+        return MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
+                           : pressed ? COLOR_RGB(84,29,0) : COLOR_RGB(100,37,0),
+                           COLOR_RGB(255,225,144)};
     return validatedUISkin(skin) == 1
         ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
                       : pressed ? COLOR_RGB(11,20,82) : COLOR_RGB(18,29,111),

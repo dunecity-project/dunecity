@@ -148,10 +148,10 @@ void ChatManager::addHintMessage(const std::string& message, SDL_Texture* pTextu
 
 
     // Chat is over the world, so keep white outlined text rather than applying
-    // the Classic Desert gold-panel foreground conversion.
+    // either desert skin's gold-panel foreground conversion.
     sdl2::texture_ptr pMessageTexture = convertSurfaceToTexture(DuneStyle::getInstance().createLabelSurface(
         width, height, lines, 12, Alignment_Left, COLOR_WHITE,
-        MenuTheme::isClassicDesert() ? COLOR_BLACK : COLOR_TRANSPARENT));
+        MenuTheme::isDesertUISkin() ? COLOR_BLACK : COLOR_TRANSPARENT));
 
     chatMessages.emplace_back(std::move(pMessageTexture), pTexture, SDL_GetTicks(), MSGTYPE_PICTURE );
 

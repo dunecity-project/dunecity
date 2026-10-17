@@ -2418,7 +2418,7 @@ GFXManager::GFXManager() {
     auto classicMenuTexture = PicFactory->createBackground();
     DuneStyle menuStyle(settings.video.menuPalette, settings.video.uiSkin,
                         classicMenuTexture.get());
-    uiGraphic[UI_MenuBackground][HOUSE_HARKONNEN] = MenuTheme::isClassicDesert()
+    uiGraphic[UI_MenuBackground][HOUSE_HARKONNEN] = MenuTheme::isDesertUISkin()
         ? PicFactory->createMainBackground()
         : menuStyle.createBackground(getRendererWidth(),getRendererHeight());
     uiGraphic[UI_GameStatsBackground][HOUSE_HARKONNEN] = PicFactory->createGameStatsBackground(HOUSE_HARKONNEN);
@@ -2497,7 +2497,7 @@ GFXManager::GFXManager() {
         const int height=uiGraphic[UI_DuneLegacy][HOUSE_HARKONNEN]->h;
         auto banner=menuStyle.createBackground(width,height);
         auto title=pFontManager->createSurfaceWithText("Dune City",
-            MenuTheme::isClassicDesert() ? MenuTheme::text : COLOR_WHITE,
+            MenuTheme::isDesertUISkin() ? MenuTheme::text : COLOR_WHITE,
             std::max(16,height-16));
         auto rect=calcDrawingRect(title.get(),width/2,height/2,HAlign::Center,VAlign::Center);
         SDL_BlitSurface(title.get(),nullptr,banner.get(),&rect);

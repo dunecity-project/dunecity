@@ -700,7 +700,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Interface Height = 0       # 0 = automatic; 480/600/768 = fixed UI size; -1 = native 1:1; Width keeps 4:3 or 16:9\n"
                                 "Start Menu Mode = 0        # 0 = classic; 1 = enlarged TV/tablet/accessibility layout\n"
                                 "Menu Palette = 0           # 0 = standard skin text; 1 = high contrast\n"
-                                "UI Skin = 0                # 0 = modern; 1 = lapis enamel (presentation only)\n"
+                                "UI Skin = 0                # 0 = modern; 1 = lapis enamel; 2 = classic desert (presentation only)\n"
                                 "Fullscreen = true\n"
                                 "FrameLimit = true           # Enable VSync for smooth, tear-free rendering.\n"
                                 "Preferred Zoom Level = 1    # 0 = no zooming, 1 = 2x, 2 = 3x\n"

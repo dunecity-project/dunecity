@@ -1,3 +1,49 @@
+## 2026-10-16 — local 1.0.838: separate original-style Classic Desert
+
+The user approved the genuine older DuneLegacy UI references and requested
+that appearance as Classic Desert, with dark-orange rather than red lettering.
+Settings → Graphics → UI Skin now offers Modern (`0`), Lapis Enamel (`1`) and
+Classic Desert (`2`). Existing ID `1` preferences retain the approved blue/gold
+Lapis theme; defaults and invalid values still select Modern. Both desert
+styles reuse the original FAME/SCREEN artwork, gold framing and sidebar/pause
+background handling. Classic has plain ochre button faces, small raised/recessed
+bevels, current label case and the original Philosopher font. Standard normal
+ink is RGB(100,37,0), pressed ink RGB(84,29,0), with a fine pale-gold relief;
+High Contrast remains independently selectable. Lapis's carved brass textures,
+end fittings, Righteous font, uppercasing and palettes are unchanged.
+
+The separate helpers distinguish common desert rendering from Lapis-only
+typography/ornaments. Explicit white/black-outlined world, chat and Mentat
+labels keep their original pixels rather than being darkened for gold panels.
+The three-skin diagnostics cover stable names/IDs, saved selection, independent
+previews/Back, Apply/reinitialization, original backgrounds, flat versus
+textured button faces, real typefaces/casing/relief and Modern/Lapis pixel
+isolation. UI features, tabs, campaign/co-op and editor navigation remain;
+there are no gameplay, world graphics/zoom, Dune2R scaling, save or protocol
+changes. Native 1:1 remains a separate setting.
+
+The source started clean at fac97fb on the existing local branch. The official
+version helper sets all three version declarations to 1.0.838. This remains a
+local design candidate on production 1.0.832, not an integration of newer main.
+The full Windows Release build and all 11 CTest suites pass (core: 1005 passed,
+four opt-in cases skipped, 10,239,338 assertions; skin subset: eight cases,
+851 assertions). The actual SDL Modern → Lapis → Classic → Modern round trip
+passes at 640×480, 854×480, 1280×720 and Native 1920×1080. The 148 PNGs are in
+the ignored `build-windows-candidate/classic-desert-ui-probe-838/captures`
+tree. Static selected-construction-yard HUD/pause and original Mentat artwork
+checks pass at every size; these are component/software-renderer checks, not
+live gameplay certification. Modern and Lapis main-menu captures also match
+local 1.0.837 pixel-for-pixel at all four sizes outside the version-label region.
+
+The separate `build-windows-portable-838` installation passes its desktop
+runtime initialization/rendering check (exit 0). Its executable matches the
+final linked game target: SHA256
+`425160006CEE905CAE7CE58E61A1D953194DD17CE53FFAE4C3B65DBD55311531`.
+The font, full OFL notice and configuration template match source/development
+output. The prior 1.0.837 portable retains its recorded executable hash.
+No push, PR, tag, publication, device installation or real-player profile
+changes were performed. Prior portable candidates are preserved.
+
 ## 2026-10-16 — local 1.0.837: name the approved skin Lapis Enamel
 
 The user approved the blue/gold 1.0.836 appearance, asked to name its selector

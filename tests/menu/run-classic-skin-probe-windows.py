@@ -148,7 +148,8 @@ def main():
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build-windows-candidate")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--configuration", default="Release")
-    parser.add_argument("--skins", choices=("0", "1"), nargs="+", default=["0", "1"])
+    parser.add_argument("--skins", choices=("0", "1", "2"), nargs="+", default=["0", "1", "2"],
+                        help="Starting skins: Modern 0, Lapis Enamel 1, Classic Desert 2; each case visits all three")
     parser.add_argument("--sizes", nargs="+", default=["640x480", "854x480", "1280x720", "1920x1080"])
     parser.add_argument("--timeout", type=int, default=240)
     parser.add_argument("--hud", action="store_true", help="Also capture the real selected-building HUD and pause window")

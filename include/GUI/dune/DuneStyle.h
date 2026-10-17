@@ -298,7 +298,7 @@ private:
         Uint32 b = (color & BMASK) >> BSHIFT;
         Uint32 a = (color & AMASK) >> ASHIFT;
 
-        if(uiSkin == 1) {
+        if(MenuTheme::isDesertUISkin(uiSkin)) {
             return COLOR_RGBA((r*3)/4, (g*3)/4, (b*3)/4, a);
         }
 

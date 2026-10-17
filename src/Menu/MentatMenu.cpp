@@ -139,7 +139,7 @@ MentatMenu::MentatMenu(int newHouse)
     }
     // Narration is drawn over the original Mentat artwork, not a gold panel.
     textLabel.setTextColor(COLOR_WHITE,
-        MenuTheme::isClassicDesert() ? COLOR_BLACK : COLOR_TRANSPARENT);
+        MenuTheme::isDesertUISkin() ? COLOR_BLACK : COLOR_TRANSPARENT);
     textLabel.setAlignment((Alignment_Enum) (Alignment_Left | Alignment_Top));
     textLabel.setVisible(false);
 }

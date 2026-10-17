@@ -49,9 +49,9 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     const int width = std::min(440,getRendererWidth()-32);
     const int height = 92 + buttons*40 + (buttons-1)*6;
     auto background = GUIStyle::getInstance().createBackground(width, height);
-    // Retain the Modern menu's existing outline. Classic uses the selected
+    // Retain the Modern menu's existing outline. Both desert skins use the selected
     // style's authentic sand texture and raised gold frame.
-    if(!MenuTheme::isClassicDesert())
+    if(!MenuTheme::isDesertUISkin())
         drawRect(background.get(),0,0,width-1,height-1,COLOR_RGB(190,153,77));
     setBackground(std::move(background));
     setCurrentPosition((getRendererWidth()-width)/2,(getRendererHeight()-height)/2,width,height);

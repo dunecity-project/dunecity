@@ -24,6 +24,7 @@
 #include <misc/draw_util.h>
 #include <config.h>
 
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -108,6 +109,33 @@ struct ClassicUISkinProbe {
         return true;
     }
 
+    static std::vector<Uint32> surfacePixels(SDL_Surface* surface) {
+        require(surface != nullptr, "Theme isolation requires a rendered surface");
+        sdl2::surface_lock lock{surface};
+        std::vector<Uint32> result;
+        result.reserve(static_cast<size_t>(surface->w) * surface->h + 2);
+        result.push_back(static_cast<Uint32>(surface->w));
+        result.push_back(static_cast<Uint32>(surface->h));
+        for(int y = 0; y < surface->h; ++y)
+            for(int x = 0; x < surface->w; ++x)
+                result.push_back(rgbaPixel(surface, x, y));
+        return result;
+    }
+
+    static void checkThemeIsolation() {
+        // These exact pixel baselines survive video/style reinitialization.
+        // Classic Desert must not change existing Modern or Lapis previews.
+        static std::array<std::vector<Uint32>, 2> baselines;
+        for(int skin : {0, 1}) {
+            DuneStyle style(0, skin);
+            auto button = style.createButtonSurface(280, 34, "Play Online", false, false);
+            const auto actual = surfacePixels(button.get());
+            if(baselines[skin].empty()) baselines[skin] = actual;
+            else require(baselines[skin] == actual,
+                         "Switching through Classic Desert changed Modern or Lapis control pixels");
+        }
+    }
+
     static void checkDisplayTypography() {
         require(pFontManager && pFileManager,
                 "Display font checks require the actual runtime font and file managers");
@@ -115,7 +143,7 @@ struct ClassicUISkinProbe {
         const auto activeBackground = MenuTheme::background;
         auto fontFile = pFileManager->openFile("Righteous-Regular.ttf");
         require(fontFile && SDL_RWsize(fontFile.get()) > 1024,
-                "The selected Classic display typeface is absent from runtime assets");
+                "The selected Lapis display typeface is absent from runtime assets");
         TTFFont coverage(std::move(fontFile), 18, 80);
         require(coverage.canRenderText(u8"CAMPAIGN ÉDITEURS"),
                 "The display face lost basic or accented Latin glyph coverage");
@@ -137,13 +165,13 @@ struct ClassicUISkinProbe {
             auto displayBefore = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
             require(defaultBefore && displayBefore, "Rendering the actual display font failed");
             require(displayWidth > 0 && displayHeight > 0 && displayWidth != defaultWidth,
-                    "Classic display metrics silently fell back to the default typeface");
+                    "Lapis display metrics silently fell back to the default typeface");
             require(displayBefore->w == displayWidth && displayBefore->h == displayHeight,
-                    "Classic display measurement and rendering disagree");
+                    "Lapis display measurement and rendering disagree");
             require(defaultBefore->w == defaultWidth && defaultBefore->h == defaultHeight,
                     "Default font measurement and rendering disagree");
             require(!sameSurfacePixels(defaultBefore.get(), displayBefore.get()),
-                    "The actual Classic display glyphs still use the original font");
+                    "The actual Lapis display glyphs still use the original font");
             auto defaultAfter = pFontManager->createSurfaceWithText(sample, COLOR_WHITE, size);
             auto displayAfter = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
             require(pFontManager->getTextWidth(sample, size) == defaultWidth
@@ -166,36 +194,36 @@ struct ClassicUISkinProbe {
         }
         auto modernAfter = modern.createButtonSurface(280, 34, "Play Online", false, false);
         require(sameSurfacePixels(modernBefore.get(), modernAfter.get()),
-                "Loading the Classic display typeface changes an existing Modern control");
+                "Loading the Lapis display typeface changes an existing Modern control");
         require(MenuTheme::uiSkin == activeSkin && MenuTheme::background == activeBackground,
                 "Resolving display fonts mutated the active UI theme");
         SDL_Log("CLASSIC_UI_DISPLAY_FONT_PASS: runtime Righteous asset, strict UTF-8/Latin coverage, distinct actual metrics/glyphs;"
                 " independent default/display caches; complete Cyrillic fallback; unchanged Modern");
     }
 
-    static void checkButtonInterior(SDL_Surface* surface, bool classic, bool pressed) {
+    static void checkButtonInterior(SDL_Surface* surface, int skin, bool pressed) {
         require(surface != nullptr, "A diagnostic button surface is missing");
         sdl2::surface_lock lock{surface};
         std::set<Uint32> interior;
-        const auto modern = MenuTheme::themeForUISkin(0);
+        const auto theme = MenuTheme::themeForUISkin(skin);
         for(int y = 0; y < surface->h; ++y) {
             for(int x = 0; x < surface->w; ++x) {
                 const auto color = rgbaPixel(surface, x, y);
                 require(RGBA2SDL(color).a == 255, "Button decoration leaves a transparent pixel");
                 if(x >= 6 && y >= 6 && x < surface->w - 6 && y < surface->h - 6) {
                     interior.insert(color);
-                    if(!classic)
-                        require(color == (pressed ? modern.pressed : modern.control),
-                                "The Modern button interior is no longer its original flat color");
+                    if(skin != 1)
+                        require(color == (pressed ? theme.pressed : theme.control),
+                                "Modern or Classic Desert lost its exact flat button interior");
                 }
             }
         }
-        require(classic ? interior.size() >= 8 : interior.size() == 1,
-                "Classic button interior is flat or Modern acquired desert decoration");
+        require(skin == 1 ? interior.size() >= 8 : interior.size() == 1,
+                "Lapis button texture is missing, or Modern/Classic Desert acquired grain");
     }
 
     static void checkButtonLabel(SDL_Surface* blank, SDL_Surface* labeled,
-                                 Uint32 foreground, Uint32 shadow, bool classic) {
+                                 Uint32 foreground, Uint32 shadow, bool desert) {
         require(blank && labeled && blank->w == labeled->w && blank->h == labeled->h,
                 "Labeled button geometry differs from its empty-label surface");
         sdl2::surface_lock blankLock{blank};
@@ -211,27 +239,27 @@ struct ClassicUISkinProbe {
                 // The text-safe grain region itself follows label width. Only
                 // exact ink/shadow pixels identify glyph bounds; other changes
                 // against an empty button are background, not escaped text.
-                if(color == foreground || (classic && color == shadow)) {
+                if(color == foreground || (desert && color == shadow)) {
                     require(x >= 3 && y >= 3 && x < labeled->w - 3 && y < labeled->h - 3,
                             "A button label or its shadow overlaps the carved border");
                     if(color == foreground) ++foregroundPixels;
-                    if(classic && color == shadow) ++shadowPixels;
+                    if(desert && color == shadow) ++shadowPixels;
                 }
             }
         }
         require(changedPixels > 0 && foregroundPixels > 0,
                 "The real font produced no visible button foreground glyphs");
-        if(classic)
-            require(shadowPixels > 0, "Classic Lapis typography lost its pale-gold offset relief");
+        if(desert)
+            require(shadowPixels > 0, "Desert typography lost its pale-gold offset relief");
     }
 
     static void checkButtonTypeface(SDL_Surface* button, const std::string& text,
-                                    bool classic, bool pressed, Uint32 foreground) {
+                                    bool lapis, bool pressed, Uint32 foreground) {
         std::string label = text;
-        if(classic)
+        if(lapis)
             for(char& character : label)
                 if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
-        const bool display = classic && button->h >= 28;
+        const bool display = lapis && button->h >= 28;
         int size = button->h >= 48 ? 22 : button->h >= 38 ? 20
             : button->h >= 30 ? 18 : button->h >= 24 ? 16 : 14;
         if(display) size += 4;
@@ -272,19 +300,29 @@ struct ClassicUISkinProbe {
                 "Button checks require actual game fonts and original desert artwork");
         const int activeSkin = MenuTheme::uiSkin;
         const auto activeBackground = MenuTheme::background;
-        auto sheet = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0, 640, 240, 32, SCREEN_FORMAT)};
+        auto sheet = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0, 960, 240, 32, SCREEN_FORMAT)};
         require(sheet != nullptr, "Creating the diagnostic button state sheet failed");
         // Every sample below comes from production DuneStyle. The sheet simply
         // places the returned surfaces side by side; it is not a UI mockup.
-        for(int skin : {0, 1}) {
+        std::vector<Uint32> desertBackdrop;
+        const std::array<const char*, 3> names{{"Modern", "Lapis Enamel", "Classic Desert"}};
+        for(int skin : {0, 1, 2}) {
             DuneStyle standard(0, skin);
             auto backdrop = standard.createBackground(320, 240);
             require(backdrop != nullptr, "Creating the actual button backdrop failed");
+            if(skin == 1) {
+                desertBackdrop = surfacePixels(backdrop.get());
+                require(std::set<Uint32>(desertBackdrop.begin() + 2, desertBackdrop.end()).size() >= 8,
+                        "The original FAME backdrop silently fell back to a plain fill");
+            }
+            if(skin == 2)
+                require(desertBackdrop == surfacePixels(backdrop.get()),
+                        "Classic Desert no longer uses the same original FAME backdrop as Lapis");
             SDL_Rect destination{skin * 320, 0, 320, 240};
             require(SDL_BlitSurface(backdrop.get(), nullptr, sheet.get(), &destination) == 0,
                     "Placing the diagnostic backdrop failed");
             auto heading = standard.createLabelSurface(300, 24,
-                {skin ? "Lapis Enamel" : "Modern"}, 14,
+                {names[skin]}, 14,
                 static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
             require(heading != nullptr, "Rendering the button state sheet heading failed");
             destination = {skin * 320 + 10, 0, 300, 24};
@@ -305,9 +343,9 @@ struct ClassicUISkinProbe {
                         require(blank && labeled, "Rendering an actual button state failed");
                         require(blank->w == width && blank->h == height,
                                 "Button decoration changed its requested hitbox dimensions");
-                        checkButtonInterior(blank.get(), skin == 1, pressed);
+                        checkButtonInterior(blank.get(), skin, pressed);
                         checkButtonLabel(blank.get(), labeled.get(), typography.foreground,
-                                         typography.shadow, skin == 1);
+                                         typography.shadow, skin != 0);
                         checkButtonTypeface(labeled.get(), text, skin == 1, pressed,
                                             typography.foreground);
                         if(palette == 0) {
@@ -332,8 +370,9 @@ struct ClassicUISkinProbe {
                 "Button previews mutated the active menu/HUD theme");
         const auto path = capturePath("buttons-modern-classic-states").string();
         require(SavePNG(sheet.get(), path.c_str()) == 0, "Saving button-state pixel evidence failed");
-        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Classic interiors, Lapis glyphs and pale-gold relief;"
-                " normal/pressed/focused at 280x34 and 70x22; unchanged flat Modern interiors;"
+        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Lapis, flat ochre Classic Desert and flat Modern interiors;"
+                " Lapis uppercase/display face, original Classic/Modern casing/font, desert pale-gold relief;"
+                " normal/pressed/focused at 280x34 and 70x22; original shared FAME backdrop;"
                 " bounds, both text palettes and preview isolation");
     }
 
@@ -341,43 +380,51 @@ struct ClassicUISkinProbe {
         require(pFontManager != nullptr, "Label pixel checks require the actual loaded game font");
         const int activeSkin = MenuTheme::uiSkin;
         const Uint32 activeBackground = MenuTheme::background;
-        DuneStyle classic(0, 1);
         DuneStyle modern(0, 0);
         const auto alignment = static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter);
         const std::vector<std::string> text{"MMMM WWW HUD"};
-        auto overArtwork = classic.createLabelSurface(260, 40, text, 20, alignment,
-            COLOR_WHITE, COLOR_BLACK, COLOR_TRANSPARENT);
-        auto overGold = classic.createLabelSurface(260, 40, text, 20, alignment,
-            COLOR_WHITE, COLOR_TRANSPARENT, COLOR_TRANSPARENT);
         auto modernWhite = modern.createLabelSurface(260, 40, text, 20, alignment,
             COLOR_WHITE, COLOR_TRANSPARENT, COLOR_TRANSPARENT);
-        require(overArtwork && overGold && modernWhite, "Rendering label surfaces failed");
-        require(solidTextPixels(overArtwork.get(), COLOR_WHITE) > 0,
-                "Classic white labels over original artwork were incorrectly darkened");
-        require(solidTextPixels(overArtwork.get(), COLOR_BLACK) > 0,
-                "Classic artwork labels lost their explicitly requested black outline");
-        const auto goldText = MenuTheme::readableText(COLOR_WHITE, 1);
-        require(goldText != COLOR_WHITE && solidTextPixels(overGold.get(), goldText) > 0,
-                "Classic labels on gold do not use the contrast-corrected dark glyphs");
-        require(solidTextPixels(overGold.get(), COLOR_WHITE) == 0,
-                "The gold-surface label incorrectly keeps unreadable white glyphs");
-        const auto gold = MenuTheme::themeForUISkin(1);
-        require(MenuTheme::textContrast(goldText, gold.background) >= 4.5
-                && MenuTheme::textContrast(goldText, gold.control) >= 4.5
-                && MenuTheme::textContrast(goldText, gold.pressed) >= 4.5,
-                "Classic label glyphs fail the golden surfaces' contrast requirement");
+        auto modernOutline = modern.createLabelSurface(340, 44, text, 24, alignment,
+            COLOR_WHITE, COLOR_BLACK, COLOR_TRANSPARENT);
+        require(modernWhite && modernOutline, "Rendering original label surfaces failed");
         require(solidTextPixels(modernWhite.get(), COLOR_WHITE) > 0,
                 "Modern label rendering no longer preserves its existing white text");
+        for(int skin : {1, 2}) {
+            DuneStyle desert(0, skin);
+            auto overArtwork = desert.createLabelSurface(340, 44, text, 24, alignment,
+                COLOR_WHITE, COLOR_BLACK, COLOR_TRANSPARENT);
+            auto overGold = desert.createLabelSurface(260, 40, text, 20, alignment,
+                COLOR_WHITE, COLOR_TRANSPARENT, COLOR_TRANSPARENT);
+            require(overArtwork && overGold, "Rendering desert label surfaces failed");
+            require(solidTextPixels(overArtwork.get(), COLOR_WHITE) > 0,
+                    "Desert white labels over original artwork were incorrectly darkened");
+            require(solidTextPixels(overArtwork.get(), COLOR_BLACK) > 0,
+                    "Desert artwork labels lost their explicitly requested black outline");
+            require(sameSurfacePixels(overArtwork.get(), modernOutline.get()),
+                    "World/Mentat labels no longer preserve exact original font, color and outline pixels");
+            const auto goldText = MenuTheme::readableText(COLOR_WHITE, skin);
+            require(goldText != COLOR_WHITE && solidTextPixels(overGold.get(), goldText) > 0,
+                    "Desert labels on gold do not use the contrast-corrected dark glyphs");
+            require(solidTextPixels(overGold.get(), COLOR_WHITE) == 0,
+                    "A gold-surface label incorrectly keeps unreadable white glyphs");
+            const auto gold = MenuTheme::themeForUISkin(skin);
+            require(MenuTheme::textContrast(goldText, gold.background) >= 4.5
+                    && MenuTheme::textContrast(goldText, gold.control) >= 4.5
+                    && MenuTheme::textContrast(goldText, gold.pressed) >= 4.5,
+                    "Desert label glyphs fail the golden surfaces' contrast requirement");
+            for(const auto& sample : {std::pair<SDL_Surface*, std::string>{overArtwork.get(), "label-artwork-white"},
+                                       {overGold.get(), "label-gold-dark"}}) {
+                const auto path = capturePath(sample.second + "-skin-" + std::to_string(skin)).string();
+                require(SavePNG(sample.first, path.c_str()) == 0, "Saving label pixel evidence failed");
+            }
+        }
         require(MenuTheme::uiSkin == activeSkin && MenuTheme::background == activeBackground,
                 "Local DuneStyle label instances mutated the active UI theme");
-        for(const auto& sample : {std::pair<SDL_Surface*, std::string>{overArtwork.get(), "label-artwork-white"},
-                                   {overGold.get(), "label-gold-dark"},
-                                   {modernWhite.get(), "label-modern-white"}}) {
-            const auto path = capturePath(sample.second).string();
-            require(SavePNG(sample.first, path.c_str()) == 0, "Saving label pixel evidence failed");
-        }
-        SDL_Log("CLASSIC_UI_LABEL_PIXELS_PASS: Classic artwork white/black, contrast-corrected gold"
-                " labels, unchanged Modern white, and preview-theme isolation");
+        const auto path = capturePath("label-modern-white").string();
+        require(SavePNG(modernWhite.get(), path.c_str()) == 0, "Saving Modern label evidence failed");
+        SDL_Log("CLASSIC_UI_LABEL_PIXELS_PASS: both desert skins preserve original white/black artwork"
+                " font/pixels and contrast-corrected gold labels; unchanged Modern white and preview isolation");
     }
 
     static Point widgetPosition(Widget& widget, OptionsMenu& menu) {
@@ -420,16 +467,15 @@ struct ClassicUISkinProbe {
         }
         require(menu.pages[1].getSize().y >= menu.pages[1].getMinimumSize().y,
                 "Graphics rows overlap the Apply/Back controls at this size");
-        require(menu.uiSkinDropDownBox.getNumEntries() == 2
+        require(menu.uiSkinDropDownBox.getNumEntries() == 3
                 && menu.uiSkinDropDownBox.getEntryIntData(0) == 0
-                && menu.uiSkinDropDownBox.getEntryIntData(1) == 1,
-                "Modern and Lapis Enamel choices are missing or misidentified");
+                && menu.uiSkinDropDownBox.getEntryIntData(1) == 1
+                && menu.uiSkinDropDownBox.getEntryIntData(2) == 2,
+                "Modern, Lapis Enamel or Classic Desert choices are missing or misidentified");
         require(menu.uiSkinDropDownBox.getEntry(0) == _("Modern")
-                && menu.uiSkinDropDownBox.getEntry(1) == _("Lapis Enamel"),
-                "The Lapis Enamel label no longer maps to the existing saved UI skin ID 1");
-        for(unsigned int index : {0u, 1u})
-            require(menu.uiSkinDropDownBox.getEntry(index) != _("Classic Desert"),
-                    "An unfinished Classic Desert option is still visible");
+                && menu.uiSkinDropDownBox.getEntry(1) == _("Lapis Enamel")
+                && menu.uiSkinDropDownBox.getEntry(2) == _("Classic Desert"),
+                "UI skin labels no longer map exactly to stable Modern 0, Lapis 1 and Classic Desert 2");
         require(menu.uiSkinDropDownBox.getSelectedEntryIntData() == settings.video.uiSkin,
                 "Reopening Options lost the UI skin selection");
         require(menu.interfaceSizeDropDownBox.getSelectedEntryIntData() == settings.video.interfaceHeight,
@@ -589,7 +635,7 @@ struct ClassicUISkinProbe {
         const char* selected = std::getenv("MENU_PROBE_SKIN");
         const int initialSkin = validatedUISkin(selected ? std::atoi(selected) : 0);
         static int stage = 0;
-        const int expectedSkin = stage == 1 ? 1 - initialSkin : initialSkin;
+        const int expectedSkin = (initialSkin + stage) % 3;
         require(settings.video.uiSkin == expectedSkin && MenuTheme::uiSkin == expectedSkin,
                 "Video reinitialization did not activate the saved UI skin");
         require(MenuTheme::background == MenuTheme::themeForUISkin(expectedSkin).background,
@@ -598,7 +644,8 @@ struct ClassicUISkinProbe {
         require(validatedUISkin(saved.getIntValue("Video", "UI Skin", 0)) == expectedSkin,
                 "Apply did not persist the UI skin in the isolated profile");
 
-        if(stage < 2) {
+        checkThemeIsolation();
+        if(stage < 3) {
             checkDisplayTypography();
             checkArtworkLabelContrast();
             checkButtonDecoration();
@@ -613,16 +660,17 @@ struct ClassicUISkinProbe {
                 capture(mentat, "mentat-artwork-label");
             }
             if(std::getenv("MENU_PROBE_HUD")) captureHUD();
-            previewAndCancel(1 - expectedSkin);
+            const int nextSkin = (expectedSkin + 1) % 3;
+            previewAndCancel(nextSkin);
             const int originalHeight = settings.video.interfaceHeight;
             const int originalZoom = settings.video.preferredZoomLevel;
             const int originalBuildingSkin = settings.general.duneCityCampaignSkin;
             const int originalLayout = settings.video.startMenuMode;
-            options.uiSkinDropDownBox.setSelectedItem(1 - expectedSkin);
+            options.uiSkinDropDownBox.setSelectedItem(nextSkin);
             options.onChangeOption(true);
             options.onOptionsOK();
             require(options.isQuiting() && !options.hasChildWindow(), "UI Apply failed or opened an error");
-            require(settings.video.uiSkin == 1 - expectedSkin, "Apply did not accept the chosen UI skin");
+            require(settings.video.uiSkin == nextSkin, "Apply did not accept the chosen UI skin");
             require(settings.video.interfaceHeight == originalHeight
                     && settings.video.preferredZoomLevel == originalZoom
                     && settings.general.duneCityCampaignSkin == originalBuildingSkin
@@ -634,10 +682,11 @@ struct ClassicUISkinProbe {
         OptionsMenu reopened;
         checkGraphicsBounds(reopened);
         capture(reopened, "graphics-restored");
-        SDL_Log("CLASSIC_UI_SKIN_PROBE_PASS: actual Modern/Classic menu and Graphics rendering; bounds;"
+        require(expectedSkin == initialSkin, "The complete three-skin round trip did not restore the starting skin");
+        SDL_Log("CLASSIC_UI_SKIN_PROBE_PASS: actual Modern/Lapis Enamel/Classic Desert menu and Graphics rendering; bounds;"
                 " independent preview and Back; Apply/reinitialization/persistence/reopening;"
                 " unchanged interface size, zoom, building skin and navigation layout;"
-                " actual label pixels and original Mentat artwork%s",
+                " exact Modern/Lapis isolation through Classic; actual label pixels and original Mentat artwork%s",
                 std::getenv("MENU_PROBE_HUD")
                     ? "; static selected construction-yard build sidebar/HUD and pause rendering (no game loop)" : "");
         return MENU_QUIT_DEFAULT;

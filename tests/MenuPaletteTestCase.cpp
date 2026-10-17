@@ -46,18 +46,22 @@ void checkActiveTheme(const MenuTheme::Theme& expected) {
 }
 
 TEST_CASE("UI skin preference defaults to Modern and validates independently of colors", "[menu][ui-skin]") {
-    // Existing profiles keep Stefan's current appearance; only an explicit 1
-    // selects Lapis Enamel. Bad INI values must not leak into theme lookup.
+    // Existing profiles keep Stefan's current appearance; explicit IDs select
+    // Lapis Enamel (1) or Classic Desert (2). Bad INI values cannot select a skin.
     constexpr auto modern = MenuTheme::themeForUISkin(0);
     static_assert(modern.background == COLOR_RGB(20,24,32));
     static_assert(menuPalette(0, 0).foreground == COLOR_RGB(250,248,240));
     CHECK(validatedUISkin(0) == 0);
     CHECK(validatedUISkin(1) == 1);
-    for(int invalid : {-99, -1, 2, 100, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
+    CHECK(validatedUISkin(2) == 2);
+    for(int invalid : {-99, -1, 3, 100, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
         INFO(invalid);
         CHECK(validatedUISkin(invalid) == 0);
         CHECK(MenuTheme::themeForUISkin(invalid).background == modern.background);
         CHECK(menuPalette(0, invalid).foreground == menuPalette(0, 0).foreground);
+        CHECK_FALSE(MenuTheme::isDesertUISkin(invalid));
+        CHECK_FALSE(MenuTheme::isLapisEnamel(invalid));
+        CHECK_FALSE(MenuTheme::isClassicDesert(invalid));
     }
 
     INIFile config(true, "Independent UI skin preference");
@@ -66,7 +70,7 @@ TEST_CASE("UI skin preference defaults to Modern and validates independently of 
     config.setIntValue("Video", "Interface Height", INTERFACE_HEIGHT_NATIVE);
     config.setIntValue("Video", "Start Menu Mode", 1);
     config.setStringValue("General", "Player Name", "Retained");
-    for(int selected : {1, 0}) {
+    for(int selected : {1, 2, 0}) {
         config.setIntValue("Video", "UI Skin", selected);
         CHECK(validatedUISkin(config.getIntValue("Video", "UI Skin", 0)) == selected);
         CHECK(config.getIntValue("Video", "Menu Palette", 0) == 1);
@@ -100,6 +104,15 @@ TEST_CASE("Modern UI skin retains the exact existing palette", "[menu][ui-skin][
 TEST_CASE("Lapis Enamel uses bright ochre panels and readable dark labels", "[menu][ui-skin][accessibility]") {
     const auto classic = MenuTheme::themeForUISkin(1);
     const auto modern = MenuTheme::themeForUISkin(0);
+    CHECK(classic.background == COLOR_RGB(207,157,47));
+    CHECK(classic.control == COLOR_RGB(223,177,66));
+    CHECK(classic.pressed == COLOR_RGB(188,135,34));
+    CHECK(classic.border == COLOR_RGB(112,70,13));
+    CHECK(classic.accent == COLOR_RGB(103,45,6));
+    CHECK(classic.text == COLOR_RGB(60,32,7));
+    CHECK(classic.muted == COLOR_RGB(105,69,21));
+    CHECK(classic.edgeLight == COLOR_RGB(255,220,128));
+    CHECK(classic.edgeDark == COLOR_RGB(133,85,18));
     for(const Uint32 color : {classic.background, classic.control, classic.pressed}) {
         const auto c = RGBA2SDL(color);
         CHECK(c.r > c.g);
@@ -124,55 +137,60 @@ TEST_CASE("Lapis Enamel uses bright ochre panels and readable dark labels", "[me
 
 TEST_CASE("Switching UI skins restores every runtime color without preview mutation", "[menu][ui-skin]") {
     RestoreUISkin restore;
-    MenuTheme::setUISkin(0);
-    CHECK_FALSE(MenuTheme::isClassicDesert());
-    checkActiveTheme(MenuTheme::themeForUISkin(0));
+    for(int skin : {0, 1, 2, 1, 0}) {
+        MenuTheme::setUISkin(skin);
+        CHECK(MenuTheme::uiSkin == skin);
+        CHECK(MenuTheme::isDesertUISkin() == (skin != 0));
+        CHECK(MenuTheme::isLapisEnamel() == (skin == 1));
+        CHECK(MenuTheme::isClassicDesert() == (skin == 2));
+        checkActiveTheme(MenuTheme::themeForUISkin(skin));
+        CHECK(menuPalette(0).foreground == menuPalette(0, skin).foreground);
+        CHECK(menuPalette(1).foreground == menuPalette(1, skin).foreground);
+        CHECK(MenuTheme::readableText(COLOR_WHITE) == MenuTheme::readableText(COLOR_WHITE, skin));
+        CHECK(MenuTheme::readableText(COLOR_BLUE) == MenuTheme::readableText(COLOR_BLUE, skin));
 
-    // Resolving a preview must not change active menu or HUD colors.
-    const auto preview = MenuTheme::themeForUISkin(1);
-    CHECK(preview.background != MenuTheme::background);
-    CHECK(menuPalette(0, 1).foreground == preview.text);
-    CHECK(MenuTheme::uiSkin == 0);
-    checkActiveTheme(MenuTheme::themeForUISkin(0));
-
-    MenuTheme::setUISkin(1);
-    CHECK(MenuTheme::isClassicDesert());
-    CHECK(MenuTheme::uiSkin == 1);
-    checkActiveTheme(preview);
-    CHECK(menuPalette(0).foreground == menuPalette(0, 1).foreground);
-    CHECK(menuPalette(1).foreground == menuPalette(1, 1).foreground);
-    CHECK(MenuTheme::readableText(COLOR_WHITE) == MenuTheme::readableText(COLOR_WHITE, 1));
-
-    MenuTheme::setUISkin(0);
-    CHECK_FALSE(MenuTheme::isClassicDesert());
-    checkActiveTheme(MenuTheme::themeForUISkin(0));
-    CHECK(menuPalette(0).foreground == menuPalette(0, 0).foreground);
-    CHECK(MenuTheme::readableText(COLOR_BLUE) == MenuTheme::readableText(COLOR_BLUE, 0));
+        // Resolve every preview without changing the selected menu/HUD theme.
+        for(int previewSkin : {0, 1, 2}) {
+            const auto preview = MenuTheme::themeForUISkin(previewSkin);
+            CHECK(menuPalette(0, previewSkin).foreground == preview.text);
+            CHECK(MenuTheme::isDesertUISkin(previewSkin) == (previewSkin != 0));
+            CHECK(MenuTheme::isLapisEnamel(previewSkin) == (previewSkin == 1));
+            CHECK(MenuTheme::isClassicDesert(previewSkin) == (previewSkin == 2));
+            CHECK(MenuTheme::uiSkin == skin);
+            checkActiveTheme(MenuTheme::themeForUISkin(skin));
+        }
+    }
     MenuTheme::setUISkin(100);
     CHECK(MenuTheme::uiSkin == 0);
+    CHECK_FALSE(MenuTheme::isDesertUISkin());
+    CHECK_FALSE(MenuTheme::isLapisEnamel());
+    CHECK_FALSE(MenuTheme::isClassicDesert());
     checkActiveTheme(MenuTheme::themeForUISkin(0));
 }
 
 TEST_CASE("Classic colored labels remain readable on gold surfaces", "[menu][ui-skin][accessibility]") {
-    const auto classic = MenuTheme::themeForUISkin(1);
-    // Cover bright and dark house colors, plus common success/warning labels.
-    for(const Uint32 color : {COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_LIGHTGREEN,
-                             COLOR_YELLOW, COLOR_ORANGE, COLOR_WHITE, COLOR_LIGHTGREY,
-                             COLOR_DARKGREY, COLOR_RGB(120,32,170), COLOR_RGB(32,32,32)}) {
-        INFO(color);
-        const auto readable = MenuTheme::readableText(color, 1);
-        CHECK(contrastRatio(readable, classic.background) >= 4.5);
-        CHECK(contrastRatio(readable, classic.control) >= 4.5);
-        CHECK(contrastRatio(readable, classic.pressed) >= 4.5);
-        const auto c = RGBA2SDL(readable);
-        CHECK(c.a == 255);
+    for(int skin : {1, 2}) {
+        INFO(skin);
+        const auto classic = MenuTheme::themeForUISkin(skin);
+        // Cover bright and dark house colors, plus common success/warning labels.
+        for(const Uint32 color : {COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_LIGHTGREEN,
+                                 COLOR_YELLOW, COLOR_ORANGE, COLOR_WHITE, COLOR_LIGHTGREY,
+                                 COLOR_DARKGREY, COLOR_RGB(120,32,170), COLOR_RGB(32,32,32)}) {
+            INFO(color);
+            const auto readable = MenuTheme::readableText(color, skin);
+            CHECK(contrastRatio(readable, classic.background) >= 4.5);
+            CHECK(contrastRatio(readable, classic.control) >= 4.5);
+            CHECK(contrastRatio(readable, classic.pressed) >= 4.5);
+            const auto c = RGBA2SDL(readable);
+            CHECK(c.a == 255);
+        }
+        CHECK(MenuTheme::readableText(COLOR_RGB(0,0,80), skin) == COLOR_RGB(0,0,80));
+        const auto translucent = COLOR_RGBA(255,255,0,128);
+        const auto c = RGBA2SDL(MenuTheme::readableText(translucent, skin));
+        CHECK(c.a == 128);
+        CHECK(c.r == c.g);
+        CHECK(c.b == 0);
     }
-    CHECK(MenuTheme::readableText(COLOR_RGB(0,0,80), 1) == COLOR_RGB(0,0,80));
-    const auto translucent = COLOR_RGBA(255,255,0,128);
-    const auto c = RGBA2SDL(MenuTheme::readableText(translucent, 1));
-    CHECK(c.a == 128);
-    CHECK(c.r == c.g);
-    CHECK(c.b == 0);
 }
 
 TEST_CASE("Classic button typography pairs readable Lapis Enamel with pale-gold relief",
@@ -217,25 +235,84 @@ TEST_CASE("Classic button typography pairs readable Lapis Enamel with pale-gold 
             const auto fallback = buttonPalette(invalid, 1, down);
             CHECK(fallback.foreground == buttonPalette(0, 1, down).foreground);
             CHECK(fallback.shadow == buttonPalette(0, 1, down).shadow);
+        }
+        for(int invalid : {-1, 3, 100}) {
             CHECK(buttonPalette(0, invalid, down).foreground == menuPalette(0, 0).foreground);
             CHECK(buttonPalette(0, invalid, down).shadow == COLOR_TRANSPARENT);
         }
     }
     RestoreUISkin restore;
-    for(int skin : {0, 1, 0}) {
+    for(int skin : {0, 1, 2, 0}) {
         MenuTheme::setUISkin(skin);
         CHECK(buttonPalette(0).foreground == buttonPalette(0, skin).foreground);
         CHECK(buttonPalette(1).shadow == buttonPalette(1, skin).shadow);
-        const auto preview = buttonPalette(0, 1 - skin, true);
-        CHECK(preview.foreground == buttonPalette(0, 1 - skin, true).foreground);
-        CHECK(MenuTheme::uiSkin == skin);
-        checkActiveTheme(MenuTheme::themeForUISkin(skin));
+        for(int previewSkin : {0, 1, 2}) {
+            const auto preview = buttonPalette(0, previewSkin, true);
+            CHECK(preview.foreground == buttonPalette(0, previewSkin, true).foreground);
+            CHECK(MenuTheme::uiSkin == skin);
+            checkActiveTheme(MenuTheme::themeForUISkin(skin));
+        }
+    }
+}
+
+TEST_CASE("Classic Desert restores ochre controls with readable dark-orange lettering",
+          "[menu][ui-skin][buttons][accessibility]") {
+    constexpr auto classic = MenuTheme::themeForUISkin(2);
+    constexpr auto standard = buttonPalette(0, 2);
+    constexpr auto pressed = buttonPalette(0, 2, true);
+    static_assert(classic.background == COLOR_RGB(207,157,47));
+    static_assert(classic.control == COLOR_RGB(214,161,26));
+    static_assert(classic.pressed == COLOR_RGB(210,154,24));
+    static_assert(classic.border == COLOR_RGB(112,70,13));
+    static_assert(classic.accent == COLOR_RGB(100,37,0));
+    static_assert(classic.text == COLOR_RGB(100,37,0));
+    static_assert(classic.muted == COLOR_RGB(105,69,21));
+    static_assert(classic.edgeLight == COLOR_RGB(255,220,128));
+    static_assert(classic.edgeDark == COLOR_RGB(133,85,18));
+    static_assert(standard.foreground == COLOR_RGB(100,37,0));
+    static_assert(pressed.foreground == COLOR_RGB(84,29,0));
+    static_assert(standard.shadow == COLOR_RGB(255,225,144));
+    static_assert(pressed.shadow == standard.shadow);
+
+    // The classic treatment is a distinct palette, not a rename of Lapis.
+    CHECK(classic.control != MenuTheme::themeForUISkin(1).control);
+    CHECK(classic.pressed != MenuTheme::themeForUISkin(1).pressed);
+    CHECK(standard.foreground != buttonPalette(0, 1).foreground);
+    CHECK(pressed.foreground != buttonPalette(0, 1, true).foreground);
+    for(const Uint32 ink : {standard.foreground, pressed.foreground}) {
+        const auto c = RGBA2SDL(ink);
+        CHECK(c.r > c.g);
+        CHECK(c.g > c.b);
+        CHECK(c.a == 255);
+        for(const Uint32 background : {classic.background, classic.control, classic.pressed})
+            CHECK(contrastRatio(ink, background) >= 4.5);
+        CHECK(contrastRatio(ink, standard.shadow) >= 4.5);
+    }
+    for(int palette : {0, 1}) {
+        CHECK(menuPalette(palette, 2).foreground
+              == (palette == 1 ? COLOR_RGB(20,12,0) : classic.text));
+        CHECK(menuPalette(palette, 2).shadow == standard.shadow);
+        for(bool down : {false, true}) {
+            const auto colors = buttonPalette(palette, 2, down);
+            CHECK(colors.foreground == (palette == 1 ? COLOR_RGB(20,12,0)
+                                       : down ? pressed.foreground : standard.foreground));
+            CHECK(colors.shadow == standard.shadow);
+            CHECK(contrastRatio(colors.foreground, down ? classic.pressed : classic.control) >= 4.5);
+        }
+    }
+    for(int invalidPalette : {-1, 2, 100}) {
+        CHECK(menuPalette(invalidPalette, 2).foreground == classic.text);
+        for(bool down : {false, true}) {
+            CHECK(buttonPalette(invalidPalette, 2, down).foreground
+                  == buttonPalette(0, 2, down).foreground);
+            CHECK(buttonPalette(invalidPalette, 2, down).shadow == standard.shadow);
+        }
     }
 }
 
 TEST_CASE("UI skin never changes interface resolution or Dune2R world presentation", "[menu][ui-skin][display]") {
     RestoreUISkin restore;
-    for(int skin : {0, 1, 0}) {
+    for(int skin : {0, 1, 2, 0}) {
         MenuTheme::setUISkin(skin);
         const auto native = interfaceLogicalSize(INTERFACE_HEIGHT_NATIVE, 1920, 1080);
         CHECK(native.x == 1920);
@@ -252,7 +329,7 @@ TEST_CASE("UI skin never changes interface resolution or Dune2R world presentati
         CHECK(dune2rWorldDrawingScale == 1);
         {
             Dune2RWorldDrawingScope world(3);
-            MenuTheme::setUISkin(1 - skin);
+            MenuTheme::setUISkin((skin + 1) % 3);
             CHECK(dune2rWorldDrawingScale == 3);
             CHECK(dune2rWorldExtent(16) == 48);
         }

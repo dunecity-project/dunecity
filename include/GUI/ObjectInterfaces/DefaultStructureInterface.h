@@ -65,7 +65,7 @@ protected:
         SDL_Rect panel{position.x, position.y, getSize().x, getSize().y};
         // The classic sidebar already supplies the original sand texture.
         // Do not cover it with a solid rectangle behind building properties.
-        if(!MenuTheme::isClassicDesert())
+        if(!MenuTheme::isDesertUISkin())
             renderFillRect(renderer, &panel, MenuTheme::background);
         DefaultObjectInterface::draw(position);
     }

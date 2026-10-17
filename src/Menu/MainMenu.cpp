@@ -219,8 +219,8 @@ MainMenu::MainMenu()
     // The generic product logo must not imply DuneCity rules when Vanilla is active.
     logoPicture.setVisible(false);
     activeModLabel.setTextFontSize(24);
-    activeModLabel.setTextColor(MenuTheme::isClassicDesert()
-        ? buttonPalette(settings.video.menuPalette, 1).foreground : COLOR_RGB(115,220,210),
+    activeModLabel.setTextColor(MenuTheme::isDesertUISkin()
+        ? buttonPalette(settings.video.menuPalette, settings.video.uiSkin).foreground : COLOR_RGB(115,220,210),
         COLOR_TRANSPARENT, COLOR_TRANSPARENT);
     activeModLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_HCenter | Alignment_VCenter));
     windowWidget.addWidget(&activeModLabel, Point(0, 0), Point(1, 1));

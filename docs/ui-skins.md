@@ -2,17 +2,17 @@
 
 ## Using the setting
 
-Open **Settings → Graphics → UI Skin** in the main menu. Choose **Modern**
-or **Lapis Enamel**, then **Apply**. Applying rebuilds the interface through
+Open **Settings → Graphics → UI Skin** in the main menu. Choose **Modern**,
+**Lapis Enamel** or **Classic Desert**, then **Apply**. Applying rebuilds the interface through
 the existing menu reinitialization path; reopening Settings shows the saved
 choice. Back discards a preview without changing the active style.
 
 Modern remains the default for existing and new profiles. A missing or invalid
-`[Video] UI Skin` value also selects Modern (`0`); Lapis Enamel is `1`.
+`[Video] UI Skin` value also selects Modern (`0`); Lapis Enamel is `1` and
+Classic Desert is `2`.
 ID `1` was labelled Classic Desert in the earlier local candidates, so existing
 preferences keep the approved appearance without migration. **Classic Desert**
-is reserved for a separate, original-DuneLegacy-inspired design; there is no
-unfinished third option in the dropdown.
+is a separate, original-DuneLegacy-inspired design introduced in local 1.0.838.
 The small Dune City sample previews both the chosen skin and Colors setting
 without changing the live menus before Apply.
 
@@ -29,6 +29,15 @@ contrast-safe colors. The pause window and selected-building sidebar follow
 the choice. Black radar and portrait regions remain intentional;
 building images and world sprites are not recolored. This is an interface style,
 not a flattened mockup or a replacement pack of generated world assets.
+
+Classic Desert shares the authentic desert backdrop but uses plain ochre
+control faces, small raised/recessed bevels and the original Philosopher font.
+Labels retain their existing case rather than Lapis's uppercase display style.
+Standard lettering is dark burnt orange instead of the historical red, with a
+fine pale-gold one-pixel relief. The normal and pressed ink exceeds 4.5:1 against
+the nominal control/background colors; this does not describe every textured
+background or antialiased edge pixel. High Contrast uses dark ink instead.
+Classic has no Lapis brass grain, carved bands or decorative end fittings.
 
 ## Independent settings
 
@@ -47,7 +56,7 @@ Native-resolution fixes already present in 1.0.829 are retained unchanged.
 Skin selection is a local preference; it is not synchronized to other players.
 
 For the classic unscaled 1080p view, choose **1920×1080**, **Native (1:1)**
-Interface Size and **Zoom 1x** separately. Choosing Lapis Enamel by itself
+Interface Size and **Zoom 1x** separately. Choosing either desert skin by itself
 does not alter any of those display choices or Dune2R's mod-specific scale.
 
 ## Lapis display lettering
@@ -60,7 +69,8 @@ the default font's existing rendering path stays unchanged. Lapis buttons
 uppercase ASCII while leaving UTF-8 byte sequences intact. Buttons at least
 28 pixels high use the display face with measured fitting; labels at least 22 pixels use it for large
 headings. Small body text and black-outlined labels over world/Mentat artwork
-keep Philosopher. Modern keeps its existing font and colors.
+keep Philosopher. Classic Desert and Modern keep their existing/default font
+rendering and metrics; Modern's colors are unchanged.
 
 Display/default faces have separate caches. If Righteous lacks any character,
 the entire label uses Philosopher, with matching fallback metrics. Missing or
@@ -82,41 +92,41 @@ rules explicitly include both loose files, since neither is a LEGACY.PAK entry.
 ## Original DuneLegacy references for Classic Desert
 
 Lapis Enamel is the approved new blue/gold treatment, not a reproduction of
-the historical interface. The separate Classic Desert design is still at the
-reference stage. A genuine main-menu/options pair appears in this
+the historical interface. Classic Desert follows those original controls,
+using dark-orange rather than red lettering at the user's request. A genuine
+main-menu/options pair appears in this
 [2019 hands-on review of the DuneLegacy 0.96.3 AmigaOS port](https://oldschoolgameblog.com/2019/12/02/gaming-on-amigaos-4-1-dune-legacy-dune-legacy-team-zettmaster-and-big-h/).
 The archived official 0.98.6.3 release also includes `extra-menu-option.png`,
 showing the red-lettered settings screen with ochre controls, small bevels,
 the original desert texture and sculpted gold framing.
 
-The intended future work is appearance-only: mimic those original controls
-and lettering while retaining current tabs, campaign/co-op features, editors,
-navigation and settings. Do not replace current menus with historical feature
-sets, relabel Lapis as faithful Classic, or expose an unfinished third choice.
+This is appearance-only: current tabs, campaign/co-op features, editors,
+navigation and settings remain. It does not restore obsolete menu feature sets
+or relabel the approved Lapis design as faithful Classic.
 
 ## Implementation and verification
 
 `MenuPalette.h` defines validated themes and contrast-safe label colors.
 `DuneStyle` captures a theme per instance so a preview cannot alter the active
 theme. Startup loads the preference before graphics caches are constructed.
-Lapis backgrounds use original bitmap resources; the safe fallback is a gold
+Both desert backgrounds use original bitmap resources; the safe fallback is a gold
 fill when an original texture is unavailable. Applying in Settings reconstructs
 the cached UI rather than leaving old-theme widgets behind.
 
 The historically named `classic_desert_ui_tests` CTest covers theme defaults,
-invalid values, Modern palette preservation, Lapis contrast, preview isolation,
+invalid values, Modern/Lapis palette preservation, Classic contrast, preview isolation,
 preference storage and independence from interface/world scaling. Button palette checks
 also cover lapis-blue/pale-gold colors, the deeper pressed-state ink, High Contrast and
-unchanged Modern colors. The renderer fixture checks opaque textured Lapis
+unchanged Modern colors and the Classic dark-orange palette. The renderer fixture checks opaque textured Lapis
 button faces, real glyph/shadow bounds and normal/pressed/focused states at
-280×34 and 70×22 in both text palettes; Modern interiors remain flat. Font checks
+280×34 and 70×22 in both text palettes; Modern and Classic interiors remain flat. Font checks
 verify the bundled typeface actually loads, display/default measurement and
 rendering agree, their caches stay separate, and Cyrillic uses a whole-label
 fallback with the original pixels.
 
 For Windows visual diagnostics, `tests/menu/run-classic-skin-probe-windows.py`
 links a private entry point against a completed Visual Studio Release build.
-It uses an isolated profile and exercises actual menu objects, both skins,
+It uses an isolated profile and exercises actual menu objects, all three skins,
 preview/Back, Apply/reinitialization and persisted selection. PNG captures are
 rendered by SDL, not generated concept images. The optional HUD probe uses the
 bundled Harkonnen map in an offline Vanilla custom-game fixture. The probe is
@@ -184,3 +194,17 @@ probe asserts the names and IDs, rejects an unfinished Classic Desert entry,
 and verifies saved selection, preview/Back and Apply/reinitialization. The full
 Windows build, all 11 CTest suites, the four-resolution SDL matrix and separate
 portable runtime check pass. Classic Desert remains a planned distinct skin.
+
+Local 1.0.838 implements the separate **Classic Desert** skin as ID `2`, with
+original-style ochre controls and dark burnt-orange Philosopher lettering.
+IDs `0`/`1` and their appearances remain intact. The full Windows Release build
+and all 11 CTest suites pass; the skin subset has eight cases and 851 assertions.
+The actual SDL Modern → Lapis → Classic → Modern matrix passes at 640×480,
+854×480, 1280×720 and Native 1920×1080, including static HUD/pause rendering
+and the original outlined world/Mentat labels. The 148 native PNG captures are
+local diagnostic evidence, not generated concepts or live gameplay certification.
+Modern/Lapis main-menu pixels match the 1.0.837 candidate at every size outside
+the updated version label. The separate portable installation passes its
+desktop runtime check; executable, font, license and template copies match.
+This remains a local play-test candidate on the production 1.0.832 source base,
+not a newer-main integration or a published release.

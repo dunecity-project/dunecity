@@ -28,6 +28,21 @@
 
 void DuneStyle::drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
                                  const SDL_Rect& labelRect) const {
+    if(MenuTheme::isClassicDesert(uiSkin)) {
+        // Original DuneLegacy controls used a plain ochre face and a small
+        // raised/recessed bevel, not Lapis Enamel's carved brass decoration.
+        SDL_FillRect(surface, nullptr, pressed ? theme.pressed : theme.control);
+        drawRect(surface, 0, 0, surface->w-1, surface->h-1,
+                 activated ? theme.accent : theme.border);
+        if(surface->w < 4 || surface->h < 4) return;
+        const auto upper = pressed ? theme.edgeDark : theme.edgeLight;
+        const auto lower = pressed ? theme.edgeLight : theme.edgeDark;
+        drawHLine(surface, 1, 1, surface->w-2, upper);
+        drawVLine(surface, 1, 1, surface->h-2, upper);
+        drawHLine(surface, 1, surface->h-2, surface->w-2, lower);
+        drawVLine(surface, surface->w-2, 1, surface->h-2, lower);
+        return;
+    }
     // Reuse the original FAME sand pattern, dyed into a carved brass control.
     // Only this owned RGB surface changes, never the shared artwork seed.
     auto* artwork = classicTexture;
@@ -115,7 +130,7 @@ void DuneStyle::fillClassicBackground(SDL_Surface* surface) const {
 sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint32 color,
                                                  unsigned int fontsize, bool allowDisplay) {
     if(pFontManager) {
-        if(allowDisplay && uiSkin == 1 && fontsize >= 22)
+        if(allowDisplay && MenuTheme::isLapisEnamel(uiSkin) && fontsize >= 22)
             return pFontManager->createDisplaySurfaceWithText(text, color, fontsize);
         return pFontManager->createSurfaceWithText(text, color, fontsize);
     } else {
@@ -133,7 +148,7 @@ sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint
 
 unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
     if(pFontManager) {
-        if(uiSkin == 1 && FontNum >= 22)
+        if(MenuTheme::isLapisEnamel(uiSkin) && FontNum >= 22)
             return std::max(pFontManager->getTextHeight(FontNum),
                             pFontManager->getDisplayTextHeight("", FontNum));
         return pFontManager->getTextHeight(FontNum);
@@ -144,7 +159,7 @@ unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
 
 unsigned int DuneStyle::getTextWidth(const std::string& text, unsigned int FontNum)  {
     if(pFontManager) {
-        if(uiSkin == 1 && FontNum >= 22)
+        if(MenuTheme::isLapisEnamel(uiSkin) && FontNum >= 22)
             return pFontManager->getDisplayTextWidth(text, FontNum);
         return pFontManager->getTextWidth(text,FontNum);
     } else {
@@ -157,7 +172,7 @@ Point DuneStyle::getMinimumLabelSize(const std::string& text, int fontSize) {
     auto width = getTextWidth(text, fontSize);
     // Explicitly outlined labels over world/Mentat artwork retain Philosopher.
     // Reserve enough room for either face when callers request auto sizing.
-    if(uiSkin == 1 && fontSize >= 22 && pFontManager)
+    if(MenuTheme::isLapisEnamel(uiSkin) && fontSize >= 22 && pFontManager)
         width = std::max(width, static_cast<unsigned int>(pFontManager->getTextWidth(text, fontSize)));
     return Point(width + 12, getTextHeight(fontSize) + 4);
 }
@@ -177,11 +192,11 @@ sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, con
     // or original dark artwork, not a gold menu surface. Preserve those colors
     // so population, demand, watermark and Mentat text retain their contrast.
     else if(backgroundcolor == COLOR_TRANSPARENT
-            && !(uiSkin == 1 && textshadowcolor == COLOR_BLACK))
+            && !(MenuTheme::isDesertUISkin(uiSkin) && textshadowcolor == COLOR_BLACK))
         textcolor = MenuTheme::readableText(textcolor, uiSkin);
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
 
-    const bool allowDisplay = !(uiSkin == 1 && backgroundcolor == COLOR_TRANSPARENT
+    const bool allowDisplay = !(MenuTheme::isDesertUISkin(uiSkin) && backgroundcolor == COLOR_TRANSPARENT
                                 && textshadowcolor == COLOR_BLACK);
     int fontheight = !allowDisplay && pFontManager ? pFontManager->getTextHeight(fontSize)
                                                   : getTextHeight(fontSize);
@@ -366,7 +381,7 @@ sdl2::surface_ptr DuneStyle::createDropDownBoxButton(Uint32 size, bool pressed, 
     if(pressed == false) {
         // normal mode
         SDL_FillRect(surface.get(), nullptr, theme.control);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && uiSkin == 1 ? theme.accent : theme.border);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && MenuTheme::isDesertUISkin(uiSkin) ? theme.accent : theme.border);
         drawHLine(surface.get(), 1, 1, surface->w-2, theme.edgeLight);
         drawVLine(surface.get(), 1, 1, surface->h-2, theme.edgeLight);
         drawHLine(surface.get(), 1, surface->h-2, surface->w-2, theme.edgeDark);
@@ -407,12 +422,12 @@ sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, co
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
     std::string labelText = text;
-    if(uiSkin == 1) {
+    if(MenuTheme::isLapisEnamel(uiSkin)) {
         // ASCII casing only: never feed individual UTF-8 bytes to std::toupper.
         for(char& character : labelText)
             if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
     }
-    const bool display = uiSkin == 1 && height >= 28 && pFontManager;
+    const bool display = MenuTheme::isLapisEnamel(uiSkin) && height >= 28 && pFontManager;
     int fontsize = height >= 48 ? 22 : height >= 38 ? 20 : height >= 30 ? 18 : height >= 24 ? 16 : 14;
     if(display) fontsize += 4;
     const auto textWidth = [&](int size) {
@@ -425,7 +440,7 @@ sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, co
     };
     while(fontsize>8 && (width < static_cast<Uint32>(textWidth(fontsize)+12)
                          || height < static_cast<Uint32>(textHeight(fontsize)+4))) --fontsize;
-    const auto lettering = uiSkin == 1
+    const auto lettering = MenuTheme::isDesertUISkin(uiSkin)
         ? (pressed ? pressedButtonTextPalette : buttonTextPalette) : textPalette;
     const auto textSurface = [&](Uint32 color) {
         return display ? pFontManager->createDisplaySurfaceWithText(labelText, color, fontsize)
@@ -434,7 +449,7 @@ sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, co
     auto label = textSurface(lettering.foreground);
     if(!label) return nullptr;
     SDL_Rect rect=calcDrawingRect(label.get(),width/2+(pressed ? 1 : 0),height/2+(pressed ? 1 : 0),HAlign::Center,VAlign::Center);
-    if(uiSkin == 1) {
+    if(MenuTheme::isDesertUISkin(uiSkin)) {
         drawControlFrame(surface.get(), pressed, activated, rect);
         auto shadow = textSurface(lettering.shadow);
         if(!shadow) return nullptr;
@@ -554,7 +569,7 @@ sdl2::surface_ptr DuneStyle::createScrollBarArrowButton(bool down, bool pressed,
     if(pressed == false) {
         // normal mode
         SDL_FillRect(surface.get(), nullptr, theme.control);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && uiSkin == 1 ? theme.accent : theme.border);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && MenuTheme::isDesertUISkin(uiSkin) ? theme.accent : theme.border);
         drawHLine(surface.get(), 1, 1, surface->w-2, theme.edgeLight);
         drawVLine(surface.get(), 1, 1, surface->h-2, theme.edgeLight);
         drawHLine(surface.get(), 1, surface->h-2, surface->w-2, theme.edgeDark);
@@ -608,7 +623,7 @@ sdl2::surface_ptr DuneStyle::createListBoxEntry(Uint32 width, const std::string&
 
     if(selected == true) {
         SDL_FillRect(surface.get(), nullptr, theme.control);
-        if(uiSkin == 1) drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.accent);
+        if(MenuTheme::isDesertUISkin(uiSkin)) drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.accent);
     } else {
         SDL_FillRect(surface.get(), nullptr, COLOR_TRANSPARENT);
     }
@@ -679,10 +694,10 @@ sdl2::surface_ptr DuneStyle::createToolTip(const std::string& text) {
 sdl2::surface_ptr DuneStyle::createBackground(Uint32 width, Uint32 height) {
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
-    if(uiSkin == 1) fillClassicBackground(surface.get());
+    if(MenuTheme::isDesertUISkin(uiSkin)) fillClassicBackground(surface.get());
     else SDL_FillRect(surface.get(),nullptr,theme.background);
     drawRect(surface.get(),0,0,width-1,height-1,theme.border);
-    if(uiSkin == 1 && width >= 6 && height >= 6) {
+    if(MenuTheme::isDesertUISkin(uiSkin) && width >= 6 && height >= 6) {
         drawHLine(surface.get(), 1, 1, width-2, theme.edgeLight);
         drawVLine(surface.get(), 1, 1, height-2, theme.edgeLight);
         drawHLine(surface.get(), 1, height-2, width-2, theme.edgeDark);
