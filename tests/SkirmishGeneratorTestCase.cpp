@@ -188,6 +188,72 @@ TEST_CASE("Random skirmish: same seed and parameters give identical INI text", "
     }
 }
 
+namespace {
+
+/// FNV-1a (64-bit) over bytes: explicit and independent of byte order, so a pinned value holds
+/// on every compiler and platform.
+uint64_t fnv1a(const std::string& bytes) {
+    uint64_t hash = 14695981039346656037ull;
+    for(unsigned char c : bytes) { hash ^= c; hash *= 1099511628211ull; }
+    return hash;
+}
+
+uint64_t terrainDigest(const MapData& map) {
+    std::string tiles;
+    for(int y = 0; y < map.getSizeY(); ++y) for(int x = 0; x < map.getSizeX(); ++x) tiles += static_cast<char>(map(x, y));
+    return fnv1a(tiles);
+}
+
+} // namespace
+
+TEST_CASE("Random skirmish: pinned seeds give the same map on every platform", "[skirmish][generator][determinism]") {
+    // Digests of the 1.0.845 macOS generator, where clang evaluates function arguments left to
+    // right. MSVC evaluates them right to left, so Coord(random.rand(..), random.rand(..)) built
+    // a different map from the same seed on Windows; macOS, the browser and Windows must agree.
+    struct Pin { int size; uint32_t seed; Mode mode; uint64_t terrain, ini; };
+    const Pin pins[] = {
+        {64, 1u, Mode::Vanilla, 0x83c3c700c756d591ull, 0xbf83cb4fc15448faull},
+        {64, 1u, Mode::DuneCity, 0x4331038d9e4e6229ull, 0xae8359fdcf7f5154ull},
+        {64, 7101u, Mode::Vanilla, 0x1f4a047aa11fec05ull, 0x2a56672130a7eaa2ull},
+        {64, 7101u, Mode::DuneCity, 0xaf295ea1269c0d65ull, 0x8811eb11bf1fbe5dull},
+        {64, 7202u, Mode::Vanilla, 0x94f4a45973d513e6ull, 0xe6eed494d2659e93ull},
+        {64, 7202u, Mode::DuneCity, 0xd4013a0680085eeaull, 0x510d6dedde40027bull},
+        {64, 7303u, Mode::Vanilla, 0x57d49737c3a65b55ull, 0xb2c50f0efb1d7deeull},
+        {64, 7303u, Mode::DuneCity, 0xa8cb2f47655bd3c1ull, 0xf6fdb0c72eb9865full},
+        {64, 4000000000u, Mode::Vanilla, 0x61c7cd10b13acaebull, 0xd981122ff4235673ull},
+        {64, 4000000000u, Mode::DuneCity, 0x967b3520c6a00460ull, 0xbd265224d27672ddull},
+        {128, 1u, Mode::Vanilla, 0x2b644ba5152c9eadull, 0x5b4437232501fc25ull},
+        {128, 1u, Mode::DuneCity, 0x1718f1fcb46416c5ull, 0xbf5c56369d3d72d4ull},
+        {128, 7101u, Mode::Vanilla, 0x16be56325988f5fdull, 0x428d662a502c333full},
+        {128, 7101u, Mode::DuneCity, 0x6cab022adbcfb22dull, 0x9c8f49445c1b001cull},
+        {128, 7202u, Mode::Vanilla, 0x42c2676e49455511ull, 0x81d3eb09c0b0c585ull},
+        {128, 7202u, Mode::DuneCity, 0xa221b75fd4d35734ull, 0x824dd4f62dbde9a2ull},
+        {128, 7303u, Mode::Vanilla, 0x5ab457a674fac1a9ull, 0x6f11398377eedb1dull},
+        {128, 7303u, Mode::DuneCity, 0x09c4f7bccae6a8f9ull, 0x5cececd4826bdf92ull},
+        {128, 4000000000u, Mode::Vanilla, 0x08cee2efe7c6286full, 0x68e7469d8e83bf34ull},
+        {128, 4000000000u, Mode::DuneCity, 0x448eb306f7cae475ull, 0xf7c64dcda9ce6d1aull},
+        {192, 1u, Mode::Vanilla, 0xa168a478eef24995ull, 0x35cb2f70e07a1550ull},
+        {192, 1u, Mode::DuneCity, 0x26d45d8bd26a5cc1ull, 0x491f09310c92fd06ull},
+        {192, 7101u, Mode::Vanilla, 0x01ffa14de9f47df9ull, 0x7a01e3699ff7c0efull},
+        {192, 7101u, Mode::DuneCity, 0xefcc1416919ddff1ull, 0x540067a35eea6fa7ull},
+        {192, 7202u, Mode::Vanilla, 0x81eef02bb000223full, 0x680dc741e425025bull},
+        {192, 7202u, Mode::DuneCity, 0xe41e988186f9dfc5ull, 0xfbc6ff417bda8142ull},
+        {192, 7303u, Mode::Vanilla, 0x6bc5ee8f43404f6dull, 0xe98bd11de45c4f6aull},
+        {192, 7303u, Mode::DuneCity, 0x7a6ab4ab4ab1c89dull, 0xd7af6c741d6d14d0ull},
+        {192, 4000000000u, Mode::Vanilla, 0x0f69ae590efaf89cull, 0x242d2afda6c4af5full},
+        {192, 4000000000u, Mode::DuneCity, 0x6b12df167779cabdull, 0xcc79c837501cc0e2ull},
+    };
+    for(const Pin& pin : pins) {
+        Params p = params(pin.size, 1, 2, pin.mode, 8, pin.seed);
+        p.symmetric = pin.seed % 2 == 1;            // odd seeds mirror the starts
+        p.allySide.city = p.enemySide.city = 2;
+        const Result r = generate(p, pin.mode == Mode::DuneCity ? city() : vanilla());
+        CAPTURE(pin.size, pin.seed, pin.mode == Mode::DuneCity);
+        CHECK(terrainDigest(r.map) == pin.terrain);
+        CHECK(fnv1a(r.ini) == pin.ini);
+    }
+}
+
 TEST_CASE("Random skirmish: houses, teams and the engine cap", "[skirmish][generator]") {
     Params p = params(128, 2, 3, Mode::Vanilla, 8, 7);
     p.enemiesAllied = true;
@@ -484,7 +550,7 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     p.credits = 7500; p.enemiesAllied = false; p.house = HOUSE_ORDOS;
     p.allySide = Side{"qBotHard", BaseSize::Large, 4, 3};
     p.enemySide = Side{"AIPlayerEasy", BaseSize::Outpost, kArmyRandom, kCityRandom};
-    INIFile config(false, "");
+    INIFile config(false, std::string());
     p.save(config);
     Params loaded;
     loaded.load(config);
@@ -499,7 +565,7 @@ TEST_CASE("Random skirmish: last-used parameters survive the configuration file"
     REQUIRE(loaded.enemySide.army == kArmyRandom); REQUIRE(loaded.enemySide.city == kCityRandom);
 
     // Corrupt values clamp instead of escaping into the generator.
-    INIFile bad(false, "");
+    INIFile bad(false, std::string());
     bad.setIntValue("Random Skirmish", "Map Size", 100);
     bad.setIntValue("Random Skirmish", "Tech Level", 42);
     bad.setIntValue("Random Skirmish", "Rock", 17);
@@ -1132,7 +1198,7 @@ TEST_CASE("Random skirmish: start catalogue is what every house can field", "[sk
 }
 
 TEST_CASE("Random skirmish: the multiplayer screen keeps its own choices", "[skirmish][generator][multiplayer]") {
-    INIFile config(false, "");
+    INIFile config(false, std::string());
     Params single = params(128, 1, 2, Mode::DuneCity, 7, 99);
     single.mod = "dunecity"; single.symmetric = false;
     single.save(config);
