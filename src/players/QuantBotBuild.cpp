@@ -5221,6 +5221,29 @@ void QuantBot::build(int militaryValue) {
 					itemID = Structure_RocketTurret; structureRule = "rocket_defense";
 					logDebug("COUNTER-ORNITHOPTER: Building rocket turret to counter enemy ornithopters");
 				}
+				// 8d. Threat turrets on the base perimeter (U, on by default, docs/formations.md
+				//     "Round 5"): while the remembered enemy army outnumbers ours, one rocket
+				//     turret per pass on the enemy-facing perimeter, one per 1,000 credits of the
+				//     enemy's lead and at most eight there, never below the economy reserve plus a
+				//     unit reserve; power first when turrets need it. Nothing once we are not outnumbered.
+				if (itemID == NONE_ID && !skipRemainingStructureLogic
+					&& forceVariant(kForceThreatTurrets)
+					&& pBuilder->getCurrentUpgradeLevel() >= 2
+					&& campaignAvailableToBuild(pBuilder,Structure_RocketTurret)
+					&& !orderedThisTick.count(Structure_RocketTurret)
+					&& money >= economyReserve + data[Structure_RocketTurret][houseID].price
+						+ ForceConcentrationPolicy::kPerimeterUnitReserve
+					&& perimeterTurrets() < perimeterTurretGoal()) {
+					if (!hasPowerBufferForTurret()) {
+						if (!powerGenerationPending() && campaignAvailableToBuild(pBuilder,Structure_WindTrap)
+							&& findPlaceLocation(Structure_WindTrap).isValid()) {
+							itemID = Structure_WindTrap; structureRule = "perimeter_battery_power";
+						}
+					} else if (findPerimeterTurretLocation().isValid()) {
+						itemID = Structure_RocketTurret; structureRule = "perimeter_battery";
+						++forceStats.perimeterTurretOrders;
+					}
+				}
 				// 9. Heavy Factory
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
 					&& cityIncomeReady
@@ -5636,7 +5659,7 @@ void QuantBot::build(int militaryValue) {
                 itemID=NONE_ID;
                 skipRemainingStructureLogic=true;
             }
-            if (itemID==Structure_RocketTurret && !routineRocketsAllowed) {
+            if (itemID==Structure_RocketTurret && !routineRocketsAllowed && structureRule!=std::string("perimeter_battery")) {
                 itemID=NONE_ID;
                 crimeServiceSite=Coord::Invalid();
                 structureRule="core_infrastructure_before_more_rockets";
@@ -5654,6 +5677,9 @@ void QuantBot::build(int militaryValue) {
                     // scorer; no alternate full-map search bypasses its overlap costs.
                     Uint32 service = NONE_ID;
                     selectCityServiceInvestment(pBuilder,money,true,service,selectedPlaceLocation,false,itemID);
+                } else if (itemID == Structure_RocketTurret
+                    && structureRule == std::string("perimeter_battery")) {
+                    selectedPlaceLocation = findPerimeterTurretLocation();
                 } else if (itemID == Structure_RocketTurret
                     && structureRule == std::string("front_battery")) {
                     // The battery rule chose this order, so it also chooses the

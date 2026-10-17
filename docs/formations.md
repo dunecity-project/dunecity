@@ -390,6 +390,106 @@ a test-only flag); the next step is a 72-108-game `/weak` run of BWFCQD v BWFCQ.
 **Decision (applied): the QuantBot default is BWFCQ** (`Bundle=true`, `LaunchFromBundle=true` on top of
 FCQ). Protocol 79 (bundling, the gate and the launcher fix change AI orders), save 9863.
 
+### Round 5: defence while outnumbered - hold the perimeter, perimeter turrets, sized defence (protocol 80, save 9863)
+
+Same harness, maps and seeds (Hard unless stated; `/weak` = that side starts with half its army; "108" =
+`--all-houses`). Data: `docs/formation-results/force/round5/` (`games.csv` 1,620 games, `waves-by-shape.csv`,
+`report-*.md` per tag, `candidates.md`). Tags: `c1` confirmation of D, `p5`/`p6` 36-game pilots, `c2` the
+108-game confirmation, `c3h` Hard head-to-head, `c3b` Brutal. The harness now records each side's army
+value at minutes 10/20/30 (`army10..30_a/b`, shown as "army k") and the new counters; its run directories
+are flat (a label with a slash nested one game's directory inside another's, whose clean-up deleted it
+mid-game - 33 `c1` games were lost to that and replayed). Unflagged games are bit-identical to the
+pre-round code (40 of 40 `c1` games replayed in `c2` gave the same result).
+
+**Why the weak side loses (traced).** Against the old rules (192/7101, 128/7101): the weak army is not
+lost to its own waves but in front of its base - the forward bundle (25% towards the enemy) and the
+harvest-field defence meet the enemy's waves out of turret cover. The district (worker) response sends
+the nearest 1.25x of the enemy *visible so far* each hit (2, 1, 2, 3, 1, 4, 4, 1, then 20, 18, 28
+units), so a wave arriving in pieces is answered in pieces. Against BWFCQ the strong side's 60% wave
+leaves at 1.7 minutes with 73 units and takes the half-army base in about 8 minutes on every map - no
+rule changed that (0.04 for every variant).
+
+New test-only flags (rules in `ForceConcentrationPolicy.h`, code in `QuantBotForce.cpp`, the scrambles,
+`attack()`, `launchGroundHunt()`, build rule 8d, `findPerimeterTurretLocation()`):
+
+| Flag | Idea | Rule as built |
+|---|---|---|
+| (all) | enemy estimate | Every enemy mobile ground fighter seen is remembered at its health-weighted value; the dead are dropped, the unseen after 5 minutes. "Outnumbered" = that memory is worth 125% of our ground army. |
+| `E` | D on the memory | D (full readiness while outnumbered) measured on the memory instead of what is visible now. |
+| `G` | fight at home (b) | While outnumbered no wave leaves (attack check deferred, re-checked in 15 s) and the reserve holds the protected rally under turret cover; the next check after a won defence launches as usual. |
+| `V` | hold the perimeter (Stefan) | As G, but the reserve holds the enemy-facing base perimeter: from the base centre along the observed front direction, the outermost own building within 24 tiles, plus 3 tiles (a standable tile within 6). Not in the city simulation (there that edge is where the next lots go). |
+| `U` | perimeter turrets (Stefan) | While outnumbered, one rocket turret per build pass on the perimeter band (4 tiles inside to 2 beyond the outermost building, 12 tiles either side of the front line; the battery's spacing and corridor rules), one per 1,000 credits of the enemy's lead, at most 8 there, only above the economy reserve + 250 + 500 for units; a wind trap first when turrets need power. Nothing once not outnumbered. |
+| `A` + `/k<pct>` | strength-aware waves (a) | A ready wave leaves only when its value is k% of the memory (k 80/100/120); else it keeps bundling. |
+| `R` | home reserve (c) | While the memory exceeds our army, the share it exceeds it by (at most half) stays home, nearest the protected rally first. |
+| `X` | sized defence (d) | Base and worker defence count the enemy within 12 tiles, send 1.5x it from up to 40 tiles with the bundle first; defenders of a building from beyond 14 tiles muster and engage together; a worker raid that everything in reach cannot match gets nobody. |
+| `Y` | fall back (e) | The recovery's local withdrawal (a wave locally outmatched 1.3x for its persistence time comes back to the protected rally and relaunches), which is off with withdrawals, alone. |
+
+Results (`/weak` side v the old rules unless stated; paired = per-game score difference against BWFCQ in
+the same setups, 95% bootstrap; structures lost, home trade = enemy value killed / own value lost within 12
+tiles of own buildings, army = own / enemy mean army value in thousands at minutes 10/20/30):
+
+| Candidate | Games | Score | 95% CI | Paired v BWFCQ | Structures lost | Home kill / loss | Army k own | Army k enemy |
+|---|---|---|---|---|---|---|---|---|
+| BWFCQ (baseline) | 108 | 0.306 | 0.22-0.39 | - | 61.0 | 0.52 | 14/26/29 | 22/38/42 |
+| BWFCQ+D | 108 | 0.310 | 0.23-0.40 | +0.005 (-0.07..+0.08) | 55.8 | 0.48 | 14/28/32 | 22/37/42 |
+| BWFCQ+DE | 36 | 0.264 | 0.14-0.40 | +0.014 (-0.10..+0.13) | 61.4 | 0.46 | 14/28/29 | 22/36/45 |
+| BWFCQ+EG | 36 | 0.222 | 0.08-0.36 | -0.028 | 71.1 | 0.55 | 13/27/25 | 23/39/48 |
+| BWFCQ+A (k100) | 36 | 0.042 | 0.00-0.11 | -0.208 (-0.35..-0.08) | 75.1 | 0.53 | 14/29/26 | 22/39/51 |
+| BWFCQ+A k80 | 36 | 0.222 | 0.08-0.36 | -0.028 | 63.2 | 0.54 | 14/28/27 | 22/38/49 |
+| BWFCQ+A k120 | 36 | 0.083 | 0.00-0.19 | -0.167 | 74.9 | 0.50 | 14/30/25 | 22/39/52 |
+| BWFCQ+R | 36 | 0.194 | 0.08-0.33 | -0.056 | 73.4 | 0.48 | 14/26/24 | 22/38/48 |
+| BWFCQ+Y | 36 | 0.278 | 0.14-0.42 | +0.028 | 68.9 | 0.56 | 14/25/26 | 22/38/47 |
+| BWFCQ+X | 36 | 0.333 | 0.19-0.47 | +0.083 (-0.06..+0.22) | 53.6 | 0.58 | 14/25/32 | 22/36/38 |
+| BWFCQ+EGX | 36 | 0.250 | 0.11-0.39 | 0.000 | 60.7 | 0.69 | 13/29/34 | 22/38/46 |
+| BWFCQ+U | 36 | 0.278 | 0.14-0.42 | +0.028 | 69.2 | 0.58 | 14/24/26 | 22/38/45 |
+| BWFCQ+V | 36 | 0.361 | 0.22-0.53 | +0.111 (-0.03..+0.25) | 55.8 | 0.43 | 14/28/30 | 23/38/41 |
+| BWFCQ+UV | 36 | 0.361 | 0.22-0.53 | +0.111 | 52.7 | 0.42 | 14/28/31 | 23/38/43 |
+| BWFCQ+UX | 36 | 0.361 | 0.19-0.53 | +0.111 | 47.9 | 0.56 | 14/25/34 | 22/36/38 |
+| BWFCQ+UVX (pilot) | 36 | 0.417 | 0.25-0.58 | +0.167 (+0.03..+0.31) | 50.8 | 0.43 | 14/29/36 | 23/37/38 |
+| **BWFCQ+UVX** | **108** | **0.426** | **0.33-0.52** | **+0.120 (+0.03..+0.21)**, 21 better / 8 worse | 53.0 | 0.45 | 14/29/35 | 23/37/38 |
+| BWFCQ /weak v BWFCQ | 108 | 0.037 | 0.01-0.07 | - | 67.3 | 0.49 | 1/2/2 | 17/20/22 |
+| BWFCQ+D /weak v BWFCQ | 108 | 0.037 | 0.01-0.07 | - | 67.2 | 0.49 | 1/2/3 | 17/20/21 |
+| BWFCQ+UVX /weak v BWFCQ | 108 | 0.046 | 0.01-0.09 | +0.009 (-0.03..+0.06) | 67.3 | 0.48 | 1/2/4 | 18/21/22 |
+
+(36-game pilots are the one-house-pair-per-seed subset; BWFCQ's score on that subset is 0.250.)
+Turrets per game (`/weak` v old rules): UVX ordered 0.9 perimeter turrets (225 credits), built 11.8 rocket
+turrets in all and lost 8.5 (BWFCQ: 11.2 built, 10.2 lost); U alone 1.9 perimeter orders. The weak house is
+rarely above the reserve, so perimeter turrets come late (first at minute ~21 in the traced game).
+
+**What the games show.** Waiting is not defence: A, R and G hold the army back, launch a few waves late and
+lose on value as the enemy's economy runs away (the L lesson of round 3). Holding the *perimeter* instead
+of the inner shelter (V) keeps the army between the enemy and the base and lets it fight under its own
+turrets; sized defence (X) stops feeding the harvest-field defence piecemeal. Together (UVX) the weak side
+loses 53 structures a game instead of 61, its army reaches 35k by minute 30 instead of 29k (the enemy's
+falls from 42k to 38k), and it scores 0.426 against 0.306 - the paired difference is above zero (+0.03 to
++0.21). The interval of the score itself still reaches below 0.5. Against a BWFCQ attacker nothing helps:
+its 60% wave at minute 1.7 takes a half-army base in 8 minutes.
+
+**Attack check (UVX = the new default; `none` = the rules before protocol 78):**
+
+| Pairing | Games | Score | 95% CI | Elim. W-L / time-outs | BWFCQ for comparison |
+|---|---|---|---|---|---|
+| UVX v none, Hard | 108 | 0.926 | 0.87-0.97 | 85-2 / 21 | 0.870 (round 4; BWFCQD 0.870 here) |
+| UVX v none, Brutal | 36 | 0.944 | 0.86-1.00 | 28-1 / 7 | 0.931 |
+| UVX v BWFCQ, Hard | 108 | 0.528 | 0.44-0.62 | 38-35 / 35 | - |
+
+`quantbot_all_against_atreides` with UVX: 6/6, 29.3 33.0 33.9 33.5 30.7 30.3 minutes (BWFCQ: 30.8 31.7 33.4
+30.3 34.4 31.7). `quantbot_no_spice_income_low-cash` failed with the perimeter hold in the city simulation
+(the army stood on the edge where the city places its next lots; with V off or X off it passed); the
+hold therefore does not apply in the city simulation (measured duels are vanilla, unaffected).
+
+**Decision (applied): the QuantBot default is BWFCQ + UVX** - new optional `[Force Concentration]` keys
+`PerimeterHold`, `PerimeterTurrets`, `SizedDefence` (code defaults true, hashed; `forceBits()` adds V, U,
+X). Saved (9863, no release used it; a 1.0.844 9863 save does not load): the remembered enemy army (id,
+value, cycle; id order) and the musters (building, point, clock, members). The perimeter and the
+outnumbered verdict are derived once per cycle and not saved. Protocol 80. D, E, G, A, R and Y stay
+test-only. Probe `quantbot_force_concentration` section 7: memory (seen, kept out of sight, dead dropped,
+forgotten after 5 min), outnumbered 9 v 2 tanks garrisons with the perimeter turret goal of the policy,
+the perimeter lies beyond every own building towards the observed enemy base and is the house anchor,
+the turret site is on the band and legal (none when the band has no legal ground), the attack check is
+held, save/load of the memory and a muster re-saves the same bytes (a 9862 load has neither), a worker
+raid of 4 tanks against 2 is declined and one of 1 tank gets 1.5x (2 tanks).
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

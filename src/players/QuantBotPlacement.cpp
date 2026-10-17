@@ -1546,6 +1546,66 @@ Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
 	return bestLocation;
 }
 
+// Threat turrets on the base perimeter (U, on by default, docs/formations.md "Round 5"): the band
+// around the outermost buildings on the observed enemy side (ForceConcentrationPolicy::
+// onPerimeterBand), a bounded box around it, the established legality checks and the battery's
+// spacing and corridor rules. Best: the most room from other turrets (a line, not a block),
+// then nearest the front line through the base centre, then nearest the outermost building;
+// ties go to the first tile in row order.
+Coord QuantBot::findPerimeterTurretLocation() {
+    AITelemetry::PerformanceScope perfScope("ai.findPerimeterTurretLocation", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Force = ForceConcentrationPolicy;
+    const Perimeter& p = perimeter();
+    if (p.length <= 0) return Coord::Invalid();
+    std::vector<Coord> turrets;
+    for (const StructureBase* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret))
+            turrets.push_back(structure->getLocation());
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder
+            && (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret))
+            turrets.push_back(entry.second.location);
+    const Coord centre(p.anchor.x + int(int64_t(p.forward.x) * p.depth / p.length),
+                       p.anchor.y + int(int64_t(p.forward.y) * p.depth / p.length));
+    const int box = Force::kPerimeterHalfWidth + Force::kPerimeterInnerTiles;
+    int bestScore = std::numeric_limits<int>::min();
+    Coord best = Coord::Invalid();
+    for (int y = std::max(0, centre.y - box); y <= std::min(getMap().getSizeY() - 1, centre.y + box); ++y) {
+        for (int x = std::max(0, centre.x - box); x <= std::min(getMap().getSizeX() - 1, centre.x + box); ++x) {
+            const int dx = x - p.anchor.x, dy = y - p.anchor.y;
+            const int along = int((int64_t(dx) * p.forward.x + int64_t(dy) * p.forward.y) / p.length);
+            const int across = int((int64_t(dy) * p.forward.x - int64_t(dx) * p.forward.y) / p.length);
+            if (!Force::onPerimeterBand(along, across, p.depth)) continue;
+            if (!getMap().okayToPlaceStructure(x, y, 1, 1, false, getHouse(), false, Structure_RocketTurret)) continue;
+            if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+            if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+            if (currentGame->isCitySimEnabled()
+                && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+            int nearest = -1;
+            for (const Coord turret : turrets) {
+                const int d = std::max(std::abs(turret.x - x), std::abs(turret.y - y));
+                if (nearest < 0 || d < nearest) nearest = d;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)) continue;
+            int passable = 0;
+            for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                const Tile* tile = getMap().getTile(x + ox, y + oy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+            const int room = nearest < 0 ? 5 : std::min(nearest, 5);
+            const int score = room * 100 - std::abs(across) * 4 - std::abs(along - p.depth) * 10;
+            if (score > bestScore) { bestScore = score; best = Coord(x, y); }
+        }
+    }
+    traceDecision("perimeter_turret_site", AITelemetry::Record().set("x", best.x).set("y", best.y)
+        .set("valid", best.isValid()).set("depth", p.depth).set("forward_x", p.forward.x).set("forward_y", p.forward.y)
+        .set("turrets", int(turrets.size())));
+    return best;
+}
+
 bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money, bool emergency,
                                          Uint32& selectedItem, Coord& selectedSite, bool landValueOnly, Uint32 requiredItem) {
     AITelemetry::PerformanceScope perfScope("ai.selectCityServiceInvestment", getGameCycleCount(), getHouse()->getHouseID());

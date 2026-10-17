@@ -1,3 +1,34 @@
+## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9863, not released)
+
+Stefan: optimise how QuantBot concentrates force on defence; "you can build up rocket turrets"; "defend at
+the base perimeter". Merged `integrate/feature-batch` (1.0.844) first. Tables, causes and decision:
+`docs/formations.md` ("Round 5"); data `docs/formation-results/force/round5/` (1,620 duels).
+
+- **D confirmed not useful**: `/weak` v old rules 108 games 0.310 v BWFCQ 0.306 (paired +0.005); v BWFCQ both
+  0.037; Hard 0.870. Traced cause of weak-side losses: the army fights out of turret cover (forward bundle,
+  harvest-field defence answered piecemeal at 1.25x of what is visible).
+- **New default UVX** (`[Force Concentration]` `PerimeterHold`, `PerimeterTurrets`, `SizedDefence`, code
+  default true, hashed): a remembered enemy army (seen fighters, dead dropped, unseen forgotten after 5 min);
+  while it is worth 125% of ours no wave leaves and the reserve holds the enemy-facing base perimeter (not in
+  the city simulation); perimeter rocket turrets (one per 1,000 credits of the enemy's lead, max 8, above the
+  economy reserve + 750); defences count the enemy within 12 tiles and send 1.5x, bundle first, distant
+  building defenders muster, unanswerable worker raids get nobody.
+- **Measured**: `/weak` v old rules 108: 0.426 (0.33-0.52) v BWFCQ 0.306, paired +0.120 (+0.03..+0.21), 21
+  better / 8 worse, structures lost 53 v 61; Hard v old rules 0.926 (BWFCQ 0.870), Brutal 0.944 (0.931), Hard
+  head-to-head v BWFCQ 0.528 (0.44-0.62); all-against-Atreides 6/6 (29.3 33.0 33.9 33.5 30.7 30.3 min).
+  Rejected (test-only): E, G, A (k80/100/120), R, Y, D.
+- **Saved (9863 appended; a 1.0.844 save no longer loads)**: the remembered enemy army and the musters.
+  Protocol 80 (pinned in `NetworkManagerTestCase`).
+- **Harness**: army value at minutes 10/20/30 per side; new counters; flat run directories (slash labels
+  had deleted each other's runs).
+- Open: against a full BWFCQ attacker the half-army side still loses its base in ~8 min (0.046); perimeter
+  turrets are rarely affordable for the weak house (0.9 a game).
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, save_scenario_export, save_scenario_input_preservation and all 32 quantbot_*: 41/42 then
+  `quantbot_force_concentration` failed on the new city-simulation exclusion (probe expectation); probe fixed,
+  rebuilt, then force_concentration, dunelegacy_tests, launcher_kiting, no_spice_income_low-cash 4/4 passed.
+
 ## 2026-10-17 — local 1.0.844 installed on the MBA
 
 Staging = 1.0.843 + `feat/ai-blob-waves` (5c65342d): QuantBot default BWFCQ (bundled forward reserve,

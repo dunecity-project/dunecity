@@ -20,12 +20,13 @@ namespace FormationDuel {
 struct Side {
     int house = HOUSE_INVALID;
     int shape = QuantBotConfig::kWaveFormationNone;
-    std::string label;          ///< as given: shape[+flags][/retreat|/noretreat][/weak]
+    std::string label;          ///< as given: shape[+flags][/retreat|/noretreat][/weak][/k<percent>]
     int retreat = -1;           ///< QuantBot::tacticalRetreatOverride: -1 the game's (on with Blob)
     int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged),
                                 ///< +s (stage near the enemy), +e (stage only with local superiority)
     int force = 0;              ///< QuantBot::forceVariantOverride bits from the uppercase flags (+F, +C, +P, +H, +M, +L, +Q,
-                                ///< +N, +B, +O, +W, +S, +T, +D)
+                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +V)
+    int strengthBps = 10000;    ///< QuantBot::forceStrengthBps from /k<percent> (A's k)
     bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
 };
 
@@ -52,6 +53,9 @@ inline std::vector<Side> sidesFromEnv() {
                 if (variant == "retreat") side.retreat = 1;
                 else if (variant == "noretreat") side.retreat = 0;
                 else if (variant == "weak") side.weak = true;
+                else if (variant.size() > 1 && variant[0] == 'k'
+                         && variant.find_first_not_of("0123456789", 1) == std::string::npos)
+                    side.strengthBps = std::stoi(variant.substr(1)) * 100;
                 else throw std::runtime_error("Unknown duel variant: " + entry);
             }
         }
@@ -77,6 +81,14 @@ inline std::vector<Side> sidesFromEnv() {
                 else if (flag == 'S') side.force |= QuantBot::kForceSplit;
                 else if (flag == 'T') side.force |= QuantBot::kForceFlank;
                 else if (flag == 'D') side.force |= QuantBot::kForceStrengthReadiness;
+                else if (flag == 'E') side.force |= QuantBot::kForceEstimate;
+                else if (flag == 'G') side.force |= QuantBot::kForceGarrison;
+                else if (flag == 'A') side.force |= QuantBot::kForceStrengthWaves;
+                else if (flag == 'R') side.force |= QuantBot::kForceReserve;
+                else if (flag == 'X') side.force |= QuantBot::kForceSizedDefence;
+                else if (flag == 'Y') side.force |= QuantBot::kForceFallBack;
+                else if (flag == 'U') side.force |= QuantBot::kForceThreatTurrets;
+                else if (flag == 'V') side.force |= QuantBot::kForcePerimeterHold;
                 else throw std::runtime_error("Unknown duel variant flag: " + entry);
             }
             shape = shape.substr(0, plus);
@@ -134,6 +146,7 @@ inline void applyShapes(Game& game, const std::vector<Side>& sides) {
                 bot->tacticalRetreatOverride = side.retreat;
                 bot->blobVariantOverride = side.variant;
                 bot->forceVariantOverride = side.force;
+                bot->forceStrengthBps = side.strengthBps;
                 ++bots;
             }
         if (bots != 1) throw std::runtime_error("A duel house does not have exactly one QuantBot");
@@ -181,14 +194,18 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "releases=%d reforms=%d fallbacks=%d fallback_returns=%d legs=%d dissolved=%d stalls=%d repairs=%d "
                 "home_kill=%d home_loss=%d focus=%d converges=%d pooled=%d recalled=%d musters=%d muster_releases=%d "
                 "stage_holds=%d staged=%d bundle_orders=%d gate_holds=%d gate_timeouts=%d splits=%d split_releases=%d "
-                "split_timeouts=%d full_readiness=%d",
+                "split_timeouts=%d full_readiness=%d garrison_holds=%d strength_holds=%d reserve_kept=%d "
+                "sized_responses=%d declined_responses=%d fall_backs=%d perimeter_turret_orders=%d turrets_built=%d "
+                "turrets_lost=%d",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
                 stats.fallbackReturns, stats.legs, stats.dissolved, stats.stalls, stats.repairs,
                 home.kill, home.loss, force.focusSwitches, force.converges, force.pooled, force.recalled, force.musters,
                 force.musterReleases, force.stageHolds, force.staged, force.bundleOrders, force.gateHolds, force.gateTimeouts,
-                force.splits, force.splitReleases, force.splitTimeouts, force.fullReadiness);
+                force.splits, force.splitReleases, force.splitTimeouts, force.fullReadiness, force.garrisonHolds,
+                force.strengthHolds, force.reserveKept, force.sizedResponses, force.declinedResponses, force.fallBacks,
+                force.perimeterTurretOrders, force.turretsBuilt, force.turretsLost);
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,
             FormationWaveMeasure::seconds(game.getGameCycleCount()));

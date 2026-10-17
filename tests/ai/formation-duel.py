@@ -46,11 +46,17 @@ PARTY_FIELDS = ('parties', 'gathered', 'gather_timeouts', 'releases', 'reforms',
 # are home kills, ours near ours home losses) and the force-candidate counters (QuantBot::forceStats).
 FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recalled', 'musters', 'muster_releases',
                 'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
-                'split_timeouts', 'full_readiness')
+                'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
+                'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
+                'turrets_lost')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units') + PARTY_FIELDS + FORCE_FIELDS
+# The army value curve: each side's mobile armed value at these game minutes (the 5-minute
+# FORMATION_HOUSE samples; after the game ended, the value at the end).
+CURVE_MINUTES = (10, 20, 30)
+CURVE_FIELDS = tuple(f'army{minute}' for minute in CURVE_MINUTES)
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
-    f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
+    f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS + CURVE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
                'arrival_spread_s', 'shots30', 'loss60', 'kill60', 'survivors', 'lost_before_contact', 'formed',
                'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s', 'together_at_contact',
@@ -129,7 +135,9 @@ def build_probe(args, scratch):
 
 def play(args, scratch, binary, key):
     tag, difficulty, size, seed, house_a, shape_a, house_b, shape_b = key
-    out = scratch / '-'.join(key)
+    # Flat: a label with a slash (none+F/weak) would nest one game's run directory inside
+    # another's (none+F), whose clean-up then deletes it mid-game.
+    out = scratch / '-'.join(key).replace('/', '_')
     shutil.rmtree(out, ignore_errors=True)
     command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
@@ -153,10 +161,14 @@ def play(args, scratch, binary, key):
                map_skipped=next((parse(l, 'FORMATION_DUEL_MAP:').get('skipped', '') for l in lines
                                  if 'FORMATION_DUEL_MAP:' in l), ''),
                error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}')
+    samples = {(s.get('house'), s.get('minute')): s.get('army_value', '')
+               for s in (parse(l, 'FORMATION_HOUSE:') for l in lines if 'FORMATION_HOUSE:' in l)}
     for side, house in (('a', house_a), ('b', house_b)):
         data = houses.get(HOUSE_NUMBERS[house], {})
         for field in HOUSE_FIELDS:
             row[f'{field}_{side}'] = data.get(field, '')
+        for minute in CURVE_MINUTES:
+            row[f'army{minute}_{side}'] = samples.get((HOUSE_NUMBERS[house], str(minute)), data.get('army_value', ''))
     shape_of = {HOUSE_NUMBERS[house_a]: shape_a, HOUSE_NUMBERS[house_b]: shape_b}
     waves = []
     for l in lines:
@@ -223,8 +235,8 @@ def sides(game, margin):
     result = []
     for me, them in (('a', 'b'), ('b', 'a')):
         house = HOUSE_NUMBERS[game[f'house_{me}']]
-        own = {f: number(game.get(f'{f}_{me}')) for f in HOUSE_FIELDS}
-        other = {f: number(game.get(f'{f}_{them}')) for f in HOUSE_FIELDS}
+        own = {f: number(game.get(f'{f}_{me}')) for f in HOUSE_FIELDS + CURVE_FIELDS}
+        other = {f: number(game.get(f'{f}_{them}')) for f in HOUSE_FIELDS + CURVE_FIELDS}
         strict = 0.5 if winner in ('', '-1') else (1.0 if winner == house else 0.0)
         score = strict
         if strict == 0.5:
@@ -424,9 +436,11 @@ def pairing_report(args):
         # how long x's eliminations took, and the per-game force-candidate counters.
         wins = [number(g['end_s']) / 60 for g in mine for s in sides(g, args.adjudicate) if s[0] == x and s[5] == 1.0]
         home_kill = sum(r[3]['home_kill'] for r in rows); home_loss = sum(r[3]['home_loss'] for r in rows)
+        curve = lambda side: '/'.join(f'{statistics.mean(r[side][f] for r in rows) / 1000:.0f}' for f in CURVE_FIELDS)
         defence_rows.append(f'| {x} v {y} | {statistics.mean(r[4]["structures_destroyed"] for r in rows):.1f} | '
                             f'{statistics.mean(r[3]["structures_destroyed"] for r in rows):.1f} | '
                             f'{home_loss / len(rows):.0f} | {home_kill / len(rows):.0f} | {home_kill / max(1, home_loss):.2f} | '
+                            f'{curve(3)} | {curve(4)} | '
                             f'{statistics.median(wins) if wins else 0:.1f} | {len(wins)} |')
         if any(r[3][f] for r in rows for f in FORCE_FIELDS[2:]):
             force_rows.append(f'| {x} v {y} | ' + ' | '.join(f'{statistics.mean(r[3][f] for r in rows):.1f}'
@@ -465,9 +479,11 @@ def pairing_report(args):
         print('\n'.join(party_rows))
     print('\nDefence and pace, first side of each pairing (per game: own structures lost and enemy structures '
           'destroyed; home trade = enemy value destroyed within 12 tiles of own buildings against own value lost '
-          'there; median minutes to an elimination win):\n')
-    print('| Pairing | Structures lost | Structures destroyed | Home loss | Home kill | Home kill / loss | Win min | Wins |')
-    print('|---|---|---|---|---|---|---|---|')
+          'there; army value curve = mean mobile armed value in thousands at game minutes '
+          f'{"/".join(map(str, CURVE_MINUTES))}, own and enemy; median minutes to an elimination win):\n')
+    print('| Pairing | Structures lost | Structures destroyed | Home loss | Home kill | Home kill / loss | Own army k | '
+          'Enemy army k | Win min | Wins |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
     print('\n'.join(defence_rows))
     if force_rows:
         print('\nForce-candidate counters per game, first side (QuantBot::forceStats):\n')

@@ -113,6 +113,12 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         return std::max(1,(FixPoint(price)*object->getHealth()/object->getMaxHealth()).lround());
     };
     int threatValue = value(intruder), committed = 0;
+    // Sized defence (X, on by default, docs/formations.md "Round 5"): a worker under ground attack
+    // counts the enemy within 12 tiles (not 8) and gets 1.5x it, the bundle first, or nobody
+    // when everything in reach cannot match the threat.
+    const bool sizedWorker = assetEmergency && !baseAttack && !intruder->isAFlyingUnit()
+        && forceVariant(kForceSizedDefence);
+    const int threatTiles = sizedWorker ? ForceConcentrationPolicy::kPoolThreatTiles : 8;
     constexpr int clearingRadius=18;
     if (clearingSpice) for (const auto* structure:getStructureList()) {
         if (structure->getOwner()->getTeamID()!=getHouse()->getTeamID() && structure->getHealth()>0
@@ -126,7 +132,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         if (unit != intruder && unit->getOwner()->getTeamID() != getHouse()->getTeamID()
             && unit->isVisible(getHouse()->getTeamID())
             && unit->isAFlyingUnit() == intruder->isAFlyingUnit()
-            && blockDistance(contact,unit->getLocation()) <= 8) threatValue += value(unit);
+            && blockDistance(contact,unit->getLocation()) <= threatTiles) threatValue += value(unit);
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()
             || !unit->canAttack(intruder) || unit->getAttackMode()==RETREAT
             || unit->getItemID()==Unit_Saboteur || unit->getItemID()==Unit_Harvester
@@ -164,6 +170,25 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     auto response=clearingSpice
         ? SimpleArmyPolicy::clearingForce(threatValue,committed,candidates,clearingRadius)
         : SimpleArmyPolicy::reinforcements(threatValue,committed,candidates);
+    if (sizedWorker) {
+        std::vector<ForceConcentrationPolicy::SizedResponder> responders;
+        int64_t reachable = 0;
+        for (const auto& candidate : candidates) {
+            const bool bundled = standsInBundle(static_cast<const UnitBase*>(getObject(candidate.id)));
+            responders.push_back({candidate.id,candidate.value,candidate.distance,bundled});
+            if (bundled || candidate.distance <= ForceConcentrationPolicy::kSizedBandTiles) reachable += candidate.value;
+        }
+        if (!ForceConcentrationPolicy::answerable(threatValue,committed,reachable)) {
+            ++forceStats.declinedResponses;
+            traceDecision("defence_declined",AITelemetry::Record().set("target",intruder->getObjectID())
+                .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
+                .set("committed_value",committed).set("reachable_value",reachable));
+            return;
+        }
+        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threatValue),committed,
+            responders,ForceConcentrationPolicy::kSizedBandTiles);
+        forceStats.sizedResponses+=int(response.size());
+    }
     // Troops already beside an attacked base must fight, even if distant
     // responders satisfy the proportional reinforcement budget. An attack on
     // anything we own widens that to a band that grows with the local threat,
@@ -171,7 +196,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     // get there rather than by three units. Still bounded, still one event, and
     // still nearest-first: nothing here is a new squad or a standing order.
     const int emergencyBand = assetEmergency ? emergencyResponseRadius(threatValue-committed) : 12;
-    if (baseAttack || assetEmergency) for (const auto& candidate : candidates)
+    if ((baseAttack || assetEmergency) && !sizedWorker) for (const auto& candidate : candidates)
         if (candidate.distance <= emergencyBand
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
@@ -257,9 +282,12 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     };
     // Test-only force candidates (docs/formations.md, "Concentrating force"): P counts the
     // enemy within 12 tiles and sends twice it from up to 40 tiles; H brings the raiding army
-    // home when the troops nearby cannot answer; M has distant defenders muster first.
-    const bool pool=forceVariant(kForcePool), recall=forceVariant(kForceRecall), muster=forceVariant(kForceMuster);
-    const int threatTiles=pool ? ForceConcentrationPolicy::kPoolThreatTiles : kBaseScrambleContactTiles;
+    // home when the troops nearby cannot answer; M has distant defenders muster first. X
+    // (round 5) counts the enemy within 12 tiles, sends 1.5x it from the bundle first, then
+    // the nearest within 40 tiles, and has the distant ones muster.
+    const bool sized=forceVariant(kForceSizedDefence);
+    const bool pool=forceVariant(kForcePool), recall=forceVariant(kForceRecall), muster=forceVariant(kForceMuster) || sized;
+    const int threatTiles=pool || sized ? ForceConcentrationPolicy::kPoolThreatTiles : kBaseScrambleContactTiles;
     int threat=value(intruder), committed=0;
     int held=0, forcedKept=0, alreadyScrambled=0, retuned=0;
     std::vector<SimpleArmyPolicy::Responder> candidates;
@@ -327,7 +355,16 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     const int band=pool ? kEmergencyBandMax : emergencyResponseRadius(threat);
     std::vector<Uint32> response;
     int recalled=0;
-    if (pool || recall || muster) {
+    if (sized) {
+        std::vector<ForceConcentrationPolicy::SizedResponder> responders;
+        for (const auto& candidate : candidates) {
+            const auto* unit=static_cast<const UnitBase*>(getObject(candidate.id));
+            responders.push_back({candidate.id,candidate.value,candidate.distance,standsInBundle(unit)});
+        }
+        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threat),committed,
+            responders,ForceConcentrationPolicy::kSizedBandTiles);
+        forceStats.sizedResponses+=int(response.size());
+    } else if (pool || recall || muster) {
         std::vector<ForceConcentrationPolicy::Responder> responders;
         for (const auto& candidate : candidates) responders.push_back({candidate.id,candidate.value,candidate.distance});
         const int64_t required=pool ? ForceConcentrationPolicy::poolRequired(threat) : SimpleArmyPolicy::responseValue(threat);
@@ -524,6 +561,17 @@ void QuantBot::attack(int militaryValue) {
             .set("healthy_deployable_value", survey.deployableValue)
             .set("healthy_deployable_ground_value", survey.deployableGroundValue)
             .set("healthy_deployable_air_value", survey.deployableAirValue));
+    }
+
+    // Garrison (G, test-only, docs/formations.md "Round 5"): while the remembered enemy army
+    // outnumbers ours, no wave leaves; the reserve holds the protected rally and the enemy
+    // attacks into the turrets. The next check after a won defence launches as usual.
+    if (garrisoned()) {
+        ++forceStats.garrisonHolds;
+        attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
+        traceDecision("attack_deferred", AITelemetry::Record().set("reason", "garrison")
+            .set("own_value", ownGroundArmyValue()).set("enemy_estimate", enemyArmyEstimate()));
+        return;
     }
 
     launchGroundHunt();
@@ -856,6 +904,22 @@ void QuantBot::launchGroundHunt() {
                     .set("posture",ArmyPosturePolicy::postureName(armyPosture)));
                 return;
             }
+            // Strength-aware waves (A, test-only, docs/formations.md "Round 5"): a ready wave
+            // leaves only when it is worth forceStrengthBps of the remembered enemy army; until
+            // then it keeps bundling.
+            if (forceVariant(kForceStrengthWaves)) {
+                std::vector<Uint32> ids;
+                ids.reserve(candidates.size());
+                for (const auto& candidate : candidates) ids.push_back(candidate.id);
+                const int64_t wave=groundValueOf(ids), enemy=enemyArmyEstimate();
+                if (!ForceConcentrationPolicy::strongEnough(wave,enemy,forceStrengthBps)) {
+                    ++forceStats.strengthHolds;
+                    attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
+                    traceDecision("attack_deferred",AITelemetry::Record().set("reason","wave_strength")
+                        .set("wave_value",wave).set("enemy_estimate",enemy).set("ratio_bps",forceStrengthBps));
+                    return;
+                }
+            }
             // Launch from the bundle (W, on by default): a ready wave leaves once most of it
             // stands in the bundle - only while there is one and bundling owns the reserve.
             if (forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
@@ -883,6 +947,28 @@ void QuantBot::launchGroundHunt() {
             // identical dispatch list.
             selected.reserve(candidates.size());
             for (const auto& candidate : candidates) selected.push_back(candidate.id);
+            // Home reserve (R, test-only): while the remembered enemy army exceeds ours, the
+            // share it exceeds it by stays home - the units nearest the protected rally.
+            if (forceVariant(kForceReserve)) {
+                const auto kept=homeReserve(selected);
+                if (!kept.empty()) {
+                    int keptValue=0, leftUnits=0, leftValue=0;
+                    for (const auto& candidate : candidates) {
+                        if (std::find(kept.begin(),kept.end(),candidate.id)!=kept.end()) keptValue+=candidate.value;
+                        else { ++leftUnits; leftValue+=candidate.value; }
+                    }
+                    if (!QuantBotBuildPolicy::viableMainWave(leftUnits,leftValue)) {
+                        attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
+                        traceDecision("attack_deferred",AITelemetry::Record().set("reason","home_reserve")
+                            .set("kept_value",keptValue).set("left_value",leftValue));
+                        return;
+                    }
+                    selected.erase(std::remove_if(selected.begin(),selected.end(),[&](Uint32 id) {
+                        return std::find(kept.begin(),kept.end(),id)!=kept.end();
+                    }),selected.end());
+                    forceStats.reserveKept+=int(kept.size());
+                }
+            }
         }
         // A custom wave commits the configured share of the ground army, minus
         // everything already out there. Survivors keep their place in the share,
@@ -1563,17 +1649,21 @@ void QuantBot::updateArmyPosture() {
             && ArmyPosturePolicy::elapsed(now, localWithdrawSince) >= thresholds.maxWithdrawCycles;
         if (squadHome || timedOut) localWithdrawSince = std::numeric_limits<Uint32>::max();
     }
+    const bool wasLocalWithdraw = localSquadWithdraw;
     localSquadWithdraw = localWithdrawSince != std::numeric_limits<Uint32>::max();
 
     // Withdrawals are off by default (QuantBotConfig::RecoverySettings::withdrawalsEnabled):
     // measured on six all-against-Atreides seeds, every withdrawal trigger together cost a
     // lost game and 2-5 minutes per win, and no single trigger alone was the culprit.
+    // Fall-back (Y, test-only, docs/formations.md "Round 5") keeps the local withdrawal alone:
+    // a wave outmatched where it stands comes back to the protected rally and relaunches.
     if (!getQuantBotConfig().recovery.withdrawalsEnabled) {
         situation.severeLocalDefeat = false;
         situation.coreUnderAttack = false;
         situation.windowCovered = false;
-        localSquadWithdraw = false;
+        localSquadWithdraw = localSquadWithdraw && forceVariant(kForceFallBack);
     }
+    if (localSquadWithdraw && !wasLocalWithdraw && forceVariant(kForceFallBack)) ++forceStats.fallBacks;
     const auto previous = armyPosture;
     const auto decision = ArmyPosturePolicy::evaluate(armyPosture, postureSince, situation, thresholds);
     if (decision.changed) {
@@ -1985,7 +2075,7 @@ Coord QuantBot::offensiveStagingLocation() const {
 
 bool QuantBot::offensiveAssemblySlot(Coord at) const {
     if (!recoveryActive() || ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
-        || localSquadWithdraw) return true;
+        || localSquadWithdraw || garrisoned()) return true;
     offensiveStagingLocation();
     if (!exteriorStagingAvailable) return true; // No exterior: sheltered fallback.
     return getMap().tileExists(at) && !getMap().getTile(at)->isRoad()
@@ -2107,9 +2197,18 @@ Coord QuantBot::armyAssemblyAnchor() const {
     //
     // Easy, Medium, campaign roles and helpers keep the established squad rally.
     if (!recoveryActive()) return squadRallyLocation;
-    if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) && !localSquadWithdraw) {
+    if (!ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) && !localSquadWithdraw && !garrisoned()) {
         const Coord staging = offensiveStagingLocation();
         if (staging.isValid()) return staging;
+    }
+    // Perimeter hold (V, docs/formations.md "Round 5"): while outnumbered the army stands on
+    // the enemy-facing base perimeter and meets attackers there (only the garrison holds it: a
+    // withdrawal or recovery still comes in to the shelter). Not in the city simulation, where
+    // that edge is the ground the city's next lots are placed on.
+    if (garrisoned() && forceVariant(kForcePerimeterHold) && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
+        && !localSquadWithdraw && !currentGame->isCitySimEnabled()) {
+        const Coord perimeterPoint = perimeter().point;
+        if (perimeterPoint.isValid()) return perimeterPoint;
     }
     if (protectedRally.isValid()) return protectedRally;
     return squadRallyLocation;

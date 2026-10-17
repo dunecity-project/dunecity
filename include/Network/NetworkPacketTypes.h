@@ -223,7 +223,14 @@
 //     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
 //     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
 //     would order the same AI units differently and desync. Save 9863.
-#define NETWORK_PROTOCOL_VERSION            79
+// 80: QuantBot force concentration round 5, defence while outnumbered: a remembered enemy
+//     army; while it outnumbers ours no Custom Hard/Brutal wave leaves, the reserve holds the
+//     enemy-facing base perimeter and rocket turrets are added there; defences are sized at
+//     1.5x the threat with the bundle first, distant defenders muster, and a worker raid the
+//     troops in reach cannot match gets nobody ([Force Concentration] PerimeterHold,
+//     PerimeterTurrets, SizedDefence, hashed; the remembered army and the musters are saved,
+//     9863). A 79 peer would order the same AI units differently and desync. Save 9863.
+#define NETWORK_PROTOCOL_VERSION            80
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
