@@ -3437,7 +3437,15 @@ void QuantBot::build(int militaryValue) {
                     }
                     using AirOrder = QuantBotBuildPolicy::AirOrder;
                     if (decision.order == AirOrder::Upgrade) {
-                        if (pBuilder->getHealth() >= pBuilder->getMaxHealth()) upgradeWithLogging(__LINE__);
+                        if (pBuilder->getHealth() >= pBuilder->getMaxHealth()) {
+                            // An Air strategy's unlock may use credits the reserves hold back, as
+                            // the starport recovery does, never cash already charged this pass.
+                            const bool airUnlock = air.airStrategy && !air.ornithopterAvailable;
+                            const int heldCash = airUnlock ? std::max(0, getHouse()->getCredits() - money) : 0;
+                            money += heldCash;
+                            upgradeWithLogging(__LINE__);
+                            money -= heldCash;
+                        }
                         else doRepair(pBuilder);
                     } else if (decision.order == AirOrder::Ornithopter || decision.order == AirOrder::Carryall) {
                         const Uint32 item = decision.order == AirOrder::Ornithopter ? Unit_Ornithopter : Unit_Carryall;
