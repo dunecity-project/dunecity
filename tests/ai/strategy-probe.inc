@@ -634,8 +634,8 @@ int runQuantBotStrategyProbe() {
     const char* sections = std::getenv("BALANCE_STRATEGY_SECTIONS");
     auto wanted = [&](char section) { return !sections || std::strchr(sections, section) != nullptr; };
 
-    // The shipped configuration plays the compiled [Strategy] default (Random over the measured
-    // weights); every Learned/Base reference below is set explicitly.
+    // The shipped configuration plays the compiled [Strategy] default (Fixed:Learned,Swarm; Mode=Random
+    // plays the measured weights); every Learned/Base reference below is set explicitly.
     const QuantBotStrategy::Settings defaults;
     require(QuantBotStrategy::modeText(getQuantBotConfig().strategy) == QuantBotStrategy::modeText(defaults)
             && getQuantBotConfig().strategy.mixWeights == defaults.mixWeights
