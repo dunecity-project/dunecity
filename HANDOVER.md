@@ -1,35 +1,30 @@
-## 2026-10-17 — Scenario tests: vanilla Construction Yard starts and troop-formation benchmarks (branch `test/formation-scenarios`, NOT built/committed: Documents access lost)
+## 2026-10-17 — Scenario tests, formation march fix, QuantBot opening readiness (branch `test/formation-scenarios`, protocol 81, save 9863 unchanged)
 
 Stefan: "think of some more tests we can do on troop formations and run them. also make sure you are playing
-some vanilla games from a construction yard start". Tables and conclusions: `docs/formations.md`, "Scenario
-tests"; data `docs/formation-results/scenarios/` (cy-start, small-long, ffa, cy-ai, opening, opening-duels,
-bench, approach, duel64). Measured with 1.0.844 code (+ test-only flag E) on the Mac mini, `build` in this worktree.
+some vanilla games from a construction yard start". Tables: `docs/formations.md`, "Scenario tests"; compact
+data `docs/formation-results/scenarios/` (raw samples/waves stay out of git). Commits on e9885232 (1.0.844):
+947e4aab harness + data + test-only flag E; 37f195b2 march fix; fac6d0d6 E default; then docs/data.
 
-- **CY start (vanilla bundled maps, MCV/CY, map credits, lobby defaults)**: BWFCQ v previous rules Hard 360
-  games 0.562 (0.51-0.61), Brutal 180 0.600 (0.53-0.67); FFA 4P 72 games mean place 2.38 v 2.62, 32 v 16 wins;
-  v AI Player (Hard) 0.983 (old rules 0.989), wins faster. Small/long maps 252 games 0.494; Sihaya-Lauper
-  0.306 (0.17-0.44): cause traced - 60% readiness sends a small early first wave into a base building its defence.
-- **Candidate E** (first wave at full readiness): CY 432 games v BWFCQ 0.565 (0.52-0.61), Lauper 0.778; but as
-  first built it loses Fortress duels (0.352 Hard, 0.278 Brutal: delays the opening strike on 160/192). Code now
-  gates it on a weak start (`ForceConcentrationPolicy::openingReadiness`: initial army below the 60% strike) -
-  identical on the measured CY maps, by construction inert in Fortress duels. Test-only flag `E`; **uncompiled**.
-- **Bug found: big formations crawl** (22-unit Box marches at 0.2 of 1.25 tiles/s; never passes a 5-tile canyon
-  gap in 300 s): laggards blocked by members holding for them. Fix written in `FormationOrders::update()`
-  (holders give way to a mate stepping onto their tile) and `UnitBase::marchesWith` (pushable holders are
-  marching mates). **Uncompiled, unmeasured**; needs protocol 80 (player formation movement changes).
-- **Approach shapes from the bundle** (Fortress, 108 Hard each): Staggered+BWFCQ v BWFCQ 0.796 (0.72-0.87),
-  Column 0.741, Box 0.731 - first time a shape beats the default. Not applied.
-- Bench (player shapes, 3,192 trials): every shape beats formations off by 1-4k value when the enemy comes
-  unformed; Pincer best for big/light armies, Box best against 'thopters (+912) and for heavy v light.
-- Harness: `tests/ai/vanilla-match.py` + `vanilla-match.inc` + `run-campaign-balance.py --match-sides`;
-  `tests/units/run-formation-bench.py` + `formation-bench.inc`; duel label flag E; provenance tolerant of an
-  unreadable git dir.
-- **Open (in order):** build; ctest dunelegacy_tests (new `[force]` case), formation_planner_tests,
-  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
-  skirmish_generator_tests, all quantbot_* incl. quantbot_all_against_atreides; bench re-run
-  (`--terrains open canyon obstacles --comps big mixed tanks`) to accept the march fix; protocol 80 in
-  `NetworkPacketTypes.h` + `NetworkManagerTestCase`; E: Fortress identity (`full_readiness` 0), Brutal CY
-  180, then decide an `OpeningReadiness` key; re-run Staggered approach after the march fix; commit.
+- **CY start (vanilla bundled maps)**: BWFCQ v previous rules Hard 360 0.562, Brutal 180 0.600; FFA 4P place
+  2.38 v 2.62; v AI Player 0.983. Sihaya-Lauper 0.306: 60% readiness sends a small first wave into a base
+  building its defence.
+- **E = opening readiness, now the default** (`[Force Concentration] OpeningReadiness`, code default on,
+  hashed): a house whose starting army cannot launch a wave holds its first wave for full readiness. CY
+  BWFCQE v BWFCQ Hard 180 0.561, Brutal 180 0.572, pooled 0.567 (0.52-0.61); Fortress duels 36 identical
+  (`full_readiness` 0). Brutal Fortress identity check (36) queued on the mini (`fe1-brutal`).
+- **March fix (protocol 81)**: two jams, not a slow pace - a laggard queued behind a pace-keeping mate in its
+  file (order inversion), and holders blocking a chokepoint. Recover members route round Pace mates; holders
+  with a next step are mates and give way (`FormationOrders::update()`). Bench big/hold contact -25 s
+  (-33..-17), march +10% of pace; canyon Pincer 0/12 -> 11/12; 10-unit armies unchanged. Still slow: big
+  form-up 30-65 s, re-forming behind obstacles (38-73% of pace) - design, not jams.
+- **Approach shapes (fixed march)**: Staggered v BWFCQ Fortress Hard 0.861, Brutal 0.861, CY Hard 0.511, but
+  CY Brutal 0.381 (0.29-0.47, 113 games) -> **no approach default**, WaveFormation stays None. Rejected
+  QuantBot-only `ApproachFormation` patch not committed. Remaining CY Brutal games queued (`ac1-brutal-mini`
+  into /private/tmp/dunecity-work/local_16397/formation-finish-bench-*/ap-cy-brutal-mini).
+- Tests at fac6d0d6 (ctest, <=3 jobs): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, all 32 quantbot_* incl. quantbot_all_against_atreides: all passed.
+- Protocol: DefenceFinish owns 80 (save 9864); this branch uses 81 - the integrator reconciles.
 
 ## 2026-10-17 — local 1.0.844 installed on the MBA
 

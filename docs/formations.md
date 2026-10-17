@@ -73,7 +73,8 @@ with 30-35 units and the army grew to 20k. On every CY map BWFCQ's first wave is
 trades worse in its first minute (kill / loss: Lauper 282 / 1,621, survivors 1.7 of 18; old rules 2,385 /
 1,656): the 60% readiness (Q) sends the opening wave into a base still building its defence.
 
-**Candidate E (gate Q by game phase, test-only flag `E`):** a house that *started without an army able to
+**E, opening readiness (default since protocol 81, `[Force Concentration] OpeningReadiness`, label flag
+`E`):** a house that *started without an army able to
 launch a wave* (initial military value below the house threshold at the configured readiness - every CY
 start measured; not a Fortress start) holds its *first* ground wave for full (100%) readiness; from the
 first wave on, 60% as before (`ForceConcentrationPolicy::openingReadiness`, `QuantBot::openingReadinessPercent`,
@@ -92,10 +93,21 @@ The first wave goes at 16.3 minutes with 24 members and trades 3.90 in its first
 BWFCQ, Fortress + 20k armies: Hard 108 0.352 (0.26-0.44), Brutal 36 0.278 (0.14-0.42); v none 0.769 against
 BWFCQ's 0.870): on 160/192 maps the 21k starting army is below the full threshold (24k), so E delays the
 opening strike - the tempo loss that sank L. Hence the start condition: with it a Fortress house (21k
-start against a 60% strike of 12-14.4k) keeps BWFCQ exactly. **Not yet the default:** the start-gated
-rule is in the code but was not compiled or re-measured (the Mac mini lost Documents access mid-run, see
-HANDOVER); next: build, confirm Fortress duels unchanged (force counter `full_readiness` 0), Brutal CY
-180 games, `quantbot_all_against_atreides`, then a `[Force Concentration] OpeningReadiness` key (protocol 80).
+start against a 60% strike of 12-14.4k) keeps BWFCQ exactly.
+
+**The start-gated rule, built and measured (code of 37f195b2, march fix included):**
+
+| Pairing | Games | Score | 95% CI | Elim. W-L / time-outs | Notes |
+|---|---|---|---|---|---|
+| Fortress duels, BWFCQE v BWFCQ, Hard (128/160/192, seeds 7101-7606) | 36 | 0.500 | 0.33-0.67 | 9-9 / 18 | `full_readiness` 0 on both sides; all 18 label-swapped pairs identical: E is inert |
+| CY set, BWFCQE v BWFCQ, Hard (5 maps, seeds 8101-8606, all house pairs) | 180 | **0.561** | 0.48-0.63 | 101-78 / 1 | Pip 0.722; first wave 18.8 v 15.4 min, trade 3.90 v 3.33 |
+| CY set, BWFCQE v BWFCQ, Brutal | 180 | **0.572** | 0.49-0.64 | 103-77 / 0 | Pip 0.750, Soolin 0.611, Penny 0.444; first wave 20.3 v 15.9 min, trade 4.22 v 3.28 |
+| CY set, Hard + Brutal | 360 | **0.567** | 0.52-0.61 | 204-155 / 1 | |
+
+With the 432 games of the ungated rule on 12 CY maps (0.565, identical rule on CY starts) and Fortress duels
+unchanged, E became the default: `QuantBotConfig::force.openingReadiness` (optional INI key
+`[Force Concentration] OpeningReadiness`, code default on, hashed), in the configured force bits like F, C,
+B and W; protocol 81, save unchanged (`customWave.launched` and the initial military value were saved already).
 
 **4-player FFA** (Habbanya-Archer, Ergsun-Odenkirk, Sihaya-Bowie; Hard; seeds 8101-8404; two BWFCQ and two
 old-rules houses, all six seatings; 72 games, 144 houses per label; place 1 = last standing, survivors at
@@ -132,10 +144,10 @@ trial; "v off" the paired difference against formations off with its 95% interva
 - Meeting the enemy in formation pays most when the enemy comes at you unformed: every shape beats off and
   Hunt by 1-4k in "B attacks back". Members firing within 10 s of contact: 70-100% in formation against
   20-60% off; the price is later contact (form-up and the slowest member's pace).
-- Against a holding enemy the shapes still trade better (trade 5-9 v 2-3) but **big formations crawl**:
+- Against a holding enemy the shapes still trade better (trade 5-9 v 2-3) but **big formations were slow**:
   22-unit Box/Pincer/Column on open sand made contact after 137-214 s against 49 s off, and through the
   canyon gap Box and Pincer never reached B in 300 s (0/12), Column 6/12, Staggered 8/12, Echelon 1/12
-  (off 12/12). Obstacles: Box 0/12, Staggered 12/12. See "Bug" below.
+  (off 12/12). Obstacles: Box 0/12, Staggered 12/12. Fixed in protocol 81 ("Bug" below).
 - Per army: Pincer for big mixed armies and for light units; Column or Box for mixed armies; Box for heavy
   against light; with sonic tanks Pincer (keeps the lanes clear); through a canyon 10-unit groups do best
   in Column/Staggered (light v hold: Column/Staggered 12/12, Box 7/12, Pincer 6/12).
@@ -145,16 +157,58 @@ trial; "v off" the paired difference against formations off with its 95% interva
   within reach of each other (6.5-7 of the 7 fire at air in every shape). Tanks alone cannot hurt 'thopters
   (0-200 of 1,800 in any shape).
 
-**Bug: a large formation's march crawls (fix written, not yet built).** Traced (canyon, 22-unit Box,
-`--trace-s 10`): the block advanced 24 tiles in 120 s (0.2 tiles/s; its pace unit moves 1.25 tiles/s on
-sand). Members inside the block that fell a tile behind (`March::Recover`) stood behind members holding for
-them (`March::Hold`); a holding member was no "marching mate" (`marchesWith`), so the laggard cleared its
-path and re-routed round the block, fell further behind and kept the rest holding. Fix in
-`FormationOrders::update()` and `UnitBase::marchesWith`: a holding member with a next step counts as a
-marching mate, and a holder whose tile is the next step of a formation-mate moving on keeps the pace for
-that cycle (repeated along a file of holders), so the member behind closes up. Changes player formation
-movement (and AI waves only with a configured `WaveFormation` shape): protocol 80. Not compiled or measured
-yet (Documents access lost); the bench above is the acceptance test (big/hold contact and canyon arrival).
+**Bug: a large formation's march jammed (fixed, protocol 81).** The bench has a march measure since:
+`formed_s` (the end of the form-up) and `march_tps` (A's mean x progress from then to contact) against
+`pace_tps` (the slowest member's speed on sand, 0.62 tiles/s for the big army's siege tanks). Traces
+(`--trace-s 1`, now with each member's next step, path length and pending path request) found two jams,
+not a slow pace - the open-sand march itself runs at about the pace once the members are in place:
+
+1. *Order inversion in a file.* A member that fell behind its place (`March::Recover`) whose next step was
+   a mate keeping the pace (a launcher in the tank row ahead of it) waited behind it (`marchesWith`) for
+   the whole march: it could never close the gap, so the group held for it every few seconds (big Column on
+   open sand: 7 tiles spread, 0.25 tiles/s). Now a recovering member routes round a mate keeping the pace
+   (`marchesWith` is false for that pair, so the route planner goes round it too); it still queues behind a
+   mate that is recovering itself.
+2. *Holders blocking a chokepoint.* Members through the canyon gap held there for the ones still behind
+   them, and those could not get through the gap the holders stood in - a permanent deadlock (Pincer 0/12).
+   Now a holding member with a next step counts as a marching mate (planned through, waited behind), and
+   `FormationOrders::update()` makes a holder whose tile is the next step of a waiting mate keep the pace
+   for that cycle, along a file of holders.
+
+The first fix written alone (2 without 1) made open-sand Box/Column/Pincer slower (laggards then waited
+behind the very holders); 1 alone left the canyon deadlock (Pincer 0/12). Both together, bench re-run
+(`--terrains open canyon obstacles --comps big mixed tanks`, every shape, 12 paired trials;
+`bench/march-before.csv` on 1.0.844 movement, `bench/march-after.csv` on protocol 81), big army, B holds:
+
+| Terrain | Shape | March / pace (median) | Reached B | Contact s (median) | Contact change, paired (95% CI) | A wins |
+|---|---|---|---|---|---|---|
+| open | Box | 52% → 66% | 12/12 → 12/12 | 214 → 175 | -42 (-70 to -17) | 6 → 11 |
+| open | Pincer | 81% → 83% | 12/12 → 12/12 | 137 → 135 | -5 (-12 to +1) | 12 → 12 |
+| open | Column | 60% → 81% | 12/12 → 11/12 | 170 → 140 | -13 (-33 to +10) | 10 → 11 |
+| open | Staggered | 91% → 91% | 12/12 → 12/12 | 111 → 111 | -2 (-7 to +1) | 12 → 12 |
+| open | Echelon | 79% → 85% | 12/12 → 12/12 | 142 → 125 | -23 (-41 to -9) | 11 → 12 |
+| canyon | Box | 22% → 48% | 4/12 → 10/12 | 228 → 201 | -61 (-91 to -24) | 0 → 6 |
+| canyon | Pincer | 18% → 46% | 0/12 → 11/12 | none → 205 | -84 (-98 to -66) | 0 → 3 |
+| canyon | Column | 50% → 63% | 9/12 → 12/12 | 181 → 168 | -50 (-83 to -22) | 6 → 12 |
+| canyon | Staggered | 57% → 64% | 8/12 → 11/12 | 151 → 145 | -41 (-80 to -9) | 8 → 11 |
+| canyon | Echelon | 31% → 47% | 8/12 → 8/12 | 221 → 195 | -24 (-51 to +9) | 1 → 5 |
+| obstacles | Box | 11% → 38% | 5/12 → 9/12 | 251 → 256 | -17 (-37 to +1) | 0 → 0 |
+| obstacles | Pincer | 50% → 53% | 10/12 → 11/12 | 186 → 185 | -11 (-48 to +22) | 10 → 10 |
+| obstacles | Column | 47% → 45% | 9/12 → 10/12 | 201 → 207 | +5 (-22 to +31) | 4 → 3 |
+| obstacles | Staggered | 67% → 73% | 12/12 → 12/12 | 143 → 132 | -7 (-16 to +2) | 12 → 12 |
+| obstacles | Echelon | 47% → 48% | 11/12 → 10/12 | 205 → 193 | +0 (-29 to +28) | 5 → 8 |
+
+(Contact: no contact counts as 300 s. Off marches at 107-113% of the pace - its faster members do not wait.)
+All cells pooled, paired contact change: big/hold -25.0 s (-32.8 to -17.2), march +10% of pace (+7 to
++13); big/attack -0.2 s; mixed/hold +1.7 s (-0.2 to +3.7); mixed/attack 0.0; tanks/hold -1.6 s (-6.6 to
++2.8); tanks/attack +0.1 - the 10-unit armies are unchanged (the bench is chaotic per trial: running a
+different shape list changes a trial's outcome, so single cells move by a few seconds either way). Open
+sand traces of the fixed Box march at 94% of the pace once formed. What remains: (a) a big group's form-up
+takes 30-65 s (Box 57 s: the last members thread into a packed 4x6 block), against 49 s to contact for
+formations off; (b) through the canyon gap and the pillars the formation re-forms behind every obstacle
+(Hold waits for members 3+ tiles behind), 38-73% of the pace. Neither is a jam; both follow from the
+one-speed rules. Formations off are untouched. Player formation movement changes (and AI waves only with a
+configured `WaveFormation` shape): protocol 81, save unchanged.
 
 **Approach shapes after bundling** (Fortress duels as round 4, Hard, 108 games each, all house pairs):
 
@@ -165,10 +219,28 @@ yet (Documents access lost); the bench above is the acceptance test (big/hold co
 | Box+BWFCQ v BWFCQ | 108 | **0.731** | 0.65-0.81 | 63-9 / 36 | 2.98 v 1.49 | 60% v 35% |
 
 Every shape lost to plain Hunt before bundling; launched from the bundle (one body, short approach) a
-formation approach that breaks on contact beats BWFCQ clearly: waves arrive 50-57% in formation and trade
-twice as well. Not applied (the default is an AI decision; the measurement predates the march fix and was
-not repeated on CY starts or Brutal). Next: after the march fix, Staggered+BWFCQ v BWFCQ 108 Hard + 36
-Brutal, CY 1v1 432 games, all-against-Atreides; then `WaveFormation = Staggered` as the default.
+formation approach that breaks on contact beats BWFCQ clearly in Fortress duels: waves arrive 50-57% in
+formation and trade twice as well.
+
+**Re-measured on the fixed march (code 37f195b2; Fortress on the MacBook Pro runner, CY on the mini and
+the MacBook Air runner, digest parity with the mini checked):**
+
+| Pairing v BWFCQ | Fortress Hard (108) | Fortress Brutal (36) | CY Hard (180) | CY Brutal |
+|---|---|---|---|---|
+| Staggered+BWFCQ | **0.861** (0.80-0.93), 72-6 / 30 | **0.861** (0.72-0.97), 29-1 / 6 | 0.511 (0.44-0.59), 90-87 / 3 | **0.381** (0.29-0.47), 113 games, 43-70 |
+| Column+BWFCQ | **0.741** (0.65-0.81), 60-12 / 36 | **0.806** (0.67-0.92), 24-3 / 9 | 0.506 (0.43-0.58), 89-88 / 3 | 0.454 (0.36-0.55), 108 games, 49-59 |
+
+(CY Brutal: 221 of 360 games when measured - seeds 8101-8303 from the Air and part of 8404-8606 from the
+mini; the rest is queued on the mini as `ac1-brutal-mini`.) **Decision: no approach default.** The rule was
+"the best shape becomes the QuantBot default only if it beats BWFCQ with its 95% interval above 0.5 on
+Fortress Hard and is not worse on CY and Brutal". Staggered, the best on Fortress, is clearly worse on
+Construction Yard starts at Brutal (structures lost 33.1 v destroyed 20.1 per game): with a Fortress army
+the shaped approach wins the big opening battles, from a CY start the slower, formed-up approach of small
+early Brutal waves loses. Column is level on CY and not clearly worse at Brutal but is not the best shape;
+WaveFormation stays None. A QuantBot-only `[Force Concentration] ApproachFormation` (shape for waves
+launched from the bundle, AI Player and campaign AI unaffected - they read WaveFormation too) was written
+and passed its probe, then dropped with this result. Worth trying next: the approach shape only from the
+second wave on, or only when the wave's value exceeds the opening army (Fortress-like fights).
 
 **Small map 64 (Random Skirmish Fortress duels)**: BWFCQ v none 36 games 0.583 (0.42-0.74), 20-14 / 2 - not
 distinguishable. Long thin maps (128x31 CY above): Pip 0.667, Servalan 0.583, Restal 0.556, Sammy 0.417,
