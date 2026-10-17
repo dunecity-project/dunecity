@@ -84,9 +84,21 @@ int QuantBot::waveReadinessPercent() const {
     return std::clamp(getQuantBotConfig().force.waveReadinessPercent, 10, 300);
 }
 
+int QuantBot::openingReadinessPercent() const {
+    const int percent = waveReadinessPercent();
+    // E: a house that started without an army able to launch a wave (a Construction Yard start,
+    // not a Fortress with a starting army) holds its first wave until full readiness: small
+    // early waves into a base that is building its defence died there (docs/formations.md,
+    // "Scenario tests"). A starting army that can strike keeps the smaller readiness.
+    if (!forceVariant(kForceOpeningReadiness)) return percent;
+    return Force::openingReadiness(percent, customWave.launched != 0, initialMilitaryValue, houseAttackThreshold());
+}
+
 int QuantBot::launchReadinessPercent() {
     const int percent = waveReadinessPercent();
-    if (percent >= 100 || !forceVariant(kForceStrengthReadiness) || !outnumberedByObservedArmy()) return percent;
+    if (percent >= 100) return percent;
+    if (openingReadinessPercent() < 100 && (!forceVariant(kForceStrengthReadiness) || !outnumberedByObservedArmy()))
+        return percent;
     ++forceStats.fullReadiness;
     return 100;
 }

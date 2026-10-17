@@ -899,11 +899,13 @@ private:
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
     /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
-    /// smaller configured one).
+    /// smaller configured one). kForceOpeningReadiness (E, test-only: a house that started without
+    /// an army able to launch a wave - a Construction Yard start - holds its first ground wave for
+    /// full readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
-        kForceFlank = 4096, kForceStrengthReadiness = 8192;
+        kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceOpeningReadiness = 16384;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// The force bits in effect: the override if set, else the configured F, C, B and W.
@@ -913,7 +915,10 @@ private:
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Hard/Brutal.
     int waveReadinessPercent() const;
-    /// The readiness a launch uses now: waveReadinessPercent(), raised to 100 by D while the
+    /// The readiness before any outnumbered raise: waveReadinessPercent(), or 100 under E while
+    /// the house has not launched a ground wave yet (the opening).
+    int openingReadinessPercent() const;
+    /// The readiness a launch uses now: openingReadinessPercent(), raised to 100 by D while the
     /// house is outnumbered (outnumberedByObservedArmy()).
     int launchReadinessPercent();
     /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of

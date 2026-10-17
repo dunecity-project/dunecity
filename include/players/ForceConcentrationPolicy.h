@@ -182,6 +182,15 @@ inline bool outnumbered(int64_t own, int64_t hostile) {
     return hostile > 0 && hostile * 10000 >= std::max<int64_t>(0, own) * kOutnumberedReadinessBps;
 }
 
+/// Opening readiness (kForceOpeningReadiness): the readiness a house's waves use. Before its first
+/// ground wave (\a launched false), a house whose starting army (\a initialArmy) could not launch
+/// a wave at \a percent of \a required - a Construction Yard start rather than a Fortress with an
+/// army - waits for full readiness (100); otherwise, and from the first wave on, \a percent.
+inline int openingReadiness(int percent, bool launched, int64_t initialArmy, int64_t required) {
+    if (percent >= 100 || launched) return percent;
+    return initialArmy < scaledReadiness(required, percent) ? 100 : percent;
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy
