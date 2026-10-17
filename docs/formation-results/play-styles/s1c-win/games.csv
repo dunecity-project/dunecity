@@ -1,0 +1,8 @@
+tag,difficulty,map,seed,sides,players,winner,winner_label,end_s,waves,wall_s,error
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@raid,2,1,default,2539.2,8,94,
+s1c,hard,habbanya-penny,8303,atreides:default@raid|harkonnen:default,2,1,default@raid,2605.0,12,125,
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@swarm,2,1,default,2933.0,15,160,
+s1c,hard,habbanya-penny,8303,atreides:default@swarm|harkonnen:default,2,1,default@swarm,3004.0,14,162,
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@rush,2,1,default,3320.6,24,201,
+s1c,hard,habbanya-penny,8303,atreides:default@rush|harkonnen:default,2,0,default,3253.1,21,223,
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@turtle,2,1,default,2946.9,11,161,

@@ -1,3 +1,27 @@
+## 2026-10-18 — QuantBot play styles: research, 11 test-only styles, screen + round-robin (branch `feat/ai-play-styles`, protocol 81 / save 9864 unchanged, not released)
+
+Stefan: "do another round of ai work, testing additional play styles against each other then summarise the
+updates and recommendations for ai play". Full write-up: `docs/ai-play-styles.md`; data
+`docs/formation-results/play-styles/<tag>/` (raw samples/waves in ~/Documents/projects/dunecity-results/play-styles).
+
+- **Mechanism (test-only, inert in real games; 1.0.846 reference games replayed bit-identical):**
+  `QuantBot::configOverride` + `botConfig()` (every QuantBot config read; `QuantBotConfig::applyOverrides`),
+  `QuantBot::PlayStyle` (`src/players/QuantBotStyle.cpp`: style mix, counter-composition, light-first rush,
+  wave minimum, baseline turrets, greedy harvest/extra refineries/yard floor, harvester raiders). Labels
+  `default` (configured rules) and `@style` (`tests/ai/play-styles/*.ini`); `--house-offset`, 4-label
+  `--ffa`, `tests/ai/play-style-matrix.py`.
+- **Results (Hard, 2,406 games: mini 1,197, Pro 712, PC 497; Air on battery):** no fixed composition or
+  build-order style beats BASE (armor 0.28 and heavy 0.34 lose on CY; turtle 0.19, raid 0.14, boom 0.33 lose
+  Fortress). **swarm** (full opening, then 35% waves) v BASE: CY 0.59 (0.51-0.67, ~145 games), Fortress
+  0.52 (0.38-0.67); it tops the round-robin (68-76 games per cell so far). No rock-paper-scissors cycle, so
+  no style-selection rule.
+- **Decision: default unchanged** (swarm lacks Brutal, all-against-Atreides and `/weak`). Still running when
+  this was written: round-robin `r1c-m`/`r1c-m2`/`r1f` (mini queue), `r1c-pro` (Pro), Brutal `b1c-w` (PC),
+  swarm confirmation `c1c-air` (Air); pull with `~/Documents/projects/dunecity-results/play-styles/pull.sh`
+  (+ `b1c-w`, `dunecity-air pull c1c-air`). Not built/tested with ctest this round (no production change).
+- `dunecity-pro/air sync` failed ("couldn't find remote ref HEAD": the bundle has no HEAD ref); synced with
+  an explicit refspec instead (`/private/tmp/dunecity-work/omp_PlayStyles/sync-mac.sh`).
+
 ## 2026-10-17 — local 1.0.846 installed on the MBA
 
 Staging = 1.0.845 + `chore/windows-runner` (348ee7e0: Random Skirmish and ambient-helicopter RNG draw
