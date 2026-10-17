@@ -21,8 +21,8 @@
 //      combat evidence plays exactly the prior masked to the available slots (applyPrior over the
 //      opening, plus the anti-air floor); the value built favours the prior's lead slots more than
 //      the Learned game on the same map does; once learning is active the mix leaves the prior.
-//   4. Learned/Base is inert: the configured default, Fixed:Learned,Base and Random weighted only on
-//      Learned/Base play the same game (every production pass's mix, digest and QuantBot bytes).
+//   4. Learned/Base is inert: Fixed:Learned,Base and Random weighted only on Learned/Base play the
+//      same game (every production pass's mix, digest and QuantBot bytes), the 1.0.846 rules.
 // One STRATEGY_PROBE: line per check.
 #include <players/QuantBotStrategy.h>
 #include <Network/GameStateDigest.h>
@@ -267,10 +267,10 @@ inline void runPeers(const Scenario& scenario, Uint32 seed, Uint32 otherSeed, Ui
     SDL_Log("STRATEGY_PROBE: check=peers_agree seed=%u houses=%zu distinct_strategies=%zu strategies=%s cycle=%u digest=%s",
             seed, host.choices.size(), distinct.size(), botsText(host.choices).c_str(), endCycle, host.digestAtEnd.c_str());
 
-    // The same game on the shipped default (every bot Learned/Base) is a different game: the digest
+    // The same game with every bot Fixed:Learned,Base (1.0.846) is a different game: the digest
     // the peers agree on covers what the strategies changed.
     const QuantBotStrategy::Settings spread = getQuantBotConfig().strategy;
-    getQuantBotConfig().strategy = QuantBotStrategy::Settings();
+    getQuantBotConfig().strategy = fixedStrategy(Mix::Learned);
     auto reference = start(mapInit(scenario, seed));
     std::vector<std::string> learnedMinutes;
     while (!reference->finished && reference->getGameCycleCount() < endCycle) {
@@ -634,12 +634,15 @@ int runQuantBotStrategyProbe() {
     const char* sections = std::getenv("BALANCE_STRATEGY_SECTIONS");
     auto wanted = [&](char section) { return !sections || std::strchr(sections, section) != nullptr; };
 
-    // The compiled default is the 1.0.846 behaviour: every bot Learned/Base.
+    // The shipped configuration plays the compiled [Strategy] default (Random over the measured
+    // weights); every Learned/Base reference below is set explicitly.
     const QuantBotStrategy::Settings defaults;
-    require(!defaults.random && defaults.fixedMix == Mix::Learned && defaults.fixedTempo == Tempo::Base,
-            "The compiled [Strategy] default is not Fixed:Learned,Base");
-    require(QuantBotStrategy::modeText(getQuantBotConfig().strategy) == "Fixed:Learned,Base",
-            "The shipped QuantBot configuration does not play Fixed:Learned,Base");
+    require(QuantBotStrategy::modeText(getQuantBotConfig().strategy) == QuantBotStrategy::modeText(defaults)
+            && getQuantBotConfig().strategy.mixWeights == defaults.mixWeights
+            && getQuantBotConfig().strategy.tempoWeights == defaults.tempoWeights,
+            "The shipped QuantBot configuration does not play the compiled [Strategy] default");
+    SDL_Log("STRATEGY_PROBE: check=default mode=%s mix_weights=%s tempo_weights=%s", QuantBotStrategy::modeText(defaults).c_str(),
+            QuantBotStrategy::weightsText(defaults.mixWeights).c_str(), QuantBotStrategy::weightsText(defaults.tempoWeights).c_str());
     const QuantBotStrategy::Settings shipped = getQuantBotConfig().strategy;
 
     if (wanted('1') || wanted('2')) {
@@ -676,8 +679,9 @@ int runQuantBotStrategyProbe() {
     if (wanted('3') || wanted('4')) {
         const Uint32 mapSeed = 7, endCycle = MILLI2CYCLES(12 * 60000);
         const int harkonnen = HOUSE_HARKONNEN, atreides = HOUSE_ATREIDES;
-        // The Learned game every mix game is compared with: both houses on the shipped default.
-        const GameResult learned = playProduction(harkonnen, atreides, {}, mapSeed, seed, endCycle);
+        // The Learned game every mix game is compared with: both houses Fixed:Learned,Base (1.0.846).
+        const GameResult learned = playProduction(harkonnen, atreides,
+            {{harkonnen, fixedStrategy(Mix::Learned)}, {atreides, fixedStrategy(Mix::Learned)}}, mapSeed, seed, endCycle);
         for (const auto& [house, production] : learned.houses) {
             logProduction("learned_reference", production, nullptr, learned.wallMs);
             require(production.strategy == Choice{} && production.inert, "The shipped default did not play Learned/Base");

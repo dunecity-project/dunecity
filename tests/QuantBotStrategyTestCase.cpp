@@ -109,7 +109,12 @@ TEST_CASE("Strategy: a house only plays mixes it can field", "[ai][strategy]") {
 
 TEST_CASE("Strategy: modes and weights parse strictly", "[ai][strategy]") {
     Settings settings;
-    REQUIRE_FALSE(settings.random);
+    // The shipped default: Random over the measured weights (docs/ai-play-styles.md).
+    REQUIRE(settings.random);
+    REQUIRE(modeText(settings) == "Random");
+    REQUIRE(weightsText(settings.mixWeights) == "Learned:50,QuadMass:15,TrikeSwarm:5,Artillery:10,Air:10,Counter:10");
+    REQUIRE(weightsText(settings.tempoWeights) == "Swarm:80,Flood:20");
+    REQUIRE(parseMode("Fixed:Learned,Base", settings));
     REQUIRE(modeText(settings) == "Fixed:Learned,Base");
     REQUIRE(parseMode(" random ", settings));
     REQUIRE(settings.random);
@@ -150,7 +155,7 @@ TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai
         mutate(changed);
         return changed.getConfigHash() != base;
     };
-    REQUIRE(differs([](QuantBotConfig& c){ c.strategy.random = true; }));
+    REQUIRE(differs([](QuantBotConfig& c){ c.strategy.random = !c.strategy.random; }));
     REQUIRE(differs([](QuantBotConfig& c){ c.strategy.fixedMix = Mix::QuadMass; }));
     REQUIRE(differs([](QuantBotConfig& c){ c.strategy.fixedTempo = Tempo::Swarm; }));
     for (size_t i = 0; i < kMixCount; ++i) {

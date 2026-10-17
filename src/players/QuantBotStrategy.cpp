@@ -116,8 +116,18 @@ TempoProfile tempoProfile(int readiness, int units, int value, bool lightFirst =
 } // namespace
 
 Settings::Settings() {
-    mixWeights[static_cast<size_t>(Mix::Learned)] = 100;
-    tempoWeights[static_cast<size_t>(Tempo::Base)] = 100;
+    // Measured weights (docs/ai-play-styles.md, "Strategies"): the tempo that wins (Swarm, with
+    // some Flood) and the learned mix half the time, the mixes level with it for variety; TankMass,
+    // Infantry and Specials (with Swarm) measured below BASE and are left out.
+    random = true;
+    mixWeights[static_cast<size_t>(Mix::Learned)] = 50;
+    mixWeights[static_cast<size_t>(Mix::QuadMass)] = 15;
+    mixWeights[static_cast<size_t>(Mix::Counter)] = 10;
+    mixWeights[static_cast<size_t>(Mix::Artillery)] = 10;
+    mixWeights[static_cast<size_t>(Mix::Air)] = 10;
+    mixWeights[static_cast<size_t>(Mix::TrikeSwarm)] = 5;
+    tempoWeights[static_cast<size_t>(Tempo::Swarm)] = 80;
+    tempoWeights[static_cast<size_t>(Tempo::Flood)] = 20;
 }
 
 const char* name(Mix mix) { return static_cast<size_t>(mix) < kMixCount ? kMixNames[static_cast<size_t>(mix)] : "?"; }
