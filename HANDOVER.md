@@ -1,4 +1,4 @@
-## 2026-10-18 — local 1.0.847 verified; MBA install pending
+## 2026-10-18 — local 1.0.847 verified and installed on the MBA
 
 Staging = 1.0.846 + `feat/skirmish-spectator` (ed441987: Spectate + "Your house AI" on the
 single-player Random Skirmish screen, client-only) + `feat/ai-strategy-mix` (2861cf30, includes
@@ -9,8 +9,9 @@ hashed; default Fixed:Learned,Swarm = learned mix with Swarm tempo (35% readines
 verify` at fd26fe55: build, check-build-deps and CTest 97/97 serial passed (`quantbot_strategy` 30 s,
 `quantbot_all_against_atreides` 80 s). Package: executable SHA256
 ef05d1a3c3fe82746a67449ccfff5d64f9fec77ef115bff340404efca30ef792, no Homebrew/local links, signature
-and runtime check passed. MBA offline; `/tmp/push-dunecity-1.0.847.sh` (run inside the parent
-session) installs when reachable and the game is closed. Not pushed or published.
+and runtime check passed. Installed on the MBA 2026-10-18 11:32 AEDT by `/tmp/push-dunecity-1.0.847.sh`
+(same SHA256, signature and runtime check passed); 1.0.846 at
+/Applications/.dunecity-backup-before-1.0.847-20261018-113252/. Not pushed or published.
 Note: around 10:04 on 2026-10-18 mini queue jobs hit `getcwd: Operation not permitted` in
 ~/Documents (transient; a test job at 10:58 read ~/Documents fine).
 
