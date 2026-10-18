@@ -60,6 +60,7 @@
 #include "probe-digest.inc"
 #include "elimination-match.inc"
 #include "vanilla-match.inc"
+#include "../performance/game-perf.inc"
 #include <FileClasses/INIFile.h>
 
 int runCampaignBalanceProbe() {
@@ -381,6 +382,26 @@ int runCampaignBalanceProbe() {
         VanillaMatch::run(*game, end, matchSides);
     } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {
         outcome = EliminationMatch::run(*game, end, humanHouse);
+    } else if (std::getenv("BALANCE_PERF")) {
+        // Frame-cost measurement (tests/performance/game-perf.py): BALANCE_PERF_CYCLES cycles from
+        // wherever the match starts (a loaded save continues from its own cycle).
+        const GameInitSettings& setup = game->getGameInitSettings();
+        const auto& options = setup.getGameOptions();
+        SDL_Log("GAME_PERF_SETUP: seed=%u cycle=%u map=%s options=%s units_override=%d harvesters_override=%d "
+                "concrete=%d explored=%d turrets_need_power=%d worms_respawn=%d",
+            setup.getRandomSeed(), game->getGameCycleCount(), setup.getFilename().c_str(), options.getHash().c_str(),
+            options.maximumNumberOfUnitsOverride, options.maximumNumberOfHarvestersOverride, options.concreteRequired,
+            options.startWithExploredMap, options.rocketTurretsNeedPower, options.sandwormsRespawn);
+        for (const auto& info : setup.getHouseInfoList())
+            for (const auto& player : info.playerInfoList)
+                SDL_Log("GAME_PERF_SETUP: house=%d team=%d player=%s class=%s", static_cast<int>(info.houseID), info.team,
+                    player.playerName.c_str(), player.playerClass.c_str());
+        // The map text a match was started from (a Random Skirmish save carries its generated map).
+        if (const char* mapOut = std::getenv("BALANCE_PERF_DUMP_MAP"))
+            std::ofstream(mapOut, std::ios::binary) << setup.getFiledata();
+        const Uint32 perfCycles = std::getenv("BALANCE_PERF_CYCLES")
+            ? static_cast<Uint32>(std::strtoul(std::getenv("BALANCE_PERF_CYCLES"), nullptr, 10)) : end;
+        GamePerf::run(*game, perfCycles, [&]() { ProbeDigest::periodic(*game); });
     } else {
         while (!game->finished && game->getGameCycleCount() < end) {
             ProbeDigest::periodic(*game);

@@ -641,6 +641,12 @@ private:
     void refreshTacticalDanger();
     int dangerAt(Coord pos, Coord size = Coord(1, 1), bool losses = false) const;
     bool reactorClearance(Uint32 item, Coord pos) const;
+    /// The footprints (x, y, w, h) a placement of @a item must keep reactor blast clearance from:
+    /// for a reactor every own protected building, for a protected building every own reactor
+    /// (standing or reserved by another builder); empty for anything else. reactorClearance()
+    /// is clearsBlastSites() over this list; a placement search builds it once per search.
+    std::vector<std::array<int, 4>> reactorBlastSites(Uint32 item) const;
+    static bool clearsBlastSites(const std::vector<std::array<int, 4>>& sites, Coord pos, Coord size);
     int rearScore(Coord pos, Coord base) const;
     int recentFactoryLossCount() const;
     struct SpiceFieldCache;

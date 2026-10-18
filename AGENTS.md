@@ -124,6 +124,19 @@ overrides 0 - and fails unless Atreides eliminates everyone within 40 game minut
 seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
 make a change pass; see `docs/quantbot-all-against-atreides.md`.
 
+The same changes, and anything touching the game loop or rendering, must also pass
+`perf_regression` (Stefan, 2026-10-18: "make sure you include performance testing as part of
+regression testing"):
+
+```bash
+ctest --test-dir build -R '^perf_regression$' --output-on-failure
+```
+
+It plays Stefan's 4P DuneCity Brutal Random Skirmish map headless for 6 game minutes and fails when
+the mean simulation CPU per cycle or a house's AI update exceeds its budget (multiples of a
+calibration loop, so it works on any Mac). Run it on a quiet machine; see `docs/game-performance.md`
+(also `tests/performance/game-perf.py --rendered` for real-window frame rates at 2 ms game speed).
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)

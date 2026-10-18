@@ -1,3 +1,25 @@
+## 2026-10-18 — Game FPS at 2 ms game speed: no release regression found; placement cuts; perf_regression (branch `perf/game-fps`, not released)
+
+Stefan (1.0.847, MBA M5): 13 fps spectating a 4P 160x160 DuneCity Brutal Random Skirmish at Game
+Speed 2 ms. Write-up: `docs/game-performance.md`; raw data `~/Documents/projects/dunecity-results/game-fps`.
+
+- **Tooling:** `tests/performance/game-perf.py` (+ `game-perf.inc`): stepped per-cycle/per-house
+  costs, interactive main loop headless or rendered (`--rendered`, real window, 2 ms), older releases
+  via `--source`; scenario `stefan-map` = his slow game's map from its pinned Workshop revision.
+  `run-campaign-balance.py --real-video`.
+- **Bisect (quiet mini, rendered, 2 ms, 8 game min):** 1.0.833-1.0.847 all 59.4-60 fps vsync-capped
+  at full 500 cycles/s, worst house update 25-31 ms in every release.
+- **His Air, his slow.dls, same 1.0.847 code, scratch profile (Air runner paused):** full speed,
+  ~100 fps; also with a copy of his `Dune City.ini`, decision log on or off. His 13 fps session had
+  every sim component 3-7x slower per cycle: machine state during the session, not a code regression.
+  Not compared: the /Applications app through the menus vs the probe. 33 GB of old decision logs in
+  his profile (not deleted).
+- **Changes (51 PROBE_DIGESTs identical over 10 game min):** reactor blast-spacing sites collected
+  once per placement search instead of a whole-map structure walk per candidate; the per-candidate
+  JSON telemetry record replaced by plain numbers (record written once). QuantBot build time -25..-32%.
+- **perf_regression** ctest (mandatory, AGENTS.md/CLAUDE.md): passed (42 s). Required ctest list:
+  see the final report of this branch.
+
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
 Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct

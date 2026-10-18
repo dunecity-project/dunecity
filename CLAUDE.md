@@ -146,6 +146,11 @@ Atreides QuantBot Brutal must eliminate the four AI Player (hard) houses on the 
 Never raise the limit or remove seeds to get a change through
 (`docs/quantbot-all-against-atreides.md`).
 
+The same changes, and game-loop or rendering changes, must also pass
+`ctest --test-dir build -R '^perf_regression$'`: Stefan's 4P DuneCity Brutal Random Skirmish map,
+6 game minutes headless, budgets on mean simulation CPU per cycle and per-house AI update time as
+multiples of a calibration loop. Run it on a quiet machine (`docs/game-performance.md`).
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)

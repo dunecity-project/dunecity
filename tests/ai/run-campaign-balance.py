@@ -152,6 +152,9 @@ parser.add_argument('--stats-ui-probe', action='store_true',
                     help='Exercise the Stats window, observer house browsing and the sidebar layout')
 parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
                     help='Render the UI probe at this window size (default 640x480)')
+parser.add_argument('--real-video', action='store_true',
+                    help='Open a real window with the platform renderer instead of the dummy video driver '
+                         '(game-perf.py --rendered: the interactive main loop at --viewport, default 1440x900)')
 parser.add_argument('--sourceforge-probe', action='store_true')
 parser.add_argument('--preplace-probe', action='store_true',
                     help='Construction Yard pre-placement queue: reservations, chain, fallback, cancel, save/load, 9854 load')
@@ -498,10 +501,12 @@ else:
         binary = app/'MacOS/balance-probe'
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
-env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',
+env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+if not args.real_video:
+    env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
 if WINDOWS:
     # The game asks for an accelerated renderer (Direct3D 11 on Windows), which the dummy video
@@ -538,7 +543,9 @@ if args.preplace_probe:
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
 if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe:
+if args.real_video and not args.viewport:
+    args.viewport = '1440x900'
+if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe or args.real_video:
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
