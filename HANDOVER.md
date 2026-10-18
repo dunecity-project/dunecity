@@ -14,6 +14,11 @@ Test: `campaign_no_population_victory_{vanilla,dunecity}` (`--no-population-vict
 level 4 = WinFlags 19; forces local city population to 800 for 480 cycles and requires the mission
 to keep running). The scenario matrix branch (`test/ai-scenario-matrix`) still reads
 `getEconomicVictoryThreshold()` and classifies win type `economic`; it must drop those when merged.
+Campaign matrix (acdada9b merged uncommitted, DuneCity Hard partner vs QuantBot Easy, levels 1-9,
+96 games; results ~/Documents/projects/dunecity-results/econ-victory/campaign): before (847 report)
+90 won / 2 lost / 4 not finished, wins conquest/economic/quota 12/74/4, mean 16.1 min; after 89 / 2 / 5,
+wins 85/0/4, mean 17.4 min. Not finished: harkonnen m3 x2, ordos m1, ordos m17 x2 (80 min limit);
+losses atreides m22, harkonnen m22 (same seeds as before).
 
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
