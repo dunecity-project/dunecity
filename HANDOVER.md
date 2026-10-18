@@ -1,3 +1,22 @@
+## 2026-10-18 — Workshop map sharing and community catalogue removed (branch `chore/remove-map-sharing`, not released)
+
+Stefan: "get rid of the workshop map shit". Removed: the per-frame `Workshop::updatePublications()`
+pump (MenuBase, Game loop, NetworkManager — it did a TLS handshake on the main thread and retried 43
+stuck outbox entries every 60 s), the `workshop/outbox` queue (`queuePublish`/`queueCollection`),
+offline custom-map collection (`Game::collectCustomMap`, `include/Network/MapCollection.h`, "queued for
+the community catalogue"), the `lookup`/`collect=1` protocol and Store `collected` receipts, host-time
+map uploads in `WorkshopGameContent::pin` (maps travel in the game setup), and — Stefan's decision
+"remove 1+2" — the catalogue browser (`WorkshopCommunityMenu` MetaserverMenu, Custom Game "Metaserver
+Maps", Map Editor "Save/Load online", Mods "Load from metaserver") and the manual "Save to metaserver"
+buttons (Map/Mod/Dune2R editors), plus `scripts/seed-metaserver-maps.py`. Kept: the revision store,
+`resolveMod`, saves pinning revisions, and the online host's blocking upload of an authored mod before
+advertising + joiners' download of pinned revisions (`src/Menu/WorkshopTransferMenu.cpp`). Opening the
+store deletes an old `workshop/outbox` once (logged). The game no longer calls `/v1/content/list` or
+`/lookup`; server (tools/p2p-signaling, dunelegacy.com p2p-service) unchanged. Docs: `docs/workshop.md`.
+New ctests `workshop_store_tests`, `save_pinned_workshop_revision` (save on an authored mod loads from
+workshop/revisions after the mod folders are deleted; seeded outbox removed, nothing published).
+`tests/menu/run-menu-probe.py --size WxH` replaces `--metaserver-maps`.
+
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
 Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct

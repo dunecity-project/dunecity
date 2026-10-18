@@ -278,7 +278,7 @@ target_sources(dunecity
         mod/WorkshopStore.cpp
         mod/Workshop.cpp
         mod/WorkshopClient.cpp
-        Menu/WorkshopCommunityMenu.cpp
+        Menu/WorkshopTransferMenu.cpp
         mod/ModManager.cpp
 
         # Structures

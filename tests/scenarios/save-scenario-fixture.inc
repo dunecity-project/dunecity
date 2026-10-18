@@ -19,9 +19,14 @@ void runFixture() {
     const std::string mapPath = requiredEnv("SCENARIO_EXPORT_FIXTURE_MAP");
     const std::string savePath = requiredEnv("SCENARIO_EXPORT_SAVE");
     const std::string mod = env("SCENARIO_EXPORT_FIXTURE_MOD", "dunecity");
+    // An authored (non-approved) copy makes the save pin an exact Workshop revision
+    // that only the local revision store can supply once the copy is gone.
+    const std::string draft = env("SCENARIO_EXPORT_FIXTURE_DRAFT", "");
 
     if(!ModManager::instance().setActiveMod(mod) || ModManager::instance().getActiveModName() != mod)
         fail("The fixture mod did not activate: " + mod);
+    if(!draft.empty() && (!ModManager::instance().createMod(draft, mod) || !ModManager::instance().setActiveMod(draft)))
+        fail("The fixture draft mod could not be created: " + draft);
 
     const std::string contents = readFile(mapPath);
     GameInitSettings init(mapPath, contents, true, settings.gameOptions);
@@ -133,6 +138,12 @@ void runFixture() {
     }
 
     require(game->saveGame(savePath), "The fixture world was saved");
+    if(!draft.empty()) {
+        const auto pinned = game->getGameInitSettings().getModRevisionHash();
+        require(!pinned.empty() && ModManager::instance().getActiveModName() == "ws-" + pinned,
+                "The fixture save pins the authored mod's exact Workshop revision");
+        SDL_Log("SCENARIO_EXPORT_FIXTURE_REVISION: %s", pinned.c_str());
+    }
     SDL_Log("SCENARIO_EXPORT_FIXTURE: map=%s size=%dx%d damaged=%d concrete_only=%d road_only=%d "
             "overlay=%d air_over_structure=%d stacked_infantry=%d objects=%zu",
             mapPath.c_str(), currentGameMap->getSizeX(), currentGameMap->getSizeY(), damaged,

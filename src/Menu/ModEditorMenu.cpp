@@ -72,16 +72,12 @@ ModEditorMenu::ModEditorMenu(const std::string& name) : modName(name), modPath(M
     statusLabel.setText(_("Save creates a version only when content changes."));
     windowWidget.addWidget(&statusLabel, Point(x,y+338), Point(width,46));
     saveButton.setText(_("Save Version"));
-    shareButton.setText(_("Save to metaserver"));
-    shareButton.setTooltipText(_("Save a version and publish that exact version to the metaserver"));
     backButton.setText(_("Back"));
-    saveButton.setOnClick([this]() { save(false); });
-    shareButton.setOnClick([this]() { save(true); });
+    saveButton.setOnClick([this]() { save(); });
     backButton.setOnClick([this]() { quit(); });
-    const int buttonWidth = (width-20)/3;
+    const int buttonWidth = (width-10)/2;
     windowWidget.addWidget(&saveButton, Point(x,y+396), Point(buttonWidth,32));
-    windowWidget.addWidget(&shareButton, Point(x+buttonWidth+10,y+396), Point(buttonWidth,32));
-    windowWidget.addWidget(&backButton, Point(x+2*(buttonWidth+10),y+396), Point(buttonWidth,32));
+    windowWidget.addWidget(&backButton, Point(x+width-buttonWidth,y+396), Point(buttonWidth,32));
     const auto info = ModManager::instance().getModInfo(modName);
     nameText.setText(info.displayName);
     authorText.setText(info.author);
@@ -106,7 +102,7 @@ ModEditorMenu::ModEditorMenu(const std::string& name) : modName(name), modPath(M
         sectionChoice.setNumVisibleEntries(6); keyChoice.setNumVisibleEntries(6);
         loadSections();
     } catch(const std::exception& error) {
-        statusLabel.setText(error.what()); saveButton.setEnabled(false); shareButton.setEnabled(false);
+        statusLabel.setText(error.what()); saveButton.setEnabled(false);
     }
     nameText.setActive();
 }
@@ -207,7 +203,7 @@ bool ModEditorMenu::applyValue() {
     return true;
 }
 
-void ModEditorMenu::save(bool share) {
+void ModEditorMenu::save() {
     if(!applyValue()) return;
     if(trim(nameText.getText()).empty()) { openWindow(MsgBox::create(_("Please enter a display name."))); return; }
     namespace fs = std::filesystem;
@@ -242,8 +238,7 @@ void ModEditorMenu::save(bool share) {
         modified = false; changed.fill(false);
         std::error_code ignored; fs::remove_all(staging, ignored);
         statusLabel.setText(_("Saved version ") + std::to_string(revision.version) + "\n"
-            + (share ? _("Publishing uploads this exact saved version.") : _("Publishing later uploads this exact saved version.")));
-        if(share) Workshop::shareRevision(revision);
+            + _("Hosting an online game shares this exact saved version with joiners."));
     } catch(const std::exception& error) {
         std::string message = error.what();
         if(!committed && createdStaging) {
@@ -256,7 +251,7 @@ void ModEditorMenu::save(bool share) {
             // Keep recovery copies only when restoring the original files failed.
             if(restored) { std::error_code ignored; fs::remove_all(staging, ignored); }
         }
-        openWindow(MsgBox::create(std::string(committed ? _("Saved, but uploading to the metaserver failed: ") : _("Save failed: ")) + message));
+        openWindow(MsgBox::create(std::string(_("Save failed: ")) + message));
     }
 }
 void ModEditorMenu::quit(int returnVal) {

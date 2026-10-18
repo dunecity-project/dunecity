@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser(description="Render real menus and check setup 
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--audio-failure', action='store_true', help='Verify startup recovery when the audio driver cannot open')
-parser.add_argument('--metaserver-maps', action='store_true', help='Read-only live catalogue and download smoke test in isolated profile')
+parser.add_argument('--size', action='append', metavar='WxH', help='Run at this window size instead of 640x480, 854x480 and 1280x720 (repeatable)')
 parser.add_argument('--retina-resolution', action='store_true', help='Verify HD selection, Apply/reinitialization and fullscreen with Retina display data')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
@@ -75,12 +75,12 @@ with (out/'build.log').open('w') as log:
         subprocess.run(options,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
         link = [str(out/'retina-options.o') if arg.endswith('/Menu/OptionsMenu.cpp.o') else arg for arg in link]
     subprocess.run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
-for width, height in (((640,480),) if args.retina_resolution else (((1280, 720),) if args.metaserver_maps else ((640, 480), (854, 480), (1280, 720)))):
+sizes = [tuple(int(v) for v in size.lower().split('x')) for size in args.size] if args.size else [(640, 480), (854, 480), (1280, 720)]
+for width, height in ([(640,480)] if args.retina_resolution else sizes):
     profile = out / ('profile-' + str(width))
     profile.mkdir(exist_ok=True)
     (profile/'Dune City.ini').write_text('[Video]\nPhysical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
-    if args.metaserver_maps: env['MENU_LIVE_MAPS']='1'
     if args.retina_resolution: env['MENU_RETINA_RESOLUTION']='1'
     logpath = out / ('run-' + str(width) + '.log')
     with logpath.open('w') as log:
@@ -88,7 +88,7 @@ for width, height in (((640,480),) if args.retina_resolution else (((1280, 720),
         # and scans the large community maps at each of three screen sizes.
         # Keep the small Retina check bounded separately; 120 seconds truncated
         # progressing navigation runs before their final assertions on macOS.
-        runtime_timeout = 720 if args.metaserver_maps else 120 if args.retina_resolution else 420
+        runtime_timeout = 120 if args.retina_resolution else 420
         subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
     results = [line for line in logpath.read_text(errors="replace").splitlines() if 'MENU_PROBE_PASS:' in line]
     if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
