@@ -270,6 +270,7 @@ QuantBotConfig::QuantBotConfig() {
     force.pressOn = false;
     force.finishWeakest = false;
     force.fortifiedWaves = false;
+    force.sonicClearLane = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -549,6 +550,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "PressOn", force.pressOn);
         iniFile.setBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
         iniFile.setBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
+        iniFile.setBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -643,6 +645,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.pressOn = iniFile.getBoolValue("Force Concentration", "PressOn", force.pressOn);
     force.finishWeakest = iniFile.getBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
     force.fortifiedWaves = iniFile.getBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
+    force.sonicClearLane = iniFile.getBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1071,6 +1074,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("pressOn", force.pressOn);
     addNamed("finishWeakest", force.finishWeakest);
     addNamed("fortifiedWaves", force.fortifiedWaves);
+    addNamed("sonicClearLane", force.sonicClearLane);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

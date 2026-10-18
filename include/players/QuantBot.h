@@ -1021,8 +1021,10 @@ private:
     /// hunter in an enemy turret's reach that is not shooting an armed unit attacks the turret),
     /// kForcePressOn (P: a wave member out of visible targets hunts on to the nearest enemy
     /// structure seen), kForceFinishWeakest (H: a ground wave hunts towards the weakest known
-    /// enemy house's production and economy) and kForceFortifiedWaves (K: against an objective
-    /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army).
+    /// enemy house's production and economy), kForceFortifiedWaves (K: against an objective
+    /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army)
+    /// and kForceSonicClearLane (S, SonicClearLane: a hunting sonic tank whose wave would pass over
+    /// one of our own units shoots another enemy in reach whose lane is clear).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
@@ -1030,7 +1032,7 @@ private:
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
         kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304,
         kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
-        kForceFortifiedWaves = 67108864;
+        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
@@ -1113,6 +1115,12 @@ private:
     /// the nearest enemy turret among \a turrets that has it in reach (or that it reaches); true if
     /// it was given that target.
     bool attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets);
+    /// kForceSonicClearLane (S): \a unit, a hunting sonic tank, keeps a target whose lane is clear
+    /// of \a friends (our team's ground units within reach, sonic tanks excluded) or switches to the
+    /// nearest enemy in its reach among \a enemies whose lane is; true if it is now on a clear-lane
+    /// target (no other targeting rule then applies to it this pass).
+    bool sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
+                          const std::vector<const UnitBase*>& friends);
     /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
     /// or power line: what a player knows stands there.
     bool knownEnemyStructure(const StructureBase* structure) const;
@@ -1212,7 +1220,7 @@ private:
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
             turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
-            finishWaves = 0, fortifiedHolds = 0;
+            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets

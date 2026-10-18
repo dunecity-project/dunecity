@@ -97,7 +97,8 @@ int QuantBot::forceBits() const {
         | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
-        | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0);
+        | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
+        | (force.sonicClearLane ? kForceSonicClearLane : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -415,10 +416,10 @@ void QuantBot::focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, 
 void QuantBot::concentrateForces() {
     const bool noOverkill = forceVariant(kForceNoOverkill);
     const bool focus = forceVariant(kForceFocusFire) && !noOverkill, convergeOn = forceVariant(kForceConverge);
-    const bool turretsFirst = forceVariant(kForceTurretPriority);
+    const bool turretsFirst = forceVariant(kForceTurretPriority), sonicLanes = forceVariant(kForceSonicClearLane);
     if (forceVariant(kForceMuster) || !musters.empty()) updateMusters();
     if (!splits.empty()) updateSplits();
-    if (!focus && !convergeOn && !noOverkill && !turretsFirst) return;
+    if (!focus && !convergeOn && !noOverkill && !turretsFirst && !sonicLanes) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
     // Visible enemy ground units and buildings, in list order.
@@ -437,6 +438,13 @@ void QuantBot::concentrateForces() {
     if (turretsFirst)
         for (const auto* enemy : enemies)
             if (enemy->isAStructure() && enemy->canAttack()) turrets.push_back(enemy);
+    // Our team's ground units a sonic wave would hurt (every one but the sonic tanks), for S.
+    std::vector<const UnitBase*> friends;
+    if (sonicLanes)
+        for (const auto* unit : getUnitList())
+            if (unit->getOwner() && unit->getOwner()->getTeamID() == myTeam && unit->getHealth() > 0 && unit->isActive()
+                && unit->isAGroundUnit() && unit->getItemID() != Unit_SonicTank)
+                friends.push_back(unit);
     // Our hunters: the wave members and the base defenders (engine Hunt, not forced).
     auto hunter = [&](const UnitBase* unit) {
         return unit->getOwner() == getHouse() && unit->getHealth() > 0 && unit->isActive() && unit->isRespondable()
@@ -469,6 +477,7 @@ void QuantBot::concentrateForces() {
     }
     for (const auto* unit : getUnitList()) {
         if (!hunter(unit) || escaping(unit)) continue;
+        if (sonicLanes && unit->getItemID() == Unit_SonicTank && sonicClearTarget(unit, enemies, friends)) continue;
         if (!turrets.empty() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave && attackTurretInReach(unit, turrets))
             continue;
         if (focus && focusFire(unit, enemies)) continue;
@@ -512,6 +521,39 @@ bool QuantBot::attackTurretInReach(const UnitBase* unit, const std::vector<const
     if (!best) return false;
     doAttackObject(unit, best, false);
     ++forceStats.turretTargets;
+    return true;
+}
+
+bool QuantBot::sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
+                                const std::vector<const UnitBase*>& friends) {
+    const Coord at = unit->getLocation();
+    // Our units the wave could reach at all (list order).
+    std::vector<Coord> near;
+    for (const auto* other : friends)
+        if (other != unit && tiles(at, other->getLocation()) <= Force::kSonicReachTiles + 1) near.push_back(other->getLocation());
+    auto clear = [&](const ObjectBase* target) {
+        const Coord aim = target->getClosestPoint(at);
+        for (const Coord& other : near)
+            if (Force::inSonicPath(aim.x - at.x, aim.y - at.y, other.x - at.x, other.y - at.y)) return false;
+        return true;
+    };
+    const int myTeam = getHouse()->getTeamID();
+    const ObjectBase* current = unit->getTarget();
+    if (current && current->getHealth() > 0 && current->getOwner() && current->getOwner()->getTeamID() != myTeam
+        && unit->isInWeaponRange(current) && clear(current)) return true;
+    // The nearest enemy in reach with a clear lane (ties: list order).
+    const ObjectBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* enemy : enemies) {
+        if (enemy == current || !unit->isInWeaponRange(enemy) || !unit->canAttack(enemy)) continue;
+        const int distance = tiles(at, enemy->getClosestPoint(at));
+        if (best && distance >= bestDistance) continue;
+        if (!clear(enemy)) continue;
+        best = enemy; bestDistance = distance;
+    }
+    if (!best) return false;
+    doAttackObject(unit, best, false);
+    ++forceStats.sonicRetargets;
     return true;
 }
 

@@ -137,7 +137,7 @@ struct QuantBotConfig {
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness,
-    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves; optional keys, the code defaults
+    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves, SonicClearLane; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -183,6 +183,10 @@ struct QuantBotConfig {
         /// Against an objective guarded by many seen turrets a ready wave waits (at most three
         /// minutes) for a bigger army before it leaves.
         bool fortifiedWaves;
+        /// A hunting sonic tank whose wave would pass over one of its own team's units (the
+        /// wave runs about nine tiles and hurts all but sonic tanks) shoots the nearest other
+        /// enemy in its reach with a clear lane instead.
+        bool sonicClearLane;
     };
     ForceSettings force;
 

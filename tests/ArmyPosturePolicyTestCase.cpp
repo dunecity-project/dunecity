@@ -676,6 +676,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.pressOn = !c.force.pressOn; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWeakest = !c.force.finishWeakest; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.fortifiedWaves = !c.force.fortifiedWaves; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.sonicClearLane = !c.force.sonicClearLane; }));
     }
 }
 

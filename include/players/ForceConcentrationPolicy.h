@@ -323,6 +323,23 @@ inline int64_t fortifiedReady(int64_t required, int64_t militaryLimit, int turre
     return std::max(required, militaryLimit * kFortifiedLimitPercent / 100);
 }
 
+/// S: a sonic tank's wave runs on past its target for its whole travel (45 frames at 12 pixels,
+/// about 8.4 tiles) and hurts everything within its 3/4-tile radius of the line, friends included
+/// (only sonic tanks are immune) - so far, in tiles from the shooter.
+constexpr int kSonicReachTiles = 9;
+
+/// Does a sonic wave fired at offset (\a tx, \a ty) from the shooter pass over offset (\a ox, \a oy):
+/// ahead of the shooter along the line to the target, at most kSonicReachTiles along it and at
+/// most one tile beside it? Integer: both bounds compare squares scaled by the target distance.
+inline bool inSonicPath(int tx, int ty, int ox, int oy) {
+    const int64_t length2 = int64_t(tx) * tx + int64_t(ty) * ty;
+    if (length2 == 0) return false;
+    const int64_t along = int64_t(ox) * tx + int64_t(oy) * ty;       // progress x |target|
+    if (along <= 0 || along * along > int64_t(kSonicReachTiles) * kSonicReachTiles * length2) return false;
+    const int64_t beside = int64_t(ox) * ty - int64_t(oy) * tx;      // lateral offset x |target|
+    return beside * beside <= length2;
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy

@@ -74,7 +74,8 @@ KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
 GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
-                     'gate_holds', 'gate_timeouts', 'raid_orders', 'strategy')
+                     'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
+                     'finish_waves', 'fortified_holds', 'sonic_retargets', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')
@@ -104,6 +105,16 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            with path.open(newline='') as handle:
+                header = next(csv.reader(handle), [])
+            if list(header) != list(fields):
+                # Written by an older harness: rewrite it with the current columns (missing ones empty).
+                old = read(path)
+                with path.open('w', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(old)
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
             if new:
