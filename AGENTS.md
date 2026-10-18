@@ -124,6 +124,17 @@ overrides 0 - and fails unless Atreides eliminates everyone within 40 game minut
 seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
 make a change pass; see `docs/quantbot-all-against-atreides.md`.
 
+## AI test games: scoring and the default rule
+
+AI test games (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py` reports) are
+scored by `tests/ai/match_score.py`. The score is placement: 1st +1, last -1, linear in between. A
+time-out is a draw and draws are negative: survivors share the top places minus 0.25, so a 1v1 draw is
+-0.25. There is no kill-value adjudication. A candidate behaviour becomes a default only when the 95%
+bootstrap interval of its paired score difference against the control is above 0, and it is not worse
+on Fortress, Brutal and `/weak`. Report the time-out rate of each arm. Do not reintroduce the old
+1/0/0.5 rule except through `--scoring legacy` to compare old reports. See
+`docs/ai-play-styles.md` section 7.
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)
