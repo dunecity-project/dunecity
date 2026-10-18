@@ -898,6 +898,71 @@ defence, and the game timed out at 60 minutes with two houses alive. Batches (fi
 DuneCity and vanilla, seeds 9101-9808, 60 minutes; Fortress/`/weak` duels; CY 1v1) were still running
 when this was written - see HANDOVER.
 
+### Free-for-all: finishing the game (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865 unchanged)
+
+Follow-up to the army fix, scored with the placement score (`tests/ai/match_score.py`: 1st +1 ... last
+-1, time-out survivors share the top places minus 0.25; paired difference, 95% bootstrap). Evidence:
+`~/Documents/projects/dunecity-results/army-stuck/` (`*-ablation*`, `late-*`).
+
+**Round 5 defence ablation (V perimeter hold, U perimeter turrets, X sized defence).** Each style
+switches rules off (`@nov @nou @nox @nouvx`). Difference = variant - default:
+
+| Setting | Games/arm | no V | no U | no X | no UVX |
+|---|---|---|---|---|---|
+| `/weak` (half army) v none, paired with default `/weak` | 36 | +0.111 (-0.04..+0.27) | -0.021 (-0.06..+0.00) | **-0.222 (-0.45..-0.02) worse** | +0.132 (-0.03..+0.31) |
+| 4P FFA rs160 DuneCity + vanilla, one house each | 24 (U: 24, two each) | +0.115 (-0.31..+0.48) | +0.000 (-0.35..+0.32) | +0.014 (-0.35..+0.39) | -0.038 (-0.52..+0.42) |
+| Fortress 1v1 head-to-head (128/160/192) | 36 | -0.111 (-0.56..+0.33) | 0.000 (-0.50..+0.50) | -0.222 (-0.72..+0.28) | 0.000 (-0.50..+0.50) |
+| CY 1v1 head-to-head (5 maps) | 60 | -0.033 (-0.53..+0.47) | -0.067 (-0.60..+0.47) | -0.133 (-0.60..+0.33) | +0.067 (-0.40..+0.60) |
+
+Decision: **X stays** (measurably helpful: removing it loses in `/weak`), **U stays** (neutral
+everywhere, never better without it, rarely builds). **V should go** by the rule (not helpful
+anywhere, point estimates favour removing it in `/weak` and the FFA, and it was the rule that
+garrisoned every FFA house), **but its removal is not landed**: with V removed (commit 0fcfc612,
+reverted) two mandatory tests fail deterministically - `quantbot_strategy` ("Artillery: the lead
+slots got no larger share of the built value than in the Learned game") and
+`quantbot_no_spice_income_low-cash` ("tax never became usable income") - and both pass with V. V
+stays on until those two tests are re-examined against a V-less opening (open item, HANDOVER).
+
+**CY 1v1, fix v 1.0.847** (default v none, 120 games each): 0.312 v 0.417, -0.104 (-0.26..+0.05)
+level. In a 1v1 the threat estimate equals the old sum, so only the bundle walk-out can differ: a
+decision log (ergun-sahij 8101) shows the bundle point moved from 25% to 22-34% of the way in 10 of 38
+recomputations. 100 of 120 games diverged from the baseline (default wins 85 v 78; 14 flips to a loss,
+9 to a win, 2 to a draw): consistent with chaotic divergence, not a measurable cost; nothing changed.
+
+**Late-game candidates** (`[Force Concentration]`, code default off, hashed): T `TurretPriority`
+(`@turretsfirst`), P `PressOn` (`@presson`), H `FinishWeakest` (`@finish`), K `FortifiedWaves`
+(`@fortified`, waits for 60% of the military limit, at most `kFortifiedMaxHoldMs` 4 min), T+P (`@tp`),
+all four (`@lateall`), and S `SonicClearLane` (`@sonic`: a hunting sonic tank whose wave - it runs
+about nine tiles, past the target, and hurts every unit but sonic tanks - would pass over one of its
+own team's units keeps or switches to the nearest enemy in reach with a clear lane;
+`ForceConcentrationPolicy::inSonicPath`; 675 retargets per Atreides house per game). Head-to-head
+4P FFA (rs160 DuneCity + vanilla, every label on every house), difference against default in the same
+games:
+
+| Candidate | Games | Score | Default | Difference (95% CI) |
+|---|---|---|---|---|
+| T | 32 | -0.003 | -0.060 | +0.057 (-0.36..+0.47) level |
+| P | 32 | +0.065 | -0.060 | +0.125 (-0.33..+0.57) level |
+| H | 32 | -0.104 | -0.060 | -0.044 (-0.43..+0.34) level |
+| K | 48 | -0.059 | -0.090 | +0.031 (-0.28..+0.33) level |
+| T+P | 48 | +0.089 | -0.090 | +0.179 (-0.10..+0.44) level |
+| T+P+H+K | 48 | -0.220 | -0.090 | -0.130 (-0.43..+0.18) level |
+| S (after V's removal) | 48 | -0.072 | -0.066 | -0.006 (-0.21..+0.21) level |
+
+Draws, all four houses playing the candidate (rs160 DuneCity, 12 seeds, 60 minutes, same seeds):
+default 5/12 time-outs (2.25 eliminated per game, first elimination median 28.8 min); T+P+H+K 8/12
+(2.00, 33.2 min); T+P 7/12 (1.75, 32.8); P 7/12 (1.92, 32.9). Every candidate ends **fewer** games, so
+none is accepted: all stay off (test-only styles). The military cap use (139k unspent in the diagnosed
+game) was not changed: nothing measured supports it.
+
+**Diagnosis that motivated them** (`diag-dunecity-9101`, decision log): the last two cities held 206
+and 265 turrets at minute 60; the stronger house sat at its military limit with 139k unspent and sent
+100-190-unit waves every ~2.5 min; ~20% of its losses after minute 20 were its own sonic tanks'
+friendly fire; only ~40 defender turrets died in 40 minutes. Still open.
+
+**Harness.** `houses.csv` gains `turret_targets press_on_orders finish_waves fortified_holds
+sonic_retargets` (an older file is rewritten with the new columns on the next append).
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

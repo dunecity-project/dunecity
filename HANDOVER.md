@@ -1,3 +1,37 @@
+## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data
+`~/Documents/projects/dunecity-results/army-stuck/` (`*-ablation*`, `late-*`, `cy-tel`) and
+`~/Documents/projects/dunecity-results/scenario-matrix/army-stuck-{before-c,after}`.
+
+- **Merged** `exp/ai-late-game` (scenario matrix acdada9b, late-game candidates T/P/H/K, `--baseline-tag`)
+  into the fix branch; `exp/ai-late-game` fast-forwarded to it. Ablation style files renamed in the
+  index (case-only renames had never been committed).
+- **UVX ablation (placement score):** X helps (`/weak` without X -0.222, -0.45..-0.02); U neutral; V not
+  helpful anywhere (`/weak` +0.111 and FFA +0.115 without it, both level). V's removal (0fcfc612) made
+  `quantbot_strategy` and `quantbot_no_spice_income_low-cash` fail deterministically (both pass with V),
+  so it was reverted (1c2bedf6). **Open:** re-examine those two tests against a V-less opening, then remove V.
+- **CY 1v1 -0.10 v 1.0.847:** level; only the bundle walk-out can differ in a 1v1 (moves the point
+  25% -> 22-34% in 10 of 38 recomputations); 100/120 games diverged chaotically. No change.
+- **Late-game candidates all rejected (stay off):** head-to-head T +0.057, P +0.125, H -0.044 (32 games),
+  K +0.031, T+P +0.179, all four -0.130 (48), S +-0.006 (48): all level; self-play DuneCity time-outs
+  default 5/12, all four 8/12, T+P 7/12, P 7/12 - every candidate ends fewer games. New candidate S
+  (`SonicClearLane`, `@sonic`): sonic tanks pick targets whose wave misses own units; active (675
+  retargets per Atreides house) but level. Military cap use not changed (not measured).
+- **Windows probe build:** `tests/performance/game-perf.inc` uses GetThreadTimes on Windows (436e6d3e).
+- **Harness:** late-rule counters in `houses.csv` (old files rewritten with the new columns on append).
+- The cluster's finish step failed for late-selfTPP/late-sonic2 (`import match_score`, runpy path); rows
+  are complete, reports run by hand.
+- **Scenario matrix, full tier skirmish/cy/mp/aaa (152 games, cluster):** final code (= `before-c`, ff0474c7
+  behaviour) 150 games played, time-outs skirmish 10/52, cy 5/28, mp 6/52, aaa 0/18, no crash; flags: QM
+  idle once (7P FFA), 3v3 medium small-army Hard team 0/4, ladder order inverted (as on 1.0.847). V
+  removed (`after`, 0fcfc612, not landed): 151 games, time-outs 11/6/4/0, same flags.
+- **Tests** (Release `build`, ctest -j3, after the revert, 1c2bedf6 tree): 45/45 passed - dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and all quantbot_* (incl. all_against_atreides, strategy, ffa_army_deploys,
+  scenario_matrix smoke).
+
 ## 2026-10-18 — FFA army fix, continued: scoring merged, fix v 1.0.847, ablation and late-game draws IN PROGRESS (branches `fix/ai-army-stuck-in-base` b8965267, `exp/ai-late-game`; not released)
 
 Agent ArmyStuck2 stopped at its budget; nothing here is a final decision. Results:
