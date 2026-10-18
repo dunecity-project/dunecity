@@ -652,7 +652,7 @@ python3 ../../../tests/ai/formation-duel.py --report --results round5 --tag c1,c
 python3 ../../../tests/ai/vanilla-match.py --report --results ../scenarios/ffa --tags cy1 --ffa none+BWFCQ,none
 ```
 
-## 8. Starting unit ratios: bounds, randomised, control and tuned arms (protocol 83, save 9866)
+## 8. Starting unit ratios: bounds, randomised, control and tuned arms (protocol 83, save 9866/9868)
 
 Stefan: "i want randomised runs, control runs and new mixes you tune. for example you can look at ratios
 at the end of the game and see what has worked and tune that way. don't allow any one unit to have over
@@ -661,10 +661,12 @@ learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = 
 
 ### 8.1 The bounds rule
 
-- **Unit types that count:** the eight unit-mix slots QuantBot's production allocates - tank, siege
-  tank, launcher, special (Devastator / Sonic Tank / Deviator, one slot), ornithopter, trike, raider
-  trike, quad. Infantry is not part of the mix: it has its own difficulty quota (10-12% of the army
-  value, 35% for the Infantry strategy) and is not learned, so it is outside the bounds.
+- **Unit types that count:** the unit-mix slots QuantBot's production allocates - tank, siege tank,
+  launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad. Since save 9868
+  (8.9) each special has its own slot, share and learning; before, the three shared one "special" slot
+  and the tables of 8.3-8.6 use that eight-slot layout (one special column = the house's one special).
+  Infantry is not part of the mix: it has its own difficulty quota (10-12% of the army value, 35% for
+  the Infantry strategy) and is not learned, so it is outside the bounds.
 - **Rule:** every starting mix - the configured `[Unit Ratios]` opening (Learned), the presets, Counter,
   Tuned and Bounded - is bounded before the learning sees it (`QuantBotStrategy::bound`, in
   `QuantBot::startingPrior`): over the slots the house can produce *in this game* (ObjectData and the
@@ -696,17 +698,20 @@ learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = 
 
 ### 8.2 New mixes and keys
 
-- `Tuned`: the per-house `[Unit Ratios Tuned]` ratios, `<House> = t,s,l,sp,o,tr,r,q` (percent; optional
-  keys, never written by `save()`, hashed). Code defaults: the measured per-house mixes of 8.5 for
-  Harkonnen, Atreides and Ordos; none for Fremen, Sardaukar and Mercenary (their configured opening).
+- `Tuned`: the per-house `[Unit Ratios Tuned]` ratios, `<House> = t,s,l,dv,so,de,o,tr,r,q` (percent: tank,
+  siege, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad; the house's
+  top tech band, and every band without its own key) and `<House>_Tech<N> = ...` or `= Opening` for the
+  tech band from level N (8.9); optional keys, never written by `save()`, hashed. Code defaults: the top
+  mixes of 8.5 for Harkonnen, Atreides, Ordos (8.8); no band keys yet (8.10).
 - `Bounded`: a random starting mix within the bounds each game - uniform over the bounded mixes of the
   slots the house can produce (sorted uniform cut points = flat Dirichlet, redrawn until within the
   bounds, at most 64 times, then `bound()`), a pure SplitMix64 function of game seed + house + salt.
   Usable as `Mode=Fixed:Bounded,<Tempo>` or in `MixWeights` (`Mode=Random` with `MixWeights=Bounded:1`
   is "random within bounds" as a production option; no separate `MixRandom` key is needed).
 - Tuned/Bounded resolve their ratios once at the pick and save them (SAVEGAMEVERSION 9866: eight 16-bit
-  basis points after the strategy). A 9865 save loads with its strategy and no resolved mix (none of
-  its mixes needs one); a 9864 save picks afresh, the same mix. Protocol 83 (production behaviour changes).
+  basis points after the strategy; 9868: ten, one per special - a 9866/9867 save loads its eight with the
+  special share split between the house's specials). A 9865 save loads with its strategy and no resolved
+  mix (none of its mixes needs one); a 9864 save picks afresh, the same mix. Protocol 83.
 - Test-only `[Play Style]` keys: `Learning=0` (the learning-off arm; style `nolearn`) and
   `StartBounds=0` (the unbounded 1.0.847 opening; style `unbounded`).
 - Harness: `houses.csv` has `start_mix` (from the `QUANTBOT_STRATEGY:` log line); `mix.csv` has, per house,
@@ -822,14 +827,65 @@ towards the same mix, the tuned start leaves more quads (Harkonnen, Ordos) and f
 - **Learned** (the configured ratios, bounded) stays available: `Mode=Fixed:Learned,Swarm`.
 - **Variety:** `Mode=Random` with `MixWeights=Bounded:1` (not worse than the control).
 
-### 8.8 Not done yet (Stefan, 2026-10-18 evening)
+### 8.8 Specials fix and one slot per special (save 9868)
 
-- **Fremen, Sardaukar, Mercenary:** never played in these arms. `vanilla-match.py --houses` now pairs any
-  houses; a six-house randomised arm (`rR6`: Bounded v Learned, all 15 pairs, 540 games) was submitted to
-  the cluster to derive their mixes; `ratio-analysis.py` still lists only Atreides/Harkonnen/Ordos.
-- **Specials:** the special slot is one share for Devastator, Sonic Tank and Deviator
-  (`QuantBot::fieldableMixSlots`, the production loop in `QuantBotBuild.cpp`: each buildable special is
-  given the whole `unitMix[3]` as its own target, so a house fielding all three can build up to three
-  times the special share). Separate tuned shares per special need a mix-layout change (save 9868).
-- **Tech levels:** the tuned ratios are for tech 8 CY games; at lower tech they are renormalised over the
-  buildable slots, not tuned per tech band.
+- **Bug (fixed, 4c3ee80b):** the capital/Starport production path gave each buildable special the whole
+  special share as its own target, so a house fielding several specials could build up to that many times
+  the share. Fix: the share is split between the buildable specials (`UnitMixPolicy::splitShare`; unit test
+  `[specials]`).
+- **Layout (32adfb8a):** ten mix slots (tank, siege, launcher, Devastator, Sonic Tank, Deviator,
+  ornithopter, trike, raider trike, quad). Each special has its own share, learning and heavy-factory
+  candidate (`SpecialUnitPolicy` removed). The group form - `[Unit Ratios]` Special, the presets, the
+  counter prior, the test play-style `Mix=` - keeps one special share, split between the house's specials
+  (`expandGroups`); bounds apply per buildable slot. Each special keeps the group's prior price (700), so a
+  one-special house (Harkonnen Devastator, Atreides Sonic Tank, Ordos Deviator) plays exactly as before:
+  `quantbot_strategy` reproduces every lead-share value of 8.5-8.6 (e.g. Tuned 3196 v 2467, TankMass 3456 v
+  2467) and the Bounded draw keeps its salts for houses with up to nine slots. The tuned top mixes keep
+  their values on the house's special (Harkonnen 14,16,15,22,0,0,0,0,0,33; Atreides 9,20,13,0,22,0,13,10,0,13;
+  Ordos 9,17,7,0,0,13,27,0,7,20). Captured specials of another kind now count in their own (unfieldable)
+  slot, not in the house's special.
+- **Save 9868:** the resolved Tuned/Bounded ratios hold ten slots; 9866/9867 saves load their eight with the
+  special share split. The learning window keeps its eight-slot serialized form (every pass replaces it
+  with the match totals before it is read). Protocol stays 83 (unreleased).
+- **Which specials:** in vanilla ObjectData Fremen, Sardaukar and Mercenary build Devastator and Sonic
+  Tank (Deviator is Ordos-only: `Builder(F/S/M) = Invalid`); in Tornie Sardaukar has Devastator+Sonic,
+  Mercenary Devastator+Deviator, Fremen none. No vanilla house builds all three; the code handles it.
+
+### 8.9 Tech bands
+
+`QuantBot::fieldableMixSlots(tech)` now follows the builder and prerequisite chain (House IX at 7 gates the
+specials and the ornithopter); `QuantBot::techBand()` is the first level with the same fieldable set.
+`tests/ai/tech-bands.py` derives the bands from ObjectData (vanilla `config/ObjectData.ini.default`;
+`--object-data mods/Tornie/ObjectData.ini` for the mod: there Ordos gains siege at 6, Sardaukar lights at 2).
+Vanilla:
+
+| House | 1 | 2 | 3 | 4 | 5 | 6 | 7-9 (top) |
+|---|---|---|---|---|---|---|---|
+| Harkonnen | - (1-2) | | quad | tank, quad | +launcher | +siege | +Devastator |
+| Atreides | - | trike | trike, quad | +tank | +launcher | +siege | +Sonic, ornithopter |
+| Ordos | - | raider | raider, quad | +tank | +launcher (5-6) | | +siege, Deviator, ornithopter |
+| Fremen, Mercenary | - | trike, raider | +quad | +tank | +launcher | +siege | +Devastator, Sonic, ornithopter |
+| Sardaukar | - (1-2) | | trike, raider, quad | +tank | +launcher | +siege | +Devastator, Sonic, ornithopter |
+
+A band with one or two fieldable slots has no freedom under the bounds (100%, or 50/50). Tunable house x
+band: Tech3 F/S/M; Tech4 A, O, F/S/M; Tech5 all six; Tech6 H, A, F/S/M; top (played at tech 8) all six.
+Lookup at a game's band: `<House>_Tech<band>`, `Opening` = the bounded configured opening, absent = the
+house's top mix renormalised over the band's slots (the pre-band behaviour). Harness: `vanilla-match.py
+--tech N...` plays a copy of each map with `[BASIC] TechLevel=N` (map `<map>@t<N>`); `ratio-analysis.py
+--tech N` analyses one level, writes `<House>_Tech<band>` candidates and reports the per-house effect
+(Δ gain of playing A as that house, least squares over both assignments of all 15 pairs, bootstrap
+interval) - the per-house/band decision.
+
+### 8.10 Not done yet (2026-10-18 night)
+
+- **Exploration submitted** (cluster, source 32adfb8a, results `~/Documents/projects/dunecity-results/
+  ratio-tuning/x{3,4,5,6,8}`): `default#Bounded-Swarm` v `default#Learned-Swarm`, all six houses, all 15
+  pairs, both sides, Hard, six maps, seeds 71000-71050 step 10, `--seed-per-map 1`, 1,080 games per tech level
+  (3, 4, 5, 6, 8). `rR6` (540 games) used the old eight-slot layout with the specials bug and is not used.
+- **Remaining per band:** candidates (`ratio-analysis.py DIR --tech N --random default#Bounded-Swarm:
+  default#Learned-Swarm --candidates tests/ai/play-styles`), round 1 (each candidate v Learned, 540 games),
+  one refinement, fresh-seed confirmation (≥2,160 games per band, so every house is in ≥720 games, ≥360 with
+  the candidate on it); accept a house/band only if its per-house effect interval is above 0, else
+  `<House>_Tech<N> = Opening`); then the code
+  defaults, the checks (all-against-Atreides, scenario matrix with `test/ai-scenario-matrix` acdada9b,
+  Brutal, Fortress, `/weak`), the per house x band tables here, and the full ctest list.

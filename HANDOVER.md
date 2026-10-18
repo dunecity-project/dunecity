@@ -1,3 +1,22 @@
+## 2026-10-18 (night) — QuantBot specials fix, one mix slot per special, tech bands (branch `feat/ai-ratio-tuning`, protocol 83, save 9868, not released)
+
+Write-up `docs/ai-play-styles.md` 8.8-8.10.
+
+- **Fixed (4c3ee80b):** the capital/Starport path gave each buildable special the whole special share;
+  now split (`UnitMixPolicy::splitShare`, unit test `[specials]`).
+- **Layout (32adfb8a):** ten slots (Devastator, Sonic Tank, Deviator each own share, learning, heavy
+  candidate; `SpecialUnitPolicy` removed). Group-form inputs (`[Unit Ratios]` Special, presets, counter,
+  style `Mix=`) split the special share between the house's specials. One-special houses unchanged
+  (`quantbot_strategy` values identical). Save 9868 (ten resolved ratios; 9866/9867 load and split).
+- **Tech bands:** `fieldableMixSlots(tech)` follows builder/prerequisites; `techBand()`;
+  `[Unit Ratios Tuned] <House>_Tech<N> = ...|Opening`; `tests/ai/tech-bands.py`; `vanilla-match.py --tech`;
+  `ratio-analysis.py` ten slots, six houses, `--tech`, per-house effect (the per-house decision).
+- **Not done:** tuning per house x band. Exploration x3/x4/x5/x6/x8 (1,080 games each, all 15 pairs) is
+  queued on the cluster (results `~/Documents/projects/dunecity-results/ratio-tuning/x<N>`); then
+  candidates, round 1, refinement, confirmation, defaults, checks and the full ctest (section 8.10).
+  Verified so far: `dunelegacy_tests`, `quantbot_strategy`, `quantbot_force_concentration`,
+  `quantbot_army_recovery`, `save_scenario_export` (ctest, 32adfb8a).
+
 ## 2026-10-18 — QuantBot ratio tuning: placement re-score, tuned rounds; default now Tuned/Swarm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
 
 Merged `test/match-scoring` (ratio write-up is now `docs/ai-play-styles.md` section 8; `ratio-analysis.py
