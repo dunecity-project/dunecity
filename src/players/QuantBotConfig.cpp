@@ -183,9 +183,15 @@ QuantBotConfig::QuantBotConfig() {
     unitRatios.mercenary.special = 0.05f;
     unitRatios.mercenary.ornithopter = 0.10f;
 
-    // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned): none yet, every house plays its
-    // configured opening. docs/ai-play-styles.md, section 8.
+    // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned; percent of tank, siege tank, launcher,
+    // special, ornithopter, trike, raider trike, quad), measured on Construction Yard starts
+    // (docs/ai-play-styles.md, section 8: round 2 "best", the round-1 candidate with the largest
+    // per-house effect). Bounded like every starting mix (2%-50% per producible slot). Fremen,
+    // Sardaukar and Mercenary were not tuned: they play their configured opening.
     tunedRatios = {};
+    tunedRatios[0] = {14, 16, 15, 22, 0, 0, 0, 33};   // Harkonnen: gradient
+    tunedRatios[1] = {11, 12, 17, 16, 17, 13, 0, 14}; // Atreides: winners' end composition
+    tunedRatios[2] = {9, 9, 7, 13, 35, 0, 7, 20};     // Ordos: regression
 
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);
