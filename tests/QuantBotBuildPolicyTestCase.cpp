@@ -978,6 +978,32 @@ TEST_CASE("Campaign attack sizes scale with difficulty and retain a reserve", "[
     REQUIRE(SimpleArmyPolicy::limitedAttack(2000,500,25,army).empty());
     REQUIRE(SimpleArmyPolicy::limitedAttack(2000,800,25,army).empty());
 }
+TEST_CASE("A house that cannot grow its army to its attack threshold attacks with what it has", "[quantbot][combat]") {
+    using SimpleArmyPolicy::reachableReadiness;
+    // Enough credits or map spice to buy the difference: the threshold stands.
+    REQUIRE(reachableReadiness(20000,3000,2000,15000)==20000);
+    REQUIRE(reachableReadiness(20000,3000,17000,0)==20000);
+    REQUIRE(reachableReadiness(20000,25000,0,0)==20000);
+    // A spice-exhausted map (bqm33541: Brutal at 3,550 of 20,000, no credits, no spice): 0.
+    REQUIRE(reachableReadiness(20000,3550,4,0)==0);
+    REQUIRE(reachableReadiness(20000,3000,2000,14999)==0);
+    // Negative inputs never inflate what is reachable; no overflow at the extremes.
+    REQUIRE(reachableReadiness(20000,-5,-100,-100)==0);
+    REQUIRE(reachableReadiness(INT32_MAX,0,INT32_MAX,INT32_MAX)==INT32_MAX);
+}
+TEST_CASE("Banked credits above the reserve buy army past the cap, at most half the cap again", "[quantbot][production]") {
+    using QuantBotBuildPolicy::surplusMilitaryBudget;
+    REQUIRE(surplusMilitaryBudget(25000,0)==25000);
+    REQUIRE(surplusMilitaryBudget(25000,10000)==25000);
+    REQUIRE(surplusMilitaryBudget(25000,22000)==37000);
+    REQUIRE(surplusMilitaryBudget(25000,158000)==37500);
+    // Medium's largest budget stays below Hard's cap on every map class (config defaults).
+    REQUIRE(surplusMilitaryBudget(5000,999999)<8000);
+    REQUIRE(surplusMilitaryBudget(12000,999999)<20000);
+    REQUIRE(surplusMilitaryBudget(40000,999999)<70000);
+    REQUIRE(surplusMilitaryBudget(0,158000)==0);
+    REQUIRE(surplusMilitaryBudget(INT32_MAX,INT32_MAX)==INT32_MAX);
+}
 TEST_CASE("Campaign waves handle mixed costs and small armies without stacking", "[quantbot][combat]") {
     using namespace SimpleArmyPolicy;
     const std::vector<Responder> army{{9,300,0},{3,120,0},{1,600,0},{4,60,0}};

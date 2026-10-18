@@ -297,9 +297,10 @@ void runWaveFormationProbe(Game& game) {
         {
             getQuantBotConfig().waveFormation=static_cast<int>(FormationPlanner::Shape::Pincer);
             Wave wave=muster(size_t(FormationOrders::kMinAIGroup-1));
-            // Two tanks are not a viable whole-army wave: Medium sends its share instead.
-            bot->difficulty=QuantBot::Difficulty::Medium;
-            getQuantBotConfig().medium.attackForceMilitaryValueRatio=1.0f;
+            // Two tanks are not a viable whole-army wave: Easy (the share path; Medium joined
+            // the whole-army difficulties, docs/ai-scenario-matrix.md) sends its share instead.
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            getQuantBotConfig().easy.attackForceMilitaryValueRatio=1.0f;
             bot->launchGroundHunt();
             int hunting=0;
             for(auto* unit:wave.fighters) {

@@ -33,6 +33,7 @@ soon as its rows are written. Scores are tests/ai/match_score.py placement score
 """
 import argparse
 import csv
+import re
 import shutil
 import statistics
 import subprocess
@@ -71,6 +72,8 @@ HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'a
                 'sortie_minutes', 'place', 'score', 'drawn')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
+# Full-tier seeds per ladder cell (four maps: 32 games per pair); --ladder-seeds 18 gives 72 per pair.
+LADDER_SEEDS = 8
 lock = threading.Lock()
 
 
@@ -106,7 +109,7 @@ def skirmish_spec(size, base, army, **extra):
     return ','.join([f'size={size}', f'base={base}', f'army={army}'] + [f'{k}={v}' for k, v in extra.items()])
 
 
-def matrix():
+def matrix(ladder_seeds=LADDER_SEEDS):
     cells = []
     # 1. Random Skirmish, mixed: players, teams, bases, armies (kArmyBudgets index: 0 none, 2 = 2,500
     # small, 5 = 20,000 large), mods, QuantBot difficulties and the AI Player.
@@ -160,15 +163,17 @@ def matrix():
                               smoke=0))
     cells.append(dict(category='campaign', name='partner-hard-v-campaign-ai', kind='campaign', mod='vanilla',
                       partner='hard', enemy_ai='campaign', minutes=80, full=1, smoke=0, first_only=True))
-    # 5. Difficulty ladder: the stronger QuantBot must win, both sides of every seed.
+    # 5. Difficulty ladder: the stronger QuantBot must win, both sides of every seed. Three Random
+    # Skirmish/bundled maps and a Construction Yard only start; --ladder-seeds plays more seeds per cell.
     ladder_maps = (('rs-vanilla', 'vanilla', dict(skirmish=skirmish_spec(96, 'small', 2))),
                    ('rs-dunecity', 'dunecity', dict(skirmish=skirmish_spec(96, 'small', 2))),
-                   ('habbanya-penny', 'vanilla', dict(path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'))))
+                   ('habbanya-penny', 'vanilla', dict(path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'))),
+                   ('cy', 'vanilla', dict(skirmish=skirmish_spec(96, 'cy', 0))))
     for strong, weak in (('QB', 'QM'), ('QH', 'QE'), ('QM', 'QE')):
         for map_name, mod, where in ladder_maps:
             smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
             cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak), expect=('wins', 1),
-                               smoke=smoke, full=8, **where))
+                               smoke=smoke, full=ladder_seeds, **where))
     # 6. Most-played bundled multiplayer maps (dunelegacy.com/usage.html, all time, 2026-10-18).
     for name, players in (('2P - 128x128 - 1v1 - Habbanya-Penny', 1), ('2P - 128x128 - 1v1 - Tuono-Orac', 1),
                           ('2P - 128x128 - 1v1 - Sihaya-Chvrches', 1), ('4P - 128x64 - 2v2 - Sihaya-Toto', 2),
@@ -210,8 +215,10 @@ def seeds_for(category, cell_name, count):
 
 def schedule(args):
     games = []
-    for cell in matrix():
+    for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS)):
         if args.categories and cell['category'] not in args.categories:
+            continue
+        if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
             continue
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
@@ -492,7 +499,7 @@ def load(dirs):
     # Expectations as the matrix defines them now (a row keeps the one it was played with).
     current = {}
     for tier in ('smoke', 'full'):
-        plan = argparse.Namespace(tier=tier, categories=None, seeds_per_cell=None, shard=None)
+        plan = argparse.Namespace(tier=tier, categories=None, seeds_per_cell=None, shard=None, ladder_seeds=LADDER_SEEDS)
         current.update({g['id']: ':'.join(str(x) for x in g['expect']) if g['expect'] else '' for g in schedule(plan)})
     for gid, row in games.items():
         row['expect'] = current.get(gid, row['expect'])
@@ -717,6 +724,9 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
+parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
+                    help='Full tier: seeds per ladder cell (4 maps, 2 sides alternating; 18 = 72 games per pair)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')

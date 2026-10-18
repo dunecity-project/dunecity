@@ -340,15 +340,12 @@ inline bool inSonicPath(int tx, int ty, int ox, int oy) {
     return beside * beside <= length2;
 }
 
-/// M (SpendAtCap): banked credits above kSurplusReserveCredits raise the production budget above
-/// the military limit, by at most kSurplusMaxPercent of the limit. Above the limit only the heavy
-/// factory's siege tanks, launchers and specials are bought (no tanks, light vehicles, infantry or
-/// aircraft), so the surplus buys what kills a fortified city.
-constexpr int kSurplusReserveCredits = 10000;
+/// M (SpendAtCap): banked credits above QuantBotBuildPolicy::kSurplusMilitaryReserve raise the
+/// production budget above the military limit (QuantBotBuildPolicy::surplusMilitaryBudget), by at
+/// most kSurplusMaxPercent of the limit. Above the limit only the heavy factory's siege tanks,
+/// launchers and specials are bought (no tanks, light vehicles, infantry or aircraft), so the
+/// surplus buys what kills a fortified city.
 constexpr int kSurplusMaxPercent = 100;
-inline int64_t surplusBudget(int64_t limit, int64_t credits) {
-    return std::clamp<int64_t>(credits - kSurplusReserveCredits, 0, std::max<int64_t>(0, limit) * kSurplusMaxPercent / 100);
-}
 
 /// Z (MassAssault): against a fortified objective (K's kFortifiedTurrets within
 /// kFortifiedRadiusTiles) of the weakest known house, a ready wave waits for kAssaultLimitPercent

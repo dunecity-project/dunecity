@@ -197,7 +197,9 @@ void QuantBot::build(int militaryValue) {
     const int militaryBudget = planningMilitaryBudget(militaryValue, money, largestMilitaryUnitValue);
     // M (SpendAtCap, test-only): the budget above the configured limit is for the heavy factory's
     // siege tanks, launchers and specials; light vehicles, infantry, aircraft and tanks stop at it.
-    const bool surplusArmy = !militaryBudgetOverridden && militaryBudget > militaryValueLimit;
+    // (Custom Medium's surplus, planningMilitaryBudget(), buys anything.)
+    const bool surplusArmy = !militaryBudgetOverridden && difficulty != Difficulty::Medium
+        && forceVariant(kForceSpendAtCap) && militaryBudget > militaryValueLimit;
     const int lightBudget = surplusArmy ? militaryValueLimit : militaryBudget;
     if (surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, militaryValue - militaryValueLimit);
 	const bool citySimEnabled = currentGame && currentGame->isCitySimEnabled();
@@ -471,8 +473,10 @@ void QuantBot::build(int militaryValue) {
     const int spiceShare = lastCalculatedSpice / std::max(1, spiceCompetitors);
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
+    // The campaign economy push no longer plans as the only house on the map: a target of 43-56
+    // harvesters left the Hard partner without an army for 12 minutes in missions 20-22.
     const int mapSpiceHarvesterTarget = vanillaEconomy
-        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, (campaignEconomyPush || style().greedyHarvest) ? 1 : spiceCompetitors, harvesterLimit)
+        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, style().greedyHarvest ? 1 : spiceCompetitors, harvesterLimit)
         : citySpiceWorkerTarget;
     const int spiceHarvesterTarget = citySimEnabled ? mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
@@ -1468,7 +1472,7 @@ void QuantBot::build(int militaryValue) {
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and
     // launchers are genuinely producible, so it cannot become a standing tax.
-    const int observedHostileAircraft = autonomousCustomHardBrutal()
+    const int observedHostileAircraft = autonomousCustomArmy()
         ? visibleHostileAircraft() : 0;
     const bool launcherFloorAuthorised = observedHostileAircraft > 0 && available[2]
         && launcherProductionAvailable;
@@ -2053,7 +2057,11 @@ void QuantBot::build(int militaryValue) {
         const int pendingCapacity=std::max(0,itemCount[Structure_Refinery]
             -getHouse()->getNumItems(Structure_Refinery))*data[Structure_Refinery][houseID].capacity;
         const int projectedCapacity=capacity+pendingCapacity;
-        return getHouse()->getNumItems(Structure_HeavyFactory)>0 && cityCoreInfrastructureReady
+        // Where the tech level has no heavy factory yet (DuneCity campaign levels 1-3), storage
+        // is not deferred for one: taxes fill the store and the spice quota waits on it.
+        return (getHouse()->getNumItems(Structure_HeavyFactory)>0
+                || data[Structure_HeavyFactory][houseID].techLevel>currentGame->techLevel)
+            && cityCoreInfrastructureReady
             && capacity > 0 && projectedCapacity < 999999
             && getHouse()->getEarnedCredits() >= projectedCapacity * 0.80_fix
             && itemCount[Structure_Silo] == getHouse()->getNumItems(Structure_Silo);
@@ -4655,6 +4663,15 @@ void QuantBot::build(int militaryValue) {
                         && data[Structure_RepairYard][houseID].enabled
                         && currentGame->techLevel >= data[Structure_RepairYard][houseID].techLevel) {
                         step = Structure_RepairYard;
+                    } else if (!canAddRepairYard(itemCount[Structure_RepairYard])
+                        && itemCount[Structure_HeavyFactory] == 0
+                        && data[Structure_HeavyFactory][houseID].enabled
+                        && currentGame->techLevel >= data[Structure_HeavyFactory][houseID].techLevel) {
+                        // Medium builds no repair yard of its own, but the yard was also this
+                        // ladder's only way to the light factory and so to vehicle production:
+                        // walk to the heavy factory instead (7P FFA: Medium idle with 17
+                        // harvesters and no factory, docs/ai-scenario-matrix.md).
+                        step = Structure_HeavyFactory;
                     }
                     // Walk missing prerequisites, stopping at a pending build.
                     // This uses each mod's actual tech tree, without adding heavy

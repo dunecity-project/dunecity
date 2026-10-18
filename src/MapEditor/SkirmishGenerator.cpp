@@ -1417,6 +1417,35 @@ bool groundConnected(const MapData& map, const std::vector<Coord>& points) {
     });
 }
 
+/// Every start reaches spice by ground within three times the distance its own field was
+/// seeded at (addSpice: (w + h) / 4 + kRimMax + 6 toward the middle). That seed lands on rock
+/// or behind a massif on some maps, and the start then has no field of its own at all (7P
+/// FFA seed 44452: 91 tiles round a massif; its house refined 20 credits in 27 minutes).
+bool spiceNearEveryStart(const MapData& map, const std::vector<Rect>& plateaus) {
+    const int w = map.getSizeX(), h = map.getSizeY();
+    for(const Rect& r : plateaus) {
+        const int limit = 3 * ((r.w + r.h) / 4 + kRimMax + 6);
+        const Coord start(r.x + r.w / 2, r.y + r.h / 2);
+        std::vector<int> steps(w * h, -1);
+        std::deque<Coord> queue{start};
+        steps[start.y * w + start.x] = 0;
+        bool found = false;
+        while(!queue.empty() && !found) {
+            const Coord c = queue.front(); queue.pop_front();
+            if(isSpiceTerrain(map(c.x, c.y))) { found = true; break; }
+            if(steps[c.y * w + c.x] >= limit) continue;
+            for(const Coord& d : {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)}) {
+                const int nx = c.x + d.x, ny = c.y + d.y;
+                if(!map.isInsideMap(nx, ny) || steps[ny * w + nx] >= 0 || map(nx, ny) == Terrain_Mountain) continue;
+                steps[ny * w + nx] = steps[c.y * w + c.x] + 1;
+                queue.emplace_back(nx, ny);
+            }
+        }
+        if(!found) return false;
+    }
+    return true;
+}
+
 int displayedPopulation(const std::vector<Placement>& placements, int house) {
     int population = 0;
     for(const Placement& p : placements)
@@ -1595,11 +1624,21 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
 
     std::vector<Coord> starts;
     for(const Plan& plan : plans) starts.push_back(plan.setup.start);
+    // The first ground-connected terrain whose every start has spice of its own; failing that,
+    // the first ground-connected one, as before. A symmetric map gives every start the same
+    // surroundings, so it is fair by construction and not checked.
+    int fallback = -1;
     for(int attempt = 0; attempt < kMaxTerrainAttempts; ++attempt) {
         result.mapSeed = params.seed + static_cast<uint32_t>(attempt);
         result.attempts = attempt + 1;
         result.map = buildTerrain(spec, result.mapSeed);
-        if(groundConnected(result.map, starts)) break;
+        if(!groundConnected(result.map, starts)) continue;
+        if(spec.spice == Spice::None || params.symmetric || spiceNearEveryStart(result.map, plateaus)) { fallback = -1; break; }
+        if(fallback < 0) fallback = attempt;
+    }
+    if(fallback >= 0) {
+        result.mapSeed = params.seed + static_cast<uint32_t>(fallback);
+        result.map = buildTerrain(spec, result.mapSeed);
     }
     if(!groundConnected(result.map, starts)) {
         // Only mountains block ground units; levelling them always connects the starts.

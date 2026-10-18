@@ -203,7 +203,7 @@ inline std::map<int, Choice> picksAfterFirstUpdate(Game& game, const Scenario& s
     for (const auto& [house, team] : scenario.roster) {
         QuantBot* bot = botOf(game, house);
         require(bot != nullptr, std::string(role) + ": a house has no QuantBot");
-        require(bot->autonomousCustomHardBrutal(), std::string(role) + ": a bot is not Custom Hard");
+        require(bot->autonomousCustomArmy(), std::string(role) + ": a bot is not an autonomous Custom army");
         require(bot->strategyPicked, std::string(role) + ": a bot had not picked its strategy after the first update");
         const Choice expected = QuantBotStrategy::pick(getQuantBotConfig().strategy, seed, house, eligibleFor(house));
         require(bot->strategy == expected, std::string(role) + ": a bot's strategy is not QuantBotStrategy::pick() of seed and house");

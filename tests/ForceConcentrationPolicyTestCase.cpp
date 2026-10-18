@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <players/ForceConcentrationPolicy.h>
+#include <players/QuantBotBuildPolicy.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -284,11 +285,14 @@ TEST_CASE("Force: a sonic wave's path runs past the target and one tile either s
 }
 
 TEST_CASE("Force: banked credits buy at most the limit again above it; a mass assault waits for 70%", "[ai][force]") {
-    REQUIRE(surplusBudget(100000, 0) == 0);
-    REQUIRE(surplusBudget(100000, kSurplusReserveCredits) == 0);
-    REQUIRE(surplusBudget(100000, kSurplusReserveCredits + 25000) == 25000);
-    REQUIRE(surplusBudget(100000, 1000000) == 100000 * kSurplusMaxPercent / 100);   // capped
-    REQUIRE(surplusBudget(0, 1000000) == 0);
+    using QuantBotBuildPolicy::surplusMilitaryBudget;
+    using QuantBotBuildPolicy::kSurplusMilitaryReserve;
+    REQUIRE(surplusMilitaryBudget(100000, 0, kSurplusMaxPercent) == 100000);
+    REQUIRE(surplusMilitaryBudget(100000, kSurplusMilitaryReserve, kSurplusMaxPercent) == 100000);
+    REQUIRE(surplusMilitaryBudget(100000, kSurplusMilitaryReserve + 25000, kSurplusMaxPercent) == 125000);
+    REQUIRE(surplusMilitaryBudget(100000, 1000000, kSurplusMaxPercent) == 200000);   // the limit again
+    REQUIRE(surplusMilitaryBudget(100000, 1000000) == 150000);                       // Medium: half
+    REQUIRE(surplusMilitaryBudget(0, 1000000, kSurplusMaxPercent) == 0);
     REQUIRE(assaultReady(7000, 100000, kFortifiedTurrets - 1) == 7000);
     REQUIRE(assaultReady(7000, 100000, kFortifiedTurrets) == 100000 * kAssaultLimitPercent / 100);
     REQUIRE(assaultReady(90000, 100000, 40) == 90000);

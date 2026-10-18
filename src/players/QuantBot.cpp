@@ -197,10 +197,16 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
     if (overridesMilitaryValueCap())
         return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
                                                           productionCash, largestUnitValue);
-    // M (SpendAtCap, test-only): banked credits above the reserve buy heavy units beyond the
-    // limit (QuantBotBuild.cpp keeps the other producers at the limit).
+    // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
+    // (docs/ai-scenario-matrix.md, "Difficulty ladder"); at most half the cap, below Hard's.
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
+    // M (SpendAtCap, test-only, Custom Hard/Brutal): banked credits above the reserve buy heavy
+    // units beyond the limit, up to the limit again (QuantBotBuild.cpp keeps the other producers
+    // at the limit).
     if (forceVariant(kForceSpendAtCap))
-        return int(militaryValueLimit + ForceConcentrationPolicy::surplusBudget(militaryValueLimit, productionCash));
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash,
+                                                          ForceConcentrationPolicy::kSurplusMaxPercent);
     return militaryValueLimit;
 }
 
@@ -867,7 +873,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			// Defend the harvester!
 			const Harvester* pHarvester = static_cast<const Harvester*>(pGroundUnit);
 			if (pHarvester->isActive()) {
-				scrambleUnitsAndDefend(pDamager,false,pObject);
+				// A Palace is a missile's launcher, not a contact: never scramble to it (vanilla
+				// m22: a Death Hand on a harvester sent the army into the Sardaukar base).
+				if (pDamager->getItemID() != Structure_Palace) scrambleUnitsAndDefend(pDamager,false,pObject);
                 auto& safety = harvesterSafety[pHarvester->getObjectID()];
                 safety.nextCheck = 0;
                 safety.retreatUntil = getGameCycleCount() + MILLI2CYCLES(30000);

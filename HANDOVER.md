@@ -1,3 +1,34 @@
+## 2026-10-19 — QuantBot difficulty ladder, team play, late campaign missions (branch `fix/ai-difficulty-ladder`, protocol 84 + merged `fix/ai-late-game-2` e99b35e1 (V removed), save 9865; not released)
+
+Agent DifficultyLadder. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty ladder, team games and late
+campaign missions"; data `~/Documents/projects/dunecity-results/difficulty-ladder/` (`before`, `c9`,
+`c5-campaign`, reports `*-report.md`, diagnoses `diag-CampaignLate|CampaignStall|TeamPlay3v3`).
+
+- **Ladder holds over 72 games each (after):** QB v QM +0.30 [+0.08, +0.50] (before +0.25), QH v QE +0.78
+  [+0.64, +0.92], QM v QE +0.64 [+0.46, +0.80] (before +0.20, 30/72 time-outs, Habbanya-Penny 0-0-18;
+  after 3/72, 17-0-1). Ladder now has a CY 96x96 map; `--ladder-seeds`, `--cells` in the matrix.
+- **Changes:** Custom Medium on the whole-army path (`autonomousCustomArmy`, renamed from
+  `autonomousCustomHardBrutal`); held opening capped at the own threshold share of Medium's limit;
+  reachable readiness (no credits+spice to reach it: attack with what you have); Medium spends banked
+  credits up to +50% past its cap; team-aware outnumbered/perimeter turrets/opening; campaign partner
+  harvester target counts competitors, ignores Palace missiles as contacts, measures waves against the
+  strongest enemy after 15 min; DuneCity: structures off reserved factory plots, silos below heavy-factory
+  tech, quota counts tax credits in the shared store (also for humans); Medium opening walks to the heavy
+  factory; generator regenerates asymmetric maps with a spiceless start (pinned digests unchanged).
+- **Campaign Hard partner:** vanilla 84/96 -> 92/96, DuneCity 90/96 -> 96/96; m20-22 Atreides/Harkonnen
+  4/12 -> 9/12; DuneCity Ordos m17, Harkonnen m3, Ordos m1 all won. Still lost: Atreides m20 x2, Harkonnen
+  m22 95897, Atreides m17 80762 (new).
+- **Open:** 3v3 Hard v Medium only 1/4 (Hard allies now sortie; Medium has the same tactics now, Hard only
+  its economy); 6P DuneCity FFA 0/4 decided (before 3/4); skirmish order QH > QB > QM > QE (QB 20 houses,
+  wide interval). Tried and reverted: strength-relative readiness (QB v QM 12-24, broke the FFA test), the
+  Medium-limit cap on every wave (c10: no better). `tests/ai/campaign-helper-economy-probe.inc` (not in
+  ctest) fails at its own fixture ("above-market harvesters") before any QuantBot logic.
+- **Protocol:** AI decisions changed in every custom game; the integrator must bump the protocol.
+- **Tests (Release `build`, HEAD game code 30338ce0):** ctest -j3 44/44 passed (all quantbot_*,
+  dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions,
+  rts_controls_probe, preplace_queue_probe, skirmish_generator_tests, save_scenario_export,
+  network_wire_harness) and perf_regression passed; the smoke 4P FFA 90866 is decided.
+
 ## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
 
 Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data
