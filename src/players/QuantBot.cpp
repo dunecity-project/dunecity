@@ -867,7 +867,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			// Defend the harvester!
 			const Harvester* pHarvester = static_cast<const Harvester*>(pGroundUnit);
 			if (pHarvester->isActive()) {
-				scrambleUnitsAndDefend(pDamager,false,pObject);
+				// A Palace is a missile's launcher, not a contact: never scramble to it (vanilla
+				// m22: a Death Hand on a harvester sent the army into the Sardaukar base).
+				if (pDamager->getItemID() != Structure_Palace) scrambleUnitsAndDefend(pDamager,false,pObject);
                 auto& safety = harvesterSafety[pHarvester->getObjectID()];
                 safety.nextCheck = 0;
                 safety.retreatUntil = getGameCycleCount() + MILLI2CYCLES(30000);

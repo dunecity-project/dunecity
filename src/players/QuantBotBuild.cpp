@@ -466,8 +466,10 @@ void QuantBot::build(int militaryValue) {
     const int spiceShare = lastCalculatedSpice / std::max(1, spiceCompetitors);
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
+    // The campaign economy push no longer plans as the only house on the map: a target of 43-56
+    // harvesters left the Hard partner without an army for 12 minutes in missions 20-22.
     const int mapSpiceHarvesterTarget = vanillaEconomy
-        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, (campaignEconomyPush || style().greedyHarvest) ? 1 : spiceCompetitors, harvesterLimit)
+        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, style().greedyHarvest ? 1 : spiceCompetitors, harvesterLimit)
         : citySpiceWorkerTarget;
     const int spiceHarvesterTarget = citySimEnabled ? mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
