@@ -50,7 +50,7 @@ bool parse(const std::string& text, Tempo& tempo);
 /// The [Strategy] settings. Optional INI keys; the code defaults apply when absent. Hashed.
 struct Settings {
     /// Mode=Random: pick by weight; Mode=Fixed:<mix>,<tempo>: that pair. The constructor sets the
-    /// measured default (Fixed:Tuned,Swarm) and the measured weights.
+    /// measured default (Fixed:Learned,Swarm) and the measured weights.
     bool random = false;
     Mix fixedMix = Mix::Learned;
     Tempo fixedTempo = Tempo::Base;

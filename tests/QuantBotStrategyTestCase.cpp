@@ -109,11 +109,11 @@ TEST_CASE("Strategy: a house only plays mixes it can field", "[ai][strategy]") {
 
 TEST_CASE("Strategy: modes and weights parse strictly", "[ai][strategy]") {
     Settings settings;
-    // The shipped default: the Tuned starting mix with the Swarm tempo (docs/ai-play-styles.md, section 8:
-    // Tuned beat the configured ratios; Swarm the only tempo measured above 1.0.846); Mode=Random plays
-    // the measured weights (docs/ai-play-styles.md, "Strategies").
+    // The shipped default: Learned/Swarm, the only strategy measured above 1.0.846, its opening bounded;
+    // Tuned is ahead of it but not by the default rule (docs/ai-play-styles.md, section 8). Mode=Random
+    // plays the measured weights (docs/ai-play-styles.md, "Strategies").
     REQUIRE_FALSE(settings.random);
-    REQUIRE(modeText(settings) == "Fixed:Tuned,Swarm");
+    REQUIRE(modeText(settings) == "Fixed:Learned,Swarm");
     REQUIRE(weightsText(settings.mixWeights) == "Learned:50,QuadMass:15,TrikeSwarm:5,Artillery:10,Air:10,Counter:10");
     REQUIRE(weightsText(settings.tempoWeights) == "Swarm:80,Flood:20");
     REQUIRE(parseMode("Fixed:Learned,Base", settings));
