@@ -196,6 +196,28 @@ QuantBotConfig::QuantBotConfig() {
     tunedRatios[0][0] = {14, 16, 15, 22, 0, 0, 0, 0, 0, 33};   // Harkonnen (Devastator)
     tunedRatios[1][0] = {9, 20, 13, 0, 22, 0, 13, 10, 0, 13};  // Atreides (Sonic Tank)
     tunedRatios[2][0] = {9, 17, 7, 0, 0, 13, 27, 0, 7, 20};    // Ordos (Deviator)
+    // Lower tech bands: set by design from what each band can field (tests/ai/tech-bands.py; not
+    // measured, docs/ai-play-styles.md 8.9): two light slots split evenly; light units only at 3
+    // (quads the strongest); tank-heavy at 4 (50% tanks); tanks and launchers lead at 5 (40/25); siege
+    // added at 6 (30/25/20); the light remainder follows the house's top mix (Harkonnen quads, the
+    // Atreides trike/quad, Ordos raider/quad). A band with one fieldable slot plays it alone.
+    tunedRatios[0][4] = {50, 0, 0, 0, 0, 0, 0, 0, 0, 50};      // Harkonnen: tank, quad
+    tunedRatios[0][5] = {40, 0, 25, 0, 0, 0, 0, 0, 0, 35};
+    tunedRatios[0][6] = {30, 25, 20, 0, 0, 0, 0, 0, 0, 25};
+    tunedRatios[1][3] = {0, 0, 0, 0, 0, 0, 0, 50, 0, 50};      // Atreides: trike, quad
+    tunedRatios[1][4] = {50, 0, 0, 0, 0, 0, 0, 20, 0, 30};
+    tunedRatios[1][5] = {40, 0, 25, 0, 0, 0, 0, 15, 0, 20};
+    tunedRatios[1][6] = {30, 25, 20, 0, 0, 0, 0, 10, 0, 15};
+    tunedRatios[2][3] = {0, 0, 0, 0, 0, 0, 0, 0, 50, 50};      // Ordos: raider trike, quad
+    tunedRatios[2][4] = {50, 0, 0, 0, 0, 0, 0, 0, 20, 30};
+    tunedRatios[2][5] = {40, 0, 25, 0, 0, 0, 0, 0, 15, 20};    // tech 5-6 (siege needs the IX band)
+    for (const size_t house : {size_t(3), size_t(4), size_t(5)}) {   // Fremen, Sardaukar, Mercenary
+        if (house != 4) tunedRatios[house][2] = {0, 0, 0, 0, 0, 0, 0, 50, 50, 0};   // Sardaukar: 1-2 none
+        tunedRatios[house][3] = {0, 0, 0, 0, 0, 0, 0, 30, 30, 40};
+        tunedRatios[house][4] = {50, 0, 0, 0, 0, 0, 0, 15, 15, 20};
+        tunedRatios[house][5] = {40, 0, 25, 0, 0, 0, 0, 10, 10, 15};
+        tunedRatios[house][6] = {30, 25, 20, 0, 0, 0, 0, 8, 7, 10};
+    }
 
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);

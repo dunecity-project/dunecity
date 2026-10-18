@@ -501,17 +501,17 @@ TEST_CASE("Strategy: Tuned and Bounded parse, and [Unit Ratios Tuned] is read an
     const auto ordos = config.getTunedRatios(2);
     REQUIRE(config.applyOverrides(path.string()));
     REQUIRE(ratiosText(config.getTunedRatios(1)) == "10,10,30,0,25,0,10,5,0,10");
-    // A band's own mix; a band without one plays the house's top mix.
+    // A band's own mix; a band without one (Atreides 2: trikes only) plays the house's top mix.
     REQUIRE(ratiosText(config.getTunedRatios(1, 5)) == "40,0,30,0,0,0,0,20,0,10");
-    REQUIRE(ratiosText(config.getTunedRatios(1, 4)) == "10,10,30,0,25,0,10,5,0,10");
+    REQUIRE(ratiosText(config.getTunedRatios(1, 2)) == "10,10,30,0,25,0,10,5,0,10");
     REQUIRE(ratiosText(config.getTunedRatios(1, 7)) == "10,10,30,0,25,0,10,5,0,10");
     REQUIRE(config.getTunedRatios(2) == ordos);   // malformed keeps the previous value
-    REQUIRE(config.getTunedRatios(2, 4) == ordos);
+    REQUIRE(config.getTunedRatios(2, 4) == QuantBotConfig().getTunedRatios(2, 4));
     REQUIRE(config.getTunedRatios(7) == UnitMixPolicy::Weights{});
     // Opening: that band plays the configured opening (no tuned mix), the others the top mix.
     REQUIRE(config.tunedOpening[0][6]);
     REQUIRE(config.getTunedRatios(0, 6) == UnitMixPolicy::Weights{});
-    REQUIRE(ratiosText(config.getTunedRatios(0, 5)) == "14,16,15,22,0,0,0,0,0,33");
+    REQUIRE(ratiosText(config.getTunedRatios(0, 3)) == "14,16,15,22,0,0,0,0,0,33");
     REQUIRE(config.getConfigHash() != base);
     QuantBotConfig opening;
     opening.tunedOpening[0][6] = true;
@@ -546,6 +546,61 @@ TEST_CASE("Strategy: the shipped Tuned ratios are the measured mixes, within the
             const auto kept = bound(weights, own[size_t(house)]);
             for (size_t i = 0; i < kept.size(); ++i) REQUIRE(kept[i] == (own[size_t(house)][i] ? weights[i] : 0));
         }
+    }
+}
+
+TEST_CASE("Strategy: the shipped tech-band ratios are valid for their band", "[ai][strategy][bounds][tech]") {
+    // Vanilla ObjectData (tests/ai/tech-bands.py): the slots each house fields in each band, as a mask of
+    // tank 0x1, siege 0x2, launcher 0x4, Devastator 0x8, Sonic Tank 0x10, Deviator 0x20, ornithopter 0x40,
+    // trike 0x80, raider trike 0x100, quad 0x200; 0 = no band starts at that level.
+    // Harkonnen, Atreides, Ordos, Fremen, Sardaukar, Mercenary; levels 1-6 (7-9 is the top mix).
+    constexpr unsigned fremen[7] = {0, 0, 0x180, 0x380, 0x381, 0x385, 0x387};
+    constexpr unsigned bands[6][7] = {
+        {0, 0, 0, 0x200, 0x201, 0x205, 0x207},
+        {0, 0, 0x080, 0x280, 0x281, 0x285, 0x287},
+        {0, 0, 0x100, 0x300, 0x301, 0x305, 0},
+        {fremen[0], fremen[1], fremen[2], fremen[3], fremen[4], fremen[5], fremen[6]},
+        {0, 0, 0, 0x380, 0x381, 0x385, 0x387},
+        {fremen[0], fremen[1], fremen[2], fremen[3], fremen[4], fremen[5], fremen[6]}};
+    const QuantBotConfig config;
+    int designed = 0;
+    for (int house = 0; house < 6; ++house) {
+        for (int band = 1; band < 7; ++band) {
+            const auto& ratios = config.tunedRatios[size_t(house)][size_t(band)];
+            const unsigned mask = bands[house][band];
+            const auto fieldable = slotsOf(mask);
+            const int count = int(std::count(fieldable.begin(), fieldable.end(), true));
+            CAPTURE(house, band, ratiosText(ratios));
+            REQUIRE_FALSE(config.tunedOpening[size_t(house)][size_t(band)]);
+            // Every band with two or more fieldable slots has its own mix; none elsewhere.
+            if (count < 2) {
+                REQUIRE(*std::max_element(ratios.begin(), ratios.end()) == 0);
+                continue;
+            }
+            ++designed;
+            int total = 0;
+            for (size_t i = 0; i < ratios.size(); ++i) {
+                total += ratios[i];
+                if (fieldable[i]) REQUIRE((ratios[i] >= 2 && ratios[i] <= 50));   // buildable: 2%-50%
+                else REQUIRE(ratios[i] == 0);                                    // only buildable slots
+            }
+            REQUIRE(total == 100);
+            REQUIRE(config.getTunedRatios(house, band) == ratios);
+            // Already within the bounds over the band's slots: bound() plays it unchanged.
+            UnitMixPolicy::Weights weights{};
+            for (size_t i = 0; i < weights.size(); ++i) weights[i] = ratios[i] * 100;
+            const auto played = bound(weights, fieldable);
+            REQUIRE(withinBounds(played, fieldable));
+            for (size_t i = 0; i < played.size(); ++i) REQUIRE(played[i] == weights[i]);
+        }
+        // The top band is the house's measured mix (Fremen, Sardaukar, Mercenary: section 8.11).
+        REQUIRE(config.getTunedRatios(house, 7) == config.tunedRatios[size_t(house)][0]);
+    }
+    REQUIRE(designed == 24);
+    // By design: tanks lead at 4 (50%), tanks and launchers at 5, siege joins at 6.
+    for (int house = 0; house < 6; ++house) {
+        if (house != 0) REQUIRE(config.getTunedRatios(house, 4)[0] == 50);
+        if (house != 2) REQUIRE(config.getTunedRatios(house, 6)[1] == 25);
     }
 }
 
