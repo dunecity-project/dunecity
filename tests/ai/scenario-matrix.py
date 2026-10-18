@@ -65,7 +65,7 @@ DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
-               'city_pop', 'economic_threshold', 'win_type', 'digest', 'wall_s', 'error')
+               'city_pop', 'win_type', 'digest', 'wall_s', 'error')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn')
@@ -286,6 +286,17 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            # A results directory from before a column change (e.g. the retired economic_threshold)
+            # is rewritten with the current columns, so appended rows stay aligned.
+            old = read(path)
+            with path.open(newline='') as handle:
+                header = next(csv.reader(handle), [])
+            if tuple(header) != tuple(fields):
+                with path.open('w', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(old)
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
             if new:
@@ -313,8 +324,6 @@ def command(args, binary, game, out):
 def win_type(result, houses, campaign):
     if not result or result.get('outcome') != 'won' or not campaign:
         return ''
-    if int(result.get('economic_threshold') or 0) > 0 and int(result.get('city_pop') or 0) >= int(result['economic_threshold']):
-        return 'economic'
     if int(result.get('quota') or 0) > 0 and int(result.get('win_flags') or 0) & 4 and \
             any(h['alive'] == '1' for h in houses if h['team'] != '1'):
         return 'quota'
@@ -343,7 +352,7 @@ def play(args, scratch, binary, game):
            'eliminations': sum(1 for h in houses if h.get('alive') == '0'),
            'triggers': result.get('triggers', ''), 'fired': result.get('fired', ''),
            'win_flags': result.get('win_flags', ''), 'quota': result.get('quota', ''),
-           'city_pop': result.get('city_pop', ''), 'economic_threshold': result.get('economic_threshold', ''),
+           'city_pop': result.get('city_pop', ''),
            'win_type': win_type(result, houses, campaign), 'digest': digest, 'wall_s': wall,
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}'}
     winner = result.get('winner_team', '')
@@ -653,7 +662,7 @@ def ladder_table(rows, houses, problems):
 
 
 def campaign_report(rows, houses, problems):
-    print('| Mod | Partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/economic/quota '
+    print('| Mod | Partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
           '| Mean min (won) | Triggers fired |')
     print('|---|---|---|---|---|---|---|---|---|---|---|')
     by_cell = defaultdict(list)
@@ -672,7 +681,7 @@ def campaign_report(rows, houses, problems):
         mean_won = statistics.mean(float(g['minutes']) for g in won) if won else 0
         print(f'| {mod} | {partner} | {enemy} | {len(gs)} | {len(won)} | {sum(g["outcome"] == "lost" for g in ok)} | '
               f'{sum(g["outcome"] == "time_limit" for g in ok)} | {len(gs) - len(ok)} | '
-              f'{types["conquest"]}/{types["economic"]}/{types["quota"]} | {mean_won:.1f} | {fired} |')
+              f'{types["conquest"]}/{types["quota"]} | {mean_won:.1f} | {fired} |')
         for g in gs:
             if g['error']:
                 problems.append(f'campaign {g["id"]}: crash ({g["error"]})')
@@ -680,7 +689,7 @@ def campaign_report(rows, houses, problems):
                 problems.append(f'campaign {g["id"]}: Hard partner {g["outcome"]} at {g["minutes"]} min')
     print()
     # Per mission (Hard partner): which missions do not end in a win.
-    print('Hard partner per mission (W won, L lost, T not finished, X crash; e = economic, q = quota win):\n')
+    print('Hard partner per mission (W won, L lost, T not finished, X crash; q = quota win):\n')
     grid = defaultdict(str)
     for g in rows:
         name, mod = g['cell'].split('/')
@@ -688,8 +697,8 @@ def campaign_report(rows, houses, problems):
             continue
         house, mission = g['id'].split('/')[3].split('-m')
         mark = 'X' if g['error'] else {'won': 'W', 'lost': 'L', 'time_limit': 'T'}.get(g['outcome'], '?')
-        if mark == 'W' and g['win_type'] in ('economic', 'quota'):
-            mark += g['win_type'][0]
+        if mark == 'W' and g['win_type'] == 'quota':
+            mark += 'q'
         grid[(mod, house, int(mission))] += mark
     missions = sorted({m for _, _, m in grid})
     if missions:

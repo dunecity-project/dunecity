@@ -28,8 +28,8 @@ Every game is a real match played headless to its end by the balance probe:
   by an idle human player and a QuantBot partner of `--partner-difficulty`; the enemies are the campaign's
   default enemy AI (QuantBot Easy, `HouseChoiceMenu` `kEnemyAIClasses[0]`), or with
   `--enemy-ai campaign` the "scenario settings" `CampaignAIPlayer`. The game runs until the mission's own
-  win/lose conditions end it (`Game::finished`: conquest, harvest quota, or the DuneCity economic victory
-  - city population over the mission's threshold) or the time limit.
+  win/lose conditions end it (`Game::finished`: conquest or harvest quota; there is no population
+  victory) or the time limit.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -37,11 +37,11 @@ Every game is a real match played headless to its end by the balance probe:
   minute. Scenario triggers (reinforcements, time-outs) are counted as they fire.
 - The end logs `SCENARIO_HOUSE` per house (team, controllers, alive, elimination time, kill/loss value,
   structures, army, peak units away, sortie minutes) and `SCENARIO_RESULT` (outcome, winning team, game
-  minutes, triggers and how many fired, win/lose flags, quota, city population and economic threshold),
+  minutes, triggers and how many fired, win/lose flags, quota, city population),
   then the final state digest (`PROBE_DIGEST ... final=1`).
 
-The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest, economic or
-quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
+The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or quota) and
+`houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the
 next run; a crashed game's last log lines go to `failed-*.txt`.
 
@@ -57,7 +57,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `skirmish` | 13 Random Skirmish cells: 1v1, 3-8 player FFA, 2v2, 3v3, 4v4; MCV only, small, medium and fortress bases; no, small and large armies; 8 vanilla, 5 DuneCity; QuantBot difficulties mixed with AI Player; 4 seeds each | decided, eliminations, idle armies; team cells with a stronger team must be won by it; placement score per controller (QB > QH > QM > QE) |
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
 | `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
-| `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/economic/quota); triggers fired |
+| `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
 | `ladder` | QB v QM, QH v QE, QM v QE on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies) and Habbanya-Penny; 8 seeds per pair and map, sides alternating | the stronger QuantBot's placement score interval above 0 (over all maps) |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
@@ -173,6 +173,7 @@ Problems found:
    `CampaignAIPlayer` 4/27 lost (Atreides m2, m5, m20; Ordos m5).
 5. **DuneCity campaigns are won economically**: 74 of 90 DuneCity Hard wins are the economic victory
    (city population past the mission threshold, e.g. 505/500 at 8.6 min on Ordos level 4) with little or
-   no fighting; mean win 16 min against 20 min vanilla.
+   no fighting; mean win 16 min against 20 min vanilla. (1.0.848 removes the population victory:
+   `fix/remove-economic-victory`; the matrix no longer records an economic threshold or win type.)
 6. DuneCity games end later: Brutal v Medium on the DuneCity Random Skirmish map 2/8 time-outs, 4v4
    fortress 3/4 time-outs (the Hard team wins the fourth), the 4P DuneCity map QH mirror 3/4 time-outs.

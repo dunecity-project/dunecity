@@ -222,6 +222,28 @@ New ctests `workshop_store_tests`, `save_pinned_workshop_revision` (save on an a
 workshop/revisions after the mod folders are deleted; seeded outbox removed, nothing published).
 `tests/menu/run-menu-probe.py --size WxH` replaces `--metaserver-maps`.
 
+## 2026-10-18 — No population/economic victory (branch `fix/remove-economic-victory`, protocol 85, save 9865, not released)
+
+Stefan: "there is no pop victory". The initial fork commit (92785605) added `WINLOSEFLAGS_ECONOMIC`
+0x10 and a check in `Game::updateGameState` winning the game once the local city reached
+`CitySimulation::economicVictoryThreshold_` (500). Original Dune II scenarios carry WinFlags=19/23
+(SCENA008-010, SCENF002-008, SCENARIO.PAK, RWRK_SCENA008-010/SCENH003) where bit 0x10 means nothing,
+so DuneCity campaign missions were silently won at 500 population (scenario matrix: 74 of 90 DuneCity
+campaign wins). Removed: the check, `WINLOSEFLAGS_ECONOMIC`, the threshold getter/field, the
+validator/generator rules and doc lines (FEATURES.md, README, TORNIE-MOD.md). Bit 0x10 is now ignored
+as upstream. **Saves:** no version bump — the 9865 layout keeps the int32 slot; save() writes 0,
+load() reads and discards it (also for 9809-9817), so old saves load and a game being won
+economically simply continues. **Protocol 85** (game end differs from an 82 peer).
+Test: `campaign_no_population_victory_{vanilla,dunecity}` (`--no-population-victory-probe`, Atreides
+level 4 = WinFlags 19; forces local city population to 800 for 480 cycles and requires the mission
+to keep running). The scenario matrix branch (`test/ai-scenario-matrix`) still reads
+`getEconomicVictoryThreshold()` and classifies win type `economic`; it must drop those when merged.
+Campaign matrix (acdada9b merged uncommitted, DuneCity Hard partner vs QuantBot Easy, levels 1-9,
+96 games; results ~/Documents/projects/dunecity-results/econ-victory/campaign): before (847 report)
+90 won / 2 lost / 4 not finished, wins conquest/economic/quota 12/74/4, mean 16.1 min; after 89 / 2 / 5,
+wins 85/0/4, mean 17.4 min. Not finished: harkonnen m3 x2, ordos m1, ordos m17 x2 (80 min limit);
+losses atreides m22, harkonnen m22 (same seeds as before).
+
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
 Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct

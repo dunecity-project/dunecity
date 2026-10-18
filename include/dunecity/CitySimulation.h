@@ -133,7 +133,6 @@ public:
 
     bool isPowerShortageJustStarted() const { return false; }
     int32_t getUnpoweredZoneCount() const { return 0; }
-    int32_t getEconomicVictoryThreshold() const { return economicVictoryThreshold_; }
 
     /// Average land value across developed blocks (0-250), refreshed each scan.
     /// Local player version for UI; per-house via getHouseState().
@@ -227,7 +226,6 @@ private:
     int32_t totalFunds_ = 0;
     int16_t cityTax_ = kDefaultTaxRate;
     int cityYear_ = 0;
-    int32_t economicVictoryThreshold_ = 500;
 
     CityMapLayer<uint8_t> powerGridMap_;
     CityMapLayer<uint8_t> trafficDensityMap_;

@@ -941,6 +941,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/spice-income-${spice_mod}-probe)
             set_tests_properties(house_spice_income_${spice_mod} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
+        # No population victory: Atreides level 4 (SCENA008-010, WinFlags=19) must not
+        # end when the city passes 500 population; vanilla must behave the same.
+        foreach(popwin_mod IN ITEMS vanilla dunecity)
+            add_test(NAME campaign_no_population_victory_${popwin_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-population-victory-probe --repeatable
+                --level 4 --house atreides
+                --mod ${popwin_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/no-population-victory-${popwin_mod}-probe)
+            set_tests_properties(campaign_no_population_victory_${popwin_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # Credit storage: refined spice and city taxes share the refinery/silo
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
         # City tax only exists with the dunecity mod, so both mods are measured.

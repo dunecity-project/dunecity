@@ -251,7 +251,11 @@
 //     house's own buildings and roads (a city base) towards the enemy. No saved state or command
 //     change; an 82 or 83 peer would order the same AI units differently and desync. (83 is
 //     feat/ai-ratio-tuning's.) Save 9865 unchanged.
-#define NETWORK_PROTOCOL_VERSION            84
+// 85: No population/economic victory. WinFlags bit 0x10 (set by original Dune II scenarios such
+//     as WinFlags=19/23) is ignored as upstream; a DuneCity campaign mission is no longer won when
+//     total city population reaches 500. An 82 peer would end the game differently. Save 9865
+//     unchanged (the retired threshold slot is still written as 0 and discarded on load).
+#define NETWORK_PROTOCOL_VERSION            85
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

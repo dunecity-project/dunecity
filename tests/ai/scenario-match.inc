@@ -256,11 +256,10 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     }
     const auto* city = game.getCitySimulation();
     SDL_Log("SCENARIO_RESULT: mode=%s outcome=%s winner_team=%d cycle=%u end_s=%.1f minutes=%.2f triggers=%zu fired=%d "
-            "win_flags=%d lose_flags=%d quota=%d city_pop=%d economic_threshold=%d",
+            "win_flags=%d lose_flags=%d quota=%d city_pop=%d",
             campaign ? "campaign" : "match", outcome.c_str(), winnerTeam, cycle, FormationWaveMeasure::seconds(cycle),
             cycle / static_cast<double>(minute), initialTriggers, fired, game.winFlags, game.loseFlags,
-            tracked ? tracked->getQuota() : 0, city && game.isCitySimEnabled() ? int(city->getTotalPop()) : 0,
-            city && game.isCitySimEnabled() ? int(city->getEconomicVictoryThreshold()) : 0);
+            tracked ? tracked->getQuota() : 0, city && game.isCitySimEnabled() ? int(city->getTotalPop()) : 0);
     return outcome;
 }
 

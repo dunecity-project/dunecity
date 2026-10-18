@@ -33,7 +33,6 @@
 - [x] City budget and tax system
 - [x] City evaluation and scoring
 - [x] Save/Load city state
-- [x] Economic victory condition
 
 ## Phase 1: Identity & First UI (DONE)
 - [x] Rebrand: binary, window title, project name → DuneCity
