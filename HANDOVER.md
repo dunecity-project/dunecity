@@ -17,7 +17,8 @@ and 563517f9 (Fremen tuned top mix as a code default; config hash changes).
 - **Versions:** protocol 86 (83 ratio + 84 army + 85 econ, all branch-only); save 9868 (ratio's ten-slot
   mix state; 9866/9867 load and split, older saves as before; econ kept the 9865 layout, army changed no
   saved state).
-- **Verified on 212125a8** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3` 101/103
+- **Verified on 212125a8 and again on 0755f07e** (ratio 563517f9; Release `build`, `check-build-deps` clean
+  before/after): full `ctest -j3` 101/103 each time
   passed (incl. perf_regression, quantbot_ffa_army_deploys, all_against_atreides, menu_navigation_probe,
   workshop/no-population tests). **Failed (combination only; each branch alone passes):**
   `quantbot_strategy` - TrikeSwarm lead share 1053 v Learned 672 bps, below the +400 margin (ratio's 50%
