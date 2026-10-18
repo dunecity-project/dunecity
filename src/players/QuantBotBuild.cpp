@@ -195,6 +195,11 @@ void QuantBot::build(int militaryValue) {
             if (QuantBotBuildPolicy::militaryItem(item) && data[item][houseID].enabled)
                 largestMilitaryUnitValue = std::max(largestMilitaryUnitValue, data[item][houseID].price);
     const int militaryBudget = planningMilitaryBudget(militaryValue, money, largestMilitaryUnitValue);
+    // M (SpendAtCap, test-only): the budget above the configured limit is for the heavy factory's
+    // siege tanks, launchers and specials; light vehicles, infantry, aircraft and tanks stop at it.
+    const bool surplusArmy = !militaryBudgetOverridden && militaryBudget > militaryValueLimit;
+    const int lightBudget = surplusArmy ? militaryValueLimit : militaryBudget;
+    if (surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, militaryValue - militaryValueLimit);
 	const bool citySimEnabled = currentGame && currentGame->isCitySimEnabled();
     // One reading of the remaining field, shared by the space decision here and
     // by the cash decisions further down. A tiny field that supports no worker
@@ -3290,7 +3295,7 @@ void QuantBot::build(int militaryValue) {
 					&& money > (citySimEnabled ? 500 : 700)
 					&& pBuilder->getProductionQueueSize() < 1
 					&& pBuilder->getBuildListSize() > 0
-					&& militaryValue < militaryBudget
+					&& militaryValue < lightBudget
 					&& ((citySimEnabled && itemCount[Structure_HeavyFactory] == 0)
 						|| ((!learningUnitMix && lightVehicleCount < 2)
                             || int64_t(lightVehicleValue) * 10000 < int64_t(vehiclePlanValue) * lightVehicleBps))) {
@@ -3313,7 +3318,7 @@ void QuantBot::build(int militaryValue) {
                             for (size_t i=5; i<8; ++i)
                                 if (campaignAvailableToBuild(pBuilder,mixItems[i])
                                     && (itemID == NONE_ID || itemCount[mixItems[i]] < itemCount[itemID])) itemID = mixItems[i];
-                        if (itemID != NONE_ID && int64_t(militaryValue) + data[itemID][houseID].price <= militaryBudget
+                        if (itemID != NONE_ID && int64_t(militaryValue) + data[itemID][houseID].price <= lightBudget
                             && produceItemWithLogging(itemID, __LINE__, "adaptive_light_mix")) {
                             ++itemCount[itemID];
                             ++lightVehicleCount;
@@ -3336,7 +3341,7 @@ void QuantBot::build(int militaryValue) {
 				&& pBuilder->getProductionQueueSize() < 1
 				&& pBuilder->getBuildListSize() > 0
 				&& money > 450
-				&& militaryValue < militaryBudget
+				&& militaryValue < lightBudget
 				&& !getHouse()->isGroundUnitLimitReached()
 				&& ((!citySimEnabled && infantryCount < 3)
 					|| infantryValue * 100 < std::max(militaryValue, 1) * infantryPercent)) {
@@ -3352,7 +3357,7 @@ void QuantBot::build(int militaryValue) {
 				for (Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
 					if (!campaignAvailableToBuild(pBuilder,candidate)) continue;
 					const int value = data[candidate][houseID].price;
-					if (int64_t(militaryValue)+value > militaryBudget) continue;
+					if (int64_t(militaryValue)+value > lightBudget) continue;
 					if (citySimEnabled
 						&& (purchasePrice(pBuilder,candidate) > money - cityWorkingReserve
 							|| !infantryQuotaAdmits(value))) continue;
@@ -3374,7 +3379,7 @@ void QuantBot::build(int militaryValue) {
 				&& pBuilder->getProductionQueueSize() < 1
 				&& pBuilder->getBuildListSize() > 0
 				&& money > 300
-				&& militaryValue < militaryBudget
+				&& militaryValue < lightBudget
 				&& !getHouse()->isGroundUnitLimitReached()
 				&& (infantryCount < 3
 					|| infantryValue * 100 < std::max(militaryValue, 1) * infantryPercent)) {
@@ -3385,7 +3390,7 @@ void QuantBot::build(int militaryValue) {
 						itemID = candidate;
 					}
 				}
-				if (itemID != NONE_ID && int64_t(militaryValue)+data[itemID][houseID].price<=militaryBudget
+				if (itemID != NONE_ID && int64_t(militaryValue)+data[itemID][houseID].price<=lightBudget
                     && produceItemWithLogging(itemID, __LINE__)) {
 					itemCount[itemID]++;
 					infantryCount++;
@@ -3413,7 +3418,7 @@ void QuantBot::build(int militaryValue) {
                     air.carryalls = itemCount[Unit_Carryall];
                     air.carryallTarget = transportTarget;
                     air.armyValue = militaryValue;
-                    air.armyLimit = militaryBudget;
+                    air.armyLimit = lightBudget;
                     air.vehiclePlanValue = vehiclePlanValue;
                     air.airCommittedValue = ornithopterValue;
                     air.airTargetBps = unitMix[4];
@@ -3645,7 +3650,9 @@ void QuantBot::build(int militaryValue) {
                                 candidates[i] = {data[item][houseID].price,
                                     i>=3 ? specialValue : data[item][houseID].price * itemCount[item],
                                     (targets[i]*10000).lround(),
-                                    i>=3 ? specialChoice>=0 : campaignAvailableToBuild(pBuilder,item)};
+                                    i>=3 ? specialChoice>=0 : campaignAvailableToBuild(pBuilder,item)
+                                        && (item!=Unit_Tank || !surplusArmy
+                                            || int64_t(militaryValue)+data[item][houseID].price<=militaryValueLimit)};
                             }
                             const int normalHorizon = vehiclePlanValue;
                             const int expansionHorizon = vehiclePlanValue;

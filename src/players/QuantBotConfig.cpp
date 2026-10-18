@@ -271,6 +271,9 @@ QuantBotConfig::QuantBotConfig() {
     force.finishWeakest = false;
     force.fortifiedWaves = false;
     force.sonicClearLane = false;
+    force.spendAtCap = false;
+    force.siegeStandoff = false;
+    force.massAssault = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -550,6 +553,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
         iniFile.setBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
         iniFile.setBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
+        iniFile.setBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
+        iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
+        iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -644,6 +650,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.finishWeakest = iniFile.getBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
     force.fortifiedWaves = iniFile.getBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
     force.sonicClearLane = iniFile.getBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
+    force.spendAtCap = iniFile.getBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
+    force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
+    force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1072,6 +1081,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("finishWeakest", force.finishWeakest);
     addNamed("fortifiedWaves", force.fortifiedWaves);
     addNamed("sonicClearLane", force.sonicClearLane);
+    addNamed("spendAtCap", force.spendAtCap);
+    addNamed("siegeStandoff", force.siegeStandoff);
+    addNamed("massAssault", force.massAssault);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

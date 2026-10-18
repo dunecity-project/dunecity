@@ -1025,7 +1025,13 @@ private:
     /// enemy house's production and economy), kForceFortifiedWaves (K: against an objective
     /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army)
     /// and kForceSonicClearLane (S, SonicClearLane: a hunting sonic tank whose wave would pass over
-    /// one of our own units shoots another enemy in reach whose lane is clear).
+    /// one of our own units shoots another enemy in reach whose lane is clear). Round 2 candidates
+    /// (all test-only, default off): kForceSpendAtCap (M, SpendAtCap: banked credits raise the
+    /// production budget above the military limit, for siege tanks, launchers and specials only),
+    /// kForceSiegeStandoff (O, SiegeStandoff: wave launchers shell known turrets from outside their
+    /// reach while the rest of the wave holds short of the turrets) and kForceMassAssault (Z,
+    /// MassAssault: against a fortified objective the army waits for kAssaultLimitPercent of the
+    /// limit, then all of it hunts towards one objective of the weakest house).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
@@ -1033,7 +1039,8 @@ private:
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
         kForceThreatTurrets = 1048576, kForceOpeningReadiness = 4194304,
         kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
-        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728;
+        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728, kForceSpendAtCap = 268435456,
+        kForceSiegeStandoff = 536870912, kForceMassAssault = 1073741824;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
@@ -1121,6 +1128,15 @@ private:
     /// target (no other targeting rule then applies to it this pass).
     bool sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
                           const std::vector<const UnitBase*>& friends);
+    /// kForceSiegeStandoff (O, test-only): wave launchers not shooting an armed unit in their reach
+    /// attack the nearest known enemy turret within kSiegeReachTiles beyond their range (they
+    /// outrange rocket turrets by a tile); wave members walking into a known turret's reach while
+    /// at least kSiegeMinLaunchers of those launchers are near them guard a point just outside it
+    /// (siegeHeld), released when the turret is gone, the launchers are, or after kSiegeMaxHoldMs.
+    /// Adds every unit it ordered or holds to \a handled (no other targeting rule this pass).
+    void siegeStandoff(std::set<Uint32>& handled);
+    /// O's held escorts: unit id -> the cycle its hold began. Not saved: the rule is test-only.
+    std::map<Uint32, Uint32> siegeHeld;
     /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
     /// or power line: what a player knows stands there.
     bool knownEnemyStructure(const StructureBase* structure) const;
@@ -1211,8 +1227,10 @@ private:
     /// Splits the launched ground units; false (nothing ordered) when the wave cannot split.
     bool startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
     void updateSplits();
-    /// Held by a force controller (a split group or a muster): no rally or regroup orders.
-    bool forceHeld(Uint32 id) const { return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)); }
+    /// Held by a force controller (a split group, a muster or O's siege hold): no rally or regroup orders.
+    bool forceHeld(Uint32 id) const {
+        return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id));
+    }
     /// Telemetry for the duel reports only: never read by a decision, not saved.
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
@@ -1220,7 +1238,8 @@ private:
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
             turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
-            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0;
+            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0, surplusPeak = 0, siegeOrders = 0,
+            siegeHolds = 0, assaultHolds = 0, assaultWaves = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
