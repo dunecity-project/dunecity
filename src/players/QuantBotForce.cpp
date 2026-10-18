@@ -120,7 +120,12 @@ int QuantBot::openingReadinessPercent() const {
     if (!forceVariant(kForceOpeningReadiness)) return percent;
     // A Rush tempo launches its opening at its own readiness.
     if (const auto* tempo = strategyTempo(); tempo && !tempo->openingReadiness) return percent;
-    return Force::openingReadiness(percent, customWave.launched != 0, initialMilitaryValue, houseAttackThreshold());
+    // In a team game the opening is over once the team's army is worth the house threshold: three
+    // Hard allies each holding for 28,000 never launched under a Medium team's waves (3v3, 12
+    // seeds, docs/ai-scenario-matrix.md "Team games"). Without allies the team is the house.
+    const bool teamReady = teamGroundArmyValue() >= houseAttackThreshold();
+    return Force::openingReadiness(percent, customWave.launched != 0 || teamReady, initialMilitaryValue,
+                                   houseAttackThreshold());
 }
 
 int QuantBot::launchReadinessPercent() {
@@ -204,11 +209,22 @@ int64_t QuantBot::ownGroundArmyValue() const {
     return own;
 }
 
+int64_t QuantBot::teamGroundArmyValue() const {
+    const int myTeam = getHouse()->getTeamID();
+    int64_t team = 0;
+    for (const auto* unit : getUnitList())
+        if (groundFighter(unit) && unit->getOwner()->getTeamID() == myTeam) team += healthValue(unit);
+    return team;
+}
+
 bool QuantBot::outnumberedByEstimate() const {
     const Uint32 now = getGameCycleCount();
     if (estimateCycle != now) {
         estimateCycle = now;
-        estimateOutnumbered = Force::outnumbered(ownGroundArmyValue(), enemyThreatEstimate());
+        // Our team against the strongest enemy team: one house of an alliance is not outnumbered
+        // by the whole enemy alliance while its allies stand beside it (3v3: own 30,500 against
+        // 57,374 held every Hard house at home).
+        estimateOutnumbered = Force::outnumbered(teamGroundArmyValue(), enemyThreatEstimate());
     }
     return estimateOutnumbered;
 }
@@ -329,7 +345,7 @@ int QuantBot::builtUpDistance(Coord p, int limit) const {
 
 int QuantBot::perimeterTurretGoal() const {
     if (!forceVariant(kForceThreatTurrets)) return 0;
-    return Force::perimeterTurretGoal(ownGroundArmyValue(), enemyThreatEstimate());
+    return Force::perimeterTurretGoal(teamGroundArmyValue(), enemyThreatEstimate());
 }
 
 int QuantBot::perimeterTurrets() const {

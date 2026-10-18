@@ -1069,7 +1069,10 @@ private:
     int64_t enemyThreatEstimate() const;
     /// Health-weighted value of our own mobile ground fighters.
     int64_t ownGroundArmyValue() const;
-    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyThreatEstimate(),
+    /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
+    /// alone in a free-for-all or a 1v1).
+    int64_t teamGroundArmyValue() const;
+    /// ForceConcentrationPolicy::outnumbered on teamGroundArmyValue() and enemyThreatEstimate(),
     /// once per cycle.
     bool outnumberedByEstimate() const;
     mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
