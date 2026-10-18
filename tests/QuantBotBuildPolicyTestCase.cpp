@@ -1001,12 +1001,16 @@ TEST_CASE("A whole-army house twice as strong as the enemy it has seen does not 
     REQUIRE(strengthReadiness(20000,15000,3000)==20000);
     REQUIRE(strengthReadiness(20000,int64_t(1)<<40,3000)==20000);
 }
-TEST_CASE("Banked credits above the reserve buy army past the cap, at most the cap again", "[quantbot][production]") {
+TEST_CASE("Banked credits above the reserve buy army past the cap, at most half the cap again", "[quantbot][production]") {
     using QuantBotBuildPolicy::surplusMilitaryBudget;
     REQUIRE(surplusMilitaryBudget(25000,0)==25000);
     REQUIRE(surplusMilitaryBudget(25000,10000)==25000);
     REQUIRE(surplusMilitaryBudget(25000,22000)==37000);
-    REQUIRE(surplusMilitaryBudget(25000,158000)==50000);
+    REQUIRE(surplusMilitaryBudget(25000,158000)==37500);
+    // Medium's largest budget stays below Hard's cap on every map class (config defaults).
+    REQUIRE(surplusMilitaryBudget(5000,999999)<8000);
+    REQUIRE(surplusMilitaryBudget(12000,999999)<20000);
+    REQUIRE(surplusMilitaryBudget(40000,999999)<70000);
     REQUIRE(surplusMilitaryBudget(0,158000)==0);
     REQUIRE(surplusMilitaryBudget(INT32_MAX,INT32_MAX)==INT32_MAX);
 }

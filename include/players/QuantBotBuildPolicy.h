@@ -42,13 +42,15 @@ inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
 }
 // Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
-// ladder"): what lies above `reserve` raises the planning budget, by at most the cap again.
-// A Custom Medium on Habbanya-Penny sat at its 25,000 cap with 117,000-158,000 credits unspent
-// while Easy's turret base held, and 15 of 18 games timed out.
+// ladder"): what lies above `reserve` raises the planning budget, by at most half the cap, so a
+// Medium never reaches Hard's cap (Medium x 1.5 < Hard on every map class). A Custom Medium on
+// Habbanya-Penny sat at its 25,000 cap with 117,000-158,000 credits unspent while Easy's turret
+// base held, and 15 of 18 games timed out; at +100% the reverse All against Atreides Medium
+// (100,000+ banked) held off four Hard houses for 60 minutes.
 inline constexpr int kSurplusMilitaryReserve = 10000;
 inline int surplusMilitaryBudget(int limit, int credits, int reserve = kSurplusMilitaryReserve) {
     const int64_t cap = std::max(0, limit);
-    const int64_t surplus = std::clamp<int64_t>(int64_t(credits) - std::max(0, reserve), 0, cap);
+    const int64_t surplus = std::clamp<int64_t>(int64_t(credits) - std::max(0, reserve), 0, cap / 2);
     return int(std::min<int64_t>(cap + surplus, std::numeric_limits<int>::max()));
 }
 // Only reached when the player asked for an explicit unit-count override on Brutal.
