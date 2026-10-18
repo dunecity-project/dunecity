@@ -258,6 +258,27 @@ def report_arms(args, games, houses):
         losses = sum(1 for r in recs if r['score'] == 0.0 and games[r['key']]['winner_label'])
         print(f'| {x} v {y} | {fmt([r["score"] for r in recs])} | {fmt(by["atreides"])} | {fmt(by["harkonnen"])} | '
               f'{fmt(by["ordos"])} | {wins}-{losses} / {len(recs) - wins - losses} |')
+    # The house columns mix the house with its opponent's strength. Every house pair is played with
+    # both assignments, so the per-house effect of A over B is identified: with s(h, o) the logit of
+    # A's score as house h against B's house o, s(h, o) + s(o, h) = d(h) + d(o) for the logit gain
+    # d(h) of playing A instead of B as house h. Shown as the score A would get as h against a B of
+    # equal strength (0.5 + effect).
+    print('\nPer-house effect of A over B (d = logit gain; score against an equal B; from both assignments):\n')
+    print('| A v B | Atreides | Harkonnen | Ordos |')
+    print('|---|---|---|---|')
+    for pair in args.arms.split(','):
+        x, y = pair.split(':')
+        cells = defaultdict(list)
+        for r in records(games, houses, defaultdict(dict), x, y):
+            cells[(r['house'], r['opponent'])].append(r['score'])
+        logit = lambda h, o: math.log(min(0.99, max(0.01, statistics.mean(cells[(h, o)])))
+                                      / (1 - min(0.99, max(0.01, statistics.mean(cells[(h, o)])))))
+        pairs = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
+        if any(not cells[(h, o)] or not cells[(o, h)] for h, o in pairs):
+            continue
+        ah, oa, ho = (logit(h, o) + logit(o, h) for h, o in pairs)
+        d = {'atreides': (ah + oa - ho) / 2, 'harkonnen': (ah + ho - oa) / 2, 'ordos': (oa + ho - ah) / 2}
+        print(f'| {x} v {y} | ' + ' | '.join(f'd={d[h]:+.2f} ({1 / (1 + math.exp(-d[h])):.2f})' for h in HOUSES) + ' |')
     if args.by_map:
         print('\n| A v B | Map | Score |')
         print('|---|---|---|')

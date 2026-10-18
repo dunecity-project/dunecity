@@ -9,17 +9,20 @@
 //      house, eligible); every game minute to 16 both have the same state digest, and the same
 //      QuantBot bytes at the end. The all-Learned game of the same seed has a different digest (the
 //      strategies matter), and another seed picks a different strategy for some house.
-//   2. Save/load: the host's minute-12 save loads with every strategy, its QuantBot blocks re-save
-//      byte-identically and round-trip through QuantBot::save/load; a 9864 block (the same bytes
-//      without the 3 strategy bytes) loads unpicked and pickStrategy() picks the original again.
+//   2. Save/load: the host's minute-12 save loads with every strategy and its resolved Tuned/Bounded
+//      starting mix (at least one house draws Bounded), its QuantBot blocks re-save byte-identically
+//      and round-trip through QuantBot::save/load; a 9865 block (without the 16 bytes of starting
+//      mix) keeps its strategy with no resolved mix; a 9864 block (without the 19 strategy bytes)
+//      loads unpicked and pickStrategy() picks the original strategy and the same drawn mix again.
 //      Loaded with the network checkpoint runtime it continues to the host's digest and QuantBot
 //      bytes; two ordinary loads continue identically (an ordinary load rebuilds the bots' plans,
 //      so it is not the host's continuation, with or without strategies).
 //   3. Each mix strategy's production follows its ratios while learning stays on: Custom Hard
 //      Fortress Random Skirmishes (every factory standing from the start), each house
-//      Fixed:<Mix>,Base in its own config copy, 12 game minutes. Every production pass before
-//      combat evidence plays exactly the prior masked to the available slots (applyPrior over the
-//      opening, plus the anti-air floor); the value built favours the prior's lead slots more than
+//      Fixed:<Mix>,Base in its own config copy, 12 game minutes (Tuned with a probe tuned table,
+//      Bounded with its draw). Every production pass before combat evidence plays exactly the prior
+//      masked to the available slots and bounded to 2%-50% per slot (applyPrior over the opening,
+//      bound(), plus the anti-air floor); the value built favours the prior's lead slots more than
 //      the Learned game on the same map does; once learning is active the mix leaves the prior.
 //   4. Learned/Base is inert: Fixed:Learned,Base and Random weighted only on Learned/Base play the
 //      same game (every production pass's mix, digest and QuantBot bytes), the 1.0.846 rules.

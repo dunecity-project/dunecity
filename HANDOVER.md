@@ -1,3 +1,28 @@
+## 2026-10-18 — QuantBot starting-ratio bounds, Bounded/Tuned mixes, randomised arm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Stefan: randomised runs, control runs and tuned mixes; no unit type over 50% or under 2% at start; keep
+the learning. Worktree ~/Documents/projects/dunecity-ratio-tuning. Write-up `docs/ai-play-styles.md`
+section 7; data `docs/formation-results/play-styles/ratios/`; raw ~/Documents/projects/dunecity-results/ratio-tuning.
+
+- **Code.** `QuantBotStrategy::bound` (each producible mix slot 2%-50%, others 0, one scale t, integer
+  bps) applied to every starting mix in `QuantBot::startingPrior` (configured opening, presets, Counter,
+  Tuned, Bounded); presets = 1.0.847 presets bounded (QuadMass 70% → 50%). New mixes `Tuned`
+  (`[Unit Ratios Tuned] <House>=t,s,l,sp,o,tr,r,q`, optional, hashed, no code defaults yet) and `Bounded`
+  (`randomMix`: uniform over the bounded mixes from seed + house, SplitMix64). Resolved ratios saved in
+  9866; protocol 83. Test-only `[Play Style] Learning=0` / `StartBounds=0`; harness `start_mix`, `mix.csv`,
+  `--seed-per-map`; `tests/ai/ratio-analysis.py`.
+- **Measured (CY, Hard, Swarm).** Randomised v control 0.520 (0.50-0.54), n=3,094; per-house effect
+  0.51/0.54/0.52 (Atreides/Harkonnen/Ordos). Bounded v unbounded control 0.500, n=108. Within-house
+  starting-share effects are small (coefficients ~1-2 SE); winners' and losers' end compositions are
+  the same (the learning converges); siege tanks are the most cost-effective unit for every house.
+- **Default unchanged** (`Fixed:Learned,Swarm`, configured ratios bounded). Round-1 tuned candidates
+  (`tests/ai/play-styles/r1-*.ini`) were running at hand-off: `t1-mini` (queue), `t1-pro`, `pB-win`
+  (Mode=Random, Bounded only, v control), rest of `rR-air`. Still to do: round 2, Base tempo, Fortress,
+  Brutal, `/weak`, all-against-Atreides and learning on/off for the best tuned mix.
+- **Infra.** Stopping a Pro batch via its run-batch (SIGTERM) left 8 orphaned balance-probes in the batch's
+  process group (ppid 1); killed by group. Windows parity: digests/houses identical, only the known ±0.1 s
+  timing fields.
+
 ## 2026-10-18 — local 1.0.847 verified and installed on the MBA
 
 Staging = 1.0.846 + `feat/skirmish-spectator` (ed441987: Spectate + "Your house AI" on the
