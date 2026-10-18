@@ -133,8 +133,9 @@ def schedule(args):
                     sides = '|'.join(f'{h}:{first if h in group else second}' for h in FFA_HOUSES)
                     games.append((args.tag, args.difficulty, name, str(seed), sides))
         return games
+    pairs = list(itertools.combinations(args.houses, 2)) if args.houses else HOUSE_PAIRS
     for index, seed in enumerate(args.seeds, args.house_offset):
-        houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
+        houses = pairs if args.all_houses else (pairs[index % len(pairs)],)
         for house_a, house_b in houses:
             for map_index, name in enumerate(args.maps):
                 # --seed-per-map: every map its own seed, so a seeded per-house draw differs by map.
@@ -574,7 +575,10 @@ parser.add_argument('--ffa', help='Four-player free-for-all: two labels x,y, two
 parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
 parser.add_argument('--baseline', help='1v1 report: also pair each first label with this label\'s side against the same '
                                        'opponent in the same setups (e.g. the old default, for a candidate v none)')
-parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
+parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all house pairs (see --houses)')
+parser.add_argument('--houses', nargs='+', choices=sorted(HOUSE_NUMBERS),
+                    help='1v1: the house pairs are every pair of these houses (default Atreides/Harkonnen/Ordos '
+                         'pairs), e.g. all six for Fremen, Sardaukar and Mercenary')
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
                          'so a run split by seed across machines plays the pairs the whole list would')
