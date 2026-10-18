@@ -889,6 +889,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 40
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # MANDATORY with quantbot_all_against_atreides (AGENTS.md, CLAUDE.md): the smoke tier of
+        # the AI scenario matrix (docs/ai-scenario-matrix.md) - one fast game per category: a
+        # 4-house Random Skirmish free-for-all, a Construction Yard only duel (replayed: its final
+        # state digest must reproduce), the reverse All against Atreides (Medium against four
+        # Hard must lose), Hard v Easy on both sides, a 2v2 on Sihaya-Toto and three campaign
+        # missions (levels 1, 4, 9; vanilla and DuneCity) the Hard partner must win. Fails on a
+        # crash, a missed expected winner, a time-out, nobody eliminated or idle armies.
+        add_test(NAME quantbot_scenario_matrix COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3
+            --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/scenario-matrix-smoke)
+        set_tests_properties(quantbot_scenario_matrix PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three

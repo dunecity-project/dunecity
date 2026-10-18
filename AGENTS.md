@@ -108,21 +108,30 @@ binary outside ctest.
   the session into `HANDOVER.md`; if a note is genuinely reference material, put it under `docs/`
   with a lowercase name so it is tracked deliberately.
 
-## AI and unit behaviour: mandatory regression match
+## AI and unit behaviour: mandatory regression matches
 
 Every change that can alter AI decisions or unit behaviour (anything under `src/players/`,
 `include/players/`, unit/structure/combat/pathfinding code, `QuantBot Config` defaults, game
-option semantics) must pass `quantbot_all_against_atreides` before it is merged:
+option semantics) must pass `quantbot_all_against_atreides` and `quantbot_scenario_matrix`
+before it is merged:
 
 ```bash
-ctest --test-dir build -R quantbot_all_against_atreides --output-on-failure
+ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matrix' --output-on-failure
 ```
 
-It plays Stefan's setup to the end on six seeds - vanilla, `5P - 128x128 - All against Atreides`,
-Atreides QuantBot Brutal (spectated) against four AI Player (hard) houses, unit and harvester
-overrides 0 - and fails unless Atreides eliminates everyone within 40 game minutes on every
-seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
-make a change pass; see `docs/quantbot-all-against-atreides.md`.
+`quantbot_all_against_atreides` plays Stefan's setup to the end on six seeds - vanilla,
+`5P - 128x128 - All against Atreides`, Atreides QuantBot Brutal (spectated) against four AI Player
+(hard) houses, unit and harvester overrides 0 - and fails unless Atreides eliminates everyone within
+40 game minutes on every seed (about 3.5 minutes wall, three games at a time). Do not raise the limit
+or drop a seed to make a change pass; see `docs/quantbot-all-against-atreides.md`.
+
+`quantbot_scenario_matrix` is the smoke tier of the AI scenario matrix (`docs/ai-scenario-matrix.md`):
+one fast game per kind - a 4-house Random Skirmish free-for-all, a Construction Yard only duel
+(replayed to the same final digest), the reverse All against Atreides (Medium against four Hard must
+lose), the Hard v Easy ladder on both sides, a 2v2 on Sihaya-Toto and campaign missions of levels 1, 4
+and 9 the Hard partner must win - and fails on a crash, a missed expected winner, a time-out, nobody
+eliminated or idle armies (a few minutes wall). Changes with a wide reach (unit mix, attack timing,
+economy, campaign AI) also run the full tier on the runners and compare its table with the last one.
 
 ## AI test games: scoring and the default rule
 

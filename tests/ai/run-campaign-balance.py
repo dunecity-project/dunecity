@@ -304,18 +304,29 @@ if args.scenario:
                      'a campaign scenario neither.')
     if args.mission and args.scenario_sides:
         parser.error('--mission is for campaign scenarios.')
+
+
+def team_number(brain, default):
+    """Brain=TeamN -> N (trailing junk ignored), else default."""
+    digits = brain[4:].split()[0] if brain.startswith('team') and brain[4:].split() else ''
+    return int(digits) if digits.isdigit() else default
+
+
 roster = []
 if args.custom_map:
     scenario = configparser.ConfigParser(strict=False, interpolation=None)
-    with args.custom_map.open() as source_file:
-        scenario.read_file(source_file)
+    # Map files are bytes to the game; a few bundled ones (6P Full Wormage) carry binary junk
+    # between their sections, which the game's INI reader skips. Read only the INI lines.
+    lines = args.custom_map.read_text(encoding='utf-8', errors='replace').splitlines()
+    scenario.read_string('\n'.join(line for line in lines if line.replace('\t', ' ').isprintable()
+                                   and (line.strip().startswith(('[', ';', '#')) or '=' in line or not line.strip())))
     sections = {s.lower(): s for s in scenario.sections()}
     names = house_names
     assigned = set()
     for name in names:
         if name in sections:
             brain = scenario[sections[name]].get('brain', 'Team2').lower()
-            team = int(brain[4:]) if brain.startswith('team') else (1 if name == args.house else 2)
+            team = team_number(brain, 1 if name == args.house else 2)
             roster.append((names.index(name), team))
             assigned.add(name)
     # Generic slots use the chosen player house first, then distinct opponents.
@@ -333,7 +344,7 @@ if args.custom_map:
         if name is None:
             parser.error('Map has more occupied slots than supported houses.')
         brain = scenario[section].get('brain', f'Team{slot}').lower()
-        team = int(brain[4:]) if brain.startswith('team') else slot
+        team = team_number(brain, slot)
         roster.append((names.index(name), team))
         assigned.add(name)
     if args.house not in assigned:
@@ -663,7 +674,7 @@ if args.no_ai_telemetry:
 with (out/'run.log').open('w') as log:
     subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
                    stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-results = [line for line in (out/'run.log').read_text().splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
+results = [line for line in (out/'run.log').read_text(errors='replace').splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
 events = None if args.no_ai_telemetry else next((out/'profile').rglob('events.jsonl'))
 metadata, attacks, final = None, [], []
