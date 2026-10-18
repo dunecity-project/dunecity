@@ -609,9 +609,9 @@ void QuantBot::update() {
 	}
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
-    // R, U and V and the late-game target choice H read it), before anything this pass consults it.
+    // R and U and the late-game target choice H read it), before anything this pass consults it.
     if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
-                     | kForcePerimeterHold | kForceFinishWeakest) || style().counterBps > 0
+                     | kForceFinishWeakest) || style().counterBps > 0
         || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front

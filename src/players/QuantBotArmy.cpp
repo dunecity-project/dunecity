@@ -2284,16 +2284,6 @@ Coord QuantBot::armyAssemblyAnchor() const {
         const Coord staging = offensiveStagingLocation();
         if (staging.isValid()) return staging;
     }
-    // Perimeter hold (V, docs/formations.md "Round 5"): while outnumbered the army stands on
-    // the enemy-facing base perimeter and meets attackers there (only the garrison holds it: a
-    // withdrawal or recovery still comes in to the shelter). In the city simulation too: the
-    // footprint rule keeps the holding troops off planned sites and out of the site search
-    // ("Planned sites and the army").
-    if (garrisoned() && forceVariant(kForcePerimeterHold) && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
-        && !localSquadWithdraw) {
-        const Coord perimeterPoint = perimeter().point;
-        if (perimeterPoint.isValid()) return perimeterPoint;
-    }
     if (protectedRally.isValid()) return protectedRally;
     return squadRallyLocation;
 }
