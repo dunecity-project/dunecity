@@ -196,6 +196,10 @@ QuantBotConfig::QuantBotConfig() {
     tunedRatios[0][0] = {14, 16, 15, 22, 0, 0, 0, 0, 0, 33};   // Harkonnen (Devastator)
     tunedRatios[1][0] = {9, 20, 13, 0, 22, 0, 13, 10, 0, 13};  // Atreides (Sonic Tank)
     tunedRatios[2][0] = {9, 17, 7, 0, 0, 13, 27, 0, 7, 20};    // Ordos (Deviator)
+    // Fremen: the x8 winners' end composition (section 8.10; v the configured opening +0.24
+    // (+0.05..+0.42) over two fresh-seed runs, n=630). Sardaukar and Mercenary: none (no candidate
+    // beat the configured opening), so their top band plays it.
+    tunedRatios[3][0] = {11, 10, 13, 5, 8, 0, 18, 11, 13, 11};
     // Lower tech bands: set by design from what each band can field (tests/ai/tech-bands.py; not
     // measured, docs/ai-play-styles.md 8.9): two light slots split evenly; light units only at 3
     // (quads the strongest); tank-heavy at 4 (50% tanks); tanks and launchers lead at 5 (40/25); siege

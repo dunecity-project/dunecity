@@ -1,4 +1,4 @@
-## 2026-10-19 — QuantBot designed tech-band mixes; F/S/M top band measured, none accepted (branch `feat/ai-ratio-tuning`, protocol 84 after merging `fix/ai-army-stuck-in-base`, save 9868, not released)
+## 2026-10-19 — QuantBot designed tech-band mixes; F/S/M top band measured, Fremen accepted (branch `feat/ai-ratio-tuning`, protocol 84 after merging `fix/ai-army-stuck-in-base`, save 9868, not released)
 
 Write-up `docs/ai-play-styles.md` 8.9 (bands) and 8.10 (top band). Stefan cut tech-level testing: the lower bands are set by design.
 
@@ -6,9 +6,10 @@ Write-up `docs/ai-play-styles.md` 8.9 (bands) and 8.10 (top band). Stefan cut te
   tanks at 4, tanks 40/launchers 25 at 5, siege added at 6 (30/25/20); the light remainder follows the house's top mix.
   Unit test `the shipped tech-band ratios are valid for their band` checks buildable slots, 2-50% and sum 100.
   `quantbot_strategy` section 5 runs a tech-4 Fortress 1v1: band mix 50/20/30, every prior pass plays it, tanks 54%/52% of the early value.
-- **F/S/M top band:** round 1 `t8-cost` / `t8-winners-end` (720 games each), then confirmation `t8-best` (1,260 fresh games).
-  None was accepted: Fremen +0.34 (-0.04..+0.75), Sardaukar -0.46 (worse), Mercenary -0.13. They keep the configured opening.
-  Fremen is the one to continue (`t8-winners-end`, ~1,260 more fresh games).
+- **F/S/M top band:** round 1 `t8-cost` / `t8-winners-end` (720 games each), then confirmation `t8-best` (1,260 fresh games),
+  then a Fremen-only confirmation `f8-fremen` (840 games, 420 pairs: +0.21, -0.005..+0.42).
+  **Fremen accepted:** winners' end 11,10,13,5,8,0,18,11,13,11, both fresh runs combined +0.24 (+0.05..+0.42), n=630; code default.
+  Not accepted: Sardaukar -0.46 (worse), Mercenary -0.13. They keep the configured opening.
 - **H/A/O re-confirmed** in the same games after the specials change: per-house effect Harkonnen +0.52 (beats),
   Atreides +0.15, Ordos +0.11 (n=210 each). Their tuned top mixes stay.
 - **Merges:** `test/ai-scenario-matrix` acdada9b (economic-victory references dropped) and `fix/ai-army-stuck-in-base` 8a8e4833.
