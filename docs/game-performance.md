@@ -61,10 +61,57 @@ Threading (unchanged since 1.0.833 apart from 8173ad73, 16 Oct: the calling thre
 path batch and one-task batches run inline): main thread = input, the whole simulation including
 all AI, rendering and the decision log; up to min(4, cores) path workers; audio. AI and rendering
 were never threaded. No probe default leaks into the game (`FrameTiming::unitPhases` defaults on,
-`DUNECITY_PATH_WORKERS` unset, decision log per `[General] Diagnostic Logs`).
+`DUNECITY_PATH_WORKERS` unset, the decision log now per `[General] AI Decision Log`, below).
 
-His Air holds 33 GB of old AI decision logs (`~/Library/Application Support/Dune City/ai-decisions`,
-429 sessions); not deleted.
+His Air held 33 GB of old AI decision logs (`~/Library/Application Support/Dune City/ai-decisions`,
+429 sessions); deleted with his OK on 2026-10-18.
+
+## The real app on his Air (2026-10-18, agent GameFPS2)
+
+A copy of the installed 1.0.847 bundle (`~/dunecity-runner/gamefps2/dc847.app`, same SHA256),
+launched through LaunchServices (`open -n`, as the Dock does) with a scratch profile holding a copy
+of his `Dune City.ini` (Fixed Seed on), driven through the real menus by an injected test-only
+input driver (`DYLD_INSERT_LIBRARIES`, SDL_PushEvent: main menu -> Random Skirmish, or Continue for
+his `slow.dls`). Figures from the game's own decision-log performance windows, on AC:
+
+| state | fps | cycles/s (target 500) | AI / city / units / path / render ms per frame |
+|---|---|---|---|
+| window in front, 450-900 units | 100-117 | 475-499 | 1.4-2.9 / 0.35-0.6 / 0.4-1.3 / 0.1-2 / 3.3-5.9 |
+| fully covered by another app's full-screen window, 1,000-1,300 units | 30-40 (one 5 s window 94) | 290-400 (10-cycle cap) | 7-11 / 1.8-2.5 / 4.3-6.4 / 3-11 / 2.7-4.5 |
+
+So the real menu-launched app runs his game at full speed in front, like the probe. Covered, the
+per-cycle cost of every component (the city simulation's too, which barely depends on unit count)
+roughly doubles while the main thread keeps its UI priority (`ps -M`: 46/47): macOS gives a
+non-focal, occluded app's thread less CPU performance. Not separated: the unit count also grew by a
+quarter during the covered minute, and Stefan closed the test game before the planned back-and-forth
+and the opt-out comparison (NSProcessInfo activity) could run. His slow session also started on
+battery with Low Power Mode on (`pmset -g custom`: Battery lowpowermode 1; AC from 12:42:58), and
+after plugging in, system daemons used 3-4 cores (load 15-33). Likely explanation of 13 fps: window
+not focal/covered (and/or Low Power Mode, background system load), not a code change; not proven.
+
+Per-frame work only the app does, from his 1.0.847 sample: `Workshop::updatePublications()` 46 of
+1,003 ms, nearly all in a TLS handshake that reloads the CA bundle (`X509_STORE_load_locations`) on
+the main thread; his outbox holds 43 queued "collect" entries since 8 Oct that never drain (one try,
+then a 60 s retry). A periodic 20-40 ms hitch, not a throughput cost; not changed.
+
+Changes from this round (no simulation change):
+
+- The game holds `NSActivityUserInitiatedAllowingIdleSystemSleep | NSActivityLatencyCritical`
+  while a match runs (`GameActivity::Scope` in `Game::runMainLoop`, `src/misc/GameActivityMac.mm`);
+  idle system sleep stays allowed. Its effect on a covered window is not yet measured on the Air.
+- F12 (fn+F12 on a Mac laptop) overlay: fps, cycles per frame, achieved vs target cycles/s, and
+  AI / city / units / structures / path / render / other ms per frame.
+- `[General] AI Decision Log` (Settings, advanced page: "AI decision log" next to "Diagnostic logs"), default off,
+  independent of "Diagnostic logs"; `DUNECITY_AI_TELEMETRY=0/1` forces it off/on. Every game start
+  prunes `ai-decisions/` to the newest 20 sessions and 2 GB (`AITelemetry::pruneSessions`, room
+  left for the new session's 256 MB cap). Harnesses that read the log enable it explicitly
+  (`run-campaign-balance.py` sets `DUNECITY_AI_TELEMETRY=1` unless `--no-ai-telemetry`; INI-based
+  probes write `AI Decision Log = true`).
+
+Evidence to capture next time it is slow: F12 overlay (photo); Activity Monitor > CPU and Energy
+for dunecity (App Nap column, % CPU); whether the window was in front and the Mac on battery/Low
+Power Mode; `~/Library/Application Support/Dune City/DuneCity-Performance.log` (needs "Diagnostic
+logs"); `sample $(pgrep -x dunecity) 10 -file ~/Desktop/dc-sample.txt`; `pmset -g batt`, `uptime`.
 
 ## Changes (bit-identical)
 
@@ -96,6 +143,13 @@ machines and moderate load:
 House updates are the engine's wall-clock timings, so the maximum is the noisiest figure on a
 loaded machine; run it on a quiet one before concluding a change regressed it. The budgets catch
 a doubling of AI or simulation cost; they do not separate 1.0.833 from 1.0.847 (which cost the same).
+
+`--menu-launch 30` (also in the ctest) then plays 30 s started the way a player does
+(`tests/performance/menu-launch.inc`: the real `MainMenu`, `RandomSkirmishMenu` with his choices
+from `[Random Skirmish]`, its Start handler, `startSinglePlayerGame`, `Game::runMainLoop` with the
+Workshop pump, Discord, analytics; metaserver at a closed local port) and budgets the per-frame
+time outside the measured components: mini headless 143 fps, 489 cycles/s, other 0.23 ms/frame =
+0.032 x calibration (budget 0.3).
 
 ## Not done
 

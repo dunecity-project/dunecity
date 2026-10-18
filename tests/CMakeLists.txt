@@ -892,11 +892,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Mandatory for every AI/unit/game-loop change (Stefan, 2026-10-18): Stefan's 4P DuneCity
         # Brutal Random Skirmish map, 6 game minutes headless, one path thread; fails when the mean
         # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of
-        # a calibration loop timed in the same process. docs/game-performance.md.
+        # a calibration loop timed in the same process. Then 30 s of a game started the way a
+        # player starts it (main menu -> Random Skirmish -> Start, the app's whole per-frame work);
+        # fails when per-frame time outside simulation and rendering exceeds its budget.
+        # docs/game-performance.md.
         add_test(NAME perf_regression COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/performance/game-perf.py --scenario stefan-map --minutes 6
-            --path-workers 1 --check --label perf_regression --build-dir ${CMAKE_BINARY_DIR})
-        set_tests_properties(perf_regression PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+            --path-workers 1 --menu-launch 30 --check --label perf_regression --build-dir ${CMAKE_BINARY_DIR})
+        set_tests_properties(perf_regression PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three

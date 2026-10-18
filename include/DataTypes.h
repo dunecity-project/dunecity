@@ -196,6 +196,10 @@ public:
         static constexpr bool defaultDiagnosticLogs = true;
 #endif
         bool            diagnosticLogs = defaultDiagnosticLogs;
+        /// Per-game AI decision log (ai-decisions/<session>/events.jsonl, up to 256 MB a game).
+        /// Independent of diagnosticLogs; DUNECITY_AI_TELEMETRY=1/0 overrides it for tools.
+        static constexpr bool defaultAIDecisionLog = false;
+        bool            aiDecisionLog = defaultAIDecisionLog;
         bool            multiplePlayersPerHouse = false; ///< Custom game lobby: allow two players per house (remembered across games)
         bool            campaignOnline = true;     ///< Campaign setup: last Offline/Online co-op choice (remembered across games)
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)

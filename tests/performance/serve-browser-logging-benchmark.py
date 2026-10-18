@@ -41,6 +41,7 @@ def handler_for(index, mode):
     config.optionxform = str
     config.read(args.profile/'Dune City.ini')
     config.set('General','Diagnostic Logs','true' if mode=='on' else 'false')
+    config.set('General','AI Decision Log','true' if mode=='on' else 'false')
     config.set('General','Play Intro','false')
     config.set('Video','Fullscreen','false')
     config.set('Video','Browser Display Version','1')

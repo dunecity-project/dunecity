@@ -1597,6 +1597,12 @@ int runMenuProbe() {
         menu.onChangeOption(true);
         menuRequire(menu.acceptButton.isEnabled(),"Diagnostic preference change cannot be applied");
         const bool diagnostics=menu.diagnosticLogsCheckbox.isChecked();
+        // The fixture profile has no "AI Decision Log" key: the separate decision log starts off,
+        // whatever the diagnostic preference, and is applied/persisted on its own.
+        menuRequire(!settings.general.aiDecisionLog && !menu.aiDecisionLogCheckbox.isChecked(),"AI decision log not off by default");
+        menuRequire(menu.aiDecisionLogCheckbox.getParent()==&menu.diagnosticLogsHBox,"AI decision log missing from Settings");
+        menu.aiDecisionLogCheckbox.setChecked(true);
+        menu.onChangeOption(true);
         menu.showPage(2);
         settings.network.metaServer=""; menu.metaServerTextBox.setText("");
         menu.playSFXCheckbox.setChecked(!settings.audio.playSFX);
@@ -1608,6 +1614,8 @@ int runMenuProbe() {
         INIFile savedOptions(getConfigFilepath());
         menuRequire(settings.general.diagnosticLogs==diagnostics
             && savedOptions.getBoolValue("General","Diagnostic Logs",!diagnostics)==diagnostics,"Diagnostic preference not applied/persisted");
+        menuRequire(settings.general.aiDecisionLog && savedOptions.getBoolValue("General","AI Decision Log",false),
+            "AI decision log preference not applied/persisted");
         menuRequire(savedOptions.getBoolValue("General","WASD Camera",false)
             && savedOptions.getBoolValue("General","Left Click Orders",false)
             && !savedOptions.getBoolValue("General","Movement Paths",true),"Input options not persisted");

@@ -1154,6 +1154,8 @@ int main(int argc, char *argv[]) {
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs
                 ? SDL_LOG_PRIORITY_VERBOSE : SDL_LOG_PRIORITY_WARN);
+            settings.general.aiDecisionLog = myINIFile.getBoolValue("General","AI Decision Log",
+                SettingsClass::GeneralClass::defaultAIDecisionLog);
             settings.general.showTutorialHints = myINIFile.getBoolValue("General","Show Tutorial Hints",true);
             settings.general.duneCityCampaignSkin = std::clamp(
                 myINIFile.getIntValue("General", "DuneCity Campaign Skin", 0), 0, 1);

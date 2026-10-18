@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -125,6 +126,134 @@ def telemetry_windows(profile):
     keep = ('frame', 'frame.ai', 'frame.city', 'frame.units', 'frame.structures', 'frame.path', 'frame.render',
             'frame.gap', 'house.update')
     return {k: v for k, v in totals.items() if k.split('/')[0] in keep}
+
+
+# The real launch path (--menu-launch): the player's Random Skirmish choices as Stefan's slow game had
+# them (4P 160x160 DuneCity, three QuantBot Brutal enemies, spectated by a QuantBot Brutal house), with
+# a fixed map seed. The metaserver points at a closed local port, so the Workshop outbox pump and
+# match analytics run their real code without reaching the public service.
+MENU_LAUNCH_INI = """[General]
+Play Intro = false
+Player Name = perf_regression
+[Video]
+Physical Width = 1440
+Physical Height = 900
+Width = 1440
+Height = 900
+Interface Height = 900
+Fullscreen = false
+FrameLimit = false
+[Network]
+MetaServer = http://127.0.0.1:9/metaserver/metaserver.php
+[Random Skirmish]
+Map Size = 160
+Rock = 2
+Spice = 2
+Symmetric = false
+Seed = 223538685
+Fixed Seed = true
+House = -1
+Credits = 3000
+Allies = 0
+Enemies = 3
+Enemies Allied = false
+Mode = 1
+Mod = dunecity
+Spectate = true
+Spectate AI = qBotBrutal
+Enemy AI = qBotBrutal
+"""
+
+
+def build_menu_launch_probe(build, out):
+    """src/main.cpp with the main menu call replaced by tests/performance/menu-launch.inc, linked
+    against this build's other objects (the same method as tests/menu/run-menu-probe.py)."""
+    subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+    commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+    main = (root / 'src/main.cpp').read_text()
+    needle = 'int menuResult = MainMenu().showMenu();'
+    if main.count(needle) != 1:
+        raise RuntimeError('Main-menu injection point changed.')
+    main = main.replace(needle, 'int menuResult = runMenuLaunchProbe();')
+    main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+    position = main.index('int main(')
+    main = main[:position] + '#include "' + str(root / 'tests/performance/menu-launch.inc') + '"\n' + main[position:]
+    source, obj = out / 'menu-launch-main.cpp', out / 'menu-launch-main.o'
+    source.write_text(main)
+    compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
+    for option in ('-include', '-MT', '-MF'):
+        if option in compile_command:
+            index = compile_command.index(option)
+            del compile_command[index:index + 2]
+    for option in ('-MD', '-MMD'):
+        if option in compile_command:
+            compile_command.remove(option)
+    compile_command[compile_command.index('-o') + 1] = str(obj)
+    compile_command[compile_command.index('-c') + 1] = str(source)
+    compile_command.append('-fno-access-control')
+    app = out / 'menu-launch.app/Contents'
+    (app / 'MacOS').mkdir(parents=True, exist_ok=True)
+    if not (app / 'Resources').exists():
+        (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
+    binary = app / 'MacOS/menu-launch'
+    link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
+    link = link[link.index('&&') + 1:]
+    link = link[:link.index('&&')]
+    link[link.index('-o') + 1] = str(binary)
+    link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
+    with (out / 'build.log').open('w') as log:
+        subprocess.run(compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    return binary
+
+
+def run_menu_launch(args, scratch):
+    """Main menu -> Random Skirmish -> Start, then the interactive game for --menu-launch wall seconds
+    at the options' 2 ms game speed. Per frame: the decision log's components and 'other' (frame time
+    the components do not account for: the app's per-frame work outside simulation and rendering)."""
+    out = scratch / 'menu-launch'
+    out.mkdir(parents=True, exist_ok=True)
+    binary = build_menu_launch_probe(args.build_dir.resolve(), out)
+    profile = out / 'profile'
+    profile.mkdir(exist_ok=True)
+    # His game options, both as the general section and as the dunecity mod's user section.
+    options = (DATA / 'stefan-game-options.ini').read_text()
+    (profile / 'Dune City.ini').write_text(MENU_LAUNCH_INI + options + options.replace('[Game Options]', '[Game Options dunecity]'))
+    env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_AUDIODRIVER='dummy', DUNECITY_AI_TELEMETRY='1',
+               MENU_LAUNCH_SECONDS=str(args.menu_launch),
+               SDL_VIDEODRIVER='cocoa' if args.rendered else 'dummy')
+    if args.path_workers:
+        env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
+    started = time.time()
+    with (out / 'run.log').open('w') as log:
+        subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT,
+                       check=True, timeout=args.menu_launch + 600)
+    text = (out / 'run.log').read_text(errors='replace')
+    found = next((json.loads(line.split('MENU_LAUNCH_RESULT: ', 1)[1]) for line in text.splitlines()
+                  if 'MENU_LAUNCH_RESULT: ' in line), None)
+    if found is None or 'Random Skirmish: ' not in text or 'Starting game...' not in text:
+        raise RuntimeError('The menu launch did not start a Random Skirmish game; see ' + str(out / 'run.log'))
+    windows = telemetry_windows(profile)
+    cycles = 0
+    for events in profile.rglob('events.jsonl'):
+        for line in events.open(errors='replace'):
+            if '"performance_window"' in line:
+                cycles += sum(m['sum'] for m in json.loads(line)['data']['metrics'].values() if m['scope'] == 'frame.cycles')
+    frame = windows.get('frame', {'count': 0, 'sum_ms': 0.0})
+    if frame['count'] < 100 or cycles == 0:
+        raise RuntimeError('The menu-launched game recorded %d frames, %d cycles; see %s' % (frame['count'], cycles, out))
+    parts = ('frame.ai', 'frame.city', 'frame.units', 'frame.structures', 'frame.path', 'frame.render')
+    per_frame = {k.split('.', 1)[1]: windows.get(k, {'sum_ms': 0.0})['sum_ms'] / frame['count'] for k in parts}
+    seconds = frame['sum_ms'] / 1000.0
+    result = dict(mode='menu-launch', label=args.label, calibration_ms=found['calibration_ms'], frames=frame['count'],
+                  cycles=cycles, fps=frame['count'] / seconds, cycles_per_s=cycles / seconds,
+                  frame_ms=frame['sum_ms'] / frame['count'], per_frame_ms=per_frame,
+                  other_ms=max(0.0, frame['sum_ms'] / frame['count'] - sum(per_frame.values())),
+                  windows=windows, wall_s=round(time.time() - started, 1), host=os.uname().nodename,
+                  load=os.getloadavg()[0], time=time.strftime('%Y-%m-%d %H:%M:%S'))
+    shutil.rmtree(out, ignore_errors=True)
+    return result
 
 
 def run_one(args, scratch, index):
@@ -286,14 +415,25 @@ def main():
                         help='worst house\'s p99 update / calibration')
     parser.add_argument('--budget-house-max', type=float, default=10.0,
                         help='worst single house update / calibration (1.0.847: ~4.6; Stefan\'s slow session: 8-26)')
+    parser.add_argument('--menu-launch', type=int, default=0, metavar='SECONDS',
+                        help='Also play SECONDS of a game started the way a player does (main menu -> Random '
+                             'Skirmish -> Start, tests/performance/menu-launch.inc), headless unless --rendered; '
+                             'with --check its per-frame time outside the measured components is budgeted. '
+                             '--repeat 0 runs only this')
+    parser.add_argument('--budget-menu-other', type=float, default=0.3,
+                        help='menu launch: mean per-frame time outside simulation and rendering / calibration '
+                             '(mini, headless: 0.032)')
     args = parser.parse_args()
     if args.summary:
         summarize(args.summary)
         return
     require_free_space()
     with scratch_dir('game-perf', args.scratch) as scratch:
-        for index in range(args.repeat):
-            result = run_one(args, scratch, index)
+        runs = [lambda index=index: run_one(args, scratch, index) for index in range(args.repeat)]
+        if args.menu_launch:
+            runs.append(lambda: run_menu_launch(args, scratch))
+        for run in runs:
+            result = run()
             line = json.dumps(result)
             if args.results:
                 with args.results.open('a') as handle:
@@ -303,6 +443,10 @@ def main():
                       % (result['label'], result['cycles'], result['sim']['mean'], result['cpu']['mean'],
                          result['frame']['mean'], result['est_fps'],
                          max((h['max'] for h in result['house'].values()), default=0)), flush=True)
+            elif result['mode'] == 'menu-launch':
+                print('label=%s mode=menu-launch frames=%d fps=%.1f cycles/s=%.0f frame_mean=%.2fms other/frame=%.2fms %s'
+                      % (result['label'], result['frames'], result['fps'], result['cycles_per_s'], result['frame_ms'],
+                         result['other_ms'], ' '.join('%s=%.2f' % kv for kv in result['per_frame_ms'].items())), flush=True)
             else:
                 frame = result['windows'].get('frame', {'count': 0, 'mean_ms': 0})
                 print('label=%s mode=%s frames=%d fps=%.1f frame_mean=%.1fms ai/frame=%.1fms render/frame=%.1fms'
@@ -320,15 +464,19 @@ def main():
 
 def check_budgets(result, args):
     """perf_regression budgets, as multiples of the calibration loop measured in the same process."""
-    if result['mode'] != 'stepped':
+    if result['mode'] == 'menu-launch':
+        cal = result['calibration_ms']
+        measured = {'menu_other': (result['other_ms'] / cal, args.budget_menu_other)}
+    elif result['mode'] != 'stepped':
         return ['--check needs a stepped run (no --mainloop/--rendered)']
-    cal = result['calibration_ms']
-    houses = result['house'].values()
-    measured = {
-        'cpu_mean': (result['cpu']['mean'] / cal, args.budget_cpu_mean),
-        'house_p99': (max(h['p99'] for h in houses) / cal, args.budget_house_p99),
-        'house_max': (max(h['max'] for h in houses) / cal, args.budget_house_max),
-    }
+    else:
+        cal = result['calibration_ms']
+        houses = result['house'].values()
+        measured = {
+            'cpu_mean': (result['cpu']['mean'] / cal, args.budget_cpu_mean),
+            'house_p99': (max(h['p99'] for h in houses) / cal, args.budget_house_p99),
+            'house_max': (max(h['max'] for h in houses) / cal, args.budget_house_max),
+        }
     print('PERF_BUDGET: calibration=%.2fms ' % cal + ' '.join('%s=%.3f/%.3f' % (k, v, b) for k, (v, b) in measured.items()),
           flush=True)
     return ['%s %.3f > budget %.3f (x calibration %.2f ms)' % (k, v, b, cal) for k, (v, b) in measured.items() if v > b]

@@ -1,3 +1,23 @@
+## 2026-10-18 — Game FPS round 2: real app on his Air, AI decision log setting, match activity, F12 breakdown, perf_regression menu launch (branch `perf/game-fps`, not released)
+
+Stefan: "your changes have broken the performance" (13 fps at 2 ms) and "make turning ai logging a
+configuration setting in the game". Details: `docs/game-performance.md`, "The real app on his Air".
+
+- **Real app, his Air:** copy of installed 1.0.847 via LaunchServices + real menus (scratch profile,
+  his INI): window in front 100-117 fps at full 500 cycles/s; covered by another app's full-screen
+  window 30-40 fps, per-cycle costs ~2x (main thread priority unchanged). His slow session began on
+  battery with Low Power Mode (Battery profile lowpowermode 1), then 3-4 cores of system load after
+  AC. Cause not proven; no code regression. Opt-out effect not measured (Stefan closed the test game;
+  he uses the Air, so sessions only when he is idle >2 min and after warning Main).
+- **Code:** `[General] AI Decision Log` (default off, "AI decision log" checkbox next to "Diagnostic logs",
+  `DUNECITY_AI_TELEMETRY=0/1` override, prune to newest 20 sessions / 2 GB at game start);
+  `GameActivity::Scope` (macOS NSProcessInfo UserInitiatedAllowingIdleSystemSleep|LatencyCritical)
+  in `Game::runMainLoop`; F12 overlay with cycles/frame, achieved speed and per-component ms.
+  Harnesses enable the log explicitly. perf_regression adds `--menu-launch 30`
+  (`tests/performance/menu-launch.inc`).
+- **Air:** test copies `~/dunecity-runner/gamefps2/{dc847,fix}.app` unregistered from
+  LaunchServices; runner PAUSE removed. Test tools in `~/dunecity-runner/gamefps2/bin`.
+
 ## 2026-10-18 — Game FPS at 2 ms game speed: no release regression found; placement cuts; perf_regression (branch `perf/game-fps`, not released)
 
 Stefan (1.0.847, MBA M5): 13 fps spectating a 4P 160x160 DuneCity Brutal Random Skirmish at Game
