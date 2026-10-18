@@ -5,8 +5,10 @@
 Reads vanilla-match.py result directories (games.csv, houses.csv with start_mix, mix.csv with the
 composition per unit-mix slot every 10 game minutes and at the end) and prints:
 
-  --arms A:B[,C:D]   score of label A against label B (95% bootstrap interval), overall, by house
-                     and by map (time-outs go to the side 1,000+ credits ahead on killed value)
+  --arms A:B[,C:D]   paired placement-score difference of label A over label B (tests/ai/match_score.py:
+                     win +1, loss -1, a time-out -0.25 each, so a 1v1 game's difference is +2/-2/0;
+                     95% bootstrap interval, A beats B when it is above 0), overall, by house and by
+                     map, with each side's time-out (draw) rate
   --random R:C       the randomised arm R (each game a random starting mix within the bounds)
                      against the control C: score by starting share per slot and house, a ridge
                      logistic regression of the result on the starting shares (+ map, opponent),
@@ -17,7 +19,8 @@ composition per unit-mix slot every 10 game minutes and at the end) and prints:
 
   --csv DIR          also writes the compact CSV tables (per-house records, slot tables, candidates)
 
-Pure Python (no numpy): the regression is IRLS on a few dozen columns.
+Regression and winners/losers use the game result (1 win, 0 loss, 0.5 time-out; no kill-value
+adjudication). Pure Python (no numpy): the regression is IRLS on a few dozen columns.
 """
 import argparse
 import csv
@@ -26,6 +29,10 @@ import random
 import statistics
 from collections import defaultdict
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import match_score  # noqa: E402
 
 SLOTS = ('tank', 'siege', 'launcher', 'special', 'ornithopter', 'trike', 'raider', 'quad')
 HOUSES = ('atreides', 'harkonnen', 'ordos')
@@ -69,12 +76,17 @@ def sides(game):
     return [tuple(s.split(':', 1)) for s in game['sides'].split('|')]
 
 
-def score(game, mine, theirs, margin=1000):
-    """1/0 for an elimination, else the killed-value adjudication (0.5 if level)."""
+def score(game, mine):
+    """The game result from mine's side: 1 win, 0 loss, 0.5 time-out."""
     if game['winner_label']:
         return 1.0 if game['winner_label'] == mine['label'] else 0.0
-    trade = number(mine['kill_value']) - number(theirs['kill_value'])
-    return 1.0 if trade >= margin else (0.0 if trade <= -margin else 0.5)
+    return 0.5
+
+
+def delta(game, mine, theirs):
+    """(paired placement-score difference mine - theirs, mine drawn) of a 1v1 game."""
+    a, b = match_score.duel(game['winner_label'] == mine['label'], game['winner_label'] == theirs['label'])
+    return a.score - b.score, a.drawn
 
 
 def bootstrap(values, rounds=2000):
@@ -94,6 +106,16 @@ def fmt(values):
     return f'{bold}{mean:.3f}{bold} ({low:.2f}-{high:.2f}) n={len(values)}'
 
 
+def fmt_delta(values):
+    """Mean paired difference, 95% interval; bold when the interval excludes 0."""
+    if not values:
+        return '-'
+    low, high = bootstrap(values)
+    mean = statistics.mean(values)
+    bold = '**' if low > 0 or high < 0 else ''
+    return f'{bold}{mean:+.3f}{bold} ({low:+.2f}..{high:+.2f}) n={len(values)}'
+
+
 def records(games, houses, mixes, x, y):
     """One record per 1v1 game between labels x and y, from x's side."""
     out = []
@@ -106,9 +128,10 @@ def records(games, houses, mixes, x, y):
             continue
         mine, theirs = rows[x], rows[y]
         rec = {'key': key, 'map': game['map'], 'seed': game['seed'], 'house': mine['house'],
-               'opponent': theirs['house'], 'score': score(game, mine, theirs), 'end_s': number(game['end_s']),
+               'opponent': theirs['house'], 'score': score(game, mine), 'end_s': number(game['end_s']),
                'start': [int(v) for v in mine.get('start_mix', '').split(',')] if mine.get('start_mix') else None,
                'opp_start': [int(v) for v in theirs.get('start_mix', '').split(',')] if theirs.get('start_mix') else None}
+        rec['delta'], rec['drawn'] = delta(game, mine, theirs)
         for side, row in (('mine', mine), ('theirs', theirs)):
             for mark in (10, 20, 30, 'final'):
                 sample = mixes[key].get((row['house'], mark))
@@ -243,8 +266,8 @@ def logistic(xs, ys, ridge=1.0, penalised=None):
 # ---- Report ----------------------------------------------------------------------------------------
 
 def report_arms(args, games, houses):
-    print('\n### Arms\n')
-    print('| A v B | All | Atreides | Harkonnen | Ordos | Strict W-L / time-outs |')
+    print('\n### Arms (paired placement-score difference A - B; time-outs -0.25 each)\n')
+    print('| A v B | Δ all | Atreides | Harkonnen | Ordos | W-L / time-outs (draw rate) |')
     print('|---|---|---|---|---|---|')
     for pair in args.arms.split(','):
         x, y = pair.split(':')
@@ -253,11 +276,13 @@ def report_arms(args, games, houses):
             continue
         by = defaultdict(list)
         for r in recs:
-            by[r['house']].append(r['score'])
-        wins = sum(1 for r in recs if r['score'] == 1.0 and games[r['key']]['winner_label'])
-        losses = sum(1 for r in recs if r['score'] == 0.0 and games[r['key']]['winner_label'])
-        print(f'| {x} v {y} | {fmt([r["score"] for r in recs])} | {fmt(by["atreides"])} | {fmt(by["harkonnen"])} | '
-              f'{fmt(by["ordos"])} | {wins}-{losses} / {len(recs) - wins - losses} |')
+            by[r['house']].append(r['delta'])
+        wins = sum(1 for r in recs if r['score'] == 1.0)
+        losses = sum(1 for r in recs if r['score'] == 0.0)
+        draws = len(recs) - wins - losses
+        print(f'| {x} v {y} | {fmt_delta([r["delta"] for r in recs])} | {fmt_delta(by["atreides"])} | '
+              f'{fmt_delta(by["harkonnen"])} | {fmt_delta(by["ordos"])} | {wins}-{losses} / {draws} '
+              f'({100 * draws / len(recs):.1f}%) |')
     # The house columns mix the house with its opponent's strength. Every house pair is played with
     # both assignments, so the per-house effect of A over B is identified: with s(h, o) the logit of
     # A's score as house h against B's house o, s(h, o) + s(o, h) = d(h) + d(o) for the logit gain
@@ -280,15 +305,15 @@ def report_arms(args, games, houses):
         d = {'atreides': (ah + oa - ho) / 2, 'harkonnen': (ah + ho - oa) / 2, 'ordos': (oa + ho - ah) / 2}
         print(f'| {x} v {y} | ' + ' | '.join(f'd={d[h]:+.2f} ({1 / (1 + math.exp(-d[h])):.2f})' for h in HOUSES) + ' |')
     if args.by_map:
-        print('\n| A v B | Map | Score |')
+        print('\n| A v B | Map | Δ |')
         print('|---|---|---|')
         for pair in args.arms.split(','):
             x, y = pair.split(':')
             groups = defaultdict(list)
             for r in records(games, houses, defaultdict(dict), x, y):
-                groups[r['map']].append(r['score'])
+                groups[r['map']].append(r['delta'])
             for name, values in sorted(groups.items()):
-                print(f'| {x} v {y} | {name} | {fmt(values)} |')
+                print(f'| {x} v {y} | {name} | {fmt_delta(values)} |')
 
 
 def fieldable_of(recs):
