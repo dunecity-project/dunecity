@@ -32,6 +32,41 @@ inline std::string playerClass(const FormationDuel::Side& side, const std::strin
         : difficulty == "brutal" ? "qBotBrutal" : "qBotEasy";
 }
 
+/// A generated free-for-all (vanilla-match.py --skirmish, docs/formations.md "Free-for-all: the
+/// army deploys"): a multiplayer Random Skirmish map of \a mapSize from \a mapSeed with one start
+/// per side, each a Fortress with the 20,000-credit army and, in the DuneCity mod, the 40,000
+/// city, Rock High and Spice Medium, not mirrored - Stefan's 4P DuneCity FFA settings
+/// ([Random Skirmish] Base 5, Army 5, City 4). Every side its own team; the engine assigns the
+/// starts from the match seed as in any custom game.
+inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std::vector<FormationDuel::Side>& sides,
+                                         const std::string& difficulty, const std::string& mod,
+                                         const SettingsClass::GameOptionsClass& options) {
+    using namespace SkirmishGenerator;
+    const bool city = mod == "dunecity";
+    Params params;
+    params.multiplayer = true;
+    params.starts = static_cast<int>(sides.size());
+    params.mapSize = mapSize;
+    params.seed = mapSeed;
+    params.symmetric = false;
+    params.rock = Rock::High;
+    params.spice = Spice::Medium;
+    params.mode = city ? Mode::DuneCity : Mode::Vanilla;
+    params.mod = mod;
+    params.techLevel = 9;
+    params.startSide = SkirmishGenerator::Side{"", BaseSize::Fortress, 5, city ? 4 : 0};
+    const Result result = generate(params, RandomSkirmish::loadCatalogue(params.mode));
+    SDL_Log("VANILLA_MATCH_SKIRMISH: name=%s size=%d map_seed=%u attempts=%d starts=%d mode=%s",
+            result.name.c_str(), mapSize, result.mapSeed, result.attempts, params.starts, city ? "dunecity" : "vanilla");
+    GameInitSettings init(result.name, result.ini, false, options);
+    for (size_t i = 0; i < sides.size(); ++i) {
+        GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(sides[i].house), static_cast<int>(i) + 1);
+        info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(sides[i].house)), playerClass(sides[i], difficulty)});
+        init.addHouseInfo(info);
+    }
+    return init;
+}
+
 /// Once per cycle: per-minute samples and newly eliminated houses. True once one house is left.
 inline bool tick(Game& game, State& state) {
     const Uint32 now = game.getGameCycleCount();

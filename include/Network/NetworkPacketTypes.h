@@ -252,7 +252,12 @@
 //     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios). Unreleased,
 //     so the same protocol also covers one mix slot per special (Devastator, Sonic Tank, Deviator;
 //     the observer allocation snapshot has ten slots), the tuned ratios per tech band and save 9868.
-#define NETWORK_PROTOCOL_VERSION            83
+// 84: QuantBot in a free-for-all: "outnumbered" (the perimeter hold, perimeter turrets and the
+//     test-only round 5 rules) measures the remembered army of the strongest single enemy team,
+//     not every enemy summed, and the forward bundle and the perimeter point move out of the
+//     house's own buildings and roads (a city base) towards the enemy. No saved state or command
+//     change; an 82 or 83 peer would order the same AI units differently and desync.
+#define NETWORK_PROTOCOL_VERSION            84
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

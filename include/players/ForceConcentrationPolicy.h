@@ -254,6 +254,11 @@ inline bool answerable(int64_t threat, int64_t committed, int64_t reachable) {
 constexpr int kPerimeterBaseTiles = 24;
 /// ... the army holds this far beyond the outermost one on the enemy side (V) ...
 constexpr int kPerimeterStandoffTiles = 3;
+/// ... or, where that point still lies among its own buildings or roads (a city spreading beyond
+/// kPerimeterBaseTiles), the first standable point at most kPerimeterMaxExtraTiles further out
+/// with none within kPerimeterClearTiles (the standoff: a compact base's point is already clear) ...
+constexpr int kPerimeterMaxExtraTiles = 24;
+constexpr int kPerimeterClearTiles = kPerimeterStandoffTiles;
 /// ... and threat turrets (U) stand in the band from kPerimeterInnerTiles inside that outermost
 /// building to kPerimeterOuterTiles beyond it, at most kPerimeterHalfWidth tiles to either side of
 /// the front line through the base centre.
@@ -279,11 +284,75 @@ inline bool onPerimeterBand(int along, int across, int depth) {
         && std::abs(across) <= kPerimeterHalfWidth;
 }
 
+// ---- Late game: finishing the game (docs/formations.md, "Free-for-all: finishing the game") ------
+
+/// H weighs each known enemy turret as this many credits of army ...
+constexpr int kKnownTurretValue = 250;
+/// ... and its objective counts production and economy (yard, factories, refinery) this much nearer.
+constexpr int kFinishPriorityTiles = 20;
+
+/// What H knows of an enemy team: its remembered army, known turrets and known structures.
+struct TeamStrength {
+    int team = -1;
+    int64_t army = 0;
+    int turrets = 0;
+    int structures = 0;
+};
+
+/// Is \a a the weaker team to finish (army + kKnownTurretValue per turret; ties: fewer known
+/// structures, then the lower team id)?
+inline bool weakerTeam(const TeamStrength& a, const TeamStrength& b) {
+    const int64_t sa = a.army + int64_t(kKnownTurretValue) * a.turrets;
+    const int64_t sb = b.army + int64_t(kKnownTurretValue) * b.turrets;
+    if (sa != sb) return sa < sb;
+    if (a.structures != b.structures) return a.structures < b.structures;
+    return a.team < b.team;
+}
+
+/// K: an objective with at least kFortifiedTurrets known turrets within kFortifiedRadiusTiles is
+/// fortified; a wave against it needs kFortifiedLimitPercent of the military limit (or the normal
+/// readiness if more), unless the last wave left kFortifiedMaxHoldMs ago.
+constexpr int kFortifiedRadiusTiles = 12;
+constexpr int kFortifiedTurrets = 8;
+constexpr int kFortifiedLimitPercent = 60;
+constexpr int kFortifiedMaxHoldMs = 240000;
+
+/// The value a ready wave needs against an objective with \a turrets known turrets nearby.
+inline int64_t fortifiedReady(int64_t required, int64_t militaryLimit, int turrets) {
+    if (turrets < kFortifiedTurrets) return required;
+    return std::max(required, militaryLimit * kFortifiedLimitPercent / 100);
+}
+
+/// S: a sonic tank's wave runs on past its target for its whole travel (45 frames at 12 pixels,
+/// about 8.4 tiles) and hurts everything within its 3/4-tile radius of the line, friends included
+/// (only sonic tanks are immune) - so far, in tiles from the shooter.
+constexpr int kSonicReachTiles = 9;
+
+/// Does a sonic wave fired at offset (\a tx, \a ty) from the shooter pass over offset (\a ox, \a oy):
+/// ahead of the shooter along the line to the target, at most kSonicReachTiles along it and at
+/// most one tile beside it? Integer: both bounds compare squares scaled by the target distance.
+inline bool inSonicPath(int tx, int ty, int ox, int oy) {
+    const int64_t length2 = int64_t(tx) * tx + int64_t(ty) * ty;
+    if (length2 == 0) return false;
+    const int64_t along = int64_t(ox) * tx + int64_t(oy) * ty;       // progress x |target|
+    if (along <= 0 || along * along > int64_t(kSonicReachTiles) * kSonicReachTiles * length2) return false;
+    const int64_t beside = int64_t(ox) * ty - int64_t(oy) * tx;      // lateral offset x |target|
+    return beside * beside <= length2;
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy
 /// base (the pre-1.0.602 rally was 75% own base + 25% enemy base) ...
 constexpr int kBundleForwardPercent = 25;
+/// ... out of the house's own base: where that point lies among its own buildings or roads (a
+/// city base), it moves on towards the enemy, at most to kBundleMaxForwardPercent of the way, to
+/// the first standable point with none within the bundle's clearance - the reserve's radius
+/// (bundleRadius), kept between kBundleClearMinTiles and kBundleClearMaxTiles ...
+constexpr int kBundleMaxForwardPercent = 50;
+constexpr int kBundleClearMinTiles = 4;
+constexpr int kBundleClearMaxTiles = 8;
+inline int bundleClearance(int radius) { return std::clamp(radius, kBundleClearMinTiles, kBundleClearMaxTiles); }
 /// ... with at most this many move orders per unit pass ...
 constexpr int kBundleOrdersPerPass = 12;
 /// ... and, with the launch gate, a ready wave waits until this share of its value stands in

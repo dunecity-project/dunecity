@@ -60,6 +60,7 @@
 #include "probe-digest.inc"
 #include "elimination-match.inc"
 #include "vanilla-match.inc"
+#include "../performance/game-perf.inc"
 #include "scenario-match.inc"
 #include <FileClasses/INIFile.h>
 
@@ -147,9 +148,15 @@ int runCampaignBalanceProbe() {
         init=FormationDuel::makeInit(std::atoi(std::getenv("BALANCE_DUEL_MAP_SIZE")),
             static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
     }
-    // Vanilla match: the custom map's slots, one side (QuantBot flags or AI Player) per house.
+    // Vanilla match: the custom map's slots, one side (QuantBot flags or AI Player) per house; or a
+    // generated free-for-all Random Skirmish map with one start per side (vanilla-match.py --skirmish).
     const std::vector<FormationDuel::Side> matchSides=VanillaMatch::sidesFromEnv();
-    if(!matchSides.empty() && (!customMap || duel)) throw std::runtime_error("A vanilla match needs a custom map");
+    const bool skirmishFfa=std::getenv("BALANCE_SKIRMISH_FFA_SIZE")!=nullptr;
+    if(!matchSides.empty() && (!(customMap || skirmishFfa) || duel)) throw std::runtime_error("A vanilla match needs a map");
+    if(skirmishFfa)
+        init=VanillaMatch::makeSkirmishInit(std::atoi(std::getenv("BALANCE_SKIRMISH_FFA_SIZE")),
+            static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SKIRMISH_MAP_SEED"))),matchSides,enemy,
+            std::getenv("BALANCE_MOD") ? std::getenv("BALANCE_MOD") : "vanilla",settings.gameOptions);
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Continue a saved match instead (its own seed, roster and options).
     const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
@@ -169,7 +176,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else if(!duel && !loadSave) {
+    } else if(!duel && !skirmishFfa && !loadSave) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }
@@ -412,6 +419,26 @@ int runCampaignBalanceProbe() {
         VanillaMatch::run(*game, end, matchSides);
     } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {
         outcome = EliminationMatch::run(*game, end, humanHouse);
+    } else if (std::getenv("BALANCE_PERF")) {
+        // Frame-cost measurement (tests/performance/game-perf.py): BALANCE_PERF_CYCLES cycles from
+        // wherever the match starts (a loaded save continues from its own cycle).
+        const GameInitSettings& setup = game->getGameInitSettings();
+        const auto& options = setup.getGameOptions();
+        SDL_Log("GAME_PERF_SETUP: seed=%u cycle=%u map=%s options=%s units_override=%d harvesters_override=%d "
+                "concrete=%d explored=%d turrets_need_power=%d worms_respawn=%d",
+            setup.getRandomSeed(), game->getGameCycleCount(), setup.getFilename().c_str(), options.getHash().c_str(),
+            options.maximumNumberOfUnitsOverride, options.maximumNumberOfHarvestersOverride, options.concreteRequired,
+            options.startWithExploredMap, options.rocketTurretsNeedPower, options.sandwormsRespawn);
+        for (const auto& info : setup.getHouseInfoList())
+            for (const auto& player : info.playerInfoList)
+                SDL_Log("GAME_PERF_SETUP: house=%d team=%d player=%s class=%s", static_cast<int>(info.houseID), info.team,
+                    player.playerName.c_str(), player.playerClass.c_str());
+        // The map text a match was started from (a Random Skirmish save carries its generated map).
+        if (const char* mapOut = std::getenv("BALANCE_PERF_DUMP_MAP"))
+            std::ofstream(mapOut, std::ios::binary) << setup.getFiledata();
+        const Uint32 perfCycles = std::getenv("BALANCE_PERF_CYCLES")
+            ? static_cast<Uint32>(std::strtoul(std::getenv("BALANCE_PERF_CYCLES"), nullptr, 10)) : end;
+        GamePerf::run(*game, perfCycles, [&]() { ProbeDigest::periodic(*game); });
     } else {
         while (!game->finished && game->getGameCycleCount() < end) {
             ProbeDigest::periodic(*game);

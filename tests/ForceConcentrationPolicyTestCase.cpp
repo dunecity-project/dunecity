@@ -252,3 +252,33 @@ TEST_CASE("Force: perimeter turrets follow the enemy's lead and stand on the ene
     REQUIRE_FALSE(onPerimeterBand(13, 0, 10));              // out in the field
     REQUIRE_FALSE(onPerimeterBand(10, kPerimeterHalfWidth + 1, 10));
 }
+
+TEST_CASE("Force: the late game finishes the weakest known team and waits for a bigger wave at a fortress", "[ai][force]") {
+    TeamStrength strong{2, 40000, 10, 300}, weak{3, 20000, 30, 300}, weakest{4, 20000, 10, 300};
+    REQUIRE(weakerTeam(weakest, strong));
+    REQUIRE(weakerTeam(weakest, weak));                    // turrets count kKnownTurretValue each
+    REQUIRE_FALSE(weakerTeam(strong, weakest));
+    TeamStrength sameButSmaller{5, 20000, 10, 120};
+    REQUIRE(weakerTeam(sameButSmaller, weakest));          // tie: fewer known structures
+    TeamStrength twin{1, 20000, 10, 120};
+    REQUIRE(weakerTeam(twin, sameButSmaller));             // tie: lower team id
+    REQUIRE_FALSE(weakerTeam(sameButSmaller, twin));
+    REQUIRE(fortifiedReady(7000, 100000, kFortifiedTurrets - 1) == 7000);
+    REQUIRE(fortifiedReady(7000, 100000, kFortifiedTurrets) == 100000 * kFortifiedLimitPercent / 100);
+    REQUIRE(fortifiedReady(90000, 100000, 40) == 90000);   // the normal readiness when it is more
+}
+
+TEST_CASE("Force: a sonic wave's path runs past the target and one tile either side of the line", "[ai][force]") {
+    REQUIRE(inSonicPath(4, 0, 2, 0));                       // between shooter and target
+    REQUIRE(inSonicPath(4, 0, 2, 1));                       // one tile beside the line
+    REQUIRE_FALSE(inSonicPath(4, 0, 2, 2));
+    REQUIRE(inSonicPath(4, 0, 7, 0));                       // past the target: the wave runs on
+    REQUIRE(inSonicPath(4, 0, kSonicReachTiles, 0));
+    REQUIRE_FALSE(inSonicPath(4, 0, kSonicReachTiles + 1, 0));
+    REQUIRE_FALSE(inSonicPath(4, 0, -1, 0));                // behind the shooter
+    REQUIRE_FALSE(inSonicPath(4, 0, 0, 1));                 // beside the shooter
+    REQUIRE(inSonicPath(3, 3, 5, 5));                       // diagonal
+    REQUIRE(inSonicPath(3, 3, 2, 3));                       // 0.7 tiles off the diagonal
+    REQUIRE_FALSE(inSonicPath(3, 3, 1, 4));                 // 2.1 tiles off it
+    REQUIRE_FALSE(inSonicPath(0, 0, 1, 0));                 // no direction
+}

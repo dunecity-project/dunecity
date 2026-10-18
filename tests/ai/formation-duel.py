@@ -55,7 +55,8 @@ FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recal
                 'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
                 'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
                 'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
-                'turrets_lost', 'raid_orders')
+                'turrets_lost', 'raid_orders', 'turret_targets', 'press_on_orders', 'finish_waves', 'fortified_holds',
+                'sonic_retargets')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units', 'strategy') + PARTY_FIELDS + FORCE_FIELDS
 # The army value curve: each side's mobile armed value at these game minutes (the 5-minute
@@ -456,6 +457,13 @@ def pairing_report(args):
         return (row['tag'] in tags and row['difficulty'] == args.difficulty and row['size'] in sizes
                 and row['seed'] in seeds)
     games = [g for g in read(results / 'games.csv') if wanted(g)]
+    # --baseline-tag: the same pairings played by another code version (tag), from --baseline-results.
+    baseline_games = []
+    if args.baseline_tag:
+        baseline_games = [g for g in read(Path(args.baseline_results or results) / 'games.csv')
+                          if g['tag'] == args.baseline_tag and g['difficulty'] == args.difficulty
+                          and g['size'] in sizes and g['seed'] in seeds]
+        games = [g for g in games if g['tag'] != args.baseline_tag]
     waves = [w for w in read(results / 'waves.csv') if wanted(w)]
     if args.scores:
         write_scores(games, args)
@@ -466,7 +474,7 @@ def pairing_report(args):
           + ' | Eliminations W-L / time-outs | ' + ('Strict score' if legacy else 'Time-outs')
           + ' | Value margin / game | Median game min | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|---|')
-    wave_rows, party_rows, defence_rows, force_rows, baseline_rows = [], [], [], [], []
+    wave_rows, party_rows, defence_rows, force_rows, baseline_rows, tag_rows = [], [], [], [], [], []
     # The setup of a side row, for --baseline: difficulty, size, seed, own house, opponent's house.
     setup = lambda g, me, them: (g['difficulty'], g['size'], g['seed'], g[f'house_{me}'], g[f'house_{them}'])
     for x, y in pairs(args):
@@ -499,6 +507,24 @@ def pairing_report(args):
                 baseline_rows.append(f'| {x} v {y} | {b.n} | {b.candidate:.3f} | {b.control:.3f} | '
                                      f'{b.difference:+.3f} ({b.low:+.2f}..{b.high:+.2f}) | '
                                      f'{100 * b.candidate_draws:.0f}% / {100 * b.control_draws:.0f}% | {b.verdict} {args.baseline} |')
+        if args.baseline_tag:
+            base = {}
+            for g in baseline_games:
+                if {g['shape_a'], g['shape_b']} == {x, y}:
+                    for me, them in (('a', 'b'), ('b', 'a')):
+                        if g[f'shape_{me}'] == x:
+                            base.setdefault(setup(g, me, them), sides(g, args)[me == 'b'])
+            paired = []
+            for g in mine:
+                for me, them in (('a', 'b'), ('b', 'a')):
+                    if g[f'shape_{me}'] == x and setup(g, me, them) in base:
+                        own, other = sides(g, args)[me == 'b'], base[setup(g, me, them)]
+                        paired.append((own[2], other[2], own[7], other[7]))
+            b = match_score.compare(paired, 20261015, 'placement')
+            if b:
+                tag_rows.append(f'| {x} v {y} | {b.n} | {b.candidate:.3f} | {b.control:.3f} | '
+                                f'{b.difference:+.3f} ({b.low:+.2f}..{b.high:+.2f}) | '
+                                f'{100 * b.candidate_draws:.0f}% / {100 * b.control_draws:.0f}% | {b.verdict} tag {args.baseline_tag} |')
         keys = {tuple(g[k] for k in KEY) for g in mine}
         # Defence and pace, from x's side: structures lost (the opponent's kills), the home trade,
         # how long x's eliminations took, and the per-game force-candidate counters.
@@ -539,6 +565,13 @@ def pairing_report(args):
         print(f'| Pairing | Paired games | Score | {args.baseline} score | Difference (95% CI) | Time-outs | Verdict |')
         print('|---|---|---|---|---|---|---|')
         print('\n'.join(baseline_rows))
+    if tag_rows:
+        print(f'\nPaired against tag {args.baseline_tag} (the same pairing and side in the same setup - difficulty, '
+              f'size, seed and houses - played by the baseline tag\'s code; difference = own score - baseline\'s, '
+              f'95% bootstrap; time-outs own / baseline):\n')
+        print(f'| Pairing | Paired games | Score | Tag {args.baseline_tag} score | Difference (95% CI) | Time-outs | Verdict |')
+        print('|---|---|---|---|---|---|---|')
+        print('\n'.join(tag_rows))
     print('\nWaves of both sides (median contact time after launch; base-arrival spread; living members within 8 '
           'tiles of the main body at contact and members engaging within 10 s of contact, as a share of members; '
           'first-minute value killed and lost from contact; members alive 5 min after launch):\n')
@@ -599,6 +632,9 @@ parser.add_argument('--adjudicate', type=float, default=1000,
                          'least this many credits')
 parser.add_argument('--baseline', help='Pairing report: also pair each first side with this shape\'s side against the '
                                        'same opponent in the same setups (e.g. the old default, for a candidate v none)')
+parser.add_argument('--baseline-tag', help='Pairing report: also pair each pairing\'s first side with the same side in the '
+                                           'same setup played by this tag (another code version, e.g. the last release)')
+parser.add_argument('--baseline-results', help='Directory of the --baseline-tag games.csv (default --results)')
 match_score.add_arguments(parser)
 args = parser.parse_args()
 if args.report:

@@ -70,6 +70,12 @@ inline void sampleMix(Game& game, const House* house, int minute, bool final) {
             join(built).c_str(), join(lost).c_str(), join(army).c_str(), join(reward).c_str());
 }
 
+} // namespace EliminationMatch
+
+#include "ffa-army.inc"
+
+namespace EliminationMatch {
+
 inline void sample(Game& game, bool final = false) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : playingHouses(game)) {
@@ -97,6 +103,7 @@ inline void sample(Game& game, bool final = false) {
         // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
+    FfaArmy::sample(game);
 }
 
 /// Plays to elimination or `end`. Returns "won"/"lost" for `house`'s team, or "time_limit".

@@ -338,7 +338,8 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "stage_holds=%d staged=%d bundle_orders=%d gate_holds=%d gate_timeouts=%d splits=%d split_releases=%d "
                 "split_timeouts=%d full_readiness=%d garrison_holds=%d strength_holds=%d reserve_kept=%d "
                 "sized_responses=%d declined_responses=%d fall_backs=%d perimeter_turret_orders=%d turrets_built=%d "
-                "turrets_lost=%d raid_orders=%d strategy=%s",
+                "turrets_lost=%d raid_orders=%d turret_targets=%d press_on_orders=%d finish_waves=%d "
+                "fortified_holds=%d sonic_retargets=%d strategy=%s",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
@@ -348,6 +349,7 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 force.splits, force.splitReleases, force.splitTimeouts, force.fullReadiness, force.garrisonHolds,
                 force.strengthHolds, force.reserveKept, force.sizedResponses, force.declinedResponses, force.fallBacks,
                 force.perimeterTurretOrders, force.turretsBuilt, force.turretsLost, force.raidOrders,
+                force.turretTargets, force.pressOnOrders, force.finishWaves, force.fortifiedHolds, force.sonicRetargets,
                 strategy.empty() ? "none" : strategy.c_str());
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,

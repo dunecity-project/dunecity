@@ -1201,7 +1201,11 @@ private:
     sdl2::texture_ptr spectatorLabel;
     bool    bReplay = false;                    ///< Is this game actually a replay
 
-    bool    bShowFPS = false;                   ///< Show the FPS
+    bool    bShowFPS = false;                   ///< Show the FPS and the frame breakdown (F12)
+    /// Smoothed per-frame costs for the F12 overlay; timing only, never read by the simulation.
+    struct FrameOverlay {
+        float cycles = 0, ai = 0, city = 0, units = 0, structures = 0, path = 0, render = 0, other = 0;
+    } frameOverlay;
 
     bool    bShowTime = false;                  ///< Show how long this game is running
 

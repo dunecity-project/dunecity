@@ -133,6 +133,33 @@ and 9 the Hard partner must win - and fails on a crash, a missed expected winner
 eliminated or idle armies (a few minutes wall). Changes with a wide reach (unit mix, attack timing,
 economy, campaign AI) also run the full tier on the runners and compare its table with the last one.
 
+They must also pass `quantbot_ffa_army_deploys`, the free-for-all counterpart (Stefan's 4P DuneCity
+game, 2026-10-18: "all the men sit in the base"):
+
+```bash
+ctest --test-dir build -R '^quantbot_ffa_army_deploys$' --output-on-failure
+```
+
+It plays a generated 4P 160x160 DuneCity free-for-all (seed 9101; Fortress starts, 20,000-credit
+armies, 40,000 cities, four QuantBot Brutal, his game options) and fails when no wave of 30+ units
+has left by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
+minutes in a row, or nobody is eliminated by minute 30 (a stalemate of armies at home is a draw;
+about 5 minutes wall). Do not loosen the thresholds to make a change pass; see
+`docs/formations.md`, "Free-for-all: the army deploys".
+
+The same changes, and anything touching the game loop or rendering, must also pass
+`perf_regression` (Stefan, 2026-10-18: "make sure you include performance testing as part of
+regression testing"):
+
+```bash
+ctest --test-dir build -R '^perf_regression$' --output-on-failure
+```
+
+It plays Stefan's 4P DuneCity Brutal Random Skirmish map headless for 6 game minutes and fails when
+the mean simulation CPU per cycle or a house's AI update exceeds its budget (multiples of a
+calibration loop, so it works on any Mac). Run it on a quiet machine; see `docs/game-performance.md`
+(also `tests/performance/game-perf.py --rendered` for real-window frame rates at 2 ms game speed).
+
 ## AI test games: scoring and the default rule
 
 AI test games (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py` reports) are

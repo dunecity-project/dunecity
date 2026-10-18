@@ -19,6 +19,7 @@
 #include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
+#include <misc/GameActivity.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -952,7 +953,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             .set("immortal_human_player", gameInitSettings.getGameOptions().immortalHumanPlayer)
             .set("harvester_limit_override", gameInitSettings.getGameOptions().maximumNumberOfHarvestersOverride))
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
-        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.diagnosticLogs);
+        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
     collectCustomMap(loadedSave);
 }
@@ -2920,11 +2921,22 @@ void Game::drawScreen()
     }
 
     if(bShowFPS) {
-        std::string strFPS = fmt::sprintf("fps: %.1f ", 1000.0f/averageFrameTime);
-
-        sdl2::texture_ptr pFPSTexture = pFontManager->createTextureWithText(strFPS, COLOR_WHITE, 14);
-        SDL_Rect drawLocation = calcDrawingRect(pFPSTexture.get(),sideBarPos.x - strFPS.length()*8, 60);
-        SDL_RenderCopy(renderer, pFPSTexture.get(), nullptr, &drawLocation);
+        // F12: frame rate, achieved game speed and where each frame's time goes (smoothed).
+        // "speed" below the target means the simulation cannot keep up with the chosen game speed.
+        const float fps = 1000.0f/averageFrameTime;
+        const auto& o = frameOverlay;
+        const std::string lines[] = {
+            fmt::sprintf("fps: %.1f  cycles/frame: %.1f  speed: %.0f of %d cycles/s",
+                fps, o.cycles, fps*o.cycles, 1000/std::max(1, getGameSpeed())),
+            fmt::sprintf("ms/frame: AI %.1f  city %.1f  units %.1f  structures %.1f  path %.1f  render %.1f  other %.1f",
+                o.ai, o.city, o.units, o.structures, o.path, o.render, o.other)};
+        int y = 60;
+        for(const auto& line : lines) {
+            sdl2::texture_ptr pLineTexture = pFontManager->createTextureWithText(line, COLOR_WHITE, 14);
+            SDL_Rect drawLocation = calcDrawingRect(pLineTexture.get(), sideBarPos.x - 8, y, HAlign::Right, VAlign::Top);
+            SDL_RenderCopy(renderer, pLineTexture.get(), nullptr, &drawLocation);
+            y += drawLocation.h + 2;
+        }
     }
 
     if(bShowTime) {
@@ -3578,6 +3590,8 @@ void Game::setupView()
 
 void Game::runMainLoop() {
     SDL_Log("Starting game...");
+    // macOS: keep a covered/background game window at full speed for the whole match.
+    const GameActivity::Scope matchActivity;
     initializeGameLoop();
     
     // Update Discord Rich Presence for in-game status
@@ -3872,6 +3886,21 @@ void Game::runMainLoop() {
         frameTiming.totalTurretScans += frameTiming.turretScansThisFrame;
         frameTiming.turretScanMs += frameTiming.turretScanMsThisFrame;
         frameTiming.frameCount++;
+
+        if(bShowFPS) {
+            const auto smooth = [](float& value, double sample) { value = 0.95f*value + 0.05f*static_cast<float>(sample); };
+            const double measured = frameTiming.aiMsThisFrame + frameTiming.citySimMsThisFrame
+                + frameTiming.unitsMsThisFrame + frameTiming.structuresMsThisFrame
+                + frameTiming.pathfindingMsThisFrame + frameTiming.renderingMsThisFrame;
+            smooth(frameOverlay.cycles, frameTiming.gameCyclesThisFrame);
+            smooth(frameOverlay.ai, frameTiming.aiMsThisFrame);
+            smooth(frameOverlay.city, frameTiming.citySimMsThisFrame);
+            smooth(frameOverlay.units, frameTiming.unitsMsThisFrame);
+            smooth(frameOverlay.structures, frameTiming.structuresMsThisFrame);
+            smooth(frameOverlay.path, frameTiming.pathfindingMsThisFrame);
+            smooth(frameOverlay.render, frameTiming.renderingMsThisFrame);
+            smooth(frameOverlay.other, std::max(0.0, thisFrameMs - measured));
+        }
 
         auto& perf = AITelemetry::log();
         if (perf.enabled()) {
@@ -4376,7 +4405,7 @@ void Game::resumeGame()
         }
         return;
     }
-    if(bPause && settings.general.diagnosticLogs) {
+    if(bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",false).set("source","resume"));
     }
@@ -4391,7 +4420,7 @@ void Game::pauseGame(const char* source) {
     if(pNetworkManager != nullptr) {
         return;
     }
-    if(!bPause && settings.general.diagnosticLogs) {
+    if(!bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",true).set("source",source).set("menu_open",bMenu));
     }

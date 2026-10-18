@@ -22,6 +22,12 @@
 //      most, and launches from the bundle once 70% stand there; an attack on a building pulls
 //      defenders out of the bundle; save/load mid-gather and while the gate waits restores the
 //      bundle exactly and re-saves the same bytes; a 9862 save has no bundle.
+//   7. Round 5: the remembered enemy army (seen, kept out of sight, the dead and the long unseen
+//      forgotten), outnumbered 9 tanks against 2 garrisons with perimeter turrets wanted, in a
+//      free-for-all the threat is the strongest enemy team (two tanks each of two enemy houses on
+//      different teams do not outnumber our two, allied they do), the perimeter lies beyond the
+//      base towards the observed enemy and is the garrison's anchor, the attack check is held,
+//      the memory and musters survive save/load, and worker raids are sized or declined.
 //   8. Planned sites and the army (the footprint rule): our own tank on a site does not make it
 //      unplaceable for the AI's site search, another house's unit does; holding/bundle slots skip
 //      a planned site; an idle tank on it is sent to a free tile beside it and leaves; a building
@@ -353,9 +359,10 @@ void runForceConcentrationProbe(Game& game) {
             game.gameCycleCount+=MILLI2CYCLES(120000);
             // The 30 s throttle: the same point inside 30 s, a fresh choice after it.
             pin();
-            require(bot->forwardBundlePoint()==bundle,"The bundle point changed inside its 30 s");
+            require(bot->forwardBundlePoint(ForceConcentrationPolicy::kBundleClearMinTiles)==bundle,
+                "The bundle point changed inside its 30 s");
             bot->bundleCycle=game.getGameCycleCount()-MILLI2CYCLES(30000);
-            bot->forwardBundlePoint();
+            bot->forwardBundlePoint(ForceConcentrationPolicy::kBundleClearMinTiles);
             require(bot->bundleCycle==game.getGameCycleCount(),"The bundle point was not re-chosen after 30 s");
 
             // One pass: 12 orders, the farthest reserve units first, the same for either list order.
@@ -521,14 +528,54 @@ void runForceConcentrationProbe(Game& game) {
             theirs[0]->setVisible(owner->getTeamID(),true);
             bot->updateEnemySightings();
             SDL_Log("FORCE_PROBE: memory remembered=%zu estimate=%lld own=%lld",bot->enemySightings.size(),
-                (long long)bot->enemyArmyEstimate(),(long long)bot->ownGroundArmyValue());
+                (long long)bot->enemyThreatEstimate(),(long long)bot->ownGroundArmyValue());
 
             // Outnumbered (9 tanks against 2): garrisoned, perimeter turrets wanted.
             ++game.gameCycleCount;
             require(bot->outnumberedByEstimate() && bot->garrisoned(),"Nine remembered tanks against two did not outnumber us");
             const int goal=bot->perimeterTurretGoal();
-            require(goal>0 && goal==Force::perimeterTurretGoal(bot->ownGroundArmyValue(),bot->enemyArmyEstimate()),
+            require(goal>0 && goal==Force::perimeterTurretGoal(bot->ownGroundArmyValue(),bot->enemyThreatEstimate()),
                 "The perimeter turret goal does not follow the enemy's lead");
+            // A free-for-all (docs/formations.md, "Free-for-all: the army deploys"): the threat is
+            // the strongest enemy team, not every enemy summed. Two remembered tanks of the enemy
+            // and two of a third house on its own team do not outnumber our two (the 1.0.847 sum,
+            // four against two, did and held every FFA house at home); allied, the four do.
+            {
+                auto* third=game.getHouse(HOUSE_ORDOS);
+                require(third && third!=owner && third!=enemy,"Force fixture missing a third house");
+                const auto savedSightings=bot->enemySightings;
+                const Uint8 savedTeam=third->teamID;
+                third->teamID=7;
+                std::vector<UnitBase*> extra{spawn(third,Unit_Tank,Coord(30,12)),spawn(third,Unit_Tank,Coord(32,12))};
+                publish();
+                for(auto* unit:extra) unit->setVisible(owner->getTeamID(),true);
+                bot->updateEnemySightings();
+                const std::set<Uint32> kept{theirs[2]->getObjectID(),theirs[3]->getObjectID(),
+                                            extra[0]->getObjectID(),extra[1]->getObjectID()};
+                for(auto it=bot->enemySightings.begin();it!=bot->enemySightings.end();)
+                    it=kept.count(it->first) ? std::next(it) : bot->enemySightings.erase(it);
+                require(bot->enemySightings.size()==4,"The four tanks of two enemy houses were not remembered");
+                int64_t sum=0;
+                for(const auto& [id,sighting]:bot->enemySightings) sum+=sighting.value;
+                ++game.gameCycleCount;
+                const int64_t split=bot->enemyThreatEstimate();
+                const bool splitOutnumbered=bot->outnumberedByEstimate();
+                SDL_Log("FORCE_PROBE: ffa threat own=%lld sum=%lld strongest_team=%lld outnumbered=%d",
+                    (long long)bot->ownGroundArmyValue(),(long long)sum,(long long)split,int(splitOutnumbered));
+                require(split*2==sum && Force::outnumbered(bot->ownGroundArmyValue(),sum) && !splitOutnumbered
+                    && !bot->garrisoned() && bot->perimeterTurretGoal()==0,
+                    "Two enemy houses fighting each other outnumbered us by their sum");
+                third->teamID=enemy->getTeamID();
+                ++game.gameCycleCount;
+                require(bot->enemyThreatEstimate()==sum && bot->outnumberedByEstimate() && bot->garrisoned(),
+                    "Two allied enemy houses did not outnumber us together");
+                third->teamID=savedTeam;
+                for(auto* unit:extra) unit->setHealth(0);
+                step();
+                bot->enemySightings=savedSightings;
+                ++game.gameCycleCount;
+                require(bot->outnumberedByEstimate(),"The FFA check did not restore the remembered enemy army");
+            }
 
             // The perimeter: towards the observed enemy base, beyond the outermost own building.
             const auto savedBases=bot->visibleEnemyBases;
@@ -547,6 +594,27 @@ void runForceConcentrationProbe(Game& game) {
             require(along(perimeter.point)>=perimeter.depth-Force::kPerimeterInnerTiles
                 && !currentGameMap->getTile(perimeter.point)->hasAStructure(),
                 "The perimeter point is not on the enemy-facing edge of the base");
+            // A city's streets around that point (a DuneCity base spreads lots and roads well beyond
+            // kPerimeterBaseTiles): the point walks on along the front until no road or own
+            // building is within kPerimeterClearTiles; without the streets it is back where it was.
+            {
+                std::vector<Coord> streets;
+                for(int dy=-4;dy<=4;++dy) for(int dx=-4;dx<=4;++dx) {
+                    const Coord p=perimeter.point+Coord(dx,dy);
+                    if(currentGameMap->tileExists(p) && !currentGameMap->getTile(p)->isRoad()) {
+                        currentGameMap->getTile(p)->setRoad(true); streets.push_back(p);
+                    }
+                }
+                ++game.gameCycleCount;
+                const Coord out=bot->perimeter().point;
+                const bool clear=out.isValid() && bot->builtUpDistance(out,Force::kPerimeterClearTiles)>=Force::kPerimeterClearTiles;
+                SDL_Log("FORCE_PROBE: perimeter streets point=%d,%d out=%d,%d along=%d->%d clear=%d",perimeter.point.x,
+                    perimeter.point.y,out.x,out.y,along(perimeter.point),out.isValid()?along(out):-1,int(clear));
+                require(clear && along(out)>along(perimeter.point),"The perimeter point stayed among the base's streets");
+                for(const Coord p:streets) currentGameMap->getTile(p)->setRoad(false);
+                ++game.gameCycleCount;
+                require(bot->perimeter().point==perimeter.point,"Without the streets the perimeter point moved");
+            }
             // The garrison holds the perimeter (the house anchor, with the posture machine on), in
             // the city simulation too: the footprint rule keeps it off planned sites (section 8).
             getQuantBotConfig().recovery.enabled=true;
