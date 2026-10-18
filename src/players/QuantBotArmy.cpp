@@ -225,14 +225,17 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         .set("dispatched",dispatched));
 }
 
-bool QuantBot::autonomousCustomHardBrutal() const {
+bool QuantBot::autonomousCustomArmy() const {
+    // Medium joined Hard and Brutal (docs/ai-scenario-matrix.md, "Difficulty ladder"): its
+    // 40% standing raid share traded evenly with Easy's home army for 60 minutes. Medium now
+    // differs from Hard in its economy, limits and air raids, not in how its army attacks.
     return !supportMode && currentGame!=nullptr && gameMode==GameMode::Custom
         && !isCampaignGameType(currentGame->gameType)
-        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+        && (difficulty==Difficulty::Medium || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }
 
 bool QuantBot::wholeArmyBaseDefence() const {
-    return autonomousCustomHardBrutal();
+    return autonomousCustomArmy();
 }
 
 bool QuantBot::attackingOwnedBuilding(const ObjectBase* contact) const {
@@ -425,9 +428,20 @@ int QuantBot::houseAttackThreshold() const {
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
     const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
-    return vanillaCustom
+    return reachableAttackThreshold(vanillaCustom
         ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
-        : (militaryValueLimit * threshold).lround();
+        : (militaryValueLimit * threshold).lround());
+}
+
+int QuantBot::reachableAttackThreshold(int required) const {
+    // Custom games only (docs/ai-scenario-matrix.md, "Difficulty ladder"): campaign enemies keep
+    // their scripted readiness and helpers do not launch waves.
+    if (supportMode || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
+    required = SimpleArmyPolicy::reachableReadiness(required, militaryUnitValue(), getHouse()->getCredits(),
+                                                    lastCalculatedSpice);
+    // A whole-army house twice as strong as what it has seen of the enemy does not wait for more.
+    return autonomousCustomArmy()
+        ? SimpleArmyPolicy::strengthReadiness(required, enemyThreatEstimate(), minWaveValue()) : required;
 }
 
 bool QuantBot::bundleArmyReady() const {
@@ -598,9 +612,7 @@ bool QuantBot::managesAutonomousRocketHunt(const UnitBase* unit) const {
 
 bool QuantBot::engineHuntAttack(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->isAGroundUnit()
-        && unit->getAttackMode()==HUNT && !supportMode && gameMode==GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType)
-        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+        && unit->getAttackMode()==HUNT && autonomousCustomArmy();
 }
 
 bool QuantBot::huntingLauncher(const UnitBase* unit) const {
@@ -730,14 +742,12 @@ void QuantBot::launchGroundHunt() {
     // Ground pressure is tracked on its own: ornithopters and other non-ground
     // troops must not inflate a budget that can only ever buy ground units.
     int groundArmyValue=0, groundCommittedUnits=0, groundCommittedValue=0;
-    // Custom Hard/Brutal dispatch is a single whole-army launch, by decision of
+    // Custom Medium/Hard/Brutal dispatch is a single whole-army launch, by decision of
     // the project owner. No share of the standing army, no local assembly
     // cohort, no colony holdback and no per-unit exclusion for merely having a
     // target or a move order may hold a troop back. Hunters already in the
     // field are not reset; they are tracked with the army that joins them.
-    const bool wholeArmy=!limited && !supportMode && gameMode==GameMode::Custom
-        && !isCampaignGameType(currentGame->gameType)
-        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+    const bool wholeArmy=!limited && autonomousCustomArmy();
     std::vector<Uint32> existingHunters;
     std::vector<SimpleArmyPolicy::Responder> candidates;
     // Launcher accounting for the dispatch audit. launchGroundHunt() has never
@@ -875,17 +885,17 @@ void QuantBot::launchGroundHunt() {
         // Shared-house helpers retain a modest home reserve, without enemy caps.
         selected=SimpleArmyPolicy::limitedAttack(armyValue,committedValue,100-profile.reservePercent,candidates);
     } else {
-        // Custom Hard/Brutal: one whole-army launch. The only pre-dispatch
+        // Custom Medium/Hard/Brutal: one whole-army launch. The only pre-dispatch
         // condition is that what is available is itself a main wave rather than
         // a patrol - the house readiness value plus the established six-unit,
         // three-thousand-credit minimum. That is also what stops the drip feed
         // while an army is out: whatever is produced next accumulates at home
         // until it is a full wave again, instead of trickling forward.
-        // Easy and Medium keep their established small-wave behaviour exactly.
+        // Easy keeps its established small-wave behaviour exactly.
         if (wholeArmy) {
             const auto& settings=botConfig().getSettings(static_cast<int>(difficulty));
             const FixPoint threshold=FixPoint(static_cast<int>(settings.attackThresholdPercent*100))/100;
-            requiredReady=(militaryValueLimit*threshold).lround();
+            requiredReady=reachableAttackThreshold((militaryValueLimit*threshold).lround());
             // Wave size: the configured readiness percentage (duel labels L / Q: 150% / 60%; D:
             // 100% while outnumbered).
             if (const int percent=launchReadinessPercent(); percent!=100)
@@ -1255,10 +1265,7 @@ void QuantBot::launchGroundHunt() {
 // ===========================================================================
 
 bool QuantBot::recoveryActive() const {
-    if (supportMode || gameMode != GameMode::Custom) return false;
-    if (currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return false;
-    if (difficulty != Difficulty::Hard && difficulty != Difficulty::Brutal) return false;
-    return botConfig().recovery.enabled;
+    return autonomousCustomArmy() && botConfig().recovery.enabled;
 }
 
 ArmyPosturePolicy::Thresholds QuantBot::postureThresholds() const {
@@ -3098,7 +3105,7 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
 	// unit that was not sent on the wave backs onto the body it belongs to.
 	Coord squadCenter = findSquadCenter(getHouse()->getHouseID(),
         isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
-        || difficulty>Difficulty::Medium || pUnit->getAttackMode()==HUNT);
+        || difficulty!=Difficulty::Easy || pUnit->getAttackMode()==HUNT);
 
 	// If no squad center, just move directly away from threat
 	if (!squadCenter.isValid()) {
@@ -3206,15 +3213,15 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // from current world state, so this is stable without remembering an
     // assignment across passes.
     if (unitRole(unit, {UnitRole::ColonyGuard, UnitRole::Escort}) != UnitRole::Free) return;
-    // Easy and Medium keep their reserve at home, as they always have.
+    // Easy keeps its reserve at home, as it always has.
     //
-    // Custom Hard/Brutal anchors the uncommitted reserve: a freshly built tank
+    // Custom Medium/Hard/Brutal anchors the uncommitted reserve: a freshly built tank
     // walking alone to the surviving attack centroid is the drip-feed this
     // replaces. Where "home" is depends on the posture - outside the staging
     // colony while offensive, the protected shelter while coming home.
     const bool recoveryHold = recoveryActive();
     const bool homeAnchored = recoveryHold || (!isCampaignGameType(currentGame->gameType)
-        && gameMode==GameMode::Custom && (difficulty==Difficulty::Easy || difficulty==Difficulty::Medium));
+        && gameMode==GameMode::Custom && difficulty==Difficulty::Easy);
     const Coord home = assemblyPoint();
     Coord regroup = (unit->getAttackMode()==RETREAT || homeAnchored)
         ? home : findSquadCenter(getHouse()->getHouseID());
@@ -3744,7 +3751,7 @@ void QuantBot::retreatAllUnits() {
                             // attack centroid is not a place to end a retreat.
                             Coord actualSquadCenter = findSquadCenter(getHouse()->getHouseID(),
                                 isCampaignGameType(currentGame->gameType) || gameMode!=GameMode::Custom
-                                || difficulty>Difficulty::Medium);
+                                || difficulty!=Difficulty::Easy);
                             FixPoint distToSquadCenter = actualSquadCenter.isValid() ? 
                                 blockDistance(pUnit->getLocation(), actualSquadCenter) : FixPt_MAX;
                             FixPoint distToRallyPoint = squadRallyLocation.isValid() ? 

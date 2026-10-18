@@ -19,6 +19,23 @@ struct Responder { uint32_t id; int value; int distance; };
 inline int attackBudget(int armyValue, int percent) {
     return int(int64_t(std::max(0, armyValue)) * std::clamp(percent, 0, 100) / 100);
 }
+// The attack readiness a house can still reach. When its credits and all the spice left on the
+// map together cannot buy the difference between its army and `required`, the army it has is
+// the largest it will get: 0, so it attacks once a viable wave stands instead of waiting for a
+// value it can never field (a spice-exhausted map held both houses at home for 35 minutes).
+inline int reachableReadiness(int required, int militaryValue, int credits, int mapSpice) {
+    const int64_t gap = int64_t(required) - std::max(0, militaryValue);
+    return gap > int64_t(std::max(0, credits)) + std::max(0, mapSpice) ? 0 : required;
+}
+// The readiness of a house that already outnumbers what it has seen of the strongest enemy
+// team: once it has seen enemy fighters worth `enemyEstimate`, twice that (at least a viable
+// wave, `minWave`) is enough, however high its configured threshold. Nothing seen: `required`.
+// A Brutal house waiting for 20,000 credits of army on a 96x96 map was killed at home by a
+// Medium wave of 10,000 in 23 of 72 ladder games (docs/ai-scenario-matrix.md, "Difficulty ladder").
+inline int strengthReadiness(int required, int64_t enemyEstimate, int minWave) {
+    if (enemyEstimate <= 0) return required;
+    return int(std::min<int64_t>(required, std::max<int64_t>(std::max(0, minWave), 2 * enemyEstimate)));
+}
 // A campaign wave shares its budget with troops already hunting. Rechecking
 // readiness cannot gradually dispatch the reserve while the first wave lives.
 inline std::vector<uint32_t> limitedAttack(int armyValue, int committed, int percent,

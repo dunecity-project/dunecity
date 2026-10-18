@@ -102,7 +102,7 @@ int QuantBot::forceBits() const {
 }
 
 int QuantBot::waveReadinessPercent() const {
-    if (!autonomousCustomHardBrutal()) return 100;
+    if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
     // The tempo of the strategy (docs/ai-play-styles.md, "Strategies"); Base keeps the config's.

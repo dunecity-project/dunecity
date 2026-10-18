@@ -194,9 +194,14 @@ bool QuantBot::overridesMilitaryValueCap() const {
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
-    if (!overridesMilitaryValueCap()) return militaryValueLimit;
-    return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
-                                                      productionCash, largestUnitValue);
+    if (overridesMilitaryValueCap())
+        return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
+                                                          productionCash, largestUnitValue);
+    // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
+    // (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
+    return militaryValueLimit;
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {

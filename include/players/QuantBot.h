@@ -373,13 +373,14 @@ private:
 
     /// Does this house answer a real attack on a building it owns with its whole
     /// ground army? Scoped exactly like the whole-army dispatch and the hunting
-    /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
+    /// launcher spacing - Custom Medium/Hard/Brutal, no campaign, no helper - and
     /// deliberately independent of the optional recovery policy.
     bool wholeArmyBaseDefence() const;
-    /// Is this an autonomous Custom Hard/Brutal controller? No campaign, no
-    /// support/helper house. The shared scope of the whole-army behaviours and of
-    /// the mobile anti-air floor.
-    bool autonomousCustomHardBrutal() const;
+    /// Is this an autonomous Custom Medium/Hard/Brutal controller? No campaign, no
+    /// support/helper house. The shared scope of the whole-army behaviours (one
+    /// concentrated wave instead of Easy's standing raid share) and of the mobile
+    /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    bool autonomousCustomArmy() const;
     /// Count of hostile Ornithopters this house can actually see right now:
     /// alive, active and visible to our team. No fog cheating, and no sticky
     /// "was once attacked from the air" flag - the demand disappears with the
@@ -1040,10 +1041,10 @@ private:
     /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X, I,
     /// T, P, H and K.
     int forceBits() const;
-    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
+    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
-    /// Hard/Brutal.
+    /// Medium/Hard/Brutal.
     int waveReadinessPercent() const;
     /// The readiness before any outnumbered raise: waveReadinessPercent(), or 100 under I while
     /// the house has not launched a ground wave yet (the opening).
@@ -1170,6 +1171,10 @@ private:
     /// The house attack threshold attack() starts from (credits of military value, before the
     /// campaign adjustment and the wave readiness scaling).
     int houseAttackThreshold() const;
+    /// \a required, or 0 in a custom game when the house's credits and the spice left on the map
+    /// cannot buy the difference to it (SimpleArmyPolicy::reachableReadiness): a house that can
+    /// no longer grow its army attacks with the army it has.
+    int reachableAttackThreshold(int required) const;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.

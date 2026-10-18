@@ -41,6 +41,16 @@ inline bool militaryItem(Uint32 item) {
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
 }
+// Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
+// ladder"): what lies above `reserve` raises the planning budget, by at most the cap again.
+// A Custom Medium on Habbanya-Penny sat at its 25,000 cap with 117,000-158,000 credits unspent
+// while Easy's turret base held, and 15 of 18 games timed out.
+inline constexpr int kSurplusMilitaryReserve = 10000;
+inline int surplusMilitaryBudget(int limit, int credits, int reserve = kSurplusMilitaryReserve) {
+    const int64_t cap = std::max(0, limit);
+    const int64_t surplus = std::clamp<int64_t>(int64_t(credits) - std::max(0, reserve), 0, cap);
+    return int(std::min<int64_t>(cap + surplus, std::numeric_limits<int>::max()));
+}
 // Only reached when the player asked for an explicit unit-count override on Brutal.
 // The configured value cap is replaced by rolling headroom above what is already
 // committed, so the planning target advances with the army instead of stopping at a

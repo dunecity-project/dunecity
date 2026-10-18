@@ -33,6 +33,7 @@ soon as its rows are written. Scores are tests/ai/match_score.py placement score
 """
 import argparse
 import csv
+import re
 import shutil
 import statistics
 import subprocess
@@ -216,6 +217,8 @@ def schedule(args):
     games = []
     for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS)):
         if args.categories and cell['category'] not in args.categories:
+            continue
+        if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
             continue
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
@@ -721,6 +724,7 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per ladder cell (4 maps, 2 sides alternating; 18 = 72 games per pair)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')

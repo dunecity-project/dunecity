@@ -25,7 +25,7 @@ void runArmyRecoveryProbe(Game& game) {
     // (quantbot_force_concentration); this one keeps the other production force rules.
     bot->forceVariantOverride=QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceSmallWaves;
 
-    // Custom Hard/Brutal is the only mode this behaviour runs in.
+    // Custom Medium/Hard/Brutal is the only mode this behaviour runs in.
     game.gameType=GameType::CustomGame;
     bot->difficulty=QuantBot::Difficulty::Brutal;
     bot->gameMode=QuantBot::GameMode::Custom;
@@ -50,8 +50,10 @@ void runArmyRecoveryProbe(Game& game) {
 
     // The gate itself: nothing below may leak into other modes.
     {
+        bot->difficulty=QuantBot::Difficulty::Easy;
+        require(!bot->recoveryActive(),"Recovery leaked into Easy");
         bot->difficulty=QuantBot::Difficulty::Medium;
-        require(!bot->recoveryActive(),"Recovery leaked into Medium");
+        require(bot->recoveryActive(),"Recovery refused Medium");
         bot->difficulty=QuantBot::Difficulty::Hard;
         require(bot->recoveryActive(),"Recovery refused Hard");
         game.gameType=GameType::Campaign;

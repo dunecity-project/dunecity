@@ -802,8 +802,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     && !getMap().okayToPlaceStructure(placeLocationX,placeLocationY,newSizeX,newSizeY,false,getHouse(),true)) continue;
                 ++candidates;
                 if (overlapsReservedStructure(placeLocationX, placeLocationY, newSizeX, newSizeY)) { ++reservedRejected; continue; }
-                if ((cityZonePlacement || planningCityProductionPlots)
+                // In DuneCity every structure keeps off the reserved factory/repair plots (a
+                // factory may use its own; an emergency power plant may use any): five
+                // refineries on the heavy factory's plot left Ordos m17 without one for 80 min.
+                if ((cityZonePlacement || planningCityProductionPlots
+                        || (citySim && !(!getHouse()->hasPower()
+                            && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant))))
                     && std::any_of(cityProductionPlots.begin(),cityProductionPlots.end(),[&](const auto& plot) {
+                        if (plot.item==itemID) return false;
                         const auto size=getStructureSize(plot.item);
                         // Leave access around the future factory/repair footprint.
                         return CityPlacementPolicy::overlaps(placeLocationX,placeLocationY,newSizeX,newSizeY,
