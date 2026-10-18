@@ -145,7 +145,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const std::array<bool,8>& availab
     }
     // The starting mix is defined over the slots the house can produce in this game (ObjectData,
     // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
-    // (docs/ai-play-styles.md, section 7). A pass then plays it over the slots producible at that
+    // (docs/ai-play-styles.md, section 8). A pass then plays it over the slots producible at that
     // pass, renormalised - the factories not yet standing do not re-shape it.
     std::array<bool,8> slots = fieldableMixSlots();
     for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];

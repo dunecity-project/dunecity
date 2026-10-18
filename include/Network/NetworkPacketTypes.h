@@ -245,7 +245,7 @@
 //     [Strategy] Mode / MixWeights / TempoWeights (hashed); the mix is the prior its learned unit
 //     mix starts from, the tempo its wave readiness. An 81 peer would build and attack
 //     differently and desync. Save 9865 (the strategy).
-// 83: QuantBot starting-mix bounds (docs/ai-play-styles.md, section 7): every starting unit mix
+// 83: QuantBot starting-mix bounds (docs/ai-play-styles.md, section 8): every starting unit mix
 //     (the configured opening, the presets, Counter) gives each producible mix slot 2%-50% before
 //     the learning, the presets are re-cut within those bounds, and the Tuned ([Unit Ratios Tuned],
 //     hashed) and Bounded (random within the bounds from seed and house) mixes are new. An 82 peer

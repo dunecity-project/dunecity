@@ -15,7 +15,7 @@
 // UnitMixPolicy::allocate blends combat evidence into, so the in-game learning still moves
 // production towards what performs, exactly as it does from the learned default.
 //
-// Starting-mix bounds (docs/ai-play-styles.md, section 7): every starting mix - the configured
+// Starting-mix bounds (docs/ai-play-styles.md, section 8): every starting mix - the configured
 // opening, a preset, Tuned, Bounded and Counter - is bounded before the learning sees it: each
 // mix slot the house can produce gets 2%-50% of it (bound()); slots it cannot produce get 0 and
 // the rest is renormalised within the bounds. The learning may move away from the bounds.

@@ -16,6 +16,12 @@ playing some vanilla games from a construction yard start". Code: 1.0.844 (BWFCQ
 `bench/bench.csv` and the bench's printed tables in `bench/report.md`; the raw `samples.csv` and
 `waves.csv` (23 MB) stay out of git. Scores are from the first label's side; 95% intervals are bootstrap
 (2,000 resamples of games, fixed seed); time-outs go to the side 1,000+ credits ahead on killed value.
+**Scoring note:** every score in this file uses the legacy rule (1 win, 0 loss, adjudicated time-outs,
+interval above 0.5). The harnesses now score by placement: +1 first ... -1 last, time-outs a negative
+draw (-0.25 in a 1v1), default rule = paired difference against the control above 0
+(`docs/ai-play-styles.md` section 7). `--scoring legacy` reprints the numbers below. Section 7.3 there
+re-scores rounds 4 and 5 and the FFA: round 5's UVX `/weak` gain (+0.120 below) is +0.06 (-0.09..+0.20)
+under the placement score, so it no longer passes the rule.
 
 ### Harnesses
 
@@ -123,7 +129,8 @@ old-rules houses, all six seatings; 72 games, 144 houses per label; place 1 = la
 | **All** | **2.38 / 32 / 69** | 2.62 / 16 / 87 |
 
 Place score of BWFCQ (1 first, 0 last) 0.541 (0.50-0.58); 24 of 72 games had two or more houses alive at
-80 minutes; decided games ended at a median 55.5 minutes.
+80 minutes; decided games ended at a median 55.5 minutes. (Placement score: BWFCQ +0.006 v none -0.152,
+difference +0.16 (-0.01..+0.33), level.)
 
 **Against the classic AI Player (Hard)**, same five 1v1 maps, 180 games each: BWFCQ **0.983** (0.96-1.00,
 177-3, wins at a median 19.4 min), old rules 0.989 (178-2, 22.6 min). All five losses are on 32x32
@@ -745,7 +752,8 @@ which is what the first commit shipped. The cause was traced afterwards ("Planne
 below): the holding army stood on base rock that the AI's site search counted as occupied. With the
 footprint rule the hold applies in the city simulation as well.
 
-**Decision (applied): the QuantBot default is BWFCQ + UVX** - new optional `[Force Concentration]` keys
+**Decision (applied; under the placement score of `docs/ai-play-styles.md` section 7 the `/weak` gain is
+not significant, +0.06 (-0.09..+0.20), so this decision would not pass the current rule): the QuantBot default is BWFCQ + UVX** - new optional `[Force Concentration]` keys
 `PerimeterHold`, `PerimeterTurrets`, `SizedDefence` (code defaults true, hashed; `forceBits()` adds V, U,
 X). Saved under SAVEGAMEVERSION 9864 (1.0.844 is installed and writes 9863, so the new state is its own
 gate): the remembered enemy army (id, value, cycle; id order) and the musters (building, point, clock,
@@ -1195,10 +1203,12 @@ group keeps its own spacing; `+` is the target where no unit stands on it.)
   houses, the match seed, map and start assignment stay the same, so house and start
   differences cancel within the pair. Houses per seed: Atreides-Harkonnen, Ordos-Atreides,
   Harkonnen-Ordos (sonic tanks, devastators and deviators all appear).
-- **Score:** 1 for a win, 0 for a loss; a time-out is adjudicated on the unit trade (the side
+- **Score (when this research ran):** 1 for a win, 0 for a loss; a time-out is adjudicated on the unit trade (the side
   whose killed unit value is ahead by 1,000 credits or more wins it, else 0.5). The strict
   score (eliminations only) is reported too. 95% intervals are bootstrap intervals over a
   shape's games (2,000 resamples, fixed seed); "by seed" is the range of the per-seed scores.
+  Today `--report` uses the placement score and the paired-difference rule (`docs/ai-play-styles.md`
+  section 7); `--scoring legacy` gives this rule.
 - **Metrics per game** (`games.csv`): winner, game time, each side's killed and lost unit
   value, enemy structures destroyed, structures and army left. **Per wave** (the existing
   `formation-wave-measure.inc`): value killed and lost in the first 60 s after contact,

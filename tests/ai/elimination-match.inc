@@ -101,7 +101,7 @@ inline void sample(Game& game, bool final = false) {
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), int(house->isAlive()),
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
                 house->getKillValue(), house->getLossValue());
-        // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 7).
+        // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
 }

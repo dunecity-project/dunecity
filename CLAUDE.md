@@ -146,6 +146,15 @@ Atreides QuantBot Brutal must eliminate the four AI Player (hard) houses on the 
 Never raise the limit or remove seeds to get a change through
 (`docs/quantbot-all-against-atreides.md`).
 
+## AI test games: scoring and the default rule
+
+AI test reports (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py`) score games
+with `tests/ai/match_score.py`. The score is placement: 1st +1 ... last -1. A time-out is a negative
+draw: survivors share the top places minus 0.25, so a 1v1 draw is -0.25. A candidate becomes a default
+only when the 95% interval of its paired score difference against the control is above 0, and it is not
+worse on Fortress, Brutal and `/weak`. Report each arm's time-out rate. `--scoring legacy` is only for
+comparing old reports (`docs/ai-play-styles.md` section 7).
+
 ## Release and hosting handover
 
 Before release, website or SourceForge work, read [docs/release-operations.md](docs/release-operations.md)

@@ -176,7 +176,7 @@ struct QuantBotConfig {
     /// INI: [Strategy] Mode = Random | Fixed:<mix>,<tempo>, MixWeights, TempoWeights; optional
     /// keys (not written by save()), the code defaults apply when absent. Hashed for multiplayer.
     QuantBotStrategy::Settings strategy;
-    /// The Tuned mix strategy's starting ratios per house (docs/ai-play-styles.md, section 7),
+    /// The Tuned mix strategy's starting ratios per house (docs/ai-play-styles.md, section 8),
     /// indexed by house id (Harkonnen, Atreides, Ordos, Fremen, Sardaukar, Mercenary) over the mix
     /// slots tank, siege tank, launcher, special, ornithopter, trike, raider trike, quad (percent).
     /// INI: [Unit Ratios Tuned] <House> = t,s,l,sp,o,tr,r,q; optional keys (not written by save()),

@@ -184,7 +184,7 @@ QuantBotConfig::QuantBotConfig() {
     unitRatios.mercenary.ornithopter = 0.10f;
 
     // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned): none yet, every house plays its
-    // configured opening. docs/ai-play-styles.md, section 7.
+    // configured opening. docs/ai-play-styles.md, section 8.
     tunedRatios = {};
 
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===

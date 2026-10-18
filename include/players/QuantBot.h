@@ -879,7 +879,7 @@ private:
         /// Light vehicles kept raiding: each hunts the nearest enemy harvester (else refinery).
         int raidUnits = 0;
         /// The in-game unit-mix learning (false: production keeps the bounded starting mix all
-        /// game; the "learning off" arm of docs/ai-play-styles.md, section 7).
+        /// game; the "learning off" arm of docs/ai-play-styles.md, section 8).
         bool learning = true;
         /// The starting-mix bounds (false: the 1.0.847 unbounded starting mix, for comparison).
         bool startBounds = true;

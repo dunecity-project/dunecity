@@ -165,7 +165,7 @@
 //       picked, its unit-mix strategy and its tempo, appended to the QuantBot block after the
 //       musters. A 9864 save loads unpicked; the first update picks by the same pure function
 //       of the game seed, the house and the config.
-// 9866: QuantBot starting-mix bounds and tuned/bounded mixes (docs/ai-play-styles.md, section 7):
+// 9866: QuantBot starting-mix bounds and tuned/bounded mixes (docs/ai-play-styles.md, section 8):
 //       the starting ratios a Tuned or Bounded strategy resolved to (eight 16-bit basis points,
 //       all zero for every other mix), appended to the QuantBot block after the strategy. A 9865
 //       save loads as it is: none of its mixes needs them.

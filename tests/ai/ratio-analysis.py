@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """QuantBot starting unit ratios: analysis of the randomised, control and tuned arms
-(docs/ai-play-styles.md, section 7).
+(docs/ai-play-styles.md, section 8).
 
 Reads vanilla-match.py result directories (games.csv, houses.csv with start_mix, mix.csv with the
 composition per unit-mix slot every 10 game minutes and at the end) and prints:
@@ -449,7 +449,7 @@ def write_candidates(directory, candidates, fieldable):
     directory.mkdir(parents=True, exist_ok=True)
     for name in names:
         lines = [f'# Test-only tuned starting mix "{name}" (tests/ai/ratio-analysis.py; docs/ai-play-styles.md,',
-                 '# section 7). Label: default@<file>#Tuned-Swarm. Percent: tank, siege, launcher, special,',
+                 '# section 8). Label: default@<file>#Tuned-Swarm. Percent: tank, siege, launcher, special,',
                  '# ornithopter, trike, raider trike, quad.', '', '[Unit Ratios Tuned]']
         for house, c in candidates.items():
             if c.get(name):
