@@ -527,6 +527,9 @@ TEST_CASE("Strategy: the shipped Tuned ratios are the measured mixes, within the
     REQUIRE(ratiosText(config.getTunedRatios(0)) == "14,16,15,22,0,0,0,0,0,33");    // Harkonnen
     REQUIRE(ratiosText(config.getTunedRatios(1)) == "9,20,13,0,22,0,13,10,0,13");   // Atreides
     REQUIRE(ratiosText(config.getTunedRatios(2)) == "9,17,7,0,0,13,27,0,7,20");     // Ordos
+    REQUIRE(ratiosText(config.getTunedRatios(3)) == "11,10,13,5,8,0,18,11,13,11");  // Fremen (section 8.10)
+    REQUIRE(config.getTunedRatios(4) == UnitMixPolicy::Weights{});                  // Sardaukar: the opening
+    REQUIRE(config.getTunedRatios(5) == UnitMixPolicy::Weights{});                  // Mercenary: the opening
     // Every shipped mix of every house and band, bounded over the slots the house fields in the vanilla
     // CY games they were measured in and over every slot, as a mod might allow: 2%-50% per fieldable
     // slot, 0 for the slots it cannot field, 100% in total. The top mixes already satisfy the bounds

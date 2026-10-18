@@ -822,8 +822,9 @@ towards the same mix, the tuned start leaves more quads (Harkonnen, Ordos) and f
 
 - **Default: `Fixed:Tuned,Swarm`** - the measured per-house ratios (8.5), bounded like every starting mix
   (2%-50%). Tuned v the bounded configured ratios +0.27 (+0.09..+0.45), n=468; not worse on Base tempo,
-  Fortress, `/weak`; beats on Brutal; `quantbot_all_against_atreides` 6/6. Fremen, Sardaukar and Mercenary
-  have no tuned top mix (none beat the control, 8.10): under Tuned they play their configured opening, bounded.
+  Fortress, `/weak`; beats on Brutal; `quantbot_all_against_atreides` 6/6. Fremen has a tuned top mix (winners'
+  end, 8.10); Sardaukar and Mercenary have none (no candidate beat the control): they play their configured
+  opening, bounded.
 - **Learned** (the configured ratios, bounded) stays available: `Mode=Fixed:Learned,Swarm`.
 - **Variety:** `Mode=Random` with `MixWeights=Bounded:1` (not worse than the control).
 
@@ -936,14 +937,32 @@ interval). n = games with the candidate on that house; the house is in twice as 
 | r1 `t8-winners-end` | **+0.192** (+0.05..+0.33) n=720 | 392-323 / 5 (0.7%) |
 | confirmation `t8-best` | +0.089 (-0.02..+0.20) n=1,260 | 657-601 / 2 (0.2%) |
 
-**Decision: no Fremen, Sardaukar or Mercenary top mix is accepted**, so their top band keeps the
-configured opening, bounded (no key). Fremen with the winners' end mix is ahead in every run (+0.42, then
-+0.34 on fresh seeds), but its interval still includes 0. Sardaukar with the cost mix is worse on fresh
-seeds (interval below 0). Mercenary is level. **Harkonnen, Atreides and Ordos keep their tuned mixes:** after
-the specials change Harkonnen beats the control on fresh seeds (+0.52), and Atreides and Ordos are ahead in
-sign (+0.15, +0.11) with the earlier pooled rule (+0.27, n=468, 8.5) unchanged. The by-house Δ of the
-confirmation run puts Atreides at **+0.31** (+0.06..+0.55) and Ordos at **+0.33** (+0.06..+0.59).
+**Fremen-only confirmation** (`f8-fremen`, source 27259b1b = 99b63340 + the style `t8-fremen`: Fremen plays the
+winners' end mix, every other house's top band `Opening`, so the two labels differ only on the Fremen side).
+Fremen v each of the five other houses, both assignments, six maps, fresh seeds 76000-76130: 840 games, 420
+pairs. The effect is the paired gain (Fremen's score difference with the candidate minus with the control,
+same map, seed and opponent), bootstrapped over the pairs:
+
+| Fremen `t8-winners-end` v Learned | Effect (95% CI) | n |
+|---|---|---|
+| `c8-t8-best` (all pairs, per-house effect) | +0.34 (-0.04..+0.75) | 210 |
+| `f8-fremen` (Fremen pairs, paired gain; v Atreides +0.17, Harkonnen +0.12, Mercenary +0.05, Ordos +0.24, Sardaukar +0.45) | +0.21 (-0.005..+0.42) | 420 |
+| **both fresh-seed runs, inverse-variance combined** | **+0.24 (+0.05..+0.42)** | 630 |
+
+`f8-fremen` overall: Δ +0.112 (-0.03..+0.25) n=840, 442-395 / 3 time-outs (0.4%). Round 1 (+0.42, n=120) is
+not pooled because it chose the candidate.
+
+**Decision:**
+- **Fremen: accepted.** The winners' end mix 11,10,13,5,8,0,18,11,13,11 is the code default. Its combined
+  fresh-seed interval is above 0; the second run alone just touches 0.
+- **Sardaukar and Mercenary: not accepted.** Their top band keeps the configured opening, bounded (no key).
+  Sardaukar with the cost mix is worse on fresh seeds (interval below 0); Mercenary is level.
+- **Harkonnen, Atreides and Ordos keep their tuned mixes.** After the specials change Harkonnen beats the
+  control on fresh seeds (+0.52), and Atreides and Ordos are ahead in sign (+0.15, +0.11) with the earlier
+  pooled rule (+0.27, n=468, 8.5) unchanged. The by-house Δ of the `t8-best` run puts Atreides at
+  **+0.31** (+0.06..+0.55) and Ordos at **+0.33** (+0.06..+0.59).
+- With Fremen's mix as the default: `quantbot_all_against_atreides` 6/6 and the tuned-ratio unit tests pass.
 
 Not run (scope cut by Stefan, 2026-10-18): Brutal, Fortress and `/weak` with the band defaults, and
-exploration at tech 3-6. To continue Fremen: `t8-winners-end`, another 1,260 fresh games (seeds 75000-75060).
-Compact rows: `docs/formation-results/play-styles/ratios/{x8,r8-t8-cost,r8-t8-winners-end,c8-t8-best}`.
+exploration at tech 3-6. Compact rows: `docs/formation-results/play-styles/ratios/{x8,r8-t8-cost,
+r8-t8-winners-end,c8-t8-best,f8-fremen}`.
