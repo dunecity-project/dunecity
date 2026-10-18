@@ -94,7 +94,7 @@ int QuantBot::forceBits() const {
     const auto& force = botConfig().force;
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
-        | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
+        | (force.perimeterTurrets ? kForceThreatTurrets : 0)
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
         | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0)

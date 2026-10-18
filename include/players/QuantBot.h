@@ -992,14 +992,15 @@ private:
     /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
     /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
     /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
-    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, V, X and I
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, X and I
     /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
     /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
     /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
-    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U, V and X
-    /// are taken from QuantBotConfig::force, the others are test-only):
+    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U and X
+    /// are taken from QuantBotConfig::force, the others are test-only; the perimeter hold V was
+    /// removed in protocol 84 - docs/formations.md "Free-for-all: finishing the game"):
     /// kForceEstimate (E: D measures the remembered enemy army,
     /// enemyThreatEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
     /// that estimate outnumbers us, no wave launches and the reserve holds the protected
@@ -1030,15 +1031,15 @@ private:
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304,
+        kForceThreatTurrets = 1048576, kForceOpeningReadiness = 4194304,
         kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
         kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
     int forceStrengthBps = 10000;
-    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X, I,
-    /// T, P, H and K.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, X, I,
+    /// T, P, H, K and S.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
@@ -1072,10 +1073,9 @@ private:
     bool outnumberedByEstimate() const;
     mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
     mutable bool estimateOutnumbered = false;
-    /// kForceGarrison (G) or kForcePerimeterHold (V) in effect now: outnumbered by the
-    /// estimate, so no wave leaves and the reserve holds at home - G at the protected rally,
-    /// V on the base perimeter facing the enemy (perimeterPoint()).
-    bool garrisoned() const { return forceVariant(kForceGarrison | kForcePerimeterHold) && outnumberedByEstimate(); }
+    /// kForceGarrison (G, test-only) in effect now: outnumbered by the estimate, so no wave
+    /// leaves and the reserve holds at the protected rally.
+    bool garrisoned() const { return forceVariant(kForceGarrison) && outnumberedByEstimate(); }
     /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
     /// base centre along the observed front direction, the farthest own building within
     /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
