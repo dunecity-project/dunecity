@@ -61,6 +61,7 @@
 #include "elimination-match.inc"
 #include "vanilla-match.inc"
 #include "../performance/game-perf.inc"
+#include "scenario-match.inc"
 #include <FileClasses/INIFile.h>
 
 int runCampaignBalanceProbe() {
@@ -76,13 +77,18 @@ int runCampaignBalanceProbe() {
         : enemy == "brutal" ? "qBotBrutal" : "qBotEasy";
     if(std::getenv("BALANCE_ENEMY_AI") && std::string(std::getenv("BALANCE_ENEMY_AI")) == "ai-player")
         enemyClass = enemy == "hard" ? "AIPlayerHard" : enemy == "medium" ? "AIPlayerMedium" : "AIPlayerEasy";
+    // The campaign menu's "scenario settings" enemy (HouseChoiceMenu kEnemyAIClasses).
+    if(std::getenv("BALANCE_ENEMY_AI") && std::string(std::getenv("BALANCE_ENEMY_AI")) == "campaign")
+        enemyClass = "CampaignAIPlayer";
     const int percent = std::atoi(std::getenv("BALANCE_ATTACK_PERCENT"));
     const auto humanHouse=static_cast<HOUSETYPE>(std::getenv("BALANCE_HOUSE") ? std::atoi(std::getenv("BALANCE_HOUSE")) : HOUSE_HARKONNEN);
     const std::string requestedMod=std::getenv("BALANCE_MOD") ? std::getenv("BALANCE_MOD") : "vanilla";
     if(!ModManager::instance().setActiveMod(requestedMod)
        || ModManager::instance().getActiveModName()!=requestedMod)
         throw std::runtime_error("Requested probe mod did not activate: "+requestedMod);
-    if(std::getenv("BALANCE_DEGRADATION_PROBE"))
+    // A scenario-matrix game takes its rules from its mod, as a new Custom Game or campaign does.
+    const bool scenario=std::getenv("BALANCE_SCENARIO")!=nullptr;
+    if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario)
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
     if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {
@@ -110,6 +116,11 @@ int runCampaignBalanceProbe() {
         applyGameOptionsFromConfig(optionsFile, "Game Options", settings.gameOptions);
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
+    // Scenario matrix: a campaign mission other than the level's first (levels 2-8 have three).
+    if (const char* mission = std::getenv("BALANCE_MISSION")) {
+        init.mission = std::atoi(mission); // Test-only access, provided by -fno-access-control.
+        init.filename = GameInitSettings::getScenarioFilename(humanHouse, init.mission);
+    }
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
         std::ifstream file(customMap);
@@ -117,6 +128,18 @@ int runCampaignBalanceProbe() {
         const std::string contents((std::istreambuf_iterator<char>(file)),std::istreambuf_iterator<char>());
         init=GameInitSettings(customMap,contents,true,settings.gameOptions);
     }
+    // Scenario matrix: every house's team and controller, and optionally a generated Random
+    // Skirmish map (one start per side) instead of a map file.
+    const std::vector<ScenarioMatch::Side> scenarioSides=ScenarioMatch::sidesFromEnv();
+    const char* skirmishSpec=std::getenv("BALANCE_SKIRMISH");
+    bool constructionYardOnly=false;
+    if(skirmishSpec) {
+        if(customMap || scenarioSides.empty()) throw std::runtime_error("A skirmish scenario needs sides and no custom map");
+        const ScenarioMatch::Skirmish skirmish=ScenarioMatch::parseSkirmish(skirmishSpec,static_cast<int>(scenarioSides.size()));
+        constructionYardOnly=skirmish.constructionYardOnly;
+        init=ScenarioMatch::makeSkirmishInit(skirmish,settings.gameOptions);
+    }
+    if(!scenarioSides.empty() && !customMap && !skirmishSpec) throw std::runtime_error("Scenario sides need a map");
     // Formation duel: a generated Random Skirmish 1v1 instead of a campaign level or map file.
     const bool duel=std::getenv("BALANCE_DUEL_MAP_SIZE")!=nullptr;
     std::vector<FormationDuel::Side> duelSides;
@@ -142,7 +165,9 @@ int runCampaignBalanceProbe() {
     init.setLocalSpectator(localSpectator);
     init.setMultiplePlayersPerHouse(!localSpectator);
     std::vector<std::pair<int,int>> roster;
-    if(customMap && !loadSave) {
+    if(!scenarioSides.empty() && !loadSave) {
+        for(const auto& side : scenarioSides) roster.emplace_back(side.house, side.team);
+    } else if(customMap && !loadSave) {
         std::istringstream input(std::getenv("BALANCE_ROSTER") ? std::getenv("BALANCE_ROSTER") : "");
         std::string slot;
         while(std::getline(input,slot,',')) {
@@ -167,6 +192,10 @@ int runCampaignBalanceProbe() {
                 const auto side = std::find_if(matchSides.begin(), matchSides.end(), [h=h](const auto& s) { return s.house == h; });
                 if (side == matchSides.end()) throw std::runtime_error("A roster house has no vanilla match side");
                 playerClass = VanillaMatch::playerClass(*side, enemy);
+            }
+            if (!scenarioSides.empty()) {
+                const auto side = std::find_if(scenarioSides.begin(), scenarioSides.end(), [h=h](const auto& s) { return s.house == h; });
+                playerClass = side->playerClass;
             }
             info.addPlayerInfo({getHouseNameByNumber(static_cast<HOUSETYPE>(h)),playerClass});
         }
@@ -384,6 +413,8 @@ int runCampaignBalanceProbe() {
         FormationDuel::report(*game, duelSides);
     } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
         FormationWaveMeasure::run(*game, end, [&]() { ProbeDigest::periodic(*game); return false; });
+    } else if (scenario) {
+        outcome = ScenarioMatch::run(*game, end, scenarioSides.empty(), humanHouse, constructionYardOnly);
     } else if (!matchSides.empty()) {
         VanillaMatch::run(*game, end, matchSides);
     } else if (std::getenv("BALANCE_ELIMINATION_MATCH")) {

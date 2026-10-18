@@ -1016,17 +1016,27 @@ private:
     /// OpeningReadiness, default on since protocol 81: a house that started without an army able
     /// to launch a wave - a Construction Yard start - holds its first ground wave for full
     /// readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
+    /// Late game (docs/formations.md, "Free-for-all: finishing the game"; [Force Concentration]
+    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves): kForceTurretPriority (T: a wave
+    /// hunter in an enemy turret's reach that is not shooting an armed unit attacks the turret),
+    /// kForcePressOn (P: a wave member out of visible targets hunts on to the nearest enemy
+    /// structure seen), kForceFinishWeakest (H: a ground wave hunts towards the weakest known
+    /// enemy house's production and economy) and kForceFortifiedWaves (K: against an objective
+    /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304;
+        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304,
+        kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
+        kForceFortifiedWaves = 67108864;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
     int forceStrengthBps = 10000;
-    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X and I.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X, I,
+    /// T, P, H and K.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
@@ -1099,6 +1109,26 @@ private:
     bool focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies);
     /// Attack-value focus fire without overkill over \a hunters (sorted by object id).
     void focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, const std::vector<const ObjectBase*>& enemies);
+    /// kForceTurretPriority (T): \a unit, a hunter not shooting an armed unit in its reach, attacks
+    /// the nearest enemy turret among \a turrets that has it in reach (or that it reaches); true if
+    /// it was given that target.
+    bool attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets);
+    /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
+    /// or power line: what a player knows stands there.
+    bool knownEnemyStructure(const StructureBase* structure) const;
+    /// kForceFinishWeakest (H): the enemy team to finish - of the teams with a known structure,
+    /// the weakest by remembered army plus kKnownTurretValue per known turret (ties: fewer known
+    /// structures, then the lower team id); -1 when none is known.
+    int finishTargetTeam() const;
+    /// H's objective for a wave led by \a lead: the nearest known structure of \a team the lead can
+    /// reach by ground, production and economy (yard, factories, refinery) counted 20 tiles nearer.
+    const ObjectBase* finishObjective(const UnitBase* lead, int team) const;
+    /// kForcePressOn (P): the nearest known enemy structure to \a unit (of \a team, or any when -1)
+    /// it can reach by ground, from \a known (the known enemy structures of this pass), or nullptr.
+    const StructureBase* pressOnTarget(const UnitBase* unit, const std::vector<const StructureBase*>& known,
+                                       int team) const;
+    /// kForceFortifiedWaves (K): known enemy turrets within kFortifiedRadiusTiles of \a objective.
+    int knownTurretsNear(const ObjectBase* objective) const;
     /// Distant defenders gathering before they engage at an attacked building (kForceMuster).
     struct Muster {
         Uint32 building = NONE_ID;
@@ -1181,7 +1211,8 @@ private:
             stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
-            turretsBuilt = 0, turretsLost = 0, raidOrders = 0;
+            turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
+            finishWaves = 0, fortifiedHolds = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets

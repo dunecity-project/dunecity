@@ -284,6 +284,45 @@ inline bool onPerimeterBand(int along, int across, int depth) {
         && std::abs(across) <= kPerimeterHalfWidth;
 }
 
+// ---- Late game: finishing the game (docs/formations.md, "Free-for-all: finishing the game") ------
+
+/// H weighs each known enemy turret as this many credits of army ...
+constexpr int kKnownTurretValue = 250;
+/// ... and its objective counts production and economy (yard, factories, refinery) this much nearer.
+constexpr int kFinishPriorityTiles = 20;
+
+/// What H knows of an enemy team: its remembered army, known turrets and known structures.
+struct TeamStrength {
+    int team = -1;
+    int64_t army = 0;
+    int turrets = 0;
+    int structures = 0;
+};
+
+/// Is \a a the weaker team to finish (army + kKnownTurretValue per turret; ties: fewer known
+/// structures, then the lower team id)?
+inline bool weakerTeam(const TeamStrength& a, const TeamStrength& b) {
+    const int64_t sa = a.army + int64_t(kKnownTurretValue) * a.turrets;
+    const int64_t sb = b.army + int64_t(kKnownTurretValue) * b.turrets;
+    if (sa != sb) return sa < sb;
+    if (a.structures != b.structures) return a.structures < b.structures;
+    return a.team < b.team;
+}
+
+/// K: an objective with at least kFortifiedTurrets known turrets within kFortifiedRadiusTiles is
+/// fortified; a wave against it needs kFortifiedLimitPercent of the military limit (or the normal
+/// readiness if more), unless the last wave left kFortifiedMaxHoldMs ago.
+constexpr int kFortifiedRadiusTiles = 12;
+constexpr int kFortifiedTurrets = 8;
+constexpr int kFortifiedLimitPercent = 60;
+constexpr int kFortifiedMaxHoldMs = 240000;
+
+/// The value a ready wave needs against an objective with \a turrets known turrets nearby.
+inline int64_t fortifiedReady(int64_t required, int64_t militaryLimit, int turrets) {
+    if (turrets < kFortifiedTurrets) return required;
+    return std::max(required, militaryLimit * kFortifiedLimitPercent / 100);
+}
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy

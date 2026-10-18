@@ -408,8 +408,35 @@ def baseline_table(args, games, houses):
                   f'{c.verdict} {args.baseline} |')
 
 
+def baseline_tag_table(args, games, houses, base_games, base_houses):
+    """Each pairing x:y against --baseline-tag T: x's side paired with x's side in T's game of the same
+    pairing with the same difficulty, map, seed and houses (the same setup played by another code version)."""
+    setup = lambda r, t: (r['difficulty'], r['map'], r['seed'], r['house'], t['house'])
+    print(f'\nPaired against tag {args.baseline_tag} (the same pairing and side in the same setup - difficulty, map, '
+          f'seed and houses - played by the baseline tag\'s code; difference = own score - baseline\'s, 95% bootstrap; '
+          f'time-outs own / baseline):\n')
+    print(f'| Pairing | Paired games | Score | Tag {args.baseline_tag} score | Difference (95% CI) | Time-outs | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for pair in args.pairs.split(','):
+        x, y = pair.split(':')
+        base = {}
+        for r in pair_scores(base_games, base_houses, x, y, args):
+            base.setdefault(setup(r[3], r[4]), r)
+        paired = [(r[1], base[setup(r[3], r[4])][1], r[6], base[setup(r[3], r[4])][6])
+                  for r in pair_scores(games, houses, x, y, args) if setup(r[3], r[4]) in base]
+        c = match_score.compare(paired, 20261017, 'placement')
+        if c:
+            print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
+                  f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
+                  f'{c.verdict} tag {args.baseline_tag} |')
+
+
 def report_pairs(args, games, houses, samples, waves):
     print(f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    base_games = [g for g in games if g['tag'] == args.baseline_tag]
+    base_houses = [h for h in houses if h['tag'] == args.baseline_tag]
+    games = [g for g in games if g['tag'] != args.baseline_tag]
+    houses = [h for h in houses if h['tag'] != args.baseline_tag]
     if args.scores:
         write_scores(games, houses, args)
     print(f'| Pairing (first label\'s side) | Games | {score_columns(args)} | Strict | Elim. W-L / time-outs | '
@@ -431,6 +458,8 @@ def report_pairs(args, games, houses, samples, waves):
               f'{lost:.1f} / {destroyed:.1f} | {compare(rows, args).verdict} {y} |')
     if args.baseline:
         baseline_table(args, games, houses)
+    if args.baseline_tag:
+        baseline_tag_table(args, games, houses, base_games, base_houses)
     # Per map (and difficulty) breakdown.
     print(f'\n| Pairing | Map | Difficulty | Games | {score_columns(args)} | Elim. W-L / time-outs | Median end min |')
     print('|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
@@ -579,7 +608,7 @@ def report_ffa_tags(args, valid, rows, scored):
     the time-out penalty: -0.25 x survivors / houses, 0 when one house is left) paired with the
     control tag's game on the same map and seed."""
     tags = sorted(args.tags)
-    control = args.control_tag or tags[0]
+    control = args.baseline_tag or tags[0]
     per_game = defaultdict(list)
     for h in rows:
         per_game[tuple(h[k] for k in KEY)].append(scored[id(h)])
@@ -664,19 +693,25 @@ def report_ffa_army(args, games, houses, waves, army):
 
 def report(args):
     results = Path(args.results)
-    tags = set(args.tags or [args.tag])
+    tags = set(args.tags or [args.tag]) | ({args.baseline_tag} if args.baseline_tag else set())
     args.tags = tags
     keep = lambda r: r['tag'] in tags and (args.difficulty_filter is None or r['difficulty'] == args.difficulty_filter)
-    games = [g for g in read(results / 'games.csv') if keep(g)]
-    houses = [h for h in read(results / 'houses.csv') if keep(h)]
+    extra = Path(args.baseline_results) if args.baseline_results else None
+    if extra and extra.resolve() == results.resolve():
+        extra = None
+
+    def load(name):
+        rows = [r for r in read(results / name) if keep(r)]
+        if extra:
+            rows += [r for r in read(extra / name) if keep(r) and r['tag'] == args.baseline_tag]
+        return rows
+    games, houses = load('games.csv'), load('houses.csv')
     if args.ffa:
         report_ffa(args, games, houses)
-        report_ffa_army(args, games, houses, [w for w in read(results / 'waves.csv') if keep(w)],
-                        [a for a in read(results / 'army.csv') if keep(a)])
+        report_ffa_army(args, games, houses, load('waves.csv'), load('army.csv'))
         return
-    samples = [s for s in read(results / 'samples.csv') if keep(s)]
-    waves = [w for w in read(results / 'waves.csv') if keep(w)]
-    report_pairs(args, games, houses, samples, waves)
+    other = lambda rows: [r for r in rows if r['tag'] != args.baseline_tag]
+    report_pairs(args, games, houses, other(load('samples.csv')), other(load('waves.csv')))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -699,8 +734,10 @@ parser.add_argument('--game-options', type=Path,
                     help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
                          'tests/performance/data/stefan-game-options.ini)')
 parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
-parser.add_argument('--control-tag', help='FFA report with one label: the tag every other tag is compared with '
-                                          '(default the first tag in sort order)')
+parser.add_argument('--baseline-tag', help='Report: compare with this tag (another code version, e.g. the last release): '
+                                           '1v1 pairings side by side in the same setup; a one-label FFA game by game '
+                                           '(default the first tag in sort order)')
+parser.add_argument('--baseline-results', help='Directory of the --baseline-tag rows (default --results)')
 parser.add_argument('--baseline', help='1v1 report: also pair each first label with this label\'s side against the same '
                                        'opponent in the same setups (e.g. the old default, for a candidate v none)')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
