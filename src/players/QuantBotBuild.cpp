@@ -2391,7 +2391,20 @@ void QuantBot::build(int militaryValue) {
             const int price=int(offer.price);
             int bps=0;
             for (size_t i=0;i<mixItems.size();++i) if (mixItems[i]==item) bps=unitMix[i];
-            if (item==Unit_SonicTank || item==Unit_Deviator || item==Unit_Devastator) bps=unitMix[3];
+            // The special share is one share for every special the house can build: split
+            // between them, so a house fielding all three cannot build three times the share.
+            if (item==Unit_Devastator || item==Unit_SonicTank || item==Unit_Deviator) {
+                const std::array<Uint32,3> specialItems = {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
+                std::array<bool,3> buildable{};
+                for (size_t s=0;s<3;++s) {
+                    const auto& spec=data[specialItems[s]][houseID];
+                    buildable[s]=spec.enabled && spec.price>0 && spec.builder!=ItemID_Invalid
+                        && spec.techLevel<=currentGame->techLevel;
+                }
+                const auto shares=UnitMixPolicy::splitShare(unitMix[3],buildable);
+                bps=0;
+                for (size_t s=0;s<3;++s) if (specialItems[s]==item) bps=shares[s];
+            }
             if (item==Unit_Soldier || item==Unit_Infantry || item==Unit_Trooper || item==Unit_Troopers) bps=infantryPercent*100;
             const int64_t deficit=int64_t(vehiclePlanValue)*bps-int64_t(itemCount[item])*value*10000;
             int score=QuantBotSpendingPolicy::militaryScore(price,value,militaryValue,militaryBudget,defendingEconomy);

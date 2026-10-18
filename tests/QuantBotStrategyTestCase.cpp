@@ -520,3 +520,17 @@ TEST_CASE("Strategy: the shipped Tuned ratios are the measured mixes, within the
         for (size_t i = 0; i < 8; ++i) REQUIRE(kept[i] == (own[size_t(house)][i] ? weights[i] : 0));
     }
 }
+
+TEST_CASE("Strategy: a house that builds several specials splits the special share", "[ai][strategy][specials]") {
+    // Devastator, Sonic Tank, Deviator. One special: the whole share, as before.
+    REQUIRE(UnitMixPolicy::splitShare(2200, std::array<bool, 3>{true, false, false}) == std::array<int, 3>{2200, 0, 0});
+    REQUIRE(UnitMixPolicy::splitShare(2200, std::array<bool, 3>{false, true, false}) == std::array<int, 3>{0, 2200, 0});
+    // Two or three: the share is divided (remainder to the lowest buildable), never given to each.
+    REQUIRE(UnitMixPolicy::splitShare(2200, std::array<bool, 3>{true, true, false}) == std::array<int, 3>{1100, 1100, 0});
+    REQUIRE(UnitMixPolicy::splitShare(2201, std::array<bool, 3>{true, false, true}) == std::array<int, 3>{1101, 0, 1100});
+    const auto three = UnitMixPolicy::splitShare(1000, std::array<bool, 3>{true, true, true});
+    REQUIRE(three == std::array<int, 3>{334, 333, 333});
+    REQUIRE(three[0] + three[1] + three[2] == 1000);
+    REQUIRE(UnitMixPolicy::splitShare(1000, std::array<bool, 3>{}) == std::array<int, 3>{});
+    REQUIRE(UnitMixPolicy::splitShare(0, std::array<bool, 3>{true, true, true}) == std::array<int, 3>{});
+}
