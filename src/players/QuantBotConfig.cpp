@@ -257,9 +257,9 @@ QuantBotConfig::QuantBotConfig() {
     force.waveReadinessPercent = 60;
     force.bundle = true;
     force.launchFromBundle = true;
-    // Round 5 (defence while outnumbered, /weak duels): perimeter turrets and sized defences
-    // (UX). The perimeter hold V was removed in protocol 84 (placement-score ablation, docs/
-    // formations.md "Free-for-all: finishing the game"); an old PerimeterHold key is ignored.
+    // Round 5 (defence while outnumbered, /weak duels): holding the perimeter with perimeter
+    // turrets and sized defences (UVX) beats BWFCQ as the outnumbered side.
+    force.perimeterHold = true;
     force.perimeterTurrets = true;
     force.sizedDefence = true;
     // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
@@ -542,6 +542,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
         iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
         iniFile.setBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+        iniFile.setBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
         iniFile.setBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
         iniFile.setBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
         iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
@@ -636,6 +637,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
     force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
     force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+    force.perimeterHold = iniFile.getBoolValue("Force Concentration", "PerimeterHold", force.perimeterHold);
     force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
     force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
     force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
@@ -1064,6 +1066,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("waveReadinessPercent", force.waveReadinessPercent);
     addNamed("bundle", force.bundle);
     addNamed("launchFromBundle", force.launchFromBundle);
+    addNamed("perimeterHold", force.perimeterHold);
     addNamed("perimeterTurrets", force.perimeterTurrets);
     addNamed("sizedDefence", force.sizedDefence);
     addNamed("openingReadiness", force.openingReadiness);

@@ -59,17 +59,17 @@ void runForceConcentrationProbe(Game& game) {
     // ---- 1. Defaults -----------------------------------------------------------------------
     const QuantBotConfig defaults;
     require(defaults.force.focusFire && defaults.force.converge && defaults.force.waveReadinessPercent==60
-        && defaults.force.bundle && defaults.force.launchFromBundle
+        && defaults.force.bundle && defaults.force.launchFromBundle && defaults.force.perimeterHold
         && defaults.force.perimeterTurrets && defaults.force.sizedDefence && defaults.force.openingReadiness,
         "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it"
-        " + perimeter turrets + sized defence + opening readiness");
+        " + perimeter hold + perimeter turrets + sized defence + opening readiness");
     const auto& loaded=getQuantBotConfig();
     require(loaded.force.focusFire && loaded.force.converge && loaded.force.waveReadinessPercent==60
-        && loaded.force.bundle && loaded.force.launchFromBundle
+        && loaded.force.bundle && loaded.force.launchFromBundle && loaded.force.perimeterHold
         && loaded.force.perimeterTurrets && loaded.force.sizedDefence && loaded.force.openingReadiness,
         "The shipped QuantBot configuration did not load the force defaults");
     require(bot->forceBits()==(QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceBundle
-            |QuantBot::kForceBundleGate|QuantBot::kForceThreatTurrets
+            |QuantBot::kForceBundleGate|QuantBot::kForcePerimeterHold|QuantBot::kForceThreatTurrets
             |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness) && bot->waveReadinessPercent()==60,
         "Custom Hard does not use the configured force rules");
     bot->difficulty=QuantBot::Difficulty::Medium;
@@ -530,10 +530,9 @@ void runForceConcentrationProbe(Game& game) {
             SDL_Log("FORCE_PROBE: memory remembered=%zu estimate=%lld own=%lld",bot->enemySightings.size(),
                 (long long)bot->enemyThreatEstimate(),(long long)bot->ownGroundArmyValue());
 
-            // Outnumbered (9 tanks against 2): perimeter turrets wanted; no garrison (the perimeter
-            // hold V was removed in protocol 84, only the test-only G holds).
+            // Outnumbered (9 tanks against 2): garrisoned, perimeter turrets wanted.
             ++game.gameCycleCount;
-            require(bot->outnumberedByEstimate() && !bot->garrisoned(),"Nine remembered tanks against two did not outnumber us");
+            require(bot->outnumberedByEstimate() && bot->garrisoned(),"Nine remembered tanks against two did not outnumber us");
             const int goal=bot->perimeterTurretGoal();
             require(goal>0 && goal==Force::perimeterTurretGoal(bot->ownGroundArmyValue(),bot->enemyThreatEstimate()),
                 "The perimeter turret goal does not follow the enemy's lead");
@@ -564,11 +563,11 @@ void runForceConcentrationProbe(Game& game) {
                 SDL_Log("FORCE_PROBE: ffa threat own=%lld sum=%lld strongest_team=%lld outnumbered=%d",
                     (long long)bot->ownGroundArmyValue(),(long long)sum,(long long)split,int(splitOutnumbered));
                 require(split*2==sum && Force::outnumbered(bot->ownGroundArmyValue(),sum) && !splitOutnumbered
-                    && bot->perimeterTurretGoal()==0,
+                    && !bot->garrisoned() && bot->perimeterTurretGoal()==0,
                     "Two enemy houses fighting each other outnumbered us by their sum");
                 third->teamID=enemy->getTeamID();
                 ++game.gameCycleCount;
-                require(bot->enemyThreatEstimate()==sum && bot->outnumberedByEstimate(),
+                require(bot->enemyThreatEstimate()==sum && bot->outnumberedByEstimate() && bot->garrisoned(),
                     "Two allied enemy houses did not outnumber us together");
                 third->teamID=savedTeam;
                 for(auto* unit:extra) unit->setHealth(0);
@@ -616,9 +615,8 @@ void runForceConcentrationProbe(Game& game) {
                 ++game.gameCycleCount;
                 require(bot->perimeter().point==perimeter.point,"Without the streets the perimeter point moved");
             }
-            // The outnumbered reserve no longer holds the perimeter (V removed): with the posture
-            // machine on and the house offensive it forms up at the offensive staging point, in
-            // the vanilla game and the city simulation alike.
+            // The garrison holds the perimeter (the house anchor, with the posture machine on), in
+            // the city simulation too: the footprint rule keeps it off planned sites (section 8).
             getQuantBotConfig().recovery.enabled=true;
             bot->armyPosture=ArmyPosturePolicy::Posture::Offensive;
             bot->localSquadWithdraw=false;
@@ -628,10 +626,8 @@ void runForceConcentrationProbe(Game& game) {
             game.citySimEnabled_=true;
             const Coord cityAnchor=bot->armyAssemblyAnchor();
             game.citySimEnabled_=savedCitySim;
-            const Coord staging=bot->offensiveStagingLocation();
-            require(!bot->garrisoned() && !bot->reserveHeldHome() && staging.isValid()
-                && vanillaAnchor==staging && cityAnchor==staging,
-                "The outnumbered reserve did not form up at the offensive staging point");
+            require(vanillaAnchor==perimeter.point && cityAnchor==perimeter.point && bot->reserveHeldHome(),
+                "The outnumbered reserve does not hold the perimeter");
             getQuantBotConfig().recovery.enabled=false;
             // A perimeter turret site: on the band and legal, and none when the band has no
             // legal ground at all (rock that is free and in build range).
@@ -650,13 +646,14 @@ void runForceConcentrationProbe(Game& game) {
                     && currentGameMap->okayToPlaceStructure(site.x,site.y,1,1,false,owner,false,Structure_RocketTurret),
                     "The perimeter turret site is off the band or not legal");
             else require(legalBand==0,"No perimeter turret site although the band has legal ground");
-            // The attack check is not held by a garrison while outnumbered (V removed).
+            // No wave leaves while outnumbered.
             if(owner->getNumItems(Structure_RepairYard)==0)
                 require(place(owner,Structure_RepairYard,Coord(10,16)),"Fixture repair yard placement failed");
             bot->militaryValueLimit=1000;
             bot->forceStats=QuantBot::ForceStats();
             bot->attack(1000000);
-            require(bot->forceStats.garrisonHolds==0,"The outnumbered attack check was held by a garrison");
+            for(auto* unit:ours) require(unit->getAttackMode()!=HUNT,"A wave left while outnumbered");
+            require(bot->forceStats.garrisonHolds==1,"The outnumbered attack check was not held by the garrison");
 
             // Save/load carries the memory and the musters byte for byte; 9862 has neither.
             QuantBot::Muster muster;

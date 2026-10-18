@@ -29,7 +29,7 @@ struct Side {
     int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged),
                                 ///< +s (stage near the enemy), +e (stage only with local superiority)
     int force = 0;              ///< QuantBot::forceVariantOverride bits from the uppercase flags (+F, +C, +P, +H, +M, +L, +Q,
-                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +I)
+                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +V, +I)
     int strengthBps = 10000;    ///< QuantBot::forceStrengthBps from /k<percent> (A's k)
     bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
     bool aiPlayer = false;      ///< label "ai": the classic AI Player controls this house (vanilla matches only)
@@ -125,6 +125,7 @@ inline std::vector<Side> parseSides(const std::string& text, bool allowAI) {
                 else if (flag == 'X') side.force |= QuantBot::kForceSizedDefence;
                 else if (flag == 'Y') side.force |= QuantBot::kForceFallBack;
                 else if (flag == 'U') side.force |= QuantBot::kForceThreatTurrets;
+                else if (flag == 'V') side.force |= QuantBot::kForcePerimeterHold;
                 else if (flag == 'I') side.force |= QuantBot::kForceOpeningReadiness;
                 else throw std::runtime_error("Unknown duel variant flag: " + entry);
             }
