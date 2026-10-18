@@ -136,8 +136,9 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness; optional
-    /// keys, the code defaults apply when absent. Hashed for multiplayer.
+    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness,
+    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves; optional keys, the code defaults
+    /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
         /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
@@ -168,6 +169,20 @@ struct QuantBotConfig {
         /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
         /// "Scenario tests").
         bool openingReadiness;
+        /// Late game (docs/formations.md, "Free-for-all: finishing the game"): a wave hunter
+        /// standing in an enemy turret's reach while it is not shooting an armed unit attacks
+        /// that turret (ranged units from beyond it where they outrange it).
+        bool turretPriority;
+        /// A wave member whose engine Hunt ran out of visible targets hunts on towards the
+        /// nearest enemy structure its house has seen, instead of standing in the field or
+        /// walking back to the bundle; the next wave meets it there.
+        bool pressOn;
+        /// A ground wave goes for the weakest enemy house it knows of (remembered army and
+        /// seen turrets), hunting towards that house's production and economy.
+        bool finishWeakest;
+        /// Against an objective guarded by many seen turrets a ready wave waits (at most three
+        /// minutes) for a bigger army before it leaves.
+        bool fortifiedWaves;
     };
     ForceSettings force;
 

@@ -95,7 +95,9 @@ int QuantBot::forceBits() const {
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
         | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
-        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0);
+        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
+        | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
+        | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -413,9 +415,10 @@ void QuantBot::focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, 
 void QuantBot::concentrateForces() {
     const bool noOverkill = forceVariant(kForceNoOverkill);
     const bool focus = forceVariant(kForceFocusFire) && !noOverkill, convergeOn = forceVariant(kForceConverge);
+    const bool turretsFirst = forceVariant(kForceTurretPriority);
     if (forceVariant(kForceMuster) || !musters.empty()) updateMusters();
     if (!splits.empty()) updateSplits();
-    if (!focus && !convergeOn && !noOverkill) return;
+    if (!focus && !convergeOn && !noOverkill && !turretsFirst) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
     // Visible enemy ground units and buildings, in list order.
@@ -429,6 +432,11 @@ void QuantBot::concentrateForces() {
             && structure->isVisible(myTeam))
             enemies.push_back(structure);
     if (enemies.empty()) return;
+    // Their turrets (armed buildings), for T.
+    std::vector<const ObjectBase*> turrets;
+    if (turretsFirst)
+        for (const auto* enemy : enemies)
+            if (enemy->isAStructure() && enemy->canAttack()) turrets.push_back(enemy);
     // Our hunters: the wave members and the base defenders (engine Hunt, not forced).
     auto hunter = [&](const UnitBase* unit) {
         return unit->getOwner() == getHouse() && unit->getHealth() > 0 && unit->isActive() && unit->isRespondable()
@@ -461,6 +469,8 @@ void QuantBot::concentrateForces() {
     }
     for (const auto* unit : getUnitList()) {
         if (!hunter(unit) || escaping(unit)) continue;
+        if (!turrets.empty() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave && attackTurretInReach(unit, turrets))
+            continue;
         if (focus && focusFire(unit, enemies)) continue;
         if (fights.empty() || unitRole(unit, {UnitRole::Wave}) != UnitRole::Wave || unit->formationContact()) continue;
         // Not fighting: the nearest fight of our army (ties to the first in list order, which
@@ -479,6 +489,107 @@ void QuantBot::concentrateForces() {
         doHuntToward(unit, fight.x, fight.y);
         ++forceStats.converges;
     }
+}
+
+bool QuantBot::attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets) {
+    // Units first (focus fire): a hunter already shooting an armed unit in its reach keeps it, and
+    // one already on a turret keeps that turret.
+    const int myTeam = getHouse()->getTeamID();
+    const ObjectBase* current = unit->getTarget();
+    if (current && current->getHealth() > 0 && current->getOwner() && current->getOwner()->getTeamID() != myTeam
+        && armed(current) && (current->isAStructure() || unit->isInWeaponRange(current))) return false;
+    // The nearest turret that has this unit in its reach, or that the unit reaches (ties: list order).
+    const Coord at = unit->getLocation();
+    const ObjectBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* turret : turrets) {
+        const int distance = tiles(at, turret->getClosestPoint(at));
+        if (distance > std::max(turret->getWeaponRange() + 1, unit->getWeaponRange())) continue;
+        if (best && distance >= bestDistance) continue;
+        if (!unit->canAttack(turret)) continue;
+        best = turret; bestDistance = distance;
+    }
+    if (!best) return false;
+    doAttackObject(unit, best, false);
+    ++forceStats.turretTargets;
+    return true;
+}
+
+bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
+    if (!structure->getOwner() || structure->getOwner()->getTeamID() == getHouse()->getTeamID()
+        || structure->getHealth() <= 0) return false;
+    switch (structure->getItemID()) {
+        case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            return false;
+        default: break;
+    }
+    const Coord at = structure->getLocation();
+    return getMap().tileExists(at) && getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID());
+}
+
+int QuantBot::finishTargetTeam() const {
+    // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
+    std::map<int, Force::TeamStrength> teams;
+    for (const auto* structure : getStructureList()) {
+        if (!knownEnemyStructure(structure)) continue;
+        auto& team = teams[structure->getOwner()->getTeamID()];
+        team.team = structure->getOwner()->getTeamID();
+        ++team.structures;
+        if (structure->canAttack()) ++team.turrets;
+    }
+    for (const auto& [id, sighting] : enemySightings)
+        if (const auto* unit = getObject(id); unit && unit->getOwner()) {
+            const auto found = teams.find(unit->getOwner()->getTeamID());
+            if (found != teams.end()) found->second.army += sighting.value;
+        }
+    const Force::TeamStrength* weakest = nullptr;
+    for (const auto& [id, team] : teams)
+        if (!weakest || Force::weakerTeam(team, *weakest)) weakest = &team;
+    return weakest ? weakest->team : -1;
+}
+
+const ObjectBase* QuantBot::finishObjective(const UnitBase* lead, int team) const {
+    if (!lead || team < 0) return nullptr;
+    const ObjectBase* chosen = nullptr;
+    int best = std::numeric_limits<int>::max();
+    for (const auto* structure : getStructureList()) {
+        if (!knownEnemyStructure(structure) || structure->getOwner()->getTeamID() != team) continue;
+        int score = tiles(lead->getLocation(), structure->getLocation());
+        switch (structure->getItemID()) {
+            case Structure_ConstructionYard: case Structure_HeavyFactory: case Structure_LightFactory:
+            case Structure_HighTechFactory: case Structure_Refinery:
+                score -= Force::kFinishPriorityTiles; break;
+            default: break;
+        }
+        if (score >= best || !groundAttackReachable(lead, structure)) continue;
+        best = score; chosen = structure;
+    }
+    return chosen;
+}
+
+const StructureBase* QuantBot::pressOnTarget(const UnitBase* unit, const std::vector<const StructureBase*>& known,
+                                             int team) const {
+    const Coord at = unit->getLocation();
+    const StructureBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* structure : known) {
+        if (team >= 0 && structure->getOwner()->getTeamID() != team) continue;
+        const int distance = tiles(at, structure->getClosestPoint(at));
+        if (best && distance >= bestDistance) continue;
+        if (!groundAttackReachable(unit, structure)) continue;
+        best = structure; bestDistance = distance;
+    }
+    return best;
+}
+
+int QuantBot::knownTurretsNear(const ObjectBase* objective) const {
+    if (!objective) return 0;
+    const Coord at = objective->getLocation();
+    int count = 0;
+    for (const auto* structure : getStructureList())
+        if (structure->canAttack() && knownEnemyStructure(structure)
+            && tiles(at, structure->getLocation()) <= Force::kFortifiedRadiusTiles) ++count;
+    return count;
 }
 
 const QuantBot::Muster* QuantBot::musterOf(Uint32 id) const {

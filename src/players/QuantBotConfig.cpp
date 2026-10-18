@@ -265,6 +265,11 @@ QuantBotConfig::QuantBotConfig() {
     // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
     // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
     force.openingReadiness = true;
+    // Late game (docs/formations.md, "Free-for-all: finishing the game"): candidates, off.
+    force.turretPriority = false;
+    force.pressOn = false;
+    force.finishWeakest = false;
+    force.fortifiedWaves = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -540,6 +545,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
         iniFile.setBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
         iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+        iniFile.setBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
+        iniFile.setBoolValue("Force Concentration", "PressOn", force.pressOn);
+        iniFile.setBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
+        iniFile.setBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -630,6 +639,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
     force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
     force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+    force.turretPriority = iniFile.getBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
+    force.pressOn = iniFile.getBoolValue("Force Concentration", "PressOn", force.pressOn);
+    force.finishWeakest = iniFile.getBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
+    force.fortifiedWaves = iniFile.getBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1054,6 +1067,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("perimeterTurrets", force.perimeterTurrets);
     addNamed("sizedDefence", force.sizedDefence);
     addNamed("openingReadiness", force.openingReadiness);
+    addNamed("turretPriority", force.turretPriority);
+    addNamed("pressOn", force.pressOn);
+    addNamed("finishWeakest", force.finishWeakest);
+    addNamed("fortifiedWaves", force.fortifiedWaves);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
