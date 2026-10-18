@@ -1,3 +1,15 @@
+## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
+
+Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct
+17:36 and 18 Oct 12:38): each install `mv`'d the old bundle into a backup folder, and the Dock's pinned
+item (a bookmark) followed the moved bundle, so the Dock kept opening an old version and 1.0.847 was
+"not in the Dock". On 18 Oct 12:40 all 77 `/Applications/.dunecity-*` backup/staging folders (6.7 GB)
+were moved to `~/Library/Application Support/DuneCity App Backups/from-Applications-20261018-124043/`
+and unregistered from LaunchServices (also the runner build `~/dunecity-runner/src/build/bin/dunecity.app`);
+`/Applications/dunecity.app` (1.0.847) re-registered. Rule for future MBA installs: back up the old app
+by COPY (`ditto`) to `~/Library/Application Support/DuneCity App Backups/`, never `mv` it and never keep
+backups under /Applications; then remove the old bundle and move the new one in.
+
 ## 2026-10-18 — local 1.0.847 verified and installed on the MBA
 
 Staging = 1.0.846 + `feat/skirmish-spectator` (ed441987: Spectate + "Your house AI" on the
