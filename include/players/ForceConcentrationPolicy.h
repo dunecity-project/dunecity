@@ -254,6 +254,11 @@ inline bool answerable(int64_t threat, int64_t committed, int64_t reachable) {
 constexpr int kPerimeterBaseTiles = 24;
 /// ... the army holds this far beyond the outermost one on the enemy side (V) ...
 constexpr int kPerimeterStandoffTiles = 3;
+/// ... or, where that point still lies among its own buildings or roads (a city spreading beyond
+/// kPerimeterBaseTiles), the first standable point at most kPerimeterMaxExtraTiles further out
+/// with none within kPerimeterClearTiles (the standoff: a compact base's point is already clear) ...
+constexpr int kPerimeterMaxExtraTiles = 24;
+constexpr int kPerimeterClearTiles = kPerimeterStandoffTiles;
 /// ... and threat turrets (U) stand in the band from kPerimeterInnerTiles inside that outermost
 /// building to kPerimeterOuterTiles beyond it, at most kPerimeterHalfWidth tiles to either side of
 /// the front line through the base centre.
@@ -284,6 +289,14 @@ inline bool onPerimeterBand(int along, int across, int depth) {
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy
 /// base (the pre-1.0.602 rally was 75% own base + 25% enemy base) ...
 constexpr int kBundleForwardPercent = 25;
+/// ... out of the house's own base: where that point lies among its own buildings or roads (a
+/// city base), it moves on towards the enemy, at most to kBundleMaxForwardPercent of the way, to
+/// the first standable point with none within the bundle's clearance - the reserve's radius
+/// (bundleRadius), kept between kBundleClearMinTiles and kBundleClearMaxTiles ...
+constexpr int kBundleMaxForwardPercent = 50;
+constexpr int kBundleClearMinTiles = 4;
+constexpr int kBundleClearMaxTiles = 8;
+inline int bundleClearance(int radius) { return std::clamp(radius, kBundleClearMinTiles, kBundleClearMaxTiles); }
 /// ... with at most this many move orders per unit pass ...
 constexpr int kBundleOrdersPerPass = 12;
 /// ... and, with the launch gate, a ready wave waits until this share of its value stands in

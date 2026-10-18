@@ -571,7 +571,7 @@ void QuantBot::attack(int militaryValue) {
         ++forceStats.garrisonHolds;
         attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
         traceDecision("attack_deferred", AITelemetry::Record().set("reason", "garrison")
-            .set("own_value", ownGroundArmyValue()).set("enemy_estimate", enemyArmyEstimate()));
+            .set("own_value", ownGroundArmyValue()).set("enemy_estimate", enemyThreatEstimate()));
         return;
     }
 
@@ -914,7 +914,7 @@ void QuantBot::launchGroundHunt() {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
                 for (const auto& candidate : candidates) ids.push_back(candidate.id);
-                const int64_t wave=groundValueOf(ids), enemy=enemyArmyEstimate();
+                const int64_t wave=groundValueOf(ids), enemy=enemyThreatEstimate();
                 if (!ForceConcentrationPolicy::strongEnough(wave,enemy,forceStrengthBps)) {
                     ++forceStats.strengthHolds;
                     attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
@@ -3408,7 +3408,6 @@ void QuantBot::retreatAllUnits() {
         int bundleTiles=0;
         std::vector<BundleWalker> bundleWalkers;
         if (bundling) {
-            forwardBundlePoint();
             int64_t sx=0, sy=0, n=0, reserve=0;
             for (const auto* unit:getUnitList()) {
                 if (unit->getOwner()!=getHouse() || !unit->isActive() || !unit->isAGroundUnit() || !unit->canAttack()
@@ -3418,6 +3417,9 @@ void QuantBot::retreatAllUnits() {
             }
             bundleCentre=forceVariant(kForceBundleOld) && n>0 ? Coord(int(sx/n),int(sy/n)) : Coord::Invalid();
             bundleTiles=ForceConcentrationPolicy::bundleRadius(int(reserve));
+            // The whole reserve stands beside the point, out of our own base (docs/formations.md,
+            // "Free-for-all: the army deploys").
+            forwardBundlePoint(ForceConcentrationPolicy::bundleClearance(bundleTiles));
         }
         for (const UnitBase* pUnit : getUnitList()) {
             // Safety check: skip null units (can happen during unit destruction)

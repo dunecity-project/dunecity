@@ -1001,7 +1001,7 @@ private:
     /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U, V and X
     /// are taken from QuantBotConfig::force, the others are test-only):
     /// kForceEstimate (E: D measures the remembered enemy army,
-    /// enemyArmyEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
+    /// enemyThreatEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
     /// that estimate outnumbers us, no wave launches and the reserve holds the protected
     /// rally under turret cover; the enemy attacks into it), kForceStrengthWaves (A: a ready
     /// wave launches only when its value is forceStrengthBps of the estimate), kForceReserve
@@ -1039,8 +1039,9 @@ private:
     /// The readiness a launch uses now: openingReadinessPercent(), raised to 100 by D while the
     /// house is outnumbered (outnumberedByObservedArmy(), with E outnumberedByEstimate()).
     int launchReadinessPercent();
-    /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of
-    /// them, wherever they stand): ForceConcentrationPolicy::outnumbered. One unit-list pass.
+    /// Health-weighted value of the visible enemy mobile ground fighters of the strongest enemy
+    /// team against ours (wherever they stand): ForceConcentrationPolicy::outnumbered. One
+    /// unit-list pass.
     bool outnumberedByObservedArmy() const;
     /// The remembered enemy army: every enemy mobile ground fighter seen within the last
     /// kSightingMemoryMs that still exists, at its health-weighted value when last seen.
@@ -1048,10 +1049,13 @@ private:
     std::map<Uint32, Sighting> enemySightings;
     /// Records the visible enemy fighters and forgets the dead and the long unseen (unit pass).
     void updateEnemySightings();
-    int64_t enemyArmyEstimate() const;
+    /// The threat the remembered enemy army poses: the strongest single enemy team's share of it
+    /// (every remembered fighter in a 1v1 or against one alliance; in a free-for-all not the sum
+    /// of houses that also fight each other).
+    int64_t enemyThreatEstimate() const;
     /// Health-weighted value of our own mobile ground fighters.
     int64_t ownGroundArmyValue() const;
-    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyArmyEstimate(),
+    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyThreatEstimate(),
     /// once per cycle.
     bool outnumberedByEstimate() const;
     mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
@@ -1063,7 +1067,8 @@ private:
     /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
     /// base centre along the observed front direction, the farthest own building within
     /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
-    /// beyond it (point). Derived from the world once per cycle; invalid without a base or a front.
+    /// beyond it (point) - further out if that is still among our buildings or roads (a city
+    /// base; builtUpDistance). Derived from the world once per cycle; invalid without a base or a front.
     struct Perimeter {
         Coord anchor = Coord::Invalid(), forward = Coord(0, 0), point = Coord::Invalid();
         int length = 0;         ///< isqrt of |forward|^2
@@ -1117,7 +1122,13 @@ private:
     Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
     /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
     Uint32 bundleGateSince = 0;
-    Coord forwardBundlePoint();
+    /// The bundle point, out of our own base by \a clearance tiles where the line towards the
+    /// enemy allows it (ForceConcentrationPolicy::bundleClearance; docs/formations.md
+    /// "Free-for-all: the army deploys").
+    Coord forwardBundlePoint(int clearance);
+    /// Tiles (Chebyshev, at most \a limit) from \a p to the nearest tile of one of our buildings
+    /// or a road: how far a point is from the built-up base. Rings outward, bounded box.
+    int builtUpDistance(Coord p, int limit) const;
     /// The house attack threshold attack() starts from (credits of military value, before the
     /// campaign adjustment and the wave readiness scaling).
     int houseAttackThreshold() const;
