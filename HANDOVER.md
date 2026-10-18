@@ -15,6 +15,17 @@ e276196e (per-tech-band defaults; its own scenario-matrix merge drops the econom
 - **Versions:** protocol 86 (83 ratio + 84 army + 85 econ, all branch-only); save 9868 (ratio's ten-slot
   mix state; 9866/9867 load and split, older saves as before; econ kept the 9865 layout, army changed no
   saved state).
+- **Verified on 212125a8** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3` 101/103
+  passed (incl. perf_regression, quantbot_ffa_army_deploys, all_against_atreides, menu_navigation_probe,
+  workshop/no-population tests). **Failed (combination only; each branch alone passes):**
+  `quantbot_strategy` - TrikeSwarm lead share 1053 v Learned 672 bps, below the +400 margin (ratio's 50%
+  bound caps Atreides' trike prior while the army fix raises Learned's own trikes; RatioTuning4 reproduced
+  it on feat/ai-ratio-tuning a35c2c56 = ratio + army fix); `quantbot_scenario_matrix` -
+  `skirmish/4p-ffa-medium-smallarmy/vanilla/90866` 60-min time-out, nobody eliminated (QB/QH/QM/QE FFA;
+  reproduces on a35c2c56). Candidate for the first: LateGame2's 45dc0775 (removes V, changes the
+  check to "larger than Learned" after a 36-seed calibration) - not merged here, a Main/Stefan call.
+  Menu probe `--size 1024x768 --size 640x480`: both MENU_PROBE_PASS; Custom Game has no "Metaserver
+  Maps", editors/mod chooser have no online buttons.
 
 ## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
 
