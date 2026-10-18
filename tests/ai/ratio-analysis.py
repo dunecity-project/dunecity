@@ -371,12 +371,14 @@ def report_random(args, games, houses, mixes, out_rows):
         pool.sort(key=predict, reverse=True)
         top = pool[:200]
         regression = bound([statistics.mean(m[i] for m in top) for i in range(8)], f)
-        # Selection gradient: the score-weighted mean start minus the plain mean, amplified.
+        # Gradient: from the mean draw a step along the linear model's coefficients (centred over
+        # the fieldable slots, so the shares still sum to 1), the largest move 12 points.
         mean_start = [statistics.mean(r['start'][i] / 10000 for r in hr) for i in range(8)]
-        my = statistics.mean(ys)
-        cov = [statistics.mean((r['start'][i] / 10000 - mean_start[i]) * (r['score'] - my) for r in hr) for i in range(8)]
-        var = statistics.pvariance(ys) or 1.0
-        gradient = bound([mean_start[i] + 4 * cov[i] / var * 0.25 for i in range(8)], f)
+        coef = {ref: 0.0, **{c: beta[k + 1] for k, c in enumerate(cols)}}
+        centre = statistics.mean(coef[i] for i in idx)
+        direction = {i: coef[i] - centre for i in idx}
+        scale = 0.12 / max(1e-9, max(abs(v) for v in direction.values()))
+        gradient = bound([mean_start[i] + scale * direction[i] if f[i] else 0.0 for i in range(8)], f)
         # Winners' end-of-game production (both arms, this house), and per-type cost-effectiveness.
         both = hr + [r for r in ctrl if r['house'] == house]
         end_win, n_win = composition(both, 'mine', 'final', 'built', 'win')
