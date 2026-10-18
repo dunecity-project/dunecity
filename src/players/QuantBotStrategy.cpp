@@ -117,15 +117,14 @@ TempoProfile tempoProfile(int readiness, int units, int value, bool lightFirst =
 } // namespace
 
 Settings::Settings() {
-    // Measured (docs/ai-play-styles.md, "Strategies"): only the Swarm tempo with the learned mix
-    // beats 1.0.846 on Construction Yard starts; the random bot over these weights is level with
-    // it, so the default plays Learned/Swarm and Mode=Random plays the weights (variety: the
-    // learned mix half the time, the mixes level with it, Swarm with some Flood; TankMass,
-    // Infantry and Specials-with-Swarm measured below BASE and are left out). The Learned opening
-    // is bounded (2%-50% per producible slot). Tuned (the measured per-house ratios, section 8)
-    // is ahead of it but not by the default rule's margin, so it is an option, not the default.
+    // Measured (docs/ai-play-styles.md, "Strategies"): only the Swarm tempo beats 1.0.846 on
+    // Construction Yard starts, so the default plays Swarm, and Mode=Random plays these weights
+    // (variety: the learned mix half the time, the mixes level with it, Swarm with some Flood;
+    // TankMass, Infantry and Specials-with-Swarm measured below BASE and are left out). The default
+    // mix is Tuned, the measured per-house starting ratios (section 8): Tuned/Swarm v Learned/Swarm
+    // +0.27 (+0.09..+0.45), n=468. Every starting mix is bounded (2%-50% per producible slot).
     random = false;
-    fixedMix = Mix::Learned;
+    fixedMix = Mix::Tuned;
     fixedTempo = Tempo::Swarm;
     mixWeights[static_cast<size_t>(Mix::Learned)] = 50;
     mixWeights[static_cast<size_t>(Mix::QuadMass)] = 15;
