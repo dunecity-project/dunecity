@@ -1,3 +1,19 @@
+## 2026-10-18 — local 1.0.847 verified; MBA install pending
+
+Staging = 1.0.846 + `feat/skirmish-spectator` (ed441987: Spectate + "Your house AI" on the
+single-player Random Skirmish screen, client-only) + `feat/ai-strategy-mix` (2861cf30, includes
+`feat/ai-play-styles` c8fcaaa8: test-only per-player play styles; production `[Strategy]
+Mode/MixWeights/TempoWeights`, deterministic per-house pick from game seed + house + config, saved and
+hashed; default Fixed:Learned,Swarm = learned mix with Swarm tempo (35% readiness, waves from 4 units /
+2,000 credits) for Custom Hard/Brutal QuantBots). Protocol 82, save 9865. `agent-workspace stage
+verify` at fd26fe55: build, check-build-deps and CTest 97/97 serial passed (`quantbot_strategy` 30 s,
+`quantbot_all_against_atreides` 80 s). Package: executable SHA256
+ef05d1a3c3fe82746a67449ccfff5d64f9fec77ef115bff340404efca30ef792, no Homebrew/local links, signature
+and runtime check passed. MBA offline; `/tmp/push-dunecity-1.0.847.sh` (run inside the parent
+session) installs when reachable and the game is closed. Not pushed or published.
+Note: around 10:04 on 2026-10-18 mini queue jobs hit `getcwd: Operation not permitted` in
+~/Documents (transient; a test job at 10:58 read ~/Documents fine).
+
 ## 2026-10-18 — QuantBot strategies: unit mix x tempo, deterministic random pick; default Learned/Swarm (branch `feat/ai-strategy-mix`, protocol 82, save 9865, not released)
 
 Stefan asked for different unit-ratio strategies, separate controls for mix and tempo, and the learning kept.
