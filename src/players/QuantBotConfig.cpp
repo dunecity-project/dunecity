@@ -185,13 +185,15 @@ QuantBotConfig::QuantBotConfig() {
 
     // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned; percent of tank, siege tank, launcher,
     // special, ornithopter, trike, raider trike, quad), measured on Construction Yard starts
-    // (docs/ai-play-styles.md, section 8: round 2 "best", the round-1 candidate with the largest
-    // per-house effect). Bounded like every starting mix (2%-50% per producible slot). Fremen,
-    // Sardaukar and Mercenary were not tuned: they play their configured opening.
+    // (docs/ai-play-styles.md, section 8): per house the round-2 mix that did best for it - the
+    // siege/Sonic refinement for Atreides (it also keeps quantbot_all_against_atreides 6/6; the
+    // winners' end composition took 40.7 minutes on one seed) and Ordos, the gradient mix for
+    // Harkonnen. Bounded like every starting mix (2%-50% per producible slot). Fremen, Sardaukar
+    // and Mercenary were not tuned: they play their configured opening.
     tunedRatios = {};
-    tunedRatios[0] = {14, 16, 15, 22, 0, 0, 0, 33};   // Harkonnen: gradient
-    tunedRatios[1] = {11, 12, 17, 16, 17, 13, 0, 14}; // Atreides: winners' end composition
-    tunedRatios[2] = {9, 9, 7, 13, 35, 0, 7, 20};     // Ordos: regression
+    tunedRatios[0] = {14, 16, 15, 22, 0, 0, 0, 33};   // Harkonnen
+    tunedRatios[1] = {9, 20, 13, 22, 13, 10, 0, 13};  // Atreides
+    tunedRatios[2] = {9, 17, 7, 13, 27, 0, 7, 20};    // Ordos
 
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);

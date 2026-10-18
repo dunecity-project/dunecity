@@ -490,12 +490,13 @@ TEST_CASE("Strategy: Tuned and Bounded parse, and [Unit Ratios Tuned] is read an
 }
 
 TEST_CASE("Strategy: the shipped Tuned ratios are the measured mixes, within the bounds", "[ai][strategy][bounds]") {
-    // docs/ai-play-styles.md, section 8 (round 2 "best"): percent of tank, siege, launcher, special,
-    // ornithopter, trike, raider trike, quad. Fremen, Sardaukar and Mercenary play their configured opening.
+    // docs/ai-play-styles.md, section 8 (per house the best round-2 mix): percent of tank, siege, launcher,
+    // special, ornithopter, trike, raider trike, quad. Fremen, Sardaukar and Mercenary play their configured
+    // opening.
     const QuantBotConfig config;
     REQUIRE(ratiosText(config.getTunedRatios(0)) == "14,16,15,22,0,0,0,33");    // Harkonnen
-    REQUIRE(ratiosText(config.getTunedRatios(1)) == "11,12,17,16,17,13,0,14");  // Atreides
-    REQUIRE(ratiosText(config.getTunedRatios(2)) == "9,9,7,13,35,0,7,20");      // Ordos
+    REQUIRE(ratiosText(config.getTunedRatios(1)) == "9,20,13,22,13,10,0,13");   // Atreides
+    REQUIRE(ratiosText(config.getTunedRatios(2)) == "9,17,7,13,27,0,7,20");     // Ordos
     for (int house = 3; house < 6; ++house) REQUIRE(config.getTunedRatios(house) == UnitMixPolicy::Weights{});
     // Each house's ratios, bounded over the slots it fields in the vanilla CY games they were measured in
     // (the start_mix those games resolved; Ordos fields launchers there) and over every slot, as a mod
