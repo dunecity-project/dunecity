@@ -16,6 +16,13 @@ Modes:
   --ffa x,y          four-player free-for-all on the 4P --maps: Harkonnen, Atreides, Ordos and
                      Sardaukar, two houses per label, all six partitions per seed.
   --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
+  --ffa x            the same with one label for all four houses: one game per map and seed.
+
+Maps: a bundled multiplayer map (MAPS or a file stem), or rs<size>-<mod> (e.g. rs160-dunecity,
+rs160-vanilla): a generated multiplayer Random Skirmish map with one start per house, each a
+Fortress with a 20,000-credit army and in DuneCity a 40,000 city (Rock High, Spice Medium) -
+Stefan's 4P DuneCity free-for-all - from the seed (map seed and match seed), played in that mod
+with --game-options (default his options, tests/performance/data/stefan-game-options.ini).
 
 Labels: as formation-duel.py, plus "default" (the configured rules), a test-only play style
 suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush, and a
@@ -23,14 +30,18 @@ strategy suffix #random or #<Mix>-<Tempo>[-fixed], e.g. default#QuadMass-Swarm (
 the strategy each house played).
 
 Each game appends a row to games.csv, its houses to houses.csv, a per-minute sample of every
-house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv
-and its waves to waves.csv; the run directory is deleted straight away and games already in
-games.csv are skipped. --report prints the tables used in docs/formations.md.
+house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv,
+where each house's army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per
+QuantBot role, at the bundle or perimeter, the outnumbered verdict) to army.csv and its waves
+to waves.csv; the run directory is deleted straight away and games already in games.csv are
+skipped. --report prints the tables used in docs/formations.md, scored by
+tests/ai/match_score.py (placement score, time-outs negative, verdict on the paired difference;
+--scoring legacy for the old rule).
 """
 import argparse
 import csv
 import itertools
-import random
+import re
 import shutil
 import statistics
 import subprocess
@@ -44,6 +55,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+import match_score  # noqa: E402
 
 MAP_DIR = root / 'data/maps/multiplayer'
 # Short names of the bundled maps used by the scenario tests (any other file stem in MAP_DIR
@@ -62,7 +74,8 @@ KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
 GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
-                     'gate_holds', 'gate_timeouts', 'raid_orders', 'strategy')
+                     'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
+                     'finish_waves', 'fortified_holds', 'sonic_retargets', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')
@@ -70,6 +83,11 @@ SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'shots30', 'loss60',
                'kill60', 'survivors', 'lost_before_contact', 'together_at_contact', 'engaged10')
 WAVE_ROW_FIELDS = KEY + ('label',) + WAVE_FIELDS
+ARMY_FIELDS = ('minute', 'army_value', 'inside_value', 'outside_value', 'on_road_value', 'wave_value', 'defence_value',
+               'free_value', 'free_inside_value', 'at_bundle_value', 'at_perimeter_value', 'stuck_value', 'outnumbered',
+               'garrisoned', 'own_estimate', 'enemy_sum', 'enemy_strongest', 'bundle_base_tiles', 'perimeter_base_tiles')
+ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
+SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
 
@@ -87,11 +105,27 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            with path.open(newline='') as handle:
+                header = next(csv.reader(handle), [])
+            if list(header) != list(fields):
+                # Written by an older harness: rewrite it with the current columns (missing ones empty).
+                old = read(path)
+                with path.open('w', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(old)
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
             if new:
                 writer.writeheader()
             writer.writerows(rows)
+
+
+def skirmish(name):
+    """rs<size>-<mod> -> (size, mod), or None for a bundled map."""
+    match = re.fullmatch(r'rs(\d+)-(vanilla|dunecity)', name)
+    return (int(match.group(1)), match.group(2)) if match else None
 
 
 def map_path(name):
@@ -112,6 +146,13 @@ def schedule(args):
     games = []
     if args.ffa:
         labels = args.ffa.split(',')
+        if len(labels) == 1:
+            # One label for every house: one game per map and seed.
+            for seed in args.seeds:
+                for name in args.maps:
+                    games.append((args.tag, args.difficulty, name, str(seed),
+                                  '|'.join(f'{h}:{labels[0]}' for h in FFA_HOUSES)))
+            return games
         if len(labels) == 4:
             # Four labels, one per house: the four rotations, so every label plays every house.
             for seed in args.seeds:
@@ -158,20 +199,6 @@ def build_probe(args, scratch):
     return probe_binary(probe)
 
 
-def places(sides, eliminated):
-    """Place per house: eliminated houses by elimination order (last out = best of them), the
-    houses alive at the end share the best places (mean of the places they cover)."""
-    alive = [h for h, _ in sides if h not in eliminated]
-    out = sorted((h for h, _ in sides if h in eliminated), key=lambda h: -eliminated[h])
-    result = {}
-    if alive:
-        shared = statistics.mean(range(1, len(alive) + 1))
-        for house in alive:
-            result[house] = shared
-    for index, house in enumerate(out, len(alive) + 1):
-        result[house] = index
-    return result
-
 
 def play(args, scratch, binary, key):
     tag, difficulty, name, seed, sides_text = key
@@ -179,11 +206,19 @@ def play(args, scratch, binary, key):
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
     shutil.rmtree(out, ignore_errors=True)
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
-               '--prebuilt-probe', str(binary), '--output-dir', str(out), '--custom-map', str(map_path(name)),
+               '--prebuilt-probe', str(binary), '--output-dir', str(out),
                '--house', sides[0][0], '--match-sides', ','.join(f'{h}:{l}' for h, l in sides),
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    if generated := skirmish(name):
+        size, mod = generated
+        command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed, '--mod', mod,
+                    '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
+    else:
+        command += ['--custom-map', str(map_path(name))]
+        if args.game_options:
+            command += ['--game-options', str(args.game_options)]
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
     started = time.time()
@@ -209,7 +244,7 @@ def play(args, scratch, binary, key):
         finish_game(scratch, out, True)
         return row
     numbers = {HOUSE_NUMBERS[h]: h for h, _ in sides}
-    place = places([(HOUSE_NUMBERS[h], l) for h, l in sides], eliminated)
+    place = {h: p.place for h, p in match_score.score_game([HOUSE_NUMBERS[h] for h, _ in sides], eliminated).items()}
     house_rows = []
     for slot, (house, label) in enumerate(sides, 1):
         number = HOUSE_NUMBERS[house]
@@ -234,9 +269,19 @@ def play(args, scratch, binary, key):
         wave = parse(l, 'FORMATION_WAVE:')
         waves.append({**dict(zip(KEY, key)), 'label': label_of.get(int(wave['house']), ''),
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
+    army = []
+    for l in lines:
+        if 'FFA_ARMY_SAMPLE:' not in l:
+            continue
+        sample = parse(l, 'FFA_ARMY_SAMPLE:')
+        number = int(sample['house'])
+        if number in numbers:
+            army.append({**dict(zip(KEY, key)), 'house': numbers[number], 'label': label_of[number],
+                         **{f: sample.get(f, '') for f in ARMY_FIELDS}})
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
+    append(results / 'army.csv', ARMY_ROW_FIELDS, army)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
     return row
@@ -272,15 +317,6 @@ def number(value, default=0.0):
         return default
 
 
-def bootstrap(scores, rounds=2000):
-    """95% interval of the mean score, resampling games (fixed seed: the report is reproducible)."""
-    if not scores:
-        return (0.0, 0.0)
-    rng = random.Random(20261017)
-    means = sorted(statistics.mean(rng.choices(scores, k=len(scores))) for _ in range(rounds))
-    return means[int(0.025 * rounds)], means[int(0.975 * rounds) - 1]
-
-
 def by_game(rows):
     grouped = defaultdict(list)
     for row in rows:
@@ -288,8 +324,20 @@ def by_game(rows):
     return grouped
 
 
-def pair_scores(games, houses, x, y, margin):
-    """Per 1v1 game with labels x and y: (game, x's score, strict score, x's house row, y's row)."""
+def placings(game, rows, draw_score):
+    """match_score Placing per house row of a game (every house its own team). A decided game's
+    houses other than the winner count as eliminated at the end if their elimination line is missing."""
+    eliminated = {r['house']: number(r['eliminated_s']) for r in rows if r['eliminated_s'] != ''}
+    if game['winner'] not in ('', '-1'):
+        for r in rows:
+            if HOUSE_NUMBERS[r['house']] != int(game['winner']):
+                eliminated.setdefault(r['house'], number(game['end_s']))
+    return match_score.score_game([r['house'] for r in rows], eliminated, draw_score)
+
+
+def pair_scores(games, houses, x, y, args):
+    """Per 1v1 game with labels x and y: (game, x's score, strict score, x's house row, y's row,
+    y's score, drawn). The score is the placement score, or the old one with --scoring legacy."""
     per_game = by_game(houses)
     out = []
     for game in games:
@@ -298,57 +346,144 @@ def pair_scores(games, houses, x, y, margin):
         labels = [l for _, l in side_list(game['sides'])]
         if sorted(labels) != sorted([x, y]):
             continue
-        rows = {r['label']: r for r in per_game[tuple(game[k] for k in KEY)]}
+        house_rows = per_game[tuple(game[k] for k in KEY)]
+        rows = {r['label']: r for r in house_rows}
         mine, theirs = rows[x], rows[y]
-        if game['winner_label']:
-            strict = 1.0 if game['winner_label'] == x else 0.0
-            score = strict
-        else:
-            strict = 0.5
-            trade = number(mine['kill_value']) - number(theirs['kill_value'])
-            score = 1.0 if trade >= margin else (0.0 if trade <= -margin else 0.5)
-        out.append((game, score, strict, mine, theirs))
+        score, strict = match_score.legacy_score(game['winner_label'] == x, game['winner_label'] == y,
+                                                 number(mine['kill_value']), number(theirs['kill_value']), args.adjudicate)
+        other = 1.0 - score
+        drawn = not game['winner_label']
+        if args.scoring == 'placement':
+            placing = placings(game, house_rows, args.draw_score)
+            score, other, drawn = placing[mine['house']].score, placing[theirs['house']].score, placing[mine['house']].drawn
+        out.append((game, score, strict, mine, theirs, other, drawn))
     return out
 
 
-def fmt_ci(scores):
-    low, high = bootstrap(scores)
-    return f'{statistics.mean(scores):.3f} | {low:.2f}-{high:.2f}'
+def compare(rows, args):
+    return match_score.compare([(r[1], r[5], r[6], r[6]) for r in rows], 20261017, args.scoring)
+
+
+def fmt_ci(rows, args):
+    """'score | interval' (legacy) or 'score | opponent's score | difference (interval)' (placement)."""
+    c = compare(rows, args)
+    if args.scoring == 'legacy':
+        return f'{c.candidate:.3f} | {c.low:.2f}-{c.high:.2f}'
+    return f'{c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
+
+
+def score_columns(args):
+    return 'Score | 95% CI' if args.scoring == 'legacy' else 'Score | Opponent score | Difference (95% CI)'
+
+
+def write_scores(games, houses, args):
+    per_game = by_game(houses)
+    rows = []
+    for game in games:
+        if game['error']:
+            continue
+        house_rows = per_game[tuple(game[k] for k in KEY)]
+        placing = placings(game, house_rows, args.draw_score)
+        for r in house_rows:
+            p = placing[r['house']]
+            rows.append({'game': '/'.join(game[k] for k in KEY), 'side': r['slot'], 'house': r['house'], 'label': r['label'],
+                         'eliminated': int(p.eliminated), 'eliminated_s': r['eliminated_s'], 'place': p.place,
+                         'score': f'{p.score:.4f}', 'drawn': int(p.drawn), 'end_s': game['end_s'],
+                         'decisive': int(game['winner'] not in ('', '-1')), 'kill_value': r['kill_value'],
+                         'loss_value': r['loss_value']})
+    match_score.write_scores(args.scores, rows)
+
+
+def baseline_table(args, games, houses):
+    """Each pairing x:y against --baseline B: x's side paired with B's side in B's games against the
+    same y with the same difficulty, map, seed and houses (e.g. a candidate and the old default, each
+    against the old rules)."""
+    setup = lambda r, t: (r['difficulty'], r['map'], r['seed'], r['house'], t['house'])
+    print(f'\nPaired against {args.baseline} (each side against the same opponent, same difficulty, map, seed and '
+          f'houses; difference = own score - {args.baseline}\'s, 95% bootstrap; time-outs own / baseline):\n')
+    print(f'| Pairing | Paired games | Score | {args.baseline} score | Difference (95% CI) | Time-outs | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for pair in args.pairs.split(','):
+        x, y = pair.split(':')
+        if x == args.baseline:
+            continue
+        base = {}
+        for r in pair_scores(games, houses, args.baseline, y, args):
+            base.setdefault(setup(r[3], r[4]), r)
+        paired = [(r[1], base[setup(r[3], r[4])][1], r[6], base[setup(r[3], r[4])][6])
+                  for r in pair_scores(games, houses, x, y, args) if setup(r[3], r[4]) in base]
+        c = match_score.compare(paired, 20261017, 'placement')
+        if c:
+            print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
+                  f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
+                  f'{c.verdict} {args.baseline} |')
+
+
+def baseline_tag_table(args, games, houses, base_games, base_houses):
+    """Each pairing x:y against --baseline-tag T: x's side paired with x's side in T's game of the same
+    pairing with the same difficulty, map, seed and houses (the same setup played by another code version)."""
+    setup = lambda r, t: (r['difficulty'], r['map'], r['seed'], r['house'], t['house'])
+    print(f'\nPaired against tag {args.baseline_tag} (the same pairing and side in the same setup - difficulty, map, '
+          f'seed and houses - played by the baseline tag\'s code; difference = own score - baseline\'s, 95% bootstrap; '
+          f'time-outs own / baseline):\n')
+    print(f'| Pairing | Paired games | Score | Tag {args.baseline_tag} score | Difference (95% CI) | Time-outs | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for pair in args.pairs.split(','):
+        x, y = pair.split(':')
+        base = {}
+        for r in pair_scores(base_games, base_houses, x, y, args):
+            base.setdefault(setup(r[3], r[4]), r)
+        paired = [(r[1], base[setup(r[3], r[4])][1], r[6], base[setup(r[3], r[4])][6])
+                  for r in pair_scores(games, houses, x, y, args) if setup(r[3], r[4]) in base]
+        c = match_score.compare(paired, 20261017, 'placement')
+        if c:
+            print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
+                  f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
+                  f'{c.verdict} tag {args.baseline_tag} |')
 
 
 def report_pairs(args, games, houses, samples, waves):
-    print('| Pairing (first label\'s side) | Games | Score | 95% CI | Strict | Elim. W-L / time-outs | '
-          'Win min (median) | Loss min (median) | Structures lost / destroyed per game |')
-    print('|---|---|---|---|---|---|---|---|---|')
+    print(f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    base_games = [g for g in games if g['tag'] == args.baseline_tag]
+    base_houses = [h for h in houses if h['tag'] == args.baseline_tag]
+    games = [g for g in games if g['tag'] != args.baseline_tag]
+    houses = [h for h in houses if h['tag'] != args.baseline_tag]
+    if args.scores:
+        write_scores(games, houses, args)
+    print(f'| Pairing (first label\'s side) | Games | {score_columns(args)} | Strict | Elim. W-L / time-outs | '
+          'Win min (median) | Loss min (median) | Structures lost / destroyed per game | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
-        rows = pair_scores(games, houses, x, y, args.adjudicate)
+        rows = pair_scores(games, houses, x, y, args)
         if not rows:
             continue
-        scores = [s for _, s, _, _, _ in rows]
-        strict = [s for _, _, s, _, _ in rows]
-        wins = [number(g['end_s']) / 60 for g, _, st, _, _ in rows if st == 1.0]
-        losses = [number(g['end_s']) / 60 for g, _, st, _, _ in rows if st == 0.0]
-        lost = statistics.mean(number(t['structures_destroyed']) for _, _, _, _, t in rows)
-        destroyed = statistics.mean(number(m['structures_destroyed']) for _, _, _, m, _ in rows)
-        print(f'| {x} v {y} | {len(rows)} | {fmt_ci(scores)} | {statistics.mean(strict):.3f} | '
+        strict = [r[2] for r in rows]
+        wins = [number(r[0]['end_s']) / 60 for r in rows if r[2] == 1.0]
+        losses = [number(r[0]['end_s']) / 60 for r in rows if r[2] == 0.0]
+        lost = statistics.mean(number(r[4]['structures_destroyed']) for r in rows)
+        destroyed = statistics.mean(number(r[3]['structures_destroyed']) for r in rows)
+        print(f'| {x} v {y} | {len(rows)} | {fmt_ci(rows, args)} | {statistics.mean(strict):.3f} | '
               f'{len(wins)}-{len(losses)} / {len(rows) - len(wins) - len(losses)} | '
               f'{statistics.median(wins) if wins else 0:.1f} | {statistics.median(losses) if losses else 0:.1f} | '
-              f'{lost:.1f} / {destroyed:.1f} |')
+              f'{lost:.1f} / {destroyed:.1f} | {compare(rows, args).verdict} {y} |')
+    if args.baseline:
+        baseline_table(args, games, houses)
+    if args.baseline_tag:
+        baseline_tag_table(args, games, houses, base_games, base_houses)
     # Per map (and difficulty) breakdown.
-    print('\n| Pairing | Map | Difficulty | Games | Score | 95% CI | Elim. W-L / time-outs | Median end min |')
-    print('|---|---|---|---|---|---|---|---|')
+    print(f'\n| Pairing | Map | Difficulty | Games | {score_columns(args)} | Elim. W-L / time-outs | Median end min |')
+    print('|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
-        rows = pair_scores(games, houses, x, y, args.adjudicate)
+        rows = pair_scores(games, houses, x, y, args)
         groups = defaultdict(list)
         for row in rows:
             groups[(row[0]['map'], row[0]['difficulty'])].append(row)
         for (name, difficulty), group in sorted(groups.items()):
-            scores = [s for _, s, _, _, _ in group]
-            w = sum(st == 1.0 for _, _, st, _, _ in group)
-            l = sum(st == 0.0 for _, _, st, _, _ in group)
-            print(f'| {x} v {y} | {name} | {difficulty} | {len(group)} | {fmt_ci(scores)} | {w}-{l} / {len(group) - w - l} | '
+            w = sum(r[2] == 1.0 for r in group)
+            l = sum(r[2] == 0.0 for r in group)
+            print(f'| {x} v {y} | {name} | {difficulty} | {len(group)} | {fmt_ci(group, args)} | {w}-{l} / {len(group) - w - l} | '
                   f'{statistics.median(number(g["end_s"]) / 60 for g, *_ in group):.1f} |')
     economy(args, samples)
     wave_table(args, waves, games)
@@ -410,56 +545,190 @@ def wave_table(args, waves, games):
 
 def report_ffa(args, games, houses):
     labels = args.ffa.split(',')
+    control = args.control or (labels[1] if len(labels) > 1 else labels[0])
+    legacy = args.scoring == 'legacy'
     rows = [h for h in houses if h['tag'] in args.tags and h['difficulty'] == args.difficulty]
-    valid = {tuple(g[k] for k in KEY) for g in games if not g['error'] and g['players'] != '2'}
+    valid = {tuple(g[k] for k in KEY): g for g in games if not g['error'] and g['players'] != '2'}
     rows = [h for h in rows if tuple(h[k] for k in KEY) in valid]
-    print('| Map | Label | Houses | Mean place | Wins (sole survivor) | Eliminated | Mean elimination min | '
-          'Kill / loss value per house |')
-    print('|---|---|---|---|---|---|---|---|')
-    win_label = {tuple(g[k] for k in KEY): g['winner_label'] for g in games}
-    for name in sorted({h['map'] for h in rows}) + ['all']:
-        for label in labels:
-            group = [h for h in rows if h['label'] == label and (name == 'all' or h['map'] == name)]
+    if args.scores:
+        write_scores(list(valid.values()), rows, args)
+    # Per house: (score, drawn). Legacy: the old place score, 1 first, 0 last; drawn = alive at a time-out.
+    scored = {}
+    for key, group in by_game(rows).items():
+        game = valid[key]
+        if legacy:
+            for h in group:
+                scored[id(h)] = ((len(group) - number(h['place'])) / (len(group) - 1),
+                                 not game['winner_label'] and h['eliminated_s'] == '')
+        else:
+            placing = placings(game, group, args.draw_score)
+            for h in group:
+                scored[id(h)] = (placing[h['house']].score, placing[h['house']].drawn)
+    print(f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    print('| Tag | Map | Label | Houses | Mean place | Mean score | Wins (sole survivor) | Eliminated | Alive at a time-out | '
+          'Mean elimination min | Kill / loss value per house |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|')
+    win_label = {key: g['winner_label'] for key, g in valid.items()}
+    for tag in sorted(args.tags):
+        for name in sorted({h['map'] for h in rows}) + ['all']:
+            for label in labels:
+                group = [h for h in rows if h['tag'] == tag and h['label'] == label and (name == 'all' or h['map'] == name)]
+                if not group:
+                    continue
+                wins = sum(1 for h in group if win_label[tuple(h[k] for k in KEY)] == label and h['eliminated_s'] == '')
+                elim = [number(h['eliminated_s']) / 60 for h in group if h['eliminated_s'] != '']
+                print(f'| {tag} | {name} | {label} | {len(group)} | {statistics.mean(number(h["place"]) for h in group):.2f} | '
+                      f'{statistics.mean(scored[id(h)][0] for h in group):+.3f} | '
+                      f'{wins} | {len(elim)} | {sum(scored[id(h)][1] for h in group)} | {statistics.mean(elim) if elim else 0:.1f} | '
+                      f'{statistics.mean(number(h["kill_value"]) for h in group):.0f} / '
+                      f'{statistics.mean(number(h["loss_value"]) for h in group):.0f} |')
+    if len(labels) == 1:
+        report_ffa_tags(args, valid, rows, scored)
+        return
+    # Per game, each label's mean over its houses; the candidate against the control in the same games.
+    per_game = defaultdict(lambda: defaultdict(list))
+    for h in rows:
+        per_game[tuple(h[k] for k in KEY)][h['label']].append(scored[id(h)])
+    mean = lambda values: (statistics.mean(v[0] for v in values), statistics.mean(1.0 if v[1] else 0.0 for v in values))
+    print(f'\nPer game (mean over a label\'s houses), against {control} in the same games '
+          f'({"interval of the score against 0.5" if legacy else "difference = score - control score, 95% bootstrap"}):\n')
+    print(f'| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
+          'Alive at a time-out (share of houses) own / control | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for label in labels:
+        if label == control:
+            continue
+        pairs = []
+        for by_label in per_game.values():
+            if label in by_label and control in by_label:
+                (a, da), (b, db) = mean(by_label[label]), mean(by_label[control])
+                pairs.append((a, b, da, db))
+        c = match_score.compare(pairs, 20261017, args.scoring)
+        if not c:
+            continue
+        interval = f'{c.low:.2f}-{c.high:.2f}' if legacy else f'{c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
+        print(f'| {label} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {interval} | '
+              f'{100 * statistics.mean(p[2] for p in pairs):.0f}% / {100 * statistics.mean(p[3] for p in pairs):.0f}% | '
+              f'{c.verdict} {control} |')
+    timeouts = sum(1 for g in valid.values() if not g['winner_label'])
+    print(f'\nTime-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
+
+
+def report_ffa_tags(args, valid, rows, scored):
+    """One label for every house: each tag's mean house score per game (in a game of equals this is
+    the time-out penalty: -0.25 x survivors / houses, 0 when one house is left) paired with the
+    control tag's game on the same map and seed."""
+    tags = sorted(args.tags)
+    control = args.baseline_tag or tags[0]
+    per_game = defaultdict(list)
+    for h in rows:
+        per_game[tuple(h[k] for k in KEY)].append(scored[id(h)])
+    by_setup = defaultdict(dict)
+    for key, values in per_game.items():
+        game = dict(zip(KEY, key))
+        by_setup[(game['difficulty'], game['map'], game['seed'])][game['tag']] = (
+            statistics.mean(v[0] for v in values), 0.0 if valid[key]['winner_label'] else 1.0)
+    print(f'\nPer game (mean house score), each tag against tag {control} on the same map and seed '
+          f'(difference = score - control score, 95% bootstrap; time-out = two or more houses alive at the limit):\n')
+    print('| Tag | Games | Score | Control score | Difference (95% CI) | Time-outs own / control | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for tag in tags:
+        if tag == control:
+            continue
+        pairs = [(s[tag][0], s[control][0], s[tag][1] > 0, s[control][1] > 0)
+                 for s in by_setup.values() if tag in s and control in s]
+        c = match_score.compare(pairs, 20261017, args.scoring)
+        if not c:
+            continue
+        print(f'| {tag} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f}) | '
+              f'{sum(p[2] for p in pairs)} / {sum(p[3] for p in pairs)} | {c.verdict} {control} |')
+    for tag in tags:
+        group = [g for g in valid.values() if g['tag'] == tag]
+        print(f'\nTag {tag} time-outs (two or more houses alive at the limit): '
+              f'{sum(1 for g in group if not g["winner_label"])} of {len(group)}')
+
+
+def longest_inside(rows, share):
+    """Longest run of consecutive sampled minutes with at least `share` of the army inside the base."""
+    best = run_length = 0
+    for r in sorted(rows, key=lambda r: int(r['minute'])):
+        army = number(r['army_value'])
+        inside = army > 0 and number(r['inside_value']) >= share * army
+        run_length = run_length + 1 if inside else 0
+        best = max(best, run_length)
+    return best
+
+
+def report_ffa_army(args, games, houses, waves, army):
+    """Where the armies stand and how the free-for-all goes, per tag and map (docs/formations.md,
+    "Free-for-all: the army deploys")."""
+    print('\n| Tag | Map | Games | Ended (one left) | Game min | First elimination min | Eliminated per game | '
+          'Waves per house | Wave members (median) | Army outside base | Free reserve inside base | '
+          'Garrisoned house-minutes | Longest 80%-inside stretch min (median / max) |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for tag in sorted(args.tags):
+        for name in sorted({g['map'] for g in games if g['tag'] == tag}):
+            group = [g for g in games if g['tag'] == tag and g['map'] == name and not g['error']]
             if not group:
                 continue
-            wins = sum(1 for h in group if win_label[tuple(h[k] for k in KEY)] == label and h['eliminated_s'] == '')
-            elim = [number(h['eliminated_s']) / 60 for h in group if h['eliminated_s'] != '']
-            print(f'| {name} | {label} | {len(group)} | {statistics.mean(number(h["place"]) for h in group):.2f} | '
-                  f'{wins} | {len(elim)} | {statistics.mean(elim) if elim else 0:.1f} | '
-                  f'{statistics.mean(number(h["kill_value"]) for h in group):.0f} / '
-                  f'{statistics.mean(number(h["loss_value"]) for h in group):.0f} |')
-    # Place as a score: 1 for first, 0 for last, per house; interval over games.
-    for label in labels if len(labels) > 2 else labels[:1]:
-        per_game = defaultdict(list)
-        for h in rows:
-            if h['label'] == label:
-                per_game[tuple(h[k] for k in KEY)].append((4 - number(h['place'])) / 3)
-        scores = [statistics.mean(v) for v in per_game.values()]
-        if scores:
-            print(f'\n{label}: place score (1 = first, 0 = last; mean of its houses per game) {fmt_ci(scores)} '
-                  f'over {len(scores)} games')
-    timeouts = sum(1 for g in games if tuple(g[k] for k in KEY) in valid and not g['winner_label'])
-    print(f'Time-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
+            keys = {tuple(g[k] for k in KEY) for g in group}
+            hs = [h for h in houses if tuple(h[k] for k in KEY) in keys]
+            ws = [w for w in waves if tuple(w[k] for k in KEY) in keys]
+            rows = [a for a in army if tuple(a[k] for k in KEY) in keys and int(a['minute']) >= 3
+                    and number(a['army_value']) > 0]
+            ended = sum(1 for g in group if g['winner'] not in ('', '-1'))
+            length = [number(g['end_s']) / 60 for g in group]
+            firsts = []
+            for key in keys:
+                elim = [number(h['eliminated_s']) / 60 for h in hs if tuple(h[k] for k in KEY) == key and h['eliminated_s']]
+                firsts.append(min(elim) if elim else float('inf'))
+            finite = [f for f in firsts if f != float('inf')]
+            first_text = (f'{statistics.median(firsts):.1f}' if len(finite) * 2 > len(firsts) else f'>{args.minutes}') + \
+                f' ({len(finite)}/{len(firsts)} games)'
+            outside = sum(number(a['outside_value']) for a in rows) / max(1, sum(number(a['army_value']) for a in rows))
+            free = sum(number(a['free_value']) for a in rows)
+            free_inside = sum(number(a['free_inside_value']) for a in rows) / max(1, free)
+            garrisoned = sum(1 for a in rows if a['garrisoned'] == '1') / max(1, len(rows))
+            stretches = []
+            for key in keys:
+                for house in {a['house'] for a in rows if tuple(a[k] for k in KEY) == key}:
+                    stretches.append(longest_inside([a for a in rows if tuple(a[k] for k in KEY) == key
+                                                     and a['house'] == house], 0.8))
+            members = [number(w['members']) for w in ws]
+            print(f'| {tag} | {name} | {len(group)} | {ended} | {statistics.mean(length):.1f} | {first_text} | '
+                  f'{sum(1 for h in hs if h["eliminated_s"]) / len(group):.2f} | {len(ws) / max(1, len(hs)):.1f} | '
+                  f'{statistics.median(members) if members else 0:.0f} | {outside:.0%} | {free_inside:.0%} | '
+                  f'{garrisoned:.0%} | {statistics.median(stretches) if stretches else 0:.0f} / '
+                  f'{max(stretches) if stretches else 0} |')
 
 
 def report(args):
     results = Path(args.results)
-    tags = set(args.tags or [args.tag])
+    tags = set(args.tags or [args.tag]) | ({args.baseline_tag} if args.baseline_tag else set())
     args.tags = tags
     keep = lambda r: r['tag'] in tags and (args.difficulty_filter is None or r['difficulty'] == args.difficulty_filter)
-    games = [g for g in read(results / 'games.csv') if keep(g)]
-    houses = [h for h in read(results / 'houses.csv') if keep(h)]
+    extra = Path(args.baseline_results) if args.baseline_results else None
+    if extra and extra.resolve() == results.resolve():
+        extra = None
+
+    def load(name):
+        rows = [r for r in read(results / name) if keep(r)]
+        if extra:
+            rows += [r for r in read(extra / name) if keep(r) and r['tag'] == args.baseline_tag]
+        return rows
+    games, houses = load('games.csv'), load('houses.csv')
     if args.ffa:
         report_ffa(args, games, houses)
+        report_ffa_army(args, games, houses, load('waves.csv'), load('army.csv'))
         return
-    samples = [s for s in read(results / 'samples.csv') if keep(s)]
-    waves = [w for w in read(results / 'waves.csv') if keep(w)]
-    report_pairs(args, games, houses, samples, waves)
+    other = lambda rows: [r for r in rows if r['tag'] != args.baseline_tag]
+    report_pairs(args, games, houses, other(load('samples.csv')), other(load('waves.csv')))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
-parser.add_argument('--results', required=True, help='Directory for games.csv, houses.csv, samples.csv, waves.csv')
+parser.add_argument('--results', required=True,
+                    help='Directory for games.csv, houses.csv, samples.csv, army.csv, waves.csv')
 parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--tag', default='cy1', help='Label of the code variant being measured')
@@ -471,7 +740,17 @@ parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--maps', nargs='+', default=list(MAPS))
 parser.add_argument('--seeds', nargs='+', type=int, default=[8101, 8202, 8303, 8404, 8505, 8606])
 parser.add_argument('--pairs', help='1v1 label pairs x:y,x:y (each played with both assignments)')
-parser.add_argument('--ffa', help='Four-player free-for-all: two labels x,y, two houses each')
+parser.add_argument('--ffa', help='Four-player free-for-all: labels x (all houses), x,y (two houses each) or a,b,c,d')
+parser.add_argument('--game-options', type=Path,
+                    help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
+                         'tests/performance/data/stefan-game-options.ini)')
+parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
+parser.add_argument('--baseline-tag', help='Report: compare with this tag (another code version, e.g. the last release): '
+                                           '1v1 pairings side by side in the same setup; a one-label FFA game by game '
+                                           '(default the first tag in sort order)')
+parser.add_argument('--baseline-results', help='Directory of the --baseline-tag rows (default --results)')
+parser.add_argument('--baseline', help='1v1 report: also pair each first label with this label\'s side against the same '
+                                       'opponent in the same setups (e.g. the old default, for a candidate v none)')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
@@ -482,7 +761,9 @@ parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe bi
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--minutes-shown', default='5,10,15,20,30,40,60', help='Report: economy table minutes')
 parser.add_argument('--adjudicate', type=float, default=1000,
-                    help='Report: a time-out goes to the side ahead on killed unit value by at least this many credits')
+                    help='Report, --scoring legacy only: a time-out goes to the side ahead on killed unit value by at '
+                         'least this many credits')
+match_score.add_arguments(parser)
 args = parser.parse_args()
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')

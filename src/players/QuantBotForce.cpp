@@ -32,6 +32,25 @@ namespace {
 
 int tiles(Coord a, Coord b) { return blockDistance(a, b).lround(); }
 
+/// The first point that \a accept takes on the line from \a from along \a step (\a step / \a length
+/// tiles per step) at steps \a first..last, searching a ring of at most \a rings tiles around each
+/// (rings outward, rows then columns); invalid if none. Integer and in a fixed order.
+template <typename Accept>
+Coord clearOfOwnBase(Coord from, Coord step, int length, int first, int last, int rings, Accept accept) {
+    Coord previous = Coord::Invalid();
+    for (int s = first; s <= last; ++s) {
+        const Coord centre(from.x + int(int64_t(step.x) * s / length), from.y + int(int64_t(step.y) * s / length));
+        if (centre == previous) continue;
+        previous = centre;
+        for (int ring = 0; ring <= rings; ++ring)
+            for (int dy = -ring; dy <= ring; ++dy)
+                for (int dx = -ring; dx <= ring; ++dx)
+                    if (std::max(std::abs(dx), std::abs(dy)) == ring && accept(centre + Coord(dx, dy)))
+                        return centre + Coord(dx, dy);
+    }
+    return Coord::Invalid();
+}
+
 Force::TargetKey targetKeyOf(const ObjectBase* object) {
     Force::TargetKey key;
     key.id = object->getObjectID();
@@ -76,7 +95,10 @@ int QuantBot::forceBits() const {
     return (force.focusFire ? kForceFocusFire : 0) | (force.converge ? kForceConverge : 0)
         | (force.bundle ? kForceBundle : 0) | (force.bundle && force.launchFromBundle ? kForceBundleGate : 0)
         | (force.perimeterHold ? kForcePerimeterHold : 0) | (force.perimeterTurrets ? kForceThreatTurrets : 0)
-        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0);
+        | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
+        | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
+        | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
+        | (force.sonicClearLane ? kForceSonicClearLane : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -128,15 +150,19 @@ int64_t healthValue(const UnitBase* unit) {
 } // namespace
 
 bool QuantBot::outnumberedByObservedArmy() const {
+    // Against the strongest enemy team in view, not every enemy summed (see enemyThreatEstimate).
     const int myTeam = getHouse()->getTeamID();
-    int64_t own = 0, hostile = 0;
+    int64_t own = 0;
+    std::map<int, int64_t> hostile;
     for (const auto* unit : getUnitList()) {
         if (!groundFighter(unit)) continue;
         const bool mine = unit->getOwner() == getHouse();
         if (!mine && (unit->getOwner()->getTeamID() == myTeam || !unit->isVisible(myTeam))) continue;
-        (mine ? own : hostile) += healthValue(unit);
+        (mine ? own : hostile[unit->getOwner()->getTeamID()]) += healthValue(unit);
     }
-    return Force::outnumbered(own, hostile);
+    int64_t strongest = 0;
+    for (const auto& [team, value] : hostile) strongest = std::max(strongest, value);
+    return Force::outnumbered(own, strongest);
 }
 
 void QuantBot::updateEnemySightings() {
@@ -155,10 +181,20 @@ void QuantBot::updateEnemySightings() {
     }
 }
 
-int64_t QuantBot::enemyArmyEstimate() const {
-    int64_t total = 0;
-    for (const auto& [id, sighting] : enemySightings) total += sighting.value;
-    return total;
+int64_t QuantBot::enemyThreatEstimate() const {
+    // The remembered army of the strongest single enemy team. In a 1v1 or against one alliance
+    // that is every remembered fighter; in a free-for-all the other houses fight each other as
+    // much as us, and summing them made every house permanently "outnumbered" (three equal
+    // starting armies are 300% of ours), so no house ever launched a wave and the reserve held
+    // the perimeter inside its own city (docs/formations.md, "Free-for-all: the army deploys").
+    // Grouped by the fighter's current owner: the sightings are in id order and std::map keeps
+    // the teams ordered, so every peer gets the same value.
+    std::map<int, int64_t> teams;
+    for (const auto& [id, sighting] : enemySightings)
+        if (const auto* unit = getObject(id); unit && unit->getOwner()) teams[unit->getOwner()->getTeamID()] += sighting.value;
+    int64_t strongest = 0;
+    for (const auto& [team, value] : teams) strongest = std::max(strongest, value);
+    return strongest;
 }
 
 int64_t QuantBot::ownGroundArmyValue() const {
@@ -172,7 +208,7 @@ bool QuantBot::outnumberedByEstimate() const {
     const Uint32 now = getGameCycleCount();
     if (estimateCycle != now) {
         estimateCycle = now;
-        estimateOutnumbered = Force::outnumbered(ownGroundArmyValue(), enemyArmyEstimate());
+        estimateOutnumbered = Force::outnumbered(ownGroundArmyValue(), enemyThreatEstimate());
     }
     return estimateOutnumbered;
 }
@@ -187,7 +223,7 @@ int64_t QuantBot::groundValueOf(const std::vector<Uint32>& ids) const {
 
 std::vector<Uint32> QuantBot::homeReserve(const std::vector<Uint32>& ids) const {
     std::vector<Uint32> kept;
-    const int share = Force::reserveShareBps(ownGroundArmyValue(), enemyArmyEstimate());
+    const int share = Force::reserveShareBps(ownGroundArmyValue(), enemyThreatEstimate());
     if (share <= 0) return kept;
     const Coord home = protectedRally.isValid() ? protectedRally : findBaseCentre(getHouse()->getHouseID());
     if (home.isInvalid()) return kept;
@@ -251,23 +287,49 @@ const QuantBot::Perimeter& QuantBot::perimeter() const {
     perimeterCache.length = length;
     perimeterCache.depth = depth;
     const int reach = depth + Force::kPerimeterStandoffTiles;
-    const Coord desired(anchor.x + int(int64_t(forward.x) * reach / length), anchor.y + int(int64_t(forward.y) * reach / length));
     auto usable = [&](Coord p) {
         if (!getMap().tileExists(p)) return false;
         const auto* tile = getMap().getTile(p);
         return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && !onPlannedSite(p);
     };
+    const Coord desired(anchor.x + int(int64_t(forward.x) * reach / length), anchor.y + int(int64_t(forward.y) * reach / length));
     for (int ring = 0; ring <= 6 && perimeterCache.point.isInvalid(); ++ring)
         for (int dy = -ring; dy <= ring && perimeterCache.point.isInvalid(); ++dy)
             for (int dx = -ring; dx <= ring && perimeterCache.point.isInvalid(); ++dx)
                 if (std::max(std::abs(dx), std::abs(dy)) == ring && usable(desired + Coord(dx, dy)))
                     perimeterCache.point = desired + Coord(dx, dy);
+    // A city spreads its lots and roads well beyond kPerimeterBaseTiles, and that point stood in the
+    // middle of the house's own streets: then walk on along the front to the first point clear of
+    // our buildings and roads (a compact base's point already is, and stays where it was).
+    constexpr int clear = Force::kPerimeterClearTiles;
+    if (perimeterCache.point.isInvalid() || builtUpDistance(perimeterCache.point, clear) < clear) {
+        const Coord out = clearOfOwnBase(anchor, forward, length, reach, reach + Force::kPerimeterMaxExtraTiles, 1,
+            [&](Coord p) { return usable(p) && builtUpDistance(p, clear) >= clear; });
+        if (out.isValid()) perimeterCache.point = out;
+    }
     return perimeterCache;
+}
+
+int QuantBot::builtUpDistance(Coord p, int limit) const {
+    for (int ring = 0; ring < limit; ++ring)
+        for (int dy = -ring; dy <= ring; ++dy)
+            for (int dx = -ring; dx <= ring; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != ring) continue;
+                const Coord q = p + Coord(dx, dy);
+                if (!getMap().tileExists(q)) continue;
+                const auto* tile = getMap().getTile(q);
+                if (tile->isRoad()) return ring;
+                if (tile->hasAStructure()) {
+                    const auto* building = tile->getGroundObject();
+                    if (building && building->getOwner() == getHouse()) return ring;
+                }
+            }
+    return limit;
 }
 
 int QuantBot::perimeterTurretGoal() const {
     if (!forceVariant(kForceThreatTurrets)) return 0;
-    return Force::perimeterTurretGoal(ownGroundArmyValue(), enemyArmyEstimate());
+    return Force::perimeterTurretGoal(ownGroundArmyValue(), enemyThreatEstimate());
 }
 
 int QuantBot::perimeterTurrets() const {
@@ -354,9 +416,10 @@ void QuantBot::focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, 
 void QuantBot::concentrateForces() {
     const bool noOverkill = forceVariant(kForceNoOverkill);
     const bool focus = forceVariant(kForceFocusFire) && !noOverkill, convergeOn = forceVariant(kForceConverge);
+    const bool turretsFirst = forceVariant(kForceTurretPriority), sonicLanes = forceVariant(kForceSonicClearLane);
     if (forceVariant(kForceMuster) || !musters.empty()) updateMusters();
     if (!splits.empty()) updateSplits();
-    if (!focus && !convergeOn && !noOverkill) return;
+    if (!focus && !convergeOn && !noOverkill && !turretsFirst && !sonicLanes) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
     // Visible enemy ground units and buildings, in list order.
@@ -370,6 +433,18 @@ void QuantBot::concentrateForces() {
             && structure->isVisible(myTeam))
             enemies.push_back(structure);
     if (enemies.empty()) return;
+    // Their turrets (armed buildings), for T.
+    std::vector<const ObjectBase*> turrets;
+    if (turretsFirst)
+        for (const auto* enemy : enemies)
+            if (enemy->isAStructure() && enemy->canAttack()) turrets.push_back(enemy);
+    // Our team's ground units a sonic wave would hurt (every one but the sonic tanks), for S.
+    std::vector<const UnitBase*> friends;
+    if (sonicLanes)
+        for (const auto* unit : getUnitList())
+            if (unit->getOwner() && unit->getOwner()->getTeamID() == myTeam && unit->getHealth() > 0 && unit->isActive()
+                && unit->isAGroundUnit() && unit->getItemID() != Unit_SonicTank)
+                friends.push_back(unit);
     // Our hunters: the wave members and the base defenders (engine Hunt, not forced).
     auto hunter = [&](const UnitBase* unit) {
         return unit->getOwner() == getHouse() && unit->getHealth() > 0 && unit->isActive() && unit->isRespondable()
@@ -402,6 +477,9 @@ void QuantBot::concentrateForces() {
     }
     for (const auto* unit : getUnitList()) {
         if (!hunter(unit) || escaping(unit)) continue;
+        if (sonicLanes && unit->getItemID() == Unit_SonicTank && sonicClearTarget(unit, enemies, friends)) continue;
+        if (!turrets.empty() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave && attackTurretInReach(unit, turrets))
+            continue;
         if (focus && focusFire(unit, enemies)) continue;
         if (fights.empty() || unitRole(unit, {UnitRole::Wave}) != UnitRole::Wave || unit->formationContact()) continue;
         // Not fighting: the nearest fight of our army (ties to the first in list order, which
@@ -420,6 +498,140 @@ void QuantBot::concentrateForces() {
         doHuntToward(unit, fight.x, fight.y);
         ++forceStats.converges;
     }
+}
+
+bool QuantBot::attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets) {
+    // Units first (focus fire): a hunter already shooting an armed unit in its reach keeps it, and
+    // one already on a turret keeps that turret.
+    const int myTeam = getHouse()->getTeamID();
+    const ObjectBase* current = unit->getTarget();
+    if (current && current->getHealth() > 0 && current->getOwner() && current->getOwner()->getTeamID() != myTeam
+        && armed(current) && (current->isAStructure() || unit->isInWeaponRange(current))) return false;
+    // The nearest turret that has this unit in its reach, or that the unit reaches (ties: list order).
+    const Coord at = unit->getLocation();
+    const ObjectBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* turret : turrets) {
+        const int distance = tiles(at, turret->getClosestPoint(at));
+        if (distance > std::max(turret->getWeaponRange() + 1, unit->getWeaponRange())) continue;
+        if (best && distance >= bestDistance) continue;
+        if (!unit->canAttack(turret)) continue;
+        best = turret; bestDistance = distance;
+    }
+    if (!best) return false;
+    doAttackObject(unit, best, false);
+    ++forceStats.turretTargets;
+    return true;
+}
+
+bool QuantBot::sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
+                                const std::vector<const UnitBase*>& friends) {
+    const Coord at = unit->getLocation();
+    // Our units the wave could reach at all (list order).
+    std::vector<Coord> near;
+    for (const auto* other : friends)
+        if (other != unit && tiles(at, other->getLocation()) <= Force::kSonicReachTiles + 1) near.push_back(other->getLocation());
+    auto clear = [&](const ObjectBase* target) {
+        const Coord aim = target->getClosestPoint(at);
+        for (const Coord& other : near)
+            if (Force::inSonicPath(aim.x - at.x, aim.y - at.y, other.x - at.x, other.y - at.y)) return false;
+        return true;
+    };
+    const int myTeam = getHouse()->getTeamID();
+    const ObjectBase* current = unit->getTarget();
+    if (current && current->getHealth() > 0 && current->getOwner() && current->getOwner()->getTeamID() != myTeam
+        && unit->isInWeaponRange(current) && clear(current)) return true;
+    // The nearest enemy in reach with a clear lane (ties: list order).
+    const ObjectBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* enemy : enemies) {
+        if (enemy == current || !unit->isInWeaponRange(enemy) || !unit->canAttack(enemy)) continue;
+        const int distance = tiles(at, enemy->getClosestPoint(at));
+        if (best && distance >= bestDistance) continue;
+        if (!clear(enemy)) continue;
+        best = enemy; bestDistance = distance;
+    }
+    if (!best) return false;
+    doAttackObject(unit, best, false);
+    ++forceStats.sonicRetargets;
+    return true;
+}
+
+bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
+    if (!structure->getOwner() || structure->getOwner()->getTeamID() == getHouse()->getTeamID()
+        || structure->getHealth() <= 0) return false;
+    switch (structure->getItemID()) {
+        case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            return false;
+        default: break;
+    }
+    const Coord at = structure->getLocation();
+    return getMap().tileExists(at) && getMap().getTile(at)->isExploredByTeam(getHouse()->getTeamID());
+}
+
+int QuantBot::finishTargetTeam() const {
+    // Ordered by team id (std::map), scanned in list order: the same choice on every peer.
+    std::map<int, Force::TeamStrength> teams;
+    for (const auto* structure : getStructureList()) {
+        if (!knownEnemyStructure(structure)) continue;
+        auto& team = teams[structure->getOwner()->getTeamID()];
+        team.team = structure->getOwner()->getTeamID();
+        ++team.structures;
+        if (structure->canAttack()) ++team.turrets;
+    }
+    for (const auto& [id, sighting] : enemySightings)
+        if (const auto* unit = getObject(id); unit && unit->getOwner()) {
+            const auto found = teams.find(unit->getOwner()->getTeamID());
+            if (found != teams.end()) found->second.army += sighting.value;
+        }
+    const Force::TeamStrength* weakest = nullptr;
+    for (const auto& [id, team] : teams)
+        if (!weakest || Force::weakerTeam(team, *weakest)) weakest = &team;
+    return weakest ? weakest->team : -1;
+}
+
+const ObjectBase* QuantBot::finishObjective(const UnitBase* lead, int team) const {
+    if (!lead || team < 0) return nullptr;
+    const ObjectBase* chosen = nullptr;
+    int best = std::numeric_limits<int>::max();
+    for (const auto* structure : getStructureList()) {
+        if (!knownEnemyStructure(structure) || structure->getOwner()->getTeamID() != team) continue;
+        int score = tiles(lead->getLocation(), structure->getLocation());
+        switch (structure->getItemID()) {
+            case Structure_ConstructionYard: case Structure_HeavyFactory: case Structure_LightFactory:
+            case Structure_HighTechFactory: case Structure_Refinery:
+                score -= Force::kFinishPriorityTiles; break;
+            default: break;
+        }
+        if (score >= best || !groundAttackReachable(lead, structure)) continue;
+        best = score; chosen = structure;
+    }
+    return chosen;
+}
+
+const StructureBase* QuantBot::pressOnTarget(const UnitBase* unit, const std::vector<const StructureBase*>& known,
+                                             int team) const {
+    const Coord at = unit->getLocation();
+    const StructureBase* best = nullptr;
+    int bestDistance = 0;
+    for (const auto* structure : known) {
+        if (team >= 0 && structure->getOwner()->getTeamID() != team) continue;
+        const int distance = tiles(at, structure->getClosestPoint(at));
+        if (best && distance >= bestDistance) continue;
+        if (!groundAttackReachable(unit, structure)) continue;
+        best = structure; bestDistance = distance;
+    }
+    return best;
+}
+
+int QuantBot::knownTurretsNear(const ObjectBase* objective) const {
+    if (!objective) return 0;
+    const Coord at = objective->getLocation();
+    int count = 0;
+    for (const auto* structure : getStructureList())
+        if (structure->canAttack() && knownEnemyStructure(structure)
+            && tiles(at, structure->getLocation()) <= Force::kFortifiedRadiusTiles) ++count;
+    return count;
 }
 
 const QuantBot::Muster* QuantBot::musterOf(Uint32 id) const {
@@ -542,7 +754,7 @@ void QuantBot::updateMusters() {
 // orders per pass, farthest first; bundled troops keep no role, so base defence takes them like
 // any other. The point, its clock and the launch gate's wait are saved (9863).
 
-Coord QuantBot::forwardBundlePoint() {
+Coord QuantBot::forwardBundlePoint(int clearance) {
     const Uint32 now = getGameCycleCount();
     const bool unsafe = bundlePoint.isValid() && (!getMap().tileExists(bundlePoint) || dangerAt(bundlePoint) != 0);
     if (!unsafe && bundleCycle != std::numeric_limits<Uint32>::max() && now >= bundleCycle
@@ -551,23 +763,40 @@ Coord QuantBot::forwardBundlePoint() {
     const Coord home = armyAssemblyAnchor();
     if (home.isInvalid()) { bundlePoint = Coord::Invalid(); return bundlePoint; }
     const Coord towards = observedFrontDirection(home);
-    const Coord desired(Force::along(home.x, home.x + towards.x, Force::kBundleForwardPercent),
-                        Force::along(home.y, home.y + towards.y, Force::kBundleForwardPercent));
     auto usable = [&](Coord p) {
         if (!getMap().tileExists(p)) return false;
         const auto* tile = getMap().getTile(p);
         return !tile->isMountain() && !tile->hasAStructure() && !tile->isSpiceBloom() && dangerAt(p) == 0
             && !onPlannedSite(p);
     };
-    bundlePoint = Coord::Invalid();
-    for (int ring = 0; ring <= 8 && bundlePoint.isInvalid(); ++ring)
-        for (int dy = -ring; dy <= ring && bundlePoint.isInvalid(); ++dy)
-            for (int dx = -ring; dx <= ring && bundlePoint.isInvalid(); ++dx)
+    // A quarter of the way (the nearest usable tile to it) ...
+    const Coord desired(Force::along(home.x, home.x + towards.x, Force::kBundleForwardPercent),
+                        Force::along(home.y, home.y + towards.y, Force::kBundleForwardPercent));
+    Coord quarter = Coord::Invalid();
+    for (int ring = 0; ring <= 8 && quarter.isInvalid(); ++ring)
+        for (int dy = -ring; dy <= ring && quarter.isInvalid(); ++dy)
+            for (int dx = -ring; dx <= ring && quarter.isInvalid(); ++dx)
                 if (std::max(std::abs(dx), std::abs(dy)) == ring && usable(desired + Coord(dx, dy)))
-                    bundlePoint = desired + Coord(dx, dy);
+                    quarter = desired + Coord(dx, dy);
+    // ... unless that is among our own lots and roads (a city base, where the reserve stood packed
+    // in its own streets): then the first point further towards the enemy, at most half way, that
+    // the whole bundle fits beside without entering the base. Where none is, the quarter point.
+    int forwardPercent = Force::kBundleForwardPercent;
+    bundlePoint = quarter;
+    if (quarter.isInvalid() || builtUpDistance(quarter, clearance) < clearance) {
+        const Coord clear = clearOfOwnBase(home, towards, 100, Force::kBundleForwardPercent,
+            Force::kBundleMaxForwardPercent, 2, [&](Coord p) { return usable(p) && builtUpDistance(p, clearance) >= clearance; });
+        const int64_t length2 = int64_t(towards.x) * towards.x + int64_t(towards.y) * towards.y;
+        if (clear.isValid() && length2 > 0) {
+            bundlePoint = clear;
+            forwardPercent = int((int64_t(clear.x - home.x) * towards.x + int64_t(clear.y - home.y) * towards.y) * 100 / length2);
+        }
+    }
     if (bundlePoint.isInvalid()) bundlePoint = home;
     traceDecision("force_bundle_point", AITelemetry::Record().set("x", bundlePoint.x).set("y", bundlePoint.y)
-        .set("home_x", home.x).set("home_y", home.y).set("forward_x", towards.x).set("forward_y", towards.y));
+        .set("home_x", home.x).set("home_y", home.y).set("forward_x", towards.x).set("forward_y", towards.y)
+        .set("forward_percent", forwardPercent).set("clearance", clearance)
+        .set("built_up_tiles", builtUpDistance(bundlePoint, clearance)));
     return bundlePoint;
 }
 

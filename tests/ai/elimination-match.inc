@@ -33,6 +33,12 @@ inline int survivingTeam(Game& game) {
     return teams.size() == 1 ? *teams.begin() : 0;
 }
 
+} // namespace EliminationMatch
+
+#include "ffa-army.inc"
+
+namespace EliminationMatch {
+
 inline void sample(Game& game) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : playingHouses(game)) {
@@ -58,6 +64,7 @@ inline void sample(Game& game) {
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
                 house->getKillValue(), house->getLossValue());
     }
+    FfaArmy::sample(game);
 }
 
 /// Plays to elimination or `end`. Returns "won"/"lost" for `house`'s team, or "time_limit".

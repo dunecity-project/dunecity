@@ -245,7 +245,13 @@
 //     [Strategy] Mode / MixWeights / TempoWeights (hashed); the mix is the prior its learned unit
 //     mix starts from, the tempo its wave readiness. An 81 peer would build and attack
 //     differently and desync. Save 9865 (the strategy).
-#define NETWORK_PROTOCOL_VERSION            82
+// 84: QuantBot in a free-for-all: "outnumbered" (the perimeter hold, perimeter turrets and the
+//     test-only round 5 rules) measures the remembered army of the strongest single enemy team,
+//     not every enemy summed, and the forward bundle and the perimeter point move out of the
+//     house's own buildings and roads (a city base) towards the enemy. No saved state or command
+//     change; an 82 or 83 peer would order the same AI units differently and desync. (83 is
+//     feat/ai-ratio-tuning's.) Save 9865 unchanged.
+#define NETWORK_PROTOCOL_VERSION            84
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -1,3 +1,208 @@
+## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data
+`~/Documents/projects/dunecity-results/army-stuck/` (`*-ablation*`, `late-*`, `cy-tel`) and
+`~/Documents/projects/dunecity-results/scenario-matrix/army-stuck-{before-c,after}`.
+
+- **Merged** `exp/ai-late-game` (scenario matrix acdada9b, late-game candidates T/P/H/K, `--baseline-tag`)
+  into the fix branch; `exp/ai-late-game` fast-forwarded to it. Ablation style files renamed in the
+  index (case-only renames had never been committed).
+- **UVX ablation (placement score):** X helps (`/weak` without X -0.222, -0.45..-0.02); U neutral; V not
+  helpful anywhere (`/weak` +0.111 and FFA +0.115 without it, both level). V's removal (0fcfc612) made
+  `quantbot_strategy` and `quantbot_no_spice_income_low-cash` fail deterministically (both pass with V),
+  so it was reverted (1c2bedf6). **Open:** re-examine those two tests against a V-less opening, then remove V.
+- **CY 1v1 -0.10 v 1.0.847:** level; only the bundle walk-out can differ in a 1v1 (moves the point
+  25% -> 22-34% in 10 of 38 recomputations); 100/120 games diverged chaotically. No change.
+- **Late-game candidates all rejected (stay off):** head-to-head T +0.057, P +0.125, H -0.044 (32 games),
+  K +0.031, T+P +0.179, all four -0.130 (48), S +-0.006 (48): all level; self-play DuneCity time-outs
+  default 5/12, all four 8/12, T+P 7/12, P 7/12 - every candidate ends fewer games. New candidate S
+  (`SonicClearLane`, `@sonic`): sonic tanks pick targets whose wave misses own units; active (675
+  retargets per Atreides house) but level. Military cap use not changed (not measured).
+- **Windows probe build:** `tests/performance/game-perf.inc` uses GetThreadTimes on Windows (436e6d3e).
+- **Harness:** late-rule counters in `houses.csv` (old files rewritten with the new columns on append).
+- The cluster's finish step failed for late-selfTPP/late-sonic2 (`import match_score`, runpy path); rows
+  are complete, reports run by hand.
+- **Scenario matrix, full tier skirmish/cy/mp/aaa (152 games, cluster):** final code (= `before-c`, ff0474c7
+  behaviour) 150 games played, time-outs skirmish 10/52, cy 5/28, mp 6/52, aaa 0/18, no crash; flags: QM
+  idle once (7P FFA), 3v3 medium small-army Hard team 0/4, ladder order inverted (as on 1.0.847). V
+  removed (`after`, 0fcfc612, not landed): 151 games, time-outs 11/6/4/0, same flags.
+- **Tests** (Release `build`, ctest -j3, after the revert, 1c2bedf6 tree): 45/45 passed - dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and all quantbot_* (incl. all_against_atreides, strategy, ffa_army_deploys,
+  scenario_matrix smoke).
+
+## 2026-10-18 — FFA army fix, continued: scoring merged, fix v 1.0.847, ablation and late-game draws IN PROGRESS (branches `fix/ai-army-stuck-in-base` b8965267, `exp/ai-late-game`; not released)
+
+Agent ArmyStuck2 stopped at its budget; nothing here is a final decision. Results:
+`~/Documents/projects/dunecity-results/army-stuck/` (new placement score, `tests/ai/match_score.py`).
+
+- **Merged:** `test/match-scoring` into the fix branch (ea6a0e23; vanilla-match keeps both the scorer and
+  the FFA army reports); `test/ai-scenario-matrix` acdada9b into `exp/ai-late-game` (69c5826d).
+  Ablation styles renamed lower case (`@nov @nou @nox @nouvx`): the label parser rejects upper case,
+  so ArmyStuck's queued `@noV...` FFA ablation had failed in every game.
+- **Reports:** `--baseline-tag T --baseline-results DIR` (formation-duel, vanilla-match 1v1 and one-label
+  FFA) pairs the same setup played by another code version (fix v 1.0.847).
+- **Fix v 1.0.847 (new score):** 4P FFA rs160 dunecity+vanilla, 8 seeds: mean house score -0.037 v
+  -0.179, Δ +0.142 (+0.09..+0.19) beats; time-outs 4/16 v 13/15; first elimination dunecity 32.3 v
+  58.4 min (7/8 v 4/7 games), vanilla 7.1 v >60. Fortress default v none 0.771 v 0.806 Δ -0.035
+  (-0.10..+0.00) level; `/weak` Δ +0.14 (-0.08..+0.36) level (64 games); CY 1v1 (120) 0.312 v 0.417
+  Δ -0.10 (-0.26..+0.05) level. `quantbot_scenario_matrix` (fails on 1.0.847) passed on the fix (170 s).
+- **Ablation (partial when stopped, all level):** Fortress h2h 14-16 games/arm, CY h2h 30-32/arm, FFA
+  6 games. Still queued/running on the mini: `ffa-abl`, `ffa-abl-u`, `weak-abl` (results dirs
+  `ffa-ablation`, `ffa-ablation-u`, `weak-ablation`), `duel-abl`, `cy-abl`. No UVX decision yet.
+- **Late-game diagnosis** (`diag-dunecity-9101`, decision log): the last two cities hold 206 and 265
+  turrets at minute 60; the stronger house (Atreides) sat at its military limit with 139k credits
+  unspent, waves of 100-190 units every ~2.5 min; its losses after minute 20: enemy units ~2,000
+  (siege tanks, quads, launchers, ornithopters), rocket turrets 451, its OWN sonic tanks 596 (friendly
+  fire, ~20%); only ~40 of the defender's turrets died in 40 minutes. Waves never target turrets (engine
+  Hunt = nearest visible; focus fire prefers units), go to GUARD when nothing is visible, and walk back
+  to the bundle.
+- **Late-game candidates** (`exp/ai-late-game` f016c104, `[Force Concentration]` keys, code default OFF,
+  hashed; styles `@turretsfirst @presson @finish @fortified @lateall`): T TurretPriority (a wave hunter in
+  a turret's reach that is not shooting an armed unit attacks the turret), P PressOn (idle wave members
+  hunt on to the nearest seen enemy structure), H FinishWeakest (waves hunt towards the weakest known
+  house's yard/factories/refinery), K FortifiedWaves (8+ seen turrets near the objective: wait for 60% of
+  the military limit, at most 4 min after the last wave). Unit tests in ForceConcentrationPolicyTestCase
+  and the config hash test. One smoke game, seed 9101 dunecity, all four on: ended at 54 min (fix: time-out).
+  Running: Air `late-h2h1` (default v T v P v H, 32 FFA games; `dunecity-air pull late-h2h1 DIR`).
+  Not run: `late-self` (`--ffa default@lateall`, 16 games), K/lateall head-to-head, 1v1/Fortress/CY checks,
+  scenario-matrix skirmish/cy/mp full tier (134 games) after the fix, regression test tightening, ctest set.
+- **Do not rebuild/edit headers in `~/Documents/projects/dunecity-army-stuck`** until its queued jobs have
+  started (the probe compiles main.cpp against the tree's headers at job start).
+
+## 2026-10-18 — QuantBot FFA: armies stuck in base fixed (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Stefan (4P DuneCity FFA, four QuantBot Brutal, save `/tmp/mba-wtf-20261018/wtf.dls`): "all the units are
+stuck in the middle of the base". Write-up: `docs/formations.md`, "Free-for-all: the army deploys";
+evidence `~/Documents/projects/dunecity-results/army-stuck/` (`wtf/`, `wtf-fix1/` overlays, rendered
+screenshots, decision logs).
+
+- **Cause:** "outnumbered" (V perimeter hold) summed every enemy's remembered army: 3 equal enemies =
+  300%, so every house was garrisoned all game (0 waves in 19.8 min of his game, 276/276 attack checks
+  deferred); the garrison's perimeter point and the bundle lay inside the house's own city (1-7 tiles
+  from own buildings), 89-95% of each army inside its base.
+- **Fix:** `enemyThreatEstimate()` = strongest single enemy team (1v1 / one alliance unchanged);
+  bundle and perimeter points walk out of own buildings/roads towards the enemy. Protocol 84 (83 is
+  feat/ai-ratio-tuning's), no saved state change. Merged `perf/game-fps` e54a58bc and 5ff98662 first.
+- **Tests added:** `quantbot_ffa_army_deploys` (mandatory, AGENTS.md/CLAUDE.md); force probe section 7
+  FFA threat + city-streets perimeter checks; harness `rs<size>-dunecity|vanilla` FFA maps,
+  `FFA_ARMY_SAMPLE`/`army.csv`, `ffa-map.py`, `--ffa-screenshot`. Verified so far: build,
+  `quantbot_force_concentration` passed; the new regression runner passed on the fix (first wave 1.3 min,
+  eliminations 22.3/27.4 min).
+- **Running when handed over** (results dirs under `dunecity-results/army-stuck/`): mini queue
+  `ffa-base` (1.0.847 + harness, worktree `~/Documents/projects/dunecity-army-stuck-base`, branch
+  `test/ffa-baseline-847`), `ffa-fix`, `duel-fix` (Fortress + `/weak` default:none, 72), `cy-fix` (CY 1v1
+  default:none, 120); Air `duel-base` (same duels on 1.0.847; pull with `dunecity-air pull duel-base`).
+  Report: `vanilla-match.py --results <dir> --tags base|fix --ffa default --difficulty brutal --report`.
+  Not yet done: CY baseline arm, the full ctest set, MatchScoring's scoring (test/match-scoring), and
+  the open late-game stalemate (two cities trading waves into turrets until the 60-minute limit).
+
+## 2026-10-18 — Game FPS round 2: real app on his Air, AI decision log setting, match activity, F12 breakdown, perf_regression menu launch (branch `perf/game-fps`, not released)
+
+Stefan: "your changes have broken the performance" (13 fps at 2 ms) and "make turning ai logging a
+configuration setting in the game". Details: `docs/game-performance.md`, "The real app on his Air".
+
+- **Real app, his Air:** copy of installed 1.0.847 via LaunchServices + real menus (scratch profile,
+  his INI): window in front 100-117 fps at full 500 cycles/s; covered by another app's full-screen
+  window 30-40 fps, per-cycle costs ~2x (main thread priority unchanged). His slow session began on
+  battery with Low Power Mode (Battery profile lowpowermode 1), then 3-4 cores of system load after
+  AC. Cause not proven; no code regression. Opt-out effect not measured (Stefan closed the test game;
+  he uses the Air, so sessions only when he is idle >2 min and after warning Main).
+- **Code:** `[General] AI Decision Log` (default off, "AI decision log" checkbox next to "Diagnostic logs",
+  `DUNECITY_AI_TELEMETRY=0/1` override, prune to newest 20 sessions / 2 GB at game start);
+  `GameActivity::Scope` (macOS NSProcessInfo UserInitiatedAllowingIdleSystemSleep|LatencyCritical)
+  in `Game::runMainLoop`; F12 overlay with cycles/frame, achieved speed and per-component ms.
+  Harnesses enable the log explicitly. perf_regression adds `--menu-launch 30`
+  (`tests/performance/menu-launch.inc`).
+- **Air:** test copies `~/dunecity-runner/gamefps2/{dc847,fix}.app` unregistered from
+  LaunchServices; runner PAUSE removed. Test tools in `~/dunecity-runner/gamefps2/bin`.
+
+## 2026-10-18 — Game FPS at 2 ms game speed: no release regression found; placement cuts; perf_regression (branch `perf/game-fps`, not released)
+
+Stefan (1.0.847, MBA M5): 13 fps spectating a 4P 160x160 DuneCity Brutal Random Skirmish at Game
+Speed 2 ms. Write-up: `docs/game-performance.md`; raw data `~/Documents/projects/dunecity-results/game-fps`.
+
+- **Tooling:** `tests/performance/game-perf.py` (+ `game-perf.inc`): stepped per-cycle/per-house
+  costs, interactive main loop headless or rendered (`--rendered`, real window, 2 ms), older releases
+  via `--source`; scenario `stefan-map` = his slow game's map from its pinned Workshop revision.
+  `run-campaign-balance.py --real-video`.
+- **Bisect (quiet mini, rendered, 2 ms, 8 game min):** 1.0.833-1.0.847 all 59.4-60 fps vsync-capped
+  at full 500 cycles/s, worst house update 25-31 ms in every release.
+- **His Air, his slow.dls, same 1.0.847 code, scratch profile (Air runner paused):** full speed,
+  ~100 fps; also with a copy of his `Dune City.ini`, decision log on or off. His 13 fps session had
+  every sim component 3-7x slower per cycle: machine state during the session, not a code regression.
+  Not compared: the /Applications app through the menus vs the probe. 33 GB of old decision logs in
+  his profile (not deleted).
+- **Changes (51 PROBE_DIGESTs identical over 10 game min):** reactor blast-spacing sites collected
+  once per placement search instead of a whole-map structure walk per candidate; the per-candidate
+  JSON telemetry record replaced by plain numbers (record written once). QuantBot build time -25..-32%.
+- **perf_regression** ctest (mandatory, AGENTS.md/CLAUDE.md): passed (42 s). Required ctest list:
+  see the final report of this branch.
+
+## 2026-10-18 — AI scenario matrix: many kinds of game, smoke ctest, full tier on 1.0.847 (branch `test/ai-scenario-matrix`, test-only, protocol/save unchanged)
+
+Stefan: test construction yard, prebuilt bases, DuneCity vs vanilla, All against Atreides vanilla,
+campaign levels 1-9, a difficulty ladder (Brutal beats Medium, Hard/Medium beat Easy), random games with
+different players and armies, and the popular MP maps 1v1/2v2/3v3. Write-up and table:
+`docs/ai-scenario-matrix.md`, `docs/ai-scenario-matrix-results/847/report.md`; raw CSVs
+~/Documents/projects/dunecity-results/scenario-matrix/full-847. Merges `test/match-scoring` (17af09d2).
+
+- **Code (test-only).** `tests/ai/scenario-match.inc` (probe mode `run-campaign-balance.py --scenario`:
+  per-house team + controller class `--scenario-sides`, Random Skirmish multiplayer map `--skirmish`
+  incl. `base=cy` = MCV deployed before cycle 1, campaign `--mission`, `--enemy-ai campaign`; logs
+  sorties, eliminations, triggers fired, win/lose flags, quota, city pop) and `tests/ai/scenario-matrix.py`
+  (6 categories, 635-game full tier, `--shard K/N`, `--report DIR...` with match_score placement scores,
+  Wilson checks, ladder intervals, flags). `run-campaign-balance.py` reads bundled maps with binary junk
+  (Full Wormage). Runners: `run-batch.sh` on the Pro and the Air accepts `scenario-matrix`.
+- **Mandatory smoke:** ctest `quantbot_scenario_matrix` (AGENTS.md/CLAUDE.md, next to
+  quantbot_all_against_atreides): 10 games, ~2 min at 3 jobs. **Fails on 1.0.847**: the 4P FFA (seed
+  90866) ends with nobody eliminated after 60 min (ArmyStuck's FFA bug; told ArmyStuck). Other 9 pass;
+  `ctest -j3 -R 'quantbot_|dunelegacy_tests|skirmish_generator'` 36/37 (only this test fails).
+- **Full tier on 1.0.847:** 25 min on Pro + Air + PC; no crash, no idle army, all-against-Atreides
+  vanilla 6/6 and reverse 6/6, Hard v Easy 23-1, Brutal v Medium 17-5-2, QH teams beat AH teams 24/24,
+  Hard campaign partner 174/192. Problems: FFAs (4-8 houses) mostly time out; Medium v Easy 7-3-14 (order
+  not shown, 8/8 draws on Habbanya-Penny); 3v3 QH team lost 0/4 to QM on the 160 medium-base map; Hard
+  partner loses vanilla levels 8-9 (8/12 Atreides/Harkonnen); DuneCity campaigns won economically (74/90);
+  DuneCity All against Atreides 5/6.
+- **Parity:** smoke digests identical on mini, Pro, Air and PC.
+- **Incident:** `agent-workspace run --git -- git merge` ran in the staging checkout and fast-forwarded
+  `integrate/feature-batch` to 17af09d2 for ~1 min; reset with `git reset --keep b683286f` (told Main).
+
+## 2026-10-18 — AI test scoring: placement score, negative draws, paired default rule (branch `test/match-scoring`)
+
+Stefan: the AIs have to attack, not raid forever into draws, so draws must be negative (better than a loss).
+Multiplayer wins must count for more: 1st a big score, 2nd smaller, and in 8 players the top 4 positive,
+the bottom 4 negative. Python harness/report code and docs only: no game, AI, protocol or save change.
+Write-up: `docs/ai-play-styles.md` section 7.
+
+- **Score** (`tests/ai/match_score.py`, used by `formation-duel.py --report`, `vanilla-match.py --report`
+  incl. `--ffa`, `play-style-matrix.py`):
+  - Place p of N scores 1 - 2(p-1)/(N-1). Eliminated entrants are ranked by elimination time; ties share
+    the mean place.
+  - At a time-out the k survivors share places 1..k minus D = 0.25, clamped between the best eliminated
+    score and +1. A 1v1 draw is -0.25 (`--draw-score`).
+  - Teams are ranked as teams. Kill-value adjudication is gone; the value margin is still printed.
+  - `--scores FILE` writes per game and side: eliminated, place, score, drawn, `end_s`, decisive.
+- **Rule:** a candidate beats the control when the 95% bootstrap interval of the paired score difference
+  is above 0. Pairing is per game, or by setup against a common opponent with `--baseline`. Each arm's
+  time-out rate is reported. `--scoring legacy` restores the old rule and reproduces old reports.
+  - New report options: `play-style-matrix.py --same A=B` (label aliases) and `--by-strategy`;
+    `vanilla-match.py --control` for FFA.
+  - Recorded CSV formats are unchanged; `houses.csv` `place` now averages tied eliminations.
+- **Re-scored:**
+  - **1.0.847 Learned/Swarm stands.** CY v BASE Δ +0.29 (+0.08..+0.50), n=356, 2% time-outs. Fortress
+    is level, Δ +0.11 (-0.17..+0.41), with 33% time-outs on both sides; the draw penalty is symmetric
+    head to head. Brutal is level.
+  - **Round 5's UVX default would fail the new rule.** The `/weak` paired gain over BWFCQ was +0.120
+    (+0.03..+0.21) and is now +0.06 (-0.09..+0.20); it came from adjudicated time-outs. UVX is still in
+    the game: a decision for Stefan.
+  - Round 4 BWFCQ stands.
+  - Fortress round-robin: boom and timing now lose to most styles (adjudication had rescued them).
+  - FFA BWFCQ v none: Δ +0.16 (-0.01..+0.33), level.
+- **Tests:** `python3 -m unittest tests.test_match_score` 8/8. No smoke batch was run: the harnesses'
+  game-running path only changed the `place` column computation, and no build was configured.
+
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
 Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct

@@ -641,6 +641,12 @@ private:
     void refreshTacticalDanger();
     int dangerAt(Coord pos, Coord size = Coord(1, 1), bool losses = false) const;
     bool reactorClearance(Uint32 item, Coord pos) const;
+    /// The footprints (x, y, w, h) a placement of @a item must keep reactor blast clearance from:
+    /// for a reactor every own protected building, for a protected building every own reactor
+    /// (standing or reserved by another builder); empty for anything else. reactorClearance()
+    /// is clearsBlastSites() over this list; a placement search builds it once per search.
+    std::vector<std::array<int, 4>> reactorBlastSites(Uint32 item) const;
+    static bool clearsBlastSites(const std::vector<std::array<int, 4>>& sites, Coord pos, Coord size);
     int rearScore(Coord pos, Coord base) const;
     int recentFactoryLossCount() const;
     struct SpiceFieldCache;
@@ -995,7 +1001,7 @@ private:
     /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U, V and X
     /// are taken from QuantBotConfig::force, the others are test-only):
     /// kForceEstimate (E: D measures the remembered enemy army,
-    /// enemyArmyEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
+    /// enemyThreatEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
     /// that estimate outnumbers us, no wave launches and the reserve holds the protected
     /// rally under turret cover; the enemy attacks into it), kForceStrengthWaves (A: a ready
     /// wave launches only when its value is forceStrengthBps of the estimate), kForceReserve
@@ -1010,17 +1016,29 @@ private:
     /// OpeningReadiness, default on since protocol 81: a house that started without an army able
     /// to launch a wave - a Construction Yard start - holds its first ground wave for full
     /// readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
+    /// Late game (docs/formations.md, "Free-for-all: finishing the game"; [Force Concentration]
+    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves): kForceTurretPriority (T: a wave
+    /// hunter in an enemy turret's reach that is not shooting an armed unit attacks the turret),
+    /// kForcePressOn (P: a wave member out of visible targets hunts on to the nearest enemy
+    /// structure seen), kForceFinishWeakest (H: a ground wave hunts towards the weakest known
+    /// enemy house's production and economy), kForceFortifiedWaves (K: against an objective
+    /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army)
+    /// and kForceSonicClearLane (S, SonicClearLane: a hunting sonic tank whose wave would pass over
+    /// one of our own units shoots another enemy in reach whose lane is clear).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304;
+        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304,
+        kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
+        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
     int forceStrengthBps = 10000;
-    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X and I.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X, I,
+    /// T, P, H and K.
     int forceBits() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
@@ -1033,8 +1051,9 @@ private:
     /// The readiness a launch uses now: openingReadinessPercent(), raised to 100 by D while the
     /// house is outnumbered (outnumberedByObservedArmy(), with E outnumberedByEstimate()).
     int launchReadinessPercent();
-    /// Health-weighted value of the visible enemy mobile ground fighters against ours (all of
-    /// them, wherever they stand): ForceConcentrationPolicy::outnumbered. One unit-list pass.
+    /// Health-weighted value of the visible enemy mobile ground fighters of the strongest enemy
+    /// team against ours (wherever they stand): ForceConcentrationPolicy::outnumbered. One
+    /// unit-list pass.
     bool outnumberedByObservedArmy() const;
     /// The remembered enemy army: every enemy mobile ground fighter seen within the last
     /// kSightingMemoryMs that still exists, at its health-weighted value when last seen.
@@ -1042,10 +1061,13 @@ private:
     std::map<Uint32, Sighting> enemySightings;
     /// Records the visible enemy fighters and forgets the dead and the long unseen (unit pass).
     void updateEnemySightings();
-    int64_t enemyArmyEstimate() const;
+    /// The threat the remembered enemy army poses: the strongest single enemy team's share of it
+    /// (every remembered fighter in a 1v1 or against one alliance; in a free-for-all not the sum
+    /// of houses that also fight each other).
+    int64_t enemyThreatEstimate() const;
     /// Health-weighted value of our own mobile ground fighters.
     int64_t ownGroundArmyValue() const;
-    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyArmyEstimate(),
+    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyThreatEstimate(),
     /// once per cycle.
     bool outnumberedByEstimate() const;
     mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
@@ -1057,7 +1079,8 @@ private:
     /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
     /// base centre along the observed front direction, the farthest own building within
     /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
-    /// beyond it (point). Derived from the world once per cycle; invalid without a base or a front.
+    /// beyond it (point) - further out if that is still among our buildings or roads (a city
+    /// base; builtUpDistance). Derived from the world once per cycle; invalid without a base or a front.
     struct Perimeter {
         Coord anchor = Coord::Invalid(), forward = Coord(0, 0), point = Coord::Invalid();
         int length = 0;         ///< isqrt of |forward|^2
@@ -1088,6 +1111,32 @@ private:
     bool focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies);
     /// Attack-value focus fire without overkill over \a hunters (sorted by object id).
     void focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, const std::vector<const ObjectBase*>& enemies);
+    /// kForceTurretPriority (T): \a unit, a hunter not shooting an armed unit in its reach, attacks
+    /// the nearest enemy turret among \a turrets that has it in reach (or that it reaches); true if
+    /// it was given that target.
+    bool attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets);
+    /// kForceSonicClearLane (S): \a unit, a hunting sonic tank, keeps a target whose lane is clear
+    /// of \a friends (our team's ground units within reach, sonic tanks excluded) or switches to the
+    /// nearest enemy in its reach among \a enemies whose lane is; true if it is now on a clear-lane
+    /// target (no other targeting rule then applies to it this pass).
+    bool sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
+                          const std::vector<const UnitBase*>& friends);
+    /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
+    /// or power line: what a player knows stands there.
+    bool knownEnemyStructure(const StructureBase* structure) const;
+    /// kForceFinishWeakest (H): the enemy team to finish - of the teams with a known structure,
+    /// the weakest by remembered army plus kKnownTurretValue per known turret (ties: fewer known
+    /// structures, then the lower team id); -1 when none is known.
+    int finishTargetTeam() const;
+    /// H's objective for a wave led by \a lead: the nearest known structure of \a team the lead can
+    /// reach by ground, production and economy (yard, factories, refinery) counted 20 tiles nearer.
+    const ObjectBase* finishObjective(const UnitBase* lead, int team) const;
+    /// kForcePressOn (P): the nearest known enemy structure to \a unit (of \a team, or any when -1)
+    /// it can reach by ground, from \a known (the known enemy structures of this pass), or nullptr.
+    const StructureBase* pressOnTarget(const UnitBase* unit, const std::vector<const StructureBase*>& known,
+                                       int team) const;
+    /// kForceFortifiedWaves (K): known enemy turrets within kFortifiedRadiusTiles of \a objective.
+    int knownTurretsNear(const ObjectBase* objective) const;
     /// Distant defenders gathering before they engage at an attacked building (kForceMuster).
     struct Muster {
         Uint32 building = NONE_ID;
@@ -1111,7 +1160,13 @@ private:
     Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
     /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
     Uint32 bundleGateSince = 0;
-    Coord forwardBundlePoint();
+    /// The bundle point, out of our own base by \a clearance tiles where the line towards the
+    /// enemy allows it (ForceConcentrationPolicy::bundleClearance; docs/formations.md
+    /// "Free-for-all: the army deploys").
+    Coord forwardBundlePoint(int clearance);
+    /// Tiles (Chebyshev, at most \a limit) from \a p to the nearest tile of one of our buildings
+    /// or a road: how far a point is from the built-up base. Rings outward, bounded box.
+    int builtUpDistance(Coord p, int limit) const;
     /// The house attack threshold attack() starts from (credits of military value, before the
     /// campaign adjustment and the wave readiness scaling).
     int houseAttackThreshold() const;
@@ -1164,7 +1219,8 @@ private:
             stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
-            turretsBuilt = 0, turretsLost = 0, raidOrders = 0;
+            turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
+            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets

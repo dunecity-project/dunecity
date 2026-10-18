@@ -140,11 +140,17 @@ parser.add_argument('--game-options', type=Path,
                     help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
 parser.add_argument('--elimination-match', action='store_true',
                     help='Play until one team is left (also as a local spectator) and log per-minute house samples')
+parser.add_argument('--ffa-screenshot', type=Path,
+                    help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
+                         'between its assembly point and its forward bundle) at the first sample, at --viewport')
+parser.add_argument('--ffa-screenshot-minute', type=int, help='--ffa-screenshot: at the first sample from this game minute')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
 parser.add_argument('--partner-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
-parser.add_argument('--enemy-ai', choices=('quantbot','ai-player'), default='quantbot', help='Enemy controller family; AI Player has Easy/Medium/Hard')
+parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), default='quantbot',
+                    help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
+                         '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
@@ -152,6 +158,9 @@ parser.add_argument('--stats-ui-probe', action='store_true',
                     help='Exercise the Stats window, observer house browsing and the sidebar layout')
 parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
                     help='Render the UI probe at this window size (default 640x480)')
+parser.add_argument('--real-video', action='store_true',
+                    help='Open a real window with the platform renderer instead of the dummy video driver '
+                         '(game-perf.py --rendered: the interactive main loop at --viewport, default 1440x900)')
 parser.add_argument('--sourceforge-probe', action='store_true')
 parser.add_argument('--preplace-probe', action='store_true',
                     help='Construction Yard pre-placement queue: reservations, chain, fallback, cancel, save/load, 9854 load')
@@ -225,20 +234,40 @@ parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192,
 parser.add_argument('--duel-map-seed', type=int, default=1, help='Formation duel: the Random Skirmish map seed')
 parser.add_argument('--duel-sides', help='Formation duel: house:shape,house:shape (e.g. atreides:box,harkonnen:wedge)')
 parser.add_argument('--match-sides',
-                    help='Vanilla match on --custom-map (vanilla-match.py): house:label per map slot in slot order, '
-                         'each house its own team; label = a duel label (none, none+BWFCQ, ...) for a QuantBot of '
-                         '--enemy-difficulty, or ai for the AI Player of it')
+                    help='Vanilla match on --custom-map or --skirmish-ffa-size (vanilla-match.py): house:label per map '
+                         'slot in slot order, each house its own team; label = a duel label (none, none+BWFCQ, ...) for '
+                         'a QuantBot of --enemy-difficulty, or ai for the AI Player of it')
+parser.add_argument('--skirmish-ffa-size', type=int, choices=(64, 96, 128, 160, 192, 256),
+                    help='Free-for-all on a generated multiplayer Random Skirmish map of this size (vanilla-match.py '
+                         '--skirmish): one start per --match-sides house, each a Fortress with a 20,000-credit army and, '
+                         'with --mod dunecity, a 40,000 city; Rock High, Spice Medium, not mirrored - the settings of '
+                         "Stefan's 4P DuneCity free-for-all")
+parser.add_argument('--skirmish-map-seed', type=int, default=1, help='--skirmish-ffa-size: the Random Skirmish map seed')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
 parser.add_argument('--no-ai-telemetry', action='store_true',
                     help='Batch measurement: no AI decision log (DUNECITY_AI_TELEMETRY=0), so no events.jsonl, no '
                          'telemetry in summary.json and no telemetry-based wave-budget check. The simulation is the '
-                         'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md)')
+                         'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md). '
+                         'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
+                         'Log = false')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
+parser.add_argument('--scenario', action='store_true',
+                    help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
+                         'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
+parser.add_argument('--scenario-sides',
+                    help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
+                         'atreides:2:qBotBrutal,harkonnen:1:AIPlayerHard); on --custom-map one per map slot')
+parser.add_argument('--skirmish',
+                    help='Scenario match on a generated Random Skirmish multiplayer map, one start per side: '
+                         'key=value,... (size, base none|cy|outpost|small|medium|large|fortress, army, city, seed, '
+                         'tech, rock, spice, credits, symmetric; scenario-match.inc)')
+parser.add_argument('--mission', type=int, choices=range(1, 23),
+                    help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
@@ -249,36 +278,87 @@ if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not (args.custom_map or args.duel_map_size):
-    parser.error('--local-spectator requires --custom-map or --duel-map-size.')
-if args.load_save and (args.custom_map or args.duel_map_size or not args.load_save.is_file()):
-    parser.error('--load-save needs an existing savegame and no --custom-map or --duel-map-size.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or args.skirmish):
+    parser.error('--local-spectator requires --custom-map, --duel-map-size, --skirmish-ffa-size or --skirmish.')
+if args.load_save and (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or not args.load_save.is_file()):
+    parser.error('--load-save needs an existing savegame and no --custom-map, --duel-map-size or --skirmish-ffa-size.')
 if args.game_options and not args.game_options.is_file():
     parser.error('--game-options must name an existing INI file.')
 if bool(args.duel_map_size) != bool(args.duel_sides) or (args.duel_map_size and args.custom_map):
     parser.error('A formation duel needs --duel-map-size and --duel-sides and no --custom-map.')
-if args.match_sides and (not args.custom_map or args.roster or args.free_for_all):
-    parser.error('--match-sides needs --custom-map and replaces --roster/--free-for-all.')
+if args.skirmish_ffa_size and (args.custom_map or args.duel_map_size or not args.match_sides):
+    parser.error('--skirmish-ffa-size needs --match-sides and no --custom-map or --duel-map-size.')
+if args.match_sides and (not (args.custom_map or args.skirmish_ffa_size) or args.roster or args.free_for_all):
+    parser.error('--match-sides needs --custom-map or --skirmish-ffa-size and replaces --roster/--free-for-all.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if args.strategy_probe and (not args.custom_map or args.prebuilt_probe):
     parser.error('--strategy-probe needs --custom-map and builds its own probe binary.')
-if not args.custom_map and (args.roster or args.house not in house_names[:3]):
-    parser.error('Explicit rosters and additional houses require --custom-map.')
+if not (args.custom_map or args.skirmish_ffa_size or args.skirmish) and (args.roster or args.house not in house_names[:3]):
+    parser.error('Explicit rosters and additional houses require --custom-map, --skirmish-ffa-size or --skirmish.')
+def parse_match_sides(slots):
+    """--match-sides as [(house index, label)], one distinct house per slot (any 2-8 if slots is None)."""
+    try:
+        parsed = [(house_names.index(house.lower()), label) for house, label in
+                  (side.split(':', 1) for side in args.match_sides.split(','))]
+    except ValueError:
+        parser.error('--match-sides must be house:label,house:label with known houses.')
+    if (slots is not None and len(parsed) != slots) or not 2 <= len(parsed) <= 8 or len({h for h, _ in parsed}) != len(parsed):
+        parser.error(f'--match-sides needs one distinct house per map slot ({slots or "2-8"}).')
+    if any(label == 'ai' for _, label in parsed) and args.enemy_difficulty == 'brutal':
+        parser.error('AI Player has no Brutal controller.')
+    if house_names.index(args.house) not in {h for h, _ in parsed}:
+        parser.error('--house must be one of the --match-sides houses.')
+    return parsed
+scenario_sides = []
+if args.scenario_sides:
+    try:
+        scenario_sides = [(house_names.index(house.lower()), int(team), player_class) for house, team, player_class in
+                          (side.split(':') for side in args.scenario_sides.split(','))]
+    except ValueError:
+        parser.error('--scenario-sides must be house:team:class,... with known houses.')
+    if (len({h for h, _, _ in scenario_sides}) != len(scenario_sides) or any(t < 1 for _, t, _ in scenario_sides)
+            or len({t for _, t, _ in scenario_sides}) < 2):
+        parser.error('--scenario-sides needs distinct houses, teams from 1 and at least two teams.')
+    if house_names.index(args.house) not in {h for h, _, _ in scenario_sides}:
+        parser.error('--house must be one of the --scenario-sides houses.')
+if (args.scenario_sides or args.skirmish or args.mission) and not args.scenario:
+    parser.error('--scenario-sides, --skirmish and --mission need --scenario.')
+if args.scenario:
+    if args.duel_map_size or args.match_sides or args.elimination_match or args.roster or args.free_for_all or args.load_save:
+        parser.error('--scenario replaces --duel-map-size, --match-sides, --elimination-match, --roster, '
+                     '--free-for-all and --load-save.')
+    if bool(args.custom_map or args.skirmish) != bool(args.scenario_sides) or (args.custom_map and args.skirmish):
+        parser.error('A scenario match needs --scenario-sides and exactly one of --custom-map and --skirmish; '
+                     'a campaign scenario neither.')
+    if args.mission and args.scenario_sides:
+        parser.error('--mission is for campaign scenarios.')
+
+
+def team_number(brain, default):
+    """Brain=TeamN -> N (trailing junk ignored), else default."""
+    digits = brain[4:].split()[0] if brain.startswith('team') and brain[4:].split() else ''
+    return int(digits) if digits.isdigit() else default
+
+
 roster = []
+sides = []
 if args.custom_map:
     scenario = configparser.ConfigParser(strict=False, interpolation=None)
-    with args.custom_map.open() as source_file:
-        scenario.read_file(source_file)
+    # Map files are bytes to the game; a few bundled ones (6P Full Wormage) carry binary junk
+    # between their sections, which the game's INI reader skips. Read only the INI lines.
+    lines = args.custom_map.read_text(encoding='utf-8', errors='replace').splitlines()
+    scenario.read_string('\n'.join(line for line in lines if line.replace('\t', ' ').isprintable()
+                                   and (line.strip().startswith(('[', ';', '#')) or '=' in line or not line.strip())))
     sections = {s.lower(): s for s in scenario.sections()}
     names = house_names
     assigned = set()
     for name in names:
         if name in sections:
             brain = scenario[sections[name]].get('brain', 'Team2').lower()
-            team = int(brain[4:]) if brain.startswith('team') else (1 if name == args.house else 2)
+            team = team_number(brain, 1 if name == args.house else 2)
             roster.append((names.index(name), team))
             assigned.add(name)
     # Generic slots use the chosen player house first, then distinct opponents.
@@ -296,7 +376,7 @@ if args.custom_map:
         if name is None:
             parser.error('Map has more occupied slots than supported houses.')
         brain = scenario[section].get('brain', f'Team{slot}').lower()
-        team = int(brain[4:]) if brain.startswith('team') else slot
+        team = team_number(brain, slot)
         roster.append((names.index(name), team))
         assigned.add(name)
     if args.house not in assigned:
@@ -315,18 +395,20 @@ if args.custom_map:
     if args.free_for_all:
         roster = [(house, i + 1) for i, (house, _) in enumerate(roster)]
     if args.match_sides:
-        try:
-            sides = [(names.index(house.lower()), label) for house, label in
-                     (side.split(':', 1) for side in args.match_sides.split(','))]
-        except ValueError:
-            parser.error('--match-sides must be house:label,house:label with known houses.')
-        if len(sides) != len(roster) or len({h for h, _ in sides}) != len(sides):
-            parser.error(f'--match-sides needs one distinct house per map slot ({len(roster)}).')
-        if any(label == 'ai' for _, label in sides) and args.enemy_difficulty == 'brutal':
-            parser.error('AI Player has no Brutal controller.')
+        sides = parse_match_sides(len(roster))
         roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
-        if names.index(args.house) not in {h for h, _ in roster}:
-            parser.error('--house must be one of the --match-sides houses.')
+    if scenario_sides:
+        # The map's own house sections (e.g. All against Atreides) must be played by those houses.
+        named = {names.index(name) for name in names if name in sections}
+        if len(scenario_sides) != len(roster) or not named <= {h for h, _, _ in scenario_sides}:
+            parser.error(f'--scenario-sides needs one distinct house per map slot ({len(roster)}), '
+                         'including every house the map names.')
+        roster = [(house, team) for house, team, _ in scenario_sides]
+elif scenario_sides:
+    roster = [(house, team) for house, team, _ in scenario_sides]
+if args.skirmish_ffa_size:
+    sides = parse_match_sides(None)
+    roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 # Provenance only (summary.json): a worktree whose git directory cannot be read still runs.
 try:
@@ -498,10 +580,12 @@ else:
         binary = app/'MacOS/balance-probe'
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
-env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',
+env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+if not args.real_video:
+    env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
 if WINDOWS:
     # The game asks for an accelerated renderer (Direct3D 11 on Windows), which the dummy video
@@ -538,7 +622,18 @@ if args.preplace_probe:
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
 if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe:
+if args.ffa_screenshot:
+    # A rendered game view (dummy video driver, software renderer) of one house's army at the
+    # first per-minute sample of an elimination match (tests/ai/ffa-army.inc).
+    env['BALANCE_FFA_SCREENSHOT'] = str(args.ffa_screenshot.resolve())
+    if args.ffa_screenshot_minute is not None:
+        env['BALANCE_FFA_SCREENSHOT_MINUTE'] = str(args.ffa_screenshot_minute)
+    env['BALANCE_FFA_SCREENSHOT_HOUSE'] = str(house_names.index(args.house))
+    args.viewport = args.viewport or '1440x900'
+if args.real_video and not args.viewport:
+    args.viewport = '1440x900'
+if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
+        or args.real_video or args.ffa_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
@@ -585,6 +680,9 @@ if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
 if args.match_sides:
     env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
+if args.skirmish_ffa_size:
+    env['BALANCE_SKIRMISH_FFA_SIZE'] = str(args.skirmish_ffa_size)
+    env['BALANCE_SKIRMISH_MAP_SEED'] = str(args.skirmish_map_seed)
 if args.duel_map_size:
     env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
     env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)
@@ -605,12 +703,19 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
-if args.no_ai_telemetry:
-    env['DUNECITY_AI_TELEMETRY'] = '0'
+if args.scenario:
+    env['BALANCE_SCENARIO'] = '1'
+    if scenario_sides:
+        env['BALANCE_SCENARIO_SIDES'] = ','.join(f'{house}:{team}:{player_class}'
+                                                 for house, team, player_class in scenario_sides)
+    if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
+    if args.mission: env['BALANCE_MISSION'] = str(args.mission)
+# Explicit either way: the game's own default ([General] AI Decision Log) is off.
+env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 with (out/'run.log').open('w') as log:
     subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
                    stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-results = [line for line in (out/'run.log').read_text().splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
+results = [line for line in (out/'run.log').read_text(errors='replace').splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
 events = None if args.no_ai_telemetry else next((out/'profile').rglob('events.jsonl'))
 metadata, attacks, final = None, [], []

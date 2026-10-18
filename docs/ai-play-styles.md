@@ -10,6 +10,13 @@ finished round-robin, Brutal and swarm-confirmation runs of this round are in 6.
 the learned mix with the **Swarm** tempo, the only strategy measured above 1.0.846. `Mode=Random` plays the
 measured weights: it gives more variety and was level with 1.0.846 in the measurements.
 
+**Scoring changed (branch `test/match-scoring`): see section 7.** AI test games are now scored by
+placement: +1 for first, -1 for last, and a time-out is a negative draw for every surviving house. A
+candidate becomes the default only when its paired score difference against the control is above 0 with
+95% confidence. Sections 3-6 were scored with the old rule (1/0, time-outs decided on killed value or
+0.5, interval above 0.5); section 7 re-scores them. Swarm still clears the rule on CY starts. Round 5's
+UVX default would no longer have passed it.
+
 **Result in one paragraph.** Eleven styles were built as test-only per-player overrides and played
 2,406 recorded games (Fortress duels and Construction Yard starts on six bundled maps, Hard) on the mini,
 MacBook Pro and Windows PC. The 1.0.846 default (BASE) is hard to beat: no fixed army composition and
@@ -123,7 +130,8 @@ test-only behaviour.
 Hard. Fortress = `formation-duel.py` Random Skirmish 128/160/192, seeds 7101-7606 (one house pair per
 seed), 40 game minutes. CY = `vanilla-match.py` on Habbanya-Penny, Ergun-Sahij, Tuono-Soolin, Sihaya-Pip,
 X-Factor, Sihaya-Lauper, 80 game minutes. Both label assignments for every seed/map/house; time-outs go
-to the side 1,000+ credits ahead on killed value; 95% bootstrap intervals. Data:
+to the side 1,000+ credits ahead on killed value; 95% bootstrap intervals (the legacy scoring, re-scored
+with the placement score in section 7). Data:
 `docs/formation-results/play-styles/<tag>/games.csv` (+ `houses.csv` for CY); `s*` = screen, `r*` =
 round-robin. Games recorded: mini 1,197, MacBook Pro 712, Windows PC 497 (2,406; plus 26 parity games;
 the Air was on battery for most of the round and ran only its 6-game parity set). Note: the first 54 Pro
@@ -183,7 +191,8 @@ remaining round-robin games, and the full 12x12 matrix of the weaker styles.
 
 ## 4. Decision
 
-- **No default change.** The rule: a style becomes the default only with its CY interval above 0.5
+- **No default change.** The rule at the time (now replaced by section 7.2's paired placement-score rule):
+  a style becomes the default only with its CY interval above 0.5
   over ≥108 games, not worse on Fortress and Brutal, `quantbot_all_against_atreides` 6/6 and `/weak` not
   worse. Swarm meets the first two (0.59, 0.51-0.67; Fortress 0.52) but its Brutal sample, the
   all-against-Atreides match and `/weak` have not been run. Swarm is config-only
@@ -327,8 +336,9 @@ learning is unchanged:
 ### 6.3 Experiments
 
 All of these are CY starts on the six bundled maps, Hard, all three house pairs, both sides, against BASE.
-Scores are from the strategy's side, with the play-style scoring rules and 95% bootstrap intervals; bold
-means the interval excludes 0.5. A house that cannot field a mix plays Learned; those games are counted
+Scores are from the strategy's side, with the play-style scoring rules (legacy; section 7 re-scores them)
+and 95% bootstrap intervals; bold means the interval excludes 0.5. A house that cannot field a mix plays
+Learned; those games are counted
 under the strategy actually played. Data: `docs/formation-results/play-styles/strategy/<tag>/`.
 
 **(a) Mix experiment.** Tempo is held at Base (control = Learned/Base = BASE). Seeds 10202 (mini),
@@ -426,7 +436,8 @@ Results, CY:
 In the pooled games, the picks the random bot played scored: Air-Swarm 0.62 (24), Counter-Swarm 0.62 (24),
 QuadMass-Swarm 0.57 (30), Learned-Flood 0.56 (54), Learned-Swarm 0.44 (90).
 
-**Decision (the stated default rule).** The random bot's pooled interval reaches 0.49, so it does not
+**Decision (the stated default rule, legacy scoring; section 7.3 re-scores it and the decision stands).**
+The random bot's pooled interval reaches 0.49, so it does not
 qualify as the default. The single winner does:
 - **Learned-Swarm on CY:** 0.57 (0.52-0.62), n=352.
 - **Fortress:** 0.58 (0.42-0.75) over 36 games on this branch (`sF-pro`); pooled with the 72 earlier
@@ -459,3 +470,181 @@ safe "more varied" setting, and it was the stronger bot against the old rules (0
 - **Mixes stay priors.** A fixed composition loses to the learning; keep `holdPercent` at 100 unless a
   mix measures better held.
 - **Avoid Specials with Swarm, TankMass, Infantry and the Timing tempo.**
+
+## 7. Scoring and the default rule (branch `test/match-scoring`)
+
+Stefan: "the AIs have to attack. they can't just send a small raiding party out for eternity. if that is
+done then the games will all end in draws. you need to make a draw negative. as in not as much as a loss
+but still negative score. also on maps with more than one player a win needs to count for more, e.g. if
+you come first big score, second smaller, etc. e.g. if 8 players 4 get positive scores most for the
+winner, 4 get negative."
+
+### 7.1 The placement score
+
+One function scores every report (`tests/ai/match_score.py`, `score_game`). `formation-duel.py --report`,
+`vanilla-match.py --report` (1v1 and `--ffa`) and `play-style-matrix.py` all use it.
+
+- **Score of place p among N entrants:** $s(p) = 1 - 2(p-1)/(N-1)$. First is +1 and last is -1, linear in
+  between. A 1v1 win is +1 and a loss -1. With 8 players the scores are +1, +0.71, +0.43, +0.14, -0.14,
+  -0.43, -0.71, -1: the top four are positive and the bottom four negative.
+- **Places:** the last entrant standing is first. Eliminated entrants are ranked by elimination time,
+  later being better. Entrants eliminated at the same time share the mean of their places.
+- **Time-outs are draws, and draws are negative.** When k ≥ 2 entrants are alive at the time limit,
+  nobody wins. The survivors share places 1..k. Each scores the mean of those places' scores minus the
+  draw penalty $D = 0.25$. The result is clamped between the best eliminated entrant's score (a loss when
+  nobody was eliminated) and +1. Examples:
+  - A 1v1 draw is $0 - 0.25 = -0.25$, worse than nothing and better than a loss.
+  - 4P with two survivors: each scores $(1 + 0.33)/2 - 0.25 = +0.42$; the eliminated houses score -0.33
+    and -1.
+  - 4P with all four alive: each scores -0.25.
+- `--draw-score` sets the 1v1 draw value (default -0.25; must be above -1 and below 0).
+- **No kill-value adjudication.** A time-out is no longer decided on killed unit value. The value margin
+  is still reported (Value margin / game).
+- **Teams:** the entrants are teams. A team is eliminated when all its houses are, at the last house's
+  elimination time, and every house of a team gets the team's score. (No harness plays team games
+  today: vanilla-match puts every house on its own team and the duels are 1v1.)
+- **Per game:** `--scores FILE` on any of the three reports writes every game's sides with eliminated,
+  place, score, drawn (alive at a time-out), game length (`end_s`) and decisive (ended before the limit).
+  The CSVs the harnesses record are unchanged.
+
+### 7.2 The default rule
+
+**A candidate beats the control when the 95% bootstrap interval of the mean paired score difference
+(candidate minus control) is wholly above 0.** It loses when the interval is wholly below 0, and is level
+otherwise. The bootstrap uses 2,000 resamples with a fixed seed.
+- Head-to-head games (candidate v control, 1v1 or FFA): the difference is taken within each game. In a
+  1v1 it is +2 for a win, -2 for a loss and 0 for a draw, so the rule is "significantly more eliminations
+  won than lost".
+- Against a common opponent (e.g. candidate v old rules and control v old rules): `--baseline CONTROL` on
+  `formation-duel.py` and `vanilla-match.py` pairs the two sides by setup (difficulty, map/size, seed,
+  own house, opponent's house).
+- Every comparison reports the time-out rate of each arm. A candidate that only wins by drawing less
+  than the control still shows up as better. That is intended.
+
+The other conditions of a default change stay as they were: not worse on Fortress, Brutal and `/weak`, and
+`quantbot_all_against_atreides` passes. `--scoring legacy` reprints any report with the old rule for
+comparing with old write-ups. It reproduces the published numbers, e.g. the play-style screen and round
+5's +0.120 (+0.03..+0.21).
+
+Unit tests: `python3 -m unittest tests.test_match_score` covers 1v1 win/loss/draw, the 4P and 8P values,
+ties, time-outs with k survivors and the clamp, teams, the legacy score and the decision rule.
+
+### 7.3 Earlier results re-scored
+
+Each row gives the old score and its interval (verdict against 0.5), then the new rule: the candidate's
+mean placement score and the paired difference Δ with its interval (verdict against 0). Commands are in
+7.4.
+
+**The 1.0.847 default (Learned/Swarm v 1.0.846 = BASE), with the random bot.** Data: the play-style dirs
+(`default@swarm` = `default#Learned-Swarm`, bit-identical) and `play-styles/strategy/`.
+
+| Comparison | n | Old | New: score, Δ (95% CI) | Time-outs (each arm) |
+|---|---|---|---|---|
+| Swarm v BASE, CY Hard (screen, round-robin, `c1c-air`, `mB*`) | 356 | 0.567 (0.51-0.62) **beats** | +0.142, Δ +0.29 (+0.08..+0.50) **beats** | 2% / 2% |
+| Swarm v BASE, Fortress Hard (`s1f*`, `r1f`, `sF`) | 108 | 0.546 (0.46-0.63) level | -0.028, Δ +0.11 (-0.17..+0.41) level | 33% / 33% |
+| Swarm v BASE, Brutal CY (`b1c-w`, `sB`) | 60 | 0.533 (0.40-0.67) level | +0.058, Δ +0.13 (-0.37..+0.63) level | 3% / 3% |
+| Swarm `/weak` v none, paired with BASE `/weak` v none (`sF`, `rF`) | 36 | +0.014 (-0.11..+0.14) level | -0.375 v -0.375, Δ 0.00 (-0.14..+0.15) level | 39% / 39% |
+| BASE `/weak` v none (`rF`) | 36 | 0.417 (0.28-0.58) level | -0.375, Δ -0.56 (-1.00..-0.11) **loses** | 39% |
+| Random v BASE, CY (`rC`, `rC2`) | 252 | 0.552 (0.49-0.61) level | +0.098, Δ +0.20 (-0.05..+0.44) level | 0% / 0% |
+| Random v none, paired with BASE v none (`rC`) | 108 | +0.065 (-0.04..+0.17) level | +0.229 v +0.100, Δ +0.13 (-0.07..+0.33) level | 1% / 1% |
+| Random v BASE, Fortress (`rF`) | 36 | 0.472 (0.31-0.64) level | -0.076, Δ +0.06 (-0.44..+0.56) level | 42% / 42% |
+| Random v BASE, Brutal (`rB`) | 36 | 0.583 (0.42-0.75) level | +0.188, Δ +0.39 (-0.22..+1.00) level | 3% / 3% |
+| Random `/weak` v none, paired with BASE `/weak` | 36 | +0.042 (-0.11..+0.19) level | Δ +0.02 (-0.19..+0.26) level | 42% / 39% |
+
+**Does Swarm still win once its time-outs count as negative draws? Yes. The 1.0.847 default stands.**
+- Swarm v BASE time-outs are almost all Fortress duels: 36 of 108, and 2% on CY starts.
+- Swarm does not draw more than other styles. In the Fortress round-robin the time-out rate is 31% for
+  Swarm's row against 28-38% for the others (BASE 34%).
+- In a head-to-head game the draw penalty hits both sides equally. It moves both arms' scores down (Swarm
+  Fortress -0.03, BASE -0.14) but cannot change a head-to-head verdict; only removing the kill-value
+  adjudication can.
+- On CY, Swarm beats BASE: Δ +0.29 (+0.08..+0.50). On Fortress and Brutal it is level, so not worse.
+  Against the old rules from `/weak` it equals BASE.
+- The random bot stays level with BASE.
+- None of the mix and tempo cells of 6.3 (`mA*`, `mB*`, `mC*`, counted by the strategy each house
+  played, `--by-strategy`) changes its verdict: all are level under both rules. Learned-Timing is the
+  lowest at Δ -0.33 (-0.78..+0.11).
+
+**Play-style screen (every style v BASE, 3).**
+- CY verdicts are unchanged: heavy and armor lose, every other style is level.
+- Fortress:
+  - raid and turtle lose under both rules (raid Δ -1.39 (-1.72..-1.06), turtle Δ -1.22).
+  - **boom now loses** (old 0.333 (0.19-0.50) level; new Δ -0.78 (-1.28..-0.22)). The old rule gave boom
+    its time-outs on kill value.
+  - timing is at the edge: Δ -0.56 (-1.06..+0.00).
+
+**Round-robin (3, 6.1).**
+- CY (108 games per cell): the same significant cells under both rules. Swarm beats rush (Δ +0.41) and
+  boom (+0.44). BASE v Swarm is at the edge (Δ -0.39, -0.76..+0.00). Row means: swarm +0.18, BASE +0.03,
+  timing +0.01, boom -0.07, siege -0.08, rush -0.09.
+- Fortress (`r1f`, 36 per cell): many more cells separate.
+  - Old: only swarm and rush over timing were significant.
+  - New: BASE, swarm, rush and siege each beat boom (Δ +0.56 to +0.89). swarm, rush and siege beat
+    timing.
+  - Row means: swarm +0.14, rush +0.12, BASE +0.03, siege -0.05, timing -0.35, boom -0.38. That is the
+    old order, apart from boom and timing swapping at the bottom.
+  - The waiting styles (boom, timing) were rescued by adjudicated time-outs.
+
+**Force concentration, rounds 4 and 5 (`docs/formations.md`; `docs/formation-results/force/`).**
+
+| Comparison | n | Old | New: score, Δ (95% CI) | Time-outs |
+|---|---|---|---|---|
+| BWFCQ v none, Hard (`r4f`) | 108 | 0.870 (0.81-0.93) beats | +0.667, Δ +1.44 (+1.24..+1.63) beats | 22% |
+| BWFCQ v FCQ, Hard (`r4f`) | 108 | 0.676 (0.58-0.76) beats | +0.306, Δ +0.78 (+0.50..+1.04) beats | 33% |
+| BWFCQ v none, Brutal (`r4fb`) | 36 | 0.931 (0.85-1.00) beats | +0.722, Δ +1.56 (+1.28..+1.83) beats | 22% |
+| BWFCQD `/weak` paired with BWFCQ `/weak`, v none (`r4d`) | 36 | +0.056 (-0.06..+0.17) level | Δ -0.06 (-0.26..+0.12) level | 33% / 42% |
+| **UVX `/weak` paired with BWFCQ `/weak`, v none (`c2`)** | 108 | **+0.120 (+0.03..+0.21) beats** | -0.417 v -0.472, **Δ +0.06 (-0.09..+0.20) level** | 33% / 33% |
+| UVX `/weak`, the same with the 36-game pilot (`c2`, `p6`) | 144 | +0.132 (+0.06..+0.21) beats | Δ +0.08 (-0.03..+0.21) level | 33% / 33% |
+| A (k100) / A k120 `/weak` paired with BWFCQ `/weak` (`p5`) | 36 | -0.208 / -0.167 loses | Δ -0.16 (-0.37..+0.03) / -0.18 (-0.39..+0.01) level | 42% / 39% v 33% |
+| UVX v none, Hard (`c2`) | 108 | 0.926 (0.87-0.97) beats | +0.720, Δ +1.54 (+1.37..+1.70) beats | 19% |
+| UVX v none, Brutal (`c3b`) | 36 | 0.944 (0.86-1.00) beats | +0.701, Δ +1.50 (+1.17..+1.83) beats | 19% |
+| UVX v BWFCQ, Hard (`c3h`) | 108 | 0.528 (0.44-0.62) level | -0.053, Δ +0.06 (-0.26..+0.35) level | 32% |
+
+**Which earlier decisions change.**
+- **Round 5's UVX default would not pass the new rule.** It was adopted on the `/weak` paired difference
+  of +0.120 (+0.03..+0.21). Re-scored it is +0.06 (-0.09..+0.20), even with the pilot games.
+  - UVX `/weak` won 18 and lost 54 eliminations against BWFCQ `/weak`'s 15-57, with 36 time-outs each.
+  - Most of its old margin came from the adjudication handing it the time-outs it led on killed value
+    (+19.7k value margin per game).
+  - UVX is not worse anywhere (attack v none +1.54, v BWFCQ level). Keeping or reverting it is a new
+    decision for Stefan; nothing in the game was changed here.
+- **Round 4 (BWFCQ default) stands.** It beats none and FCQ by a wide margin under both rules.
+- **The 1.0.847 Learned/Swarm default stands** (above).
+- **The `/weak` absolute scores flip to "loses to none"** (BASE `/weak` -0.56, BWFCQ `/weak` -0.78). The
+  old 0.42/0.31 hid how often the weak side drew. No decision used the absolute `/weak` score; only "not
+  worse than BASE `/weak`" was used, and that still holds.
+- **4-player FFA, BWFCQ v none** (`scenarios/ffa`, 72 games, 2+2 houses):
+  - Old place score 0.541 (0.50-0.58).
+  - New: BWFCQ +0.006 v none -0.152, Δ +0.16 (-0.01..+0.33), level.
+  - 24 of 72 games timed out (Habbanya-Archer almost always). Houses alive at a time-out: BWFCQ 30%,
+    none 28%.
+  - Both arms score near or below 0 because a time-out makes every survivor lose 0.25.
+- **4-player FFA, `rX-pro`** (8 games, one house each): none loses to Learned-Base, Δ -0.75
+  (-1.25..-0.33). Learned-Swarm (Δ -0.42) and the random bot (Δ -0.50) are level with Learned-Base in so
+  few games.
+
+### 7.4 Commands
+
+```bash
+cd docs/formation-results/play-styles
+S=../../../tests/ai/play-style-matrix.py   # add --scoring legacy for the old numbers
+python3 $S --duel s1f s1f-b s1f-pro --vanilla s1c s1c-pro s1c-pro2 s1c-win s1c-win2 s2c-m1 s2c-m2 s2c-w1 s2c-w2 --screen default
+python3 $S --vanilla r1c-m r1c-m2 r1c-pro r1c-w1 r1c-w2 --matrix default swarm timing rush boom siege
+python3 $S --duel r1f --matrix default swarm timing rush boom siege
+python3 $S --vanilla s1c s1c-pro s1c-pro2 s1c-win s1c-win2 s2c-m1 s2c-m2 s2c-w1 s2c-w2 r1c-m r1c-m2 r1c-pro r1c-w1 r1c-w2 \
+  c1c-air strategy/mB1-air strategy/mB2-air --duel s1f s1f-b s1f-pro r1f strategy/sF-pro --difficulty hard \
+  --same default#Learned-Swarm=default@swarm default#Learned-Base=default --screen default
+python3 $S --vanilla b1c-w strategy/sB-win --difficulty brutal --same default#Learned-Swarm=default@swarm default#Learned-Base=default --screen default
+python3 $S --vanilla strategy/mA1 strategy/mA2-win strategy/mA3 strategy/mB1-air strategy/mB2-air strategy/mC1-pro strategy/mC2-pro \
+  --difficulty hard --by-strategy --screen default#Learned-Base
+python3 $S --vanilla strategy/rC-pro strategy/rC2-pro --screen default#Learned-Base
+python3 ../../../tests/ai/vanilla-match.py --report --results strategy/rC-pro --tags rC \
+  --pairs "default#random:default#Learned-Base,default#random:none,default#Learned-Base:none" --baseline default#Learned-Base
+# Fortress /weak: rF and sF-pro concatenated into one games.csv (same header), then
+python3 ../../../tests/ai/formation-duel.py --report --results MERGED --tag rF,sF --seeds 12101 12202 12303 12404 12505 12606 \
+  --pairs "default#Learned-Base/weak:none,default#Learned-Swarm/weak:none,default#random/weak:none" --baseline default#Learned-Base/weak
+cd ../force
+python3 ../../../tests/ai/formation-duel.py --report --results round5 --tag c1,c2 --pairs "none+BWFCQ/weak:none,none+BWFCQUVX/weak:none" \
+  --baseline none+BWFCQ/weak --seeds 7101 7202 7303 7404 7505 7606 --sizes 128 160 192
+python3 ../../../tests/ai/vanilla-match.py --report --results ../scenarios/ffa --tags cy1 --ffa none+BWFCQ,none
+```

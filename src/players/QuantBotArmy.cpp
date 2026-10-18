@@ -571,7 +571,7 @@ void QuantBot::attack(int militaryValue) {
         ++forceStats.garrisonHolds;
         attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
         traceDecision("attack_deferred", AITelemetry::Record().set("reason", "garrison")
-            .set("own_value", ownGroundArmyValue()).set("enemy_estimate", enemyArmyEstimate()));
+            .set("own_value", ownGroundArmyValue()).set("enemy_estimate", enemyThreatEstimate()));
         return;
     }
 
@@ -907,6 +907,30 @@ void QuantBot::launchGroundHunt() {
                     .set("posture",ArmyPosturePolicy::postureName(armyPosture)));
                 return;
             }
+            // Fortified objective (K, docs/formations.md "Free-for-all: finishing the game"):
+            // against kFortifiedTurrets known turrets around the objective a ready wave keeps
+            // bundling until it is worth kFortifiedLimitPercent of the military limit, at most
+            // until kFortifiedMaxHoldMs after the last wave left (game start counts as one).
+            if (forceVariant(kForceFortifiedWaves)) {
+                const UnitBase* lead=nullptr;
+                for (const auto& candidate : candidates) {
+                    const auto* unit=dynamic_cast<const UnitBase*>(getObject(candidate.id));
+                    if (unit && unit->isAGroundUnit() && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
+                }
+                const ObjectBase* objective=forceVariant(kForceFinishWeakest) ? finishObjective(lead,finishTargetTeam())
+                                                                             : customWaveObjective(lead);
+                const int turrets=knownTurretsNear(objective);
+                const int64_t needed=ForceConcentrationPolicy::fortifiedReady(requiredReady,militaryValueLimit,turrets);
+                const bool overdue=ArmyPosturePolicy::elapsed(getGameCycleCount(),customWave.launched)
+                    >=Uint32(MILLI2CYCLES(ForceConcentrationPolicy::kFortifiedMaxHoldMs));
+                if (availableValue<needed && !overdue) {
+                    ++forceStats.fortifiedHolds;
+                    attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
+                    traceDecision("attack_deferred",AITelemetry::Record().set("reason","fortified")
+                        .set("turrets",turrets).set("needed",needed).set("available_value",availableValue));
+                    return;
+                }
+            }
             // Strength-aware waves (A, test-only, docs/formations.md "Round 5"): a ready wave
             // leaves only when it is worth forceStrengthBps of the remembered enemy army; until
             // then it keeps bundling.
@@ -914,7 +938,7 @@ void QuantBot::launchGroundHunt() {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
                 for (const auto& candidate : candidates) ids.push_back(candidate.id);
-                const int64_t wave=groundValueOf(ids), enemy=enemyArmyEstimate();
+                const int64_t wave=groundValueOf(ids), enemy=enemyThreatEstimate();
                 if (!ForceConcentrationPolicy::strongEnough(wave,enemy,forceStrengthBps)) {
                     ++forceStats.strengthHolds;
                     attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
@@ -1056,6 +1080,8 @@ void QuantBot::launchGroundHunt() {
         return Coord::Invalid();
     };
     std::vector<const UnitBase*> hunters;                      // engine-Hunt ground members
+    std::vector<const UnitBase*> finishers;                    // H: hunt towards the weakest house
+    const bool finishWave=trackedCustomWave && wholeArmy && forceVariant(kForceFinishWeakest);
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
@@ -1083,6 +1109,7 @@ void QuantBot::launchGroundHunt() {
             if (formationWave) hunters.push_back(unit);
             else if (partyWave) partyUnits.push_back(unit);
             else if (splitWave) splitUnits.push_back(unit);
+            else if (finishWave) finishers.push_back(unit);
             else doSetAttackMode(unit,HUNT);
         }
         if (launcherItem(unit)) ++launcherDispatched;
@@ -1153,6 +1180,21 @@ void QuantBot::launchGroundHunt() {
             }
         }
     }
+    // Finish the weakest (H): the plain Hunt wave hunts its way towards the weakest known enemy
+    // house's production and economy; each member stops for what it meets on the way (doHuntToward).
+    int finishTeam=-1;
+    if (!finishers.empty()) {
+        const UnitBase* lead=nullptr;
+        for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
+        finishTeam=finishTargetTeam();
+        const ObjectBase* objective=finishObjective(lead,finishTeam);
+        for (const auto* unit : finishers) {
+            if (!objective) { doSetAttackMode(unit,HUNT); continue; }
+            const Coord goal=objective->getClosestPoint(unit->getLocation());
+            doHuntToward(unit,goal.x,goal.y);
+        }
+        if (objective) ++forceStats.finishWaves;
+    }
     if (!partyUnits.empty()) startHuntParty(partyUnits,observedFront);
     if (!splitUnits.empty() && !startSplit(splitUnits,observedFront))
         for (const auto* unit : splitUnits) doSetAttackMode(unit,HUNT);
@@ -1168,6 +1210,7 @@ void QuantBot::launchGroundHunt() {
         .set("wave_formation",QuantBotConfig::waveFormationName(waveFormationShape()))
         .set("hunt_party",int(partyUnits.size()))
         .set("formation_members",formationMembers)
+        .set("finish_team",finishTeam)
         .set("campaign_limited",limited).set("army_value",armyValue)
         .set("committed_value",custom ? groundCommittedValue : committedValue)
         .set("committed_units",limited ? campaignPressure().units : groundCommittedUnits)
@@ -1753,6 +1796,10 @@ void QuantBot::updateCustomWave() {
         && !front->isAFlyingUnit() && front->getOwner()
         && front->getOwner()->getTeamID()!=getHouse()->getTeamID()
         && front->isVisible(getHouse()->getTeamID());
+    const bool pressOn = forceVariant(kForcePressOn);
+    std::vector<const StructureBase*> known;     // P: the known enemy structures, built on first need
+    bool knownReady = false;
+    int pressTeam = -1;
     for (auto it = customWave.members.begin(); it != customWave.members.end();) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(*it));
         if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0
@@ -1781,6 +1828,32 @@ void QuantBot::updateCustomWave() {
             doAttackObject(unit,front,false);
             traceDecision("launcher_wave_rejoined",AITelemetry::Record()
                 .set("unit",unit->getObjectID()).set("front",front->getObjectID()));
+        }
+        // Press on (P, docs/formations.md "Free-for-all: finishing the game"): a member whose
+        // engine Hunt ran out of visible targets hunts on to the nearest enemy structure we have
+        // seen - of the team H is finishing, else any - instead of standing where it stopped
+        // and later walking back to the bundle. Not while the house holds its army at home.
+        if (pressOn && !garrisoned() && !ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture)
+            && !localSquadWithdraw && !huntPartyOf(unit->getObjectID())
+            && (splits.empty() || !splitOf(unit->getObjectID())) && unit->isAGroundUnit()
+            && unit->isActive() && unit->isRespondable() && unit->getAttackMode() != HUNT
+            && !unit->hasATarget() && !unit->isMoving() && !unit->wasForced()
+            && unitRole(unit, {UnitRole::Defence}) == UnitRole::Free) {
+            if (!knownReady) {
+                knownReady = true;
+                for (const auto* structure : getStructureList())
+                    if (knownEnemyStructure(structure)) known.push_back(structure);
+                pressTeam = forceVariant(kForceFinishWeakest) ? finishTargetTeam() : -1;
+            }
+            const StructureBase* target = pressOnTarget(unit, known, pressTeam);
+            if (!target && pressTeam >= 0) target = pressOnTarget(unit, known, -1);
+            if (target) {
+                const Coord goal = target->getClosestPoint(unit->getLocation());
+                doHuntToward(unit, goal.x, goal.y);
+                ++forceStats.pressOnOrders;
+                ++it;
+                continue;
+            }
         }
         // Membership is commitment accounting, so it has to end when the
         // commitment does. A dispatched attacker hunts; once it is active, no
@@ -3408,7 +3481,6 @@ void QuantBot::retreatAllUnits() {
         int bundleTiles=0;
         std::vector<BundleWalker> bundleWalkers;
         if (bundling) {
-            forwardBundlePoint();
             int64_t sx=0, sy=0, n=0, reserve=0;
             for (const auto* unit:getUnitList()) {
                 if (unit->getOwner()!=getHouse() || !unit->isActive() || !unit->isAGroundUnit() || !unit->canAttack()
@@ -3418,6 +3490,9 @@ void QuantBot::retreatAllUnits() {
             }
             bundleCentre=forceVariant(kForceBundleOld) && n>0 ? Coord(int(sx/n),int(sy/n)) : Coord::Invalid();
             bundleTiles=ForceConcentrationPolicy::bundleRadius(int(reserve));
+            // The whole reserve stands beside the point, out of our own base (docs/formations.md,
+            // "Free-for-all: the army deploys").
+            forwardBundlePoint(ForceConcentrationPolicy::bundleClearance(bundleTiles));
         }
         for (const UnitBase* pUnit : getUnitList()) {
             // Safety check: skip null units (can happen during unit destruction)
