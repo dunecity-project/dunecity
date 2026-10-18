@@ -3,7 +3,8 @@
 Agent Integrate848. From `integrate/feature-batch` b683286f (1.0.847), merged in order:
 `fix/ai-army-stuck-in-base` 8a8e4833 (with perf/game-fps, test/match-scoring, test/ai-scenario-matrix,
 exp/ai-late-game), `chore/remove-map-sharing` 0a9ff138, `fix/remove-economic-victory` f44564ee,
-`feat/ai-ratio-tuning` 4c3ee80b, then its newer tip 873030df (ten mix slots, tech bands, save 9868).
+`feat/ai-ratio-tuning` 4c3ee80b, then its newer tips 873030df (ten mix slots, tech bands, save 9868) and
+e276196e (per-tech-band defaults; its own scenario-matrix merge drops the economic threshold too).
 - **Conflicts:** HANDOVER (all entries kept); protocol history and `NetworkManagerTestCase` (83/84/85
   histories kept, one new 86); `tests/ai/elimination-match.inc` (FfaArmy include + ten-slot `sampleMix`,
   the final sample logs both); `tests/ai/vanilla-match.py` (late-rule counters + `start_mix`; both

@@ -28,8 +28,8 @@ Every game is a real match played headless to its end by the balance probe:
   by an idle human player and a QuantBot partner of `--partner-difficulty`; the enemies are the campaign's
   default enemy AI (QuantBot Easy, `HouseChoiceMenu` `kEnemyAIClasses[0]`), or with
   `--enemy-ai campaign` the "scenario settings" `CampaignAIPlayer`. The game runs until the mission's own
-  win/lose conditions end it (`Game::finished`: conquest or harvest quota; there is no population
-  victory) or the time limit.
+  win/lose conditions end it (`Game::finished`: conquest or harvest quota; the DuneCity economic victory
+  is removed on `fix/remove-economic-victory`) or the time limit.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -40,8 +40,8 @@ Every game is a real match played headless to its end by the balance probe:
   minutes, triggers and how many fired, win/lose flags, quota, city population),
   then the final state digest (`PROBE_DIGEST ... final=1`).
 
-The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or quota) and
-`houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
+The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or
+quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the
 next run; a crashed game's last log lines go to `failed-*.txt`.
 
@@ -171,9 +171,8 @@ Problems found:
    Harkonnen m14 and Ordos m18 once not finished; DuneCity: Atreides/Harkonnen m22 lost once each, Ordos
    m17 never finishes (80 min, 2/2), Harkonnen m3 and Ordos m1 once not finished; against
    `CampaignAIPlayer` 4/27 lost (Atreides m2, m5, m20; Ordos m5).
-5. **DuneCity campaigns are won economically**: 74 of 90 DuneCity Hard wins are the economic victory
-   (city population past the mission threshold, e.g. 505/500 at 8.6 min on Ordos level 4) with little or
-   no fighting; mean win 16 min against 20 min vanilla. (1.0.848 removes the population victory:
-   `fix/remove-economic-victory`; the matrix no longer records an economic threshold or win type.)
+5. **DuneCity campaigns were won economically on 1.0.847**: 74 of 90 DuneCity Hard wins were the economic
+   victory (since removed: `fix/remove-economic-victory`), e.g. 505/500 population at 8.6 min on Ordos
+   level 4, with little or no fighting; mean win 16 min against 20 min vanilla.
 6. DuneCity games end later: Brutal v Medium on the DuneCity Random Skirmish map 2/8 time-outs, 4v4
    fortress 3/4 time-outs (the Hard team wins the fourth), the 4P DuneCity map QH mirror 3/4 time-outs.

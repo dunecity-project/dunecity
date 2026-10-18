@@ -159,8 +159,8 @@ inline GameInitSettings mapInit(const Scenario& scenario, Uint32 seed) {
 }
 
 /// A mirrored 64x64 Random Skirmish 1v1, both starts a Fortress (every factory, IX and Starport
-/// standing) with a 1,000-credit army and 10,000 credits, two QuantBot Hard houses.
-inline GameInitSettings fortressInit(int first, int second, Uint32 mapSeed, Uint32 seed) {
+/// standing) with a 1,000-credit army and 10,000 credits, two QuantBot Hard houses, at \a techLevel.
+inline GameInitSettings fortressInit(int first, int second, Uint32 mapSeed, Uint32 seed, int techLevel = 9) {
     using namespace SkirmishGenerator;
     Params params;
     params.multiplayer = true;
@@ -170,7 +170,7 @@ inline GameInitSettings fortressInit(int first, int second, Uint32 mapSeed, Uint
     params.symmetric = true;
     params.mode = Mode::Vanilla;
     params.mod = "vanilla";
-    params.techLevel = 9;
+    params.techLevel = techLevel;
     params.credits = 10000;
     params.startSide = SkirmishGenerator::Side{"", BaseSize::Fortress, 1, 0};
     const Result result = generate(params, RandomSkirmish::loadCatalogue(Mode::Vanilla));
@@ -515,12 +515,12 @@ struct GameResult {
     long long wallMs = 0;
 };
 
-/// Plays a Fortress 1v1 to \a endCycle, each house with \a strategies (none = the global config),
-/// checking every production pass against the prior.
+/// Plays a Fortress 1v1 at \a techLevel to \a endCycle, each house with \a strategies (none = the global
+/// config), checking every production pass against the prior.
 inline GameResult playProduction(int first, int second, const std::map<int, QuantBotStrategy::Settings>& strategies,
-                                 Uint32 mapSeed, Uint32 seed, Uint32 endCycle) {
+                                 Uint32 mapSeed, Uint32 seed, Uint32 endCycle, int techLevel = 9) {
     const auto wall = Clock::now();
-    auto game = start(fortressInit(first, second, mapSeed, seed));
+    auto game = start(fortressInit(first, second, mapSeed, seed, techLevel));
     GameResult result;
     for (const int house : {first, second}) {
         QuantBot* bot = botOf(*game, house);
@@ -819,6 +819,31 @@ int runQuantBotStrategyProbe() {
                 checkMix(mixA, played.houses.at(atreides), learned.houses.at(atreides), played.wallMs);
             }
             getQuantBotConfig().tunedRatios = shippedTuned;
+        }
+    }
+
+    if (wanted('5')) {
+        // Tech bands: at tech 4 the shipped default (Fixed:Tuned,Swarm) starts from the band's designed
+        // mix (QuantBotConfig: 50% tanks, the rest light units), not the top mix renormalised, and its
+        // production passes play it until the learning has evidence.
+        const int atreides = HOUSE_ATREIDES, ordos = HOUSE_ORDOS;
+        const GameResult played = playProduction(atreides, ordos, {}, 7, seed, MILLI2CYCLES(12 * 60000), 4);
+        for (const int house : {atreides, ordos}) {
+            const Production& p = played.houses.at(house);
+            const auto& band = getQuantBotConfig().getTunedRatios(house, 4);
+            UnitMixPolicy::Mix expected{};
+            for (size_t i = 0; i < expected.size(); ++i) expected[i] = int(band[i] * 100);
+            logProduction("tech_band", p, nullptr, played.wallMs, " tech=4 band_mix=" + join(expected));
+            require(p.strategy.mix == Mix::Tuned, "Tech 4: the shipped default did not play Tuned");
+            require(expected[0] == 5000 && p.strategyPrior == expected, "Tech 4: the starting mix is not the band's (50% tanks)");
+            require(p.priorPasses > 0 && p.priorMatches == p.priorPasses, "Tech 4: a pass before combat evidence was not the band's mix");
+            require(p.boundedPasses == p.priorPasses, "Tech 4: a starting mix was outside the bounds");
+            // Measured (mapSeed 7, seed 486409243): tanks 54%/52% of the value built before the learning
+            // (Atreides/Ordos), 40%/45% over the 12 minutes; the largest share both times.
+            require(p.built[0] > 0 && p.earlyValueBps[0] >= 4000 && p.earlyValueBps[0] <= 6000,
+                    "Tech 4: the tank share of the value built before the learning is not near the band's 50%");
+            require(*std::max_element(p.valueBps.begin(), p.valueBps.end()) == p.valueBps[0],
+                    "Tech 4: tanks are not the largest share of the built value");
         }
     }
     SDL_Log("STRATEGY_PROBE: check=done wall_ms=%lld", millisecondsSince(probeStart));

@@ -698,7 +698,7 @@ def campaign_report(rows, houses, problems):
         house, mission = g['id'].split('/')[3].split('-m')
         mark = 'X' if g['error'] else {'won': 'W', 'lost': 'L', 'time_limit': 'T'}.get(g['outcome'], '?')
         if mark == 'W' and g['win_type'] == 'quota':
-            mark += 'q'
+            mark += g['win_type'][0]
         grid[(mod, house, int(mission))] += mark
     missions = sorted({m for _, _, m in grid})
     if missions:
