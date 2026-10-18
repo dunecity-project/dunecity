@@ -433,15 +433,40 @@ int QuantBot::houseAttackThreshold() const {
         : (militaryValueLimit * threshold).lround());
 }
 
+namespace {
+// The custom-game military limit of \a settings on this map (the size classes of QuantBot's
+// initialisation, QuantBot.cpp).
+int customMapLimit(const QuantBotConfig::DifficultySettings& settings) {
+    const int mapsize = currentGameMap ? currentGameMap->getSizeX() * currentGameMap->getSizeY() : 4096;
+    return mapsize <= 1024 ? settings.militaryValueLimitCustomSmallMap
+        : mapsize <= 4096 ? settings.militaryValueLimitCustomMediumMap
+        : mapsize <= 16384 ? settings.militaryValueLimitCustomLargeMap
+        : settings.militaryValueLimitCustomHugeMap;
+}
+} // namespace
+
 int QuantBot::reachableAttackThreshold(int required) const {
     // Custom games only (docs/ai-scenario-matrix.md, "Difficulty ladder"): campaign enemies keep
     // their scripted readiness and helpers do not launch waves.
     if (supportMode || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
     required = SimpleArmyPolicy::reachableReadiness(required, militaryUnitValue(), getHouse()->getCredits(),
                                                     lastCalculatedSpice);
-    // A whole-army house twice as strong as what it has seen of the enemy does not wait for more.
-    return autonomousCustomArmy()
-        ? SimpleArmyPolicy::strengthReadiness(required, enemyThreatEstimate(), minWaveValue()) : required;
+    // The opening of a whole-army house that started without an army able to launch a wave (a
+    // Construction Yard or small-army start, the one ForceConcentrationPolicy::openingReadiness
+    // holds to full readiness) ends at its own threshold share of at most Medium's limit: a
+    // higher difficulty's larger limit buys a larger army later, not a later first wave. Brutal
+    // waiting for 20,000 (25% of 80,000) on a 96x96 map was killed at home by Medium's first wave
+    // of 10,000 in 23 of 72 ladder games; now Brutal 6,250, Hard 7,500, Medium 10,000. A starting
+    // army that can strike keeps its thresholds (quantbot_ffa_army_deploys).
+    if (autonomousCustomArmy() && customWave.launched == 0
+        && initialMilitaryValue < ForceConcentrationPolicy::scaledReadiness(required, waveReadinessPercent())) {
+        const auto& config = botConfig();
+        const float own = config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent;
+        const int base = std::min(militaryValueLimit,
+                                  customMapLimit(config.getSettings(static_cast<int>(Difficulty::Medium))));
+        required = std::min(required, (base * (FixPoint(static_cast<int>(own * 100)) / 100)).lround());
+    }
+    return required;
 }
 
 bool QuantBot::bundleArmyReady() const {

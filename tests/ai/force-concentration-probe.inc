@@ -72,9 +72,13 @@ void runForceConcentrationProbe(Game& game) {
             |QuantBot::kForceBundleGate|QuantBot::kForceThreatTurrets
             |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness) && bot->waveReadinessPercent()==60,
         "Custom Hard does not use the configured force rules");
+    // Custom Medium is an autonomous custom army (docs/ai-scenario-matrix.md, "Difficulty ladder").
     bot->difficulty=QuantBot::Difficulty::Medium;
+    require(bot->forceVariant(QuantBot::kForceFocusFire) && bot->waveReadinessPercent()==60,
+        "Custom Medium does not use the configured force rules");
+    bot->difficulty=QuantBot::Difficulty::Easy;
     require(!bot->forceVariant(QuantBot::kForceFocusFire) && bot->waveReadinessPercent()==100,
-        "Custom Medium uses the Hard/Brutal force rules");
+        "Custom Easy uses the Medium/Hard/Brutal force rules");
     bot->difficulty=QuantBot::Difficulty::Brutal;
     require(bot->forceVariant(QuantBot::kForceConverge) && bot->waveReadinessPercent()==60,
         "Custom Brutal does not use the configured force rules");

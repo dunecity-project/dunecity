@@ -991,16 +991,6 @@ TEST_CASE("A house that cannot grow its army to its attack threshold attacks wit
     REQUIRE(reachableReadiness(20000,-5,-100,-100)==0);
     REQUIRE(reachableReadiness(INT32_MAX,0,INT32_MAX,INT32_MAX)==INT32_MAX);
 }
-TEST_CASE("A whole-army house twice as strong as the enemy it has seen does not wait for more", "[quantbot][combat]") {
-    using SimpleArmyPolicy::strengthReadiness;
-    // Nothing seen: the configured threshold.
-    REQUIRE(strengthReadiness(20000,0,3000)==20000);
-    // Twice the seen army, never below a viable wave, never above the configured threshold.
-    REQUIRE(strengthReadiness(20000,4000,3000)==8000);
-    REQUIRE(strengthReadiness(20000,1000,3000)==3000);
-    REQUIRE(strengthReadiness(20000,15000,3000)==20000);
-    REQUIRE(strengthReadiness(20000,int64_t(1)<<40,3000)==20000);
-}
 TEST_CASE("Banked credits above the reserve buy army past the cap, at most half the cap again", "[quantbot][production]") {
     using QuantBotBuildPolicy::surplusMilitaryBudget;
     REQUIRE(surplusMilitaryBudget(25000,0)==25000);

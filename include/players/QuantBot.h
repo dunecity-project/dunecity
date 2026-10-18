@@ -1174,9 +1174,11 @@ private:
     /// The house attack threshold attack() starts from (credits of military value, before the
     /// campaign adjustment and the wave readiness scaling).
     int houseAttackThreshold() const;
-    /// \a required, or 0 in a custom game when the house's credits and the spice left on the map
-    /// cannot buy the difference to it (SimpleArmyPolicy::reachableReadiness): a house that can
-    /// no longer grow its army attacks with the army it has.
+    /// The custom-game threshold actually required (campaign: \a required unchanged): 0 when the
+    /// house's credits and the spice left on the map cannot buy the difference to it
+    /// (SimpleArmyPolicy::reachableReadiness), and during a whole-army house's held opening (no
+    /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
+    /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
     int reachableAttackThreshold(int required) const;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
