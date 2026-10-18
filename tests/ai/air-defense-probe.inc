@@ -858,7 +858,7 @@ void runAirDefenseProbe(Game& game) {
             bot->build(fundedArmy);
             const int beforeFloor=bot->lastUnitMixBps[2];
             SDL_Log("AIR_DEFENSE_DIAG: learned_launcher_bps=%d tank=%d quad=%d",
-                beforeFloor,bot->lastUnitMixBps[0],bot->lastUnitMixBps[7]);
+                beforeFloor,bot->lastUnitMixBps[0],bot->lastUnitMixBps[UnitMixPolicy::kQuadSlot]);
             require(beforeFloor<UnitMixPolicy::kMobileAntiAirFloorBps,
                 "The engine fixture did not create a learned-down launcher mix");
             SDL_Log("AIR_DEFENSE_DIAG: quiet_factory queue=%d first=%d upgrading=%d hold=%d credits=%d budget=%d tanks=%d launchers=%d infantry=%d",

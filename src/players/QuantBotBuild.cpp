@@ -1350,26 +1350,22 @@ void QuantBot::build(int militaryValue) {
     const QuantBotStrategy::MixProfile* strategyMixProfile = strategyMix();
     if (strategyMixProfile && strategyMixProfile->infantryPercent > 0) infantryPercent = strategyMixProfile->infantryPercent;
 
-    constexpr std::array<Uint32,8> mixItems = {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
-        Unit_SonicTank, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
+    constexpr auto& mixItems = kMixItems;
+    constexpr size_t kSlots = UnitMixPolicy::kSlots;
+    constexpr size_t kOrnithopterSlot = UnitMixPolicy::kOrnithopterSlot;
     UnitMixPolicy::Weights damage{}, rewardMilli{}, killBonusMilli{}, lostValue{}, scores{}, defaults{}, prices{}, lossMilli{};
-    std::array<bool,8> available{};
+    UnitMixPolicy::Slots available{};
     bool launcherProductionAvailable = false;
     for (const auto* structure : getStructureList()) {
         const auto* builder = dynamic_cast<const BuilderBase*>(structure);
         if (!builder || builder->getOwner() != getHouse()
             || (builder->getItemID() != Structure_LightFactory && builder->getItemID() != Structure_HeavyFactory
                 && builder->getItemID() != Structure_HighTechFactory)) continue;
-        for (size_t i=0; i<8; ++i) {
-            if (i == 3) {
-                for (Uint32 special : {Unit_Devastator, Unit_SonicTank, Unit_Deviator})
-                    available[i] |= campaignAvailableToBuild(builder,special);
-            } else {
-                const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
-                available[i] |= producible;
-                if (i == 2 && builder->getHealth() > 0 && builder->isActive())
-                    launcherProductionAvailable |= producible;
-            }
+        for (size_t i=0; i<kSlots; ++i) {
+            const bool producible = campaignAvailableToBuild(builder,mixItems[i]);
+            available[i] |= producible;
+            if (i == 2 && builder->getHealth() > 0 && builder->isActive())
+                launcherProductionAvailable |= producible;
         }
     }
     // Losing a producer is a rebuilding need, not evidence that its units
@@ -1387,41 +1383,25 @@ void QuantBot::build(int militaryValue) {
                     && getHouse()->getNumLostItems(prerequisite) == 0) return false;
             return true;
         };
-        for (size_t i = 0; i < 4; ++i) {
-            if (i == 3) {
-                for (Uint32 special : {Unit_Devastator, Unit_SonicTank, Unit_Deviator})
-                    available[i] |= recoverableHeavyUnit(special);
-            } else available[i] |= recoverableHeavyUnit(mixItems[i]);
-        }
+        for (size_t i = 0; i < UnitMixPolicy::kOrnithopterSlot; ++i) available[i] |= recoverableHeavyUnit(mixItems[i]);
     }
-    if (getHouse()->isAirUnitLimitReached()) available[4]=false;
+    if (getHouse()->isAirUnitLimitReached()) available[kOrnithopterSlot]=false;
     // The starting mix (QuantBot::startingPrior): the configured opening or the strategy's prior in
     // its place, within the starting-mix bounds; the learning below blends combat evidence into it.
     defaults = startingPrior(available);
     int64_t totalDamage = 0, totalRewardMilli = 0, totalLostValue = 0;
-    for (size_t i=0; i<8; ++i) {
+    for (size_t i=0; i<kSlots; ++i) {
         const Uint32 item = mixItems[i];
-        int priorPrice = std::max(1, data[item][houseID].price);
+        // Each special keeps the special group's former prior price, so a house with one special
+        // learns exactly as it did when the three shared one slot.
+        const bool special = i >= UnitMixPolicy::kFirstSpecialSlot && i < kOrnithopterSlot;
+        int priorPrice = special ? 700 : std::max(1, data[item][houseID].price);
         damage[i] = std::max(0, getHouse()->getNumItemDamageInflicted(item));
         rewardMilli[i] = getHouse()->getCombatReward(item).total();
         killBonusMilli[i] = getHouse()->getCombatReward(item).killBonusMilli;
         lostValue[i] = int64_t(getHouse()->getNumLostItems(item)) * data[item][houseID].price;
-        bool enabled = data[item][houseID].enabled && data[item][houseID].price > 0
+        const bool enabled = data[item][houseID].enabled && data[item][houseID].price > 0
             && data[item][houseID].techLevel <= currentGame->techLevel;
-        if (i == 3) {
-            damage[i] = rewardMilli[i] = killBonusMilli[i] = lostValue[i] = 0;
-            enabled = false;
-            priorPrice = 700; // Preserve the special-unit group's existing prior.
-            for (Uint32 special : {Unit_Devastator, Unit_SonicTank, Unit_Deviator}) {
-                damage[i] += getHouse()->getNumItemDamageInflicted(special);
-                rewardMilli[i] += getHouse()->getCombatReward(special).total();
-                killBonusMilli[i] += getHouse()->getCombatReward(special).killBonusMilli;
-                lostValue[i] += int64_t(getHouse()->getNumLostItems(special)) * data[special][houseID].price;
-                enabled |= data[special][houseID].enabled && data[special][houseID].price > 0
-                    && data[special][houseID].techLevel <= currentGame->techLevel;
-            }
-            damage[i] = std::max<int64_t>(0, damage[i]);
-        }
         totalDamage += damage[i];
         totalRewardMilli += rewardMilli[i];
         totalLostValue += lostValue[i];
@@ -1434,7 +1414,7 @@ void QuantBot::build(int militaryValue) {
     const bool learningUnitMix = totalRewardMilli >= 3000000 && style().learning;
     performanceHistory.update(getGameCycleCount(),rewardMilli,lossMilli);
     if (learningUnitMix) {
-        for (size_t i=0;i<8;++i) scores[i]=available[i]
+        for (size_t i=0;i<kSlots;++i) scores[i]=available[i]
             ? UnitMixPolicy::performanceScore(performanceHistory.reward[i],performanceHistory.loss[i],prices[i]) : 0;
         scores=UnitMixPolicy::exploredScores(scores,performanceHistory.reward,performanceHistory.loss,prices,available);
     }
@@ -1473,7 +1453,7 @@ void QuantBot::build(int militaryValue) {
     // Observational record of exactly this pass: the same scores and the same
     // intended shares the orders below are placed from. Reading it cannot move a
     // unit, and nothing here recomputes anything - it only copies.
-    for (size_t i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < kSlots; ++i) {
         allocationSnapshot.slots[i] = {mixItems[i], scores[i], unitMix[i], available[i]};
     }
     allocationSnapshot.ready = true;
@@ -1482,13 +1462,14 @@ void QuantBot::build(int militaryValue) {
     allocationSnapshot.militaryValue = militaryValue;
     allocationSnapshot.antiAirFloorBps = launcherFloorAuthorised ? launcherFloorBps : 0;
     allocationSnapshot.infantryQuotaBps = infantryPercent * 100;
-    const int rawOrnithopterBps = rawMix[4];
+    const int rawOrnithopterBps = rawMix[kOrnithopterSlot];
     const FixPoint tankPercent = FixPoint(unitMix[0])/10000;
     const FixPoint siegePercent = FixPoint(unitMix[1])/10000;
     const FixPoint launcherPercent = FixPoint(unitMix[2])/10000;
-    const FixPoint specialPercent = FixPoint(unitMix[3])/10000;
-    const FixPoint ornithopterPercent = FixPoint(unitMix[4])/10000;
-    const int lightVehicleBps = unitMix[5] + unitMix[6] + unitMix[7];
+    const int specialBps = unitMix[3] + unitMix[4] + unitMix[5];
+    const FixPoint specialPercent = FixPoint(specialBps)/10000;
+    const FixPoint ornithopterPercent = FixPoint(unitMix[kOrnithopterSlot])/10000;
+    const int lightVehicleBps = unitMix[7] + unitMix[8] + unitMix[9];
     const int lightVehiclePercent = lightVehicleBps / 100;
 
 	int lightVehicleValue = data[Unit_Trike][houseID].price * itemCount[Unit_Trike]
@@ -1542,12 +1523,13 @@ void QuantBot::build(int militaryValue) {
     if (emitStatsLog && AITelemetry::log().enabled()) {
         traceDecision("unit_mix", AITelemetry::Record().set("basis", !learningUnitMix ? "configured" : vanillaEconomy ? "lifetime_evidence_weighted_value_per_loss" : "lifetime_value_per_loss")
             .set("tank_bps", (tankPercent * 10000).lround()).set("siege_bps", (siegePercent * 10000).lround())
-            .set("special_bps", (specialPercent * 10000).lround()).set("launcher_bps", (launcherPercent * 10000).lround())
+            .set("special_bps", specialBps).set("devastator_bps", unitMix[3]).set("sonic_tank_bps", unitMix[4])
+            .set("deviator_bps", unitMix[5]).set("launcher_bps", (launcherPercent * 10000).lround())
             .set("ornithopter_bps", (ornithopterPercent * 10000).lround()).set("raw_ornithopter_bps", rawOrnithopterBps)
             .set("light_vehicle_percent", lightVehiclePercent).set("light_vehicle_bps", lightVehicleBps)
-            .set("trike_bps", unitMix[5]).set("raider_trike_bps", unitMix[6]).set("quad_bps", unitMix[7])
-            .set("allocation_types", 8).set("tech_level", currentGame->techLevel)
-            .set("opening_light_bps", defaults[5]+defaults[6]+defaults[7]).set("total_damage", totalDamage)
+            .set("trike_bps", unitMix[7]).set("raider_trike_bps", unitMix[8]).set("quad_bps", unitMix[9])
+            .set("allocation_types", int(kSlots)).set("tech_level", currentGame->techLevel)
+            .set("opening_light_bps", defaults[7]+defaults[8]+defaults[9]).set("total_damage", totalDamage)
             .set("total_reward_milli", totalRewardMilli).set("total_lost_value", totalLostValue)
             .set("launcher_floor_bps", launcherFloorBps)
             .set("launcher_floor_applied", launcherFloorApplied)
@@ -1557,7 +1539,7 @@ void QuantBot::build(int militaryValue) {
             .set("performance_exponent_milli",1500).set("performance_confidence_bps", performanceConfidenceBps).set("funded_army_value",fundedArmyValue)
             .set("vehicle_plan_value",vehiclePlanValue).set("queued_military_value",queuedMilitaryValue).set("mix_inputs", [&]() {
                 AITelemetry::Record inputs;
-                for (size_t i=0; i<8; ++i) inputs.set(i == 3 ? "special" : std::to_string(mixItems[i]),
+                for (size_t i=0; i<kSlots; ++i) inputs.set(std::to_string(mixItems[i]),
                     AITelemetry::Record().set("damage", damage[i]).set("reward_milli", rewardMilli[i]).set("kill_bonus_milli", killBonusMilli[i])
                         .set("lost_value", lostValue[i]).set("score", scores[i]).set("allocation_weight",allocationWeights[i])
                         .set("lifetime_reward_milli",performanceHistory.reward[i]).set("lifetime_loss_milli",performanceHistory.loss[i])
@@ -1576,7 +1558,7 @@ void QuantBot::build(int militaryValue) {
 			getHouse()->getNumItemDamageInflicted(Unit_SiegeTank), getHouse()->getNumLostItems(Unit_SiegeTank) * 600, siegePercent.toDouble(),
 			getHouse()->getNumItemDamageInflicted(Unit_SonicTank) + getHouse()->getNumItemDamageInflicted(Unit_Devastator) + getHouse()->getNumItemDamageInflicted(Unit_Deviator),
 			getHouse()->getNumLostItems(Unit_SonicTank) * 600 + getHouse()->getNumLostItems(Unit_Devastator) * 800 + getHouse()->getNumLostItems(Unit_Deviator) * 750,
-			specialPercent.toDouble(),
+			specialBps / 10000.0,
 			getHouse()->getNumItemDamageInflicted(Unit_Launcher), getHouse()->getNumLostItems(Unit_Launcher) * 450, launcherPercent.toDouble(),
 			getHouse()->getNumItemDamageInflicted(Unit_Ornithopter), getHouse()->getNumLostItems(Unit_Ornithopter) * data[Unit_Ornithopter][houseID].price, ornithopterPercent.toDouble()
 		);
@@ -2390,21 +2372,8 @@ void QuantBot::build(int militaryValue) {
             const int value=data[item][houseID].price;
             const int price=int(offer.price);
             int bps=0;
+            // Every special has its own mix slot (and so its own share) since 9868.
             for (size_t i=0;i<mixItems.size();++i) if (mixItems[i]==item) bps=unitMix[i];
-            // The special share is one share for every special the house can build: split
-            // between them, so a house fielding all three cannot build three times the share.
-            if (item==Unit_Devastator || item==Unit_SonicTank || item==Unit_Deviator) {
-                const std::array<Uint32,3> specialItems = {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
-                std::array<bool,3> buildable{};
-                for (size_t s=0;s<3;++s) {
-                    const auto& spec=data[specialItems[s]][houseID];
-                    buildable[s]=spec.enabled && spec.price>0 && spec.builder!=ItemID_Invalid
-                        && spec.techLevel<=currentGame->techLevel;
-                }
-                const auto shares=UnitMixPolicy::splitShare(unitMix[3],buildable);
-                bps=0;
-                for (size_t s=0;s<3;++s) if (specialItems[s]==item) bps=shares[s];
-            }
             if (item==Unit_Soldier || item==Unit_Infantry || item==Unit_Trooper || item==Unit_Troopers) bps=infantryPercent*100;
             const int64_t deficit=int64_t(vehiclePlanValue)*bps-int64_t(itemCount[item])*value*10000;
             int score=QuantBotSpendingPolicy::militaryScore(price,value,militaryValue,militaryBudget,defendingEconomy);
@@ -3303,7 +3272,7 @@ void QuantBot::build(int militaryValue) {
 					else if (!getHouse()->isGroundUnitLimitReached()) {
                         Uint32 itemID = NONE_ID;
                         int64_t bestDeficit = 0;
-                        for (size_t i=5; i<8; ++i) {
+                        for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i) {
                             const Uint32 candidate = mixItems[i];
                             if (!campaignAvailableToBuild(pBuilder,candidate)) continue;
                             const auto deficit = UnitMixPolicy::deficit(unitMix[i], vehiclePlanValue,
@@ -3312,7 +3281,7 @@ void QuantBot::build(int militaryValue) {
                         }
                         // Bootstrap a small sample before combat learning begins.
                         if (itemID == NONE_ID && !learningUnitMix && lightVehicleCount < 2)
-                            for (size_t i=5; i<8; ++i)
+                            for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i)
                                 if (campaignAvailableToBuild(pBuilder,mixItems[i])
                                     && (itemID == NONE_ID || itemCount[mixItems[i]] < itemCount[itemID])) itemID = mixItems[i];
                         if (itemID != NONE_ID && int64_t(militaryValue) + data[itemID][houseID].price <= militaryBudget
@@ -3418,8 +3387,8 @@ void QuantBot::build(int militaryValue) {
                     air.armyLimit = militaryBudget;
                     air.vehiclePlanValue = vehiclePlanValue;
                     air.airCommittedValue = ornithopterValue;
-                    air.airTargetBps = unitMix[4];
-                    air.airStrategy = strategyMixProfile && strategyMixProfile->prior[4] > 0;
+                    air.airTargetBps = unitMix[kOrnithopterSlot];
+                    air.airStrategy = strategyMixProfile && strategyStart[kOrnithopterSlot] > 0;
                     air.credits = getHouse()->getCredits();
                     const auto decision = QuantBotBuildPolicy::chooseAirProduction(air);
                     if (emitStatsLog && AITelemetry::log().enabled()) {
@@ -3429,7 +3398,7 @@ void QuantBot::build(int militaryValue) {
                             .set("economy_reserve",economyReserve).set("strategic_reserve",strategicReserveCost)
                             .set("cash_threshold",ornithopterPrice).set("ornithopter_price",ornithopterPrice)
                             .set("air_target_value",(vehiclePlanValue*ornithopterPercent).lround())
-                            .set("air_committed_value",ornithopterValue).set("air_target_bps",unitMix[4])
+                            .set("air_committed_value",ornithopterValue).set("air_target_bps",unitMix[kOrnithopterSlot])
                             .set("military_value",militaryValue).set("military_limit",militaryValueLimit)
                             .set("military_budget",militaryBudget)
                             .set("ornithopter_available",air.ornithopterAvailable)
@@ -3600,54 +3569,17 @@ void QuantBot::build(int militaryValue) {
 						}
 						else if (money > (citySimEnabled || vanillaEconomy ? 500 : 2000)
 							&& militaryValue < militaryBudget && !getHouse()->isGroundUnitLimitReached()) {
-                            const int specialValue = data[Unit_Devastator][houseID].price * itemCount[Unit_Devastator]
-                                + data[Unit_SonicTank][houseID].price * itemCount[Unit_SonicTank]
-                                + data[Unit_Deviator][houseID].price * itemCount[Unit_Deviator];
-                            // The special class competes for one share, so it
-                            // occupies one allocation slot. Which special that
-                            // slot buys is decided on each type's own measured
-                            // return per credit lost, with a bounded prior so an
-                            // untried type is tried rather than starved.
-                            //
-                            // Previously all three specials were separate
-                            // candidates carrying the same committed value and
-                            // the same target share, so the outer
-                            // largest-deficit comparison saw three identical
-                            // deficits and its strict greater-than kept the
-                            // first one in array order. The outer share, budget,
-                            // affordability and availability rules are unchanged.
-                            SpecialUnitPolicy::Candidates specials{};
-                            {
-                                const std::array<Uint32,SpecialUnitPolicy::kSpecials> specialItems =
-                                    {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
-                                for (size_t s=0; s<specialItems.size(); ++s) {
-                                    const auto item = specialItems[s];
-                                    const int price = data[item][houseID].price;
-                                    specials[s].item = item;
-                                    specials[s].price = price;
-                                    specials[s].rewardMilli = getHouse()->getCombatReward(item).total();
-                                    specials[s].lossMilli = int64_t(getHouse()->getNumLostItems(item)) * price * 1000;
-                                    specials[s].committedValue = int64_t(price) * itemCount[item];
-                                    specials[s].available = campaignAvailableToBuild(pBuilder,item);
-                                    specials[s].affordable = price > 0 && price <= money
-                                        && int64_t(militaryValue) + price <= militaryBudget;
-                                }
-                            }
-                            const int specialChoice = SpecialUnitPolicy::select(specials);
-                            const Uint32 specialItem = specialChoice >= 0
-                                ? specials[specialChoice].item : Unit_Devastator;
-                            const std::array<Uint32,4> types = {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
-                                specialItem};
-                            const std::array<FixPoint,4> targets = {tankPercent,siegePercent,launcherPercent,
-                                specialPercent};
-                            std::array<QuantBotBuildPolicy::AllocationCandidate,4> candidates;
+                            // Every heavy mix slot is a candidate with its own learned share and
+                            // committed value - each special its own slot since 9868, so a house
+                            // that builds several specials weighs them by their own results.
+                            constexpr size_t kHeavy = UnitMixPolicy::kOrnithopterSlot;
+                            std::array<Uint32,kHeavy> types{};
+                            std::array<QuantBotBuildPolicy::AllocationCandidate,kHeavy> candidates;
                             AITelemetry::Record choices;
                             for (size_t i=0; i<types.size(); ++i) {
-                                const auto item = types[i];
-                                candidates[i] = {data[item][houseID].price,
-                                    i>=3 ? specialValue : data[item][houseID].price * itemCount[item],
-                                    (targets[i]*10000).lround(),
-                                    i>=3 ? specialChoice>=0 : campaignAvailableToBuild(pBuilder,item)};
+                                const auto item = types[i] = mixItems[i];
+                                candidates[i] = {data[item][houseID].price, data[item][houseID].price * itemCount[item],
+                                    unitMix[i], campaignAvailableToBuild(pBuilder,item)};
                             }
                             const int normalHorizon = vehiclePlanValue;
                             const int expansionHorizon = vehiclePlanValue;
@@ -3669,10 +3601,7 @@ void QuantBot::build(int militaryValue) {
                             // identical no-deficit decision for every idle factory rapidly exhausts
                             // the match capture. Keep a periodic heartbeat for diagnosis.
                             const Uint32 allocationCycle = getGameCycleCount();
-                            // The within-special choice is part of the decision,
-                            // so a change of special re-emits the heartbeat.
                             const uint64_t allocationSignature = (uint64_t(selected + 1) << 40)
-                                | (uint64_t(specialChoice + 1) << 8)
                                 | static_cast<uint64_t>(expansionFallback);
                             const auto traceIt = lastHeavyAllocationTrace.find(pBuilder->getObjectID());
                             const bool allocationChanged = traceIt == lastHeavyAllocationTrace.end()
@@ -3687,23 +3616,6 @@ void QuantBot::build(int militaryValue) {
                                     .set("expansion_horizon",expansionHorizon).set("expansion_fallback",expansionFallback)
                                     .set("spendable",money).set("candidates",choices)
                                     .set("selected",selected<0 ? NONE_ID : types[selected])
-                                    .set("special_selected",specialChoice<0 ? NONE_ID : specialItem)
-                                    .set("special_reason",SpecialUnitPolicy::selectionReason(specials,specialChoice))
-                                    .set("specials",[&]() {
-                                        AITelemetry::Record record;
-                                        const auto explored=SpecialUnitPolicy::exploredScores(specials);
-                                        for (size_t s=0;s<specials.size();++s)
-                                            record.set(std::to_string(specials[s].item),AITelemetry::Record()
-                                                .set("price",specials[s].price)
-                                                .set("reward_milli",specials[s].rewardMilli)
-                                                .set("loss_milli",specials[s].lossMilli)
-                                                .set("owned_value",specials[s].committedValue)
-                                                .set("available",specials[s].available)
-                                                .set("affordable",specials[s].affordable)
-                                                .set("raw_score",SpecialUnitPolicy::rawScore(specials[s]))
-                                                .set("explored_score",explored[s]));
-                                        return record;
-                                    }())
                                     .set("reason",selected<0 ? "no_affordable_capacity"
                                         : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit"));
                                 lastHeavyAllocationTrace[pBuilder->getObjectID()] = {allocationSignature, allocationCycle};

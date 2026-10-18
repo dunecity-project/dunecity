@@ -249,7 +249,9 @@
 //     (the configured opening, the presets, Counter) gives each producible mix slot 2%-50% before
 //     the learning, the presets are re-cut within those bounds, and the Tuned ([Unit Ratios Tuned],
 //     hashed) and Bounded (random within the bounds from seed and house) mixes are new. An 82 peer
-//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios).
+//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios). Unreleased,
+//     so the same protocol also covers one mix slot per special (Devastator, Sonic Tank, Deviator;
+//     the observer allocation snapshot has ten slots), the tuned ratios per tech band and save 9868.
 //     (Branch feat/ai-ratio-tuning only; never released.)
 // 84: QuantBot in a free-for-all: "outnumbered" (the perimeter hold, perimeter turrets and the
 //     test-only round 5 rules) measures the remembered army of the strongest single enemy team,
@@ -262,10 +264,10 @@
 //     total city population reaches 500. An 82 peer would end the game differently. No saved
 //     state change (the retired threshold slot is still written as 0 and discarded on load).
 //     (Branch fix/remove-economic-victory only; never released.)
-// 86: 1.0.848 = 83 + 84 + 85 together: the starting-mix bounds and Tuned/Bounded mixes, the
-//     free-for-all "outnumbered" rule and city-free rally points, and no population victory. Any
-//     82-85 peer would build, attack or end the game differently and desync. Save 9866 (83's
-//     resolved Tuned/Bounded ratios); 9865 and older saves load.
+// 86: 1.0.848 = 83 + 84 + 85 together: the starting-mix bounds, Tuned/Bounded mixes, one mix slot
+//     per special and tuned ratios per tech band; the free-for-all "outnumbered" rule and city-free
+//     rally points; and no population victory. Any 82-85 peer would build, attack or end the game
+//     differently and desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
 #define NETWORK_PROTOCOL_VERSION            86
 
 // Mod transfer limits

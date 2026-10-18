@@ -1,3 +1,20 @@
+## 2026-10-18 — 1.0.848 trial integration (branch `integrate/848-trial`, worktree `~/Documents/projects/dunecity-int-848`, protocol 86, save 9868; not released, no version bump)
+
+Agent Integrate848. From `integrate/feature-batch` b683286f (1.0.847), merged in order:
+`fix/ai-army-stuck-in-base` 8a8e4833 (with perf/game-fps, test/match-scoring, test/ai-scenario-matrix,
+exp/ai-late-game), `chore/remove-map-sharing` 0a9ff138, `fix/remove-economic-victory` f44564ee,
+`feat/ai-ratio-tuning` 4c3ee80b, then its newer tip 873030df (ten mix slots, tech bands, save 9868).
+- **Conflicts:** HANDOVER (all entries kept); protocol history and `NetworkManagerTestCase` (83/84/85
+  histories kept, one new 86); `tests/ai/elimination-match.inc` (FfaArmy include + ten-slot `sampleMix`,
+  the final sample logs both); `tests/ai/vanilla-match.py` (late-rule counters + `start_mix`; both
+  `army.csv` and `mix.csv`; `--tech` map copies also used for bundled maps, generated rs maps unchanged).
+- **Integration-only fix:** the scenario matrix read the removed `getEconomicVictoryThreshold()` and had
+  an `economic` win type; both dropped (`SCENARIO_RESULT`, `games.csv` column, campaign report). An
+  older `games.csv` is rewritten with the current columns on append.
+- **Versions:** protocol 86 (83 ratio + 84 army + 85 econ, all branch-only); save 9868 (ratio's ten-slot
+  mix state; 9866/9867 load and split, older saves as before; econ kept the 9865 layout, army changed no
+  saved state).
+
 ## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
 
 Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data
@@ -168,6 +185,25 @@ different players and armies, and the popular MP maps 1v1/2v2/3v3. Write-up and 
 - **Parity:** smoke digests identical on mini, Pro, Air and PC.
 - **Incident:** `agent-workspace run --git -- git merge` ran in the staging checkout and fast-forwarded
   `integrate/feature-batch` to 17af09d2 for ~1 min; reset with `git reset --keep b683286f` (told Main).
+
+## 2026-10-18 (night) — QuantBot specials fix, one mix slot per special, tech bands (branch `feat/ai-ratio-tuning`, protocol 83, save 9868, not released)
+
+Write-up `docs/ai-play-styles.md` 8.8-8.10.
+
+- **Fixed (4c3ee80b):** the capital/Starport path gave each buildable special the whole special share;
+  now split (`UnitMixPolicy::splitShare`, unit test `[specials]`).
+- **Layout (32adfb8a):** ten slots (Devastator, Sonic Tank, Deviator each own share, learning, heavy
+  candidate; `SpecialUnitPolicy` removed). Group-form inputs (`[Unit Ratios]` Special, presets, counter,
+  style `Mix=`) split the special share between the house's specials. One-special houses unchanged
+  (`quantbot_strategy` values identical). Save 9868 (ten resolved ratios; 9866/9867 load and split).
+- **Tech bands:** `fieldableMixSlots(tech)` follows builder/prerequisites; `techBand()`;
+  `[Unit Ratios Tuned] <House>_Tech<N> = ...|Opening`; `tests/ai/tech-bands.py`; `vanilla-match.py --tech`;
+  `ratio-analysis.py` ten slots, six houses, `--tech`, per-house effect (the per-house decision).
+- **Not done:** tuning per house x band. Exploration x3/x4/x5/x6/x8 (1,080 games each, all 15 pairs) is
+  queued on the cluster (results `~/Documents/projects/dunecity-results/ratio-tuning/x<N>`); then
+  candidates, round 1, refinement, confirmation, defaults, checks and the full ctest (section 8.10).
+  Verified so far: `dunelegacy_tests`, `quantbot_strategy`, `quantbot_force_concentration`,
+  `quantbot_army_recovery`, `save_scenario_export` (ctest, 32adfb8a).
 
 ## 2026-10-18 — QuantBot ratio tuning: placement re-score, tuned rounds; default now Tuned/Swarm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
 

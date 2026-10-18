@@ -123,11 +123,6 @@ namespace {
 
 constexpr Uint32 SAVE_SETUP_COLOR_MARKER = 0x53434F4C; // "SCOL"
 
-constexpr std::array<Uint32, 8> analyticsMixItems = {
-    Unit_Tank, Unit_SiegeTank, Unit_Launcher, 9999, // QBot's special-unit group
-    Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad
-};
-
 std::string analyticsGameType(GameType type) {
     switch (type) {
         case GameType::Campaign: return "campaign";
@@ -1117,36 +1112,19 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
             if (qbot && finishedMatch) {
                 std::vector<std::string> unitRows;
                 const auto& mix = qbot->getLastUnitMixBps();
-                for (size_t i = 0; i < analyticsMixItems.size(); ++i) {
-                    const int item = analyticsMixItems[i];
-                    int built = 0;
-                    int lost = 0;
-                    int destroyed = 0;
-                    int64_t rewardMilli = 0;
-                    int64_t damageValueMilli = 0;
-                    int64_t killBonusMilli = 0;
-                    int64_t lostValue = 0;
-                    const std::array<Uint32, 3> specialItems = {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
-                    const bool specialGroup = item == 9999;
-                    const auto collect = [&](Uint32 unit) {
-                        built += currentHouse->getNumBuiltItems(unit);
-                        lost += currentHouse->getNumLostItems(unit);
-                        destroyed += currentHouse->getNumKilledItems(unit);
-                        const auto& reward = currentHouse->getCombatReward(unit);
-                        rewardMilli += reward.total();
-                        damageValueMilli += reward.damageMilli;
-                        killBonusMilli += reward.killBonusMilli;
-                        lostValue += int64_t(currentHouse->getNumLostItems(unit)) * objectData.data[unit][h].price;
-                    };
-                    if (specialGroup) {
-                        for (const auto unit : specialItems) collect(unit);
-                    } else {
-                        collect(item);
-                    }
+                for (size_t i = 0; i < QuantBot::kMixItems.size(); ++i) {
+                    const Uint32 item = QuantBot::kMixItems[i];
+                    const auto& reward = currentHouse->getCombatReward(item);
+                    const int built = currentHouse->getNumBuiltItems(item);
+                    const int lost = currentHouse->getNumLostItems(item);
+                    const int destroyed = currentHouse->getNumKilledItems(item);
+                    const int64_t rewardMilli = reward.total();
+                    const int64_t damageValueMilli = reward.damageMilli;
+                    const int64_t killBonusMilli = reward.killBonusMilli;
+                    const int64_t lostValue = int64_t(lost) * objectData.data[item][h].price;
                     std::ostringstream unit;
                     unit << "{\"item_id\":" << item
-                         << ",\"item_name\":" << AITelemetry::Record::quote(
-                                specialGroup ? "special" : getItemNameByID(item))
+                         << ",\"item_name\":" << AITelemetry::Record::quote(getItemNameByID(item))
                          << ",\"target_weight_bps\":" << mix[i]
                          << ",\"built\":" << built
                          << ",\"lost\":" << lost

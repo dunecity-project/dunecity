@@ -195,12 +195,24 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
     }
     // SAVEGAMEVERSION 9866: the starting ratios a Tuned/Bounded strategy resolved to. A 9865 save
     // holds none of those mixes (its mixes take their ratios from QuantBotStrategy::profile).
+    // 9868: ten slots, one per special; a 9866/9867 save has the eight group slots, its special
+    // share is split between the specials this house can build (UnitMixPolicy::expandGroups).
     strategyPrior = {};
     if (currentGame->getLoadedSavegameVersion() >= 9866) {
         int total = 0;
-        for (auto& share : strategyPrior) {
-            share = stream.readUint16();
-            total += share;
+        if (currentGame->getLoadedSavegameVersion() >= 9868) {
+            for (auto& share : strategyPrior) {
+                share = stream.readUint16();
+                total += share;
+            }
+        } else {
+            UnitMixPolicy::GroupWeights group{};
+            for (auto& share : group) {
+                share = stream.readUint16();
+                total += int(share);
+            }
+            const auto expanded = UnitMixPolicy::expandGroups(group, fieldableMixSlots());
+            for (size_t i = 0; i < strategyPrior.size(); ++i) strategyPrior[i] = int(expanded[i]);
         }
         const bool resolves = strategy.mix == QuantBotStrategy::Mix::Tuned || strategy.mix == QuantBotStrategy::Mix::Bounded;
         if ((total != 0 && total != 10000) || (total != 0 && !resolves))

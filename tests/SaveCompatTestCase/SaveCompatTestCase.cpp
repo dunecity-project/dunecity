@@ -55,7 +55,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9864 adds the QuantBot remembered enemy army and defence musters (defence while outnumbered).
     // 9865 adds the QuantBot strategy (unit-mix strategy and tempo).
     // 9866 adds the starting ratios a Tuned/Bounded strategy resolved to.
-    REQUIRE(SAVEGAMEVERSION == 9866);
+    // 9868 gives every special its own unit-mix slot (ten slots instead of eight).
+    REQUIRE(SAVEGAMEVERSION == 9868);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

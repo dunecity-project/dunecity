@@ -90,14 +90,15 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // Concentration] OpeningReadiness); no saved state change (9864).
     // 82 gives every Custom Hard/Brutal QuantBot a unit-mix strategy and a tempo picked from the
     // game seed, its house and [Strategy] (hashed); save 9865 (the strategy).
-    // 83 bounds every starting unit mix (each producible slot 2%-50%) and adds the Tuned and Bounded
-    // mixes ([Unit Ratios Tuned] hashed); save 9866 (their resolved ratios).
+    // 83 bounds every starting unit mix (each producible slot 2%-50%), adds the Tuned and Bounded
+    // mixes ([Unit Ratios Tuned] hashed), one mix slot per special and tuned ratios per tech band;
+    // save 9868 (ten resolved ratios).
     // 84 judges a QuantBot "outnumbered" against the strongest enemy team (not every enemy
     // summed: free-for-all houses stayed home) and moves the bundle and the perimeter point out
     // of the house's own city; no saved state change.
     // 85 removes the population/economic victory (WinFlags bit 0x10 ignored); no saved state
     // change.
-    // 86 is 1.0.848: 83, 84 and 85 together (they were branch-only); save 9866.
+    // 86 is 1.0.848: 83, 84 and 85 together (they were branch-only); save 9868.
     REQUIRE(NETWORK_PROTOCOL_VERSION == 86);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

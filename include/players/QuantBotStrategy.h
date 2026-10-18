@@ -8,8 +8,9 @@
 // Lockstep: the pick is a pure function of the game's random seed, the house and the (hashed)
 // config - no simulation RNG draw, no clock, no local setting - so every peer, a replay and a
 // reload agree, and the order the bots are created or updated in cannot change it. The choice is
-// saved (SAVEGAMEVERSION 9865), the Tuned/Bounded starting mix it resolved to as well (9866); a
-// 9864 save picks it afresh by the same function, a 9865 save holds none of the newer mixes.
+// saved (SAVEGAMEVERSION 9865), the Tuned/Bounded starting mix it resolved to as well (9866; ten
+// slots, one per special, since 9868); a 9864 save picks it afresh by the same function, a 9865
+// save holds none of the newer mixes.
 //
 // A mix strategy is a prior, not a frozen composition: it replaces the opening mix that
 // UnitMixPolicy::allocate blends combat evidence into, so the in-game learning still moves
@@ -88,10 +89,11 @@ Choice pick(const Settings& settings, uint32_t seed, int house, const std::array
 
 /// What a mix strategy changes.
 struct MixProfile {
-    /// The starting ratios (tank, siege tank, launcher, special, ornithopter, trike, raider
-    /// trike, quad); all zero = the configured opening mix (Tuned and Bounded: resolved per house
-    /// by QuantBot). Unavailable slots are dropped, then the mix is bounded (bound()).
-    UnitMixPolicy::Weights prior{};
+    /// The starting ratios in the group form (tank, siege tank, launcher, special, ornithopter,
+    /// trike, raider trike, quad; UnitMixPolicy::expandGroups splits the special share between the
+    /// specials a house can build); all zero = the configured opening mix (Tuned and Bounded:
+    /// resolved per house by QuantBot). Unavailable slots are dropped, then the mix is bounded (bound()).
+    UnitMixPolicy::GroupWeights prior{};
     /// Share of the opening prior the strategy's ratios replace (basis points).
     int priorBps = 0;
     /// How long the prior holds against combat evidence: the fielded army counts this many
@@ -118,15 +120,15 @@ struct TempoProfile {
 };
 const TempoProfile& profile(Tempo tempo);
 
-/// The 8-slot prior that counters a remembered enemy army worth light/armour/launchers/air
+/// The group-form prior that counters a remembered enemy army worth light/armour/launchers/air
 /// credits (light -> tanks and siege, armour -> launchers and siege, launchers -> quads and
 /// tanks, air -> launchers). All zero when nothing has been seen.
-UnitMixPolicy::Weights counterPrior(int64_t light, int64_t armour, int64_t launchers, int64_t air);
+UnitMixPolicy::GroupWeights counterPrior(int64_t light, int64_t armour, int64_t launchers, int64_t air);
 
 /// \a opening with priorBps of it replaced by \a prior (masked by \a available and normalised).
 /// Returns \a opening unchanged when the profile has no prior or nothing of it is available.
 UnitMixPolicy::Weights applyPrior(const UnitMixPolicy::Weights& opening, const UnitMixPolicy::Weights& prior,
-                                  int priorBps, const std::array<bool, 8>& available);
+                                  int priorBps, const UnitMixPolicy::Slots& available);
 
 /// The starting-mix bounds: every slot the house can produce gets at least kStartMinBps and at
 /// most kStartMaxBps of a starting mix (2% and 50%).
@@ -139,25 +141,26 @@ constexpr int kStartMaxBps = 5000;
 /// get 0; an available slot of weight 0 gets 2%. If even every weighted slot at 50% is short, the
 /// zero-weight slots share the rest equally. One available slot gets 100% (the cap cannot hold),
 /// none an all-zero mix. Deterministic, order-independent, idempotent on a bounded mix.
-UnitMixPolicy::Mix bound(const UnitMixPolicy::Weights& weights, const std::array<bool, 8>& available);
+UnitMixPolicy::Mix bound(const UnitMixPolicy::Weights& weights, const UnitMixPolicy::Slots& available);
 /// True if \a mix sums to 10000 over the \a available slots, is 0 elsewhere and every available
 /// slot is within the bounds (or the only one available has 10000).
-bool withinBounds(const UnitMixPolicy::Mix& mix, const std::array<bool, 8>& available);
+bool withinBounds(const UnitMixPolicy::Mix& mix, const UnitMixPolicy::Slots& available);
 
 /// The Bounded strategy's starting mix of house \a house in the game with seed \a seed: uniform
 /// over the bounded mixes of the \a available slots (spacings of sorted uniform cut points - a flat
 /// Dirichlet - drawn by SplitMix64 of seed, house and a counter, redrawn until within the bounds,
 /// at most 64 times, then bound() of the last draw). Integer arithmetic only.
-UnitMixPolicy::Mix randomMix(uint32_t seed, int house, const std::array<bool, 8>& available);
+UnitMixPolicy::Mix randomMix(uint32_t seed, int house, const UnitMixPolicy::Slots& available);
 
-/// "t,s,l,sp,o,tr,r,q": eight non-negative integer weights (percent) over the mix slots; false if
-/// malformed or all zero (\a weights unchanged). An empty text is all zero (no tuned mix).
+/// "t,s,l,dv,so,de,o,tr,r,q": ten non-negative integer weights (percent) over the mix slots (tank,
+/// siege tank, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad);
+/// false if malformed or all zero (\a weights unchanged). An empty text is all zero (no tuned mix).
 bool parseRatios(const std::string& text, UnitMixPolicy::Weights& weights);
 std::string ratiosText(const UnitMixPolicy::Weights& weights);
 
 /// Mixes a house can field: a mix needs at least half of its prior's weight in slots the house
-/// can build (\a buildable over the 8 mix slots), Infantry needs \a infantryBuildable.
-std::array<bool, kMixCount> eligibleMixes(const std::array<bool, 8>& buildable, bool infantryBuildable);
+/// can build (\a buildable over the mix slots), Infantry needs \a infantryBuildable.
+std::array<bool, kMixCount> eligibleMixes(const UnitMixPolicy::Slots& buildable, bool infantryBuildable);
 
 } // namespace QuantBotStrategy
 

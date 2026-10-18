@@ -39,19 +39,12 @@ inline int survivingTeam(Game& game) {
 
 namespace EliminationMatch {
 
-/// The unit-mix slot of a unit type (QuantBotStrategy: tank, siege tank, launcher, special,
-/// ornithopter, trike, raider trike, quad) or 8 for infantry, -1 for anything else.
+/// The unit-mix slot of \a item (QuantBot::kMixItems order: tank, siege tank, launcher, Devastator,
+/// Sonic Tank, Deviator, ornithopter, trike, raider trike, quad), 10 for infantry, -1 otherwise.
 inline int mixSlot(Uint32 item) {
+    for (size_t i = 0; i < QuantBot::kMixItems.size(); ++i) if (QuantBot::kMixItems[i] == item) return int(i);
     switch (item) {
-        case Unit_Tank: return 0;
-        case Unit_SiegeTank: return 1;
-        case Unit_Launcher: return 2;
-        case Unit_Devastator: case Unit_SonicTank: case Unit_Deviator: return 3;
-        case Unit_Ornithopter: return 4;
-        case Unit_Trike: return 5;
-        case Unit_RaiderTrike: return 6;
-        case Unit_Quad: return 7;
-        case Unit_Soldier: case Unit_Infantry: case Unit_Trooper: case Unit_Troopers: return 8;
+        case Unit_Soldier: case Unit_Infantry: case Unit_Trooper: case Unit_Troopers: return int(UnitMixPolicy::kSlots);
         default: return -1;
     }
 }
@@ -60,7 +53,7 @@ inline int mixSlot(Uint32 item) {
 /// credited to it (credits of damage value; House::getCombatReward), as "a/b/.../i".
 inline void sampleMix(Game& game, const House* house, int minute, bool final) {
     const int houseID = house->getHouseID();
-    std::array<long long, 9> built{}, lost{}, army{}, reward{};
+    std::array<long long, UnitMixPolicy::kSlots + 1> built{}, lost{}, army{}, reward{};
     for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item) {
         const int slot = mixSlot(item);
         if (slot < 0) continue;
@@ -74,7 +67,7 @@ inline void sampleMix(Game& game, const House* house, int minute, bool final) {
             const int slot = mixSlot(unit->getItemID());
             if (slot >= 0) army[slot] += game.objectData.data[unit->getItemID()][houseID].price;
         }
-    auto join = [](const std::array<long long, 9>& values) {
+    auto join = [](const std::array<long long, UnitMixPolicy::kSlots + 1>& values) {
         std::string out;
         for (const auto value : values) out += (out.empty() ? "" : "/") + std::to_string(value);
         return out;

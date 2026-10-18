@@ -17,6 +17,8 @@ Modes:
                      Sardaukar, two houses per label, all six partitions per seed.
   --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
   --ffa x            the same with one label for all four houses: one game per map and seed.
+  --tech N [N ...]   1v1 at each of these tech levels: a copy of every map with [BASIC] TechLevel=N
+                     (the lobby starts a map at its own tech level; games.csv names it <map>@t<N>).
 
 Maps: a bundled multiplayer map (MAPS or a file stem), or rs<size>-<mod> (e.g. rs160-dunecity,
 rs160-vanilla): a generated multiplayer Random Skirmish map with one start per house, each a
@@ -133,12 +135,47 @@ def skirmish(name):
 
 
 def map_path(name):
+    """The map file of a --maps entry; an '@t<N>' suffix (--tech) names the same map."""
+    name = name.split('@t', 1)[0]
     if name in MAPS:
         return MAP_DIR / MAPS[name]
     for path in MAP_DIR.glob('*.ini'):
         if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
             return path
     raise SystemExit(f'Unknown map {name}')
+
+
+def map_tech(name):
+    """The tech level of a scheduled map entry ('<map>@t<N>', --tech), or None for the map's own."""
+    return int(name.split('@t', 1)[1]) if '@t' in name else None
+
+
+def game_map(name, scratch):
+    """The map file a game plays: the bundled file, or (--tech) a copy of it with [BASIC] TechLevel=N
+    in the scratch directory (the lobby starts the map at its own tech level)."""
+    path, tech = map_path(name), map_tech(name)
+    if tech is None:
+        return path
+    copy = Path(scratch) / 'maps' / f't{tech}' / path.name
+    with lock:
+        if not copy.exists():
+            lines = path.read_text(errors='replace').splitlines()
+            section, out, done = '', [], False
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('['):
+                    if section == 'basic' and not done:
+                        out.append(f'TechLevel={tech}')
+                        done = True
+                    section = stripped.strip('[]').strip().lower()
+                elif section == 'basic' and stripped.split('=', 1)[0].strip().lower() == 'techlevel':
+                    line, done = f'TechLevel={tech}', True
+                out.append(line)
+            if not done:
+                out.append(f'TechLevel={tech}')
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            copy.write_text('\n'.join(out) + '\n')
+    return copy
 
 
 def side_list(sides):
@@ -177,13 +214,15 @@ def schedule(args):
     for index, seed in enumerate(args.seeds, args.house_offset):
         houses = pairs if args.all_houses else (pairs[index % len(pairs)],)
         for house_a, house_b in houses:
-            for map_index, name in enumerate(args.maps):
+            for map_index, base in enumerate(args.maps):
                 # --seed-per-map: every map its own seed, so a seeded per-house draw differs by map.
                 game_seed = seed + map_index * args.seed_per_map
-                for pair in args.pairs.split(','):
-                    x, y = pair.split(':')
-                    for la, lb in ((x, y), (y, x)):
-                        games.append((args.tag, args.difficulty, name, str(game_seed), f'{house_a}:{la}|{house_b}:{lb}'))
+                # --tech: the same map and seed at each tech level ('<map>@t<N>').
+                for name in ([f'{base}@t{tech}' for tech in args.tech] if args.tech else [base]):
+                    for pair in args.pairs.split(','):
+                        x, y = pair.split(':')
+                        for la, lb in ((x, y), (y, x)):
+                            games.append((args.tag, args.difficulty, name, str(game_seed), f'{house_a}:{la}|{house_b}:{lb}'))
     return games
 
 
@@ -223,7 +262,7 @@ def play(args, scratch, binary, key):
         command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed, '--mod', mod,
                     '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
     else:
-        command += ['--custom-map', str(map_path(name))]
+        command += ['--custom-map', str(game_map(name, scratch))]
         if args.game_options:
             command += ['--game-options', str(args.game_options)]
     if not args.ai_telemetry:
@@ -757,6 +796,9 @@ parser.add_argument('--difficulty-filter', choices=('hard', 'brutal'), help='Rep
 parser.add_argument('--minutes', type=int, default=80, help='Game minutes before a game is a time-out')
 parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--maps', nargs='+', default=list(MAPS))
+parser.add_argument('--tech', nargs='+', type=int, choices=range(1, 10), metavar='N',
+                    help='1v1: play every map at each of these tech levels (a copy of the map with [BASIC] TechLevel=N; '
+                         'games.csv names the map <map>@t<N>; tests/ai/tech-bands.py lists where the bands change)')
 parser.add_argument('--seeds', nargs='+', type=int, default=[8101, 8202, 8303, 8404, 8505, 8606])
 parser.add_argument('--pairs', help='1v1 label pairs x:y,x:y (each played with both assignments)')
 parser.add_argument('--ffa', help='Four-player free-for-all: labels x (all houses), x,y (two houses each) or a,b,c,d')

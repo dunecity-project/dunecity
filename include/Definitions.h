@@ -169,7 +169,13 @@
 //       the starting ratios a Tuned or Bounded strategy resolved to (eight 16-bit basis points,
 //       all zero for every other mix), appended to the QuantBot block after the strategy. A 9865
 //       save loads as it is: none of its mixes needs them.
-#define SAVEGAMEVERSION     9866
+// 9868: QuantBot mix slots per special (docs/ai-play-styles.md, section 8): the resolved
+//       Tuned/Bounded starting ratios hold ten slots (tank, siege tank, launcher, Devastator,
+//       Sonic Tank, Deviator, ornithopter, trike, raider trike, quad) instead of the eight with one
+//       special group. A 9866/9867 save loads its eight; the special share is split between the
+//       specials the house can build. (The learning window keeps its eight-slot serialized form:
+//       every production pass replaces it with the house's match totals before it is read.)
+#define SAVEGAMEVERSION     9868
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

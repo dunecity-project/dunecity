@@ -98,18 +98,14 @@ inline QuantBot* botOf(Game& game, int house) {
 }
 
 /// The mixes a house can field, exactly as QuantBot::pickStrategy() decides them.
-inline std::array<bool, QuantBotStrategy::kMixCount> eligibleFor(int houseID) {
+inline std::array<bool, QuantBotStrategy::kMixCount> eligibleFor(const QuantBot& bot) {
+    const int houseID = bot.getHouse()->getHouseID();
     auto buildable = [&](Uint32 item) {
         const auto& spec = currentGame->objectData.data[item][houseID];
         return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid && spec.techLevel <= currentGame->techLevel;
     };
-    std::array<bool, 8> slots{};
-    const std::array<Uint32, 8> items = {Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Devastator,
-        Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
-    for (size_t i = 0; i < items.size(); ++i) slots[i] = buildable(items[i]);
-    slots[3] = buildable(Unit_Devastator) || buildable(Unit_SonicTank) || buildable(Unit_Deviator);
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry) || buildable(Unit_Trooper) || buildable(Unit_Troopers);
-    return QuantBotStrategy::eligibleMixes(slots, infantry);
+    return QuantBotStrategy::eligibleMixes(bot.fieldableMixSlots(), infantry);
 }
 
 inline std::string botBytes(const QuantBot& bot) {
@@ -208,19 +204,20 @@ inline std::map<int, Choice> picksAfterFirstUpdate(Game& game, const Scenario& s
         require(bot != nullptr, std::string(role) + ": a house has no QuantBot");
         require(bot->autonomousCustomHardBrutal(), std::string(role) + ": a bot is not Custom Hard");
         require(bot->strategyPicked, std::string(role) + ": a bot had not picked its strategy after the first update");
-        const Choice expected = QuantBotStrategy::pick(getQuantBotConfig().strategy, seed, house, eligibleFor(house));
+        const Choice expected = QuantBotStrategy::pick(getQuantBotConfig().strategy, seed, house, eligibleFor(*bot));
         require(bot->strategy == expected, std::string(role) + ": a bot's strategy is not QuantBotStrategy::pick() of seed and house");
         // Bounded: the draw of seed and house over the slots the house can produce, within the bounds.
         const auto fieldable = bot->fieldableMixSlots();
         UnitMixPolicy::Mix prior{};
         if (expected.mix == Mix::Bounded) prior = QuantBotStrategy::randomMix(seed, house, fieldable);
-        else if (expected.mix == Mix::Tuned && *std::max_element(getQuantBotConfig().getTunedRatios(house).begin(),
-                                                                   getQuantBotConfig().getTunedRatios(house).end()) > 0)
-            prior = QuantBotStrategy::bound(getQuantBotConfig().getTunedRatios(house), fieldable);
+        else if (expected.mix == Mix::Tuned) {
+            const auto& tuned = getQuantBotConfig().getTunedRatios(house, bot->techBand());
+            if (*std::max_element(tuned.begin(), tuned.end()) > 0) prior = QuantBotStrategy::bound(tuned, fieldable);
+        }
         require(bot->strategyPrior == prior, std::string(role) + ": a bot's starting mix is not the draw of seed and house");
         const auto start = bot->startingPrior(fieldable);
         UnitMixPolicy::Mix startMix{};
-        for (size_t i = 0; i < 8; ++i) startMix[i] = int(start[i]);
+        for (size_t i = 0; i < startMix.size(); ++i) startMix[i] = int(start[i]);
         require(QuantBotStrategy::withinBounds(startMix, fieldable), std::string(role) + ": a bot's starting mix is not within the bounds");
         choices[house] = bot->strategy;
     }
@@ -339,16 +336,40 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
                     "A QuantBot block lost its strategy or its starting mix");
             require(botBytes(restored) == bytes, "A QuantBot block does not round-trip byte-identically");
         }
-        // The strategy (9865: picked flag, mix, tempo) and its resolved starting mix (9866: eight
-        // 16-bit basis points) are the last 19 bytes of the block.
-        constexpr size_t kPriorBytes = 16, kStrategyBytes = 3 + kPriorBytes;
+        // The strategy (9865: picked flag, mix, tempo) and its resolved starting mix (9868: ten
+        // 16-bit basis points, one slot per special) are the last 23 bytes of the block.
+        constexpr size_t kPriorBytes = 2 * UnitMixPolicy::kSlots, kStrategyBytes = 3 + kPriorBytes;
         const size_t at = bytes.size() - kStrategyBytes;
         require(bytes.size() > kStrategyBytes && Uint8(bytes[at]) == 1 && Uint8(bytes[at + 1]) == Uint8(bot->strategy.mix)
                 && Uint8(bytes[at + 2]) == Uint8(bot->strategy.tempo), "The strategy is not at the end of the QuantBot block");
-        for (size_t i = 0; i < 8; ++i)
+        for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i)
             require(Uint8(bytes[at + 3 + 2 * i]) + 256 * Uint8(bytes[at + 4 + 2 * i]) == bot->strategyPrior[i]
                     || Uint8(bytes[at + 4 + 2 * i]) + 256 * Uint8(bytes[at + 3 + 2 * i]) == bot->strategyPrior[i],
-                    "The starting mix is not the last 16 bytes of the QuantBot block");
+                    "The starting mix is not the last 20 bytes of the QuantBot block");
+        // A 9866 block: the eight group slots (one special share). It loads with the special share
+        // split between the specials the house can build - for a house with one special, exactly the
+        // mix it had - and re-saves as a current block.
+        {
+            UnitMixPolicy::GroupWeights group{};
+            for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i) group[UnitMixPolicy::groupOf(i)] += bot->strategyPrior[i];
+            OMemoryStream tail;
+            tail.open();
+            for (const auto share : group) tail.writeUint16(static_cast<Uint16>(share));
+            const std::string v9866 = bytes.substr(0, bytes.size() - kPriorBytes) + std::string(tail.getData(), tail.getDataLength());
+            currentGame->loadedSavegameVersion = 9866;
+            IMemoryStream in(v9866.data(), v9866.size());
+            QuantBot restored(in, owner);
+            const auto expanded = UnitMixPolicy::expandGroups(group, bot->fieldableMixSlots());
+            UnitMixPolicy::Mix expected{};
+            for (size_t i = 0; i < expected.size(); ++i) expected[i] = int(expanded[i]);
+            require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == expected,
+                    "A 9866 block did not load its starting mix with the special share split");
+            const auto specials = UnitMixPolicy::specials(bot->fieldableMixSlots());
+            if (int(specials[0]) + int(specials[1]) + int(specials[2]) <= 1)
+                require(restored.strategyPrior == bot->strategyPrior, "A one-special house's 9866 mix changed on load");
+            currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
+            require(botBytes(restored).size() == bytes.size(), "A loaded 9866 bot does not re-save as a current block");
+        }
         // A 9865 block: the same bytes without the starting mix. It keeps the strategy; none of the
         // 9865 mixes needs a resolved mix (a Tuned/Bounded pick here plays the configured opening).
         const std::string v9865 = bytes.substr(0, bytes.size() - kPriorBytes);
@@ -415,8 +436,8 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
 
 // ---- 3./4. Production --------------------------------------------------------------------------
 
-constexpr std::array<Uint32, 8> kSlotItems = {Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_SonicTank,
-    Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
+constexpr const auto& kSlotItems = QuantBot::kMixItems;
+constexpr size_t kSlots = UnitMixPolicy::kSlots;
 
 /// What one house did over a production game.
 struct Production {
@@ -430,12 +451,12 @@ struct Production {
     UnitMixPolicy::Mix firstCounterMix{};
     std::string mismatch;
     std::uint64_t mixTrace = 0;   ///< every production pass's cycle and mix, in order
-    std::array<int, 8> built{};   ///< units built per mix slot (specials grouped)
-    std::array<int, 8> valueBps{};///< share of the built vehicle and air value per slot
-    std::array<int, 8> earlyValueBps{};///< the same, of what was built before the first learning pass
+    std::array<int, kSlots> built{};   ///< units built per mix slot
+    std::array<int, kSlots> valueBps{};///< share of the built vehicle and air value per slot
+    std::array<int, kSlots> earlyValueBps{};///< the same, of what was built before the first learning pass
     int builtInfantry = 0;
     int infantryQuotaBps = 0;
-    std::array<Uint32, 8> firstAllocated{};   ///< cycle of the first pass each slot was producible (0 = never)
+    std::array<Uint32, kSlots> firstAllocated{};   ///< cycle of the first pass each slot was producible (0 = never)
     int boundedPasses = 0;        ///< prior passes whose starting mix (before the anti-air floor) was within the bounds
     UnitMixPolicy::Mix strategyPrior{};   ///< the Tuned/Bounded starting ratios the bot resolved
 };
@@ -445,51 +466,45 @@ struct Production {
 /// house can produce 2%-50%), then the mobile anti-air floor if that pass applied one (QuantBotBuild.cpp).
 /// \a start gets the bounded starting mix over the slots the house can produce in the game (and
 /// now), \a slots those slots; the pass plays it masked to the producible slots, renormalised.
-inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const std::array<bool, 8>& available, int antiAirFloorBps,
-                                   bool& counterPlayed, UnitMixPolicy::Mix& start, std::array<bool, 8>& slots) {
+inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const UnitMixPolicy::Slots& available, int antiAirFloorBps,
+                                   bool& counterPlayed, UnitMixPolicy::Mix& start, UnitMixPolicy::Slots& slots) {
     const int houseID = bot.getHouse()->getHouseID();
     const auto& ratios = bot.botConfig().getRatios(houseID);
-    UnitMixPolicy::Weights configured{};
-    configured[0] = static_cast<int>(ratios.tank * 10000);
-    configured[1] = static_cast<int>(ratios.siegeTank * 10000);
-    configured[2] = static_cast<int>(ratios.launcher * 10000);
-    configured[3] = static_cast<int>(ratios.special * 10000);
-    configured[4] = static_cast<int>(ratios.ornithopter * 10000);
     slots = bot.fieldableMixSlots();
-    for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];
+    for (size_t i = 0; i < kSlots; ++i) slots[i] = slots[i] || available[i];
+    const auto configured = UnitMixPolicy::expandGroups({static_cast<int>(ratios.tank * 10000),
+        static_cast<int>(ratios.siegeTank * 10000), static_cast<int>(ratios.launcher * 10000),
+        static_cast<int>(ratios.special * 10000), static_cast<int>(ratios.ornithopter * 10000), 0, 0, 0}, slots);
     const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
     UnitMixPolicy::Weights defaults{};
-    for (size_t i = 0; i < 8; ++i) defaults[i] = opening[i];
+    for (size_t i = 0; i < kSlots; ++i) defaults[i] = opening[i];
     counterPlayed = false;
     if (const auto* profile = bot.strategyMix()) {
-        const UnitMixPolicy::Weights prior = profile->counter ? bot.enemyCounterPrior() : profile->prior;
+        const UnitMixPolicy::Weights prior = profile->counter ? bot.enemyCounterPrior() : bot.strategyStart;
         counterPlayed = profile->counter && *std::max_element(prior.begin(), prior.end()) > 0;
         defaults = QuantBotStrategy::applyPrior(defaults, prior, profile->priorBps, slots);
     }
     start = QuantBotStrategy::bound(defaults, slots);
     UnitMixPolicy::Weights masked{};
-    for (size_t i = 0; i < 8; ++i) masked[i] = available[i] ? start[i] : 0;
+    for (size_t i = 0; i < kSlots; ++i) masked[i] = available[i] ? start[i] : 0;
     const auto mix = UnitMixPolicy::normalize(masked);
     return antiAirFloorBps > 0 ? UnitMixPolicy::applyFloor(mix, 2, antiAirFloorBps) : mix;
 }
 
 /// The share of the value of the vehicles and aircraft \a house has built (factories and
 /// Starport), per mix slot; \a counts gets the numbers.
-inline std::array<int, 8> builtValueBps(Game& game, int house, std::array<int, 8>* counts = nullptr) {
+inline std::array<int, kSlots> builtValueBps(Game& game, int house, std::array<int, kSlots>* counts = nullptr) {
     const House* owner = game.getHouse(static_cast<HOUSETYPE>(house));
     auto valueOf = [&](Uint32 item) { return int64_t(owner->getNumBuiltItems(item)) * game.objectData.data[item][house].price; };
-    std::array<int64_t, 8> value{};
-    for (size_t i = 0; i < 8; ++i) {
+    std::array<int64_t, kSlots> value{};
+    for (size_t i = 0; i < kSlots; ++i) {
         value[i] = valueOf(kSlotItems[i]);
         if (counts) (*counts)[i] = owner->getNumBuiltItems(kSlotItems[i]);
     }
-    value[3] = valueOf(Unit_Devastator) + valueOf(Unit_SonicTank) + valueOf(Unit_Deviator);
-    if (counts) (*counts)[3] = owner->getNumBuiltItems(Unit_Devastator) + owner->getNumBuiltItems(Unit_SonicTank)
-        + owner->getNumBuiltItems(Unit_Deviator);
     int64_t total = 0;
     for (const auto v : value) total += v;
-    std::array<int, 8> bps{};
-    for (size_t i = 0; i < 8; ++i) bps[i] = total > 0 ? static_cast<int>(value[i] * 10000 / total) : 0;
+    std::array<int, kSlots> bps{};
+    for (size_t i = 0; i < kSlots; ++i) bps[i] = total > 0 ? static_cast<int>(value[i] * 10000 / total) : 0;
     return bps;
 }
 
@@ -533,9 +548,9 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             pass.mixUint32(snapshot.cycle);
             for (const int share : mix) pass.mixInt32(share);
             production.mixTrace = production.mixTrace * 1000003 + pass.value();
-            std::array<bool, 8> available{};
+            UnitMixPolicy::Slots available{};
             bool any = false;
-            for (size_t i = 0; i < 8; ++i) {
+            for (size_t i = 0; i < kSlots; ++i) {
                 any |= available[i] = snapshot.slots[i].allocated;
                 if (available[i] && production.firstAllocated[i] == 0) production.firstAllocated[i] = snapshot.cycle;
             }
@@ -543,7 +558,7 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             production.airFloorPasses += snapshot.antiAirFloorBps > 0 ? 1 : 0;
             bool counterPlayed = false;
             UnitMixPolicy::Mix start{};
-            std::array<bool, 8> slots{};
+            UnitMixPolicy::Slots slots{};
             const auto expected = priorMix(*bot, available, snapshot.antiAirFloorBps, counterPlayed, start, slots);
             const bool same = std::equal(mix.begin(), mix.end(), expected.begin());
             if (!snapshot.learning) {
@@ -560,7 +575,7 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
                 }
                 if (!same && production.learningOffPrior++ == 0) {
                     production.firstOffPriorCycle = snapshot.cycle;
-                    for (size_t i = 0; i < 8; ++i) production.offPriorMix[i] = mix[i];
+                    for (size_t i = 0; i < kSlots; ++i) production.offPriorMix[i] = mix[i];
                     production.offPriorExpected = expected;
                 }
             }
@@ -604,12 +619,12 @@ inline void logProduction(const char* check, const Production& p, const Producti
 /// lead with two). Counter leads with the largest share of the counter it first played.
 inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
     switch (mix) {
-        case Mix::QuadMass: return {7};
-        case Mix::TrikeSwarm: return {5, 6};
+        case Mix::QuadMass: return {9};
+        case Mix::TrikeSwarm: return {7, 8};
         case Mix::TankMass: return {0};
         case Mix::Artillery: return {1};   // siege: Atreides's configured mix already has 35% launchers
-        case Mix::Specials: return {3};
-        case Mix::Air: return {4};
+        case Mix::Specials: return {3, 4, 5};   // the house's special(s)
+        case Mix::Air: return {UnitMixPolicy::kOrnithopterSlot};
         case Mix::Counter:
             return {size_t(std::max_element(p.firstCounterMix.begin(), p.firstCounterMix.end()) - p.firstCounterMix.begin())};
         case Mix::Tuned:
@@ -634,7 +649,7 @@ constexpr int kLeadMarginBps = 400;
 inline void checkMix(Mix mix, const Production& p, const Production& learned, long long wallMs) {
     const std::vector<size_t> lead = leadSlots(mix, p);
     int leadBps = 0, learnedLeadBps = 0;
-    for (size_t i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < kSlots; ++i) {
         const bool isLead = std::find(lead.begin(), lead.end(), i) != lead.end();
         if (isLead) { leadBps += p.valueBps[i]; learnedLeadBps += learned.valueBps[i]; }
     }
@@ -668,12 +683,13 @@ inline void checkMix(Mix mix, const Production& p, const Production& learned, lo
     if (mix == Mix::Air) {
         // Every house buys Starport ornithopters (Learned's first minutes are 51% ornithopter value),
         // so the share hardly separates them. The Air strategy upgrades its Hi-Tech Factory to make
-        // ornithopters producible while its prior holds, and builds more of them. Measured: slot 4
-        // producible from cycle 4579 (learning from 15879), 12 ornithopters vs Learned's 9; value
-        // share 2271 vs 1981.
-        require(p.firstAllocated[4] > 0 && p.firstAllocated[4] < p.firstLearningCycle,
+        // ornithopters producible while its prior holds, and builds more of them. Measured: the
+        // ornithopter slot producible from cycle 4579 (learning from 15879), 12 ornithopters vs
+        // Learned's 9; value share 2271 vs 1981.
+        constexpr size_t air = UnitMixPolicy::kOrnithopterSlot;
+        require(p.firstAllocated[air] > 0 && p.firstAllocated[air] < p.firstLearningCycle,
                 "Air: ornithopters were not producible while the prior held");
-        require(p.built[4] > learned.built[4], "Air: no more ornithopters than the Learned game");
+        require(p.built[air] > learned.built[air], "Air: no more ornithopters than the Learned game");
         return;
     }
     require(leadBps >= learnedLeadBps + kLeadMarginBps, name + ": the lead slots got no larger share of the built value than in the Learned game");
@@ -731,7 +747,8 @@ int runQuantBotStrategyProbe() {
         spread.tempoWeights.fill(10);
         getQuantBotConfig().strategy = spread;
         const auto shippedTuned = getQuantBotConfig().tunedRatios;
-        for (auto& ratios : getQuantBotConfig().tunedRatios) if (ratios == UnitMixPolicy::Weights{}) ratios = {30, 20, 20, 15, 5, 3, 2, 5};
+        for (auto& bands : getQuantBotConfig().tunedRatios)
+            if (bands[0] == UnitMixPolicy::Weights{}) bands[0] = {30, 20, 20, 8, 7, 0, 5, 3, 2, 5};
         // Measured on Four Chambers, seed 486409243: the strategies first change the state digest in game
         // minute 12 (no house attacks earlier), so the save is taken there and the peers play to 16.
         const Uint32 saveCycle = MILLI2CYCLES(12 * 60000), endCycle = MILLI2CYCLES(16 * 60000);
@@ -791,7 +808,7 @@ int runQuantBotStrategyProbe() {
             // Two mix strategies a game, one a house (Harkonnen fields no trikes or ornithopters).
             // Tuned plays the probe's [Unit Ratios Tuned] (Harkonnen: 45% tanks), Bounded its draw.
             const auto shippedTuned = getQuantBotConfig().tunedRatios;
-            getQuantBotConfig().tunedRatios[harkonnen] = {45, 15, 15, 15, 0, 0, 0, 10};
+            getQuantBotConfig().tunedRatios[harkonnen][0] = {45, 15, 15, 15, 0, 0, 0, 0, 0, 10};
             const std::vector<std::pair<Mix, Mix>> games = {
                 {Mix::QuadMass, Mix::Artillery}, {Mix::TankMass, Mix::TrikeSwarm}, {Mix::Specials, Mix::Air}, {Mix::Infantry, Mix::Counter},
                 {Mix::Tuned, Mix::Bounded}};
