@@ -568,13 +568,18 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
     }
 }
 
-/// How much more of the built value the lead slots get than in the Learned game (basis points).
-/// Measured (12 game minutes, mapSeed 7, seed 486409243; lead share vs Learned's): QuadMass quads
-/// 2413 vs 960, Artillery siege+launchers 5318 vs 4183 (the smallest margin, +1135), TankMass tanks
-/// 4571 vs 1703, TrikeSwarm trikes 1578 vs 385, Specials 2253 vs 1048, Counter (tanks, its first
-/// counter's lead) 2161 vs 660; Air is checked by its ornithopters (checkMix). The largest-share slot is not asserted: Starport ornithopters and
-/// the mobile anti-air floor's launchers are bought outside the mix and can outweigh a lead slot.
-constexpr int kLeadMarginBps = 500;
+/// The lead slots must get a larger share of the built value than in the Learned game. Measured
+/// (12 game minutes, mapSeed 7, seed 486409243; lead share vs Learned's): QuadMass quads 2413 vs
+/// 960, Artillery siege+launchers 5318 vs 4183, TankMass tanks 4571 vs 1703, TrikeSwarm trikes 1578
+/// vs 385, Specials 2253 vs 1048, Counter (tanks, its first counter's lead) 2161 vs 660; Air is
+/// checked by its ornithopters (checkMix). A fixed margin is not asserted: one 12-minute game per
+/// mix is one trajectory of the whole fight, and over six seeds (486409243, 11, 22, 33, 44, 55),
+/// with and without the perimeter hold (V), the margins ranged +88..+2974 (mean ~+1250), and
+/// the 500-bps margin this check used to require failed 3 of 36 checks with the hold and 5 of 36
+/// without it, spread over all six mixes (docs/formations.md, "Free-for-all: finishing the
+/// game"). The largest-share slot is not asserted either: Starport ornithopters and the mobile
+/// anti-air floor's launchers are bought outside the mix and can outweigh a lead slot.
+constexpr int kLeadMarginBps = 1;
 
 /// Section 3's checks for one house playing Fixed:<mix>,Base, against the Learned game.
 inline void checkMix(Mix mix, const Production& p, const Production& learned, long long wallMs) {
