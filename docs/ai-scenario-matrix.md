@@ -119,3 +119,60 @@ dunecity-pro pull sm-<tag>-s1 <dir1>; dunecity-air pull sm-<tag>-s2 <dir2>   # P
 
 The runners' `run-batch.sh` accepts `scenario-matrix` as a harness (added 2026-10-18). Parity: the
 smoke tier on the Pro, the Air and the PC gives the same final digest for every game as on the mini.
+
+## Machines and time
+
+Full tier, 635 games, 2026-10-18, split `--shard K/4`:
+
+| Machine | Jobs | Games | Wall | Notes |
+|---|---|---|---|---|
+| MacBook Pro (`dunecity-pro`) | 8 | 159 | 21 min | |
+| MacBook Air (`dunecity-air`) | 7 | 159 + 158 | 21.5 + 25 min | ran shards 2 and 4 (the mini queue was full) |
+| Windows PC (`dunecity-win`) | 8 | 157 | 32 min | one 4v4 DuneCity fortress game hit the 1,800 s wall limit (625 s on the Pro) and was replayed on the Air |
+| Mac mini (queue) | 3 | smoke only | 1.7-2.2 min smoke | queue was full all afternoon |
+
+So the full tier is about 25 minutes on three runners (about 3 CPU-hours: campaign missions take
+5-40 s wall, most matches 20-120 s, 7-8 player and 4v4 DuneCity games up to 10 minutes). The smoke
+tier takes 70 s (8 jobs) to 130 s (3 jobs, loaded mini). Parity: the smoke tier's ten final digests are
+identical on the mini, the Pro, the Air and the PC (the PC prints some `end_s` 0.1 s lower: printf
+rounding of the same cycle count).
+
+## Results on 1.0.847 (staging `integrate/feature-batch` b683286f)
+
+Full report: `docs/ai-scenario-matrix-results/847/report.md`; raw CSVs
+`~/Documents/projects/dunecity-results/scenario-matrix/full-847`. Smoke on 1.0.847: 9/10 pass, the
+4P FFA times out with nobody eliminated (ctest `quantbot_scenario_matrix` fails on this baseline; the
+other 36 tests of `ctest -j3 -R 'quantbot_|dunelegacy_tests|skirmish_generator'` pass).
+
+No crash in 635 games (the only failures were harness ones: Full Wormage's binary map header, now
+read; one PC wall-time limit), no idle army anywhere (every house that lasted 20 minutes made sorties or
+kills). What holds:
+
+- **All against Atreides vanilla** 6/6 within 40 min (mean 31 min); **reverse** (Atreides Medium v 4
+  QuantBot Hard) lost 6/6 as it must; **DuneCity** Brutal wins 5/6 (mean 41 min; one seed lost).
+- **Hard v Easy** 23-1 (score +0.92 [+0.75, +1.00]); **Brutal v Medium** 17-5-2 (+0.48 [+0.12, +0.78]),
+  but only 4-4 on the small vanilla Random Skirmish map; QuantBot QH teams beat AI Player Hard teams
+  in every 2v2/3v3 (24/24) and QH beats AH 1v1 CY 4/4.
+- Placement score by controller over Random Skirmish: QB +0.30, QH +0.18, QM -0.13, AH -0.28,
+  QE -0.35, AM -0.57 - the QuantBot order holds overall.
+- **Campaign**: 411 missions run, every one loads and runs, triggers fire (1,287 fired); the Hard
+  partner wins 174/192 (vanilla 84/96, DuneCity 90/96).
+
+Problems found:
+
+1. **Free-for-alls do not end.** 4-8 house FFAs time out in 17 of 24 skirmish FFA games and 5/8 CY
+   FFAs (6P DuneCity 4/4), often with nobody eliminated although every house fights (kill values 20-90k).
+   Team games mostly end. The smoke FFA is one of them (ArmyStuck's bug).
+2. **Medium does not beat Easy.** QM v QE 7-3-14: 8/8 time-outs on Habbanya-Penny, 6/8 on the DuneCity
+   map, 5-3 on the vanilla map; score +0.02 [-0.23, +0.31] - the ladder order is not shown.
+3. **3v3 Hard team loses to the Medium team** on the Random Skirmish 160x160 medium-base map (0/4).
+4. **Hard partner loses late campaign missions**: vanilla level 8-9 (missions 20-22) Atreides/Harkonnen
+   lose 8 of 12 Hard games against QuantBot Easy enemies (Ordos m21 once); Atreides m11 lost once;
+   Harkonnen m14 and Ordos m18 once not finished; DuneCity: Atreides/Harkonnen m22 lost once each, Ordos
+   m17 never finishes (80 min, 2/2), Harkonnen m3 and Ordos m1 once not finished; against
+   `CampaignAIPlayer` 4/27 lost (Atreides m2, m5, m20; Ordos m5).
+5. **DuneCity campaigns are won economically**: 74 of 90 DuneCity Hard wins are the economic victory
+   (city population past the mission threshold, e.g. 505/500 at 8.6 min on Ordos level 4) with little or
+   no fighting; mean win 16 min against 20 min vanilla.
+6. DuneCity games end later: Brutal v Medium on the DuneCity Random Skirmish map 2/8 time-outs, 4v4
+   fortress 2/3 time-outs, the 4P DuneCity map QH mirror 3/4 time-outs.
