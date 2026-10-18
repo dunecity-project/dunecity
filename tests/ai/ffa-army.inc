@@ -28,8 +28,11 @@ namespace QuantBotInternal { bool mobileCombatItem(Uint32 item); }
 
 namespace FfaArmy {
 
-/// A unit within this many tiles (Chebyshev) of one of its house's buildings is inside the base.
-constexpr int kBaseTiles = 4;
+/// A unit within this many tiles (Chebyshev) of one of its house's buildings is inside the base:
+/// among a city's lots (one-tile roads between 2x2 zones) every tile is; the bundle (at least
+/// kBundleClearMinTiles from buildings and roads) and the perimeter point (kPerimeterClearTiles)
+/// are not.
+constexpr int kBaseTiles = 2;
 /// Standing at a point: within this many tiles of it (QuantBot::standsInBundle's radius).
 constexpr int kAtPointTiles = 8;
 
