@@ -6,7 +6,7 @@ enabled independently from the **MODS** menu:
 | Mod | What it is | City mode |
 |-----|-----------|-----------|
 | **Tornie** | A content/tech-tree mod: new **units**, **red/green spice**, and the **8th faction (Rebels)** | Off |
-| **DuneCity** | A **city builder** grafted onto the RTS: zones, roads, civic buildings, budget, economic victory | On |
+| **DuneCity** | A **city builder** grafted onto the RTS: zones, roads, civic buildings, budget | On |
 
 > ⚠️ **The city-building content (zones, roads, nuclear plant, police/stadium/
 > airport, budget) belongs to the DuneCity mod — NOT the Tornie mod.** Tornie is

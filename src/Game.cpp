@@ -4219,13 +4219,6 @@ void Game::updateGameState() {
             currentGame->addToNewsTicker(fmt::sprintf(_("WARNING: Power shortage! %d zones unpowered"), unpowered));
         }
 
-        if ((winFlags & WINLOSEFLAGS_ECONOMIC) && !finished) {
-            int32_t threshold = citySimulation_->getEconomicVictoryThreshold();
-            if (threshold > 0 && citySimulation_->getTotalPop() >= threshold) {
-                setGameWon();
-            }
-        }
-
         // City aircraft are launched by the Airport itself, in
         // Airport::updateCityAircraft() — the direct counterpart of Micropolis
         // simulate.cpp::doAirport(). Keeping a second map-wide spawn loop here

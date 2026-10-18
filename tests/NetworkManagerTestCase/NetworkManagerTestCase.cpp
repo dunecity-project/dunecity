@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 82;
+static constexpr int kWireProtocolVersion = 85;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -90,7 +90,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // Concentration] OpeningReadiness); no saved state change (9864).
     // 82 gives every Custom Hard/Brutal QuantBot a unit-mix strategy and a tempo picked from the
     // game seed, its house and [Strategy] (hashed); save 9865 (the strategy).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 82);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 85);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

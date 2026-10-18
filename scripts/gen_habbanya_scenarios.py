@@ -43,9 +43,7 @@ Engine facts these maps are built against (same sources as
     Unit_Sandworm, so a worm-only house never blocks the
     WINLOSEFLAGS_AI_NO_BUILDINGS victory test in House.cpp:947.  Set
     ``INCLUDE_SANDWORMS = False`` below to ship both maps without worms.
-  * Objectives are plain conquest, WinFlags=3 / LoseFlags=1.  No quota and
-    never WINLOSEFLAGS_ECONOMIC (16), which would win instantly on a prebuilt
-    city.
+  * Objectives are plain conquest, WinFlags=3 / LoseFlags=1.  No quota.
 
 Rock is deliberately left under-built: both cities are compact and irregular,
 and every shelf keeps open rock so the player has somewhere to zone.

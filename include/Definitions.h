@@ -193,7 +193,8 @@
 #define WINLOSEFLAGS_HUMAN_HAS_BUILDINGS    0x02
 #define WINLOSEFLAGS_QUOTA                  0x04
 #define WINLOSEFLAGS_TIMEOUT                0x08
-#define WINLOSEFLAGS_ECONOMIC               0x10
+// Bit 0x10 (set in some original Dune II scenarios, WinFlags=19/23) has no meaning and is ignored,
+// as in Dune II and upstream Dune Legacy. DuneCity has no population/economic victory.
 
 #define MAX_XSIZE 512
 #define MAX_YSIZE 512

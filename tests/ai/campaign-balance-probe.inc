@@ -48,6 +48,7 @@
 #include "credit-capture-probe.inc"
 #include "refund-provenance-probe.inc"
 #include "campaign-city-economy-probe.inc"
+#include "no-population-victory-probe.inc"
 #include "degradation-probe.inc"
 #include "spice-income-probe.inc"
 #include "preplace-queue-probe.inc"
@@ -210,6 +211,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_CITY_CAMPAIGN_PROBE")) {
         runCampaignCityEconomyProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_NO_POPULATION_VICTORY_PROBE")) {
+        runNoPopulationVictoryProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_SPICE_INCOME_PROBE")) {

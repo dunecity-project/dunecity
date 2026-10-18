@@ -88,7 +88,7 @@ void CitySimulation::load(InputStream& stream) {
         lastProcessedDay_        = stream.readUint32();
         lastTaxYear_             = stream.readUint32();
         lastBudgetTick_          = (lastProcessedDay_ * kCyclesPerCityDay) / kCyclesPerBudgetTick;
-        economicVictoryThreshold_= stream.readSint32();
+        stream.readSint32(); // retired economic-victory threshold (no population victory); discarded
 
         const int savedCityHouseCount = loadedVersion >= 9823
             ? kMaxCityHouses
@@ -122,7 +122,7 @@ void CitySimulation::load(InputStream& stream) {
         lastProcessedDay_        = stream.readUint32();
         lastTaxYear_             = stream.readUint32();
         lastBudgetTick_          = (lastProcessedDay_ * kCyclesPerCityDay) / kCyclesPerBudgetTick;
-        economicVictoryThreshold_= stream.readSint32();
+        stream.readSint32(); // retired economic-victory threshold (no population victory); discarded
 
         // policeFunding / nominalCost / lastExpense / budget come AFTER global fields
         // in the old format (and are part of each house slot in the new format).
@@ -151,7 +151,7 @@ void CitySimulation::save(OutputStream& stream) const {
     stream.writeSint32(cityDay_);
     stream.writeUint32(lastProcessedDay_);
     stream.writeUint32(lastTaxYear_);
-    stream.writeSint32(economicVictoryThreshold_);
+    stream.writeSint32(0); // retired economic-victory threshold slot, kept so the 9865 layout is unchanged
 
     // SAVEGAMEVERSION 9818+ persists all kMaxCityHouses slots.
     for (int h = 0; h < kMaxCityHouses; ++h) {
