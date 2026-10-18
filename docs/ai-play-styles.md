@@ -823,7 +823,7 @@ towards the same mix, the tuned start leaves more quads (Harkonnen, Ordos) and f
 - **Default: `Fixed:Tuned,Swarm`** - the measured per-house ratios (8.5), bounded like every starting mix
   (2%-50%). Tuned v the bounded configured ratios +0.27 (+0.09..+0.45), n=468; not worse on Base tempo,
   Fortress, `/weak`; beats on Brutal; `quantbot_all_against_atreides` 6/6. Fremen, Sardaukar and Mercenary
-  have no tuned ratios yet: under Tuned they play their configured opening, bounded (8.8).
+  have no tuned top mix (none beat the control, 8.10): under Tuned they play their configured opening, bounded.
 - **Learned** (the configured ratios, bounded) stays available: `Mode=Fixed:Learned,Swarm`.
 - **Variety:** `Mode=Random` with `MixWeights=Bounded:1` (not worse than the control).
 
@@ -867,25 +867,83 @@ Vanilla:
 | Fremen, Mercenary | - | trike, raider | +quad | +tank | +launcher | +siege | +Devastator, Sonic, ornithopter |
 | Sardaukar | - (1-2) | | trike, raider, quad | +tank | +launcher | +siege | +Devastator, Sonic, ornithopter |
 
-A band with one or two fieldable slots has no freedom under the bounds (100%, or 50/50). Tunable house x
-band: Tech3 F/S/M; Tech4 A, O, F/S/M; Tech5 all six; Tech6 H, A, F/S/M; top (played at tech 8) all six.
-Lookup at a game's band: `<House>_Tech<band>`, `Opening` = the bounded configured opening, absent = the
-house's top mix renormalised over the band's slots (the pre-band behaviour). Harness: `vanilla-match.py
---tech N...` plays a copy of each map with `[BASIC] TechLevel=N` (map `<map>@t<N>`); `ratio-analysis.py
---tech N` analyses one level, writes `<House>_Tech<band>` candidates and reports the per-house effect
-(Δ gain of playing A as that house, least squares over both assignments of all 15 pairs, bootstrap
-interval) - the per-house/band decision.
+A band with one fieldable slot plays it alone; with two the bounds force 50/50. Lookup at a game's band:
+`<House>_Tech<band>`, `Opening` = the bounded configured opening, absent = the house's top mix renormalised
+over the band's slots. Harness: `vanilla-match.py --tech N...` plays a copy of each map with `[BASIC]
+TechLevel=N` (map `<map>@t<N>`); `ratio-analysis.py --tech N` analyses one level and writes
+`<House>_Tech<band>` candidates.
 
-### 8.10 Not done yet (2026-10-18 night)
+**Lower bands are set by design, not measured** (Stefan, 2026-10-18: no tech-level ratio testing). Each
+band's mix follows what it can field: light units only at 3 (quads the strongest), tank-heavy at 4 (50%
+tanks), tanks and launchers lead at 5 (40/25), siege joins at 6 (30/25/20). The light remainder follows
+the house's top mix (Harkonnen quads; Atreides trike/quad; Ordos raider/quad). Code defaults
+(`QuantBotConfig.cpp`), percent of the fieldable slots:
 
-- **Exploration submitted** (cluster, source 32adfb8a, results `~/Documents/projects/dunecity-results/
-  ratio-tuning/x{3,4,5,6,8}`): `default#Bounded-Swarm` v `default#Learned-Swarm`, all six houses, all 15
-  pairs, both sides, Hard, six maps, seeds 71000-71050 step 10, `--seed-per-map 1`, 1,080 games per tech level
-  (3, 4, 5, 6, 8). `rR6` (540 games) used the old eight-slot layout with the specials bug and is not used.
-- **Remaining per band:** candidates (`ratio-analysis.py DIR --tech N --random default#Bounded-Swarm:
-  default#Learned-Swarm --candidates tests/ai/play-styles`), round 1 (each candidate v Learned, 540 games),
-  one refinement, fresh-seed confirmation (≥2,160 games per band, so every house is in ≥720 games, ≥360 with
-  the candidate on it); accept a house/band only if its per-house effect interval is above 0, else
-  `<House>_Tech<N> = Opening`); then the code
-  defaults, the checks (all-against-Atreides, scenario matrix with `test/ai-scenario-matrix` acdada9b,
-  Brutal, Fortress, `/weak`), the per house x band tables here, and the full ctest list.
+| House | Tech2 | Tech3 | Tech4 | Tech5 | Tech6 |
+|---|---|---|---|---|---|
+| Harkonnen | - | quad 100 (one slot) | tank 50, quad 50 | tank 40, launcher 25, quad 35 | tank 30, siege 25, launcher 20, quad 25 |
+| Atreides | trike 100 (one slot) | trike 50, quad 50 | tank 50, trike 20, quad 30 | tank 40, launcher 25, trike 15, quad 20 | tank 30, siege 25, launcher 20, trike 10, quad 15 |
+| Ordos | raider 100 (one slot) | raider 50, quad 50 | tank 50, raider 20, quad 30 | tank 40, launcher 25, raider 15, quad 20 (tech 5-6) | (Tech5) |
+| Fremen, Mercenary | trike 50, raider 50 | trike 30, raider 30, quad 40 | tank 50, trike 15, raider 15, quad 20 | tank 40, launcher 25, trike 10, raider 10, quad 15 | tank 30, siege 25, launcher 20, trike 8, raider 7, quad 10 |
+| Sardaukar | - (Tech1: 1-2) | as Fremen | as Fremen | as Fremen | as Fremen |
+
+Each designed mix is already within 2%-50% over its band's slots, so `bound()` plays it unchanged. Checks:
+unit test `the shipped tech-band ratios are valid for their band` (every house x band: buildable slots
+only, 2-50%, sum 100, the lookup returns it, the top band the measured mix) and `quantbot_strategy`
+section 5. In a tech-4 Fortress 1v1 (Atreides v Ordos) both houses start Tuned from the band mix
+5000/2000/3000 bps. Every production pass before the learning plays it, and tanks are 54%/52% of the value
+built before the learning (40%/45% over 12 minutes, the largest share).
+
+The exploration jobs at tech 3-6 (`x3`-`x6`) were cancelled unplayed when the scope changed. `rR6` (540
+games) used the old eight-slot layout with the specials bug and is not used.
+
+### 8.10 Top band: Fremen, Sardaukar, Mercenary, and the three main houses re-confirmed
+
+Setup: CY 1v1, Hard, Swarm, six maps (Habbanya-Penny, Ergun-Sahij, Tuono-Soolin, Sihaya-Pip, X-Factor,
+Sihaya-Lauper), all six houses, all 15 pairs, both assignments, `--seed-per-map 1`, bundled maps (tech 8).
+Arms: `default@<style>#Tuned-Swarm` v the control `default#Learned-Swarm` (the configured opening, bounded).
+A candidate file sets only the Fremen/Sardaukar/Mercenary top keys, so Harkonnen, Atreides and Ordos play
+their shipped mixes in the same games (their re-confirmation after the specials change). The decision
+statistic is the per-house effect (8.9: least squares over both assignments of every pair, bootstrap 95%
+interval). n = games with the candidate on that house; the house is in twice as many.
+
+- **Exploration** `x8` (source 32adfb8a; `default#Bounded-Swarm` v Learned, seeds 71000-71020): 272 games
+  were played before the run was cut short (scope change). Per house that is about 20 random-side games,
+  too few for the regression or gradient. Pooled over both arms, the cost-effectiveness ranking is the same
+  for all three houses and matches the main houses: Sonic Tank 2.5-3.1, siege 1.8-2.2, launcher 1.5-1.8,
+  ornithopter ~1.3, quad ~1.25, Devastator ~1.1, tank/trike/raider ~1.0. Candidates (percent: tank, siege,
+  launcher, Devastator, Sonic, Deviator, ornithopter, trike, raider, quad):
+
+| Candidate | Fremen | Sardaukar | Mercenary |
+|---|---|---|---|
+| `t8-cost` (cost-effectiveness) | 8,15,12,9,20,0,10,8,8,10 | 7,15,13,8,23,0,9,8,8,9 | 7,16,12,8,22,0,9,8,8,10 |
+| `t8-winners-end` (winners' end composition) | 11,10,13,5,8,0,18,11,13,11 | 8,14,17,5,10,0,17,9,9,11 | 8,10,16,5,12,0,17,12,8,12 |
+
+- **Round 1** (source e276196e, seeds 73000-73030, 720 games per candidate, priority 2; `r8-*`) and
+  **confirmation** of the better candidate per house (`t8-best`: Fremen winners' end, Sardaukar and
+  Mercenary cost; merged source a35c2c56 with `fix/ai-army-stuck-in-base`; fresh seeds 74000-74060, 1,260
+  games; `c8-t8-best`):
+
+| Per-house effect v Learned | Harkonnen | Atreides | Ordos | Fremen | Sardaukar | Mercenary |
+|---|---|---|---|---|---|---|
+| r1 `t8-cost` (n=120 each) | +0.38 (-0.12..+0.94) | -0.01 (-0.54..+0.50) | -0.10 (-0.60..+0.46) | +0.07 (-0.48..+0.65) | +0.01 (-0.57..+0.49) | +0.36 (-0.18..+0.88) |
+| r1 `t8-winners-end` (n=120 each) | +0.48 (-0.06..+0.99) | +0.17 (-0.36..+0.68) | -0.02 (-0.59..+0.48) | +0.42 (-0.08..+0.94) | -0.06 (-0.60..+0.44) | +0.15 (-0.37..+0.70) |
+| confirmation `t8-best` (n=210 each) | **+0.52** (+0.14..+0.92) | +0.15 (-0.25..+0.53) | +0.11 (-0.30..+0.51) | +0.34 (-0.04..+0.75) | **-0.46** (-0.85..-0.03) | -0.13 (-0.50..+0.27) |
+
+| Arm, overall | Δ (95% CI) n | W-L / time-outs |
+|---|---|---|
+| r1 `t8-cost` | +0.119 (-0.03..+0.26) n=720 | 381-338 / 1 (0.1%) |
+| r1 `t8-winners-end` | **+0.192** (+0.05..+0.33) n=720 | 392-323 / 5 (0.7%) |
+| confirmation `t8-best` | +0.089 (-0.02..+0.20) n=1,260 | 657-601 / 2 (0.2%) |
+
+**Decision: no Fremen, Sardaukar or Mercenary top mix is accepted**, so their top band keeps the
+configured opening, bounded (no key). Fremen with the winners' end mix is ahead in every run (+0.42, then
++0.34 on fresh seeds), but its interval still includes 0. Sardaukar with the cost mix is worse on fresh
+seeds (interval below 0). Mercenary is level. **Harkonnen, Atreides and Ordos keep their tuned mixes:** after
+the specials change Harkonnen beats the control on fresh seeds (+0.52), and Atreides and Ordos are ahead in
+sign (+0.15, +0.11) with the earlier pooled rule (+0.27, n=468, 8.5) unchanged. The by-house Δ of the
+confirmation run puts Atreides at **+0.31** (+0.06..+0.55) and Ordos at **+0.33** (+0.06..+0.59).
+
+Not run (scope cut by Stefan, 2026-10-18): Brutal, Fortress and `/weak` with the band defaults, and
+exploration at tech 3-6. To continue Fremen: `t8-winners-end`, another 1,260 fresh games (seeds 75000-75060).
+Compact rows: `docs/formation-results/play-styles/ratios/{x8,r8-t8-cost,r8-t8-winners-end,c8-t8-best}`.

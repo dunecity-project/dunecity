@@ -593,7 +593,7 @@ TEST_CASE("Strategy: the shipped tech-band ratios are valid for their band", "[a
             REQUIRE(withinBounds(played, fieldable));
             for (size_t i = 0; i < played.size(); ++i) REQUIRE(played[i] == weights[i]);
         }
-        // The top band is the house's measured mix (Fremen, Sardaukar, Mercenary: section 8.11).
+        // The top band is the house's measured mix (none for Fremen, Sardaukar, Mercenary: section 8.10).
         REQUIRE(config.getTunedRatios(house, 7) == config.tunedRatios[size_t(house)][0]);
     }
     REQUIRE(designed == 24);
