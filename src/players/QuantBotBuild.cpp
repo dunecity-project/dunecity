@@ -1353,10 +1353,6 @@ void QuantBot::build(int militaryValue) {
     constexpr std::array<Uint32,8> mixItems = {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
         Unit_SonicTank, Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
     UnitMixPolicy::Weights damage{}, rewardMilli{}, killBonusMilli{}, lostValue{}, scores{}, defaults{}, prices{}, lossMilli{};
-    const auto& ratios = botConfig().getRatios(houseID);
-    const std::array<int,5> configured = {static_cast<int>(ratios.tank*10000),
-        static_cast<int>(ratios.siegeTank*10000), static_cast<int>(ratios.launcher*10000),
-        static_cast<int>(ratios.special*10000), static_cast<int>(ratios.ornithopter*10000)};
     std::array<bool,8> available{};
     bool launcherProductionAvailable = false;
     for (const auto* structure : getStructureList()) {
@@ -1399,17 +1395,9 @@ void QuantBot::build(int militaryValue) {
         }
     }
     if (getHouse()->isAirUnitLimitReached()) available[4]=false;
-    UnitMixPolicy::Weights configuredWeights{};
-    for (size_t i=0; i<5; ++i) configuredWeights[i] = configured[i];
-    const auto openingMix = UnitMixPolicy::openingMix(currentGame->techLevel, configuredWeights, available);
-    for (size_t i=0; i<8; ++i) defaults[i] = openingMix[i];
-    // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
-    // of the remembered enemy army); the learning below blends combat evidence into it exactly
-    // as it does into the configured opening.
-    if (strategyMixProfile)
-        defaults = QuantBotStrategy::applyPrior(defaults,
-            strategyMixProfile->counter ? enemyCounterPrior() : strategyMixProfile->prior,
-            strategyMixProfile->priorBps, available);
+    // The starting mix (QuantBot::startingPrior): the configured opening or the strategy's prior in
+    // its place, within the starting-mix bounds; the learning below blends combat evidence into it.
+    defaults = startingPrior(available);
     int64_t totalDamage = 0, totalRewardMilli = 0, totalLostValue = 0;
     for (size_t i=0; i<8; ++i) {
         const Uint32 item = mixItems[i];
@@ -1442,7 +1430,8 @@ void QuantBot::build(int militaryValue) {
         if (!enabled || !available[i]) { available[i] = false; continue; }
         scores[i] = UnitMixPolicy::performanceScore(rewardMilli[i], lostValue[i]*1000, priorPrice*1000);
     }
-    const bool learningUnitMix = totalRewardMilli >= 3000000;
+    // A test style may hold the starting mix all game (the "learning off" arm; inert in real games).
+    const bool learningUnitMix = totalRewardMilli >= 3000000 && style().learning;
     performanceHistory.update(getGameCycleCount(),rewardMilli,lossMilli);
     if (learningUnitMix) {
         for (size_t i=0;i<8;++i) scores[i]=available[i]
@@ -1558,7 +1547,7 @@ void QuantBot::build(int militaryValue) {
             .set("light_vehicle_percent", lightVehiclePercent).set("light_vehicle_bps", lightVehicleBps)
             .set("trike_bps", unitMix[5]).set("raider_trike_bps", unitMix[6]).set("quad_bps", unitMix[7])
             .set("allocation_types", 8).set("tech_level", currentGame->techLevel)
-            .set("opening_light_bps", openingMix[5]+openingMix[6]+openingMix[7]).set("total_damage", totalDamage)
+            .set("opening_light_bps", defaults[5]+defaults[6]+defaults[7]).set("total_damage", totalDamage)
             .set("total_reward_milli", totalRewardMilli).set("total_lost_value", totalLostValue)
             .set("launcher_floor_bps", launcherFloorBps)
             .set("launcher_floor_applied", launcherFloorApplied)
@@ -1572,7 +1561,7 @@ void QuantBot::build(int militaryValue) {
                     AITelemetry::Record().set("damage", damage[i]).set("reward_milli", rewardMilli[i]).set("kill_bonus_milli", killBonusMilli[i])
                         .set("lost_value", lostValue[i]).set("score", scores[i]).set("allocation_weight",allocationWeights[i])
                         .set("lifetime_reward_milli",performanceHistory.reward[i]).set("lifetime_loss_milli",performanceHistory.loss[i])
-                        .set("available", available[i]).set("opening_bps", openingMix[i]).set("target_bps", unitMix[i]));
+                        .set("available", available[i]).set("opening_bps", defaults[i]).set("target_bps", unitMix[i]));
                 return inputs;
             }()).set("infantry_percent", infantryPercent));
     }

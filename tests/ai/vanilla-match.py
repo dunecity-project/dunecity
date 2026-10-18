@@ -21,11 +21,13 @@ Labels: as formation-duel.py, plus "default" (the configured rules), a test-only
 suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush, and a
 strategy suffix #random or #<Mix>-<Tempo>[-fixed], e.g. default#QuadMass-Swarm (houses.csv records
 the strategy each house played).
-
-Each game appends a row to games.csv, its houses to houses.csv, a per-minute sample of every
-house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv
-and its waves to waves.csv; the run directory is deleted straight away and games already in
-games.csv are skipped. --report prints the tables used in docs/formations.md.
+Each game appends a row to games.csv, its houses to houses.csv (with the starting mix each QuantBot
+played, start_mix, from its QUANTBOT_STRATEGY line), a per-minute sample of every house (credits,
+army, harvesters, structures, factories, kill and loss value) to samples.csv, its waves to waves.csv
+and the composition per unit-mix slot every 10 game minutes and at the end (value built, lost and
+standing, combat reward; docs/ai-play-styles.md, section 7) to mix.csv; the run directory is
+deleted straight away and games already in games.csv are skipped. --report prints the tables
+used in docs/formations.md.
 """
 import argparse
 import csv
@@ -63,9 +65,11 @@ GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wal
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'strategy')
-HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
+HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS + ('start_mix',)
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')
+MIX_FIELDS = ('minute', 'final', 'built', 'lost', 'army', 'reward')
+MIX_ROW_FIELDS = KEY + ('house', 'label') + MIX_FIELDS
 SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'shots30', 'loss60',
                'kill60', 'survivors', 'lost_before_contact', 'together_at_contact', 'engaged10')
@@ -131,11 +135,13 @@ def schedule(args):
     for index, seed in enumerate(args.seeds, args.house_offset):
         houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
         for house_a, house_b in houses:
-            for name in args.maps:
+            for map_index, name in enumerate(args.maps):
+                # --seed-per-map: every map its own seed, so a seeded per-house draw differs by map.
+                game_seed = seed + map_index * args.seed_per_map
                 for pair in args.pairs.split(','):
                     x, y = pair.split(':')
                     for la, lb in ((x, y), (y, x)):
-                        games.append((args.tag, args.difficulty, name, str(seed), f'{house_a}:{la}|{house_b}:{lb}'))
+                        games.append((args.tag, args.difficulty, name, str(game_seed), f'{house_a}:{la}|{house_b}:{lb}'))
     return games
 
 
@@ -210,13 +216,15 @@ def play(args, scratch, binary, key):
         return row
     numbers = {HOUSE_NUMBERS[h]: h for h, _ in sides}
     place = places([(HOUSE_NUMBERS[h], l) for h, l in sides], eliminated)
+    starts = {int(s['house']): s.get('start_mix', '') for s in
+              (parse(l, 'QUANTBOT_STRATEGY:') for l in lines if 'QUANTBOT_STRATEGY:' in l)}
     house_rows = []
     for slot, (house, label) in enumerate(sides, 1):
         number = HOUSE_NUMBERS[house]
         data = houses.get(number, {})
         house_rows.append({**dict(zip(KEY, key)), 'slot': slot, 'house': house, 'label': label,
                            'eliminated_s': eliminated.get(number, ''), 'place': place[number],
-                           **{f: data.get(f, '') for f in DUEL_HOUSE_FIELDS}})
+                           **{f: data.get(f, '') for f in DUEL_HOUSE_FIELDS}, 'start_mix': starts.get(number, '')})
     samples = []
     for l in lines:
         if 'ELIMINATION_SAMPLE:' not in l:
@@ -234,9 +242,19 @@ def play(args, scratch, binary, key):
         wave = parse(l, 'FORMATION_WAVE:')
         waves.append({**dict(zip(KEY, key)), 'label': label_of.get(int(wave['house']), ''),
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
+    mixes = []
+    for l in lines:
+        if 'UNIT_MIX_SAMPLE:' not in l:
+            continue
+        sample = parse(l, 'UNIT_MIX_SAMPLE:')
+        number = int(sample['house'])
+        if number in numbers:
+            mixes.append({**dict(zip(KEY, key)), 'house': numbers[number], 'label': label_of[number],
+                          **{f: sample.get(f, '') for f in MIX_FIELDS}})
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
+    append(results / 'mix.csv', MIX_ROW_FIELDS, mixes)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
     return row
@@ -476,6 +494,9 @@ parser.add_argument('--all-houses', action='store_true', help='1v1: every seed w
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
                          'so a run split by seed across machines plays the pairs the whole list would')
+parser.add_argument('--seed-per-map', type=int, default=0, metavar='STRIDE',
+                    help='1v1: map i of --maps plays seed + i * STRIDE (0 = every map the same seed), so a per-game '
+                         'draw from seed and house (the Bounded mix) differs by map')
 parser.add_argument('--jobs', type=int, default=4, help='Games played in parallel')
 parser.add_argument('--ai-telemetry', action='store_true', help='Keep the AI decision log (events.jsonl)')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')

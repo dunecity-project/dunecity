@@ -207,6 +207,18 @@ inline std::map<int, Choice> picksAfterFirstUpdate(Game& game, const Scenario& s
         require(bot->strategyPicked, std::string(role) + ": a bot had not picked its strategy after the first update");
         const Choice expected = QuantBotStrategy::pick(getQuantBotConfig().strategy, seed, house, eligibleFor(house));
         require(bot->strategy == expected, std::string(role) + ": a bot's strategy is not QuantBotStrategy::pick() of seed and house");
+        // Bounded: the draw of seed and house over the slots the house can produce, within the bounds.
+        const auto fieldable = bot->fieldableMixSlots();
+        UnitMixPolicy::Mix prior{};
+        if (expected.mix == Mix::Bounded) prior = QuantBotStrategy::randomMix(seed, house, fieldable);
+        else if (expected.mix == Mix::Tuned && *std::max_element(getQuantBotConfig().getTunedRatios(house).begin(),
+                                                                   getQuantBotConfig().getTunedRatios(house).end()) > 0)
+            prior = QuantBotStrategy::bound(getQuantBotConfig().getTunedRatios(house), fieldable);
+        require(bot->strategyPrior == prior, std::string(role) + ": a bot's starting mix is not the draw of seed and house");
+        const auto start = bot->startingPrior(fieldable);
+        UnitMixPolicy::Mix startMix{};
+        for (size_t i = 0; i < 8; ++i) startMix[i] = int(start[i]);
+        require(QuantBotStrategy::withinBounds(startMix, fieldable), std::string(role) + ": a bot's starting mix is not within the bounds");
         choices[house] = bot->strategy;
     }
     return choices;
@@ -320,14 +332,34 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         {
             IMemoryStream in(bytes.data(), bytes.size());
             QuantBot restored(in, owner);
-            require(restored.strategyPicked && restored.strategy == bot->strategy, "A QuantBot block lost its strategy");
+            require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == bot->strategyPrior,
+                    "A QuantBot block lost its strategy or its starting mix");
             require(botBytes(restored) == bytes, "A QuantBot block does not round-trip byte-identically");
         }
-        // A 9864 block: the same bytes without the 9865 strategy (picked flag, mix, tempo).
-        constexpr size_t kStrategyBytes = 3;
-        require(bytes.size() > kStrategyBytes && Uint8(bytes[bytes.size() - 3]) == 1
-                && Uint8(bytes[bytes.size() - 2]) == Uint8(bot->strategy.mix) && Uint8(bytes[bytes.size() - 1]) == Uint8(bot->strategy.tempo),
-                "The strategy is not the last 3 bytes of the QuantBot block");
+        // The strategy (9865: picked flag, mix, tempo) and its resolved starting mix (9866: eight
+        // 16-bit basis points) are the last 19 bytes of the block.
+        constexpr size_t kPriorBytes = 16, kStrategyBytes = 3 + kPriorBytes;
+        const size_t at = bytes.size() - kStrategyBytes;
+        require(bytes.size() > kStrategyBytes && Uint8(bytes[at]) == 1 && Uint8(bytes[at + 1]) == Uint8(bot->strategy.mix)
+                && Uint8(bytes[at + 2]) == Uint8(bot->strategy.tempo), "The strategy is not at the end of the QuantBot block");
+        for (size_t i = 0; i < 8; ++i)
+            require(Uint8(bytes[at + 3 + 2 * i]) + 256 * Uint8(bytes[at + 4 + 2 * i]) == bot->strategyPrior[i]
+                    || Uint8(bytes[at + 4 + 2 * i]) + 256 * Uint8(bytes[at + 3 + 2 * i]) == bot->strategyPrior[i],
+                    "The starting mix is not the last 16 bytes of the QuantBot block");
+        // A 9865 block: the same bytes without the starting mix. It keeps the strategy; none of the
+        // 9865 mixes needs a resolved mix (a Tuned/Bounded pick here plays the configured opening).
+        const std::string v9865 = bytes.substr(0, bytes.size() - kPriorBytes);
+        currentGame->loadedSavegameVersion = 9865;
+        {
+            IMemoryStream in(v9865.data(), v9865.size());
+            QuantBot restored(in, owner);
+            require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == UnitMixPolicy::Mix{},
+                    "A 9865 block did not load with its strategy and no starting mix");
+            currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
+            require(botBytes(restored).size() == bytes.size(), "A loaded 9865 bot does not re-save as a current block");
+        }
+        // A 9864 block: no strategy at all. It loads unpicked and picks the same strategy and the
+        // same starting mix (the Bounded draw is a pure function of seed and house).
         const std::string old = bytes.substr(0, bytes.size() - kStrategyBytes);
         currentGame->loadedSavegameVersion = 9864;
         {
@@ -336,8 +368,8 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             require(!restored.strategyPicked && restored.strategy == Choice{}, "A 9864 block loaded with a strategy");
             require(restored.strategyMix() == nullptr && restored.strategyTempo() == nullptr, "An unpicked 9864 bot plays a strategy");
             restored.pickStrategy();
-            require(restored.strategyPicked && restored.strategy == host.choices.at(house),
-                    "A 9864 block picked a different strategy than the game did");
+            require(restored.strategyPicked && restored.strategy == host.choices.at(house) && restored.strategyPrior == bot->strategyPrior,
+                    "A 9864 block picked a different strategy or starting mix than the game did");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
             require(botBytes(restored).size() == bytes.size(), "A picked 9864 bot does not re-save as a current block");
         }
@@ -345,7 +377,7 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         ++blocks;
         blockBytes = bytes.size();
     }
-    SDL_Log("STRATEGY_PROBE: check=bot_block_roundtrip seed=%u blocks=%zu bytes=%zu strategies=%s identical=1 v9864_repicked=1",
+    SDL_Log("STRATEGY_PROBE: check=bot_block_roundtrip seed=%u blocks=%zu bytes=%zu strategies=%s identical=1 v9865_kept=1 v9864_repicked=1",
             seed, blocks, blockBytes, botsText(host.choices).c_str());
     // An ordinary load rebuilds the bots' supplemental plans (QuantBot::saveObserverRuntime: "normal
     // disk saves intentionally rebuild these plans"), so it is a different continuation than the
@@ -401,13 +433,16 @@ struct Production {
     int builtInfantry = 0;
     int infantryQuotaBps = 0;
     std::array<Uint32, 8> firstAllocated{};   ///< cycle of the first pass each slot was producible (0 = never)
+    int boundedPasses = 0;        ///< prior passes whose starting mix (before the anti-air floor) was within the bounds
+    UnitMixPolicy::Mix strategyPrior{};   ///< the Tuned/Bounded starting ratios the bot resolved
 };
 
 /// The mix the bot plays with no combat evidence at this pass: the configured opening over the
-/// available slots with the strategy's prior in place of priorBps of it, then the mobile anti-air
-/// floor if that pass applied one (QuantBotBuild.cpp).
+/// available slots with the strategy's prior in place of priorBps of it, bounded (every available
+/// slot 2%-50%), then the mobile anti-air floor if that pass applied one (QuantBotBuild.cpp).
+/// \a start gets the bounded starting mix before the floor.
 inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const std::array<bool, 8>& available, int antiAirFloorBps,
-                                   bool& counterPlayed) {
+                                   bool& counterPlayed, UnitMixPolicy::Mix& start) {
     const int houseID = bot.getHouse()->getHouseID();
     const auto& ratios = bot.botConfig().getRatios(houseID);
     UnitMixPolicy::Weights configured{};
@@ -425,7 +460,8 @@ inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const std::array<bool, 8
         counterPlayed = profile->counter && *std::max_element(prior.begin(), prior.end()) > 0;
         defaults = QuantBotStrategy::applyPrior(defaults, prior, profile->priorBps, available);
     }
-    const auto mix = UnitMixPolicy::normalize(defaults);
+    start = QuantBotStrategy::bound(defaults, available);
+    const auto& mix = start;
     return antiAirFloorBps > 0 ? UnitMixPolicy::applyFloor(mix, 2, antiAirFloorBps) : mix;
 }
 
@@ -498,11 +534,13 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             if (!any) continue;
             production.airFloorPasses += snapshot.antiAirFloorBps > 0 ? 1 : 0;
             bool counterPlayed = false;
-            const auto expected = priorMix(*bot, available, snapshot.antiAirFloorBps, counterPlayed);
+            UnitMixPolicy::Mix start{};
+            const auto expected = priorMix(*bot, available, snapshot.antiAirFloorBps, counterPlayed, start);
             const bool same = std::equal(mix.begin(), mix.end(), expected.begin());
             if (!snapshot.learning) {
                 if (production.priorPasses++ == 0) { production.firstPriorCycle = snapshot.cycle; production.firstPriorMix = expected; }
                 if (counterPlayed && production.counterPasses++ == 0) production.firstCounterMix = expected;
+                if (QuantBotStrategy::withinBounds(start, available)) ++production.boundedPasses;
                 if (same) ++production.priorMatches;
                 else if (production.mismatch.empty())
                     production.mismatch = "cycle=" + std::to_string(snapshot.cycle) + " mix=" + join(mix) + " expected=" + join(expected);
@@ -525,6 +563,7 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
         Production& production = result.houses[house];
         production.strategy = bot->strategy;
         production.inert = bot->strategyMix() == nullptr && bot->strategyTempo() == nullptr;
+        production.strategyPrior = bot->strategyPrior;
         production.valueBps = builtValueBps(*game, house, &production.built);
         const House* owner = game->getHouse(static_cast<HOUSETYPE>(house));
         production.builtInfantry = owner->getNumBuiltItems(Unit_Soldier) + owner->getNumBuiltItems(Unit_Infantry)
@@ -559,21 +598,27 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
         case Mix::QuadMass: return {7};
         case Mix::TrikeSwarm: return {5, 6};
         case Mix::TankMass: return {0};
-        case Mix::Artillery: return {1, 2};
+        case Mix::Artillery: return {1};   // siege: Atreides's configured mix already has 35% launchers
         case Mix::Specials: return {3};
         case Mix::Air: return {4};
         case Mix::Counter:
             return {size_t(std::max_element(p.firstCounterMix.begin(), p.firstCounterMix.end()) - p.firstCounterMix.begin())};
+        case Mix::Tuned:
+        case Mix::Bounded:
+            return {size_t(std::max_element(p.strategyPrior.begin(), p.strategyPrior.end()) - p.strategyPrior.begin())};
         default: return {};
     }
 }
 
 /// How much more of the built value the lead slots get than in the Learned game (basis points).
-/// Measured (12 game minutes, mapSeed 7, seed 486409243; lead share vs Learned's): QuadMass quads
-/// 2413 vs 960, Artillery siege+launchers 5318 vs 4183 (the smallest margin, +1135), TankMass tanks
-/// 4571 vs 1703, TrikeSwarm trikes 1578 vs 385, Specials 2253 vs 1048, Counter (tanks, its first
-/// counter's lead) 2161 vs 660; Air is checked by its ornithopters (checkMix). The largest-share slot is not asserted: Starport ornithopters and
-/// the mobile anti-air floor's launchers are bought outside the mix and can outweigh a lead slot.
+/// Measured with the starting-mix bounds and the bounded presets (12 game minutes, mapSeed 7, seed
+/// 486409243; lead share vs Learned's): QuadMass quads 1687 vs 865, Artillery siege 2576 vs 1609,
+/// TankMass tanks 3386 vs 1558, TrikeSwarm trikes 1232 vs 574, Specials 3418 vs 692, Counter (tanks,
+/// its first counter's lead) 2050 vs 1379 (the smallest margin, +671), Tuned (Harkonnen 45% tanks)
+/// 3196 vs 1558; Air is checked by its ornithopters and Bounded by its passes (checkMix). Artillery
+/// leads with siege only: the Atreides configured mix already has 35% launchers (Artillery 31.5%).
+/// The largest-share slot is not asserted: Starport ornithopters and the mobile anti-air floor's
+/// launchers are bought outside the mix and can outweigh a lead slot.
 constexpr int kLeadMarginBps = 500;
 
 /// Section 3's checks for one house playing Fixed:<mix>,Base, against the Learned game.
@@ -590,10 +635,18 @@ inline void checkMix(Mix mix, const Production& p, const Production& learned, lo
         + " lead_value_bps=" + std::to_string(leadBps) + " learned_lead_value_bps=" + std::to_string(learnedLeadBps));
     const std::string name = QuantBotStrategy::name(mix);
     require(p.strategy == Choice{mix, Tempo::Base} && !p.inert, name + ": the house did not play its fixed strategy");
-    // Before combat evidence every pass is the prior, exactly.
+    // Before combat evidence every pass is the prior, exactly, and within the starting-mix bounds.
     require(p.priorPasses > 0 && p.priorMatches == p.priorPasses, name + ": a pass before combat evidence was not the prior");
+    require(p.boundedPasses == p.priorPasses, name + ": a starting mix was outside the bounds");
     // The learning stays on: once it is active the mix leaves the prior.
     require(p.learningPasses > 0 && p.learningOffPrior > 0, name + ": learning never moved the mix off the prior");
+    if (mix == Mix::Tuned || mix == Mix::Bounded) {
+        UnitMixPolicy::Mix none{};
+        require(p.strategyPrior != none, name + ": no starting ratios were resolved");
+        // A random draw need not lead with a slot the Learned game builds less of; its passes
+        // matching the drawn prior is the check.
+        if (mix == Mix::Bounded) return;
+    }
     if (mix == Mix::Infantry) {
         require(p.infantryQuotaBps == QuantBotStrategy::profile(mix).infantryPercent * 100,
                 "Infantry: the infantry quota is not the strategy's share");
@@ -659,12 +712,17 @@ int runQuantBotStrategyProbe() {
             scenario.roster.emplace_back(std::stoi(slot.substr(0, colon)), std::stoi(slot.substr(colon + 1)));
         }
         require(scenario.roster.size() >= 2, "The strategy probe needs a multi-house map");
-        // Every mix and tempo weighted, so the houses spread over the strategies.
+        // Every mix and tempo weighted, so the houses spread over the strategies; Bounded and Tuned
+        // more, so the drawn and the tuned starting mixes go through the peers and the save.
         QuantBotStrategy::Settings spread;
         spread.random = true;
         spread.mixWeights.fill(10);
+        spread.mixWeights[size_t(Mix::Bounded)] = 40;
+        spread.mixWeights[size_t(Mix::Tuned)] = 20;
         spread.tempoWeights.fill(10);
         getQuantBotConfig().strategy = spread;
+        const auto shippedTuned = getQuantBotConfig().tunedRatios;
+        for (auto& ratios : getQuantBotConfig().tunedRatios) if (ratios == UnitMixPolicy::Weights{}) ratios = {30, 20, 20, 15, 5, 3, 2, 5};
         // Measured on Four Chambers, seed 486409243: the strategies first change the state digest in game
         // minute 12 (no house attacks earlier), so the save is taken there and the peers play to 16.
         const Uint32 saveCycle = MILLI2CYCLES(12 * 60000), endCycle = MILLI2CYCLES(16 * 60000);
@@ -672,8 +730,12 @@ int runQuantBotStrategyProbe() {
         std::string runtime;
         World host;
         runPeers(scenario, seed, seed + 1, saveCycle, endCycle, savePath, runtime, host);
+        int drawn = 0;
+        for (const auto& [house, choice] : host.choices) drawn += choice.mix == Mix::Bounded ? 1 : 0;
+        require(drawn > 0, "No house drew a Bounded mix: the drawn mix's lockstep and save are not covered");
         if (wanted('2')) checkBotBlocks(scenario, seed, savePath, runtime, host, saveCycle, endCycle);
         getQuantBotConfig().strategy = shipped;
+        getQuantBotConfig().tunedRatios = shippedTuned;
     }
 
     if (wanted('3') || wanted('4')) {
@@ -687,6 +749,7 @@ int runQuantBotStrategyProbe() {
             require(production.strategy == Choice{} && production.inert, "The shipped default did not play Learned/Base");
             require(production.priorPasses > 0 && production.priorMatches == production.priorPasses,
                     "A Learned pass before combat evidence was not the configured opening mix");
+            require(production.boundedPasses == production.priorPasses, "A Learned starting mix was outside the bounds");
         }
         if (wanted('4')) {
             // Fixed:Learned,Base explicitly, and Random weighted only on Learned/Base: both the
@@ -717,14 +780,19 @@ int runQuantBotStrategyProbe() {
         }
         if (wanted('3')) {
             // Two mix strategies a game, one a house (Harkonnen fields no trikes or ornithopters).
+            // Tuned plays the probe's [Unit Ratios Tuned] (Harkonnen: 45% tanks), Bounded its draw.
+            const auto shippedTuned = getQuantBotConfig().tunedRatios;
+            getQuantBotConfig().tunedRatios[harkonnen] = {45, 15, 15, 15, 0, 0, 0, 10};
             const std::vector<std::pair<Mix, Mix>> games = {
-                {Mix::QuadMass, Mix::Artillery}, {Mix::TankMass, Mix::TrikeSwarm}, {Mix::Specials, Mix::Air}, {Mix::Infantry, Mix::Counter}};
+                {Mix::QuadMass, Mix::Artillery}, {Mix::TankMass, Mix::TrikeSwarm}, {Mix::Specials, Mix::Air}, {Mix::Infantry, Mix::Counter},
+                {Mix::Tuned, Mix::Bounded}};
             for (const auto& [mixH, mixA] : games) {
                 const GameResult played = playProduction(harkonnen, atreides,
                     {{harkonnen, fixedStrategy(mixH)}, {atreides, fixedStrategy(mixA)}}, mapSeed, seed, endCycle);
                 checkMix(mixH, played.houses.at(harkonnen), learned.houses.at(harkonnen), played.wallMs);
                 checkMix(mixA, played.houses.at(atreides), learned.houses.at(atreides), played.wallMs);
             }
+            getQuantBotConfig().tunedRatios = shippedTuned;
         }
     }
     SDL_Log("STRATEGY_PROBE: check=done wall_ms=%lld", millisecondsSince(probeStart));

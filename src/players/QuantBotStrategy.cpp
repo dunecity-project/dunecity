@@ -26,7 +26,7 @@ namespace QuantBotStrategy {
 namespace {
 
 constexpr const char* kMixNames[kMixCount] = {"Learned", "QuadMass", "TrikeSwarm", "TankMass", "Artillery",
-                                              "Specials", "Air", "Infantry", "Counter"};
+                                              "Specials", "Air", "Infantry", "Counter", "Tuned", "Bounded"};
 constexpr const char* kTempoNames[kTempoCount] = {"Base", "Swarm", "Timing", "Rush", "Flood"};
 
 std::string trim(const std::string& text) {
@@ -92,6 +92,7 @@ uint64_t splitMix64(uint64_t z) {
 
 constexpr uint32_t kMixSalt = 0x4D495853;   // "MIXS"
 constexpr uint32_t kTempoSalt = 0x54454D50; // "TEMP"
+constexpr uint32_t kBoundedSalt = 0x424F554E; // "BOUN": the Bounded mix's cut points
 
 MixProfile mixProfile(UnitMixPolicy::Weights prior, int infantryPercent = 0, bool counter = false) {
     MixProfile profile;
@@ -215,17 +216,23 @@ Choice pick(const Settings& settings, uint32_t seed, int house, const std::array
 }
 
 const MixProfile& profile(Mix mix) {
-    // Slots: tank, siege tank, launcher, special, ornithopter, trike, raider trike, quad.
+    // Slots: tank, siege tank, launcher, special, ornithopter, trike, raider trike, quad. Every
+    // preset is the 1.0.847 preset clamped and renormalised into the starting-mix bounds over all
+    // eight slots (bound(): 2%-50% per slot); bound() renormalises it again over the slots a house
+    // can produce. 1.0.847: QuadMass 20/0/0/0/0/0/10/70, TrikeSwarm 10/0/0/0/0/45/45/0, TankMass
+    // 70/15/15, Artillery 20/45/35, Specials 25/15/10/50, Air 15/10/15/0/60.
     static const std::array<MixProfile, kMixCount> profiles = {
-        mixProfile({}),                                            // Learned: the configured opening
-        mixProfile({2000, 0, 0, 0, 0, 0, 1000, 7000}),             // QuadMass
-        mixProfile({1000, 0, 0, 0, 0, 4500, 4500, 0}),             // TrikeSwarm
-        mixProfile({7000, 1500, 1500, 0, 0, 0, 0, 0}),             // TankMass
-        mixProfile({2000, 4500, 3500, 0, 0, 0, 0, 0}),             // Artillery: siege and launchers behind tanks
-        mixProfile({2500, 1500, 1000, 5000, 0, 0, 0, 0}),          // Specials: Devastator / Sonic Tank / Deviator
-        mixProfile({1500, 1000, 1500, 0, 6000, 0, 0, 0}),          // Air
-        mixProfile({}, 35),                                        // Infantry: 35% of the army on foot
-        mixProfile({}, 0, true),                                   // Counter
+        mixProfile({}),                                                // Learned: the configured opening
+        mixProfile({2667, 200, 200, 200, 200, 200, 1333, 5000}),       // QuadMass
+        mixProfile({900, 200, 200, 200, 200, 4050, 4050, 200}),        // TrikeSwarm
+        mixProfile({5000, 2000, 2000, 200, 200, 200, 200, 200}),       // TankMass
+        mixProfile({1800, 4050, 3150, 200, 200, 200, 200, 200}),       // Artillery: siege and launchers behind tanks
+        mixProfile({2300, 1380, 920, 4600, 200, 200, 200, 200}),       // Specials: Devastator / Sonic Tank / Deviator
+        mixProfile({1575, 1050, 1575, 200, 5000, 200, 200, 200}),      // Air
+        mixProfile({}, 35),                                            // Infantry: 35% of the army on foot
+        mixProfile({}, 0, true),                                       // Counter
+        mixProfile({}),                                                // Tuned: per house, resolved by QuantBot
+        mixProfile({}),                                                // Bounded: drawn per game, resolved by QuantBot
     };
     return profiles[std::min(static_cast<size_t>(mix), kMixCount - 1)];
 }
@@ -275,6 +282,153 @@ UnitMixPolicy::Weights applyPrior(const UnitMixPolicy::Weights& opening, const U
     UnitMixPolicy::Weights weights{};
     for (size_t i = 0; i < weights.size(); ++i) weights[i] = result[i];
     return weights;
+}
+
+UnitMixPolicy::Mix bound(const UnitMixPolicy::Weights& weights, const std::array<bool, 8>& available) {
+    UnitMixPolicy::Mix result{};
+    std::array<size_t, 8> order{};
+    size_t n = 0;
+    for (size_t i = 0; i < 8; ++i) if (available[i]) order[n++] = i;
+    if (n == 0) return result;
+    if (n == 1) { result[order[0]] = 10000; return result; }
+    // The weights as millionths of the available total (floored, so a heavier slot never gets a
+    // smaller value; a bounded mix in basis points maps exactly): small integers for the products below.
+    UnitMixPolicy::Weights v{};
+    int64_t sum = 0;
+    for (size_t k = 0; k < n; ++k) sum += std::max<int64_t>(0, weights[order[k]]);
+    const int64_t divisor = sum > 1000000000000LL ? sum / 1000000000000LL + 1 : 1;   // keeps w * 1e6 within 64 bits
+    sum = 0;
+    for (size_t k = 0; k < n; ++k) sum += std::max<int64_t>(0, weights[order[k]]) / divisor;
+    for (size_t k = 0; k < n && sum > 0; ++k)
+        v[order[k]] = std::max<int64_t>(0, weights[order[k]]) / divisor * 1000000 / sum;
+    constexpr int64_t lo = kStartMinBps, hi = kStartMaxBps;   // n >= 2, so n * hi >= 10000
+    // Ascending weight, lower slot first on a tie: with one scale t the slots at the floor are the
+    // lightest, those at the cap the heaviest.
+    std::stable_sort(order.begin(), order.begin() + n, [&](size_t a, size_t b) { return v[a] < v[b]; });
+    for (size_t low = 0; low <= n; ++low)
+        for (size_t high = 0; low + high <= n; ++high) {
+            const int64_t budget = 10000 - int64_t(low) * lo - int64_t(high) * hi;
+            if (budget < 0) continue;
+            int64_t total = 0;
+            for (size_t k = low; k < n - high; ++k) total += v[order[k]];
+            bool ok = true;
+            if (low == n - high) {
+                // Every slot at a bound: some t must put the low ones at or under the floor and the
+                // high ones (all weighted) at or over the cap.
+                ok = budget == 0;
+                for (size_t k = low; k < n && ok; ++k) ok = v[order[k]] > 0;
+                if (ok && low > 0 && high > 0) ok = v[order[low - 1]] * hi <= v[order[low]] * lo;
+            } else {
+                // t = budget / total; the middle slots are within the bounds, the others beyond them.
+                ok = total > 0;
+                for (size_t k = 0; k < n && ok; ++k) {
+                    const int64_t scaled = v[order[k]] * budget;
+                    if (k < low) ok = scaled <= lo * total;
+                    else if (k >= n - high) ok = scaled >= hi * total;
+                    else ok = scaled >= lo * total && scaled <= hi * total;
+                }
+            }
+            if (!ok) continue;
+            int64_t assigned = 0;
+            std::array<int64_t, 8> remainder{};
+            for (size_t k = 0; k < n; ++k) {
+                const size_t slot = order[k];
+                if (k < low) result[slot] = int(lo);
+                else if (k >= n - high) result[slot] = int(hi);
+                else {
+                    result[slot] = int(v[slot] * budget / total);
+                    remainder[slot] = v[slot] * budget % total;
+                }
+                assigned += result[slot];
+            }
+            // Rounding: one basis point each to the largest remainders, lowest slot first. A slot
+            // with a remainder is below its exact share, which is within the bounds.
+            for (int64_t left = 10000 - assigned; left > 0; --left) {
+                size_t best = 8;
+                for (size_t slot = 0; slot < 8; ++slot)
+                    if (remainder[slot] > 0 && (best == 8 || remainder[slot] > remainder[best])) best = slot;
+                if (best == 8) break;
+                ++result[best];
+                remainder[best] = 0;
+            }
+            return result;
+        }
+    // Even every weighted slot at the cap is short: those at the cap, the zero-weight slots share the rest.
+    int64_t rest = 10000;
+    size_t zeros = 0;
+    for (size_t k = 0; k < n; ++k) {
+        if (v[order[k]] > 0) { result[order[k]] = int(hi); rest -= hi; }
+        else ++zeros;
+    }
+    std::sort(order.begin(), order.begin() + n);
+    int64_t extra = zeros ? rest % int64_t(zeros) : 0;
+    for (size_t k = 0; k < n; ++k)
+        if (v[order[k]] == 0) result[order[k]] = int(rest / int64_t(zeros) + (extra-- > 0 ? 1 : 0));
+    return result;
+}
+
+bool withinBounds(const UnitMixPolicy::Mix& mix, const std::array<bool, 8>& available) {
+    int count = 0, total = 0;
+    for (size_t i = 0; i < 8; ++i) {
+        if (!available[i] && mix[i] != 0) return false;
+        if (available[i]) ++count;
+        total += mix[i];
+    }
+    if (count == 0) return total == 0;
+    if (total != 10000) return false;
+    for (size_t i = 0; i < 8; ++i)
+        if (available[i] && count > 1 && (mix[i] < kStartMinBps || mix[i] > kStartMaxBps)) return false;
+    return true;
+}
+
+UnitMixPolicy::Mix randomMix(uint32_t seed, int house, const std::array<bool, 8>& available) {
+    std::array<size_t, 8> slots{};
+    size_t n = 0;
+    for (size_t i = 0; i < 8; ++i) if (available[i]) slots[n++] = i;
+    if (n <= 1) return bound({}, available);
+    UnitMixPolicy::Weights last{};
+    for (uint32_t attempt = 0; attempt < 64; ++attempt) {
+        // n - 1 uniform cut points of [0, 10000]; their spacings are a flat Dirichlet draw.
+        std::array<int64_t, 8> cuts{};
+        for (size_t j = 0; j + 1 < n; ++j)
+            cuts[j] = int64_t(draw(seed, house, kBoundedSalt + attempt * 8 + uint32_t(j)) % 10001);
+        std::sort(cuts.begin(), cuts.begin() + (n - 1));
+        UnitMixPolicy::Mix mix{};
+        int64_t previous = 0;
+        for (size_t k = 0; k < n; ++k) {
+            const int64_t next = k + 1 < n ? cuts[k] : 10000;
+            mix[slots[k]] = int(next - previous);
+            last[slots[k]] = next - previous;
+            previous = next;
+        }
+        if (withinBounds(mix, available)) return mix;
+    }
+    return bound(last, available);
+}
+
+bool parseRatios(const std::string& text, UnitMixPolicy::Weights& weights) {
+    if (trim(text).empty()) { weights = {}; return true; }
+    UnitMixPolicy::Weights parsed{};
+    std::istringstream input(text);
+    std::string entry;
+    size_t count = 0;
+    int64_t total = 0;
+    while (std::getline(input, entry, ',')) {
+        const std::string value = trim(entry);
+        if (count >= parsed.size() || value.empty() || value.size() > 6
+            || value.find_first_not_of("0123456789") != std::string::npos) return false;
+        parsed[count] = std::stoll(value);
+        total += parsed[count++];
+    }
+    if (count != parsed.size() || total <= 0) return false;
+    weights = parsed;
+    return true;
+}
+
+std::string ratiosText(const UnitMixPolicy::Weights& weights) {
+    std::string text;
+    for (size_t i = 0; i < weights.size(); ++i) text += (i ? "," : "") + std::to_string(weights[i]);
+    return text;
 }
 
 std::array<bool, kMixCount> eligibleMixes(const std::array<bool, 8>& buildable, bool infantryBuildable) {
