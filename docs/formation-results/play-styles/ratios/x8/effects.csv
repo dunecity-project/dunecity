@@ -1,0 +1,7 @@
+arm,tech,house,effect,low,high,n,draws
+default#Bounded-Swarm v default#Learned-Swarm,8,atreides,0.339,-0.344,1.089,60,0
+default#Bounded-Swarm v default#Learned-Swarm,8,harkonnen,0.059,-0.736,0.905,54,0
+default#Bounded-Swarm v default#Learned-Swarm,8,ordos,0.089,-0.761,0.961,42,0
+default#Bounded-Swarm v default#Learned-Swarm,8,fremen,0.256,-0.627,1.126,42,0
+default#Bounded-Swarm v default#Learned-Swarm,8,sardaukar,0.059,-0.803,1.035,41,0
+default#Bounded-Swarm v default#Learned-Swarm,8,mercenary,0.173,-0.777,1.103,36,1

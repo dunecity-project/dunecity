@@ -1,0 +1,47 @@
+tech,house,slot,b0,b1,b2,b3,slope_per_100pct,n
+8,atreides,tank,0.50 n=30,0.55 n=20,0.20 n=10,-,-1.295,60
+8,atreides,siege,0.30 n=10,0.67 n=15,0.60 n=5,0.40 n=30,-0.345,60
+8,atreides,launcher,0.46 n=35,0.60 n=10,0.50 n=10,0.20 n=5,-0.487,60
+8,atreides,sonic,0.33 n=15,0.60 n=5,0.50 n=20,0.50 n=20,0.500,60
+8,atreides,ornithopter,0.40 n=25,0.48 n=25,-,0.60 n=10,0.963,60
+8,atreides,trike,0.44 n=25,0.40 n=10,0.47 n=15,0.60 n=10,0.696,60
+8,atreides,quad,0.60 n=20,0.35 n=20,0.47 n=15,0.40 n=5,-0.440,60
+8,harkonnen,tank,0.36 n=14,0.42 n=19,0.62 n=8,0.62 n=13,0.586,54
+8,harkonnen,siege,0.38 n=13,0.58 n=12,0.40 n=5,0.50 n=24,0.091,54
+8,harkonnen,launcher,-,0.56 n=32,0.33 n=9,0.38 n=13,-0.709,54
+8,harkonnen,devastator,0.40 n=10,0.61 n=18,-,0.42 n=26,-0.187,54
+8,harkonnen,quad,0.38 n=8,0.61 n=18,0.44 n=18,0.40 n=10,-0.077,54
+8,ordos,tank,0.91 n=11,0.64 n=14,0.75 n=12,0.40 n=5,-1.405,42
+8,ordos,siege,0.75 n=16,0.92 n=12,0.40 n=5,0.56 n=9,-0.745,42
+8,ordos,launcher,0.69 n=29,1.00 n=2,0.57 n=7,1.00 n=4,0.395,42
+8,ordos,deviator,0.80 n=15,0.62 n=21,0.50 n=2,1.00 n=4,0.454,42
+8,ordos,ornithopter,0.71 n=21,0.56 n=9,0.60 n=5,1.00 n=7,0.818,42
+8,ordos,raider,0.83 n=23,1.00 n=2,0.50 n=12,0.60 n=5,-0.943,42
+8,ordos,quad,0.67 n=18,0.50 n=2,0.71 n=7,0.80 n=15,0.428,42
+8,fremen,tank,0.50 n=30,0.83 n=12,-,-,2.613,42
+8,fremen,siege,0.56 n=16,0.69 n=16,0.50 n=10,-,0.146,42
+8,fremen,launcher,0.52 n=21,0.57 n=14,1.00 n=2,0.80 n=5,1.600,42
+8,fremen,devastator,0.58 n=36,0.50 n=2,0.50 n=2,1.00 n=2,0.786,42
+8,fremen,sonic,0.47 n=15,0.77 n=13,0.44 n=9,0.80 n=5,0.733,42
+8,fremen,ornithopter,0.50 n=2,0.83 n=18,0.33 n=12,0.50 n=10,-1.819,42
+8,fremen,trike,0.75 n=16,0.42 n=12,0.29 n=7,0.86 n=7,-0.073,42
+8,fremen,raider,0.58 n=12,0.56 n=16,1.00 n=2,0.58 n=12,-0.069,42
+8,fremen,quad,0.69 n=26,0.56 n=9,0.29 n=7,-,-2.275,42
+8,sardaukar,tank,0.59 n=27,0.60 n=5,0.43 n=7,0.50 n=2,-0.895,41
+8,sardaukar,siege,0.56 n=32,0.57 n=7,0.50 n=2,-,0.218,41
+8,sardaukar,launcher,0.58 n=12,0.50 n=2,0.50 n=14,0.62 n=13,0.399,41
+8,sardaukar,devastator,0.71 n=17,0.33 n=9,0.53 n=15,-,-1.004,41
+8,sardaukar,sonic,0.57 n=14,0.55 n=20,0.57 n=7,-,0.580,41
+8,sardaukar,ornithopter,0.59 n=22,0.57 n=7,0.50 n=2,0.50 n=10,-0.223,41
+8,sardaukar,trike,0.56 n=16,0.54 n=13,0.43 n=7,0.80 n=5,0.670,41
+8,sardaukar,raider,0.48 n=23,0.67 n=18,-,-,3.905,41
+8,sardaukar,quad,0.56 n=18,0.57 n=14,0.57 n=7,0.50 n=2,-0.565,41
+8,mercenary,tank,0.56 n=24,0.42 n=12,-,-,-2.516,36
+8,mercenary,siege,0.44 n=9,0.57 n=20,0.43 n=7,-,0.360,36
+8,mercenary,launcher,0.41 n=17,0.71 n=7,0.59 n=11,0.00 n=1,0.461,36
+8,mercenary,devastator,0.54 n=23,0.33 n=6,0.57 n=7,-,0.041,36
+8,mercenary,sonic,0.50 n=6,0.47 n=18,0.60 n=5,0.57 n=7,0.268,36
+8,mercenary,ornithopter,0.47 n=17,0.67 n=9,0.50 n=5,0.40 n=5,-0.187,36
+8,mercenary,trike,0.56 n=9,0.36 n=11,0.59 n=16,-,0.520,36
+8,mercenary,raider,0.57 n=29,0.29 n=7,-,-,-2.088,36
+8,mercenary,quad,0.58 n=13,0.45 n=11,0.50 n=10,0.50 n=2,-0.060,36
