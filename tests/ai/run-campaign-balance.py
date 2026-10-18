@@ -228,9 +228,15 @@ parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192,
 parser.add_argument('--duel-map-seed', type=int, default=1, help='Formation duel: the Random Skirmish map seed')
 parser.add_argument('--duel-sides', help='Formation duel: house:shape,house:shape (e.g. atreides:box,harkonnen:wedge)')
 parser.add_argument('--match-sides',
-                    help='Vanilla match on --custom-map (vanilla-match.py): house:label per map slot in slot order, '
-                         'each house its own team; label = a duel label (none, none+BWFCQ, ...) for a QuantBot of '
-                         '--enemy-difficulty, or ai for the AI Player of it')
+                    help='Vanilla match on --custom-map or --skirmish-ffa-size (vanilla-match.py): house:label per map '
+                         'slot in slot order, each house its own team; label = a duel label (none, none+BWFCQ, ...) for '
+                         'a QuantBot of --enemy-difficulty, or ai for the AI Player of it')
+parser.add_argument('--skirmish-ffa-size', type=int, choices=(64, 96, 128, 160, 192, 256),
+                    help='Free-for-all on a generated multiplayer Random Skirmish map of this size (vanilla-match.py '
+                         '--skirmish): one start per --match-sides house, each a Fortress with a 20,000-credit army and, '
+                         'with --mod dunecity, a 40,000 city; Rock High, Spice Medium, not mirrored - the settings of '
+                         "Stefan's 4P DuneCity free-for-all")
+parser.add_argument('--skirmish-map-seed', type=int, default=1, help='--skirmish-ffa-size: the Random Skirmish map seed')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
 parser.add_argument('--no-ai-telemetry', action='store_true',
@@ -252,25 +258,44 @@ if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not (args.custom_map or args.duel_map_size):
-    parser.error('--local-spectator requires --custom-map or --duel-map-size.')
-if args.load_save and (args.custom_map or args.duel_map_size or not args.load_save.is_file()):
-    parser.error('--load-save needs an existing savegame and no --custom-map or --duel-map-size.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size):
+    parser.error('--local-spectator requires --custom-map, --duel-map-size or --skirmish-ffa-size.')
+if args.load_save and (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or not args.load_save.is_file()):
+    parser.error('--load-save needs an existing savegame and no --custom-map, --duel-map-size or --skirmish-ffa-size.')
 if args.game_options and not args.game_options.is_file():
     parser.error('--game-options must name an existing INI file.')
 if bool(args.duel_map_size) != bool(args.duel_sides) or (args.duel_map_size and args.custom_map):
     parser.error('A formation duel needs --duel-map-size and --duel-sides and no --custom-map.')
-if args.match_sides and (not args.custom_map or args.roster or args.free_for_all):
-    parser.error('--match-sides needs --custom-map and replaces --roster/--free-for-all.')
+if args.skirmish_ffa_size and (args.custom_map or args.duel_map_size or not args.match_sides):
+    parser.error('--skirmish-ffa-size needs --match-sides and no --custom-map or --duel-map-size.')
+if args.match_sides and (not (args.custom_map or args.skirmish_ffa_size) or args.roster or args.free_for_all):
+    parser.error('--match-sides needs --custom-map or --skirmish-ffa-size and replaces --roster/--free-for-all.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if args.strategy_probe and (not args.custom_map or args.prebuilt_probe):
     parser.error('--strategy-probe needs --custom-map and builds its own probe binary.')
-if not args.custom_map and (args.roster or args.house not in house_names[:3]):
-    parser.error('Explicit rosters and additional houses require --custom-map.')
+if not (args.custom_map or args.skirmish_ffa_size) and (args.roster or args.house not in house_names[:3]):
+    parser.error('Explicit rosters and additional houses require --custom-map or --skirmish-ffa-size.')
+def parse_match_sides(slots):
+    """--match-sides as [(house index, label)], one distinct house per slot (any 2-8 if slots is None)."""
+    try:
+        parsed = [(house_names.index(house.lower()), label) for house, label in
+                  (side.split(':', 1) for side in args.match_sides.split(','))]
+    except ValueError:
+        parser.error('--match-sides must be house:label,house:label with known houses.')
+    if (slots is not None and len(parsed) != slots) or not 2 <= len(parsed) <= 8 or len({h for h, _ in parsed}) != len(parsed):
+        parser.error(f'--match-sides needs one distinct house per map slot ({slots or "2-8"}).')
+    if any(label == 'ai' for _, label in parsed) and args.enemy_difficulty == 'brutal':
+        parser.error('AI Player has no Brutal controller.')
+    if house_names.index(args.house) not in {h for h, _ in parsed}:
+        parser.error('--house must be one of the --match-sides houses.')
+    return parsed
+
+
 roster = []
+sides = []
 if args.custom_map:
     scenario = configparser.ConfigParser(strict=False, interpolation=None)
     with args.custom_map.open() as source_file:
@@ -318,18 +343,11 @@ if args.custom_map:
     if args.free_for_all:
         roster = [(house, i + 1) for i, (house, _) in enumerate(roster)]
     if args.match_sides:
-        try:
-            sides = [(names.index(house.lower()), label) for house, label in
-                     (side.split(':', 1) for side in args.match_sides.split(','))]
-        except ValueError:
-            parser.error('--match-sides must be house:label,house:label with known houses.')
-        if len(sides) != len(roster) or len({h for h, _ in sides}) != len(sides):
-            parser.error(f'--match-sides needs one distinct house per map slot ({len(roster)}).')
-        if any(label == 'ai' for _, label in sides) and args.enemy_difficulty == 'brutal':
-            parser.error('AI Player has no Brutal controller.')
+        sides = parse_match_sides(len(roster))
         roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
-        if names.index(args.house) not in {h for h, _ in roster}:
-            parser.error('--house must be one of the --match-sides houses.')
+if args.skirmish_ffa_size:
+    sides = parse_match_sides(None)
+    roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 # Provenance only (summary.json): a worktree whose git directory cannot be read still runs.
 try:
@@ -592,6 +610,9 @@ if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
 if args.match_sides:
     env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
+if args.skirmish_ffa_size:
+    env['BALANCE_SKIRMISH_FFA_SIZE'] = str(args.skirmish_ffa_size)
+    env['BALANCE_SKIRMISH_MAP_SEED'] = str(args.skirmish_map_seed)
 if args.duel_map_size:
     env['BALANCE_DUEL_MAP_SIZE'] = str(args.duel_map_size)
     env['BALANCE_DUEL_MAP_SEED'] = str(args.duel_map_seed)

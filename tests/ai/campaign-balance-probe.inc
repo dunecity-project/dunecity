@@ -125,9 +125,15 @@ int runCampaignBalanceProbe() {
         init=FormationDuel::makeInit(std::atoi(std::getenv("BALANCE_DUEL_MAP_SIZE")),
             static_cast<Uint32>(std::stoul(std::getenv("BALANCE_DUEL_MAP_SEED"))),duelSides,enemyClass,settings.gameOptions);
     }
-    // Vanilla match: the custom map's slots, one side (QuantBot flags or AI Player) per house.
+    // Vanilla match: the custom map's slots, one side (QuantBot flags or AI Player) per house; or a
+    // generated free-for-all Random Skirmish map with one start per side (vanilla-match.py --skirmish).
     const std::vector<FormationDuel::Side> matchSides=VanillaMatch::sidesFromEnv();
-    if(!matchSides.empty() && (!customMap || duel)) throw std::runtime_error("A vanilla match needs a custom map");
+    const bool skirmishFfa=std::getenv("BALANCE_SKIRMISH_FFA_SIZE")!=nullptr;
+    if(!matchSides.empty() && (!(customMap || skirmishFfa) || duel)) throw std::runtime_error("A vanilla match needs a map");
+    if(skirmishFfa)
+        init=VanillaMatch::makeSkirmishInit(std::atoi(std::getenv("BALANCE_SKIRMISH_FFA_SIZE")),
+            static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SKIRMISH_MAP_SEED"))),matchSides,enemy,
+            std::getenv("BALANCE_MOD") ? std::getenv("BALANCE_MOD") : "vanilla",settings.gameOptions);
     init.randomSeed = seed; // Test-only access, provided by -fno-access-control.
     // Continue a saved match instead (its own seed, roster and options).
     const char* loadSave = std::getenv("BALANCE_LOAD_SAVE");
@@ -145,7 +151,7 @@ int runCampaignBalanceProbe() {
             roster.emplace_back(std::stoi(slot.substr(0,colon)),std::stoi(slot.substr(colon+1)));
         }
         if(roster.empty()) throw std::runtime_error("Custom test requires a roster");
-    } else if(!duel && !loadSave) {
+    } else if(!duel && !skirmishFfa && !loadSave) {
         for(int h=0;h<NUM_HOUSES;++h)
             if(isHouseAvailable(static_cast<HOUSETYPE>(h))) roster.emplace_back(h,h==humanHouse ? 1 : 2);
     }

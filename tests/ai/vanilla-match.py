@@ -16,6 +16,13 @@ Modes:
   --ffa x,y          four-player free-for-all on the 4P --maps: Harkonnen, Atreides, Ordos and
                      Sardaukar, two houses per label, all six partitions per seed.
   --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
+  --ffa x            the same with one label for all four houses: one game per map and seed.
+
+Maps: a bundled multiplayer map (MAPS or a file stem), or rs<size>-<mod> (e.g. rs160-dunecity,
+rs160-vanilla): a generated multiplayer Random Skirmish map with one start per house, each a
+Fortress with a 20,000-credit army and in DuneCity a 40,000 city (Rock High, Spice Medium) -
+Stefan's 4P DuneCity free-for-all - from the seed (map seed and match seed), played in that mod
+with --game-options (default his options, tests/performance/data/stefan-game-options.ini).
 
 Labels: as formation-duel.py, plus "default" (the configured rules), a test-only play style
 suffix @style (tests/ai/play-styles/<style>.ini, docs/ai-play-styles.md), e.g. default@rush, and a
@@ -23,14 +30,17 @@ strategy suffix #random or #<Mix>-<Tempo>[-fixed], e.g. default#QuadMass-Swarm (
 the strategy each house played).
 
 Each game appends a row to games.csv, its houses to houses.csv, a per-minute sample of every
-house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv
-and its waves to waves.csv; the run directory is deleted straight away and games already in
-games.csv are skipped. --report prints the tables used in docs/formations.md.
+house (credits, army, harvesters, structures, factories, kill and loss value) to samples.csv,
+where each house's army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per
+QuantBot role, at the bundle or perimeter, the outnumbered verdict) to army.csv and its waves
+to waves.csv; the run directory is deleted straight away and games already in games.csv are
+skipped. --report prints the tables used in docs/formations.md.
 """
 import argparse
 import csv
 import itertools
 import random
+import re
 import shutil
 import statistics
 import subprocess
@@ -70,6 +80,11 @@ SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'shots30', 'loss60',
                'kill60', 'survivors', 'lost_before_contact', 'together_at_contact', 'engaged10')
 WAVE_ROW_FIELDS = KEY + ('label',) + WAVE_FIELDS
+ARMY_FIELDS = ('minute', 'army_value', 'inside_value', 'outside_value', 'on_road_value', 'wave_value', 'defence_value',
+               'free_value', 'free_inside_value', 'at_bundle_value', 'at_perimeter_value', 'stuck_value', 'outnumbered',
+               'garrisoned', 'own_estimate', 'enemy_sum', 'enemy_strongest', 'bundle_base_tiles', 'perimeter_base_tiles')
+ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
+SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
 
@@ -94,6 +109,12 @@ def append(path, fields, rows):
             writer.writerows(rows)
 
 
+def skirmish(name):
+    """rs<size>-<mod> -> (size, mod), or None for a bundled map."""
+    match = re.fullmatch(r'rs(\d+)-(vanilla|dunecity)', name)
+    return (int(match.group(1)), match.group(2)) if match else None
+
+
 def map_path(name):
     if name in MAPS:
         return MAP_DIR / MAPS[name]
@@ -112,6 +133,13 @@ def schedule(args):
     games = []
     if args.ffa:
         labels = args.ffa.split(',')
+        if len(labels) == 1:
+            # One label for every house: one game per map and seed.
+            for seed in args.seeds:
+                for name in args.maps:
+                    games.append((args.tag, args.difficulty, name, str(seed),
+                                  '|'.join(f'{h}:{labels[0]}' for h in FFA_HOUSES)))
+            return games
         if len(labels) == 4:
             # Four labels, one per house: the four rotations, so every label plays every house.
             for seed in args.seeds:
@@ -179,11 +207,19 @@ def play(args, scratch, binary, key):
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
     shutil.rmtree(out, ignore_errors=True)
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
-               '--prebuilt-probe', str(binary), '--output-dir', str(out), '--custom-map', str(map_path(name)),
+               '--prebuilt-probe', str(binary), '--output-dir', str(out),
                '--house', sides[0][0], '--match-sides', ','.join(f'{h}:{l}' for h, l in sides),
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    if generated := skirmish(name):
+        size, mod = generated
+        command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed, '--mod', mod,
+                    '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
+    else:
+        command += ['--custom-map', str(map_path(name))]
+        if args.game_options:
+            command += ['--game-options', str(args.game_options)]
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
     started = time.time()
@@ -234,9 +270,19 @@ def play(args, scratch, binary, key):
         wave = parse(l, 'FORMATION_WAVE:')
         waves.append({**dict(zip(KEY, key)), 'label': label_of.get(int(wave['house']), ''),
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
+    army = []
+    for l in lines:
+        if 'FFA_ARMY_SAMPLE:' not in l:
+            continue
+        sample = parse(l, 'FFA_ARMY_SAMPLE:')
+        number = int(sample['house'])
+        if number in numbers:
+            army.append({**dict(zip(KEY, key)), 'house': numbers[number], 'label': label_of[number],
+                         **{f: sample.get(f, '') for f in ARMY_FIELDS}})
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
+    append(results / 'army.csv', ARMY_ROW_FIELDS, army)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
     return row
@@ -442,6 +488,60 @@ def report_ffa(args, games, houses):
     print(f'Time-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
 
 
+def longest_inside(rows, share):
+    """Longest run of consecutive sampled minutes with at least `share` of the army inside the base."""
+    best = run_length = 0
+    for r in sorted(rows, key=lambda r: int(r['minute'])):
+        army = number(r['army_value'])
+        inside = army > 0 and number(r['inside_value']) >= share * army
+        run_length = run_length + 1 if inside else 0
+        best = max(best, run_length)
+    return best
+
+
+def report_ffa_army(args, games, houses, waves, army):
+    """Where the armies stand and how the free-for-all goes, per tag and map (docs/formations.md,
+    "Free-for-all: the army deploys")."""
+    print('\n| Tag | Map | Games | Ended (one left) | Game min | First elimination min | Eliminated per game | '
+          'Waves per house | Wave members (median) | Army outside base | Free reserve inside base | '
+          'Garrisoned house-minutes | Longest 80%-inside stretch min (median / max) |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for tag in sorted(args.tags):
+        for name in sorted({g['map'] for g in games if g['tag'] == tag}):
+            group = [g for g in games if g['tag'] == tag and g['map'] == name and not g['error']]
+            if not group:
+                continue
+            keys = {tuple(g[k] for k in KEY) for g in group}
+            hs = [h for h in houses if tuple(h[k] for k in KEY) in keys]
+            ws = [w for w in waves if tuple(w[k] for k in KEY) in keys]
+            rows = [a for a in army if tuple(a[k] for k in KEY) in keys and int(a['minute']) >= 3
+                    and number(a['army_value']) > 0]
+            ended = sum(1 for g in group if g['winner'] not in ('', '-1'))
+            length = [number(g['end_s']) / 60 for g in group]
+            firsts = []
+            for key in keys:
+                elim = [number(h['eliminated_s']) / 60 for h in hs if tuple(h[k] for k in KEY) == key and h['eliminated_s']]
+                firsts.append(min(elim) if elim else float('inf'))
+            finite = [f for f in firsts if f != float('inf')]
+            first_text = (f'{statistics.median(firsts):.1f}' if len(finite) * 2 > len(firsts) else f'>{args.minutes}') + \
+                f' ({len(finite)}/{len(firsts)} games)'
+            outside = sum(number(a['outside_value']) for a in rows) / max(1, sum(number(a['army_value']) for a in rows))
+            free = sum(number(a['free_value']) for a in rows)
+            free_inside = sum(number(a['free_inside_value']) for a in rows) / max(1, free)
+            garrisoned = sum(1 for a in rows if a['garrisoned'] == '1') / max(1, len(rows))
+            stretches = []
+            for key in keys:
+                for house in {a['house'] for a in rows if tuple(a[k] for k in KEY) == key}:
+                    stretches.append(longest_inside([a for a in rows if tuple(a[k] for k in KEY) == key
+                                                     and a['house'] == house], 0.8))
+            members = [number(w['members']) for w in ws]
+            print(f'| {tag} | {name} | {len(group)} | {ended} | {statistics.mean(length):.1f} | {first_text} | '
+                  f'{sum(1 for h in hs if h["eliminated_s"]) / len(group):.2f} | {len(ws) / max(1, len(hs)):.1f} | '
+                  f'{statistics.median(members) if members else 0:.0f} | {outside:.0%} | {free_inside:.0%} | '
+                  f'{garrisoned:.0%} | {statistics.median(stretches) if stretches else 0:.0f} / '
+                  f'{max(stretches) if stretches else 0} |')
+
+
 def report(args):
     results = Path(args.results)
     tags = set(args.tags or [args.tag])
@@ -451,6 +551,8 @@ def report(args):
     houses = [h for h in read(results / 'houses.csv') if keep(h)]
     if args.ffa:
         report_ffa(args, games, houses)
+        report_ffa_army(args, games, houses, [w for w in read(results / 'waves.csv') if keep(w)],
+                        [a for a in read(results / 'army.csv') if keep(a)])
         return
     samples = [s for s in read(results / 'samples.csv') if keep(s)]
     waves = [w for w in read(results / 'waves.csv') if keep(w)]
@@ -459,7 +561,8 @@ def report(args):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
-parser.add_argument('--results', required=True, help='Directory for games.csv, houses.csv, samples.csv, waves.csv')
+parser.add_argument('--results', required=True,
+                    help='Directory for games.csv, houses.csv, samples.csv, army.csv, waves.csv')
 parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--tag', default='cy1', help='Label of the code variant being measured')
@@ -471,7 +574,10 @@ parser.add_argument('--wall-timeout', type=int, default=3600)
 parser.add_argument('--maps', nargs='+', default=list(MAPS))
 parser.add_argument('--seeds', nargs='+', type=int, default=[8101, 8202, 8303, 8404, 8505, 8606])
 parser.add_argument('--pairs', help='1v1 label pairs x:y,x:y (each played with both assignments)')
-parser.add_argument('--ffa', help='Four-player free-for-all: two labels x,y, two houses each')
+parser.add_argument('--ffa', help='Four-player free-for-all: labels x (all houses), x,y (two houses each) or a,b,c,d')
+parser.add_argument('--game-options', type=Path,
+                    help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
+                         'tests/performance/data/stefan-game-options.ini)')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
