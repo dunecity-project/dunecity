@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -24,6 +25,15 @@
 #include <functional>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 namespace GamePerf {
 
@@ -36,9 +46,17 @@ inline double msSince(Clock::time_point start) {
 /// This thread's CPU time in ms: unlike wall time it does not grow while the thread waits for a
 /// core on a loaded machine (it still grows on a slower core).
 inline double threadCpuMs() {
+#ifdef _WIN32
+    // Windows has no CLOCK_THREAD_CPUTIME_ID: kernel + user time of this thread, in 100 ns units.
+    FILETIME creation{}, exit{}, kernel{}, user{};
+    GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user);
+    const auto ticks = [](const FILETIME& t) { return (uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime; };
+    return double(ticks(kernel) + ticks(user)) / 1.0e4;
+#else
     timespec now{};
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now);
     return now.tv_sec * 1000.0 + now.tv_nsec / 1.0e6;
+#endif
 }
 
 /// A fixed reference workload (integer hashing over a 4 MiB table: arithmetic plus cache misses,
