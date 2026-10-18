@@ -1,3 +1,42 @@
+## 2026-10-18 — FFA army fix, continued: scoring merged, fix v 1.0.847, ablation and late-game draws IN PROGRESS (branches `fix/ai-army-stuck-in-base` b8965267, `exp/ai-late-game`; not released)
+
+Agent ArmyStuck2 stopped at its budget; nothing here is a final decision. Results:
+`~/Documents/projects/dunecity-results/army-stuck/` (new placement score, `tests/ai/match_score.py`).
+
+- **Merged:** `test/match-scoring` into the fix branch (ea6a0e23; vanilla-match keeps both the scorer and
+  the FFA army reports); `test/ai-scenario-matrix` acdada9b into `exp/ai-late-game` (69c5826d).
+  Ablation styles renamed lower case (`@nov @nou @nox @nouvx`): the label parser rejects upper case,
+  so ArmyStuck's queued `@noV...` FFA ablation had failed in every game.
+- **Reports:** `--baseline-tag T --baseline-results DIR` (formation-duel, vanilla-match 1v1 and one-label
+  FFA) pairs the same setup played by another code version (fix v 1.0.847).
+- **Fix v 1.0.847 (new score):** 4P FFA rs160 dunecity+vanilla, 8 seeds: mean house score -0.037 v
+  -0.179, Δ +0.142 (+0.09..+0.19) beats; time-outs 4/16 v 13/15; first elimination dunecity 32.3 v
+  58.4 min (7/8 v 4/7 games), vanilla 7.1 v >60. Fortress default v none 0.771 v 0.806 Δ -0.035
+  (-0.10..+0.00) level; `/weak` Δ +0.14 (-0.08..+0.36) level (64 games); CY 1v1 (120) 0.312 v 0.417
+  Δ -0.10 (-0.26..+0.05) level. `quantbot_scenario_matrix` (fails on 1.0.847) passed on the fix (170 s).
+- **Ablation (partial when stopped, all level):** Fortress h2h 14-16 games/arm, CY h2h 30-32/arm, FFA
+  6 games. Still queued/running on the mini: `ffa-abl`, `ffa-abl-u`, `weak-abl` (results dirs
+  `ffa-ablation`, `ffa-ablation-u`, `weak-ablation`), `duel-abl`, `cy-abl`. No UVX decision yet.
+- **Late-game diagnosis** (`diag-dunecity-9101`, decision log): the last two cities hold 206 and 265
+  turrets at minute 60; the stronger house (Atreides) sat at its military limit with 139k credits
+  unspent, waves of 100-190 units every ~2.5 min; its losses after minute 20: enemy units ~2,000
+  (siege tanks, quads, launchers, ornithopters), rocket turrets 451, its OWN sonic tanks 596 (friendly
+  fire, ~20%); only ~40 of the defender's turrets died in 40 minutes. Waves never target turrets (engine
+  Hunt = nearest visible; focus fire prefers units), go to GUARD when nothing is visible, and walk back
+  to the bundle.
+- **Late-game candidates** (`exp/ai-late-game` f016c104, `[Force Concentration]` keys, code default OFF,
+  hashed; styles `@turretsfirst @presson @finish @fortified @lateall`): T TurretPriority (a wave hunter in
+  a turret's reach that is not shooting an armed unit attacks the turret), P PressOn (idle wave members
+  hunt on to the nearest seen enemy structure), H FinishWeakest (waves hunt towards the weakest known
+  house's yard/factories/refinery), K FortifiedWaves (8+ seen turrets near the objective: wait for 60% of
+  the military limit, at most 4 min after the last wave). Unit tests in ForceConcentrationPolicyTestCase
+  and the config hash test. One smoke game, seed 9101 dunecity, all four on: ended at 54 min (fix: time-out).
+  Running: Air `late-h2h1` (default v T v P v H, 32 FFA games; `dunecity-air pull late-h2h1 DIR`).
+  Not run: `late-self` (`--ffa default@lateall`, 16 games), K/lateall head-to-head, 1v1/Fortress/CY checks,
+  scenario-matrix skirmish/cy/mp full tier (134 games) after the fix, regression test tightening, ctest set.
+- **Do not rebuild/edit headers in `~/Documents/projects/dunecity-army-stuck`** until its queued jobs have
+  started (the probe compiles main.cpp against the tree's headers at job start).
+
 ## 2026-10-18 — QuantBot FFA: armies stuck in base fixed (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
 
 Stefan (4P DuneCity FFA, four QuantBot Brutal, save `/tmp/mba-wtf-20261018/wtf.dls`): "all the units are
