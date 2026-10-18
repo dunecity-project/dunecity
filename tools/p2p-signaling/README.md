@@ -258,6 +258,12 @@ HTTPS, the origin allowlist and POST-only rules apply. Content errors use
 `status=error`, `code=<fixed-token>` and **`message=<hex-encoded UTF-8>`**. Existing admission
 and signaling envelopes remain unchanged.
 
+**Game clients from 2026-10-18 on** use only the transfer routes: an online host of an
+authored mod uploads it (`begin`/`chunk`/`commit`, `source=host`, `promoted=0`) and joiners
+download pinned revisions (`manifest`/`blob`). They no longer call `list` or `lookup`, never
+send `collect=1`, never upload maps, and have no background upload queue. The catalogue and
+collection sections below describe what the service still accepts from older clients.
+
 Every manifest has this exact ASCII representation, including its final newline:
 
 ```text
@@ -383,10 +389,8 @@ separate and authoritative for exact gameplay; reclassification never changes it
 an authored map revision; `[BASIC] Version` remains the legacy file-format number.
 The downloaded `.workshop.ini` sidecar records the server revision and mod.
 
-`scripts/seed-metaserver-maps.py` in the game repository prepares a deduplicated
-collection and publishes it only with `--upload`, using existing verified mod
-snapshots and a local Workshop owner file. Original maps, saves and replays are
-not modified or uploaded as arbitrary archives. Review its inventory first.
+The catalogue was seeded by `scripts/seed-metaserver-maps.py` in the game repository;
+that script was removed with the in-game catalogue on 2026-10-18.
 
 ### Offline custom map collection (1.0.771)
 

@@ -53,17 +53,13 @@
 
 namespace {
 // Sidebar rows below the 132px radar. The mode chooser and the house drop down
-// are packed directly under the radar so the two metaserver buttons get a
-// full-width row each; the object pickers still start well above the bottom
-// bar at the minimum 640x480 resolution.
+// are packed directly under the radar; the object pickers fill the rest of the
+// column down to the bottom bar.
 constexpr int SidebarModeChooserY      = 134;
 constexpr int SidebarModeChooserHeight = 22;
 constexpr int SidebarHouseY            = 157;
 constexpr int SidebarHouseHeight       = 20;
-constexpr int SidebarMetaserverSaveY   = 178;
-constexpr int SidebarMetaserverLoadY   = 199;
-constexpr int SidebarMetaserverHeight  = 20;
-constexpr int SidebarPickerY           = 221;
+constexpr int SidebarPickerY           = 178;
 }
 
 MapEditorInterface::MapEditorInterface(MapEditor* pMapEditor)
@@ -264,29 +260,6 @@ MapEditorInterface::MapEditorInterface(MapEditor* pMapEditor)
     windowWidget.addWidget( &houseDropDownBox,
                             Point(getRendererWidth() - sideBar.getSize().x + 14, SidebarHouseY),
                             Point(sideBar.getSize().x - 15,SidebarHouseHeight));
-
-    // metaserver actions
-    const int sidebarButtonWidth = sideBar.getSize().x - 15;
-    // A clipped label is worse than a shorter one, so fall back when the sidebar
-    // column (or a translation) is too narrow for the full wording.
-    const auto setFittingText = [sidebarButtonWidth](TextButton& button, const std::string& text, const std::string& shortText) {
-        button.setText(text);
-        if(button.getMinimumSize().x > sidebarButtonWidth) button.setText(shortText);
-    };
-
-    setFittingText(metaserverSaveButton, _("Save to metaserver"), _("Save online"));
-    metaserverSaveButton.setTooltipText(_("Save a map version and publish that exact version to the metaserver"));
-    metaserverSaveButton.setOnClick([this]() { onSave(true); });
-    windowWidget.addWidget( &metaserverSaveButton,
-                            Point(getRendererWidth() - sideBar.getSize().x + 14, SidebarMetaserverSaveY),
-                            Point(sidebarButtonWidth,SidebarMetaserverHeight));
-
-    setFittingText(metaserverLoadButton, _("Load from metaserver"), _("Load online"));
-    metaserverLoadButton.setTooltipText(_("Download a map published on the metaserver and open it here"));
-    metaserverLoadButton.setOnClick([this]() { onLoadFromMetaserver(); });
-    windowWidget.addWidget( &metaserverLoadButton,
-                            Point(getRendererWidth() - sideBar.getSize().x + 14, SidebarMetaserverLoadY),
-                            Point(sidebarButtonWidth,SidebarMetaserverHeight));
 
     // setup terrain mode
 
@@ -1105,37 +1078,22 @@ void MapEditorInterface::onChildWindowClose(Window* pChildWindow) {
 
     LoadSaveWindow* pLoadSaveWindow = dynamic_cast<LoadSaveWindow*>(pChildWindow);
     if(pLoadSaveWindow != nullptr) {
-        const bool share = shareAfterSave;
-        shareAfterSave = false;
         if(!pLoadSaveWindow->getFilename().empty()) {
-            bool saved = false;
             try {
                 pMapEditor->saveMap(pLoadSaveWindow->getFilename());
-                saved = true;
                 const INIFile metadata(pLoadSaveWindow->getFilename() + ".workshop.ini");
                 const auto revision = Workshop::store().get(metadata.getStringValue("Workshop", "Hash"));
                 saveButton.setTooltipText(_("Saved map version ") + std::to_string(revision.version));
-                if(share) Workshop::shareRevision(revision);
-                else openWindow(MsgBox::create(_("Saved map version ") + std::to_string(revision.version)));
+                openWindow(MsgBox::create(_("Saved map version ") + std::to_string(revision.version)));
             } catch(const std::exception& error) {
-                openWindow(MsgBox::create(std::string(saved ? _("Map saved, but uploading to the metaserver failed: ") : _("Map save failed: ")) + error.what()));
+                openWindow(MsgBox::create(std::string(_("Map save failed: ")) + error.what()));
             }
         }
     }
 
     QstBox* pQstBox = dynamic_cast<QstBox*>(pChildWindow);
-    if(pQstBox != nullptr) {
-        // A pending metaserver map means this box asked about discarding unsaved
-        // changes before loading it, not about quitting the editor.
-        const std::string metaserverMap = pendingMetaserverMapPath;
-        pendingMetaserverMapPath.clear();
-        if(pQstBox->getPressedButtonID() == QSTBOX_BUTTON1) {
-            if(metaserverMap.empty()) {
-                pMapEditor->onQuit();
-            } else {
-                loadMetaserverMap(metaserverMap);
-            }
-        }
+    if(pQstBox != nullptr && pQstBox->getPressedButtonID() == QSTBOX_BUTTON1) {
+        pMapEditor->onQuit();
     }
 }
 
@@ -1160,9 +1118,7 @@ void MapEditorInterface::onQuit() {
     }
 }
 
-void MapEditorInterface::onSave(bool share) {
-    shareAfterSave = share;
-
+void MapEditorInterface::onSave() {
     std::vector<std::string> mapDirectories;
     std::vector<std::string> directoryTitles;
 
@@ -1199,45 +1155,6 @@ void MapEditorInterface::onSave(bool share) {
 
 void MapEditorInterface::onLoad() {
     openWindow(LoadMapWindow::create(color));
-}
-
-void MapEditorInterface::onLoadFromMetaserver() {
-    std::string mapPath;
-    try {
-        mapPath = Workshop::loadMapFromMetaserver();
-    } catch(const std::exception& error) {
-        openWindow(MsgBox::create(std::string(_("Could not load a map from the metaserver: ")) + error.what()));
-        return;
-    }
-
-    if(mapPath.empty()) {
-        // Nothing was chosen; the current map is untouched.
-        return;
-    }
-
-    if(pMapEditor->hasChangeSinceLastSave()) {
-        pendingMetaserverMapPath = mapPath;
-        QstBox* pQstBox = QstBox::create(_("Do you really want to load this map and lose unsaved changes to the current map?"), _("Yes"), _("No"));
-        pQstBox->setTextColor(color);
-        openWindow(pQstBox);
-        return;
-    }
-
-    loadMetaserverMap(mapPath);
-}
-
-void MapEditorInterface::loadMetaserverMap(const std::string& path) {
-    try {
-        const INIFile metadata(path + ".workshop.ini");
-        const auto revision=Workshop::store().get(metadata.getStringValue("Workshop", "Hash"));
-        if(!revision.modHash.empty() && !Workshop::activateModRevision(revision.modHash))
-            throw std::runtime_error("Could not load the required mod.");
-        effectiveGameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-        pMapEditor->loadMap(path);
-        pMapEditor->requestInterfaceRefresh();
-    } catch(const std::exception& error) {
-        openWindow(MsgBox::create(std::string(_("Could not open the map: ")) + error.what()));
-    }
 }
 
 void MapEditorInterface::onPlayers() {

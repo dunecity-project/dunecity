@@ -175,8 +175,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         // Its map is chosen after pairing, so publish before sending game setup.
         publishBeforeSetup = pNetworkManager && !pNetworkManager->isRoomSession();
 #endif
-        if(bServer) WorkshopGameContent::pin(gameInitSettings, publishBeforeSetup,
-            !bLANServer);
+        if(bServer) WorkshopGameContent::pin(gameInitSettings, publishBeforeSetup);
         else if(pNetworkManager && pNetworkManager->supportsModTransfer()) {
             try { WorkshopGameContent::resolveMod(gameInitSettings, false); }
             catch(const std::exception&) {

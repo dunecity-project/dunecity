@@ -15,6 +15,7 @@
 #include <Menu/AboutMenu.h>
 #include <Menu/HowToPlayMenu.h>
 #include <Menu/ModMenu.h>
+#include <Menu/Dune2REditorMenu.h>
 #include <Menu/ModEditorMenu.h>
 #include <mod/Workshop.h>
 #include <Menu/DisplayMenu.h>
@@ -30,7 +31,6 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <players/PlayerFactory.h>
 
-namespace Workshop { std::unique_ptr<MenuBase> createMetaserverMenu(const std::string& kind, bool online); }
 std::unique_ptr<MenuBase> createExtrasMenu(bool workshop);
 
 void menuRequire(bool value, const char* message) {
@@ -49,43 +49,6 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
 }
 #include "user-map-list-probe.inc"
-int runLiveMapCatalogueProbe() {
-    settings.network.relayUseDevelopmentEndpoint=false;
-    settings.general.playerName="Map catalogue tester";
-    ModManager::instance().setActiveMod("dunecity");
-    effectiveGameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    CustomPlaySetup setup;setup.mods=ModManager::instance().listModChoices();setup.rules=effectiveGameOptions;
-    CustomGameMenu browser(false,false,&setup);
-    browser.onMapTypeChange(5);
-    const auto deadline=SDL_GetTicks()+60000;
-    while(browser.loadingMaps && static_cast<Sint32>(deadline-SDL_GetTicks())>0){browser.update();SDL_Delay(10);}
-    menuRequire(!browser.loadingMaps && browser.mapEntries.size()>=127,"Live catalogue did not load seeded maps");
-    browser.mapModFilter.setSelectedItem(3);browser.mapSizeFilter.setSelectedItem(4);browser.mapPlayersFilter.setSelectedItem(6);browser.rebuildMapList();
-    int selected=-1;
-    for(int i=0;i<browser.mapList.getNumEntries();++i)if(browser.mapEntries[browser.visibleMaps[i]].metadata.name=="Alkozeltser 4 Cities")selected=i;
-    menuRequire(selected>=0,"DuneCity/256/6-player filters lost Alkozeltser 4 Cities");
-    browser.mapList.setSelectedItem(selected);menuCapture(browser,"live-metaserver-maps");
-    auto& entry=browser.mapEntries[browser.visibleMaps[selected]];
-    Workshop::Client download;download.download(entry.revision.hash);
-    const auto downloadDeadline=SDL_GetTicks()+600000;
-    while(download.status()==Workshop::Client::Status::Busy && static_cast<Sint32>(downloadDeadline-SDL_GetTicks())>0){download.update();SDL_Delay(5);}
-    SDL_Log("LIVE_MAP_DOWNLOAD: %s",download.message().c_str());
-    menuRequire(download.status()==Workshop::Client::Status::Succeeded,"Live map/dependency download failed");
-    menuRequire(browser.prepareSelectedMap(),"Downloaded map could not be selected");
-    browser.onMapListSelectionChange(true);menuCapture(browser,"live-metaserver-preview");
-    menuRequire(std::filesystem::path(browser.getSelectedMapPath()).filename()=="Alkozeltser 4 Cities.ini","Map download changed the name");
-    browser.onNext();menuRequire(browser.retVal==MENU_SETUP_PLAYERS,"Metaserver selection did not reach player setup");
-    auto path=setup.maps[setup.map];
-    GameInitSettings init(getBasename(path,true),readCompleteFile(path),false,setup.rules);
-    // A new custom game plays the mod that was selected here; the authored revision of the
-    // downloaded bytes is reused only when it belongs to that very mod.
-    const bool reused=WorkshopGameContent::applyMapRevisionForSelectedMod(path,init);
-    SDL_Log("LIVE_MAP_REVISION: authored revision %s",reused?"reused":"recaptured under the selected mod");
-    menuRequire(ModManager::instance().getContentBase(ModManager::instance().getActiveModName())=="dunecity",
-                "Downloading a city map changed the selected mod");
-    SDL_Log("MENU_PROBE_PASS: live catalogue, combined filters, verified map/mod download, stable name, preview and player setup");
-    return MENU_QUIT_DEFAULT;
-}
 
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
@@ -161,7 +124,6 @@ int runRetinaResolutionProbe() {
 }
 
 int runMenuProbe() {
-    if(std::getenv("MENU_LIVE_MAPS"))return runLiveMapCatalogueProbe();
     if(std::getenv("MENU_RETINA_RESOLUTION"))return runRetinaResolutionProbe();
     menuRequire(getRendererWidth()==std::atoi(std::getenv("MENU_PROBE_WIDTH"))
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
@@ -297,13 +259,21 @@ int runMenuProbe() {
                 fs::remove(root / ".asset-catalog.previous");
                 menuRequire(OnlineModPolicy::fingerprint() == token,
                             "Removing the optional artwork changed the approved identity");
+                {
+                    // Save Version owns the whole row the retired metaserver button shared.
+                    Dune2REditorMenu editor;
+                    const auto pos = editor.windowWidget.getWidgetPosition(&editor.saveVersionButton);
+                    menuRequire(pos.x >= 0 && pos.x + editor.saveVersionButton.getSize().x <= editor.getSize().x,
+                                "Dune2R Save Version leaves the screen");
+                    menuCapture(editor, "dune2r-editor");
+                }
             }
 
             GameInitSettings campaign(HOUSE_ATREIDES, effectiveGameOptions, 1);
             campaign.enableCoop(true, "Approved campaign");
-            // The community endpoint is disabled. Even publish/queue callers must
-            // start approved campaigns without capturing or uploading a mod.
-            WorkshopGameContent::pin(campaign, true, true);
+            // The community endpoint is disabled. Even a publishing host must start
+            // approved campaigns without capturing or uploading a mod.
+            WorkshopGameContent::pin(campaign, true);
             menuRequire(campaign.getModRevisionHash().empty() && campaign.getModName() == name,
                         "Approved campaign created a Workshop dependency");
             menuRequire(Workshop::store().list("mod").size() == revisions,
@@ -664,26 +634,26 @@ int runMenuProbe() {
         menuRequire(browser.mapList.getNumEntries()>0,"Old untagged large maps disappeared from Vanilla filter");
         menuCapture(browser,"vanilla-large-maps");
         browser.mapModFilter.setSelectedItem(0);browser.mapSizeFilter.setSelectedItem(0);
-        browser.onMapTypeChange(5);browser.mapClient.cancel();browser.loadingMaps=false;
-        browser.mapEntries.clear();
-        CustomGameMenu::MapEntry city;city.metadata.name="Alkozeltser 4 Cities";
+        // Revision suffixes and combined filters on rows the chooser did not scan itself.
+        browser.mapEntries.clear();browser.visibleMaps.clear();
+        CustomGameMenu::MapEntry city;city.path=setup.maps.front();city.metadata.name="Alkozeltser 4 Cities";
         city.metadata.mod="dunecity";city.metadata.width=city.metadata.height=256;city.metadata.players=6;city.metadata.version=3;
-        CustomGameMenu::MapEntry legacy;legacy.metadata.name="Small dunes";
+        CustomGameMenu::MapEntry legacy;legacy.path=setup.maps.back();legacy.metadata.name="Small dunes";
         legacy.metadata.mod="vanilla";legacy.metadata.width=legacy.metadata.height=64;legacy.metadata.players=2;legacy.metadata.version=1;
         browser.mapEntries={city,legacy};browser.rebuildMapList();
-        menuRequire(browser.mapList.getNumEntries()==2,"Metaserver maps were not listed");
+        menuRequire(browser.mapList.getNumEntries()==2,"Map rows were not listed");
         menuRequire(browser.mapList.getEntry(0)=="Alkozeltser 4 Cities v3","Map name is missing its revision suffix");
         menuRequire(browser.mapList.getEntry(1)=="Small dunes v1","Map name is missing revision one");
         menuRequire(browser.mapPropertyVersion.getText()=="3","Map revision metadata missing");
         browser.mapModFilter.setSelectedItem(3);browser.mapSizeFilter.setSelectedItem(4);browser.mapPlayersFilter.setSelectedItem(6);browser.rebuildMapList();
         menuRequire(browser.mapList.getNumEntries()==1,"Combined map filters dropped a matching map");
-        menuCapture(browser,"metaserver-maps");
+        menuCapture(browser,"map-filters");
         browser.mapPlayersFilter.setSelectedItem(2);browser.rebuildMapList();
         menuRequire(browser.mapList.getNumEntries()==0&&!browser.nextButton.isEnabled(),"Empty filter result can start a stale map");
     }
     {
         // "All Maps" reads four directories, so one map can arrive from several
-        // of them: a metaserver download installed into the user profile, an
+        // of them: a multiplayer map received and installed into the user profile, an
         // editor save of a bundled map, or a metadata-annotated copy left
         // beside its original. Those copies shared one display name and were
         // listed once each. Real files, real chooser, real INI parsing.
@@ -744,10 +714,11 @@ int runMenuProbe() {
     {
         const auto file=setup.maps.front();
         ModManager::instance().setActiveMod("vanilla");
-        GameInitSettings hosted(getBasename(file,true),readCompleteFile(file),"Map collection test",false,setup.rules);
-        WorkshopGameContent::pin(hosted,false,true);
+        GameInitSettings hosted(getBasename(file,true),readCompleteFile(file),"Hosted map test",false,setup.rules);
+        // An approved-mod online host pins its map for the game setup and uploads nothing.
+        WorkshopGameContent::pin(hosted,true);
         menuRequire(!hosted.getMapRevisionHash().empty(),"Approved hosted map was not captured");
-        menuRequire(std::filesystem::exists(Workshop::store().root()/"outbox"/hosted.getMapRevisionHash()),"Approved online map was not queued for collection");
+        menuRequire(!std::filesystem::exists(Workshop::store().root()/"outbox"),"Hosting recreated the retired sharing queue");
         auto r=Workshop::store().get(hosted.getMapRevisionHash());
         auto installed=Workshop::installMap(r);
         menuRequire(std::filesystem::path(installed).stem().string()==r.name,"Downloaded map name gained a version suffix");
@@ -774,7 +745,7 @@ int runMenuProbe() {
             menuRequire(mods.getActiveModName()=="dunecity" && mods.isCityModeActive(),
                         "Picking Dune City did not activate the city content");
             menuRequire(settings.general.customGameMod=="dunecity","Mod choice was not remembered");
-            menuRequire(browser.prepareSelectedMap(),"Vanilla map could not be prepared under Dune City");
+            browser.onMapListSelectionChange(true);
             menuRequire(mods.getActiveModName()=="dunecity","Selecting a Vanilla map reset the chosen mod");
             // Using the already selected mod also records it, even without a dropdown change.
             settings.general.customGameMod.clear();
@@ -784,14 +755,14 @@ int runMenuProbe() {
             menuRequire(modSetup.mods[modSetup.mod].name=="dunecity","Player setup received a different mod than the one chosen");
             menuRequire(mods.getActiveModName()=="dunecity" && mods.isCityModeActive(),"Next left the chosen mod");
         }
-        // The downloaded fixture: the same map bytes, authored and pinned under Vanilla.
+        // The received fixture: the same map bytes, authored and pinned under Vanilla.
         Workshop::Revision authored;
         std::string downloaded;
         {
             menuRequire(mods.setActiveMod("vanilla"),"Cannot author the Vanilla map fixture");
             GameInitSettings hosted(getBasename(setup.maps.front(),true),readCompleteFile(setup.maps.front()),
                                     "Mod choice fixture",false,setup.rules);
-            WorkshopGameContent::pin(hosted,false,false);
+            WorkshopGameContent::pin(hosted);
             authored = Workshop::store().get(hosted.getMapRevisionHash());
             downloaded = Workshop::installMap(authored);
             menuRequire(existsFile(downloaded+".workshop.ini") && !authored.modHash.empty(),
@@ -803,7 +774,7 @@ int runMenuProbe() {
             menuRequire(!WorkshopGameContent::applyMapRevisionForSelectedMod(file,started),
                         "A map authored with Vanilla overruled the chosen mod");
             menuRequire(mods.getActiveModName()=="dunecity","Preparing the map switched the active mod");
-            WorkshopGameContent::pin(started,false,false);
+            WorkshopGameContent::pin(started);
             menuRequire(started.getModName()=="dunecity","The started game did not keep the chosen mod");
             menuRequire(!started.getMapRevisionHash().empty() && started.getMapRevisionHash()!=authored.hash,
                         "The same map bytes under another mod did not become a new revision");
@@ -1746,10 +1717,13 @@ int runMenuProbe() {
         auto& ui = *editor.pInterface;
         while(ui.hasChildWindow()) { ui.closeChildWindow(); ui.processChildWindowOpenCloses(); }
         editor.setMap(MapData(64,64,Terrain_Rock), MapInfo());
-        for(auto* button:{&ui.metaserverSaveButton,&ui.metaserverLoadButton}) {
-            const auto pos=ui.windowWidget.getWidgetPosition(button);
-            menuRequire(pos.x>=0 && pos.x+button->getSize().x<=getRendererWidth(),"Editor metaserver action exceeds screen width");
-            menuRequire(button->getSize().x>=button->getMinimumSize().x,"Editor metaserver action label is clipped");
+        {
+            // Without the retired online buttons the object pickers start right below
+            // the house choice, with no empty sidebar row between them.
+            const auto house=ui.windowWidget.getWidgetPosition(&ui.houseDropDownBox);
+            ui.onModeButton(3);
+            const auto picker=ui.windowWidget.getWidgetPosition(&ui.editorModeUnits_MainVBox);
+            menuRequire(picker.y==house.y+ui.houseDropDownBox.getSize().y+1,"Editor sidebar leaves a gap above the pickers");
         }
         ui.onModeButton(3);
         ui.editorModeUnits_ScrollView.scrollbar.setCurrentValue(10000);
@@ -1803,11 +1777,6 @@ int runMenuProbe() {
         SDL_ClearError();
         editor.drawMap(screenborder, false);
         menuRequire(SDL_GetError()[0] == '\0', "Editor city map rendering failed");
-        ui.loadMetaserverMap(path);
-        menuRequire(editor.refreshInterface,"Loading a map did not request its mod palette");
-        editor.refreshInterfaceIfNeeded();
-        menuRequire(editor.pInterface->cityStructsVisible_ && editor.getStructureList().size()==8,
-                    "Loading a map lost city palette or structures");
     }
     ModManager::instance().setActiveMod("vanilla");
     {
@@ -2154,13 +2123,13 @@ int runMenuProbe() {
         }
         menuRequire(foundNumeric, "Mod editor exposes no editable numeric unit stats");
         menu.nameText.setText("Workshop UI Edited");
-        menu.save(false);
+        menu.save();
         menuRequire(!menu.modified, "Save did not persist the mod draft");
         INIFile savedMetadata(path + "/mod.ini");
         menuRequire(savedMetadata.getStringValue("Test Metadata", "Preserved") == "yes",
                     "Mod metadata save discarded unrelated sections");
         const auto revision = Workshop::saveMod(draft);
-        menu.save(false);
+        menu.save();
         menuRequire(Workshop::saveMod(draft).version == revision.version,
                     "Unchanged editor Save allocated another version");
         menuCapture(menu,"mod-editor-saved");
@@ -2281,20 +2250,18 @@ int runMenuProbe() {
                     "Rejected LAN replacement damaged the verified local revision");
         SDL_Log("MENU_PROBE_LAN_REVISION_PASS: offline full-package import and asset tamper rejection");
     }
-    for(const std::string kind : {"map", "mod"}) {
-        auto menu=Workshop::createMetaserverMenu(kind,false);
-        auto* layout=dynamic_cast<StaticContainer*>(menu->getWindowWidget());
-        menuRequire(layout!=nullptr,"Metaserver loader has no layout");
-        bool load=false;
+    {
+        // The mod chooser no longer offers a catalogue download; its status line
+        // takes the whole row and every control stays on screen.
+        ModMenu menu;
+        const auto* layout=&menu.windowWidget;
         for(const auto& data:layout->containedWidgets) {
-            menuRequire(data.position.x>=0 && data.position.y>=0 && data.position.x+data.size.x<=menu->getSize().x
-                && data.position.y+data.size.y<=menu->getSize().y,"Metaserver control outside screen");
-            if(auto* button=dynamic_cast<TextButton*>(data.pWidget)) if(button->getText()=="Load") {
-                load=true; menuRequire(!button->isEnabled(),"Empty catalogue allows loading");
-            }
+            menuRequire(data.position.x>=0 && data.position.y>=0 && data.position.x+data.size.x<=menu.getSize().x
+                && data.position.y+data.size.y<=menu.getSize().y,"Mod chooser control outside screen");
+            if(auto* button=dynamic_cast<TextButton*>(data.pWidget))
+                menuRequire(button->getText().find("metaserver")==std::string::npos,"Mod chooser still offers the metaserver");
         }
-        menuRequire(load,"Metaserver load button missing");
-        menuCapture(*menu,"metaserver-"+kind+"-loader");
+        menuCapture(menu,"mod-chooser");
     }
     {
         // Receiving the first map must work before any editor or map browser has

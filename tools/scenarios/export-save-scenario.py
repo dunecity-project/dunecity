@@ -115,6 +115,11 @@ def parse_arguments():
                         help='Build a synthetic world first and convert that instead of --save')
     parser.add_argument('--fixture-map', type=Path, default=DEFAULT_FIXTURE_MAP,
                         help='Bundled map the synthetic world is built on')
+    parser.add_argument('--fixture-draft', metavar='NAME',
+                        help='Build the synthetic world on an authored copy of the mod, so the save '
+                             'pins an exact Workshop revision; the copy is then deleted and a '
+                             'retired sharing queue seeded, so loading must resolve the revision '
+                             'from the local store and drop the queue without publishing anything')
     parser.add_argument('--min-structures', type=int, default=0,
                         help='Fail unless the reloaded scenario holds at least this many structures. '
                              'Use it to prove a converted world is not merely a starting map.')
@@ -128,6 +133,8 @@ def parse_arguments():
     arguments = parser.parse_args()
     if not arguments.selftest and arguments.save is None:
         parser.error('--save is required unless --selftest is given.')
+    if arguments.fixture_draft is not None and not arguments.selftest:
+        parser.error('--fixture-draft needs --selftest.')
     if not 1 <= arguments.match_seconds <= 3600:
         parser.error('--match-seconds must be between 1 and 3600.')
     if not 1 <= arguments.search_radius <= 64:
@@ -206,6 +213,50 @@ def run_phase(binary, work, profile, name, extra_env, timeout=1800):
     if not any(('SCENARIO_EXPORT_PASS: ' + name) in line for line in lines):
         raise RuntimeError('Phase ' + name + ' did not pass; see ' + str(log_path))
     return lines
+
+
+def prepare_pinned_save_profile(profile, draft, fixture_lines):
+    """Leave the save's authored mod only in the revision store, beside a retired queue.
+
+    Deletes the draft and its installed ws-<hash> copy, so loading must rebuild the mod from
+    workshop/revisions, and seeds workshop/outbox the way releases before 2026-10-18 left it.
+    """
+    revisions = [line.split('SCENARIO_EXPORT_FIXTURE_REVISION: ', 1)[1].strip()
+                 for line in fixture_lines if 'SCENARIO_EXPORT_FIXTURE_REVISION: ' in line]
+    if len(revisions) != 1 or len(revisions[0]) != 64:
+        raise RuntimeError('The fixture did not report the save\'s pinned mod revision.')
+    revision = revisions[0]
+    if not (profile / 'workshop/revisions' / revision / 'manifest').is_file():
+        raise RuntimeError('The pinned mod revision is not in the local store: ' + revision)
+    for installed in (profile / 'mods' / draft, profile / 'mods' / ('ws-' + revision)):
+        shutil.rmtree(installed, ignore_errors=True)
+        if installed.exists():
+            raise RuntimeError('Could not remove ' + str(installed))
+    # The two entry forms older releases wrote: a map collection and a host publication.
+    outbox = profile / 'workshop/outbox'
+    outbox.mkdir(parents=True, exist_ok=True)
+    (outbox / revision).write_text('collect')
+    (outbox / ('a' * 64)).write_text('a' * 64)
+    return revision
+
+
+def check_pinned_save_load(work, profile, revision, facts):
+    """The save loaded on its exact revision, from the store, and nothing was published."""
+    loaded = scalar(facts, 'mod', convert=str, default='')
+    if loaded != 'ws-' + revision:
+        raise RuntimeError('The save loaded on ' + repr(loaded) + ' instead of its pinned revision '
+                           'ws-' + revision + '.')
+    if (profile / 'workshop/outbox').exists():
+        raise RuntimeError('The retired sharing queue survived opening the revision store.')
+    log = (work / 'run-export.log').read_text(errors='replace')
+    if 'Workshop: removed the retired automatic sharing queue' not in log:
+        raise RuntimeError('Removing the retired sharing queue was not logged.')
+    for retired in ('queued sharing', 'community catalogue', '/v1/content/'):
+        if retired in log:
+            raise RuntimeError('Loading the save still reached the sharing path: ' + retired)
+    print('SCENARIO_EXPORT_PINNED_SAVE: loaded ws-' + revision + ' from the revision store; '
+          'retired queue removed; no publication')
+
 
 
 def read_facts(path):
@@ -362,10 +413,17 @@ def main():
             fixture_map = arguments.fixture_map.resolve()
             if not fixture_map.is_file():
                 raise SystemExit('No such fixture map: ' + str(fixture_map))
-            run_phase(binary, work, profile, 'fixture', {
+            fixture_env = {
                 'SCENARIO_EXPORT_SAVE': str(save),
                 'SCENARIO_EXPORT_FIXTURE_MAP': str(fixture_map),
-            })
+            }
+            if arguments.fixture_draft:
+                shutil.rmtree(profile / 'mods' / arguments.fixture_draft, ignore_errors=True)
+                fixture_env['SCENARIO_EXPORT_FIXTURE_DRAFT'] = arguments.fixture_draft
+            fixture_lines = run_phase(binary, work, profile, 'fixture', fixture_env)
+            if arguments.fixture_draft:
+                pinned_mod = prepare_pinned_save_profile(profile, arguments.fixture_draft, fixture_lines)
+                report['inputs']['pinned_mod_revision'] = pinned_mod
             report['inputs']['fixture_map_sha256'] = hashlib.sha256(
                 fixture_map.read_bytes()).hexdigest()
             # Overwriting a map whose revision sidecar names a revision the local Workshop
@@ -387,6 +445,8 @@ def main():
             'SCENARIO_EXPORT_AUTHOR': arguments.author,
             'SCENARIO_EXPORT_SEARCH_RADIUS': str(arguments.search_radius),
         })
+        if arguments.fixture_draft:
+            check_pinned_save_load(work, profile, pinned_mod, read_facts(facts_path))
         # The input save must come out byte-identical: this tool only reads it.
         if hashlib.sha256(save.read_bytes()).hexdigest() != report['inputs']['save_sha256']:
             raise RuntimeError('The exporter modified its input save.')

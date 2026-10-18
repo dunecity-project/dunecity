@@ -42,7 +42,7 @@ private:
     void onResetSlot();
     void onReloadMounts();
     void onAssets();
-    void onSaveVersion(bool share);
+    void onSaveVersion();
     void onBack();
     void rebuildStateEntries();
     void rebuildDirectionEntries();
@@ -73,7 +73,6 @@ private:
     TextButton assetsButton;
     TextButton backButton;
     TextButton saveVersionButton;
-    TextButton shareButton;
     std::unique_ptr<Dune2RPreviewWidget> previewWidget;
     std::vector<GFXManager::EnhancedUnitEditorInfo> units;
 };

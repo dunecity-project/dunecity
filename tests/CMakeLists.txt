@@ -11,7 +11,6 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
-        MapCollectionTestCase.cpp
         # Random Skirmish generator: the pure generator over the real map generator/mirror.
         SkirmishGeneratorTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
@@ -194,7 +193,8 @@ target_compile_options(dunelegacy_tests
 # Add test
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
-add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+# Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
+add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
 add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
@@ -405,7 +405,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -441,6 +441,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
             --selftest --force --match-seconds 10 --min-structures 4 --min-units 19)
         set_tests_properties(save_scenario_export PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A save pinned to an authored mod's exact Workshop revision loads once the mod
+        # exists only in workshop/revisions, and a retired upload queue in that profile is
+        # deleted without any publication.
+        add_test(NAME save_pinned_workshop_revision COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
+            --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/pinned-revision-save
+            --selftest --fixture-draft "Pinned Draft" --force --match-seconds 5)
+        set_tests_properties(save_pinned_workshop_revision PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         add_test(NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
         set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)

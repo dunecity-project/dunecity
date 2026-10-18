@@ -100,11 +100,12 @@ int main(int argc,char** argv) {
         write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Smoke\n");
         const auto mapID=Workshop::newID();
         auto map=Workshop::store().capture("map",mapID,"Wire map","",mod.hash,mapSource);
-        client.publish(map,false);finish(client);check(client.result().version==1,"Wrong map version");
+        client.publish(map);finish(client);check(client.result().version==1,"Wrong map version");
         write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Smoke\nChanged=yes\n");
         auto map2=Workshop::store().capture("map",mapID,"Wire map","",mod.hash,mapSource);
         client.publish(map2);finish(client);check(client.result().version==2,"Changed share did not allocate version2");
         // Independent profile starts with no files and must fetch the complete exact dependency.
+        // The first manifest request is answered with HTTP 429 and retried by the client.
         Workshop::testStore=std::make_unique<Workshop::Store>(root/"recipient");
         client.download(map2.hash);finish(client);
         auto downloaded=Workshop::store().get(map2.hash);
@@ -115,7 +116,6 @@ int main(int argc,char** argv) {
         write(fs::path(downloaded.directory)/"map.ini","corrupt");
         client.download(map2.hash);finish(client);
         check(Workshop::store().get(map2.hash).hash==map2.hash,"Corrupt cache was not repaired");
-        client.browse("map");finish(client);check(client.items().size()==2,"Catalog did not retain both map versions");
         // Public exact snapshots may be re-shared without stealing ownership.
         client.publish(Workshop::store().get(map2.hash));finish(client);check(client.result().version==2,"Mirror changed shared numbering");
         write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Someone else\n");
@@ -124,46 +124,7 @@ int main(int argc,char** argv) {
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
         while(client.status()==Workshop::Client::Status::Busy&&std::chrono::steady_clock::now()<deadline){client.update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         check(client.status()==Workshop::Client::Status::Failed,"Borrower changed the original author's lineage");
-        // Automatic collection from a started offline match. A second player holds the same
-        // scenario on the same mod, but local item identity is per-creator, so their revision
-        // hash differs. The content preflight must recognise it and record a receipt instead
-        // of uploading a duplicate; genuinely new content must still be uploaded.
-        Workshop::testStore=std::make_unique<Workshop::Store>(root/"collector");
-        auto sameMod=Workshop::store().capture("mod",mod.id,"Wire test","Dune2R","",modSource);
-        check(sameMod.hash==mod.hash,"The same installed mod must capture to the same revision");
-        write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Smoke\n");
-        auto copy=Workshop::store().capture("map",Workshop::newID(),"Wire map","",sameMod.hash,mapSource);
-        check(copy.hash!=map.hash,"The second player's copy should carry its own local identity");
-        client.browseMaps();finish(client);
-        const auto knownMaps=client.items().size();
-        client.collect(copy);finish(client);
-        check(Workshop::store().collected(copy.hash),"A known map left no collection receipt");
-        check(!Workshop::store().shared(copy.hash),"Collection claimed a shared version the server never assigned");
-        client.browseMaps();finish(client);
-        check(client.items().size()==knownMaps,"Collecting a known map added catalogue storage");
-        write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Smoke\nCollected=yes\n");
-        auto fresh=Workshop::store().capture("map",Workshop::newID(),"Wire map","",sameMod.hash,mapSource);
-        client.collect(fresh);finish(client);
-        check(Workshop::store().shared(fresh.hash),"A new scenario was not uploaded and versioned");
-        client.browseMaps();finish(client);
-        check(client.items().size()==knownMaps+1,"A new scenario did not reach the catalogue");
-        // An unavailable service leaves the queued scenario intact and later retries.
-        write(mapSource/"map.ini","[BASIC]\nVersion=2\nAuthor=Smoke\nOffline=yes\n");
-        auto offline=Workshop::store().capture("map",Workshop::newID(),"Offline map","",sameMod.hash,mapSource);
-        settings.network.directDevelopmentEndpoint="http://127.0.0.1:1";
-        Workshop::queueCollection(offline);
-        const auto outbox=Workshop::store().root()/"outbox"/offline.hash;
-        for(int n=0;n<100;++n) { Workshop::updatePublications();std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
-        check(fs::exists(outbox),"An unavailable server lost the queued map");
-        check(!Workshop::store().shared(offline.hash)&&!Workshop::store().collected(offline.hash),
-              "An unavailable server was recorded as collection success");
-        settings.network.directDevelopmentEndpoint=argv[1];
-        const auto retryDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
-        while(fs::exists(outbox)&&std::chrono::steady_clock::now()<retryDeadline) {
-            Workshop::updatePublications();std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        check(!fs::exists(outbox)&&Workshop::store().shared(offline.hash),"Queued collection failed to recover");
-        std::cout<<"PASS: real client/server resume, duplicate large assets, dependency closure, versions, cache repair, rate-limit retry, owner rejection and cross-creator map collection\n";
+        std::cout<<"PASS: real client/server resume, duplicate large assets, dependency closure, versions, cache repair, rate-limit retry and owner rejection\n";
         return 0;
     }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

@@ -48,6 +48,21 @@ TEST_CASE("Workshop downloaded bytes must match manifest and corrupt cache can b
     REQUIRE(other.get(r.hash).hash==r.hash);
     REQUIRE_THROWS(other.importRevision(r.manifest,std::string(64,'0'),1,r.directory));
 }
+TEST_CASE("Opening a profile drops the retired sharing queue and keeps every revision","[workshop][outbox]") {
+    namespace fs=std::filesystem;
+    Fixture f;auto mod=f.save();
+    // An older release left queued uploads and a collection receipt beside the revision.
+    const auto cache=f.root/"cache";
+    fs::create_directories(cache/"outbox");
+    for(const auto& marker:{mod.hash,std::string(64,'c')}) std::ofstream(cache/"outbox"/marker)<<"collect";
+    std::ofstream(cache/"revisions"/mod.hash/"collected")<<std::string(64,'d');
+    Workshop::Store reopened(cache);
+    REQUIRE_FALSE(fs::exists(cache/"outbox"));
+    REQUIRE(reopened.get(mod.hash).hash==mod.hash);
+    REQUIRE(reopened.list("mod").size()==1);
+    Workshop::Store again(cache); // A later start has nothing left to remove.
+    REQUIRE(again.get(mod.hash).hash==mod.hash);
+}
 TEST_CASE("Workshop rejects unsafe paths case aliases and noncanonical manifests","[workshop]") {
     Fixture f;auto r=f.save();
     auto bad=r.manifest;bad.replace(bad.find("kind=mod"),8,"kind=map");REQUIRE_THROWS(Workshop::parseManifest(bad));

@@ -56,13 +56,8 @@ ModMenu::ModMenu(Purpose purpose) : purpose(purpose) {
     createButton.setText(_("Create Copy"));
     createButton.setOnClick([this]() { onCreateNew(); });
     windowWidget.addWidget(&createButton, Point(x+width-140,y+height-100), Point(140,28));
-    metaserverButton.setText(_("Load from metaserver"));
-    metaserverButton.setTooltipText(_("Download mods published on the metaserver"));
-    metaserverButton.setOnClick([this]() { onLoadFromMetaserver(); });
-    const int metaserverWidth = std::max(150, metaserverButton.getMinimumSize().x + 8);
-    windowWidget.addWidget(&metaserverButton, Point(x+width-metaserverWidth,y+height-66), Point(metaserverWidth,28));
     statusLabel.setTextFontSize(12);
-    windowWidget.addWidget(&statusLabel, Point(x,y+height-68), Point(width-metaserverWidth-10,26));
+    windowWidget.addWidget(&statusLabel, Point(x,y+height-68), Point(width,26));
     editButton.setText(purpose == Purpose::ModEditor ? _("Edit Draft") : _("Open Editor"));
     editButton.setOnClick([this]() { onEdit(); });
     windowWidget.addWidget(&editButton, Point(x,y+height-32), Point(width/2-8,32));
@@ -111,18 +106,6 @@ void ModMenu::updateModDetails() {
     statusLabel.setText((purpose != Purpose::MapEditor && bundledMod(mod.name)) || immutableMod(mod.name)
         ? _("Bundled and shared versions are protected. Create a copy to edit.")
         : _("The selected mod is used only for this editor session."));
-}
-
-void ModMenu::onLoadFromMetaserver() {
-    const int index = modListBox.getSelectedIndex();
-    const std::string selected = index >= 0 && index < static_cast<int>(mods.size()) ? mods[index].name : std::string();
-    try {
-        Workshop::openMetaserverMods();
-    } catch(const std::exception& error) {
-        openWindow(MsgBox::create(std::string(_("Could not open the metaserver mods: ")) + error.what()));
-    }
-    // Downloads install read-only snapshots; refresh so they appear (and stay protected from editing).
-    refreshModList(selected);
 }
 
 void ModMenu::onCreateNew() {

@@ -194,11 +194,8 @@ Dune2REditorMenu::Dune2REditorMenu() {
     backButton.setText(_("BACK"));
     backButton.setOnClick(std::bind(&Dune2REditorMenu::onBack, this));
     saveVersionButton.setText(_("Save Version"));
-    saveVersionButton.setOnClick([this]() { onSaveVersion(false); });
-    shareButton.setText(_("Save to metaserver"));
-    shareButton.setOnClick([this]() { onSaveVersion(true); });
-    windowWidget.addWidget(&saveVersionButton, Point(originX + 25, originY + panelHeight - 80), Point(245,28));
-    windowWidget.addWidget(&shareButton, Point(originX + 284, originY + panelHeight - 80), Point(245,28));
+    saveVersionButton.setOnClick([this]() { onSaveVersion(); });
+    windowWidget.addWidget(&saveVersionButton, Point(originX + 25, originY + panelHeight - 80), Point(504,28));
     const int buttonY = originY + panelHeight - 42;
     windowWidget.addWidget(&assetsButton, Point(originX + 25, buttonY), Point(90, 28));
     windowWidget.addWidget(&reloadButton, Point(originX + 123, buttonY), Point(112, 28));
@@ -387,7 +384,7 @@ void Dune2REditorMenu::onApply() {
         openWindow(MsgBox::create(_("Could not save this animation setting.")));
         return;
     }
-    onSaveVersion(false);
+    onSaveVersion();
 }
 
 void Dune2REditorMenu::onResetSlot() {
@@ -402,7 +399,7 @@ void Dune2REditorMenu::onResetSlot() {
         return;
     }
     refreshSelection();
-    onSaveVersion(false);
+    onSaveVersion();
 }
 
 void Dune2REditorMenu::onReloadMounts() {
@@ -416,16 +413,15 @@ void Dune2REditorMenu::onAssets() {
     menu.showMenu();
     pGFXManager->reloadEnhancedUnitMounts();
     rebuildUnitEntries();
-    onSaveVersion(false);
+    onSaveVersion();
 }
 
-void Dune2REditorMenu::onSaveVersion(bool share) {
+void Dune2REditorMenu::onSaveVersion() {
     try {
         const auto revision = Workshop::saveMod(ModManager::instance().getActiveModName());
         refreshStatus(_("Saved mod version ") + std::to_string(revision.version));
-        if(share) Workshop::shareRevision(revision);
     } catch(const std::exception& error) {
-        openWindow(MsgBox::create(std::string(_("Could not save or share assets: ")) + error.what()));
+        openWindow(MsgBox::create(std::string(_("Could not save assets: ")) + error.what()));
     }
 }
 

@@ -33,7 +33,6 @@
 #include <mod/ModManager.h>
 #include <mod/Workshop.h>
 #include <Network/OnlineModPolicy.h>
-#include <mod/WorkshopClient.h>
 #include <mod/ModTransferValidation.h>
 
 #include <globals.h>
@@ -666,7 +665,6 @@ void NetworkManager::disconnect() {
 
 void NetworkManager::update()
 {
-    Workshop::updatePublications();
     if(isRoomSession()) {
         updateRelaySession();
         updateLateJoin();
