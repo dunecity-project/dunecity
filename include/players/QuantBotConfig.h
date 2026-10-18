@@ -137,7 +137,8 @@ struct QuantBotConfig {
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
-    /// FinishWeakest, FortifiedWaves, SonicClearLane; optional keys, the code defaults
+    /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault;
+    /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -185,6 +186,17 @@ struct QuantBotConfig {
         /// wave runs about nine tiles and hurts all but sonic tanks) shoots the nearest other
         /// enemy in its reach with a clear lane instead.
         bool sonicClearLane;
+        /// Round 2 late-game candidates (docs/formations.md, "Free-for-all: finishing the game").
+        /// Banked credits above a reserve raise the production budget above the military limit
+        /// (at most double), spent only on siege tanks, launchers and specials.
+        bool spendAtCap;
+        /// Wave launchers shell known enemy turrets from beyond the turrets' reach while the
+        /// wave's other ground units hold short of that reach, guarding them.
+        bool siegeStandoff;
+        /// Against an objective guarded by many seen turrets the army waits (at most four
+        /// minutes) for 70% of the military limit, then everything hunts towards one objective
+        /// of the weakest known house.
+        bool massAssault;
     };
     ForceSettings force;
 

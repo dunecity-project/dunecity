@@ -75,7 +75,8 @@ GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wal
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
-                     'finish_waves', 'fortified_holds', 'sonic_retargets', 'strategy')
+                     'finish_waves', 'fortified_holds', 'sonic_retargets', 'surplus_peak', 'siege_orders',
+                     'siege_holds', 'assault_holds', 'assault_waves', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive')

@@ -194,9 +194,14 @@ bool QuantBot::overridesMilitaryValueCap() const {
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
-    if (!overridesMilitaryValueCap()) return militaryValueLimit;
-    return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
-                                                      productionCash, largestUnitValue);
+    if (overridesMilitaryValueCap())
+        return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
+                                                          productionCash, largestUnitValue);
+    // M (SpendAtCap, test-only): banked credits above the reserve buy heavy units beyond the
+    // limit (QuantBotBuild.cpp keeps the other producers at the limit).
+    if (forceVariant(kForceSpendAtCap))
+        return int(militaryValueLimit + ForceConcentrationPolicy::surplusBudget(militaryValueLimit, productionCash));
+    return militaryValueLimit;
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
@@ -604,9 +609,9 @@ void QuantBot::update() {
 	}
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
-    // R and U and the late-game target choice H read it), before anything this pass consults it.
+    // R and U and the late-game target choices H and Z read it), before anything this pass consults it.
     if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
-                     | kForceFinishWeakest) || style().counterBps > 0
+                     | kForceFinishWeakest | kForceMassAssault) || style().counterBps > 0
         || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front

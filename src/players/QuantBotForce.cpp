@@ -98,7 +98,8 @@ int QuantBot::forceBits() const {
         | (force.sizedDefence ? kForceSizedDefence : 0) | (force.openingReadiness ? kForceOpeningReadiness : 0)
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
         | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
-        | (force.sonicClearLane ? kForceSonicClearLane : 0);
+        | (force.sonicClearLane ? kForceSonicClearLane : 0) | (force.spendAtCap ? kForceSpendAtCap : 0)
+        | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
@@ -419,6 +420,10 @@ void QuantBot::concentrateForces() {
     const bool turretsFirst = forceVariant(kForceTurretPriority), sonicLanes = forceVariant(kForceSonicClearLane);
     if (forceVariant(kForceMuster) || !musters.empty()) updateMusters();
     if (!splits.empty()) updateSplits();
+    // O (siege standoff) first: what it orders or holds takes no other targeting rule this pass.
+    std::set<Uint32> sieging;
+    if (forceVariant(kForceSiegeStandoff)) siegeStandoff(sieging);
+    else siegeHeld.clear();
     if (!focus && !convergeOn && !noOverkill && !turretsFirst && !sonicLanes) return;
     AITelemetry::PerformanceScope perfScope("ai.concentrateForces", getGameCycleCount(), getHouse()->getHouseID());
     const int myTeam = getHouse()->getTeamID();
@@ -476,7 +481,7 @@ void QuantBot::concentrateForces() {
         focusFireNoOverkill(hunters, enemies);
     }
     for (const auto* unit : getUnitList()) {
-        if (!hunter(unit) || escaping(unit)) continue;
+        if (!hunter(unit) || escaping(unit) || sieging.count(unit->getObjectID())) continue;
         if (sonicLanes && unit->getItemID() == Unit_SonicTank && sonicClearTarget(unit, enemies, friends)) continue;
         if (!turrets.empty() && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave && attackTurretInReach(unit, turrets))
             continue;
@@ -555,6 +560,98 @@ bool QuantBot::sonicClearTarget(const UnitBase* unit, const std::vector<const Ob
     doAttackObject(unit, best, false);
     ++forceStats.sonicRetargets;
     return true;
+}
+
+void QuantBot::siegeStandoff(std::set<Uint32>& handled) {
+    const Uint32 now = getGameCycleCount();
+    const int myTeam = getHouse()->getTeamID();
+    // Known enemy turrets (explored, not necessarily in sight: buildings do not move), list order.
+    std::vector<const StructureBase*> turrets;
+    for (const auto* structure : getStructureList())
+        if (structure->canAttack() && knownEnemyStructure(structure)) turrets.push_back(structure);
+    // The nearest of them to \a at within \a reach(turret) tiles, or nullptr (ties: list order).
+    auto nearestTurret = [&](Coord at, auto reach) {
+        const StructureBase* best = nullptr;
+        int bestDistance = 0;
+        for (const auto* turret : turrets) {
+            const int distance = tiles(at, turret->getClosestPoint(at));
+            if (distance > reach(turret) || (best && distance >= bestDistance)) continue;
+            best = turret; bestDistance = distance;
+        }
+        return best;
+    };
+    auto waveMember = [&](const UnitBase* unit) {
+        return unit->getOwner() == getHouse() && unit->getHealth() > 0 && unit->isActive() && unit->isRespondable()
+            && unit->isAGroundUnit() && unit->canAttack() && mobileCombatItem(unit->getItemID())
+            && unit->getItemID() != Unit_Deviator && !unit->wasForced()
+            && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free
+            && unitRole(unit, {UnitRole::Wave}) == UnitRole::Wave;
+    };
+    // Shooting an armed enemy unit in its reach: such a unit keeps its fight.
+    auto fighting = [&](const UnitBase* unit) {
+        const ObjectBase* target = unit->getTarget();
+        return target && target->getHealth() > 0 && target->getOwner() && target->getOwner()->getTeamID() != myTeam
+            && !target->isAStructure() && armed(target) && unit->isInWeaponRange(target);
+    };
+    // 1. Launchers shell the nearest known turret within their reach plus kSiegeReachTiles.
+    std::vector<Coord> launchers;
+    if (!turrets.empty())
+        for (const auto* unit : getUnitList()) {
+            if (unit->getItemID() != Unit_Launcher || !waveMember(unit) || unit->getAttackMode() != HUNT) continue;
+            if (closeThreatWhileHunting(unit) != nullptr || fighting(unit)) continue;
+            const int range = unit->getWeaponRange();
+            const auto* turret = nearestTurret(unit->getLocation(),
+                [&](const StructureBase*) { return range + Force::kSiegeReachTiles; });
+            if (!turret || !unit->canAttack(turret)) continue;
+            launchers.push_back(unit->getLocation());
+            handled.insert(unit->getObjectID());
+            if (unit->getTarget() == turret) continue;
+            doAttackObject(unit, turret, false);
+            ++forceStats.siegeOrders;
+        }
+    auto launchersNear = [&](Coord at) {
+        int n = 0;
+        for (const Coord& launcher : launchers) if (tiles(at, launcher) <= Force::kSiegeEscortTiles) ++n;
+        return n;
+    };
+    auto holdReach = [](const StructureBase* turret) { return turret->getWeaponRange() + Force::kSiegeHoldMarginTiles; };
+    // 2. Held escorts: released (back to engine Hunt) when the hold is over.
+    for (auto it = siegeHeld.begin(); it != siegeHeld.end();) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(it->first));
+        if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0 || !unit->isActive()) {
+            it = siegeHeld.erase(it);
+            continue;
+        }
+        const bool over = ArmyPosturePolicy::elapsed(now, it->second) >= Uint32(MILLI2CYCLES(Force::kSiegeMaxHoldMs))
+            || launchersNear(unit->getLocation()) < Force::kSiegeMinLaunchers
+            || !nearestTurret(unit->getLocation(), [&](const StructureBase* t) { return holdReach(t) + 1; });
+        if (over) {
+            if (unit->isRespondable() && unit->getAttackMode() == GUARD) doSetAttackMode(unit, HUNT);
+            it = siegeHeld.erase(it);
+            continue;
+        }
+        handled.insert(it->first);
+        ++it;
+    }
+    if (launchers.size() < size_t(Force::kSiegeMinLaunchers)) return;
+    // 3. Hunting wave members about to walk into a turret's reach while launchers are near them
+    //    guard a point kSiegeHoldMarginTiles outside that reach, on their side of the turret.
+    for (const auto* unit : getUnitList()) {
+        if (unit->getItemID() == Unit_Launcher || !waveMember(unit) || unit->getAttackMode() != HUNT) continue;
+        if (handled.count(unit->getObjectID()) || siegeHeld.count(unit->getObjectID()) || fighting(unit)) continue;
+        const Coord at = unit->getLocation();
+        const auto* turret = nearestTurret(at, holdReach);
+        if (!turret || launchersNear(at) < Force::kSiegeMinLaunchers) continue;
+        const Coord edge = turret->getClosestPoint(at);
+        const auto offset = BlobWavePolicy::scaled(at.x - edge.x, at.y - edge.y, holdReach(turret));
+        Coord point = edge + Coord(offset.first, offset.second);
+        if (!getMap().tileExists(point) || !unit->canPass(point.x, point.y)) point = at;
+        doSetAttackMode(unit, GUARD);
+        doMove2Pos(unit, point.x, point.y, false);
+        siegeHeld.emplace(unit->getObjectID(), std::max<Uint32>(1, now));
+        handled.insert(unit->getObjectID());
+        ++forceStats.siegeHolds;
+    }
 }
 
 bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {

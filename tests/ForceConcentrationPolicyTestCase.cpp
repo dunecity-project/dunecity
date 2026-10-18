@@ -282,3 +282,14 @@ TEST_CASE("Force: a sonic wave's path runs past the target and one tile either s
     REQUIRE_FALSE(inSonicPath(3, 3, 1, 4));                 // 2.1 tiles off it
     REQUIRE_FALSE(inSonicPath(0, 0, 1, 0));                 // no direction
 }
+
+TEST_CASE("Force: banked credits buy at most the limit again above it; a mass assault waits for 70%", "[ai][force]") {
+    REQUIRE(surplusBudget(100000, 0) == 0);
+    REQUIRE(surplusBudget(100000, kSurplusReserveCredits) == 0);
+    REQUIRE(surplusBudget(100000, kSurplusReserveCredits + 25000) == 25000);
+    REQUIRE(surplusBudget(100000, 1000000) == 100000 * kSurplusMaxPercent / 100);   // capped
+    REQUIRE(surplusBudget(0, 1000000) == 0);
+    REQUIRE(assaultReady(7000, 100000, kFortifiedTurrets - 1) == 7000);
+    REQUIRE(assaultReady(7000, 100000, kFortifiedTurrets) == 100000 * kAssaultLimitPercent / 100);
+    REQUIRE(assaultReady(90000, 100000, 40) == 90000);
+}

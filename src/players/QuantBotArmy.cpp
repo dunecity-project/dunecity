@@ -931,6 +931,30 @@ void QuantBot::launchGroundHunt() {
                     return;
                 }
             }
+            // Mass assault (Z, test-only, docs/formations.md "Free-for-all: finishing the game"):
+            // the objective is the weakest known house's (H's choice); when it is fortified the
+            // ready wave keeps bundling until it is worth kAssaultLimitPercent of the military
+            // limit, at most until kAssaultMaxHoldMs after the last wave left.
+            if (forceVariant(kForceMassAssault)) {
+                const UnitBase* lead=nullptr;
+                for (const auto& candidate : candidates) {
+                    const auto* unit=dynamic_cast<const UnitBase*>(getObject(candidate.id));
+                    if (unit && unit->isAGroundUnit() && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
+                }
+                const ObjectBase* objective=finishObjective(lead,finishTargetTeam());
+                if (!objective) objective=customWaveObjective(lead);
+                const int turrets=knownTurretsNear(objective);
+                const int64_t needed=ForceConcentrationPolicy::assaultReady(requiredReady,militaryValueLimit,turrets);
+                const bool overdue=ArmyPosturePolicy::elapsed(getGameCycleCount(),customWave.launched)
+                    >=Uint32(MILLI2CYCLES(ForceConcentrationPolicy::kAssaultMaxHoldMs));
+                if (availableValue<needed && !overdue) {
+                    ++forceStats.assaultHolds;
+                    attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
+                    traceDecision("attack_deferred",AITelemetry::Record().set("reason","mass_assault")
+                        .set("turrets",turrets).set("needed",needed).set("available_value",availableValue));
+                    return;
+                }
+            }
             // Strength-aware waves (A, test-only, docs/formations.md "Round 5"): a ready wave
             // leaves only when it is worth forceStrengthBps of the remembered enemy army; until
             // then it keeps bundling.
@@ -1080,8 +1104,9 @@ void QuantBot::launchGroundHunt() {
         return Coord::Invalid();
     };
     std::vector<const UnitBase*> hunters;                      // engine-Hunt ground members
-    std::vector<const UnitBase*> finishers;                    // H: hunt towards the weakest house
-    const bool finishWave=trackedCustomWave && wholeArmy && forceVariant(kForceFinishWeakest);
+    std::vector<const UnitBase*> finishers;                    // H / Z: hunt towards the weakest house
+    const bool massAssault=trackedCustomWave && wholeArmy && forceVariant(kForceMassAssault);
+    const bool finishWave=trackedCustomWave && wholeArmy && (forceVariant(kForceFinishWeakest) || massAssault);
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
@@ -1182,18 +1207,21 @@ void QuantBot::launchGroundHunt() {
     }
     // Finish the weakest (H): the plain Hunt wave hunts its way towards the weakest known enemy
     // house's production and economy; each member stops for what it meets on the way (doHuntToward).
+    // Mass assault (Z): the same objective, every member to one point of it (the lead's side).
     int finishTeam=-1;
     if (!finishers.empty()) {
         const UnitBase* lead=nullptr;
         for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
         finishTeam=finishTargetTeam();
         const ObjectBase* objective=finishObjective(lead,finishTeam);
+        if (!objective && massAssault) objective=observedFront;
+        const Coord point=objective ? objective->getClosestPoint(lead->getLocation()) : Coord::Invalid();
         for (const auto* unit : finishers) {
             if (!objective) { doSetAttackMode(unit,HUNT); continue; }
-            const Coord goal=objective->getClosestPoint(unit->getLocation());
+            const Coord goal=massAssault ? point : objective->getClosestPoint(unit->getLocation());
             doHuntToward(unit,goal.x,goal.y);
         }
-        if (objective) ++forceStats.finishWaves;
+        if (objective) ++(massAssault ? forceStats.assaultWaves : forceStats.finishWaves);
     }
     if (!partyUnits.empty()) startHuntParty(partyUnits,observedFront);
     if (!splitUnits.empty() && !startSplit(splitUnits,observedFront))
