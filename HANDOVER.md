@@ -15,10 +15,14 @@ section 7; data `docs/formation-results/play-styles/ratios/`; raw ~/Documents/pr
   0.51/0.54/0.52 (Atreides/Harkonnen/Ordos). Bounded v unbounded control 0.500, n=108. Within-house
   starting-share effects are small (coefficients ~1-2 SE); winners' and losers' end compositions are
   the same (the learning converges); siege tanks are the most cost-effective unit for every house.
-- **Default unchanged** (`Fixed:Learned,Swarm`, configured ratios bounded). Round-1 tuned candidates
-  (`tests/ai/play-styles/r1-*.ini`) were running at hand-off: `t1-mini` (queue), `t1-pro`, `pB-win`
-  (Mode=Random, Bounded only, v control), rest of `rR-air`. Still to do: round 2, Base tempo, Fortress,
-  Brutal, `/weak`, all-against-Atreides and learning on/off for the best tuned mix.
+- **Bounds per game, not per pass.** Bounding again over each pass's producible slots failed
+  `quantbot_all_against_atreides` (seed 41562270, 5/6); bounds over the game's producible slots, then
+  masked per pass, pass it 6/6. The 3,094 randomised and 108 bounds-control games used the per-pass version.
+- **Default unchanged** (`Fixed:Learned,Swarm`, configured ratios bounded). Round-1 candidates
+  (`tests/ai/play-styles/r1-*.ini`) and `pB-win` (Mode=Random, Bounded only) were stopped (old binary).
+  To do on the final rule (re-sync runners first): round 1/2, Base tempo, Fortress, Brutal, `/weak`,
+  all-against-Atreides and learning on/off for the best tuned mix, the production-option arm; rescore with
+  `test/match-scoring` when it lands.
 - **Infra.** Stopping a Pro batch via its run-batch (SIGTERM) left 8 orphaned balance-probes in the batch's
   process group (ppid 1); killed by group. Windows parity: digests/houses identical, only the known ±0.1 s
   timing fields.

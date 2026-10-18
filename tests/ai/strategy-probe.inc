@@ -441,11 +441,12 @@ struct Production {
 };
 
 /// The mix the bot plays with no combat evidence at this pass: the configured opening over the
-/// available slots with the strategy's prior in place of priorBps of it, bounded (every available
-/// slot 2%-50%), then the mobile anti-air floor if that pass applied one (QuantBotBuild.cpp).
-/// \a start gets the bounded starting mix before the floor.
+/// available slots with the strategy's prior in place of priorBps of it, bounded (every slot the
+/// house can produce 2%-50%), then the mobile anti-air floor if that pass applied one (QuantBotBuild.cpp).
+/// \a start gets the bounded starting mix over the slots the house can produce in the game (and
+/// now), \a slots those slots; the pass plays it masked to the producible slots, renormalised.
 inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const std::array<bool, 8>& available, int antiAirFloorBps,
-                                   bool& counterPlayed, UnitMixPolicy::Mix& start) {
+                                   bool& counterPlayed, UnitMixPolicy::Mix& start, std::array<bool, 8>& slots) {
     const int houseID = bot.getHouse()->getHouseID();
     const auto& ratios = bot.botConfig().getRatios(houseID);
     UnitMixPolicy::Weights configured{};
@@ -454,17 +455,21 @@ inline UnitMixPolicy::Mix priorMix(const QuantBot& bot, const std::array<bool, 8
     configured[2] = static_cast<int>(ratios.launcher * 10000);
     configured[3] = static_cast<int>(ratios.special * 10000);
     configured[4] = static_cast<int>(ratios.ornithopter * 10000);
-    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+    slots = bot.fieldableMixSlots();
+    for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];
+    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
     UnitMixPolicy::Weights defaults{};
     for (size_t i = 0; i < 8; ++i) defaults[i] = opening[i];
     counterPlayed = false;
     if (const auto* profile = bot.strategyMix()) {
         const UnitMixPolicy::Weights prior = profile->counter ? bot.enemyCounterPrior() : profile->prior;
         counterPlayed = profile->counter && *std::max_element(prior.begin(), prior.end()) > 0;
-        defaults = QuantBotStrategy::applyPrior(defaults, prior, profile->priorBps, available);
+        defaults = QuantBotStrategy::applyPrior(defaults, prior, profile->priorBps, slots);
     }
-    start = QuantBotStrategy::bound(defaults, available);
-    const auto& mix = start;
+    start = QuantBotStrategy::bound(defaults, slots);
+    UnitMixPolicy::Weights masked{};
+    for (size_t i = 0; i < 8; ++i) masked[i] = available[i] ? start[i] : 0;
+    const auto mix = UnitMixPolicy::normalize(masked);
     return antiAirFloorBps > 0 ? UnitMixPolicy::applyFloor(mix, 2, antiAirFloorBps) : mix;
 }
 
@@ -538,12 +543,13 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             production.airFloorPasses += snapshot.antiAirFloorBps > 0 ? 1 : 0;
             bool counterPlayed = false;
             UnitMixPolicy::Mix start{};
-            const auto expected = priorMix(*bot, available, snapshot.antiAirFloorBps, counterPlayed, start);
+            std::array<bool, 8> slots{};
+            const auto expected = priorMix(*bot, available, snapshot.antiAirFloorBps, counterPlayed, start, slots);
             const bool same = std::equal(mix.begin(), mix.end(), expected.begin());
             if (!snapshot.learning) {
                 if (production.priorPasses++ == 0) { production.firstPriorCycle = snapshot.cycle; production.firstPriorMix = expected; }
                 if (counterPlayed && production.counterPasses++ == 0) production.firstCounterMix = expected;
-                if (QuantBotStrategy::withinBounds(start, available)) ++production.boundedPasses;
+                if (QuantBotStrategy::withinBounds(start, slots)) ++production.boundedPasses;
                 if (same) ++production.priorMatches;
                 else if (production.mismatch.empty())
                     production.mismatch = "cycle=" + std::to_string(snapshot.cycle) + " mix=" + join(mix) + " expected=" + join(expected);
@@ -614,15 +620,15 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
 }
 
 /// How much more of the built value the lead slots get than in the Learned game (basis points).
-/// Measured with the starting-mix bounds and the bounded presets (12 game minutes, mapSeed 7, seed
-/// 486409243; lead share vs Learned's): QuadMass quads 1687 vs 865, Artillery siege 2576 vs 1609,
-/// TankMass tanks 3386 vs 1558, TrikeSwarm trikes 1232 vs 574, Specials 3418 vs 692, Counter (tanks,
-/// its first counter's lead) 2050 vs 1379 (the smallest margin, +671), Tuned (Harkonnen 45% tanks)
-/// 3196 vs 1558; Air is checked by its ornithopters and Bounded by its passes (checkMix). Artillery
-/// leads with siege only: the Atreides configured mix already has 35% launchers (Artillery 31.5%).
+/// Measured with the starting-mix bounds (per game, masked per pass) and the bounded presets (12 game
+/// minutes, mapSeed 7, seed 486409243; lead share vs Learned's): QuadMass quads 1785 vs 952, Artillery
+/// siege 2440 vs 836, TankMass tanks 3456 vs 2467, TrikeSwarm trikes 996 vs 574 (the smallest margin,
+/// +422), Specials 2406 vs 346, Counter (its first counter's lead) 1920 vs 940, Tuned (Harkonnen 45%
+/// tanks) 3196 vs 2467; Air is checked by its ornithopters and Bounded by its passes (checkMix).
+/// Artillery leads with siege only: the Atreides configured mix already has 35% launchers.
 /// The largest-share slot is not asserted: Starport ornithopters and the mobile anti-air floor's
 /// launchers are bought outside the mix and can outweigh a lead slot.
-constexpr int kLeadMarginBps = 500;
+constexpr int kLeadMarginBps = 400;
 
 /// Section 3's checks for one house playing Fixed:<mix>,Base, against the Learned game.
 inline void checkMix(Mix mix, const Production& p, const Production& learned, long long wallMs) {

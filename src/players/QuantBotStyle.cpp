@@ -134,17 +134,33 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const std::array<bool,8>& availab
     configured[2] = static_cast<int>(ratios.launcher*10000);
     configured[3] = static_cast<int>(ratios.special*10000);
     configured[4] = static_cast<int>(ratios.ornithopter*10000);
-    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+    // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
+    if (!style().startBounds) {
+        const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+        UnitMixPolicy::Weights prior{};
+        for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
+        if (const auto* mix = strategyMix())
+            prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, available);
+        return prior;
+    }
+    // The starting mix is defined over the slots the house can produce in this game (ObjectData,
+    // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
+    // (docs/ai-play-styles.md, section 7). A pass then plays it over the slots producible at that
+    // pass, renormalised - the factories not yet standing do not re-shape it.
+    std::array<bool,8> slots = fieldableMixSlots();
+    for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];
+    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
     UnitMixPolicy::Weights prior{};
     for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
     // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
     // of the remembered enemy army).
     if (const auto* mix = strategyMix())
-        prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, available);
-    if (!style().startBounds) return prior;
-    // The starting-mix bounds: every producible slot 2%-50% (docs/ai-play-styles.md, section 7).
-    const auto bounded = QuantBotStrategy::bound(prior, available);
-    for (size_t i = 0; i < 8; ++i) prior[i] = bounded[i];
+        prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, slots);
+    const auto bounded = QuantBotStrategy::bound(prior, slots);
+    UnitMixPolicy::Weights masked{};
+    for (size_t i = 0; i < 8; ++i) masked[i] = available[i] ? bounded[i] : 0;
+    const auto mix = UnitMixPolicy::normalize(masked);
+    for (size_t i = 0; i < 8; ++i) prior[i] = mix[i];
     return prior;
 }
 

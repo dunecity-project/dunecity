@@ -478,12 +478,20 @@ learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = 
   trike, quad. Infantry is not part of the mix: it has its own difficulty quota (10-12% of the army
   value, 35% for the Infantry strategy) and is not learned, so it is outside the bounds.
 - **Rule:** every starting mix - the configured `[Unit Ratios]` opening (Learned), the presets, Counter,
-  Tuned and Bounded - is bounded before the learning sees it (`QuantBotStrategy::bound`, applied in
-  `QuantBot::startingPrior` on every production pass): each slot the house can produce *at that pass*
-  gets 2%-50%; slots it cannot produce get 0 and the rest is renormalised within the bounds.
-  Precisely x_i = clamp(t * w_i, 2%, 50%) with the one scale t that sums to 100% (integer basis points,
-  rounding remainder to the largest fractions). A 0 becomes 2%; one producible slot gets 100% (the cap
-  cannot hold); two get 50/50 at most each. Learning may move away from the bounds during the game.
+  Tuned and Bounded - is bounded before the learning sees it (`QuantBotStrategy::bound`, in
+  `QuantBot::startingPrior`): over the slots the house can produce *in this game* (ObjectData and the
+  game's tech level, `fieldableMixSlots`) each slot gets 2%-50%; slots it cannot produce get 0 and the rest
+  is renormalised within the bounds. Precisely x_i = clamp(t * w_i, 2%, 50%) with the one scale t that sums
+  to 100% (integer basis points, rounding remainder to the largest fractions). A 0 becomes 2%; one
+  producible slot gets 100% (the cap cannot hold). Each production pass then plays that bounded mix over
+  the slots producible at that pass (factories standing), renormalised: a factory not yet built does not
+  re-shape the starting mix. Learning may move away from the bounds during the game.
+- **Why per game, not per pass:** the first version bounded the mix again over the slots producible at
+  each pass (e.g. 50% cap with only a light factory and a heavy factory up). It failed
+  `quantbot_all_against_atreides` on seed 41562270 (no house eliminated in 41 minutes, 5/6); bounding over
+  the game's producible slots passes 6/6. **The randomised and bounds-control games in 7.3-7.4 were played
+  with that first (per-pass) version**; the starting mix over all producible slots is the same in both, they
+  differ only while factories are still missing. Round-1 tuned games were stopped for the same reason.
 - **Configured ratios:** Atreides Tank 0.05 stays about 5% (4.8% of the heavy share at tech 8); the
   opening's light units (4% at tech 7+, quads twice trikes) rise to 2% each; Harkonnen's launcher 0.50 x
   0.96 stays 48%. `config/QuantBot Config.ini.default` is unchanged (it is in the mod checksum).
@@ -566,11 +574,12 @@ the first 3,013 randomised games (`tests/ai/play-styles/r1-*.ini`, label `defaul
 | winners' end composition | 11,12,17,16,17,13,0,14 | 15,19,24,13,0,0,0,29 | 13,15,15,11,19,0,13,14 |
 | cost-effectiveness | 10,18,15,23,12,10,0,12 | 16,28,19,19,0,0,0,18 | 11,20,16,14,12,0,12,15 |
 
-Running when this was written: each candidate v control, 216 games (`t1-mini` seeds 50000-50020,
-`t1-pro` 50030-50050); random-within-bounds as a production option (`default@mixbounded#random`, Mode=Random
-with Swarm 80 / Flood 20) v control, 216 games (`pB-win`); the rest of the Air's randomised slice.
-Not yet run: round 2 refinement, the best tuned mix at Base tempo, on Fortress, Brutal, `/weak`,
-`quantbot_all_against_atreides` with it, and learning on v off (`@nolearn`).
+Round 1 (each candidate v control, 216 games: `t1-mini`, `t1-pro`) and random-within-bounds as a production
+option (`default@mixbounded#random`, `pB-win`) were started and then stopped when the bounds moved from per
+pass to per game (7.1): they ran the superseded binary. Not yet run on the final rule: round 1/2, the best
+tuned mix at Base tempo, on Fortress, Brutal, `/weak`, all-against-Atreides with it, learning on v off
+(`@nolearn`), and the production-option arm. Time-outs (draws): randomised arm 20 of 3,094 (0.6%), bounds
+control 0 of 108. Scoring will move to the placement/draw-penalty score of `test/match-scoring`.
 
 **Decision so far: no default change.** The default stays `Fixed:Learned,Swarm` with the configured
 ratios, now bounded; `[Unit Ratios Tuned]` has no code defaults, so `Tuned` = the configured opening.
