@@ -7,9 +7,9 @@ defeated meanwhile is reported (`defeated`, with its tax) but not held to either
 64x64 map the starting armies fight from minute 1, and a house whose zones and windtrap fall in
 minute 2-4 has no city left to tax. How early that happens is chance: over eight seeds of this
 map, with and without the since removed perimeter hold, a defeated house banked 12-6,056
-credits (median ~400), and whether it reached 100 changed with nothing but the opening
-skirmish's trajectory (docs/no-spice-economy-817.md,
-docs/quantbot-all-against-atreides.md, docs/formations.md "Free-for-all: finishing the game").
+credits (median ~270-450), and whether it reached 100 changed with nothing but the opening
+skirmish's trajectory (docs/no-spice-economy-817.md, docs/quantbot-all-against-atreides.md,
+docs/formations.md "Free-for-all: finishing the game, round 2").
 """
 import argparse
 import configparser

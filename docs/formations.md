@@ -917,11 +917,8 @@ switches rules off (`@nov @nou @nox @nouvx`). Difference = variant - default:
 Decision: **X stays** (measurably helpful: removing it loses in `/weak`), **U stays** (neutral
 everywhere, never better without it, rarely builds). **V should go** by the rule (not helpful
 anywhere, point estimates favour removing it in `/weak` and the FFA, and it was the rule that
-garrisoned every FFA house), **but its removal is not landed**: with V removed (commit 0fcfc612,
-reverted) two mandatory tests fail deterministically - `quantbot_strategy` ("Artillery: the lead
-slots got no larger share of the built value than in the Learned game") and
-`quantbot_no_spice_income_low-cash` ("tax never became usable income") - and both pass with V. V
-stays on until those two tests are re-examined against a V-less opening (open item, HANDOVER).
+garrisoned every FFA house). Its first removal (0fcfc612) was reverted because two mandatory tests
+then failed; round 2 (below) found both tests pinned chance, fixed them, and **removed V**.
 
 **CY 1v1, fix v 1.0.847** (default v none, 120 games each): 0.312 v 0.417, -0.104 (-0.26..+0.05)
 level. In a 1v1 the threat estimate equals the old sum, so only the bundle walk-out can differ: a
@@ -962,6 +959,112 @@ friendly fire; only ~40 defender turrets died in 40 minutes. Still open.
 
 **Harness.** `houses.csv` gains `turret_targets press_on_orders finish_waves fortified_holds
 sonic_retargets` (an older file is rewritten with the new columns on the next append).
+
+### Free-for-all: finishing the game, round 2 (branch `fix/ai-late-game-2`, protocol 84, save 9865 unchanged)
+
+Stefan: "the AIs have to attack. they can't just send a small raiding party out for eternity ... you
+need to make a draw negative". Evidence: `~/Documents/projects/dunecity-results/late-game-2/`
+(`v-*`, `v-probes`, `self-*`, `h2h-*`, `m-*` = on the code merged with `fix/ai-difficulty-ladder`
+c766c262, `bisect-6p-*`, `diag-spend-*`, `ctest-*.log`, `matrix-*-report.md`). Scores as above.
+
+**Perimeter hold V removed.** Why the two tests failed without it (decision logs and 6 x 2 seeded
+calibration runs, `v-probes/`):
+- `quantbot_strategy` ("Artillery: the lead slots got no larger share ... than in the Learned game")
+  required every Fixed mix to beat the Learned game's lead-slot share by 500 bps in one 12-minute game.
+  Over six seeds (486409243, 11, 22, 33, 44, 55) the margins were +88..+2974 (mean ~+1250); +500 failed
+  3 of 36 checks with V and 5 of 36 without, spread over all six mixes: V changes the fight's
+  trajectory, the mix does not change. The check now asserts a larger share (`kLeadMarginBps` 1;
+  commit 49394f73 on its own, `fix/strategy-lead-check`).
+- `quantbot_no_spice_income_low-cash` ("tax never became usable income") held every house to 100
+  credits of tax, also one razed meanwhile. On the 64x64 3 vs 1 map the starting armies fight from
+  minute 1; Harkonnen's first residential zone fell at minute 2.2 either way, its windtrap at 2.5
+  without V (12 credits banked) and at 8.6 with V (1,482). Over eight seeds a razed house banked
+  12-6,056 either way (median ~450 with V, ~270 without; below 100 once, the ctest seed without V);
+  every surviving house banked 367-13,463. The economy is not
+  what V protects - how long a doomed city stands is - so no part of V is kept: the tax check now
+  applies to the houses still alive, like the R/I opening check.
+- Clean cutover: `PerimeterHold` key, its hash entry and field, `kForcePerimeterHold`, the duel flag
+  `V`, the perimeter anchor in `armyAssemblyAnchor()`, the force probe's garrison checks (the
+  outnumbered reserve now forms up at the offensive staging point); styles `@nov`/`@nouvx` -> `@noux`.
+  `garrisoned()` is the test-only G alone.
+
+| V re-measured (no V - V, placement score) | Games | Difference (95% CI) |
+|---|---|---|
+| 4P FFA rs160 DuneCity + vanilla, head-to-head (`v-ffa`) | 48 | +0.019 (-0.21..+0.23) level |
+| Fortress 1v1 head-to-head 128/160/192 (`v-duel`) | 48 | -0.083 (-0.46..+0.29) level |
+| `/weak` v none, paired with V's `/weak` (`v-duel`) | 48 | +0.109 (-0.03..+0.26) level |
+| CY 1v1 head-to-head, 5 maps (`v-cy`) | 50 | -0.040 (-0.60..+0.52) level |
+
+**Diagnosis of the draws** (`diag-spend-9101`, `diag-spend-9808` decision logs, `houses.csv`):
+- Vanilla 4P FFAs never time out (0/24 in every arm; first elimination ~6 min). The draws are
+  DuneCity's: 11 of 24 on the merged default. Of those 11, four ended with 2 houses, four with 3,
+  three with 4; in four the leader's army was 18-200x the next (a remnant of 60-260 structures - city
+  zones, turrets, a factory - outlived the hour), the rest were 3-4 houses of 1.1-2.5x each other.
+- The leader's waves are 35-50% of its army (every ~2.5 min, 40-67k of 100-133k) and its kills are
+  spread over every enemy (seed 9808, minutes 30-60: units and structures of all three houses).
+- Atreides sonic tanks: 417 of their 2,095 kills were Atreides units (20%).
+- Spending at the cap works: with M the leader's army rose to 135-190k by minute 40-50 and killed 191
+  of the next city's turrets in 20 minutes (9101, all three others eliminated by minute 50).
+
+**Candidates** (`[Force Concentration]`, code default off, hashed, Custom Hard/Brutal - and Medium,
+which `fix/ai-difficulty-ladder` put on the force rules):
+- M `SpendAtCap` (`@spend`): banked credits above 10,000 raise the production budget past the limit,
+  by at most the limit again (`QuantBotBuildPolicy::surplusMilitaryBudget`, shared with Medium's +50%;
+  Medium keeps its own); above the limit only siege tanks, launchers and specials are bought.
+- O `SiegeStandoff` (`@standoff`): wave launchers shell known turrets from beyond their reach (9 v 8,
+  up to 4 tiles further); while 4+ such launchers are within 12 tiles, wave members about to enter a
+  turret's reach guard a point 2 tiles outside it (at most 90 s; `siegeHeld`, not saved).
+- Z `MassAssault` (`@assault`): against a fortified objective (8+ known turrets within 12 tiles) of
+  the weakest known house (H's choice) a ready wave waits for 70% of the limit (at most 4 min since
+  the last wave), then every member hunts to one point of that objective.
+- Combinations: `@late2` (M+O+Z+S), `@spendfinish` (M+H), `@spendfs` (M+H+S); H and S from round 1.
+
+| Candidate (head-to-head 4P FFA; self-play 24 seeds) | Code | Games | Difference v default (95% CI) | Self-play DuneCity time-outs | Vanilla |
+|---|---|---|---|---|---|
+| default | merged | - | - | 11/24 (46%), first elimination median 37.8 min | 0/24 |
+| M spend | before merge | 48 | +0.019 (-0.20..+0.23) level | 12/24 (50%) | 0/24 |
+| O standoff | before merge | 48 | -0.012 (-0.23..+0.19) level | 19/24 (79%) | 0/24 |
+| Z assault | before merge | 48 | -0.226 (-0.45..+0.00) level, worse | 15/24 (62%) | 0/24 |
+| M+O+Z+S | before merge | stopped | (25 games: -0.118) | (6/15) | - |
+| M spend | merged | 48 (DuneCity) | +0.025 (-0.17..+0.24) level | 11/24 (46%) | = default (never fires) |
+| H finish weakest | merged | 48 | -0.167 (-0.38..+0.05) level | 8/24 (33%), 20.0 min | 1/24 |
+| M+H | merged | 48 (DuneCity) | -0.114 (-0.30..+0.08) level | 9/24 (38%), 20.0 min | - |
+
+1v1 checks (merged code): M Fortress +0.000 (-0.42..+0.42), `/weak` -0.026 (-0.08..+0.00), CY +0.000
+(-0.56..+0.56); H Fortress +0.167 (-0.29..+0.58), `/weak` -0.031 (-0.16..+0.09), CY -0.080
+(-0.64..+0.48) - all level. M fires in 12 of 50 CY houses and 28 of 96 Fortress sides, never in the
+vanilla FFAs (decided by minute ~14).
+
+Decision: **nothing is accepted; every candidate stays off.** None both lowers the time-outs and
+scores above 0 against the default: O and Z end fewer games, M ends as many (46% v 46%), H ends more
+(33%) but an H house scores worse in mixed games (-0.167: it finishes the weakest for everyone, and
+the others profit), M+H in between.
+
+**6P DuneCity FFA** (scenario matrix cell `6p-ffa-small-smallarmy/dunecity`, QB/QH/QM/QE/AH/AM, 4
+seeds, 60 min; decided games): before `fix/ai-difficulty-ladder` 3/4 (QH at 45-60 min), after it
+0/4. The maps are unchanged (one generator attempt each). Bisection on the merged code: Medium's
++50% surplus off 0/4; Medium off the whole-army path (its old waves and no surplus) 1/4; the reachable
+readiness and the opening cap off 0/4 - no single part of that branch accounts for it. In every
+time-out Hard sits at its 63-70k cap beside a Medium of 7-47k. Defaults with M on: 2/4 (Hard reaches
+109-140k); with H on 3/4, but H also runs for Medium and the FFA cells then rank QM (+0.45) above QH
+(+0.30); M+H 2/4. Every other FFA cell is unchanged by M.
+
+**Scenario matrix, full tier skirmish/cy/mp/aaa** (152 games each; undecided games): before
+(8a8e4833, `scenario-matrix/army-stuck-before-c`) skirmish 10/52, cy 5/28, mp 8/54, aaa 0/18; after
+(this branch with `fix/ai-difficulty-ladder`, defaults unchanged by round 2,
+`scenario-matrix/late-game-2-after`) 6/52, 1/28, 8/54, 0/18, no crash. After's flags: 6P DuneCity FFA
+0/4, 2v2 DuneCity QH mirror 0/4 (nobody eliminated), 3v3 medium-base Hard team 1/4 (before 0/4),
+order QH > QB > QM > QE; before's idle Medium in the 7P FFA is gone.
+
+**What to try next.** H shortens 4P DuneCity games (first elimination median 38 -> 20 min; time-outs
+11 -> 8 of 24, not significant at this size) but
+costs the house that uses it: try H only once the house leads (its army above the strongest enemy
+team's), so the leader finishes the weakest instead of a mid-game house feeding the others; restrict
+the force rules to Hard/Brutal again so M/H cannot lift Medium past Hard; M as the Hard/Brutal answer
+to Medium's surplus if the ladder needs it (6P 0/4 -> 2/4, level everywhere else). Remnant cities
+(zones and turrets) need a finishing target that persists per house until it is gone.
+
+**Harness.** `houses.csv` gains `surplus_peak siege_orders siege_holds assault_holds assault_waves`.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
