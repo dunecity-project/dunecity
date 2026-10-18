@@ -8,7 +8,9 @@ composition per unit-mix slot every 10 game minutes and at the end) and prints:
   --arms A:B[,C:D]   paired placement-score difference of label A over label B (tests/ai/match_score.py:
                      win +1, loss -1, a time-out -0.25 each, so a 1v1 game's difference is +2/-2/0;
                      95% bootstrap interval, A beats B when it is above 0), overall, by house and by
-                     map, with each side's time-out (draw) rate
+                     map, with each side's time-out (draw) rate, and the per-house effect: the Δ gain of
+                     playing A instead of B as that house, from both assignments of every house pair
+                     (least squares over the pairs, bootstrap interval) - the per-house decision
   --random R:C       the randomised arm R (each game a random starting mix within the bounds)
                      against the control C: score by starting share per slot and house, a ridge
                      logistic regression of the result on the starting shares (+ map, opponent),
@@ -18,12 +20,20 @@ composition per unit-mix slot every 10 game minutes and at the end) and prints:
                      styles with [Unit Ratios Tuned] keys)
 
   --csv DIR          also writes the compact CSV tables (per-house records, slot tables, candidates)
+  --tech N           only the games played at tech level N (vanilla-match.py --tech: maps named
+                     <map>@t<N>; a bundled map without the suffix is tech 8); candidates are then
+                     written as the [Unit Ratios Tuned] keys of each house's tech band at N
+                     (<House>_Tech<band>, the top band <House>; tests/ai/tech-bands.py)
+
+Slots: tank, siege, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike,
+quad (one per special since SAVEGAMEVERSION 9868), houses: all six.
 
 Regression and winners/losers use the game result (1 win, 0 loss, 0.5 time-out; no kill-value
 adjudication). Pure Python (no numpy): the regression is IRLS on a few dozen columns.
 """
 import argparse
 import csv
+import importlib.util
 import math
 import random
 import statistics
@@ -34,8 +44,14 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import match_score  # noqa: E402
 
-SLOTS = ('tank', 'siege', 'launcher', 'special', 'ornithopter', 'trike', 'raider', 'quad')
-HOUSES = ('atreides', 'harkonnen', 'ordos')
+_spec = importlib.util.spec_from_file_location('tech_bands', Path(__file__).resolve().parent / 'tech-bands.py')
+tech_bands = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(tech_bands)
+
+SLOTS = ('tank', 'siege', 'launcher', 'devastator', 'sonic', 'deviator', 'ornithopter', 'trike', 'raider', 'quad')
+N = len(SLOTS)
+HOUSES = ('atreides', 'harkonnen', 'ordos', 'fremen', 'sardaukar', 'mercenary')
+TOP_TECH = 8
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
 LO, HI = 0.02, 0.50
 
@@ -54,12 +70,31 @@ def number(value, default=0.0):
         return default
 
 
-def load(dirs, tags):
+def game_tech(game):
+    return int(game['map'].split('@t', 1)[1]) if '@t' in game['map'] else TOP_TECH
+
+
+def band_of(house, tech, sections=None):
+    """The first tech level of \a house's tech band at \a tech (vanilla ObjectData)."""
+    sections = sections or band_of.sections
+    letter = dict(tech_bands.HOUSES)[house]
+    for first, last, _ in tech_bands.bands(sections, letter):
+        if first <= tech <= last:
+            return first
+    return tech
+
+
+band_of.sections = tech_bands.load(tech_bands.root / 'config/ObjectData.ini.default')
+
+
+def load(dirs, tags, tech=None):
     games, houses, mixes = {}, defaultdict(dict), defaultdict(dict)
     for d in dirs:
         d = Path(d)
         for g in read(d / 'games.csv'):
             if (tags and g['tag'] not in tags) or g['error']:
+                continue
+            if tech is not None and game_tech(g) != tech:
                 continue
             games[tuple(g[k] for k in KEY)] = g
         for h in read(d / 'houses.csv'):
@@ -127,7 +162,7 @@ def records(games, houses, mixes, x, y):
         if x not in rows or y not in rows:
             continue
         mine, theirs = rows[x], rows[y]
-        rec = {'key': key, 'map': game['map'], 'seed': game['seed'], 'house': mine['house'],
+        rec = {'key': key, 'map': game['map'], 'tech': game_tech(game), 'seed': game['seed'], 'house': mine['house'],
                'opponent': theirs['house'], 'score': score(game, mine), 'end_s': number(game['end_s']),
                'start': [int(v) for v in mine.get('start_mix', '').split(',')] if mine.get('start_mix') else None,
                'opp_start': [int(v) for v in theirs.get('start_mix', '').split(',')] if theirs.get('start_mix') else None}
@@ -141,7 +176,7 @@ def records(games, houses, mixes, x, y):
     return out
 
 
-def shares(values, slots=8):
+def shares(values, slots=N):
     total = sum(values[:slots])
     return [v / total for v in values[:slots]] if total > 0 else None
 
@@ -150,8 +185,8 @@ def shares(values, slots=8):
 
 def bound(weights, fieldable):
     """Clamp-and-renormalise into [2%, 50%] over the fieldable slots (one scale t, bisection)."""
-    idx = [i for i in range(8) if fieldable[i]]
-    out = [0.0] * 8
+    idx = [i for i in range(N) if fieldable[i]]
+    out = [0.0] * N
     if len(idx) == 1:
         out[idx[0]] = 1.0
         return out
@@ -182,12 +217,14 @@ def bound(weights, fieldable):
 
 def percent(mix, fieldable):
     """Integer percent within the bounds summing to 100 (largest remainders)."""
-    raw = [mix[i] * 100 if fieldable[i] else 0.0 for i in range(8)]
+    raw = [mix[i] * 100 if fieldable[i] else 0.0 for i in range(N)]
     ints = [int(math.floor(v)) for v in raw]
-    for i in range(8):
+    for i in range(N):
         if fieldable[i]:
             ints[i] = min(50, max(2, ints[i]))
-    order = sorted((i for i in range(8) if fieldable[i]), key=lambda i: -(raw[i] - math.floor(raw[i])))
+    order = sorted((i for i in range(N) if fieldable[i]), key=lambda i: -(raw[i] - math.floor(raw[i])))
+    if len(order) == 1:
+        return [100 if i == order[0] else 0 for i in range(N)]
     while sum(ints) < 100:
         for i in order:
             if sum(ints) < 100 and ints[i] < 50:
@@ -200,12 +237,14 @@ def percent(mix, fieldable):
 
 
 def uniform_bounded(rng, fieldable):
-    idx = [i for i in range(8) if fieldable[i]]
+    idx = [i for i in range(N) if fieldable[i]]
     while True:
         cuts = sorted(rng.random() for _ in range(len(idx) - 1))
         parts = [b - a for a, b in zip([0.0] + cuts, cuts + [1.0])]
-        if all(LO <= p <= HI for p in parts):
-            out = [0.0] * 8
+        if len(idx) <= 2 or all(LO <= p <= HI for p in parts):
+            if len(idx) == 2:
+                parts = [0.5, 0.5]
+            out = [0.0] * N
             for k, i in enumerate(idx):
                 out[i] = parts[k]
             return out
@@ -265,10 +304,57 @@ def logistic(xs, ys, ridge=1.0, penalised=None):
 
 # ---- Report ----------------------------------------------------------------------------------------
 
-def report_arms(args, games, houses):
+def house_effects(recs, houses, rounds=1000):
+    """Per-house Δ effect of A over B: for every house pair (h, o) played with both assignments,
+    mean Δ(A plays h v B as o) + mean Δ(A plays o v B as h) = e(h) + e(o) - the house and position
+    strengths cancel; e by least squares over the pairs. Interval: bootstrap of the games within each
+    (house, opponent) cell. Returns {house: (e, low, high, games A played as the house)}."""
+    cells = defaultdict(list)
+    for r in recs:
+        cells[(r['house'], r['opponent'])].append(r['delta'])
+    present = [h for h in houses if any(cells[(h, o)] for o in houses)]
+    pairs = [(h, o) for i, h in enumerate(present) for o in present[i + 1:] if cells[(h, o)] and cells[(o, h)]]
+    if not pairs:
+        return {}
+    index = {h: k for k, h in enumerate(present)}
+
+    def fit(means):
+        a = [[0.0] * len(present) for _ in present]
+        b = [0.0] * len(present)
+        for h, o in pairs:
+            y = means[(h, o)] + means[(o, h)]
+            for u in (h, o):
+                b[index[u]] += y
+                for v in (h, o):
+                    a[index[u]][index[v]] += 1.0
+        return solve(a, b)
+    point = fit({k: statistics.mean(v) for k, v in cells.items() if v})
+    rng = random.Random(20261019)
+    draws = []
+    for _ in range(rounds):
+        draws.append(fit({k: statistics.mean(rng.choices(v, k=len(v))) for k, v in cells.items() if v}))
+    out = {}
+    for h in present:
+        k = index[h]
+        values = sorted(d[k] for d in draws)
+        n = sum(len(cells[(h, o)]) for o in present)
+        out[h] = (point[k], values[int(0.025 * rounds)], values[int(0.975 * rounds) - 1], n)
+    return out
+
+
+def fmt_effect(effect):
+    if not effect:
+        return '-'
+    e, low, high, n = effect
+    bold = '**' if low > 0 or high < 0 else ''
+    return f'{bold}{e:+.3f}{bold} ({low:+.2f}..{high:+.2f}) n={n}'
+
+
+def report_arms(args, games, houses, out_rows=None):
+    present = [h for h in HOUSES if any(h in rows for rows in houses.values())]
     print('\n### Arms (paired placement-score difference A - B; time-outs -0.25 each)\n')
-    print('| A v B | Δ all | Atreides | Harkonnen | Ordos | W-L / time-outs (draw rate) |')
-    print('|---|---|---|---|---|---|')
+    print('| A v B | Δ all | ' + ' | '.join(h.capitalize() for h in present) + ' | W-L / time-outs (draw rate) |')
+    print('|---|---|' + '---|' * len(present) + '---|')
     for pair in args.arms.split(','):
         x, y = pair.split(':')
         recs = records(games, houses, defaultdict(dict), x, y)
@@ -280,30 +366,31 @@ def report_arms(args, games, houses):
         wins = sum(1 for r in recs if r['score'] == 1.0)
         losses = sum(1 for r in recs if r['score'] == 0.0)
         draws = len(recs) - wins - losses
-        print(f'| {x} v {y} | {fmt_delta([r["delta"] for r in recs])} | {fmt_delta(by["atreides"])} | '
-              f'{fmt_delta(by["harkonnen"])} | {fmt_delta(by["ordos"])} | {wins}-{losses} / {draws} '
-              f'({100 * draws / len(recs):.1f}%) |')
+        print(f'| {x} v {y} | {fmt_delta([r["delta"] for r in recs])} | '
+              + ' | '.join(fmt_delta(by[h]) for h in present)
+              + f' | {wins}-{losses} / {draws} ({100 * draws / len(recs):.1f}%) |')
     # The house columns mix the house with its opponent's strength. Every house pair is played with
-    # both assignments, so the per-house effect of A over B is identified: with s(h, o) the logit of
-    # A's score as house h against B's house o, s(h, o) + s(o, h) = d(h) + d(o) for the logit gain
-    # d(h) of playing A instead of B as house h. Shown as the score A would get as h against a B of
-    # equal strength (0.5 + effect).
-    print('\nPer-house effect of A over B (d = logit gain; score against an equal B; from both assignments):\n')
-    print('| A v B | Atreides | Harkonnen | Ordos |')
-    print('|---|---|---|---|')
+    # both assignments, so the per-house effect of A over B is identified (house_effects).
+    print('\nPer-house effect of A over B (Δ gain of playing A instead of B as that house; both assignments of '
+          'every pair; least squares, bootstrap 95% interval; bold = the interval excludes 0; n = games A played '
+          'as the house):\n')
+    print('| A v B | ' + ' | '.join(h.capitalize() for h in present) + ' |')
+    print('|---|' + '---|' * len(present))
     for pair in args.arms.split(','):
         x, y = pair.split(':')
-        cells = defaultdict(list)
-        for r in records(games, houses, defaultdict(dict), x, y):
-            cells[(r['house'], r['opponent'])].append(r['score'])
-        logit = lambda h, o: math.log(min(0.99, max(0.01, statistics.mean(cells[(h, o)])))
-                                      / (1 - min(0.99, max(0.01, statistics.mean(cells[(h, o)])))))
-        pairs = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
-        if any(not cells[(h, o)] or not cells[(o, h)] for h, o in pairs):
+        recs = records(games, houses, defaultdict(dict), x, y)
+        effects = house_effects(recs, present)
+        if not effects:
             continue
-        ah, oa, ho = (logit(h, o) + logit(o, h) for h, o in pairs)
-        d = {'atreides': (ah + oa - ho) / 2, 'harkonnen': (ah + ho - oa) / 2, 'ordos': (oa + ho - ah) / 2}
-        print(f'| {x} v {y} | ' + ' | '.join(f'd={d[h]:+.2f} ({1 / (1 + math.exp(-d[h])):.2f})' for h in HOUSES) + ' |')
+        print(f'| {x} v {y} | ' + ' | '.join(fmt_effect(effects.get(h)) for h in present) + ' |')
+        if out_rows is not None:
+            for h in present:
+                if h in effects:
+                    e, low, high, n = effects[h]
+                    hd = [r for r in recs if r['house'] == h]
+                    out_rows['effects'].append({'arm': f'{x} v {y}', 'tech': args.tech or '', 'house': h,
+                                                'effect': f'{e:.3f}', 'low': f'{low:.3f}', 'high': f'{high:.3f}', 'n': n,
+                                                'draws': sum(1 for r in hd if r['drawn'])})
     if args.by_map:
         print('\n| A v B | Map | Δ |')
         print('|---|---|---|')
@@ -319,8 +406,8 @@ def report_arms(args, games, houses):
 def fieldable_of(recs):
     out = {}
     for house in HOUSES:
-        starts = [r['start'] for r in recs if r['house'] == house and r['start']]
-        out[house] = [any(s[i] > 0 for s in starts) for i in range(8)] if starts else [False] * 8
+        starts = [r['start'] for r in recs if r['house'] == house and r['start'] and len(r['start']) == N]
+        out[house] = [any(s[i] > 0 for s in starts) for i in range(N)] if starts else [False] * N
     return out
 
 
@@ -329,7 +416,7 @@ def composition(recs, side, mark, field='built', who=None):
     vals = []
     for r in recs:
         sample = r.get((side, mark))
-        if not sample:
+        if not sample or len(sample[field]) < N:
             continue
         mine_won = r['score'] == 1.0
         side_won = mine_won if side == 'mine' else r['score'] == 0.0
@@ -342,21 +429,21 @@ def composition(recs, side, mark, field='built', who=None):
             vals.append(s)
     if not vals:
         return None, 0
-    return [statistics.mean(v[i] for v in vals) for i in range(8)], len(vals)
+    return [statistics.mean(v[i] for v in vals) for i in range(N)], len(vals)
 
 
 def pct(mix, fieldable=None):
     if mix is None:
         return '-'
-    return '/'.join('-' if fieldable and not fieldable[i] else f'{100 * mix[i]:.0f}' for i in range(8))
+    return '/'.join('-' if fieldable and not fieldable[i] else f'{100 * mix[i]:.0f}' for i in range(N))
 
 
 def report_random(args, games, houses, mixes, out_rows):
     x, y = args.random.split(':')
-    recs = [r for r in records(games, houses, mixes, x, y) if r['start']]
+    recs = [r for r in records(games, houses, mixes, x, y) if r['start'] and len(r['start']) == N]
     ctrl = records(games, houses, mixes, y, x)
     fieldable = fieldable_of(recs)
-    print(f'\n### Randomised arm {x} v {y}: {len(recs)} games\n')
+    print(f'\n### Randomised arm {x} v {y}: {len(recs)} games' + (f' (tech {args.tech})' if args.tech else '') + '\n')
     print(f'Overall {fmt([r["score"] for r in recs])}')
     candidates = {}
     rng = random.Random(7)
@@ -365,9 +452,13 @@ def report_random(args, games, houses, mixes, out_rows):
         if not hr:
             continue
         f = fieldable[house]
-        idx = [i for i in range(8) if f[i]]
+        idx = [i for i in range(N) if f[i]]
         print(f'\n#### {house.capitalize()} (randomised side): {fmt([r["score"] for r in hr])}; '
               f'fieldable: {", ".join(SLOTS[i] for i in idx)}\n')
+        if len(idx) <= 2:
+            # One slot: 100%; two: 50/50 - the bounds leave nothing to tune.
+            print('(at most two fieldable slots: the bounds fix the mix)')
+            continue
         # Score by starting share bucket.
         buckets = ((0.02, 0.08), (0.08, 0.16), (0.16, 0.25), (0.25, 0.51))
         print('| Slot | ' + ' | '.join(f'start {int(100 * a)}-{int(100 * b) if b < 0.51 else 50}%' for a, b in buckets) + ' | slope |')
@@ -383,10 +474,11 @@ def report_random(args, games, houses, mixes, out_rows):
             sxx = sum((v - mx) ** 2 for v in xs)
             slope = sum((a - mx) * (b - my) for a, b in zip(xs, ys)) / sxx if sxx else 0
             print(f'| {SLOTS[i]} | ' + ' | '.join(cells) + f' | {slope:+.2f} per 100% |')
-            out_rows['slots'].append({'house': house, 'slot': SLOTS[i], **{f'b{k}': c for k, c in enumerate(cells)},
+            out_rows['slots'].append({'tech': args.tech or '', 'house': house, 'slot': SLOTS[i],
+                                      **{f'b{k}': c for k, c in enumerate(cells)},
                                       'slope_per_100pct': f'{slope:.3f}', 'n': len(hr)})
-        # Ridge logistic regression: log-ratio-free linear shares (reference slot dropped), map and opponent.
-        ref = max(idx, key=lambda i: statistics.mean(r['start'][i] for r in hr)) if False else idx[0]
+        # Ridge logistic regression: linear shares (reference slot dropped), map and opponent.
+        ref = idx[0]
         cols = [i for i in idx if i != ref]
         maps = sorted({r['map'] for r in recs})
         opps = sorted({r['opponent'] for r in hr})
@@ -403,7 +495,7 @@ def report_random(args, games, houses, mixes, out_rows):
         print(f'\nLogistic regression (ridge 1; shares in fractions, reference {SLOTS[ref]}; map and opponent '
               f'dummies): ' + ', '.join(f'{SLOTS[c]} {beta[k + 1]:+.2f}±{se[k + 1]:.2f}' for k, c in enumerate(cols)))
         for k, c in enumerate(cols):
-            out_rows['regression'].append({'house': house, 'slot': SLOTS[c], 'reference': SLOTS[ref],
+            out_rows['regression'].append({'tech': args.tech or '', 'house': house, 'slot': SLOTS[c], 'reference': SLOTS[ref],
                                            'coef_per_unit_share': f'{beta[k + 1]:.3f}', 'se': f'{se[k + 1]:.3f}', 'n': len(hr)})
         # Quadratic model, maximised over random bounded mixes: the mean of the best 5% (regression candidate).
         xq = [design([v / 10000 for v in r['start']], r['map'], r['opponent'], quad=True) for r in hr]
@@ -416,110 +508,121 @@ def report_random(args, games, houses, mixes, out_rows):
             return sum(b * v for b, v in zip(bq[:nq], row))
         pool.sort(key=predict, reverse=True)
         top = pool[:200]
-        regression = bound([statistics.mean(m[i] for m in top) for i in range(8)], f)
+        regression = bound([statistics.mean(m[i] for m in top) for i in range(N)], f)
         # Gradient: from the mean draw a step along the linear model's coefficients (centred over
         # the fieldable slots, so the shares still sum to 1), the largest move 12 points.
-        mean_start = [statistics.mean(r['start'][i] / 10000 for r in hr) for i in range(8)]
+        mean_start = [statistics.mean(r['start'][i] / 10000 for r in hr) for i in range(N)]
         coef = {ref: 0.0, **{c: beta[k + 1] for k, c in enumerate(cols)}}
         centre = statistics.mean(coef[i] for i in idx)
         direction = {i: coef[i] - centre for i in idx}
         scale = 0.12 / max(1e-9, max(abs(v) for v in direction.values()))
-        gradient = bound([mean_start[i] + scale * direction[i] if f[i] else 0.0 for i in range(8)], f)
+        gradient = bound([mean_start[i] + scale * direction[i] if f[i] else 0.0 for i in range(N)], f)
         # Winners' end-of-game production (both arms, this house), and per-type cost-effectiveness.
         both = hr + [r for r in ctrl if r['house'] == house]
         end_win, n_win = composition(both, 'mine', 'final', 'built', 'win')
         end_loss, n_loss = composition(both, 'mine', 'final', 'built', 'loss')
         winners_end = bound(end_win, f) if end_win else None
-        reward = [0.0] * 9
-        built = [0.0] * 9
-        lost = [0.0] * 9
+        reward = [0.0] * (N + 1)
+        built = [0.0] * (N + 1)
+        lost = [0.0] * (N + 1)
         for r in both:
             s = r.get(('mine', 'final'))
-            if s:
-                for i in range(9):
+            if s and len(s['reward']) > N:
+                for i in range(N + 1):
                     reward[i] += s['reward'][i]
                     built[i] += s['built'][i]
                     lost[i] += s['lost'][i]
-        eff = [reward[i] / built[i] if built[i] > 0 else 0.0 for i in range(8)]
+        eff = [reward[i] / built[i] if built[i] > 0 else 0.0 for i in range(N)]
         cost = bound(eff, f)
         print(f'\nEnd of game, built value share (this house, both arms): winners {pct(end_win, f)} (n={n_win}), '
               f'losers {pct(end_loss, f)} (n={n_loss})')
         for mark in (10, 20, 30):
             w, nw = composition(both, 'mine', mark, 'built', 'win')
-            l, nl = composition(both, 'mine', mark, 'built', 'loss')
-            print(f'Minute {mark}: winners {pct(w, f)} (n={nw}), losers {pct(l, f)} (n={nl})')
+            lo, nl = composition(both, 'mine', mark, 'built', 'loss')
+            print(f'Minute {mark}: winners {pct(w, f)} (n={nw}), losers {pct(lo, f)} (n={nl})')
         print('Per type (both arms): reward per value built ' + ', '.join(
             f'{SLOTS[i]} {eff[i]:.2f}' for i in idx) + '; survival ' + ', '.join(
             f'{SLOTS[i]} {1 - lost[i] / built[i]:.2f}' for i in idx if built[i] > 0))
-        for i in list(idx) + [8]:
-            name = SLOTS[i] if i < 8 else 'infantry'
-            out_rows['types'].append({'house': house, 'slot': name, 'built_value': int(built[i]), 'lost_value': int(lost[i]),
-                                      'reward': int(reward[i]), 'reward_per_built': f'{reward[i] / built[i]:.3f}' if built[i] else '',
+        for i in list(idx) + [N]:
+            name = SLOTS[i] if i < N else 'infantry'
+            out_rows['types'].append({'tech': args.tech or '', 'house': house, 'slot': name, 'built_value': int(built[i]),
+                                      'lost_value': int(lost[i]), 'reward': int(reward[i]),
+                                      'reward_per_built': f'{reward[i] / built[i]:.3f}' if built[i] else '',
                                       'survival': f'{1 - lost[i] / built[i]:.3f}' if built[i] else '',
-                                      'end_share_winners': f'{end_win[i]:.3f}' if end_win and i < 8 else '',
-                                      'end_share_losers': f'{end_loss[i]:.3f}' if end_loss and i < 8 else ''})
+                                      'end_share_winners': f'{end_win[i]:.3f}' if end_win and i < N else '',
+                                      'end_share_losers': f'{end_loss[i]:.3f}' if end_loss and i < N else ''})
         candidates[house] = {'regression': regression, 'gradient': gradient, 'winners_end': winners_end, 'cost': cost}
-        print('\nCandidates (percent, tank/siege/launcher/special/ornithopter/trike/raider/quad):')
+        print('\nCandidates (percent, ' + '/'.join(SLOTS) + '):')
         for name, mix in candidates[house].items():
             if mix:
                 ints = percent(mix, f)
                 print(f'- {name}: {",".join(map(str, ints))}')
-                out_rows['candidates'].append({'house': house, 'candidate': name, 'ratios': ','.join(map(str, ints))})
+                out_rows['candidates'].append({'tech': args.tech or '', 'house': house, 'candidate': name,
+                                               'ratios': ','.join(map(str, ints))})
     return candidates, fieldable
 
 
-def write_candidates(directory, candidates, fieldable):
+def tuned_key(house, tech):
+    """The [Unit Ratios Tuned] key of \\a house's tech band at \\a tech (the top band: <House>)."""
+    band = band_of(house, tech)
+    return house.capitalize() if band == band_of(house, 9) else f'{house.capitalize()}_Tech{band}'
+
+
+def write_candidates(directory, candidates, fieldable, tech=None, prefix='tuned'):
     names = sorted({name for c in candidates.values() for name in c})
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+    tech = tech or TOP_TECH
     for name in names:
-        lines = [f'# Test-only tuned starting mix "{name}" (tests/ai/ratio-analysis.py; docs/ai-play-styles.md,',
-                 '# section 8). Label: default@<file>#Tuned-Swarm. Percent: tank, siege, launcher, special,',
-                 '# ornithopter, trike, raider trike, quad.', '', '[Unit Ratios Tuned]']
+        lines = [f'# Test-only tuned starting mix "{name}" at tech {tech} (tests/ai/ratio-analysis.py; docs/ai-play-styles.md,',
+                 '# section 8). Label: default@<file>#Tuned-Swarm. Percent: ' + ', '.join(SLOTS) + '.', '', '[Unit Ratios Tuned]']
         for house, c in candidates.items():
             if c.get(name):
-                lines.append(f'{house.capitalize()}={",".join(map(str, percent(c[name], fieldable[house])))}')
-        (directory / f'tuned-{name.replace("_", "-")}.ini').write_text('\n'.join(lines) + '\n')
+                lines.append(f'{tuned_key(house, tech)}={",".join(map(str, percent(c[name], fieldable[house])))}')
+        suffix = f'-t{tech}' if tech != TOP_TECH else ''
+        (directory / f'{prefix}{suffix}-{name.replace("_", "-")}.ini').write_text('\n'.join(lines) + '\n')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('results', nargs='+', help='vanilla-match.py result directories')
     parser.add_argument('--tags', nargs='*')
+    parser.add_argument('--tech', type=int, help='Only the games at this tech level (vanilla-match.py --tech)')
     parser.add_argument('--arms')
     parser.add_argument('--by-map', action='store_true')
     parser.add_argument('--random')
     parser.add_argument('--candidates', help='Write the candidates as play styles into this directory')
     parser.add_argument('--csv', help='Write the compact tables into this directory')
     args = parser.parse_args()
-    games, houses, mixes = load(args.results, set(args.tags or []))
+    games, houses, mixes = load(args.results, set(args.tags or []), args.tech)
     out_rows = defaultdict(list)
     if args.arms:
-        report_arms(args, games, houses)
+        report_arms(args, games, houses, out_rows)
     if args.random:
         candidates, fieldable = report_random(args, games, houses, mixes, out_rows)
         if args.candidates:
-            write_candidates(args.candidates, candidates, fieldable)
-        if args.csv:
+            write_candidates(args.candidates, candidates, fieldable, args.tech)
+    if args.csv:
+        d = Path(args.csv)
+        d.mkdir(parents=True, exist_ok=True)
+        if args.random:
             x, y = args.random.split(':')
-            d = Path(args.csv)
-            d.mkdir(parents=True, exist_ok=True)
-            recs = [r for r in records(games, houses, mixes, x, y) if r['start']]
+            recs = [r for r in records(games, houses, mixes, x, y) if r['start'] and len(r['start']) == N]
             with (d / 'random-games.csv').open('w', newline='') as handle:
                 w = csv.writer(handle)
-                w.writerow(['map', 'seed', 'house', 'opponent', 'score', 'end_min'] + [f'start_{s}' for s in SLOTS]
+                w.writerow(['map', 'tech', 'seed', 'house', 'opponent', 'score', 'end_min'] + [f'start_{s}' for s in SLOTS]
                            + [f'end_built_{s}' for s in SLOTS] + [f'opp_end_built_{s}' for s in SLOTS])
                 for r in recs:
                     mine = shares(r[('mine', 'final')]['built']) if ('mine', 'final') in r else None
                     theirs = shares(r[('theirs', 'final')]['built']) if ('theirs', 'final') in r else None
-                    w.writerow([r['map'], r['seed'], r['house'], r['opponent'], r['score'], f'{r["end_s"] / 60:.1f}']
-                               + r['start'] + [f'{v:.3f}' for v in (mine or [0] * 8)] + [f'{v:.3f}' for v in (theirs or [0] * 8)])
-            for name, rows in out_rows.items():
-                if rows:
-                    with (d / f'{name}.csv').open('w', newline='') as handle:
-                        w = csv.DictWriter(handle, fieldnames=list(rows[0]))
-                        w.writeheader()
-                        w.writerows(rows)
+                    w.writerow([r['map'], r['tech'], r['seed'], r['house'], r['opponent'], r['score'], f'{r["end_s"] / 60:.1f}']
+                               + r['start'] + [f'{v:.3f}' for v in (mine or [0] * N)] + [f'{v:.3f}' for v in (theirs or [0] * N)])
+        for name, rows in out_rows.items():
+            if rows:
+                with (d / f'{name}.csv').open('w', newline='') as handle:
+                    w = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                    w.writeheader()
+                    w.writerows(rows)
 
 
 if __name__ == '__main__':

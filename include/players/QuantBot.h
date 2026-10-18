@@ -36,7 +36,7 @@ class Harvester;
 #include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
-#include <players/SpecialUnitPolicy.h>
+#include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
 
@@ -113,15 +113,19 @@ public:
 
     /// Observational data for the compact end-of-match metaserver summary.
     /// It is not saved or consulted by simulation decisions.
-    const std::array<int, 8>& getLastUnitMixBps() const { return lastUnitMixBps; }
+    const UnitMixPolicy::Mix& getLastUnitMixBps() const { return lastUnitMixBps; }
+    /// The unit of each mix slot (UnitMixPolicy::kSlots order).
+    static constexpr std::array<Uint32, UnitMixPolicy::kSlots> kMixItems = {Unit_Tank, Unit_SiegeTank,
+        Unit_Launcher, Unit_Devastator, Unit_SonicTank, Unit_Deviator, Unit_Ornithopter, Unit_Trike,
+        Unit_RaiderTrike, Unit_Quad};
 
     /**
         Read-only record of the allocation the last production pass actually used: the
         same performance scores and the same intended army-value shares that produced
         lastUnitMixBps, taken at that pass. Purely observational - nothing in the
         simulation reads it, and a reader must never recompute learning from it.
-        Slot order is the production mix order: Tank, Siege Tank, Launcher, the
-        grouped special heavies, Ornithopter, Trike, Raider Trike, Quad.
+        Slot order is the production mix order: Tank, Siege Tank, Launcher, Devastator,
+        Sonic Tank, Deviator, Ornithopter, Trike, Raider Trike, Quad (UnitMixPolicy::kSlots).
     */
     struct AllocationSnapshot {
         struct Slot {
@@ -130,10 +134,7 @@ public:
             int targetBps = 0;       ///< Intended share of army value, basis points.
             bool allocated = false;  ///< Producible in that pass; otherwise no target exists.
         };
-        /// Slot 3 is the grouped special heavies (Devastator/Sonic Tank/Deviator):
-        /// one score and one share for the whole group, never per variant.
-        static constexpr size_t kSpecialGroupSlot = 3;
-        std::array<Slot, 8> slots{};
+        std::array<Slot, UnitMixPolicy::kSlots> slots{};
         bool ready = false;          ///< A real production pass has filled this.
         Uint32 cycle = 0;            ///< Game cycle of that pass.
         bool learning = false;       ///< Scores came from the measured learning window.
@@ -141,7 +142,7 @@ public:
         /// Mobile anti-air share protected in that pass while a hostile wing was
         /// observed, in basis points; zero when no floor was in force.
         int antiAirFloorBps = 0;
-        /// Aggregate infantry admission quota, separate from the eight-slot mix.
+        /// Aggregate infantry admission quota, separate from the unit-mix slots.
         int infantryQuotaBps = 0;
     };
     const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
@@ -318,7 +319,7 @@ private:
     Uint32 lastTelemetrySnapshotCycle = 0;
     Uint32 lastCityBuildingSnapshotCycle = 0;
     uint64_t telemetryState = 0; // Runtime only; never part of save/simulation state.
-    std::array<int, 8> lastUnitMixBps{};
+    UnitMixPolicy::Mix lastUnitMixBps{};
     /// Written once per production pass beside lastUnitMixBps, read only by the
     /// observational Stats UI and the supplemental observer runtime.
     AllocationSnapshot allocationSnapshot{};
@@ -855,9 +856,10 @@ private:
     struct PlayStyle {
         /// Share (basis points) of the final unit mix taken from `mix` (0 = the learned mix only).
         int mixBps = 0;
-        /// The style's composition over the mix slots (tank, siege tank, launcher, special,
-        /// ornithopter, trike, raider trike, quad); unavailable slots are dropped.
-        UnitMixPolicy::Weights mix{};
+        /// The style's composition in the group form (tank, siege tank, launcher, special,
+        /// ornithopter, trike, raider trike, quad; the special share is split between the specials
+        /// the house can build); unavailable slots are dropped.
+        UnitMixPolicy::GroupWeights mix{};
         /// Game minutes the style mix applies for (0 = the whole game).
         int mixMinutes = 0;
         /// Counter-composition: blend the mix towards the counters of the remembered enemy army
@@ -898,16 +900,18 @@ private:
     /// Orders a raider at the nearest enemy harvester (else refinery); false if it has no prey.
     bool raidWithStyle(const UnitBase* raider);
     /// The unit mix with the style mix and counter-composition applied (unit production).
-    UnitMixPolicy::Mix styledUnitMix(const UnitMixPolicy::Mix& mix, const std::array<bool,8>& available) const;
+    UnitMixPolicy::Mix styledUnitMix(const UnitMixPolicy::Mix& mix, const UnitMixPolicy::Slots& available) const;
     /// The strategy this house plays (QuantBotStrategy; docs/ai-play-styles.md, "Strategies"):
     /// picked once by pickStrategy() from the game seed, the house and the config, saved
     /// (SAVEGAMEVERSION 9865); a 9864 save picks it afresh by the same function.
     QuantBotStrategy::Choice strategy;
     bool strategyPicked = false;
     /// The starting ratios a Tuned or Bounded strategy resolved to when it was picked (the house's
-    /// [Unit Ratios Tuned], or QuantBotStrategy::randomMix of seed and house), bounded over the
-    /// slots the house can produce; all zero for every other mix. Saved (SAVEGAMEVERSION 9866): a
-    /// reload plays the mix it drew whatever config is loaded then. A 9865 save has no such mix.
+    /// [Unit Ratios Tuned] for the game's tech band, or QuantBotStrategy::randomMix of seed and
+    /// house), bounded over the slots the house can produce; all zero for every other mix. Saved
+    /// (SAVEGAMEVERSION 9866; ten slots, one per special, since 9868 - an older save's special
+    /// share is split between the house's specials): a reload plays the mix it drew whatever
+    /// config is loaded then. A 9865 save has no such mix.
     UnitMixPolicy::Mix strategyPrior{};
     /// Picks the strategy if none is set (first update of a new game or a pre-9865 load).
     void pickStrategy();
@@ -915,12 +919,20 @@ private:
     /// minutes), else null: the learned default and the configured readiness.
     const QuantBotStrategy::MixProfile* strategyMix() const;
     const QuantBotStrategy::TempoProfile* strategyTempo() const;
-    /// The mix slots this house can produce in this game (ObjectData and the game's tech level).
-    std::array<bool,8> fieldableMixSlots() const;
+    /// The mix slots this house can produce at \a tech (default: the game's tech level): the unit
+    /// is enabled, priced and has a builder, its tech level is at most \a tech, and its builder
+    /// and every prerequisite structure can be obtained at \a tech (ObjectData, recursively).
+    UnitMixPolicy::Slots fieldableMixSlots(int tech = -1) const;
+    /// The first tech level of the game's tech band for this house: the lowest level at which
+    /// the house fields the same slots as at the game's tech level (tests/ai/tech-bands.py).
+    int techBand() const;
+    /// fieldableMixSlots() of the game's tech level, computed once (runtime only, not saved).
+    mutable UnitMixPolicy::Slots fieldableSlots{};
+    mutable bool fieldableSlotsCached = false;
     /// The starting mix over the \a available slots, before any combat evidence: the configured
     /// opening, the strategy's prior in its place, then the starting-mix bounds (unless a test
     /// style turns them off). The prior UnitMixPolicy::allocate blends the learning into.
-    UnitMixPolicy::Weights startingPrior(const std::array<bool,8>& available) const;
+    UnitMixPolicy::Weights startingPrior(const UnitMixPolicy::Slots& available) const;
     /// The opening and wave rules of the style (if a test style is active) or else the tempo.
     bool lightFirstOpening() const;
     int minWaveUnits() const;
@@ -940,6 +952,9 @@ private:
 
     /// profile(strategy.mix) with a Tuned/Bounded strategyPrior in place (strategyMix()).
     QuantBotStrategy::MixProfile strategyProfile;
+    /// The strategy's starting ratios over this house's mix slots: strategyPrior (Tuned,
+    /// Bounded) or the preset's group form expanded over the house's specials.
+    UnitMixPolicy::Weights strategyStart{};
     void resolveStrategyProfile();
     // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
     //

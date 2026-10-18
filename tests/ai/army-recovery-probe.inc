@@ -1603,35 +1603,6 @@ void runArmyRecoveryProbe(Game& game) {
             enemyBase->setHealth(0);
         }
 
-        // ---- 13. Special allocator learns instead of taking array order ----
-        {
-            SpecialUnitPolicy::Candidates specials{};
-            const std::array<Uint32,3> items={Unit_Devastator,Unit_SonicTank,Unit_Deviator};
-            for(size_t s=0;s<items.size();++s) {
-                specials[s].item=items[s];
-                specials[s].price=currentGame->objectData.data[items[s]][owner->getHouseID()].price;
-                specials[s].available=true;
-                specials[s].affordable=true;
-            }
-            // Equal evidence, equal share, both affordable: this is the logged
-            // condition that always chose the Devastator from array order.
-            const int blind=SpecialUnitPolicy::select(specials);
-            require(blind>=0,"No special was selectable with everything available");
-            specials[size_t(blind)].committedValue+=specials[size_t(blind)].price;
-            const int second=SpecialUnitPolicy::select(specials);
-            require(second!=blind,"The special choice did not rotate across the group");
-            // Measured evidence then decides, in either direction.
-            specials[0].rewardMilli=1'000'000'000; specials[0].lossMilli=50'000'000'000;
-            specials[1].rewardMilli=80'000'000'000; specials[1].lossMilli=2'000'000'000;
-            specials[2].available=false;
-            require(SpecialUnitPolicy::select(specials)==1,
-                "The measurably better special was not chosen");
-            std::swap(specials[0].rewardMilli,specials[1].rewardMilli);
-            std::swap(specials[0].lossMilli,specials[1].lossMilli);
-            require(SpecialUnitPolicy::select(specials)==0,
-                "The special choice is fixed rather than measured");
-        }
-
         // ---- 14. Save, load and older-save defaults ------------------------
         {
             bot->armyPosture=ArmyPosturePolicy::Posture::Recovering;

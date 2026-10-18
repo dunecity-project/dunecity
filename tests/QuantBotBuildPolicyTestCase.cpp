@@ -463,45 +463,45 @@ TEST_CASE("Parallel MCV orders account for earlier factories and subsequent depl
 
 TEST_CASE("Light vehicle combat returns compete with heavy units by replacement cost", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     Weights scores{performanceScore(3000,600,300),performanceScore(3000,1200,600),
-        performanceScore(3000,900,450),performanceScore(3000,1400,700),0,
+        performanceScore(3000,900,450),performanceScore(3000,1400,700),0,0,0,
         performanceScore(3000,300,150),0,performanceScore(3000,400,200)};
     // Provide combat evidence: without losses the opening mix is intentionally
     // retained, so performance must not steer production yet.
     const auto successful = allocate(scores,baseline,true,true,10000,10000);
-    REQUIRE(successful[5] > successful[0]);
-    REQUIRE(successful[5] > successful[7]);
-    REQUIRE(successful[5]+successful[7] > 1200);
-    scores[5] = performanceScore(3000,3000,150);
+    REQUIRE(successful[7] > successful[0]);
+    REQUIRE(successful[7] > successful[9]);
+    REQUIRE(successful[7]+successful[9] > 1200);
+    scores[7] = performanceScore(3000,3000,150);
     const auto costly = allocate(scores,baseline,true,true,10000,10000);
-    REQUIRE(costly[5] < successful[5]);
-    REQUIRE(costly[7] > costly[5]);
-    REQUIRE(costly[6] == 0);
+    REQUIRE(costly[7] < successful[7]);
+    REQUIRE(costly[9] > costly[7]);
+    REQUIRE(costly[8] == 0);
 }
-TEST_CASE("Eight-type mix keeps defaults before combat and handles zero damage safely", "[quantbot][unitmix]") {
+TEST_CASE("Ten-type mix keeps defaults before combat and handles zero damage safely", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     const auto expected = normalize(baseline);
     REQUIRE(allocate({},baseline,true,true) == expected);
-    REQUIRE(allocate({0,0,0,0,0,100,0,0},baseline,false,true) == expected);
+    REQUIRE(allocate({0,0,0,0,0,0,0,100,0,0},baseline,false,true) == expected);
     REQUIRE(performanceScore(-100,0,0) == 0);
     REQUIRE(performanceScore(500,0,0) == 500000000);
     REQUIRE(performanceScore(2000000000,2000000000,150) > 0);
 }
-TEST_CASE("Adaptive eight-type mix preserves limits and deterministic peer results", "[quantbot][unitmix][multiplayer]") {
+TEST_CASE("Adaptive ten-type mix preserves limits and deterministic peer results", "[quantbot][unitmix][multiplayer]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     for (bool vanilla : {false,true}) {
-        for (size_t strongest=0; strongest<8; ++strongest) {
+        for (size_t strongest=0; strongest<kSlots; ++strongest) {
             Weights scores{}; scores[strongest]=10000000;
             const auto first=allocate(scores,baseline,true,vanilla);
-            allocate({4,3,2,1,0,4,3,2},baseline,true,vanilla);
+            allocate({4,3,2,1,1,1,0,4,3,2},baseline,true,vanilla);
             REQUIRE(allocate(scores,baseline,true,vanilla) == first);
             int total=0;
             for (int share : first) { REQUIRE(share>=0); REQUIRE(share<=8000); total+=share; }
             REQUIRE(total == 10000);
-            if (vanilla) REQUIRE(first[4]<=2500);
+            if (vanilla) REQUIRE(first[kOrnithopterSlot]<=2500);
         }
     }
 }
@@ -528,36 +528,37 @@ TEST_CASE("Light vehicle selection fills value deficits and counts queued units"
 
 TEST_CASE("Opening light shares shrink with tech and unavailable units receive no allocation", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights configured{500,1000,3500,3500,1500,0,0,0};
-    const std::array<bool,8> full{true,true,true,true,true,true,false,true};
+    // Tank, siege, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider, quad.
+    const Weights configured{500,1000,3500,3500,0,0,1500,0,0,0};
+    const Slots full{true,true,true,true,false,false,true,true,false,true};
     for (int tech=4; tech<=8; ++tech) {
         const auto mix = openingMix(tech,configured,full);
-        REQUIRE(mix[5]+mix[6]+mix[7] == (tech>=7 ? 400 : tech>=5 ? 800 : 1500));
-        REQUIRE(mix[6] == 0);
-        REQUIRE(mix[7] > mix[5]);
+        REQUIRE(mix[7]+mix[8]+mix[9] == (tech>=7 ? 400 : tech>=5 ? 800 : 1500));
+        REQUIRE(mix[8] == 0);
+        REQUIRE(mix[9] > mix[7]);
         int total=0; for (int value : mix) total+=value;
         REQUIRE(total == 10000);
     }
-    const auto tankOnly = openingMix(4,configured,{true,false,false,false,false,true,false,true});
+    const auto tankOnly = openingMix(4,configured,{true,false,false,false,false,false,false,true,false,true});
     REQUIRE(tankOnly[0] == 8500);
     REQUIRE(tankOnly[3] == 0);
-    REQUIRE(tankOnly[4] == 0);
-    const auto lightsOnly = openingMix(3,configured,{false,false,false,false,false,true,false,true});
-    REQUIRE(lightsOnly[5]+lightsOnly[7] == 10000);
+    REQUIRE(tankOnly[6] == 0);
+    const auto lightsOnly = openingMix(3,configured,{false,false,false,false,false,false,false,true,false,true});
+    REQUIRE(lightsOnly[7]+lightsOnly[9] == 10000);
     const auto noFactory = openingMix(8,configured,{});
     REQUIRE(noFactory == Mix{});
 }
 TEST_CASE("Opening allocation follows upgrades and missing producer recovery", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights configured{500,1000,3500,3500,1500,0,0,0};
-    const auto before = openingMix(8,configured,{true,false,false,false,false,true,false,true});
-    const auto after = openingMix(8,configured,{true,true,true,true,true,true,false,true});
+    const Weights configured{500,1000,3500,3500,0,0,1500,0,0,0};
+    const auto before = openingMix(8,configured,{true,false,false,false,false,false,false,true,false,true});
+    const auto after = openingMix(8,configured,{true,true,true,true,false,false,true,true,false,true});
     REQUIRE(before[0] == 9600);
     REQUIRE(after[0] < before[0]);
     REQUIRE(after[3] > 0);
-    REQUIRE(after[4] > 0);
-    REQUIRE(after[5]+after[7] == 400);
-    REQUIRE(openingMix(8,{}, {true,false,false,false,false,false,false,false})[0] == 10000);
+    REQUIRE(after[6] > 0);
+    REQUIRE(after[7]+after[9] == 400);
+    REQUIRE(openingMix(8,{}, {true,false,false,false,false,false,false,false,false,false})[0] == 10000);
 }
 
 TEST_CASE("Damage reward values actual HP removed and gives the killer twenty percent", "[quantbot][reward]") {
@@ -792,14 +793,14 @@ TEST_CASE("An explicit unit-count override replaces the value cap with rolling h
 TEST_CASE("Exploration fades independently for each unit's evidence", "[quantbot][allocation]") {
     using namespace UnitMixPolicy;
     Weights scores{},rewards{},losses{},prices{};
-    std::array<bool,8> available{}; available[0]=available[1]=available[3]=true;
+    Slots available{}; available[0]=available[1]=available[3]=true;
     scores[0]=2000000; rewards[0]=100000000; losses[0]=50000000;
     scores[1]=100000; rewards[1]=100000000; losses[1]=1000000000;
     prices.fill(700000);
     const auto first=exploredScores(scores,rewards,losses,prices,available);
     REQUIRE(first[3]>0); // never tried: eligible for a real combat sample
     REQUIRE(first[1]<first[3]); // many losses: no named-unit floor rescuing poor performance
-    REQUIRE(first[4]==0); // unavailable aircraft get no speculative allocation
+    REQUIRE(first[kOrnithopterSlot]==0); // unavailable aircraft get no speculative allocation
     scores[3]=100000; rewards[3]=10000000; losses[3]=100000000;
     const auto tested=exploredScores(scores,rewards,losses,prices,available);
     REQUIRE(tested[3]<first[3]);
@@ -819,12 +820,12 @@ TEST_CASE("Unit mix remembers full-match evidence across idle time and saves", "
     using namespace UnitMixPolicy;
     PerformanceHistory original;
     Weights reward{},loss{},prices{}; prices.fill(600000);
-    const std::array<bool,8> available{true,false,false,false,true,false,false,false};
+    const Slots available{true,false,false,false,false,false,true,false,false,false};
     reward[0]=4000000; loss[0]=2000000;
-    reward[4]=800000; loss[4]=1600000;
+    reward[6]=800000; loss[6]=1600000;
     auto score = [&]() {
         Weights scores{};
-        for (size_t i=0;i<8;++i) scores[i]=performanceScore(original.reward[i],original.loss[i],prices[i]);
+        for (size_t i=0;i<kSlots;++i) scores[i]=performanceScore(original.reward[i],original.loss[i],prices[i]);
         return normalize(exploredScores(scores,original.reward,original.loss,prices,available));
     };
     original.update(100,reward,loss);
@@ -836,13 +837,31 @@ TEST_CASE("Unit mix remembers full-match evidence across idle time and saves", "
     OMemoryStream output; original.save(output);
     IMemoryStream input(output.getData(),output.getDataLength());
     PerformanceHistory restored; restored.load(input);
-    reward[4]+=500000; loss[4]+=100000;
+    reward[6]+=500000; loss[6]+=100000;
     original.update(1000001,reward,loss); restored.update(1000001,reward,loss);
     REQUIRE(restored.reward==original.reward);
     REQUIRE(restored.loss==original.loss);
     REQUIRE(restored.sampled==original.sampled);
-    REQUIRE(original.reward[4]==1300000);
-    REQUIRE(original.loss[4]==1700000);
+    REQUIRE(original.reward[6]==1300000);
+    REQUIRE(original.loss[6]==1700000);
+    // The serialized window keeps the eight group slots (every save version): ornithopter evidence
+    // (group slot 4) loads into the ornithopter's slot, the special group into the first special
+    // slot, and a save writes the three specials summed.
+    OMemoryStream legacy;
+    legacy.writeUint32(7); legacy.writeBool(true);
+    for (int block = 0; block < 4; ++block)
+        for (int64_t g = 0; g < 8; ++g) legacy.writeSint64(block * 100 + g + 1);
+    IMemoryStream legacyInput(legacy.getData(),legacy.getDataLength());
+    PerformanceHistory old; old.load(legacyInput);
+    REQUIRE(old.sampled==7);
+    REQUIRE(old.loss==Weights{301,302,303,304,0,0,305,306,307,308});
+    REQUIRE(old.reward==Weights{201,202,203,204,0,0,205,206,207,208});
+    old.reward[4]=10; old.reward[5]=20;
+    OMemoryStream resaved; old.save(resaved);
+    REQUIRE(resaved.getDataLength()==legacy.getDataLength());
+    IMemoryStream resavedInput(resaved.getData(),resaved.getDataLength());
+    PerformanceHistory again; again.load(resavedInput);
+    REQUIRE(again.reward[3]==204+10+20);
 }
 TEST_CASE("Loaded legacy evidence is replaced with the house's complete combat totals", "[quantbot][allocation][save-compat]") {
     using namespace UnitMixPolicy;
@@ -850,8 +869,8 @@ TEST_CASE("Loaded legacy evidence is replaced with the house's complete combat t
     OMemoryStream output;
     output.writeUint32(100); output.writeBool(true);
     Weights totalReward{},totalLoss{},decayedReward{},decayedLoss{};
-    totalReward[4]=800000; totalLoss[4]=1600000;
-    decayedReward[4]=100000; decayedLoss[4]=200000;
+    totalReward[6]=800000; totalLoss[6]=1600000;
+    decayedReward[6]=100000; decayedLoss[6]=200000;
     for (const auto& values:{totalReward,totalLoss,decayedReward,decayedLoss})
         for (auto value:values) output.writeSint64(value);
     IMemoryStream input(output.getData(),output.getDataLength());

@@ -32,6 +32,9 @@
 
 #include "QuantBotInternal.h"
 
+#include <bitset>
+#include <functional>
+
 namespace {
 
 int tiles(Coord a, Coord b) { return blockDistance(a, b).lround(); }
@@ -57,19 +60,47 @@ const QuantBot::PlayStyle& QuantBot::style() const {
     return autonomousCustomHardBrutal() ? playStyle : inert;
 }
 
-std::array<bool,8> QuantBot::fieldableMixSlots() const {
+UnitMixPolicy::Slots QuantBot::fieldableMixSlots(int tech) const {
+    // ObjectData and the game's tech level do not change during a game: computed once.
+    if (tech < 0 && fieldableSlotsCached) return fieldableSlots;
+    const bool gameTech = tech < 0;
     const int houseID = getHouse()->getHouseID();
-    auto buildable = [&](Uint32 item) {
-        const auto& spec = currentGame->objectData.data[item][houseID];
-        return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
-            && spec.techLevel <= currentGame->techLevel;
+    if (tech < 0) tech = currentGame->techLevel;
+    const auto& data = currentGame->objectData.data;
+    // A structure can be obtained at `tech` when it is enabled, priced, built somewhere obtainable
+    // and its own prerequisites can be obtained too; the Construction Yard is where a game starts.
+    std::function<bool(int, std::bitset<Structure_LastID + 1>&)> obtainable = [&](int item, std::bitset<Structure_LastID + 1>& seen) {
+        if (item == Structure_ConstructionYard) return true;
+        if (item < Structure_FirstID || item > Structure_LastID || seen[item]) return false;
+        const auto& spec = data[item][houseID];
+        if (!spec.enabled || spec.price <= 0 || spec.builder == ItemID_Invalid || spec.techLevel > tech) return false;
+        seen[item] = true;
+        bool ok = obtainable(spec.builder, seen);
+        for (int prerequisite = Structure_FirstID; ok && prerequisite <= Structure_LastID; ++prerequisite)
+            if (spec.prerequisiteStructuresSet[prerequisite]) ok = obtainable(prerequisite, seen);
+        seen[item] = false;
+        return ok;
     };
-    std::array<bool, 8> slots{};
-    const std::array<Uint32, 8> items = {Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Devastator,
-        Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
-    for (size_t i = 0; i < items.size(); ++i) slots[i] = buildable(items[i]);
-    slots[3] = buildable(Unit_Devastator) || buildable(Unit_SonicTank) || buildable(Unit_Deviator);
+    auto buildable = [&](Uint32 item) {
+        const auto& spec = data[item][houseID];
+        if (!spec.enabled || spec.price <= 0 || spec.builder == ItemID_Invalid || spec.techLevel > tech) return false;
+        std::bitset<Structure_LastID + 1> seen;
+        if (!obtainable(spec.builder, seen)) return false;
+        for (int prerequisite = Structure_FirstID; prerequisite <= Structure_LastID; ++prerequisite)
+            if (spec.prerequisiteStructuresSet[prerequisite] && !obtainable(prerequisite, seen)) return false;
+        return true;
+    };
+    UnitMixPolicy::Slots slots{};
+    for (size_t i = 0; i < slots.size(); ++i) slots[i] = buildable(kMixItems[i]);
+    if (gameTech) { fieldableSlots = slots; fieldableSlotsCached = true; }
     return slots;
+}
+
+int QuantBot::techBand() const {
+    const auto slots = fieldableMixSlots();
+    int band = currentGame->techLevel;
+    while (band > 1 && fieldableMixSlots(band - 1) == slots) --band;
+    return band;
 }
 
 void QuantBot::pickStrategy() {
@@ -80,7 +111,7 @@ void QuantBot::pickStrategy() {
         return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
             && spec.techLevel <= currentGame->techLevel;
     };
-    const std::array<bool, 8> slots = fieldableMixSlots();
+    const UnitMixPolicy::Slots slots = fieldableMixSlots();
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
         || buildable(Unit_Trooper) || buildable(Unit_Troopers);
     const bool active = autonomousCustomHardBrutal();
@@ -88,11 +119,12 @@ void QuantBot::pickStrategy() {
     strategy = active ? QuantBotStrategy::pick(botConfig().strategy, seed, houseID,
                                                 QuantBotStrategy::eligibleMixes(slots, infantry))
                       : QuantBotStrategy::Choice{};
-    // Tuned and Bounded resolve their starting ratios now, once: the house's tuned ratios or the
-    // draw of seed and house, bounded over what the house can produce (saved, SAVEGAMEVERSION 9866).
+    // Tuned and Bounded resolve their starting ratios now, once: the house's tuned ratios for the
+    // game's tech band (none for the band: the house's top mix, renormalised over the band's slots)
+    // or the draw of seed and house, bounded over what the house can produce (saved, 9866/9868).
     strategyPrior = {};
     if (strategy.mix == QuantBotStrategy::Mix::Tuned) {
-        const auto& tuned = botConfig().getTunedRatios(houseID);
+        const auto& tuned = botConfig().getTunedRatios(houseID, techBand());
         if (*std::max_element(tuned.begin(), tuned.end()) > 0) strategyPrior = QuantBotStrategy::bound(tuned, slots);
     } else if (strategy.mix == QuantBotStrategy::Mix::Bounded) {
         strategyPrior = QuantBotStrategy::randomMix(seed, houseID, slots);
@@ -115,8 +147,9 @@ void QuantBot::pickStrategy() {
 
 void QuantBot::resolveStrategyProfile() {
     strategyProfile = QuantBotStrategy::profile(strategy.mix);
+    strategyStart = UnitMixPolicy::expandGroups(strategyProfile.prior, fieldableMixSlots());
     if (strategy.mix != QuantBotStrategy::Mix::Tuned && strategy.mix != QuantBotStrategy::Mix::Bounded) return;
-    for (size_t i = 0; i < strategyPrior.size(); ++i) strategyProfile.prior[i] = strategyPrior[i];
+    for (size_t i = 0; i < strategyPrior.size(); ++i) strategyStart[i] = strategyPrior[i];
     // No tuned ratios for this house: the configured opening, as Learned.
     strategyProfile.priorBps = *std::max_element(strategyPrior.begin(), strategyPrior.end()) > 0 ? 10000 : 0;
 }
@@ -126,41 +159,43 @@ const QuantBotStrategy::MixProfile* QuantBot::strategyMix() const {
     return &strategyProfile;
 }
 
-UnitMixPolicy::Weights QuantBot::startingPrior(const std::array<bool,8>& available) const {
+UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& available) const {
     const auto& ratios = botConfig().getRatios(getHouse()->getHouseID());
-    UnitMixPolicy::Weights configured{};
-    configured[0] = static_cast<int>(ratios.tank*10000);
-    configured[1] = static_cast<int>(ratios.siegeTank*10000);
-    configured[2] = static_cast<int>(ratios.launcher*10000);
-    configured[3] = static_cast<int>(ratios.special*10000);
-    configured[4] = static_cast<int>(ratios.ornithopter*10000);
+    // The configured [Unit Ratios] have one special share: split between the house's specials.
+    UnitMixPolicy::GroupWeights group{};
+    group[0] = static_cast<int>(ratios.tank*10000);
+    group[1] = static_cast<int>(ratios.siegeTank*10000);
+    group[2] = static_cast<int>(ratios.launcher*10000);
+    group[3] = static_cast<int>(ratios.special*10000);
+    group[4] = static_cast<int>(ratios.ornithopter*10000);
+    UnitMixPolicy::Slots slots = fieldableMixSlots();
+    for (size_t i = 0; i < slots.size(); ++i) slots[i] = slots[i] || available[i];
+    const auto configured = UnitMixPolicy::expandGroups(group, slots);
     // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
     if (!style().startBounds) {
         const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
         UnitMixPolicy::Weights prior{};
-        for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
+        for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
         if (const auto* mix = strategyMix())
-            prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, available);
+            prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : strategyStart, mix->priorBps, available);
         return prior;
     }
     // The starting mix is defined over the slots the house can produce in this game (ObjectData,
     // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
     // (docs/ai-play-styles.md, section 8). A pass then plays it over the slots producible at that
     // pass, renormalised - the factories not yet standing do not re-shape it.
-    std::array<bool,8> slots = fieldableMixSlots();
-    for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];
     const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
     UnitMixPolicy::Weights prior{};
-    for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
+    for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
     // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
     // of the remembered enemy army).
     if (const auto* mix = strategyMix())
-        prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, slots);
+        prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : strategyStart, mix->priorBps, slots);
     const auto bounded = QuantBotStrategy::bound(prior, slots);
     UnitMixPolicy::Weights masked{};
-    for (size_t i = 0; i < 8; ++i) masked[i] = available[i] ? bounded[i] : 0;
+    for (size_t i = 0; i < masked.size(); ++i) masked[i] = available[i] ? bounded[i] : 0;
     const auto mix = UnitMixPolicy::normalize(masked);
-    for (size_t i = 0; i < 8; ++i) prior[i] = mix[i];
+    for (size_t i = 0; i < prior.size(); ++i) prior[i] = mix[i];
     return prior;
 }
 
@@ -202,10 +237,10 @@ UnitMixPolicy::Weights QuantBot::enemyCounterPrior() const {
     }
     const int64_t air = int64_t(visibleHostileAircraft())
         * std::max(1, currentGame->objectData.data[Unit_Ornithopter][getHouse()->getHouseID()].price);
-    return QuantBotStrategy::counterPrior(light, armour, launchers, air);
+    return UnitMixPolicy::expandGroups(QuantBotStrategy::counterPrior(light, armour, launchers, air), fieldableMixSlots());
 }
 
-UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const std::array<bool,8>& available) const {
+UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const UnitMixPolicy::Slots& available) const {
     const PlayStyle& s = style();
     UnitMixPolicy::Mix result = mix;
     auto blend = [&](const UnitMixPolicy::Weights& weights, int bps) {
@@ -220,7 +255,7 @@ UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const 
         result = UnitMixPolicy::normalize(blended);
     };
     if (s.mixBps > 0 && (s.mixMinutes <= 0 || getGameCycleCount() < Uint32(MILLI2CYCLES(s.mixMinutes * 60000))))
-        blend(s.mix, s.mixBps);
+        blend(UnitMixPolicy::expandGroups(s.mix, fieldableMixSlots()), s.mixBps);
     if (s.counterBps > 0) {
         const auto counter = enemyCounterPrior();
         if (*std::max_element(counter.begin(), counter.end()) > 0) blend(counter, s.counterBps);

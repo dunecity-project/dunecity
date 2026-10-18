@@ -621,7 +621,7 @@ void runForceConcentrationProbe(Game& game) {
                 // re-saves as a current save that loads again.
                 OMemoryStream trailer; trailer.open();
                 bot->saveDefenceMemory(trailer);
-                constexpr size_t kStrategyBytes=3+16; // 9865: picked flag, mix, tempo; 9866: 8 x Uint16 ratios
+                constexpr size_t kStrategyBytes=3+20; // 9865: picked flag, mix, tempo; 9868: 10 x Uint16 ratios
                 require(trailer.getDataLength()+kStrategyBytes<bytes.size(),"The 9864 trailer is not part of the save");
                 const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kStrategyBytes);
                 currentGame->loadedSavegameVersion=9863;

@@ -177,13 +177,23 @@ struct QuantBotConfig {
     /// keys (not written by save()), the code defaults apply when absent. Hashed for multiplayer.
     QuantBotStrategy::Settings strategy;
     /// The Tuned mix strategy's starting ratios per house (docs/ai-play-styles.md, section 8),
-    /// indexed by house id (Harkonnen, Atreides, Ordos, Fremen, Sardaukar, Mercenary) over the mix
-    /// slots tank, siege tank, launcher, special, ornithopter, trike, raider trike, quad (percent).
-    /// INI: [Unit Ratios Tuned] <House> = t,s,l,sp,o,tr,r,q; optional keys (not written by save()),
-    /// the code defaults apply when absent; all zero = the configured opening. Hashed.
-    std::array<UnitMixPolicy::Weights, 6> tunedRatios{};
-    /// The tuned ratios of a house; all zero for a house without any.
-    const UnitMixPolicy::Weights& getTunedRatios(int houseID) const;
+    /// indexed by house id (Harkonnen, Atreides, Ordos, Fremen, Sardaukar, Mercenary) and tech band
+    /// (0 = the house's top mix, used in every band without its own; 1-9 = the band whose first tech
+    /// level that is, QuantBot::techBand) over the mix slots tank, siege tank, launcher, Devastator,
+    /// Sonic Tank, Deviator, ornithopter, trike, raider trike, quad (percent).
+    /// INI: [Unit Ratios Tuned] <House> = t,s,l,dv,so,de,o,tr,r,q and <House>_Tech<N> = ... or
+    /// <House>_Tech<N> = Opening (that band plays the configured opening, bounded: a band whose
+    /// tuned mix did not beat it); optional keys (not written by save()), the code defaults apply
+    /// when absent; all zero = none (the house's top mix, or with none at all the configured opening).
+    /// Hashed.
+    static constexpr size_t kTunedBands = 10;
+    std::array<std::array<UnitMixPolicy::Weights, kTunedBands>, 6> tunedRatios{};
+    /// Bands (1-9) that play the configured opening although the house has a top mix.
+    std::array<std::array<bool, kTunedBands>, 6> tunedOpening{};
+    /// The tuned ratios of a house in the tech band starting at \a band: none (all zero) for an
+    /// Opening band, else the band's own mix, else the house's top mix (renormalised over the band's
+    /// slots when bounded); all zero for none.
+    const UnitMixPolicy::Weights& getTunedRatios(int houseID, int band = 0) const;
 
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)

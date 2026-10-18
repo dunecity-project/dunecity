@@ -249,7 +249,9 @@
 //     (the configured opening, the presets, Counter) gives each producible mix slot 2%-50% before
 //     the learning, the presets are re-cut within those bounds, and the Tuned ([Unit Ratios Tuned],
 //     hashed) and Bounded (random within the bounds from seed and house) mixes are new. An 82 peer
-//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios).
+//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios). Unreleased,
+//     so the same protocol also covers one mix slot per special (Devastator, Sonic Tank, Deviator;
+//     the observer allocation snapshot has ten slots), the tuned ratios per tech band and save 9868.
 #define NETWORK_PROTOCOL_VERSION            83
 
 // Mod transfer limits

@@ -6,7 +6,6 @@
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/QuantBotConfig.h>
-#include <players/SpecialUnitPolicy.h>
 
 #include <cstdint>
 #include <sstream>
@@ -672,74 +671,5 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = false; }));
-    }
-}
-
-TEST_CASE("Special units: the within-group choice is measured, not array order",
-          "[ai][special]") {
-    auto candidate = [](uint32_t item, int price) {
-        SpecialUnitPolicy::Candidate c;
-        c.item = item; c.price = price; c.available = true; c.affordable = true;
-        return c;
-    };
-    SECTION("no affordable special") {
-        SpecialUnitPolicy::Candidates specials{};
-        REQUIRE(SpecialUnitPolicy::select(specials) == -1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, -1))
-            == "no_affordable_special");
-    }
-    SECTION("with no evidence the least-owned type is tried") {
-        // This is the condition the reviewed match logged: identical deficits,
-        // both available and affordable. The old pooled comparison always kept
-        // the Devastator because it came first in the array.
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        specials[0].committedValue = 4000;   // Plenty of Devastators already.
-        specials[1].committedValue = 0;
-        specials[2].committedValue = 1200;
-        const int chosen = SpecialUnitPolicy::select(specials);
-        REQUIRE(chosen == 1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, chosen))
-            == "exploration_least_owned");
-    }
-    SECTION("exploration rotates across the group rather than fixing on one type") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        std::vector<int> picks;
-        for (int round = 0; round < 3; ++round) {
-            const int chosen = SpecialUnitPolicy::select(specials);
-            REQUIRE(chosen >= 0);
-            picks.push_back(chosen);
-            specials[size_t(chosen)].committedValue += specials[size_t(chosen)].price;
-        }
-        REQUIRE(picks[0] != picks[1]);
-        REQUIRE(picks[1] != picks[2]);
-    }
-    SECTION("a measurably better type wins once there is evidence") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        // The Devastator has traded badly and the Sonic Tank has traded well,
-        // with enough evidence on both sides to overcome the prior.
-        specials[0].rewardMilli = 2'000'000'000;  specials[0].lossMilli = 40'000'000'000;
-        specials[1].rewardMilli = 60'000'000'000; specials[1].lossMilli = 4'000'000'000;
-        specials[2].available = false;
-        const int chosen = SpecialUnitPolicy::select(specials);
-        REQUIRE(chosen == 1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, chosen))
-            == "measured_return_per_loss");
-        REQUIRE(SpecialUnitPolicy::rawScore(specials[1]) > SpecialUnitPolicy::rawScore(specials[0]));
-        // And the reverse evidence picks the other way, so nothing is globally
-        // preferred: the measurement decides.
-        std::swap(specials[0].rewardMilli, specials[1].rewardMilli);
-        std::swap(specials[0].lossMilli, specials[1].lossMilli);
-        REQUIRE(SpecialUnitPolicy::select(specials) == 0);
-    }
-    SECTION("an unavailable or unaffordable type is never chosen") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        specials[1].rewardMilli = 60'000'000'000; specials[1].lossMilli = 1'000'000;
-        specials[1].affordable = false;          // Best, but cannot be paid for.
-        specials[2].available = false;
-        REQUIRE(SpecialUnitPolicy::select(specials) == 0);
     }
 }

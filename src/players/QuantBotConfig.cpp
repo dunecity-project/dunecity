@@ -184,16 +184,18 @@ QuantBotConfig::QuantBotConfig() {
     unitRatios.mercenary.ornithopter = 0.10f;
 
     // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned; percent of tank, siege tank, launcher,
-    // special, ornithopter, trike, raider trike, quad), measured on Construction Yard starts
-    // (docs/ai-play-styles.md, section 8): per house the round-2 mix that did best for it - the
-    // siege/Sonic refinement for Atreides (it also keeps quantbot_all_against_atreides 6/6; the
-    // winners' end composition took 40.7 minutes on one seed) and Ordos, the gradient mix for
-    // Harkonnen. Bounded like every starting mix (2%-50% per producible slot). Fremen, Sardaukar
-    // and Mercenary were not tuned: they play their configured opening.
+    // Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad), measured on
+    // Construction Yard starts (docs/ai-play-styles.md, section 8): per house the round-2 mix that
+    // did best for it - the siege/Sonic refinement for Atreides (it also keeps
+    // quantbot_all_against_atreides 6/6; the winners' end composition took 40.7 minutes on one
+    // seed) and Ordos, the gradient mix for Harkonnen; each house's one special keeps the former
+    // special share. Bounded like every starting mix (2%-50% per producible slot). Index 0 is the
+    // house's top mix (every tech band without its own); [house][N] the band from tech level N.
     tunedRatios = {};
-    tunedRatios[0] = {14, 16, 15, 22, 0, 0, 0, 33};   // Harkonnen
-    tunedRatios[1] = {9, 20, 13, 22, 13, 10, 0, 13};  // Atreides
-    tunedRatios[2] = {9, 17, 7, 13, 27, 0, 7, 20};    // Ordos
+    tunedOpening = {};
+    tunedRatios[0][0] = {14, 16, 15, 22, 0, 0, 0, 0, 0, 33};   // Harkonnen (Devastator)
+    tunedRatios[1][0] = {9, 20, 13, 0, 22, 0, 13, 10, 0, 13};  // Atreides (Sonic Tank)
+    tunedRatios[2][0] = {9, 17, 7, 0, 0, 13, 27, 0, 7, 20};    // Ordos (Deviator)
 
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);
@@ -661,14 +663,29 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
                     QuantBotStrategy::weightsText(strategy.tempoWeights).c_str());
     }
     // [Unit Ratios Tuned]: optional keys, never written by save(); a malformed value keeps the current one.
+    // <House> is the house's top mix, <House>_Tech<N> the mix of its tech band from level N (or
+    // "Opening": that band plays the configured opening; a mix or an empty value clears it).
     {
         static const char* const kTunedHouses[6] = {"Harkonnen", "Atreides", "Ordos", "Fremen", "Sardaukar", "Mercenary"};
         for (size_t house = 0; house < tunedRatios.size(); ++house) {
-            if (!iniFile.hasKey("Unit Ratios Tuned", kTunedHouses[house])) continue;
-            const std::string text = iniFile.getStringValue("Unit Ratios Tuned", kTunedHouses[house]);
-            if (!QuantBotStrategy::parseRatios(text, tunedRatios[house]))
-                SDL_Log("QuantBot config: invalid [Unit Ratios Tuned] %s '%s', keeping %s", kTunedHouses[house], text.c_str(),
-                        QuantBotStrategy::ratiosText(tunedRatios[house]).c_str());
+            for (size_t band = 0; band < kTunedBands; ++band) {
+                const std::string key = band == 0 ? std::string(kTunedHouses[house])
+                                                  : std::string(kTunedHouses[house]) + "_Tech" + std::to_string(band);
+                if (!iniFile.hasKey("Unit Ratios Tuned", key)) continue;
+                const std::string text = iniFile.getStringValue("Unit Ratios Tuned", key);
+                std::string word = text;
+                word.erase(std::remove_if(word.begin(), word.end(), [](unsigned char c) { return std::isspace(c); }), word.end());
+                std::transform(word.begin(), word.end(), word.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                if (band > 0 && word == "opening") {
+                    tunedRatios[house][band] = {};
+                    tunedOpening[house][band] = true;
+                } else if (QuantBotStrategy::parseRatios(text, tunedRatios[house][band])) {
+                    tunedOpening[house][band] = false;
+                } else {
+                    SDL_Log("QuantBot config: invalid [Unit Ratios Tuned] %s '%s', keeping %s", key.c_str(), text.c_str(),
+                            QuantBotStrategy::ratiosText(tunedRatios[house][band]).c_str());
+                }
+            }
         }
     }
 
@@ -715,9 +732,16 @@ const QuantBotConfig::UnitRatios& QuantBotConfig::getRatios(int houseID) const {
     }
 }
 
-const UnitMixPolicy::Weights& QuantBotConfig::getTunedRatios(int houseID) const {
+const UnitMixPolicy::Weights& QuantBotConfig::getTunedRatios(int houseID, int band) const {
     static const UnitMixPolicy::Weights none{};
-    return houseID >= 0 && size_t(houseID) < tunedRatios.size() ? tunedRatios[size_t(houseID)] : none;
+    if (houseID < 0 || size_t(houseID) >= tunedRatios.size()) return none;
+    const size_t h = size_t(houseID);
+    const auto& house = tunedRatios[h];
+    if (band > 0 && size_t(band) < kTunedBands) {
+        if (tunedOpening[h][size_t(band)]) return none;
+        if (*std::max_element(house[size_t(band)].begin(), house[size_t(band)].end()) > 0) return house[size_t(band)];
+    }
+    return house[0];
 }
 
 const QuantBotConfig::TargetPriority& QuantBotConfig::getStructurePriority(int structureID) const {
@@ -1092,10 +1116,11 @@ std::string QuantBotConfig::getConfigHash() const {
     for (size_t i = 0; i < strategy.tempoWeights.size(); ++i)
         addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Tempo>(i)), strategy.tempoWeights[i]);
     configStr += "|TUNED";
-    for (const auto& ratios : tunedRatios) {
-        configStr += '|';
-        configStr += QuantBotStrategy::ratiosText(ratios);
-    }
+    for (size_t h = 0; h < tunedRatios.size(); ++h)
+        for (size_t band = 0; band < kTunedBands; ++band) {
+            configStr += '|';
+            configStr += tunedOpening[h][band] ? std::string("opening") : QuantBotStrategy::ratiosText(tunedRatios[h][band]);
+        }
     configStr += "|/TUNED|";
     configStr += "|/STRATEGY|";
 

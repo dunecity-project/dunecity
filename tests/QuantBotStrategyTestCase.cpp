@@ -88,8 +88,8 @@ TEST_CASE("Strategy: houses of one game vary and the weights are respected", "[a
 }
 
 TEST_CASE("Strategy: a house only plays mixes it can field", "[ai][strategy]") {
-    // Harkonnen: no ornithopters, trikes or raider trikes.
-    const std::array<bool, 8> harkonnen = {true, true, true, true, false, false, false, true};
+    // Harkonnen: no ornithopters, trikes or raider trikes; the Devastator its one special.
+    const UnitMixPolicy::Slots harkonnen = {true, true, true, true, false, false, false, false, false, true};
     const auto eligible = eligibleMixes(harkonnen, true);
     REQUIRE_FALSE(eligible[static_cast<size_t>(Mix::Air)]);
     REQUIRE_FALSE(eligible[static_cast<size_t>(Mix::TrikeSwarm)]);
@@ -202,10 +202,10 @@ TEST_CASE("Strategy: Learned and Base are the 1.0.846 rules", "[ai][strategy]") 
     REQUIRE(learned.priorBps == 0);
     REQUIRE(learned.infantryPercent == 0);
     REQUIRE_FALSE(learned.counter);
-    const UnitMixPolicy::Weights opening = {3000, 2000, 2000, 1500, 1000, 0, 0, 500};
-    std::array<bool, 8> available{};
+    const UnitMixPolicy::Weights opening = {3000, 2000, 2000, 1500, 0, 0, 1000, 0, 0, 500};
+    UnitMixPolicy::Slots available{};
     available.fill(true);
-    REQUIRE(applyPrior(opening, learned.prior, learned.priorBps, available) == opening);
+    REQUIRE(applyPrior(opening, UnitMixPolicy::expandGroups(learned.prior, available), learned.priorBps, available) == opening);
     const TempoProfile& base = profile(Tempo::Base);
     REQUIRE(base.readinessPercent == 0);
     REQUIRE((base.minWaveUnits == 6 && base.minWaveValue == 3000));
@@ -216,40 +216,41 @@ TEST_CASE("Strategy: Learned and Base are the 1.0.846 rules", "[ai][strategy]") 
 }
 
 TEST_CASE("Strategy: a mix is the prior the learning starts from, not a frozen mix", "[ai][strategy]") {
-    std::array<bool, 8> available{};
+    UnitMixPolicy::Slots available{};
     available.fill(true);
-    const UnitMixPolicy::Weights opening = {5000, 2000, 2000, 1000, 0, 0, 0, 0};
-    const auto quads = applyPrior(opening, profile(Mix::QuadMass).prior, profile(Mix::QuadMass).priorBps, available);
-    REQUIRE(UnitMixPolicy::normalize(quads)[7] == 5000);
+    const auto quadMass = UnitMixPolicy::expandGroups(profile(Mix::QuadMass).prior, available);
+    const UnitMixPolicy::Weights opening = {5000, 2000, 2000, 1000, 0, 0, 0, 0, 0, 0};
+    const auto quads = applyPrior(opening, quadMass, profile(Mix::QuadMass).priorBps, available);
+    REQUIRE(UnitMixPolicy::normalize(quads)[9] == 5000);
     REQUIRE(UnitMixPolicy::normalize(quads)[0] == 2667);
     // Unavailable slots are dropped from the prior; nothing available keeps the opening.
-    std::array<bool, 8> noQuads = available;
-    noQuads[7] = false;
-    const auto masked = UnitMixPolicy::normalize(applyPrior(opening, profile(Mix::QuadMass).prior, 10000, noQuads));
-    REQUIRE(masked[7] == 0);
+    UnitMixPolicy::Slots noQuads = available;
+    noQuads[9] = false;
+    const auto masked = UnitMixPolicy::normalize(applyPrior(opening, quadMass, 10000, noQuads));
+    REQUIRE(masked[9] == 0);
     REQUIRE(masked[0] == 5334);
-    std::array<bool, 8> none{};
-    REQUIRE(applyPrior(opening, profile(Mix::QuadMass).prior, 10000, none) == opening);
+    UnitMixPolicy::Slots none{};
+    REQUIRE(applyPrior(opening, quadMass, 10000, none) == opening);
 
     // Tanks performed, quads did not: with no evidence the prior stands; as the lost value grows
     // against the fielded army the allocation follows the performance (vanilla evidence blend).
     UnitMixPolicy::Weights scores{};
     scores[0] = 4000000;
-    scores[7] = 500000;
+    scores[9] = 500000;
     const auto start = UnitMixPolicy::allocate(scores, quads, false, true, 0, 10000);
-    REQUIRE(start[7] == 5000);
+    REQUIRE(start[9] == 5000);
     const auto early = UnitMixPolicy::allocate(scores, quads, true, true, 1000, 10000);
     const auto late = UnitMixPolicy::allocate(scores, quads, true, true, 30000, 10000);
-    REQUIRE(early[7] < 5000);
-    REQUIRE(late[7] < early[7]);
+    REQUIRE(early[9] < 5000);
+    REQUIRE(late[9] < early[9]);
     REQUIRE(late[0] > early[0]);
     REQUIRE(late[0] > 5000);
 
     // Counter: nothing seen, no prior; armour seen, launchers and siege lead.
-    REQUIRE(counterPrior(0, 0, 0, 0) == UnitMixPolicy::Weights{});
-    const auto counter = UnitMixPolicy::normalize(counterPrior(0, 10000, 0, 0));
+    REQUIRE(counterPrior(0, 0, 0, 0) == UnitMixPolicy::GroupWeights{});
+    const auto counter = UnitMixPolicy::normalize(UnitMixPolicy::expandGroups(counterPrior(0, 10000, 0, 0), available));
     REQUIRE(counter[2] > counter[0]);
-    REQUIRE(counter[1] > counter[7]);
+    REQUIRE(counter[1] > counter[9]);
 }
 
 TEST_CASE("Strategy: an Air strategy unlocks ornithopters before the first carryall", "[ai][strategy]") {
@@ -274,16 +275,24 @@ TEST_CASE("Strategy: an Air strategy unlocks ornithopters before the first carry
 
 namespace {
 
-std::array<bool, 8> slotsOf(unsigned mask) {
-    std::array<bool, 8> slots{};
-    for (size_t i = 0; i < 8; ++i) slots[i] = (mask >> i) & 1u;
+UnitMixPolicy::Slots slotsOf(unsigned mask) {
+    UnitMixPolicy::Slots slots{};
+    for (size_t i = 0; i < slots.size(); ++i) slots[i] = (mask >> i) & 1u;
     return slots;
 }
 
-// Mix slots: tank, siege, launcher, special, ornithopter, trike, raider, quad.
-const std::array<bool, 8> kAtreides = {true, true, true, true, true, true, false, true};
-const std::array<bool, 8> kHarkonnen = {true, true, true, true, false, false, false, true};
-const std::array<bool, 8> kOrdos = {true, true, false, true, true, false, true, true};
+constexpr unsigned kEverySlot = (1u << UnitMixPolicy::kSlots) - 1;
+
+// Mix slots: tank, siege, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider, quad
+// (vanilla ObjectData at tech 7+, tests/ai/tech-bands.py).
+const UnitMixPolicy::Slots kAtreides = {true, true, true, false, true, false, true, true, false, true};
+const UnitMixPolicy::Slots kHarkonnen = {true, true, true, true, false, false, false, false, false, true};
+const UnitMixPolicy::Slots kOrdos = {true, true, true, false, false, true, true, false, true, true};
+const UnitMixPolicy::Slots kFremen = {true, true, true, true, true, false, true, true, true, true};
+
+UnitMixPolicy::Weights expanded(const UnitMixPolicy::GroupWeights& group, const UnitMixPolicy::Slots& slots) {
+    return UnitMixPolicy::expandGroups(group, slots);
+}
 
 uint64_t lcg(uint64_t& state) {
     state = state * 6364136223846793005ULL + 1442695040888963407ULL;
@@ -295,17 +304,17 @@ uint64_t lcg(uint64_t& state) {
 TEST_CASE("Strategy: bound() keeps every producible slot within 2%-50%", "[ai][strategy][bounds]") {
     // Every availability set and a spread of weights, zeros included.
     uint64_t state = 20261018;
-    for (unsigned mask = 0; mask < 256; ++mask) {
+    for (unsigned mask = 0; mask <= kEverySlot; ++mask) {
         const auto available = slotsOf(mask);
         int count = 0;
         for (bool slot : available) count += slot;
-        for (int trial = 0; trial < 80; ++trial) {
+        for (int trial = 0; trial < 24; ++trial) {
             UnitMixPolicy::Weights weights{};
             for (auto& weight : weights) weight = lcg(state) % 4 == 0 ? 0 : int64_t(lcg(state) % 100000);
             const auto mix = bound(weights, available);
             REQUIRE(withinBounds(mix, available));
             int total = 0;
-            for (size_t i = 0; i < 8; ++i) {
+            for (size_t i = 0; i < mix.size(); ++i) {
                 total += mix[i];
                 if (!available[i]) REQUIRE(mix[i] == 0);   // excluded types stay out
                 else if (count > 1) REQUIRE((mix[i] >= kStartMinBps && mix[i] <= kStartMaxBps));
@@ -314,94 +323,101 @@ TEST_CASE("Strategy: bound() keeps every producible slot within 2%-50%", "[ai][s
             if (count == 1) REQUIRE(*std::max_element(mix.begin(), mix.end()) == 10000);
             // Idempotent: a bounded mix is its own bound.
             UnitMixPolicy::Weights again{};
-            for (size_t i = 0; i < 8; ++i) again[i] = mix[i];
+            for (size_t i = 0; i < mix.size(); ++i) again[i] = mix[i];
             REQUIRE(bound(again, available) == mix);
             // The order of the weights within the bounds is kept (a heavier slot never gets less).
-            for (size_t i = 0; i < 8; ++i)
-                for (size_t j = 0; j < 8; ++j)
+            for (size_t i = 0; i < mix.size(); ++i)
+                for (size_t j = 0; j < mix.size(); ++j)
                     if (available[i] && available[j] && weights[i] > weights[j]) REQUIRE(mix[i] + 1 >= mix[j]);
         }
     }
     // Clamp and renormalise: the slots inside the bounds keep their proportions.
-    const auto mix = bound({7000, 2000, 1000, 0, 0, 0, 0, 0}, slotsOf(0x0F));
-    REQUIRE(mix == UnitMixPolicy::Mix{5000, 3200, 1600, 200, 0, 0, 0, 0});
+    const auto mix = bound({7000, 2000, 1000, 0, 0, 0, 0, 0, 0, 0}, slotsOf(0x0F));
+    REQUIRE(mix == UnitMixPolicy::Mix{5000, 3200, 1600, 200, 0, 0, 0, 0, 0, 0});
     // Two slots: 50/50 whatever the weights.
-    REQUIRE(bound({9000, 1000, 0, 0, 0, 0, 0, 0}, slotsOf(0x03)) == UnitMixPolicy::Mix{5000, 5000, 0, 0, 0, 0, 0, 0});
+    REQUIRE(bound({9000, 1000}, slotsOf(0x03)) == UnitMixPolicy::Mix{5000, 5000, 0, 0, 0, 0, 0, 0, 0, 0});
     // One weighted slot among zeros: it takes the cap, the zeros share the rest.
-    REQUIRE(bound({0, 0, 0, 0, 0, 0, 0, 1}, slotsOf(0xA1)) == UnitMixPolicy::Mix{2500, 0, 0, 0, 0, 2500, 0, 5000});
+    REQUIRE(bound({0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, slotsOf(0x281)) == UnitMixPolicy::Mix{2500, 0, 0, 0, 0, 0, 0, 2500, 0, 5000});
     REQUIRE(bound({}, slotsOf(0x00)) == UnitMixPolicy::Mix{});
 }
 
 TEST_CASE("Strategy: every starting mix is within the bounds", "[ai][strategy][bounds]") {
     // The presets, over every house's slots: the bounds hold and no single type passes 50%.
-    for (const auto& available : {kAtreides, kHarkonnen, kOrdos, slotsOf(0xFF), slotsOf(0xE0), slotsOf(0x1F)}) {
+    for (const auto& available : {kAtreides, kHarkonnen, kOrdos, kFremen, slotsOf(kEverySlot), slotsOf(0x380), slotsOf(0x7F)}) {
         for (size_t m = 0; m < kMixCount; ++m) {
             const MixProfile& mix = profile(static_cast<Mix>(m));
             if (mix.priorBps <= 0) continue;
-            const auto prior = applyPrior({}, mix.prior, mix.priorBps, available);
+            const auto prior = applyPrior({}, expanded(mix.prior, available), mix.priorBps, available);
             REQUIRE(withinBounds(bound(prior, available), available));
         }
     }
-    // Each preset as written is within the bounds over all eight slots (Counter has no fixed prior).
+    // Each preset as written (the group form, one special share) is within the bounds over the eight
+    // groups (Counter has no fixed prior).
     for (size_t m = 0; m < kMixCount; ++m) {
         const MixProfile& mix = profile(static_cast<Mix>(m));
         if (mix.priorBps <= 0 || mix.counter) continue;
-        UnitMixPolicy::Mix written{};
-        for (size_t i = 0; i < 8; ++i) written[i] = int(mix.prior[i]);
-        REQUIRE(withinBounds(written, slotsOf(0xFF)));
+        int64_t total = 0;
+        for (const auto share : mix.prior) {
+            REQUIRE((share >= kStartMinBps && share <= kStartMaxBps));
+            total += share;
+        }
+        REQUIRE(total == 10000);
     }
-    // The presets are the 1.0.847 presets clamped and renormalised: QuadMass was 70% quads, now 50%.
-    const std::array<bool, 8> every = slotsOf(0xFF);
-    REQUIRE(bound({2000, 0, 0, 0, 0, 0, 1000, 7000}, every) == bound(profile(Mix::QuadMass).prior, every));
-    REQUIRE(bound({1000, 0, 0, 0, 0, 4500, 4500, 0}, every) == bound(profile(Mix::TrikeSwarm).prior, every));
-    REQUIRE(bound({7000, 1500, 1500, 0, 0, 0, 0, 0}, every) == bound(profile(Mix::TankMass).prior, every));
-    REQUIRE(bound({2000, 4500, 3500, 0, 0, 0, 0, 0}, every) == bound(profile(Mix::Artillery).prior, every));
-    REQUIRE(bound({2500, 1500, 1000, 5000, 0, 0, 0, 0}, every) == bound(profile(Mix::Specials).prior, every));
-    REQUIRE(bound({1500, 1000, 1500, 0, 6000, 0, 0, 0}, every) == bound(profile(Mix::Air).prior, every));
+    // The presets are the 1.0.847 presets clamped and renormalised: QuadMass was 70% quads, now 50%
+    // (compared over every slot with one special, i.e. the eight slots of 1.0.847).
+    const auto every = slotsOf(kEverySlot);
+    const auto eight = slotsOf(kEverySlot & ~0x30u);
+    auto same = [&](const UnitMixPolicy::GroupWeights& old, Mix preset) {
+        return bound(expanded(old, eight), eight) == bound(expanded(profile(preset).prior, eight), eight);
+    };
+    REQUIRE(same({2000, 0, 0, 0, 0, 0, 1000, 7000}, Mix::QuadMass));
+    REQUIRE(same({1000, 0, 0, 0, 0, 4500, 4500, 0}, Mix::TrikeSwarm));
+    REQUIRE(same({7000, 1500, 1500, 0, 0, 0, 0, 0}, Mix::TankMass));
+    REQUIRE(same({2000, 4500, 3500, 0, 0, 0, 0, 0}, Mix::Artillery));
+    REQUIRE(same({2500, 1500, 1000, 5000, 0, 0, 0, 0}, Mix::Specials));
+    REQUIRE(same({1500, 1000, 1500, 0, 6000, 0, 0, 0}, Mix::Air));
     REQUIRE(profile(Mix::QuadMass).prior[7] == kStartMaxBps);
-    REQUIRE(bound(profile(Mix::QuadMass).prior, kHarkonnen)[7] == kStartMaxBps);
+    REQUIRE(bound(expanded(profile(Mix::QuadMass).prior, kHarkonnen), kHarkonnen)[9] == kStartMaxBps);
+    // A house with one special plays a preset's special share on it, as before 9868.
+    REQUIRE(expanded(profile(Mix::Specials).prior, kHarkonnen)[3] == 4600);
+    REQUIRE(expanded(profile(Mix::Specials).prior, kAtreides)[4] == 4600);
     // Stefan's configured ratios (QuantBot Config.ini [Unit Ratios]) through the opening, tech 8:
     // Atreides Tank 0.05 stays (5% x 0.96 of the heavy share is above 2%), a 0 becomes 2%.
     const QuantBotConfig config;
-    for (int house = 0; house < 6; ++house) {
+    auto configured = [&](int house, const UnitMixPolicy::Slots& available) {
         const auto& ratios = config.getRatios(house);
-        const UnitMixPolicy::Weights configured = {int64_t(ratios.tank * 10000), int64_t(ratios.siegeTank * 10000),
-            int64_t(ratios.launcher * 10000), int64_t(ratios.special * 10000), int64_t(ratios.ornithopter * 10000), 0, 0, 0};
-        for (const auto& available : {kAtreides, kHarkonnen, kOrdos, slotsOf(0xFF)}) {
-            UnitMixPolicy::Weights opening{};
-            const auto open = UnitMixPolicy::openingMix(8, configured, available);
-            for (size_t i = 0; i < 8; ++i) opening[i] = open[i];
-            REQUIRE(withinBounds(bound(opening, available), available));
-        }
-    }
-    const auto& atreides = config.getRatios(1);
-    const UnitMixPolicy::Weights configured = {int64_t(atreides.tank * 10000), int64_t(atreides.siegeTank * 10000),
-        int64_t(atreides.launcher * 10000), int64_t(atreides.special * 10000), int64_t(atreides.ornithopter * 10000), 0, 0, 0};
-    const auto open = UnitMixPolicy::openingMix(8, configured, kAtreides);
-    UnitMixPolicy::Weights opening{};
-    for (size_t i = 0; i < 8; ++i) opening[i] = open[i];
-    const auto bounded = bound(opening, kAtreides);
+        return expanded({int64_t(ratios.tank * 10000), int64_t(ratios.siegeTank * 10000), int64_t(ratios.launcher * 10000),
+                         int64_t(ratios.special * 10000), int64_t(ratios.ornithopter * 10000), 0, 0, 0}, available);
+    };
+    auto opening = [&](int house, const UnitMixPolicy::Slots& available) {
+        const auto open = UnitMixPolicy::openingMix(8, configured(house, available), available);
+        UnitMixPolicy::Weights weights{};
+        for (size_t i = 0; i < open.size(); ++i) weights[i] = open[i];
+        return weights;
+    };
+    for (int house = 0; house < 6; ++house)
+        for (const auto& available : {kAtreides, kHarkonnen, kOrdos, kFremen, slotsOf(kEverySlot)})
+            REQUIRE(withinBounds(bound(opening(house, available), available), available));
+    const auto bounded = bound(opening(1, kAtreides), kAtreides);
     REQUIRE(bounded[0] > 400);                            // the 5% tank share stays about 5%
-    REQUIRE(bounded[5] == kStartMinBps);                  // trikes (1.3% of the opening) rise to 2%
-    REQUIRE(bounded[6] == 0);                             // Atreides has no raider trikes
-    const auto& harkonnen = config.getRatios(0);
-    const UnitMixPolicy::Weights harkonnenWeights = {int64_t(harkonnen.tank * 10000), int64_t(harkonnen.siegeTank * 10000),
-        int64_t(harkonnen.launcher * 10000), int64_t(harkonnen.special * 10000), int64_t(harkonnen.ornithopter * 10000), 0, 0, 0};
+    REQUIRE(bounded[7] == kStartMinBps);                  // trikes (1.3% of the opening) rise to 2%
+    REQUIRE(bounded[8] == 0);                             // Atreides has no raider trikes
     // Ornithopter 0.00 with ornithopters producible (all slots): 2%.
-    const auto all = slotsOf(0xFF);
-    const auto harkonnenOpen = UnitMixPolicy::openingMix(8, harkonnenWeights, all);
-    UnitMixPolicy::Weights harkonnenOpening{};
-    for (size_t i = 0; i < 8; ++i) harkonnenOpening[i] = harkonnenOpen[i];
-    REQUIRE(bound(harkonnenOpening, all)[4] == kStartMinBps);
+    REQUIRE(bound(opening(0, every), every)[UnitMixPolicy::kOrnithopterSlot] == kStartMinBps);
+    // A house with two specials splits its configured special share between them (Mercenary 5%).
+    const auto mercenary = configured(5, kFremen);
+    REQUIRE(mercenary[3] == mercenary[4]);
+    REQUIRE(mercenary[3] + mercenary[4] == int64_t(config.getRatios(5).special * 10000));
+    REQUIRE(mercenary[5] == 0);
 }
 
 TEST_CASE("Strategy: the Bounded draw is a pure, bounded function of seed and house", "[ai][strategy][bounds]") {
     constexpr int kSeeds = 20000;
-    for (const auto& available : {kAtreides, kHarkonnen, kOrdos, slotsOf(0xFF), slotsOf(0x03), slotsOf(0x01)}) {
+    for (const auto& available : {kAtreides, kHarkonnen, kOrdos, kFremen, slotsOf(kEverySlot), slotsOf(0x03), slotsOf(0x01)}) {
         int count = 0;
         for (bool slot : available) count += slot;
-        std::array<int64_t, 8> sum{};
-        std::array<int, 8> lowest{}, highest{};
+        std::array<int64_t, UnitMixPolicy::kSlots> sum{};
+        std::array<int, UnitMixPolicy::kSlots> lowest{}, highest{};
         lowest.fill(10000);
         int differ = 0;
         for (uint32_t seed = 1; seed <= kSeeds; ++seed) {
@@ -409,14 +425,14 @@ TEST_CASE("Strategy: the Bounded draw is a pure, bounded function of seed and ho
             REQUIRE(withinBounds(mix, available));
             REQUIRE(randomMix(seed, 1, available) == mix);
             differ += randomMix(seed, 2, available) != mix;
-            for (size_t i = 0; i < 8; ++i) {
+            for (size_t i = 0; i < mix.size(); ++i) {
                 sum[i] += mix[i];
                 if (available[i]) { lowest[i] = std::min(lowest[i], mix[i]); highest[i] = std::max(highest[i], mix[i]); }
             }
         }
         if (count < 3) continue;   // one slot: 100%; two: 50/50
         REQUIRE(differ > kSeeds * 99 / 100);
-        for (size_t i = 0; i < 8; ++i) {
+        for (size_t i = 0; i < sum.size(); ++i) {
             if (!available[i]) { REQUIRE(sum[i] == 0); continue; }
             // Uniform over the bounded mixes: every slot averages 1/n, and the draws reach both bounds.
             const int64_t mean = sum[i] / kSeeds;
@@ -432,7 +448,6 @@ TEST_CASE("Strategy: the Bounded draw is a pure, bounded function of seed and ho
         for (int house = 5; house >= 0; --house) backward[house] = randomMix(seed, house, kAtreides);
         REQUIRE(forward == backward);
     }
-    // Pinned: a change of the draw would desync a peer running the older build.
     REQUIRE(randomMix(7101, 1, kAtreides) == randomMix(7101, 1, kAtreides));
     REQUIRE(randomMix(7101, 1, kAtreides) != randomMix(7102, 1, kAtreides));
 }
@@ -450,74 +465,87 @@ TEST_CASE("Strategy: Tuned and Bounded parse, and [Unit Ratios Tuned] is read an
     REQUIRE(eligibleMixes(kHarkonnen, false)[size_t(Mix::Bounded)]);
 
     UnitMixPolicy::Weights ratios{};
-    REQUIRE(parseRatios(" 10,20 ,30,20,10,5,0,5", ratios));
-    REQUIRE(ratiosText(ratios) == "10,20,30,20,10,5,0,5");
+    REQUIRE(parseRatios(" 10,20 ,30,10,10,0,10,5,0,5", ratios));
+    REQUIRE(ratiosText(ratios) == "10,20,30,10,10,0,10,5,0,5");
     REQUIRE_FALSE(parseRatios("10,20,30", ratios));
-    REQUIRE_FALSE(parseRatios("10,20,30,20,10,5,0,5,1", ratios));
-    REQUIRE_FALSE(parseRatios("10,-20,30,20,10,5,0,5", ratios));
-    REQUIRE_FALSE(parseRatios("0,0,0,0,0,0,0,0", ratios));
-    REQUIRE(ratiosText(ratios) == "10,20,30,20,10,5,0,5");
+    REQUIRE_FALSE(parseRatios("10,20,30,20,10,5,0,5", ratios));             // the eight-slot layout
+    REQUIRE_FALSE(parseRatios("10,20,30,10,10,0,10,5,0,5,1", ratios));
+    REQUIRE_FALSE(parseRatios("10,-20,30,10,10,0,10,5,0,5", ratios));
+    REQUIRE_FALSE(parseRatios("0,0,0,0,0,0,0,0,0,0", ratios));
+    REQUIRE(ratiosText(ratios) == "10,20,30,10,10,0,10,5,0,5");
     REQUIRE(parseRatios("", ratios));
     REQUIRE(ratios == UnitMixPolicy::Weights{});
 
     const QuantBotConfig baseline;
     const std::string base = baseline.getConfigHash();
     for (size_t house = 0; house < 6; ++house)
-        for (size_t slot = 0; slot < 8; ++slot) {
-            QuantBotConfig changed;
-            changed.tunedRatios[house][slot] += 1;
-            REQUIRE(changed.getConfigHash() != base);
-        }
+        for (size_t band = 0; band < QuantBotConfig::kTunedBands; ++band)
+            for (size_t slot = 0; slot < UnitMixPolicy::kSlots; ++slot) {
+                QuantBotConfig changed;
+                changed.tunedRatios[house][band][slot] += 1;
+                REQUIRE(changed.getConfigHash() != base);
+            }
     {   // Moving weight between two adjacent slots cannot alias.
         QuantBotConfig a, b;
-        a.tunedRatios[1] = {1, 23, 0, 0, 0, 0, 0, 0};
-        b.tunedRatios[1] = {12, 3, 0, 0, 0, 0, 0, 0};
+        a.tunedRatios[1][0] = {1, 23, 0, 0, 0, 0, 0, 0, 0, 0};
+        b.tunedRatios[1][0] = {12, 3, 0, 0, 0, 0, 0, 0, 0, 0};
         REQUIRE(a.getConfigHash() != b.getConfigHash());
     }
     const auto path = std::filesystem::temp_directory_path() / "quantbot-tuned-test.ini";
     {
         std::ofstream ini(path);
-        ini << "[Unit Ratios Tuned]\nAtreides=10,10,30,25,10,5,0,10\nOrdos=bogus\n";
+        ini << "[Unit Ratios Tuned]\nAtreides=10,10,30,0,25,0,10,5,0,10\nAtreides_Tech5=40,0,30,0,0,0,0,20,0,10\n"
+               "Ordos=bogus\nOrdos_Tech4=1,2,3\nHarkonnen_Tech6= opening \n";
     }
     QuantBotConfig config;
     const auto ordos = config.getTunedRatios(2);
     REQUIRE(config.applyOverrides(path.string()));
-    REQUIRE(ratiosText(config.getTunedRatios(1)) == "10,10,30,25,10,5,0,10");
+    REQUIRE(ratiosText(config.getTunedRatios(1)) == "10,10,30,0,25,0,10,5,0,10");
+    // A band's own mix; a band without one plays the house's top mix.
+    REQUIRE(ratiosText(config.getTunedRatios(1, 5)) == "40,0,30,0,0,0,0,20,0,10");
+    REQUIRE(ratiosText(config.getTunedRatios(1, 4)) == "10,10,30,0,25,0,10,5,0,10");
+    REQUIRE(ratiosText(config.getTunedRatios(1, 7)) == "10,10,30,0,25,0,10,5,0,10");
     REQUIRE(config.getTunedRatios(2) == ordos);   // malformed keeps the previous value
+    REQUIRE(config.getTunedRatios(2, 4) == ordos);
     REQUIRE(config.getTunedRatios(7) == UnitMixPolicy::Weights{});
+    // Opening: that band plays the configured opening (no tuned mix), the others the top mix.
+    REQUIRE(config.tunedOpening[0][6]);
+    REQUIRE(config.getTunedRatios(0, 6) == UnitMixPolicy::Weights{});
+    REQUIRE(ratiosText(config.getTunedRatios(0, 5)) == "14,16,15,22,0,0,0,0,0,33");
     REQUIRE(config.getConfigHash() != base);
+    QuantBotConfig opening;
+    opening.tunedOpening[0][6] = true;
+    REQUIRE(opening.getConfigHash() != base);
     std::filesystem::remove(path);
 }
 
 TEST_CASE("Strategy: the shipped Tuned ratios are the measured mixes, within the bounds", "[ai][strategy][bounds]") {
     // docs/ai-play-styles.md, section 8 (per house the best round-2 mix): percent of tank, siege, launcher,
-    // special, ornithopter, trike, raider trike, quad. Fremen, Sardaukar and Mercenary play their configured
-    // opening.
+    // Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad; each single-special house
+    // keeps its former special share on its special.
     const QuantBotConfig config;
-    REQUIRE(ratiosText(config.getTunedRatios(0)) == "14,16,15,22,0,0,0,33");    // Harkonnen
-    REQUIRE(ratiosText(config.getTunedRatios(1)) == "9,20,13,22,13,10,0,13");   // Atreides
-    REQUIRE(ratiosText(config.getTunedRatios(2)) == "9,17,7,13,27,0,7,20");     // Ordos
-    for (int house = 3; house < 6; ++house) REQUIRE(config.getTunedRatios(house) == UnitMixPolicy::Weights{});
-    // Each house's ratios, bounded over the slots it fields in the vanilla CY games they were measured in
-    // (the start_mix those games resolved; Ordos fields launchers there) and over every slot, as a mod
-    // might allow: 2%-50% per fieldable slot, 0 for the slots it cannot field, 100% in total. The written
-    // ratios already satisfy the bounds over the house's own slots, so bound() keeps them.
-    const std::array<std::array<bool, 8>, 3> own = {kHarkonnen, kAtreides, slotsOf(0xDF)};
-    for (int house = 0; house < 3; ++house) {
-        UnitMixPolicy::Weights weights{};
-        for (size_t i = 0; i < 8; ++i) weights[i] = config.getTunedRatios(house)[i] * 100;
-        for (const auto& available : {own[size_t(house)], slotsOf(0xFF)}) {
-            const auto mix = bound(weights, available);
-            REQUIRE(withinBounds(mix, available));
-            int total = 0;
-            for (size_t i = 0; i < 8; ++i) {
-                total += mix[i];
-                if (!available[i]) REQUIRE(mix[i] == 0);
+    REQUIRE(ratiosText(config.getTunedRatios(0)) == "14,16,15,22,0,0,0,0,0,33");    // Harkonnen
+    REQUIRE(ratiosText(config.getTunedRatios(1)) == "9,20,13,0,22,0,13,10,0,13");   // Atreides
+    REQUIRE(ratiosText(config.getTunedRatios(2)) == "9,17,7,0,0,13,27,0,7,20");     // Ordos
+    // Every shipped mix of every house and band, bounded over the slots the house fields in the vanilla
+    // CY games they were measured in and over every slot, as a mod might allow: 2%-50% per fieldable
+    // slot, 0 for the slots it cannot field, 100% in total. The top mixes already satisfy the bounds
+    // over the house's own slots, so bound() keeps them.
+    const std::array<UnitMixPolicy::Slots, 6> own = {kHarkonnen, kAtreides, kOrdos, kFremen, kFremen, kFremen};
+    for (int house = 0; house < 6; ++house) {
+        for (size_t band = 0; band < QuantBotConfig::kTunedBands; ++band) {
+            const auto& ratios = config.tunedRatios[size_t(house)][band];
+            if (*std::max_element(ratios.begin(), ratios.end()) == 0) continue;
+            UnitMixPolicy::Weights weights{};
+            for (size_t i = 0; i < weights.size(); ++i) weights[i] = ratios[i] * 100;
+            for (const auto& available : {own[size_t(house)], slotsOf(kEverySlot)}) {
+                const auto mix = bound(weights, available);
+                REQUIRE(withinBounds(mix, available));
             }
-            REQUIRE(total == 10000);
+            if (band != 0) continue;
+            const auto kept = bound(weights, own[size_t(house)]);
+            for (size_t i = 0; i < kept.size(); ++i) REQUIRE(kept[i] == (own[size_t(house)][i] ? weights[i] : 0));
         }
-        const auto kept = bound(weights, own[size_t(house)]);
-        for (size_t i = 0; i < 8; ++i) REQUIRE(kept[i] == (own[size_t(house)][i] ? weights[i] : 0));
     }
 }
 
@@ -533,4 +561,36 @@ TEST_CASE("Strategy: a house that builds several specials splits the special sha
     REQUIRE(three[0] + three[1] + three[2] == 1000);
     REQUIRE(UnitMixPolicy::splitShare(1000, std::array<bool, 3>{}) == std::array<int, 3>{});
     REQUIRE(UnitMixPolicy::splitShare(0, std::array<bool, 3>{true, true, true}) == std::array<int, 3>{});
+}
+
+TEST_CASE("Strategy: each special has its own slot, share and learning", "[ai][strategy][specials]") {
+    // The group form (one special share) expands over the specials a house can build.
+    const UnitMixPolicy::GroupWeights group = {1000, 1000, 1000, 3000, 1000, 1000, 1000, 1000};
+    const auto one = UnitMixPolicy::expandGroups(group, kHarkonnen);
+    REQUIRE((one[3] == 3000 && one[4] == 0 && one[5] == 0));
+    REQUIRE(one[6] == 1000);                                     // the ornithopter keeps its group value
+    const auto two = UnitMixPolicy::expandGroups(group, kFremen);
+    REQUIRE((two[3] == 1500 && two[4] == 1500 && two[5] == 0));
+    const auto three = UnitMixPolicy::expandGroups(group, slotsOf(kEverySlot));
+    REQUIRE((three[3] == 1000 && three[4] == 1000 && three[5] == 1000));
+    REQUIRE(UnitMixPolicy::groupSlots(kFremen) == std::array<bool, 8>{true, true, true, true, true, true, true, true});
+    REQUIRE(UnitMixPolicy::groupSlots(kHarkonnen) == std::array<bool, 8>{true, true, true, true, false, false, false, true});
+    // Bounds apply per buildable special: every one of a three-special house gets 2%-50%.
+    const auto bounded = bound(three, slotsOf(kEverySlot));
+    REQUIRE(withinBounds(bounded, slotsOf(kEverySlot)));
+    for (size_t s = 3; s < 6; ++s) REQUIRE(bounded[s] >= kStartMinBps);
+    // The learning weighs each special by its own results: the Devastator performed, the Sonic Tank
+    // did not, so the Devastator's share rises above the Sonic Tank's (one share each, not one for all).
+    UnitMixPolicy::Weights baseline{};
+    for (size_t i = 0; i < baseline.size(); ++i) baseline[i] = kFremen[i] ? 1000 : 0;
+    UnitMixPolicy::Weights scores{};
+    scores[0] = 1000000;
+    scores[3] = 4000000;
+    scores[4] = 200000;
+    const auto mix = UnitMixPolicy::allocate(scores, baseline, true, true, 30000, 10000);
+    REQUIRE(mix[3] > mix[4]);
+    REQUIRE(mix[5] == 0);
+    int total = 0;
+    for (const int share : mix) total += share;
+    REQUIRE(total == 10000);
 }
