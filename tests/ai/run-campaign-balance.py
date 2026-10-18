@@ -236,7 +236,9 @@ parser.add_argument('--prebuilt-probe', type=Path,
 parser.add_argument('--no-ai-telemetry', action='store_true',
                     help='Batch measurement: no AI decision log (DUNECITY_AI_TELEMETRY=0), so no events.jsonl, no '
                          'telemetry in summary.json and no telemetry-based wave-budget check. The simulation is the '
-                         'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md)')
+                         'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md). '
+                         'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
+                         'Log = false')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
@@ -612,8 +614,8 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
-if args.no_ai_telemetry:
-    env['DUNECITY_AI_TELEMETRY'] = '0'
+# Explicit either way: the game's own default ([General] AI Decision Log) is off.
+env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 with (out/'run.log').open('w') as log:
     subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
                    stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)

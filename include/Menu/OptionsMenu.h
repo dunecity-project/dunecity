@@ -84,7 +84,7 @@ private:
     DropDownBox scrollSpeedDropDownBox;
     HBox        introHBox;
     HBox        diagnosticLogsHBox;
-    Checkbox    diagnosticLogsCheckbox;
+    Checkbox    diagnosticLogsCheckbox, aiDecisionLogCheckbox;
     HBox        flagsHBox;
 
     HBox        NameHBox;

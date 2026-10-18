@@ -419,11 +419,18 @@ OptionsMenu::OptionsMenu() : MenuBase()
     pages[4].addWidget(&networkMetaServerHBox, 32);
     pages[4].addWidget(VSpacer::create(6));
 
-    diagnosticLogsCheckbox.setText(_("Diagnostic logs (development)"));
+    // Two development captures in one row (the page has no room for another): the diagnostic
+    // logs, and the separate, much larger AI decision log (up to 256 MB a game; the newest
+    // 20 games / 2 GB are kept), which diagnostic logs alone no longer write.
+    diagnosticLogsCheckbox.setText(_("Diagnostic logs"));
     diagnosticLogsCheckbox.setChecked(settings.general.diagnosticLogs);
     diagnosticLogsCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
+    aiDecisionLogCheckbox.setText(_("AI decision log"));
+    aiDecisionLogCheckbox.setChecked(settings.general.aiDecisionLog);
+    aiDecisionLogCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
     diagnosticLogsHBox.addWidget(Spacer::create(), 0.5);
-    diagnosticLogsHBox.addWidget(&diagnosticLogsCheckbox, 480);
+    diagnosticLogsHBox.addWidget(&diagnosticLogsCheckbox, 240);
+    diagnosticLogsHBox.addWidget(&aiDecisionLogCheckbox, 240);
     diagnosticLogsHBox.addWidget(Spacer::create(), 0.5);
     pages[4].addWidget(&diagnosticLogsHBox, 32);
     pages[4].addWidget(VSpacer::create(6));
@@ -498,6 +505,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= settings.general.showMovementPaths != movementPathsCheckbox.isChecked();
     bChanged |= settings.general.formationMoves != formationMovesCheckbox.isChecked();
     bChanged |= settings.general.diagnosticLogs != diagnosticLogsCheckbox.isChecked();
+    bChanged |= settings.general.aiDecisionLog != aiDecisionLogCheckbox.isChecked();
     bChanged |= settings.video.interfaceHeight != interfaceSizeDropDownBox.getSelectedEntryIntData();
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
     bChanged |= (settings.video.width * 3 > settings.video.height * 4) != (aspectDropDownBox.getSelectedEntryIntData() == 1);
@@ -568,6 +576,7 @@ void OptionsMenu::onOptionsOK() {
     settings.general.showMovementPaths=movementPathsCheckbox.isChecked();
     settings.general.formationMoves=formationMovesCheckbox.isChecked();
     settings.general.diagnosticLogs=diagnosticLogsCheckbox.isChecked();
+    settings.general.aiDecisionLog=aiDecisionLogCheckbox.isChecked();
     settings.general.playerName = playername;
     std::string languageFilename = (languageDropDownBox.getSelectedEntryIntData() < 0) ? "English.en.po" : availLanguages[languageDropDownBox.getSelectedEntryIntData()];
     settings.general.language = languageFilename.substr(languageFilename.size()-5,2);
@@ -732,6 +741,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("General","Formation Moves",settings.general.formationMoves);
     myINIFile.setIntValue("General","Formation Shape",settings.general.formationShape);
     myINIFile.setBoolValue("General","Diagnostic Logs",settings.general.diagnosticLogs);
+    myINIFile.setBoolValue("General","AI Decision Log",settings.general.aiDecisionLog);
     myINIFile.setBoolValue("General","Play Intro",settings.general.playIntro);
     myINIFile.setBoolValue("General","Show Tutorial Hints",settings.general.showTutorialHints);
     myINIFile.setIntValue("General","DuneCity Campaign Skin",settings.general.duneCityCampaignSkin);

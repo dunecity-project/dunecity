@@ -1,13 +1,47 @@
 #include <catch2/catch_test_macros.hpp>
 #include <players/AIDecisionLog.h>
+#include <DataTypes.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <optional>
+
+namespace {
+// Sets (or with nullptr removes) an environment variable for one scope, then restores it.
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const char* value) : name(name) {
+        if (const char* old = std::getenv(name)) previous = old;
+        set(value);
+    }
+    ~ScopedEnv() { set(previous ? previous->c_str() : nullptr); }
+private:
+    void set(const char* value) {
+#ifdef _WIN32
+        _putenv_s(name, value ? value : "");
+#else
+        if (value) setenv(name, value, 1); else unsetenv(name);
+#endif
+    }
+    const char* name;
+    std::optional<std::string> previous;
+};
+std::filesystem::path scratchDirectory(const char* prefix) {
+    return std::filesystem::temp_directory_path()/(prefix+
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+}
+void writeBytes(const std::filesystem::path& file, size_t size) {
+    std::filesystem::create_directories(file.parent_path());
+    std::ofstream(file, std::ios::binary) << std::string(size, 'x');
+}
+}
 
 TEST_CASE("Disabled diagnostics close structured capture and skip subsequent records", "[ai][telemetry]") {
-    const auto root=std::filesystem::temp_directory_path()/("dunecity-disabled-"+
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto root=scratchDirectory("dunecity-disabled-");
+    // startGame prunes the profile's ai-decisions folder: never the real user profile.
+    const ScopedEnv profile("DUNECITY_USERDIR",(root/"profile").string().c_str());
+    const ScopedEnv forced("DUNECITY_AI_TELEMETRY",nullptr);
     auto& writer=AITelemetry::log();
     REQUIRE(writer.start(root.string(),AITelemetry::Record()));
     const auto file=writer.path();
@@ -19,6 +53,88 @@ TEST_CASE("Disabled diagnostics close structured capture and skip subsequent rec
     writer.performance(1,0,"frame",200000);
     writer.flushPerformance(1,true);
     REQUIRE(std::filesystem::file_size(file)==size);
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE("The AI decision log is its own setting, off by default", "[ai][telemetry][settings]") {
+    STATIC_REQUIRE_FALSE(SettingsClass::GeneralClass::defaultAIDecisionLog);
+    const SettingsClass::GeneralClass general{};
+    REQUIRE_FALSE(general.aiDecisionLog);
+    // Diagnostic logs keep their own (desktop: on) default and no longer imply the decision log.
+    REQUIRE(general.diagnosticLogs==SettingsClass::GeneralClass::defaultDiagnosticLogs);
+}
+
+TEST_CASE("startGame follows the AI Decision Log setting; DUNECITY_AI_TELEMETRY overrides it", "[ai][telemetry][settings]") {
+    const auto root=scratchDirectory("dunecity-setting-");
+    const ScopedEnv profile("DUNECITY_USERDIR",root.string().c_str());
+    auto& writer=AITelemetry::log();
+    {
+        const ScopedEnv forced("DUNECITY_AI_TELEMETRY",nullptr);
+        AITelemetry::startGame(AITelemetry::Record(),false);
+        REQUIRE_FALSE(writer.enabled());
+        REQUIRE_FALSE(std::filesystem::exists(root/"ai-decisions"));
+        AITelemetry::startGame(AITelemetry::Record(),true);
+        REQUIRE(writer.enabled());
+        REQUIRE(std::filesystem::path(writer.path()).parent_path().parent_path()==root/"ai-decisions");
+    }
+    {
+        const ScopedEnv forced("DUNECITY_AI_TELEMETRY","0");
+        AITelemetry::startGame(AITelemetry::Record(),true);
+        REQUIRE_FALSE(writer.enabled());
+    }
+    {
+        const ScopedEnv forced("DUNECITY_AI_TELEMETRY","1");
+        AITelemetry::startGame(AITelemetry::Record(),false);
+        REQUIRE(writer.enabled());
+    }
+    writer.stop();
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Decision log sessions are pruned to the newest ones within the count and byte budget", "[ai][telemetry]") {
+    const auto root=scratchDirectory("dunecity-prune-");
+    // Newest first by the microsecond stamp, then the suffix; names, not file times, decide.
+    writeBytes(root/"1000-0"/"events.jsonl",100);
+    writeBytes(root/"2000-0"/"events.jsonl",100);
+    writeBytes(root/"2000-1"/"events.jsonl",100);
+    writeBytes(root/"3000-0"/"events.jsonl",100);
+    writeBytes(root/"4000-0"/"events.jsonl",50);
+    writeBytes(root/"4000-0"/"extra"/"notes.txt",20);
+    writeBytes(root/"notes"/"keep.txt",500);        // not a session folder
+    writeBytes(root/"5000-x"/"events.jsonl",500);   // not a session folder
+    writeBytes(root/"readme.txt",10);
+    const auto exists=[&](const char* name) { return std::filesystem::exists(root/name); };
+
+    REQUIRE(AITelemetry::pruneSessions(root.string(),10,1000)==0);
+    REQUIRE(AITelemetry::pruneSessions(root.string(),3,1000)==2);   // count: keeps 4000-0, 3000-0, 2000-1
+    REQUIRE(exists("4000-0"));REQUIRE(exists("3000-0"));REQUIRE(exists("2000-1"));
+    REQUIRE_FALSE(exists("2000-0"));REQUIRE_FALSE(exists("1000-0"));
+    REQUIRE(AITelemetry::pruneSessions(root.string(),3,170)==1);    // bytes: 70 + 100 fit, the third does not
+    REQUIRE(exists("4000-0"));REQUIRE(exists("3000-0"));REQUIRE_FALSE(exists("2000-1"));
+    REQUIRE(AITelemetry::pruneSessions(root.string(),0,1000)==2);
+    REQUIRE_FALSE(exists("4000-0"));REQUIRE_FALSE(exists("3000-0"));
+    REQUIRE(exists("notes"));REQUIRE(exists("5000-x"));REQUIRE(exists("readme.txt"));
+    REQUIRE(AITelemetry::pruneSessions((root/"missing").string(),0,0)==0);
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE("Starting a logged game keeps at most the newest kKeptSessions sessions", "[ai][telemetry]") {
+    const auto root=scratchDirectory("dunecity-startprune-");
+    const ScopedEnv profile("DUNECITY_USERDIR",root.string().c_str());
+    const ScopedEnv forced("DUNECITY_AI_TELEMETRY",nullptr);
+    for (size_t i = 0; i < AITelemetry::kKeptSessions + 5; ++i)
+        writeBytes(root/"ai-decisions"/(std::to_string(1000+i)+"-0")/"events.jsonl",10);
+    AITelemetry::startGame(AITelemetry::Record(),true);
+    REQUIRE(AITelemetry::log().enabled());
+    AITelemetry::log().stop();
+    size_t sessions=0;
+    for (const auto& entry : std::filesystem::directory_iterator(root/"ai-decisions")) sessions+=entry.is_directory();
+    REQUIRE(sessions==AITelemetry::kKeptSessions);                 // 19 old ones + this game's
+    REQUIRE(std::filesystem::exists(root/"ai-decisions"/(std::to_string(1000+AITelemetry::kKeptSessions+4)+"-0")));
+    REQUIRE_FALSE(std::filesystem::exists(root/"ai-decisions"/"1005-0"));
+    // A disabled game prunes to the full budget and writes nothing.
+    AITelemetry::startGame(AITelemetry::Record(),false);
+    REQUIRE_FALSE(AITelemetry::log().enabled());
     std::filesystem::remove_all(root);
 }
 

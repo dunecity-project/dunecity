@@ -446,9 +446,11 @@ if(APPLE)
     target_sources(dunecity
         PRIVATE
             ${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
     )
     # Enable Objective-C ARC (Automatic Reference Counting)
     set_source_files_properties(${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
         PROPERTIES
             COMPILE_FLAGS "-fobjc-arc"
     )
