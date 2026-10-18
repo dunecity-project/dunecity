@@ -144,7 +144,9 @@ parser.add_argument('--load-save', type=Path, help='Continue this savegame inste
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
 parser.add_argument('--partner-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
-parser.add_argument('--enemy-ai', choices=('quantbot','ai-player'), default='quantbot', help='Enemy controller family; AI Player has Easy/Medium/Hard')
+parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), default='quantbot',
+                    help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
+                         '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
@@ -239,6 +241,18 @@ parser.add_argument('--pressure-probe', action='store_true', help='Verify campai
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
+parser.add_argument('--scenario', action='store_true',
+                    help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
+                         'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
+parser.add_argument('--scenario-sides',
+                    help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
+                         'atreides:2:qBotBrutal,harkonnen:1:AIPlayerHard); on --custom-map one per map slot')
+parser.add_argument('--skirmish',
+                    help='Scenario match on a generated Random Skirmish multiplayer map, one start per side: '
+                         'key=value,... (size, base none|cy|outpost|small|medium|large|fortress, army, city, seed, '
+                         'tech, rock, spice, credits, symmetric; scenario-match.inc)')
+parser.add_argument('--mission', type=int, choices=range(1, 23),
+                    help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
@@ -249,8 +263,8 @@ if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not (args.custom_map or args.duel_map_size):
-    parser.error('--local-spectator requires --custom-map or --duel-map-size.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish):
+    parser.error('--local-spectator requires --custom-map, --duel-map-size or --skirmish.')
 if args.load_save and (args.custom_map or args.duel_map_size or not args.load_save.is_file()):
     parser.error('--load-save needs an existing savegame and no --custom-map or --duel-map-size.')
 if args.game_options and not args.game_options.is_file():
@@ -265,8 +279,31 @@ if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if args.strategy_probe and (not args.custom_map or args.prebuilt_probe):
     parser.error('--strategy-probe needs --custom-map and builds its own probe binary.')
-if not args.custom_map and (args.roster or args.house not in house_names[:3]):
+if not args.custom_map and not args.skirmish and (args.roster or args.house not in house_names[:3]):
     parser.error('Explicit rosters and additional houses require --custom-map.')
+scenario_sides = []
+if args.scenario_sides:
+    try:
+        scenario_sides = [(house_names.index(house.lower()), int(team), player_class) for house, team, player_class in
+                          (side.split(':') for side in args.scenario_sides.split(','))]
+    except ValueError:
+        parser.error('--scenario-sides must be house:team:class,... with known houses.')
+    if (len({h for h, _, _ in scenario_sides}) != len(scenario_sides) or any(t < 1 for _, t, _ in scenario_sides)
+            or len({t for _, t, _ in scenario_sides}) < 2):
+        parser.error('--scenario-sides needs distinct houses, teams from 1 and at least two teams.')
+    if house_names.index(args.house) not in {h for h, _, _ in scenario_sides}:
+        parser.error('--house must be one of the --scenario-sides houses.')
+if (args.scenario_sides or args.skirmish or args.mission) and not args.scenario:
+    parser.error('--scenario-sides, --skirmish and --mission need --scenario.')
+if args.scenario:
+    if args.duel_map_size or args.match_sides or args.elimination_match or args.roster or args.free_for_all or args.load_save:
+        parser.error('--scenario replaces --duel-map-size, --match-sides, --elimination-match, --roster, '
+                     '--free-for-all and --load-save.')
+    if bool(args.custom_map or args.skirmish) != bool(args.scenario_sides) or (args.custom_map and args.skirmish):
+        parser.error('A scenario match needs --scenario-sides and exactly one of --custom-map and --skirmish; '
+                     'a campaign scenario neither.')
+    if args.mission and args.scenario_sides:
+        parser.error('--mission is for campaign scenarios.')
 roster = []
 if args.custom_map:
     scenario = configparser.ConfigParser(strict=False, interpolation=None)
@@ -327,6 +364,15 @@ if args.custom_map:
         roster = [(house, i + 1) for i, (house, _) in enumerate(sides)]
         if names.index(args.house) not in {h for h, _ in roster}:
             parser.error('--house must be one of the --match-sides houses.')
+    if scenario_sides:
+        # The map's own house sections (e.g. All against Atreides) must be played by those houses.
+        named = {names.index(name) for name in names if name in sections}
+        if len(scenario_sides) != len(roster) or not named <= {h for h, _, _ in scenario_sides}:
+            parser.error(f'--scenario-sides needs one distinct house per map slot ({len(roster)}), '
+                         'including every house the map names.')
+        roster = [(house, team) for house, team, _ in scenario_sides]
+elif scenario_sides:
+    roster = [(house, team) for house, team, _ in scenario_sides]
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 # Provenance only (summary.json): a worktree whose git directory cannot be read still runs.
 try:
@@ -605,6 +651,13 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
+if args.scenario:
+    env['BALANCE_SCENARIO'] = '1'
+    if scenario_sides:
+        env['BALANCE_SCENARIO_SIDES'] = ','.join(f'{house}:{team}:{player_class}'
+                                                 for house, team, player_class in scenario_sides)
+    if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
+    if args.mission: env['BALANCE_MISSION'] = str(args.mission)
 if args.no_ai_telemetry:
     env['DUNECITY_AI_TELEMETRY'] = '0'
 with (out/'run.log').open('w') as log:
