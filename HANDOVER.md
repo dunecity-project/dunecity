@@ -67,6 +67,40 @@ Speed 2 ms. Write-up: `docs/game-performance.md`; raw data `~/Documents/projects
 - **perf_regression** ctest (mandatory, AGENTS.md/CLAUDE.md): passed (42 s). Required ctest list:
   see the final report of this branch.
 
+## 2026-10-18 — AI test scoring: placement score, negative draws, paired default rule (branch `test/match-scoring`)
+
+Stefan: the AIs have to attack, not raid forever into draws, so draws must be negative (better than a loss).
+Multiplayer wins must count for more: 1st a big score, 2nd smaller, and in 8 players the top 4 positive,
+the bottom 4 negative. Python harness/report code and docs only: no game, AI, protocol or save change.
+Write-up: `docs/ai-play-styles.md` section 7.
+
+- **Score** (`tests/ai/match_score.py`, used by `formation-duel.py --report`, `vanilla-match.py --report`
+  incl. `--ffa`, `play-style-matrix.py`):
+  - Place p of N scores 1 - 2(p-1)/(N-1). Eliminated entrants are ranked by elimination time; ties share
+    the mean place.
+  - At a time-out the k survivors share places 1..k minus D = 0.25, clamped between the best eliminated
+    score and +1. A 1v1 draw is -0.25 (`--draw-score`).
+  - Teams are ranked as teams. Kill-value adjudication is gone; the value margin is still printed.
+  - `--scores FILE` writes per game and side: eliminated, place, score, drawn, `end_s`, decisive.
+- **Rule:** a candidate beats the control when the 95% bootstrap interval of the paired score difference
+  is above 0. Pairing is per game, or by setup against a common opponent with `--baseline`. Each arm's
+  time-out rate is reported. `--scoring legacy` restores the old rule and reproduces old reports.
+  - New report options: `play-style-matrix.py --same A=B` (label aliases) and `--by-strategy`;
+    `vanilla-match.py --control` for FFA.
+  - Recorded CSV formats are unchanged; `houses.csv` `place` now averages tied eliminations.
+- **Re-scored:**
+  - **1.0.847 Learned/Swarm stands.** CY v BASE Δ +0.29 (+0.08..+0.50), n=356, 2% time-outs. Fortress
+    is level, Δ +0.11 (-0.17..+0.41), with 33% time-outs on both sides; the draw penalty is symmetric
+    head to head. Brutal is level.
+  - **Round 5's UVX default would fail the new rule.** The `/weak` paired gain over BWFCQ was +0.120
+    (+0.03..+0.21) and is now +0.06 (-0.09..+0.20); it came from adjudicated time-outs. UVX is still in
+    the game: a decision for Stefan.
+  - Round 4 BWFCQ stands.
+  - Fortress round-robin: boom and timing now lose to most styles (adjudication had rescued them).
+  - FFA BWFCQ v none: Δ +0.16 (-0.01..+0.33), level.
+- **Tests:** `python3 -m unittest tests.test_match_score` 8/8. No smoke batch was run: the harnesses'
+  game-running path only changed the `place` column computation, and no build was configured.
+
 ## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
 
 Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct

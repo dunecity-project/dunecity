@@ -34,12 +34,13 @@ house (credits, army, harvesters, structures, factories, kill and loss value) to
 where each house's army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per
 QuantBot role, at the bundle or perimeter, the outnumbered verdict) to army.csv and its waves
 to waves.csv; the run directory is deleted straight away and games already in games.csv are
-skipped. --report prints the tables used in docs/formations.md.
+skipped. --report prints the tables used in docs/formations.md, scored by
+tests/ai/match_score.py (placement score, time-outs negative, verdict on the paired difference;
+--scoring legacy for the old rule).
 """
 import argparse
 import csv
 import itertools
-import random
 import re
 import shutil
 import statistics
@@ -54,6 +55,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+import match_score  # noqa: E402
 
 MAP_DIR = root / 'data/maps/multiplayer'
 # Short names of the bundled maps used by the scenario tests (any other file stem in MAP_DIR
@@ -186,20 +188,6 @@ def build_probe(args, scratch):
     return probe_binary(probe)
 
 
-def places(sides, eliminated):
-    """Place per house: eliminated houses by elimination order (last out = best of them), the
-    houses alive at the end share the best places (mean of the places they cover)."""
-    alive = [h for h, _ in sides if h not in eliminated]
-    out = sorted((h for h, _ in sides if h in eliminated), key=lambda h: -eliminated[h])
-    result = {}
-    if alive:
-        shared = statistics.mean(range(1, len(alive) + 1))
-        for house in alive:
-            result[house] = shared
-    for index, house in enumerate(out, len(alive) + 1):
-        result[house] = index
-    return result
-
 
 def play(args, scratch, binary, key):
     tag, difficulty, name, seed, sides_text = key
@@ -245,7 +233,7 @@ def play(args, scratch, binary, key):
         finish_game(scratch, out, True)
         return row
     numbers = {HOUSE_NUMBERS[h]: h for h, _ in sides}
-    place = places([(HOUSE_NUMBERS[h], l) for h, l in sides], eliminated)
+    place = {h: p.place for h, p in match_score.score_game([HOUSE_NUMBERS[h] for h, _ in sides], eliminated).items()}
     house_rows = []
     for slot, (house, label) in enumerate(sides, 1):
         number = HOUSE_NUMBERS[house]
@@ -318,15 +306,6 @@ def number(value, default=0.0):
         return default
 
 
-def bootstrap(scores, rounds=2000):
-    """95% interval of the mean score, resampling games (fixed seed: the report is reproducible)."""
-    if not scores:
-        return (0.0, 0.0)
-    rng = random.Random(20261017)
-    means = sorted(statistics.mean(rng.choices(scores, k=len(scores))) for _ in range(rounds))
-    return means[int(0.025 * rounds)], means[int(0.975 * rounds) - 1]
-
-
 def by_game(rows):
     grouped = defaultdict(list)
     for row in rows:
@@ -334,8 +313,20 @@ def by_game(rows):
     return grouped
 
 
-def pair_scores(games, houses, x, y, margin):
-    """Per 1v1 game with labels x and y: (game, x's score, strict score, x's house row, y's row)."""
+def placings(game, rows, draw_score):
+    """match_score Placing per house row of a game (every house its own team). A decided game's
+    houses other than the winner count as eliminated at the end if their elimination line is missing."""
+    eliminated = {r['house']: number(r['eliminated_s']) for r in rows if r['eliminated_s'] != ''}
+    if game['winner'] not in ('', '-1'):
+        for r in rows:
+            if HOUSE_NUMBERS[r['house']] != int(game['winner']):
+                eliminated.setdefault(r['house'], number(game['end_s']))
+    return match_score.score_game([r['house'] for r in rows], eliminated, draw_score)
+
+
+def pair_scores(games, houses, x, y, args):
+    """Per 1v1 game with labels x and y: (game, x's score, strict score, x's house row, y's row,
+    y's score, drawn). The score is the placement score, or the old one with --scoring legacy."""
     per_game = by_game(houses)
     out = []
     for game in games:
@@ -344,57 +335,115 @@ def pair_scores(games, houses, x, y, margin):
         labels = [l for _, l in side_list(game['sides'])]
         if sorted(labels) != sorted([x, y]):
             continue
-        rows = {r['label']: r for r in per_game[tuple(game[k] for k in KEY)]}
+        house_rows = per_game[tuple(game[k] for k in KEY)]
+        rows = {r['label']: r for r in house_rows}
         mine, theirs = rows[x], rows[y]
-        if game['winner_label']:
-            strict = 1.0 if game['winner_label'] == x else 0.0
-            score = strict
-        else:
-            strict = 0.5
-            trade = number(mine['kill_value']) - number(theirs['kill_value'])
-            score = 1.0 if trade >= margin else (0.0 if trade <= -margin else 0.5)
-        out.append((game, score, strict, mine, theirs))
+        score, strict = match_score.legacy_score(game['winner_label'] == x, game['winner_label'] == y,
+                                                 number(mine['kill_value']), number(theirs['kill_value']), args.adjudicate)
+        other = 1.0 - score
+        drawn = not game['winner_label']
+        if args.scoring == 'placement':
+            placing = placings(game, house_rows, args.draw_score)
+            score, other, drawn = placing[mine['house']].score, placing[theirs['house']].score, placing[mine['house']].drawn
+        out.append((game, score, strict, mine, theirs, other, drawn))
     return out
 
 
-def fmt_ci(scores):
-    low, high = bootstrap(scores)
-    return f'{statistics.mean(scores):.3f} | {low:.2f}-{high:.2f}'
+def compare(rows, args):
+    return match_score.compare([(r[1], r[5], r[6], r[6]) for r in rows], 20261017, args.scoring)
+
+
+def fmt_ci(rows, args):
+    """'score | interval' (legacy) or 'score | opponent's score | difference (interval)' (placement)."""
+    c = compare(rows, args)
+    if args.scoring == 'legacy':
+        return f'{c.candidate:.3f} | {c.low:.2f}-{c.high:.2f}'
+    return f'{c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
+
+
+def score_columns(args):
+    return 'Score | 95% CI' if args.scoring == 'legacy' else 'Score | Opponent score | Difference (95% CI)'
+
+
+def write_scores(games, houses, args):
+    per_game = by_game(houses)
+    rows = []
+    for game in games:
+        if game['error']:
+            continue
+        house_rows = per_game[tuple(game[k] for k in KEY)]
+        placing = placings(game, house_rows, args.draw_score)
+        for r in house_rows:
+            p = placing[r['house']]
+            rows.append({'game': '/'.join(game[k] for k in KEY), 'side': r['slot'], 'house': r['house'], 'label': r['label'],
+                         'eliminated': int(p.eliminated), 'eliminated_s': r['eliminated_s'], 'place': p.place,
+                         'score': f'{p.score:.4f}', 'drawn': int(p.drawn), 'end_s': game['end_s'],
+                         'decisive': int(game['winner'] not in ('', '-1')), 'kill_value': r['kill_value'],
+                         'loss_value': r['loss_value']})
+    match_score.write_scores(args.scores, rows)
+
+
+def baseline_table(args, games, houses):
+    """Each pairing x:y against --baseline B: x's side paired with B's side in B's games against the
+    same y with the same difficulty, map, seed and houses (e.g. a candidate and the old default, each
+    against the old rules)."""
+    setup = lambda r, t: (r['difficulty'], r['map'], r['seed'], r['house'], t['house'])
+    print(f'\nPaired against {args.baseline} (each side against the same opponent, same difficulty, map, seed and '
+          f'houses; difference = own score - {args.baseline}\'s, 95% bootstrap; time-outs own / baseline):\n')
+    print(f'| Pairing | Paired games | Score | {args.baseline} score | Difference (95% CI) | Time-outs | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for pair in args.pairs.split(','):
+        x, y = pair.split(':')
+        if x == args.baseline:
+            continue
+        base = {}
+        for r in pair_scores(games, houses, args.baseline, y, args):
+            base.setdefault(setup(r[3], r[4]), r)
+        paired = [(r[1], base[setup(r[3], r[4])][1], r[6], base[setup(r[3], r[4])][6])
+                  for r in pair_scores(games, houses, x, y, args) if setup(r[3], r[4]) in base]
+        c = match_score.compare(paired, 20261017, 'placement')
+        if c:
+            print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
+                  f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
+                  f'{c.verdict} {args.baseline} |')
 
 
 def report_pairs(args, games, houses, samples, waves):
-    print('| Pairing (first label\'s side) | Games | Score | 95% CI | Strict | Elim. W-L / time-outs | '
-          'Win min (median) | Loss min (median) | Structures lost / destroyed per game |')
-    print('|---|---|---|---|---|---|---|---|---|')
+    print(f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    if args.scores:
+        write_scores(games, houses, args)
+    print(f'| Pairing (first label\'s side) | Games | {score_columns(args)} | Strict | Elim. W-L / time-outs | '
+          'Win min (median) | Loss min (median) | Structures lost / destroyed per game | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
-        rows = pair_scores(games, houses, x, y, args.adjudicate)
+        rows = pair_scores(games, houses, x, y, args)
         if not rows:
             continue
-        scores = [s for _, s, _, _, _ in rows]
-        strict = [s for _, _, s, _, _ in rows]
-        wins = [number(g['end_s']) / 60 for g, _, st, _, _ in rows if st == 1.0]
-        losses = [number(g['end_s']) / 60 for g, _, st, _, _ in rows if st == 0.0]
-        lost = statistics.mean(number(t['structures_destroyed']) for _, _, _, _, t in rows)
-        destroyed = statistics.mean(number(m['structures_destroyed']) for _, _, _, m, _ in rows)
-        print(f'| {x} v {y} | {len(rows)} | {fmt_ci(scores)} | {statistics.mean(strict):.3f} | '
+        strict = [r[2] for r in rows]
+        wins = [number(r[0]['end_s']) / 60 for r in rows if r[2] == 1.0]
+        losses = [number(r[0]['end_s']) / 60 for r in rows if r[2] == 0.0]
+        lost = statistics.mean(number(r[4]['structures_destroyed']) for r in rows)
+        destroyed = statistics.mean(number(r[3]['structures_destroyed']) for r in rows)
+        print(f'| {x} v {y} | {len(rows)} | {fmt_ci(rows, args)} | {statistics.mean(strict):.3f} | '
               f'{len(wins)}-{len(losses)} / {len(rows) - len(wins) - len(losses)} | '
               f'{statistics.median(wins) if wins else 0:.1f} | {statistics.median(losses) if losses else 0:.1f} | '
-              f'{lost:.1f} / {destroyed:.1f} |')
+              f'{lost:.1f} / {destroyed:.1f} | {compare(rows, args).verdict} {y} |')
+    if args.baseline:
+        baseline_table(args, games, houses)
     # Per map (and difficulty) breakdown.
-    print('\n| Pairing | Map | Difficulty | Games | Score | 95% CI | Elim. W-L / time-outs | Median end min |')
-    print('|---|---|---|---|---|---|---|---|')
+    print(f'\n| Pairing | Map | Difficulty | Games | {score_columns(args)} | Elim. W-L / time-outs | Median end min |')
+    print('|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
-        rows = pair_scores(games, houses, x, y, args.adjudicate)
+        rows = pair_scores(games, houses, x, y, args)
         groups = defaultdict(list)
         for row in rows:
             groups[(row[0]['map'], row[0]['difficulty'])].append(row)
         for (name, difficulty), group in sorted(groups.items()):
-            scores = [s for _, s, _, _, _ in group]
-            w = sum(st == 1.0 for _, _, st, _, _ in group)
-            l = sum(st == 0.0 for _, _, st, _, _ in group)
-            print(f'| {x} v {y} | {name} | {difficulty} | {len(group)} | {fmt_ci(scores)} | {w}-{l} / {len(group) - w - l} | '
+            w = sum(r[2] == 1.0 for r in group)
+            l = sum(r[2] == 0.0 for r in group)
+            print(f'| {x} v {y} | {name} | {difficulty} | {len(group)} | {fmt_ci(group, args)} | {w}-{l} / {len(group) - w - l} | '
                   f'{statistics.median(number(g["end_s"]) / 60 for g, *_ in group):.1f} |')
     economy(args, samples)
     wave_table(args, waves, games)
@@ -456,36 +505,107 @@ def wave_table(args, waves, games):
 
 def report_ffa(args, games, houses):
     labels = args.ffa.split(',')
+    control = args.control or (labels[1] if len(labels) > 1 else labels[0])
+    legacy = args.scoring == 'legacy'
     rows = [h for h in houses if h['tag'] in args.tags and h['difficulty'] == args.difficulty]
-    valid = {tuple(g[k] for k in KEY) for g in games if not g['error'] and g['players'] != '2'}
+    valid = {tuple(g[k] for k in KEY): g for g in games if not g['error'] and g['players'] != '2'}
     rows = [h for h in rows if tuple(h[k] for k in KEY) in valid]
-    print('| Map | Label | Houses | Mean place | Wins (sole survivor) | Eliminated | Mean elimination min | '
-          'Kill / loss value per house |')
-    print('|---|---|---|---|---|---|---|---|')
-    win_label = {tuple(g[k] for k in KEY): g['winner_label'] for g in games}
-    for name in sorted({h['map'] for h in rows}) + ['all']:
-        for label in labels:
-            group = [h for h in rows if h['label'] == label and (name == 'all' or h['map'] == name)]
-            if not group:
-                continue
-            wins = sum(1 for h in group if win_label[tuple(h[k] for k in KEY)] == label and h['eliminated_s'] == '')
-            elim = [number(h['eliminated_s']) / 60 for h in group if h['eliminated_s'] != '']
-            print(f'| {name} | {label} | {len(group)} | {statistics.mean(number(h["place"]) for h in group):.2f} | '
-                  f'{wins} | {len(elim)} | {statistics.mean(elim) if elim else 0:.1f} | '
-                  f'{statistics.mean(number(h["kill_value"]) for h in group):.0f} / '
-                  f'{statistics.mean(number(h["loss_value"]) for h in group):.0f} |')
-    # Place as a score: 1 for first, 0 for last, per house; interval over games.
-    for label in labels if len(labels) > 2 else labels[:1]:
-        per_game = defaultdict(list)
-        for h in rows:
-            if h['label'] == label:
-                per_game[tuple(h[k] for k in KEY)].append((4 - number(h['place'])) / 3)
-        scores = [statistics.mean(v) for v in per_game.values()]
-        if scores:
-            print(f'\n{label}: place score (1 = first, 0 = last; mean of its houses per game) {fmt_ci(scores)} '
-                  f'over {len(scores)} games')
-    timeouts = sum(1 for g in games if tuple(g[k] for k in KEY) in valid and not g['winner_label'])
-    print(f'Time-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
+    if args.scores:
+        write_scores(list(valid.values()), rows, args)
+    # Per house: (score, drawn). Legacy: the old place score, 1 first, 0 last; drawn = alive at a time-out.
+    scored = {}
+    for key, group in by_game(rows).items():
+        game = valid[key]
+        if legacy:
+            for h in group:
+                scored[id(h)] = ((len(group) - number(h['place'])) / (len(group) - 1),
+                                 not game['winner_label'] and h['eliminated_s'] == '')
+        else:
+            placing = placings(game, group, args.draw_score)
+            for h in group:
+                scored[id(h)] = (placing[h['house']].score, placing[h['house']].drawn)
+    print(f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    print('| Tag | Map | Label | Houses | Mean place | Mean score | Wins (sole survivor) | Eliminated | Alive at a time-out | '
+          'Mean elimination min | Kill / loss value per house |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|')
+    win_label = {key: g['winner_label'] for key, g in valid.items()}
+    for tag in sorted(args.tags):
+        for name in sorted({h['map'] for h in rows}) + ['all']:
+            for label in labels:
+                group = [h for h in rows if h['tag'] == tag and h['label'] == label and (name == 'all' or h['map'] == name)]
+                if not group:
+                    continue
+                wins = sum(1 for h in group if win_label[tuple(h[k] for k in KEY)] == label and h['eliminated_s'] == '')
+                elim = [number(h['eliminated_s']) / 60 for h in group if h['eliminated_s'] != '']
+                print(f'| {tag} | {name} | {label} | {len(group)} | {statistics.mean(number(h["place"]) for h in group):.2f} | '
+                      f'{statistics.mean(scored[id(h)][0] for h in group):+.3f} | '
+                      f'{wins} | {len(elim)} | {sum(scored[id(h)][1] for h in group)} | {statistics.mean(elim) if elim else 0:.1f} | '
+                      f'{statistics.mean(number(h["kill_value"]) for h in group):.0f} / '
+                      f'{statistics.mean(number(h["loss_value"]) for h in group):.0f} |')
+    if len(labels) == 1:
+        report_ffa_tags(args, valid, rows, scored)
+        return
+    # Per game, each label's mean over its houses; the candidate against the control in the same games.
+    per_game = defaultdict(lambda: defaultdict(list))
+    for h in rows:
+        per_game[tuple(h[k] for k in KEY)][h['label']].append(scored[id(h)])
+    mean = lambda values: (statistics.mean(v[0] for v in values), statistics.mean(1.0 if v[1] else 0.0 for v in values))
+    print(f'\nPer game (mean over a label\'s houses), against {control} in the same games '
+          f'({"interval of the score against 0.5" if legacy else "difference = score - control score, 95% bootstrap"}):\n')
+    print(f'| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
+          'Alive at a time-out (share of houses) own / control | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for label in labels:
+        if label == control:
+            continue
+        pairs = []
+        for by_label in per_game.values():
+            if label in by_label and control in by_label:
+                (a, da), (b, db) = mean(by_label[label]), mean(by_label[control])
+                pairs.append((a, b, da, db))
+        c = match_score.compare(pairs, 20261017, args.scoring)
+        if not c:
+            continue
+        interval = f'{c.low:.2f}-{c.high:.2f}' if legacy else f'{c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
+        print(f'| {label} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {interval} | '
+              f'{100 * statistics.mean(p[2] for p in pairs):.0f}% / {100 * statistics.mean(p[3] for p in pairs):.0f}% | '
+              f'{c.verdict} {control} |')
+    timeouts = sum(1 for g in valid.values() if not g['winner_label'])
+    print(f'\nTime-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
+
+
+def report_ffa_tags(args, valid, rows, scored):
+    """One label for every house: each tag's mean house score per game (in a game of equals this is
+    the time-out penalty: -0.25 x survivors / houses, 0 when one house is left) paired with the
+    control tag's game on the same map and seed."""
+    tags = sorted(args.tags)
+    control = args.control_tag or tags[0]
+    per_game = defaultdict(list)
+    for h in rows:
+        per_game[tuple(h[k] for k in KEY)].append(scored[id(h)])
+    by_setup = defaultdict(dict)
+    for key, values in per_game.items():
+        game = dict(zip(KEY, key))
+        by_setup[(game['difficulty'], game['map'], game['seed'])][game['tag']] = (
+            statistics.mean(v[0] for v in values), 0.0 if valid[key]['winner_label'] else 1.0)
+    print(f'\nPer game (mean house score), each tag against tag {control} on the same map and seed '
+          f'(difference = score - control score, 95% bootstrap; time-out = two or more houses alive at the limit):\n')
+    print('| Tag | Games | Score | Control score | Difference (95% CI) | Time-outs own / control | Verdict |')
+    print('|---|---|---|---|---|---|---|')
+    for tag in tags:
+        if tag == control:
+            continue
+        pairs = [(s[tag][0], s[control][0], s[tag][1] > 0, s[control][1] > 0)
+                 for s in by_setup.values() if tag in s and control in s]
+        c = match_score.compare(pairs, 20261017, args.scoring)
+        if not c:
+            continue
+        print(f'| {tag} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f}) | '
+              f'{sum(p[2] for p in pairs)} / {sum(p[3] for p in pairs)} | {c.verdict} {control} |')
+    for tag in tags:
+        group = [g for g in valid.values() if g['tag'] == tag]
+        print(f'\nTag {tag} time-outs (two or more houses alive at the limit): '
+              f'{sum(1 for g in group if not g["winner_label"])} of {len(group)}')
 
 
 def longest_inside(rows, share):
@@ -578,6 +698,11 @@ parser.add_argument('--ffa', help='Four-player free-for-all: labels x (all house
 parser.add_argument('--game-options', type=Path,
                     help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
                          'tests/performance/data/stefan-game-options.ini)')
+parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
+parser.add_argument('--control-tag', help='FFA report with one label: the tag every other tag is compared with '
+                                          '(default the first tag in sort order)')
+parser.add_argument('--baseline', help='1v1 report: also pair each first label with this label\'s side against the same '
+                                       'opponent in the same setups (e.g. the old default, for a candidate v none)')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all three house pairs')
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
@@ -588,7 +713,9 @@ parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe bi
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--minutes-shown', default='5,10,15,20,30,40,60', help='Report: economy table minutes')
 parser.add_argument('--adjudicate', type=float, default=1000,
-                    help='Report: a time-out goes to the side ahead on killed unit value by at least this many credits')
+                    help='Report, --scoring legacy only: a time-out goes to the side ahead on killed unit value by at '
+                         'least this many credits')
+match_score.add_arguments(parser)
 args = parser.parse_args()
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')
