@@ -422,9 +422,10 @@ int QuantBot::emergencyResponseRadius(int threatValue) {
 }
 
 int QuantBot::houseAttackThreshold() const {
-    // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
+    // Campaign mode and the whole-army custom houses: the difficulty's own threshold (Hard 30%, not
+    // the global 40%); other custom houses (Easy): the global one.
     const QuantBotConfig& config = botConfig();
-    const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+    const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal || autonomousCustomArmy())
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
     const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
@@ -451,15 +452,16 @@ int QuantBot::reachableAttackThreshold(int required) const {
     if (supportMode || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
     required = SimpleArmyPolicy::reachableReadiness(required, militaryUnitValue(), getHouse()->getCredits(),
                                                     lastCalculatedSpice);
-    // The opening of a whole-army house that started without an army able to launch a wave (a
-    // Construction Yard or small-army start, the one ForceConcentrationPolicy::openingReadiness
-    // holds to full readiness) ends at its own threshold share of at most Medium's limit: a
-    // higher difficulty's larger limit buys a larger army later, not a later first wave. Brutal
+    // A whole-army house's waves leave at its own threshold share of at most Medium's limit: a
+    // higher difficulty's larger limit buys a larger army, not later and rarer waves. Brutal
     // waiting for 20,000 (25% of 80,000) on a 96x96 map was killed at home by Medium's first wave
-    // of 10,000 in 23 of 72 ladder games; now Brutal 6,250, Hard 7,500, Medium 10,000. A starting
-    // army that can strike keeps its thresholds (quantbot_ffa_army_deploys).
-    if (autonomousCustomArmy() && customWave.launched == 0
-        && initialMilitaryValue < ForceConcentrationPolicy::scaledReadiness(required, waveReadinessPercent())) {
+    // of 10,000 in 23 of 72 ladder games, and three Hard allies waiting for 16,800 each lost 3 of
+    // 4 3v3s to Medium houses leaving at 9,600; now Brutal 6,250, Hard 7,500, Medium 10,000 on a
+    // 96-128 map. It applies against one enemy team (1v1, team games) and in an opening held for
+    // a house that started without an army able to strike; a free-for-all with starting armies
+    // keeps its thresholds (quantbot_ffa_army_deploys).
+    if (autonomousCustomArmy() && (singleEnemyTeam() || (customWave.launched == 0
+        && initialMilitaryValue < ForceConcentrationPolicy::scaledReadiness(required, waveReadinessPercent())))) {
         const auto& config = botConfig();
         const float own = config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent;
         const int base = std::min(militaryValueLimit,
@@ -467,6 +469,18 @@ int QuantBot::reachableAttackThreshold(int required) const {
         required = std::min(required, (base * (FixPoint(static_cast<int>(own * 100)) / 100)).lround());
     }
     return required;
+}
+
+bool QuantBot::singleEnemyTeam() const {
+    const int myTeam = getHouse()->getTeamID();
+    int enemyTeam = -1;
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* house = getHouse(h);
+        if (!house || !house->isAlive() || house->getTeamID() == myTeam) continue;
+        if (enemyTeam >= 0 && house->getTeamID() != enemyTeam) return false;
+        enemyTeam = house->getTeamID();
+    }
+    return enemyTeam >= 0;
 }
 
 bool QuantBot::bundleArmyReady() const {

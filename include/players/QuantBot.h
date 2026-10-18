@@ -1176,10 +1176,12 @@ private:
     int houseAttackThreshold() const;
     /// The custom-game threshold actually required (campaign: \a required unchanged): 0 when the
     /// house's credits and the spice left on the map cannot buy the difference to it
-    /// (SimpleArmyPolicy::reachableReadiness), and during a whole-army house's held opening (no
-    /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
-    /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    /// (SimpleArmyPolicy::reachableReadiness), and for a whole-army house facing one enemy team or
+    /// in its held opening at most its own threshold share of Medium's limit on this map
+    /// (docs/ai-scenario-matrix.md, "Difficulty ladder").
     int reachableAttackThreshold(int required) const;
+    /// Every living enemy house is on one team (a 1v1 or a team game, not a free-for-all).
+    bool singleEnemyTeam() const;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.
