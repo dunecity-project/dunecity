@@ -1,3 +1,24 @@
+## 2026-10-18 — QuantBot ratio tuning finished: placement re-score, tuned rounds, Tuned code defaults; default unchanged (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Merged `test/match-scoring` (ratio write-up is now `docs/ai-play-styles.md` section 8; `ratio-analysis.py
+--arms` reports the paired placement Δ and draw rates). Raw results ~/Documents/projects/dunecity-results/ratio-tuning,
+compact CSVs `docs/formation-results/play-styles/ratios/{r1,r2,f1,fB,fF,pB,g,gB,gF,gL}`.
+
+- **Re-scored randomised arm:** Δ +0.087 (+0.02..+0.16) v control, n=3,094, 0.6% time-outs.
+- **Tuned rounds (CY, Hard, Swarm, v `#Learned-Swarm`):** r1 four candidates +0.08..+0.26 (n=144 each); r2
+  best +0.27 (-0.01..+0.53), r2 siege +0.24 (n=216 each); the per-house pick (code defaults) on fresh seeds
+  +0.19 (-0.07..+0.45), n=216: ahead, not by the rule. Base +0.30 level, Brutal **+0.48** beats, Fortress and
+  `/weak` level; all-against-Atreides 6/6 with Tuned as the default (the r2-best Atreides mix failed 5/6).
+- **Code:** `[Unit Ratios Tuned]` defaults Harkonnen 14,16,15,22,0,0,0,33; Atreides 9,20,13,22,13,10,0,13;
+  Ordos 9,17,7,13,27,0,7,20 (others none); unit test pins them within the bounds. **Default stays
+  `Fixed:Learned,Swarm`** (configured ratios, bounded). Recommended stronger option `Mode=Fixed:Tuned,Swarm`;
+  variety option `Mode=Random`, `MixWeights=Bounded:1` (+0.19 level, n=108).
+- **Learning on v off:** level everywhere (r2 best +0.03, n=216; random start +0.07, n=108; Tuned `gL` partial
+  n=56) - kept per Stefan; its measured value remains section 6.3(d).
+- **Tests (89b8ca3b, ctest -j3 from the shell):** 42/42 of the required list (`perf_regression` does not exist on
+  this branch; it is on `perf/game-fps`). Pending: `gL-win` (PC) finishing; ~200 more `#Tuned-Swarm` games
+  would decide the default.
+
 ## 2026-10-18 — QuantBot starting-ratio bounds, Bounded/Tuned mixes, randomised arm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
 
 Stefan: randomised runs, control runs and tuned mixes; no unit type over 50% or under 2% at start; keep

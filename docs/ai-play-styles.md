@@ -697,8 +697,8 @@ learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = 
 ### 8.2 New mixes and keys
 
 - `Tuned`: the per-house `[Unit Ratios Tuned]` ratios, `<House> = t,s,l,sp,o,tr,r,q` (percent; optional
-  keys, never written by `save()`, hashed). Code defaults: none, so Tuned plays the configured opening
-  until tuned ratios are adopted (8.5).
+  keys, never written by `save()`, hashed). Code defaults: the measured per-house mixes of 8.5 for
+  Harkonnen, Atreides and Ordos; none for Fremen, Sardaukar and Mercenary (their configured opening).
 - `Bounded`: a random starting mix within the bounds each game - uniform over the bounded mixes of the
   slots the house can produce (sorted uniform cut points = flat Dirichlet, redrawn until within the
   bounds, at most 64 times, then `bound()`), a pure SplitMix64 function of game seed + house + salt.
@@ -714,64 +714,110 @@ learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = 
   (`UNIT_MIX_SAMPLE:`); `--seed-per-map STRIDE` gives every map its own seed so the Bounded draw differs
   by map. Analysis: `tests/ai/ratio-analysis.py`.
 
-### 8.3 Arms (CY starts, six bundled maps, Hard, all house pairs, both sides, Swarm tempo)
+### 8.3 Scoring and setup
 
-Control = `default#Learned-Swarm` (the 1.0.847 default, bounded). Scores: time-outs go to the side
-1,000+ credits ahead on killed value; 95% bootstrap intervals; bold = interval excludes 0.5. Per-house
-effect: every house pair is played with both assignments, so the gain of A over B as house h is
-identified from s(h,o) + s(o,h) = d(h) + d(o) (logits); shown as the score against an equal B.
-Data: `docs/formation-results/play-styles/ratios/` (`rR/`, `cU/` games and houses; `random-games.csv`
-one row per randomised game with the starting mix and both sides' end-of-game built shares; `slots.csv`,
-`regression.csv`, `types.csv`, `candidates.csv`).
+All arms: CY starts on the six bundled maps (habbanya-penny, ergun-sahij, tuono-soolin, sihaya-pip,
+x-factor, sihaya-lauper), Hard unless stated, all three house pairs, both sides (36 games per seed),
+`--seed-per-map 1`. Control = `default#Learned-Swarm` (the 1.0.847 default with the bounded configured
+opening). Score = the placement score of section 7 (win +1, loss -1, a time-out -0.25 each; no kill-value
+adjudication); **Δ** = mean paired difference candidate - control per game, 95% bootstrap interval; bold =
+the interval excludes 0 (the default rule). House columns are Δ with the candidate playing that house;
+they include house strength (Ordos is strong, Harkonnen weak; compare columns across arms, not with 0).
+Runners: mini, MacBook Pro, Windows PC; the Pro and the PC were synced and matched the mini's parity set
+(`par`, 12 games: Pro identical, PC identical except the known ±0.1 s timing fields).
+Data: `docs/formation-results/play-styles/ratios/<arm>/` (games + houses; `fF`/`gF` Fortress games only);
+report with `python3 tests/ai/ratio-analysis.py DIR... --arms A:B` (Fortress: `formation-duel.py --report`).
 
-| Arm | Score v control | Per-house effect (Atreides / Harkonnen / Ordos) | Games (runner) |
+### 8.4 Randomised v control, re-scored (3,094 games)
+
+| Arm | Δ v control | Atreides / Harkonnen / Ordos | W-L / time-outs |
 |---|---|---|---|
-| Randomised (`Bounded-Swarm`) | **0.520** (0.50-0.54) n=3,094 | 0.51 / 0.54 / 0.52 | mini 946, Pro 1,137, Air 490, PC 521 |
-| 1.0.847 unbounded opening (`@unbounded`), control's side | 0.500 (0.41-0.59) n=108 | 0.49 / 0.67 / 0.33 (small n) | mini 108 |
+| Randomised (`Bounded-Swarm`; `rR`) | **+0.087** (+0.02..+0.16) n=3,094 | +0.08 / -0.29 / +0.47 | 1,604-1,470 / 20 (0.6%) |
+| Bounded control v 1.0.847 unbounded opening (`cU`) | +0.000 (-0.37..+0.37) n=108 | -0.22 / -0.11 / +0.33 | 54-54 / 0 |
 
-The randomised arm's raw by-house columns (Atreides 0.52, Harkonnen **0.43**, Ordos **0.62**) are house
-strength, not mix: as either label Ordos beats and Harkonnen loses more. Net of that, a random starting
-mix within the bounds is level with or slightly above the configured ratios for every house. The bounds
-themselves cost nothing measurable (bounded v unbounded 0.50).
+Legacy score of the same games: 0.520 (0.50-0.54). The randomised arm still edges the configured ratios;
+the bounds themselves cost nothing. (These games used the superseded per-pass bounds, 8.1.)
 
-### 8.4 What worked (randomised arm, 3,094 games)
+**What worked** (randomised arm; derived with the legacy score, unchanged by re-scoring - 20 time-outs):
 
-- **The starting mix matters little once the learning runs.** Score by starting share is flat within
-  ±0.05 for nearly every slot and house; ridge-logistic coefficients (per unit share, against tanks, map
-  and opponent dummies) are within about 2 standard errors of 0: Atreides siege +1.10±0.58, special
-  -0.61±0.57, quad +0.41; Harkonnen quad +0.67±0.52, special +0.26; Ordos ornithopter +1.04±0.59, quad
-  +0.66, launcher -0.36, raider -0.38. +10 points of a slot moves the result by at most ~3 points.
-- **The learning converges to the same composition in winners and losers.** End-of-game built-value
-  shares (tank/siege/launcher/special/orni/trike/raider/quad): Atreides winners 11/12/17/16/17/13/-/14 v
-  losers 9/13/18/14/18/13/-/14; Harkonnen 13/17/21/11/-/-/-/25 v 12/18/22/12/-/-/-/23; Ordos
-  12/15/14/11/18/-/12/14 v 11/14/16/12/17/-/11/13. At minute 10 production is light-vehicle heavy
-  (trikes/quads/raiders 33-47%), by minute 20-30 it is the balanced mix above.
-- **Cost-effectiveness** (combat reward per value built, both arms): siege tanks are the best value for
-  every house (1.83 / 2.02 / 2.20), then the Sonic Tank for Atreides (2.38) and launchers for Ordos
-  (1.75); tanks, trikes and ornithopters return about 1.0-1.3. Survival is low for everything (5-23%).
+- **The starting mix matters little once the learning runs.** Ridge-logistic coefficients of the result on
+  the starting shares are within about 2 standard errors of 0: Atreides siege +1.10±0.58, special
+  -0.61±0.57; Harkonnen quad +0.67±0.52; Ordos ornithopter +1.04±0.59, quad +0.66. +10 points of a slot
+  moves the result by at most ~3 points.
+- **Winners and losers end with the same composition** (built value, tank/siege/launcher/special/orni/
+  trike/raider/quad): Atreides 11/12/17/16/17/13/-/14 v 9/13/18/14/18/13/-/14; Harkonnen
+  13/17/21/11/-/-/-/25 v 12/18/22/12/-/-/-/23; Ordos 12/15/14/11/18/-/12/14 v 11/14/16/12/17/-/11/13.
+- **Cost-effectiveness** (combat reward per value built): siege tanks best for every house (1.8-2.2), then
+  the Sonic Tank (Atreides, 2.4) and launchers (Ordos, 1.75).
 
-### 8.5 Tuned mixes (round 1, in progress) and decision
+### 8.5 Tuned mixes: round 1, round 2 and the final per-house mix
 
-Round-1 candidates per house (percent, tank/siege/launcher/special/orni/trike/raider/quad), derived from
-the first 3,013 randomised games (`tests/ai/play-styles/r1-*.ini`, label `default@r1-<name>#Tuned-Swarm`):
+Percent: tank, siege, launcher, special, ornithopter, trike, raider trike, quad (0 = the house cannot
+field it; every mix is bounded 2%-50% over the fieldable slots at game start).
 
-| Candidate | Atreides | Harkonnen | Ordos |
+| Candidate (style) | Atreides | Harkonnen | Ordos |
 |---|---|---|---|
-| regression (quadratic logistic, mean of the best 5% of 4,000 bounded mixes) | 10,39,11,7,10,9,0,14 | 10,13,10,23,0,0,0,44 | 9,9,7,13,35,0,7,20 |
-| gradient (12-point step along the linear coefficients) | 13,26,15,6,13,10,0,17 | 14,16,15,22,0,0,0,33 | 12,11,6,17,27,0,5,22 |
-| winners' end composition | 11,12,17,16,17,13,0,14 | 15,19,24,13,0,0,0,29 | 13,15,15,11,19,0,13,14 |
-| cost-effectiveness | 10,18,15,23,12,10,0,12 | 16,28,19,19,0,0,0,18 | 11,20,16,14,12,0,12,15 |
+| r1 regression | 10,39,11,7,10,9,0,14 | 10,13,10,23,0,0,0,44 | 9,9,7,13,35,0,7,20 |
+| r1 gradient | 13,26,15,6,13,10,0,17 | 14,16,15,22,0,0,0,33 | 12,11,6,17,27,0,5,22 |
+| r1 winners' end | 11,12,17,16,17,13,0,14 | 15,19,24,13,0,0,0,29 | 13,15,15,11,19,0,13,14 |
+| r1 cost | 10,18,15,23,12,10,0,12 | 16,28,19,19,0,0,0,18 | 11,20,16,14,12,0,12,15 |
+| r2 best (per house the best r1 effect) | 11,12,17,16,17,13,0,14 | 14,16,15,22,0,0,0,33 | 9,9,7,13,35,0,7,20 |
+| r2 siege (r2 best +8 siege; Atreides +6 Sonic) | 9,20,13,22,13,10,0,13 | 13,24,14,19,0,0,0,30 | 9,17,7,13,27,0,7,20 |
+| **Tuned code defaults** (per house the better r2 mix) | **9,20,13,22,13,10,0,13** | **14,16,15,22,0,0,0,33** | **9,17,7,13,27,0,7,20** |
+| configured opening, bounded (control, for reference) | 4.8,9.5,33.4,33.4,14.3,2,0,2.7 | 16.3,16.3,48,15.4,0,0,0,4 | 23.4,23.4,2,23.4,23.4,0,2,2.6 |
 
-Round 1 (each candidate v control, 216 games: `t1-mini`, `t1-pro`) and random-within-bounds as a production
-option (`default@mixbounded#random`, `pB-win`) were started and then stopped when the bounds moved from per
-pass to per game (8.1): they ran the superseded binary. Not yet run on the final rule: round 1/2, the best
-tuned mix at Base tempo, on Fortress, Brutal, `/weak`, all-against-Atreides with it, learning on v off
-(`@nolearn`), and the production-option arm. Time-outs (draws): randomised arm 20 of 3,094 (0.6%), bounds
-control 0 of 108. Scoring will move to the placement/draw-penalty score of `test/match-scoring`.
+| Arm (v control, Swarm) | Δ | Atreides / Harkonnen / Ordos | W-L / time-outs |
+|---|---|---|---|
+| r1 regression (`r1`) | +0.194 (-0.12..+0.51) n=144 | +0.58 / -0.38 / +0.38 | 78-64 / 2 (1.4%) |
+| r1 gradient | +0.264 (-0.06..+0.58) n=144 | +0.42 / +0.00 / +0.38 | 81-62 / 1 (0.7%) |
+| r1 winners' end | +0.236 (-0.08..+0.57) n=144 | +0.88 / -0.33 / +0.17 | 80-63 / 1 (0.7%) |
+| r1 cost | +0.083 (-0.25..+0.42) n=144 | +0.17 / -0.25 / +0.33 | 75-69 / 0 |
+| r2 best (`r2`) | +0.269 (-0.01..+0.53) n=216 | +0.17 / -0.08 / +0.72 | 122-93 / 1 (0.5%) |
+| r2 siege | +0.241 (-0.02..+0.50) n=216 | -0.17 / -0.11 / +1.00 | 121-95 / 0 |
+| **Tuned defaults, `default#Tuned-Swarm`** (`g`, fresh seeds) | +0.194 (-0.07..+0.45) n=216 | -0.14 / +0.08 / +0.64 | 116-95 / 5 (2.3%) |
 
-**Decision so far: no default change.** The default stays `Fixed:Learned,Swarm` with the configured
-ratios, now bounded; `[Unit Ratios Tuned]` has no code defaults, so `Tuned` = the configured opening.
-The adoption rule stands: a tuned mix becomes the default only with its CY interval above 0.5 over ≥108
-games, not worse on Fortress, Brutal and `/weak`, and `quantbot_all_against_atreides` 6/6. Given 8.4
-(small within-house effects), a tuned mix is unlikely to clear it by much; the measured, safe variety
-option today is `Mode=Random` with `MixWeights=Bounded:1` (the randomised arm: 0.52 v control).
+Every tuned mix is ahead of the configured ratios, none by the rule's margin; the per-house choice regressed
+on fresh seeds (+0.27 -> +0.19). Harkonnen and Ordos gain most (their columns sit 0.3-0.5 above the
+randomised arm's), Atreides least. **Atreides:** the r2 best mix (winners' end composition) failed
+`quantbot_all_against_atreides` (seed 1430976924 won at 40.7 min, 5/6); the siege/Sonic mix passes 6/6
+(29.9-37.5 min), so it is the Atreides default. End-of-game composition (built value, Tuned v control,
+`g`): Atreides 10/13/14/14/18/14/-/16 v 9/12/20/16/19/11/-/13; Harkonnen 11/15/16/12/-/-/-/32 v
+11/18/24/13/-/-/-/21; Ordos 12/13/13/10/20/-/9/18 v 16/15/12/12/21/-/8/11 - the learning pulls both
+towards the same mix, the tuned start leaves more quads (Harkonnen, Ordos) and fewer launchers.
+
+### 8.6 The tuned mix elsewhere, the learning, and random-within-bounds
+
+| Arm | Δ (95% CI) n | W-L / time-outs |
+|---|---|---|
+| Tuned defaults, Base tempo: `#Tuned-Base` v `#Learned-Base` (`g`) | +0.296 (-0.07..+0.67) n=108 | 62-46 / 0 |
+| r2 best, Base tempo (`f1`) | **+0.407** (+0.04..+0.78) n=108 | 65-43 / 0 |
+| Tuned defaults, Brutal (`gB`) | **+0.481** (+0.11..+0.85) n=108 | 67-41 / 0 |
+| r2 best, Brutal (`fB`) | +0.222 (-0.15..+0.59) n=108 | 60-48 / 0 |
+| Tuned defaults, Fortress 128/160/192, seeds 12101-12606 (`gF`) | -0.056 (-0.56..+0.50) n=36 | 12-13 / 11 (31%) |
+| r2 best, Fortress (`fF`) | +0.056 (-0.50..+0.56) n=36 | 12-11 / 13 (36%) |
+| Tuned `/weak` v none, paired with Learned `/weak` v none (`gF`) | +0.000 (-0.18..+0.18) n=36 | 36% / 36% |
+| r2 best `/weak`, paired the same (`fF`) | -0.111 (-0.32..+0.07) n=36 | 44% / 44% |
+| all-against-Atreides (Tuned defaults as the default, 9c0e2afa) | 6/6, 29.9-37.5 min | - |
+| Learning on v off, r2 best (`f1`) | +0.028 (-0.24..+0.29) n=216 | 109-106 / 1 |
+| Learning on v off, random start (`#Bounded-Swarm` v `@nolearn#Bounded-Swarm`, `g`) | +0.074 (-0.30..+0.44) n=108 | 56-52 / 0 |
+| Learning on v off, Tuned defaults (`gL`, partial when written) | -0.036 (-0.54..+0.46) n=56 | 27-28 / 1 |
+| **Random within bounds** (`Mode=Random`, `MixWeights=Bounded:1`: `default@mixbounded#random`, `pB`) | +0.185 (-0.19..+0.56) n=108 | 59-49 / 0 |
+
+- **Not worse anywhere:** Base tempo, Brutal (beats), Fortress and `/weak` level.
+- **The learning does not measurably add value on CY 1v1** - not from a tuned start, not from a random one
+  (380 games, all level). Its measured value is the earlier result (6.3 d): held fixed, heavy compositions
+  lost (armor 0.28, heavy 0.34) where the same ratios as priors with learning were level. It is kept (Stefan's
+  rule; it protects against bad starting mixes), but this round cannot show a gain over a good start.
+- **Random within bounds** (the pick: 98 Bounded-Swarm, 10 Bounded-Flood) is level and ahead in sign, like the
+  3,094-game randomised arm (+0.087, beats): fine as a variety option.
+
+### 8.7 Decision
+
+- **Default unchanged: `Fixed:Learned,Swarm`, the configured ratios bounded** (every starting mix, the
+  default included, obeys 2%-50%). Tuned's final Δ +0.19 (-0.07..+0.45, n=216) misses the rule (interval
+  above 0), although it is ahead in every arm (9 of 9 tuned CY arms positive; Brutal beats).
+- **`Tuned` now has measured code defaults** (above; Fremen/Sardaukar/Mercenary none = configured opening):
+  `[Strategy] Mode=Fixed:Tuned,Swarm` is the recommended stronger setting; it passes all-against-Atreides.
+- **Variety:** `Mode=Random` with `MixWeights=Bounded:1` (not worse than the control).
+- Next: ~200 more fresh-seed `#Tuned-Swarm` games would decide the default (at +0.19 the interval clears 0
+  near n=400); gL-win was still running when this was written.
