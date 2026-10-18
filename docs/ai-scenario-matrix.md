@@ -58,7 +58,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
 | `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
 | `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/economic/quota); triggers fired |
-| `ladder` | QB v QM, QH v QE, QM v QE on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies) and Habbanya-Penny; 8 seeds per pair and map, sides alternating | the stronger QuantBot's placement score interval above 0 (over all maps) |
+| `ladder` | QB v QM, QH v QE, QM v QE on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies), Habbanya-Penny and a vanilla Construction Yard only 96x96 start; 8 seeds per pair and map (`--ladder-seeds 18`: 72 games per pair), sides alternating | the stronger QuantBot's placement score interval above 0 (over all maps) |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
 Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
@@ -99,7 +99,8 @@ Every game must also finish without a crash. 10 games, three at a time.
 python3 tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3 --build-dir build --results build/scenario-matrix-smoke
 # full tier, one machine
 python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/projects/dunecity-results/scenario-matrix/<tag>
-# a slice: --categories ladder campaign, --seeds-per-cell 2, --list (print the plan)
+# a slice: --categories ladder campaign, --seeds-per-cell 2, --cells 'QB-v-QM|3v3' (regex on
+# category/cell/mod), --ladder-seeds 18 (72 ladder games per pair), --list (print the plan)
 # report over any number of results directories (e.g. the four shards)
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
 ```

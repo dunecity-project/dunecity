@@ -1189,6 +1189,9 @@ void runArmyRecoveryProbe(Game& game) {
             for(auto* unit:waveUnits){bot->doSetAttackMode(unit,GUARD);unit->setForced(false);}
             for(auto* unit:homeUnits){bot->doSetAttackMode(unit,GUARD);unit->setForced(false);}
             bot->militaryValueLimit=1000000;   // Far above anything assembled.
+            // ...yet reachable: spice left to buy it, so the gate is the configured threshold, not
+            // SimpleArmyPolicy::reachableReadiness's "attack with what you have".
+            bot->lastCalculatedSpice=2000000;
             bot->launchGroundHunt();
             require(bot->customWave.members.empty(),
                 "An unready Brutal house still issued a fresh wave");
