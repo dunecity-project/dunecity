@@ -140,6 +140,10 @@ parser.add_argument('--game-options', type=Path,
                     help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
 parser.add_argument('--elimination-match', action='store_true',
                     help='Play until one team is left (also as a local spectator) and log per-minute house samples')
+parser.add_argument('--ffa-screenshot', type=Path,
+                    help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
+                         'between its assembly point and its forward bundle) at the first sample, at --viewport')
+parser.add_argument('--ffa-screenshot-minute', type=int, help='--ffa-screenshot: at the first sample from this game minute')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
@@ -561,9 +565,18 @@ if args.preplace_probe:
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
 if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
+if args.ffa_screenshot:
+    # A rendered game view (dummy video driver, software renderer) of one house's army at the
+    # first per-minute sample of an elimination match (tests/ai/ffa-army.inc).
+    env['BALANCE_FFA_SCREENSHOT'] = str(args.ffa_screenshot.resolve())
+    if args.ffa_screenshot_minute is not None:
+        env['BALANCE_FFA_SCREENSHOT_MINUTE'] = str(args.ffa_screenshot_minute)
+    env['BALANCE_FFA_SCREENSHOT_HOUSE'] = str(house_names.index(args.house))
+    args.viewport = args.viewport or '1440x900'
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
-if args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe or args.real_video:
+if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
+        or args.real_video or args.ffa_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480

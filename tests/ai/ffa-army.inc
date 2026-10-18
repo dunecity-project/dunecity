@@ -12,10 +12,15 @@
 //
 // BALANCE_FFA_DUMP=<prefix> also writes <prefix>-m<minute>.json at the first sample and every
 // BALANCE_FFA_DUMP_EVERY minutes (default 5): terrain, building and road tiles per owner, every
-// unit and each QuantBot's points, for tests/ai/ffa-map.py to draw.
+// unit and each QuantBot's points, for tests/ai/ffa-map.py to draw. BALANCE_FFA_SCREENSHOT=<png>
+// renders the game view (Game::drawScreen at the profile's resolution) centred between house
+// BALANCE_FFA_SCREENSHOT_HOUSE's assembly point and its forward bundle at the first sample.
 #include <players/QuantBot.h>
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <FileClasses/LoadSavePNG.h>
+#include <ScreenBorder.h>
+#include <misc/draw_util.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -158,8 +163,30 @@ inline void dump(Game& game, int minute) {
     SDL_Log("FFA_ARMY_DUMP: minute=%d file=%s-m%d.json", minute, prefix, minute);
 }
 
+inline void screenshot(Game& game, int minute) {
+    static bool taken = false;
+    const char* path = std::getenv("BALANCE_FFA_SCREENSHOT");
+    const char* at = std::getenv("BALANCE_FFA_SCREENSHOT_MINUTE");
+    if (taken || !path || (at && minute < std::atoi(at))) return;
+    taken = true;
+    const House* house = game.getHouse(std::atoi(std::getenv("BALANCE_FFA_SCREENSHOT_HOUSE")));
+    const QuantBot* bot = house ? quantBotOf(house) : nullptr;
+    Coord centre = house ? bot ? bot->armyAssemblyAnchor() : Coord::Invalid() : Coord::Invalid();
+    if (bot && centre.isValid() && bot->bundlePoint.isValid())
+        centre = Coord((centre.x + bot->bundlePoint.x) / 2, (centre.y + bot->bundlePoint.y) / 2);
+    if (centre.isInvalid()) return;
+    screenborder->setNewScreenCenter(Coord(centre.x * TILESIZE + TILESIZE / 2, centre.y * TILESIZE + TILESIZE / 2));
+    SDL_SetRenderTarget(renderer, nullptr);
+    game.drawScreen();
+    auto image = renderReadSurface(renderer);
+    const bool saved = image != nullptr && SavePNG(image.get(), path) == 0;
+    SDL_Log("FFA_ARMY_SCREENSHOT: house=%d centre=%d,%d file=%s saved=%d", house->getHouseID(), centre.x, centre.y, path,
+            int(saved));
+}
+
 inline void sample(Game& game) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
+    screenshot(game, minute);
     auto& last = lastPositions();
     std::map<Uint32, Coord> now;
     for (const House* house : EliminationMatch::playingHouses(game)) {
