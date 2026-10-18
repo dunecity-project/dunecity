@@ -16,6 +16,9 @@ candidate becomes the default only when its paired score difference against the 
 95% confidence. Sections 3-6 were scored with the old rule (1/0, time-outs decided on killed value or
 0.5, interval above 0.5); section 7 re-scores them. Swarm still clears the rule on CY starts. Round 5's
 UVX default would no longer have passed it.
+**Update (branch `feat/ai-ratio-tuning`, protocol 83, save 9866): see section 8.** Every starting mix is
+bounded (each producible unit type 2%-50%); new `Tuned` and `Bounded` (random within the bounds) mixes;
+randomised, control and tuned arms.
 
 **Result in one paragraph.** Eleven styles were built as test-only per-player overrides and played
 2,406 recorded games (Fortress duels and Construction Yard starts on six bundled maps, Hard) on the mini,
@@ -648,3 +651,185 @@ python3 ../../../tests/ai/formation-duel.py --report --results round5 --tag c1,c
   --baseline none+BWFCQ/weak --seeds 7101 7202 7303 7404 7505 7606 --sizes 128 160 192
 python3 ../../../tests/ai/vanilla-match.py --report --results ../scenarios/ffa --tags cy1 --ffa none+BWFCQ,none
 ```
+
+## 8. Starting unit ratios: bounds, randomised, control and tuned arms (protocol 83, save 9866)
+
+Stefan: "i want randomised runs, control runs and new mixes you tune. for example you can look at ratios
+at the end of the game and see what has worked and tune that way. don't allow any one unit to have over
+50% at start, and not under 2% so we always have a chance to introduce a variety of units." The in-game
+learning stays as it is. Branch `feat/ai-ratio-tuning` (from staging 7eaa52ab = local 1.0.847).
+
+### 8.1 The bounds rule
+
+- **Unit types that count:** the eight unit-mix slots QuantBot's production allocates - tank, siege
+  tank, launcher, special (Devastator / Sonic Tank / Deviator, one slot), ornithopter, trike, raider
+  trike, quad. Infantry is not part of the mix: it has its own difficulty quota (10-12% of the army
+  value, 35% for the Infantry strategy) and is not learned, so it is outside the bounds.
+- **Rule:** every starting mix - the configured `[Unit Ratios]` opening (Learned), the presets, Counter,
+  Tuned and Bounded - is bounded before the learning sees it (`QuantBotStrategy::bound`, in
+  `QuantBot::startingPrior`): over the slots the house can produce *in this game* (ObjectData and the
+  game's tech level, `fieldableMixSlots`) each slot gets 2%-50%; slots it cannot produce get 0 and the rest
+  is renormalised within the bounds. Precisely x_i = clamp(t * w_i, 2%, 50%) with the one scale t that sums
+  to 100% (integer basis points, rounding remainder to the largest fractions). A 0 becomes 2%; one
+  producible slot gets 100% (the cap cannot hold). Each production pass then plays that bounded mix over
+  the slots producible at that pass (factories standing), renormalised: a factory not yet built does not
+  re-shape the starting mix. Learning may move away from the bounds during the game.
+- **Why per game, not per pass:** the first version bounded the mix again over the slots producible at
+  each pass (e.g. 50% cap with only a light factory and a heavy factory up). It failed
+  `quantbot_all_against_atreides` on seed 41562270 (no house eliminated in 41 minutes, 5/6); bounding over
+  the game's producible slots passes 6/6. **The randomised and bounds-control games in 8.3-8.4 were played
+  with that first (per-pass) version**; the starting mix over all producible slots is the same in both, they
+  differ only while factories are still missing. Round-1 tuned games were stopped for the same reason.
+- **Configured ratios:** Atreides Tank 0.05 stays about 5% (4.8% of the heavy share at tech 8); the
+  opening's light units (4% at tech 7+, quads twice trikes) rise to 2% each; Harkonnen's launcher 0.50 x
+  0.96 stays 48%. `config/QuantBot Config.ini.default` is unchanged (it is in the mod checksum).
+- **Presets** are the 1.0.847 presets clamped and renormalised (pinned in the unit tests):
+
+| Mix | 1.0.847 (tank/siege/launcher/special/orni/trike/raider/quad) | Now |
+|---|---|---|
+| QuadMass | 20/0/0/0/0/0/10/70 | 26.67/2/2/2/2/2/13.33/50 |
+| TrikeSwarm | 10/0/0/0/0/45/45/0 | 9/2/2/2/2/40.5/40.5/2 |
+| TankMass | 70/15/15/0/0/0/0/0 | 50/20/20/2/2/2/2/2 |
+| Artillery | 20/45/35/0/0/0/0/0 | 18/40.5/31.5/2/2/2/2/2 |
+| Specials | 25/15/10/50/0/0/0/0 | 23/13.8/9.2/46/2/2/2/2 |
+| Air | 15/10/15/0/60/0/0/0 | 15.75/10.5/15.75/2/50/2/2/2 |
+
+### 8.2 New mixes and keys
+
+- `Tuned`: the per-house `[Unit Ratios Tuned]` ratios, `<House> = t,s,l,sp,o,tr,r,q` (percent; optional
+  keys, never written by `save()`, hashed). Code defaults: the measured per-house mixes of 8.5 for
+  Harkonnen, Atreides and Ordos; none for Fremen, Sardaukar and Mercenary (their configured opening).
+- `Bounded`: a random starting mix within the bounds each game - uniform over the bounded mixes of the
+  slots the house can produce (sorted uniform cut points = flat Dirichlet, redrawn until within the
+  bounds, at most 64 times, then `bound()`), a pure SplitMix64 function of game seed + house + salt.
+  Usable as `Mode=Fixed:Bounded,<Tempo>` or in `MixWeights` (`Mode=Random` with `MixWeights=Bounded:1`
+  is "random within bounds" as a production option; no separate `MixRandom` key is needed).
+- Tuned/Bounded resolve their ratios once at the pick and save them (SAVEGAMEVERSION 9866: eight 16-bit
+  basis points after the strategy). A 9865 save loads with its strategy and no resolved mix (none of
+  its mixes needs one); a 9864 save picks afresh, the same mix. Protocol 83 (production behaviour changes).
+- Test-only `[Play Style]` keys: `Learning=0` (the learning-off arm; style `nolearn`) and
+  `StartBounds=0` (the unbounded 1.0.847 opening; style `unbounded`).
+- Harness: `houses.csv` has `start_mix` (from the `QUANTBOT_STRATEGY:` log line); `mix.csv` has, per house,
+  value built / lost / standing and combat reward per slot (+ infantry) at 10, 20, 30 minutes and the end
+  (`UNIT_MIX_SAMPLE:`); `--seed-per-map STRIDE` gives every map its own seed so the Bounded draw differs
+  by map. Analysis: `tests/ai/ratio-analysis.py`.
+
+### 8.3 Scoring and setup
+
+All arms: CY starts on the six bundled maps (habbanya-penny, ergun-sahij, tuono-soolin, sihaya-pip,
+x-factor, sihaya-lauper), Hard unless stated, all three house pairs, both sides (36 games per seed),
+`--seed-per-map 1`. Control = `default#Learned-Swarm` (the 1.0.847 default with the bounded configured
+opening). Score = the placement score of section 7 (win +1, loss -1, a time-out -0.25 each; no kill-value
+adjudication); **Δ** = mean paired difference candidate - control per game, 95% bootstrap interval; bold =
+the interval excludes 0 (the default rule). House columns are Δ with the candidate playing that house;
+they include house strength (Ordos is strong, Harkonnen weak; compare columns across arms, not with 0).
+Runners: mini, MacBook Pro, Windows PC; the Pro and the PC were synced and matched the mini's parity set
+(`par`, 12 games: Pro identical, PC identical except the known ±0.1 s timing fields).
+Data: `docs/formation-results/play-styles/ratios/<arm>/` (games + houses; `fF`/`gF` Fortress games only);
+report with `python3 tests/ai/ratio-analysis.py DIR... --arms A:B` (Fortress: `formation-duel.py --report`).
+
+### 8.4 Randomised v control, re-scored (3,094 games)
+
+| Arm | Δ v control | Atreides / Harkonnen / Ordos | W-L / time-outs |
+|---|---|---|---|
+| Randomised (`Bounded-Swarm`; `rR`) | **+0.087** (+0.02..+0.16) n=3,094 | +0.08 / -0.29 / +0.47 | 1,604-1,470 / 20 (0.6%) |
+| Bounded control v 1.0.847 unbounded opening (`cU`) | +0.000 (-0.37..+0.37) n=108 | -0.22 / -0.11 / +0.33 | 54-54 / 0 |
+
+Legacy score of the same games: 0.520 (0.50-0.54). The randomised arm still edges the configured ratios;
+the bounds themselves cost nothing. (These games used the superseded per-pass bounds, 8.1.)
+
+**What worked** (randomised arm; derived with the legacy score, unchanged by re-scoring - 20 time-outs):
+
+- **The starting mix matters little once the learning runs.** Ridge-logistic coefficients of the result on
+  the starting shares are within about 2 standard errors of 0: Atreides siege +1.10±0.58, special
+  -0.61±0.57; Harkonnen quad +0.67±0.52; Ordos ornithopter +1.04±0.59, quad +0.66. +10 points of a slot
+  moves the result by at most ~3 points.
+- **Winners and losers end with the same composition** (built value, tank/siege/launcher/special/orni/
+  trike/raider/quad): Atreides 11/12/17/16/17/13/-/14 v 9/13/18/14/18/13/-/14; Harkonnen
+  13/17/21/11/-/-/-/25 v 12/18/22/12/-/-/-/23; Ordos 12/15/14/11/18/-/12/14 v 11/14/16/12/17/-/11/13.
+- **Cost-effectiveness** (combat reward per value built): siege tanks best for every house (1.8-2.2), then
+  the Sonic Tank (Atreides, 2.4) and launchers (Ordos, 1.75).
+
+### 8.5 Tuned mixes: round 1, round 2 and the final per-house mix
+
+Percent: tank, siege, launcher, special, ornithopter, trike, raider trike, quad (0 = the house cannot
+field it; every mix is bounded 2%-50% over the fieldable slots at game start).
+
+| Candidate (style) | Atreides | Harkonnen | Ordos |
+|---|---|---|---|
+| r1 regression | 10,39,11,7,10,9,0,14 | 10,13,10,23,0,0,0,44 | 9,9,7,13,35,0,7,20 |
+| r1 gradient | 13,26,15,6,13,10,0,17 | 14,16,15,22,0,0,0,33 | 12,11,6,17,27,0,5,22 |
+| r1 winners' end | 11,12,17,16,17,13,0,14 | 15,19,24,13,0,0,0,29 | 13,15,15,11,19,0,13,14 |
+| r1 cost | 10,18,15,23,12,10,0,12 | 16,28,19,19,0,0,0,18 | 11,20,16,14,12,0,12,15 |
+| r2 best (per house the best r1 effect) | 11,12,17,16,17,13,0,14 | 14,16,15,22,0,0,0,33 | 9,9,7,13,35,0,7,20 |
+| r2 siege (r2 best +8 siege; Atreides +6 Sonic) | 9,20,13,22,13,10,0,13 | 13,24,14,19,0,0,0,30 | 9,17,7,13,27,0,7,20 |
+| **Tuned code defaults** (per house the better r2 mix) | **9,20,13,22,13,10,0,13** | **14,16,15,22,0,0,0,33** | **9,17,7,13,27,0,7,20** |
+| configured opening, bounded (control, for reference) | 4.8,9.5,33.4,33.4,14.3,2,0,2.7 | 16.3,16.3,48,15.4,0,0,0,4 | 23.4,23.4,2,23.4,23.4,0,2,2.6 |
+
+| Arm (v control, Swarm) | Δ | Atreides / Harkonnen / Ordos | W-L / time-outs |
+|---|---|---|---|
+| r1 regression (`r1`) | +0.194 (-0.12..+0.51) n=144 | +0.58 / -0.38 / +0.38 | 78-64 / 2 (1.4%) |
+| r1 gradient | +0.264 (-0.06..+0.58) n=144 | +0.42 / +0.00 / +0.38 | 81-62 / 1 (0.7%) |
+| r1 winners' end | +0.236 (-0.08..+0.57) n=144 | +0.88 / -0.33 / +0.17 | 80-63 / 1 (0.7%) |
+| r1 cost | +0.083 (-0.25..+0.42) n=144 | +0.17 / -0.25 / +0.33 | 75-69 / 0 |
+| r2 best (`r2`) | +0.269 (-0.01..+0.53) n=216 | +0.17 / -0.08 / +0.72 | 122-93 / 1 (0.5%) |
+| r2 siege | +0.241 (-0.02..+0.50) n=216 | -0.17 / -0.11 / +1.00 | 121-95 / 0 |
+| Tuned defaults, `default#Tuned-Swarm` (`g`, fresh seeds) | +0.194 (-0.07..+0.45) n=216 | -0.14 / +0.08 / +0.64 | 116-95 / 5 (2.3%) |
+| Tuned defaults, settle run (`h1`, seeds 68000-68060, cluster) | **+0.341** (+0.09..+0.57) n=252 | +0.29 / -0.12 / +0.86 | 146-103 / 3 (1.2%) |
+| **Tuned defaults, `g` + `h1`** | **+0.274** (+0.09..+0.45) n=468 | +0.09 / -0.03 / +0.76 | 262-198 / 8 (1.7%) |
+
+Every tuned mix is ahead of the configured ratios. The per-house pick did not clear the rule on its first 216
+fresh games (+0.19), and does over 468 (+0.27, interval above 0). Harkonnen and Ordos gain most (their columns sit 0.3-0.5 above the
+randomised arm's), Atreides least. **Atreides:** the r2 best mix (winners' end composition) failed
+`quantbot_all_against_atreides` (seed 1430976924 won at 40.7 min, 5/6); the siege/Sonic mix passes 6/6
+(29.9-37.5 min), so it is the Atreides default. End-of-game composition (built value, Tuned v control,
+`g`): Atreides 10/13/14/14/18/14/-/16 v 9/12/20/16/19/11/-/13; Harkonnen 11/15/16/12/-/-/-/32 v
+11/18/24/13/-/-/-/21; Ordos 12/13/13/10/20/-/9/18 v 16/15/12/12/21/-/8/11 - the learning pulls both
+towards the same mix, the tuned start leaves more quads (Harkonnen, Ordos) and fewer launchers.
+
+### 8.6 The tuned mix elsewhere, the learning, and random-within-bounds
+
+| Arm | Δ (95% CI) n | W-L / time-outs |
+|---|---|---|
+| Tuned defaults, Base tempo: `#Tuned-Base` v `#Learned-Base` (`g`) | +0.296 (-0.07..+0.67) n=108 | 62-46 / 0 |
+| r2 best, Base tempo (`f1`) | **+0.407** (+0.04..+0.78) n=108 | 65-43 / 0 |
+| Tuned defaults, Brutal (`gB`) | **+0.481** (+0.11..+0.85) n=108 | 67-41 / 0 |
+| r2 best, Brutal (`fB`) | +0.222 (-0.15..+0.59) n=108 | 60-48 / 0 |
+| Tuned defaults, Fortress 128/160/192, seeds 12101-12606 (`gF`) | -0.056 (-0.56..+0.50) n=36 | 12-13 / 11 (31%) |
+| r2 best, Fortress (`fF`) | +0.056 (-0.50..+0.56) n=36 | 12-11 / 13 (36%) |
+| Tuned `/weak` v none, paired with Learned `/weak` v none (`gF`) | +0.000 (-0.18..+0.18) n=36 | 36% / 36% |
+| r2 best `/weak`, paired the same (`fF`) | -0.111 (-0.32..+0.07) n=36 | 44% / 44% |
+| all-against-Atreides (Tuned defaults as the default, 9c0e2afa) | 6/6, 29.9-37.5 min | - |
+| Learning on v off, r2 best (`f1`) | +0.028 (-0.24..+0.29) n=216 | 109-106 / 1 |
+| Learning on v off, random start (`#Bounded-Swarm` v `@nolearn#Bounded-Swarm`, `g`) | +0.074 (-0.30..+0.44) n=108 | 56-52 / 0 |
+| Learning on v off, Tuned defaults (`gL` + `h2`) | +0.000 (-0.27..+0.27) n=216 | 107-107 / 2 |
+| **Random within bounds** (`Mode=Random`, `MixWeights=Bounded:1`: `default@mixbounded#random`, `pB`) | +0.185 (-0.19..+0.56) n=108 | 59-49 / 0 |
+
+- **Not worse anywhere:** Base tempo, Brutal (beats), Fortress and `/weak` level.
+- **The learning does not measurably add value on CY 1v1** - not from a tuned start, not from a random one
+  (540 games, all level). Its measured value is the earlier result (6.3 d): held fixed, heavy compositions
+  lost (armor 0.28, heavy 0.34) where the same ratios as priors with learning were level. It is kept (Stefan's
+  rule; it protects against bad starting mixes), but this round cannot show a gain over a good start.
+- **Random within bounds** (the pick: 98 Bounded-Swarm, 10 Bounded-Flood) is level and ahead in sign, like the
+  3,094-game randomised arm (+0.087, beats): fine as a variety option.
+
+### 8.7 Decision
+
+- **Default: `Fixed:Tuned,Swarm`** - the measured per-house ratios (8.5), bounded like every starting mix
+  (2%-50%). Tuned v the bounded configured ratios +0.27 (+0.09..+0.45), n=468; not worse on Base tempo,
+  Fortress, `/weak`; beats on Brutal; `quantbot_all_against_atreides` 6/6. Fremen, Sardaukar and Mercenary
+  have no tuned ratios yet: under Tuned they play their configured opening, bounded (8.8).
+- **Learned** (the configured ratios, bounded) stays available: `Mode=Fixed:Learned,Swarm`.
+- **Variety:** `Mode=Random` with `MixWeights=Bounded:1` (not worse than the control).
+
+### 8.8 Not done yet (Stefan, 2026-10-18 evening)
+
+- **Fremen, Sardaukar, Mercenary:** never played in these arms. `vanilla-match.py --houses` now pairs any
+  houses; a six-house randomised arm (`rR6`: Bounded v Learned, all 15 pairs, 540 games) was submitted to
+  the cluster to derive their mixes; `ratio-analysis.py` still lists only Atreides/Harkonnen/Ordos.
+- **Specials:** the special slot is one share for Devastator, Sonic Tank and Deviator
+  (`QuantBot::fieldableMixSlots`, the production loop in `QuantBotBuild.cpp`: each buildable special is
+  given the whole `unitMix[3]` as its own target, so a house fielding all three can build up to three
+  times the special share). Separate tuned shares per special need a mix-layout change (save 9868).
+- **Tech levels:** the tuned ratios are for tech 8 CY games; at lower tech they are renormalised over the
+  buildable slots, not tuned per tech band.

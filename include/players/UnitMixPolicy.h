@@ -221,5 +221,21 @@ inline int64_t deficit(int targetBps, int armyValue, int currentCount, int price
     return int64_t(targetBps) * std::max(0, armyValue)
         - int64_t(std::max(0, currentCount)) * std::max(0, price) * 10000;
 }
+// The share of a group (the special slot: Devastator, Sonic Tank, Deviator) split between its
+// \a buildable members: equal parts, the rounding remainder to the lowest buildable members, 0 for
+// the others. A house that can build several specials divides the share; none gets all of it.
+template<size_t N>
+std::array<int, N> splitShare(int bps, const std::array<bool, N>& buildable) {
+    std::array<int, N> result{};
+    int count = 0;
+    for (const bool b : buildable) count += b ? 1 : 0;
+    if (count == 0 || bps <= 0) return result;
+    int remainder = bps % count;
+    for (size_t i = 0; i < N; ++i) if (buildable[i]) {
+        result[i] = bps / count + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) --remainder;
+    }
+    return result;
+}
 }
 #endif

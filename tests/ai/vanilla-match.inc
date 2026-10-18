@@ -88,7 +88,7 @@ inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& 
         ProbeDigest::periodic(game);
         return tick(game, state);
     });
-    EliminationMatch::sample(game);
+    EliminationMatch::sample(game, true);
     FormationDuel::report(game, sides);
 }
 

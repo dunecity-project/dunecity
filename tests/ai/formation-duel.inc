@@ -208,6 +208,8 @@ inline void applyStyle(QuantBot& bot, const std::string& style) {
     s.extraRefineries = ini.getIntValue(section, "ExtraRefineries", s.extraRefineries);
     s.minYards = ini.getIntValue(section, "MinYards", s.minYards);
     s.raidUnits = ini.getIntValue(section, "RaidUnits", s.raidUnits);
+    s.learning = ini.getBoolValue(section, "Learning", s.learning);
+    s.startBounds = ini.getBoolValue(section, "StartBounds", s.startBounds);
     bot.playStyle = s;
     // The constructor drew the first attack delay from the global config.
     if (config->attackTimerMs != getQuantBotConfig().attackTimerMs)
@@ -215,10 +217,11 @@ inline void applyStyle(QuantBot& bot, const std::string& style) {
             currentGame->getGameInitSettings().getRandomSeed(), currentGame->getGameCycleCount(),
             bot.getHouse()->getHouseID());
     SDL_Log("PLAY_STYLE: house=%d style=%s mix_bps=%d counter_bps=%d light_first=%d raid=%d turrets=%d greedy=%d "
-            "extra_refineries=%d min_yards=%d wave=%d/%d readiness=%d opening=%d timer_ms=%d",
+            "extra_refineries=%d min_yards=%d wave=%d/%d readiness=%d opening=%d timer_ms=%d learning=%d start_bounds=%d",
             bot.getHouse()->getHouseID(), style.c_str(), s.mixBps, s.counterBps, int(s.lightFirst), s.raidUnits,
             s.rocketTurrets, int(s.greedyHarvest), s.extraRefineries, s.minYards, s.minWaveUnits, s.minWaveValue,
-            config->force.waveReadinessPercent, int(config->force.openingReadiness), config->attackTimerMs);
+            config->force.waveReadinessPercent, int(config->force.openingReadiness), config->attackTimerMs,
+            int(s.learning), int(s.startBounds));
 }
 
 /// A strategy (docs/ai-play-styles.md, "Strategies") for this bot only: "random" = [Strategy]

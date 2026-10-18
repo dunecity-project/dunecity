@@ -684,12 +684,12 @@ void runForceConcentrationProbe(Game& game) {
                 require(std::string(again.getData(),again.getDataLength())==bytes,
                     "Re-saving the loaded memory and musters produced different bytes");
                 // A 9863 save as 1.0.844 wrote it: the same QuantBot block without the 9864
-                // trailer (the memory and the musters) and the 9865 strategy written after it. It
-                // loads with the bundle and neither, and the loaded bot re-saves as a current save
-                // that loads again.
+                // trailer (the memory and the musters), the 9865 strategy and the 9866 starting
+                // ratios written after it. It loads with the bundle and neither, and the loaded bot
+                // re-saves as a current save that loads again.
                 OMemoryStream trailer; trailer.open();
                 bot->saveDefenceMemory(trailer);
-                constexpr size_t kStrategyBytes=3; // 9865: picked flag, mix, tempo
+                constexpr size_t kStrategyBytes=3+16; // 9865: picked flag, mix, tempo; 9866: 8 x Uint16 ratios
                 require(trailer.getDataLength()+kStrategyBytes<bytes.size(),"The 9864 trailer is not part of the save");
                 const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kStrategyBytes);
                 currentGame->loadedSavegameVersion=9863;

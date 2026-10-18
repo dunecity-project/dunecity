@@ -169,6 +169,59 @@ different players and armies, and the popular MP maps 1v1/2v2/3v3. Write-up and 
 - **Incident:** `agent-workspace run --git -- git merge` ran in the staging checkout and fast-forwarded
   `integrate/feature-batch` to 17af09d2 for ~1 min; reset with `git reset --keep b683286f` (told Main).
 
+## 2026-10-18 — QuantBot ratio tuning: placement re-score, tuned rounds; default now Tuned/Swarm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Merged `test/match-scoring` (ratio write-up is now `docs/ai-play-styles.md` section 8; `ratio-analysis.py
+--arms` reports the paired placement Δ and draw rates). Raw results ~/Documents/projects/dunecity-results/ratio-tuning,
+compact CSVs `docs/formation-results/play-styles/ratios/{r1,r2,f1,fB,fF,pB,g,gB,gF,gL,h1,h2}`.
+
+- **Re-scored randomised arm:** Δ +0.087 (+0.02..+0.16) v control, n=3,094, 0.6% time-outs.
+- **Tuned rounds (CY, Hard, Swarm, v `#Learned-Swarm`):** r1 four candidates +0.08..+0.26 (n=144 each); r2
+  best +0.27 (-0.01..+0.53), r2 siege +0.24 (n=216 each); the per-house pick (code defaults) +0.19
+  (-0.07..+0.45) on 216 fresh games, +0.34 on 252 more (`h1`, cluster): **+0.27 (+0.09..+0.45), n=468, beats**.
+  Base +0.30 level, Brutal **+0.48** beats, Fortress and `/weak` level; all-against-Atreides 6/6 with Tuned as
+  the default (the r2-best Atreides mix failed 5/6, so Atreides uses the siege/Sonic mix).
+- **Code:** `[Unit Ratios Tuned]` defaults Harkonnen 14,16,15,22,0,0,0,33; Atreides 9,20,13,22,13,10,0,13;
+  Ordos 9,17,7,13,27,0,7,20 (Fremen/Sardaukar/Mercenary none = configured opening); unit test pins them within
+  the bounds. **Default `Fixed:Tuned,Swarm`** (all starting mixes bounded 2%-50%). Variety option `Mode=Random`,
+  `MixWeights=Bounded:1` (+0.19 level, n=108).
+- **Learning on v off:** level everywhere (Tuned +0.00, n=216; r2 best +0.03, n=216; random start +0.07, n=108)
+  - kept per Stefan; its measured value remains section 6.3(d).
+- **Tests:** ctest -j3 from the shell (never via the queue) on the required list; `perf_regression` is not on this
+  branch (it is on `perf/game-fps`). See the final report for the HEAD it ran on.
+- **Not done (section 8.8):** Fremen/Sardaukar/Mercenary tuning (six-house randomised arm `rR6`, 540 games, submitted
+  to the cluster; `vanilla-match.py --houses`), separate shares per special (one slot today; each buildable
+  special targets the whole share), tuned ratios per tech band.
+
+## 2026-10-18 — QuantBot starting-ratio bounds, Bounded/Tuned mixes, randomised arm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Stefan: randomised runs, control runs and tuned mixes; no unit type over 50% or under 2% at start; keep
+the learning. Worktree ~/Documents/projects/dunecity-ratio-tuning. Write-up `docs/ai-play-styles.md`
+section 8; data `docs/formation-results/play-styles/ratios/`; raw ~/Documents/projects/dunecity-results/ratio-tuning.
+
+- **Code.** `QuantBotStrategy::bound` (each producible mix slot 2%-50%, others 0, one scale t, integer
+  bps) applied to every starting mix in `QuantBot::startingPrior` (configured opening, presets, Counter,
+  Tuned, Bounded); presets = 1.0.847 presets bounded (QuadMass 70% → 50%). New mixes `Tuned`
+  (`[Unit Ratios Tuned] <House>=t,s,l,sp,o,tr,r,q`, optional, hashed, no code defaults yet) and `Bounded`
+  (`randomMix`: uniform over the bounded mixes from seed + house, SplitMix64). Resolved ratios saved in
+  9866; protocol 83. Test-only `[Play Style] Learning=0` / `StartBounds=0`; harness `start_mix`, `mix.csv`,
+  `--seed-per-map`; `tests/ai/ratio-analysis.py`.
+- **Measured (CY, Hard, Swarm).** Randomised v control 0.520 (0.50-0.54), n=3,094; per-house effect
+  0.51/0.54/0.52 (Atreides/Harkonnen/Ordos). Bounded v unbounded control 0.500, n=108. Within-house
+  starting-share effects are small (coefficients ~1-2 SE); winners' and losers' end compositions are
+  the same (the learning converges); siege tanks are the most cost-effective unit for every house.
+- **Bounds per game, not per pass.** Bounding again over each pass's producible slots failed
+  `quantbot_all_against_atreides` (seed 41562270, 5/6); bounds over the game's producible slots, then
+  masked per pass, pass it 6/6. The 3,094 randomised and 108 bounds-control games used the per-pass version.
+- **Default unchanged** (`Fixed:Learned,Swarm`, configured ratios bounded). Round-1 candidates
+  (`tests/ai/play-styles/r1-*.ini`) and `pB-win` (Mode=Random, Bounded only) were stopped (old binary).
+  To do on the final rule (re-sync runners first): round 1/2, Base tempo, Fortress, Brutal, `/weak`,
+  all-against-Atreides and learning on/off for the best tuned mix, the production-option arm; rescore with
+  `test/match-scoring` when it lands.
+- **Infra.** Stopping a Pro batch via its run-batch (SIGTERM) left 8 orphaned balance-probes in the batch's
+  process group (ppid 1); killed by group. Windows parity: digests/houses identical, only the known ±0.1 s
+  timing fields.
+
 ## 2026-10-18 — AI test scoring: placement score, negative draws, paired default rule (branch `test/match-scoring`)
 
 Stefan: the AIs have to attack, not raid forever into draws, so draws must be negative (better than a loss).

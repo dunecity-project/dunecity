@@ -57,8 +57,7 @@ const QuantBot::PlayStyle& QuantBot::style() const {
     return autonomousCustomHardBrutal() ? playStyle : inert;
 }
 
-void QuantBot::pickStrategy() {
-    if (strategyPicked || currentGame == nullptr || getHouse() == nullptr) return;
+std::array<bool,8> QuantBot::fieldableMixSlots() const {
     const int houseID = getHouse()->getHouseID();
     auto buildable = [&](Uint32 item) {
         const auto& spec = currentGame->objectData.data[item][houseID];
@@ -70,6 +69,18 @@ void QuantBot::pickStrategy() {
         Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad};
     for (size_t i = 0; i < items.size(); ++i) slots[i] = buildable(items[i]);
     slots[3] = buildable(Unit_Devastator) || buildable(Unit_SonicTank) || buildable(Unit_Deviator);
+    return slots;
+}
+
+void QuantBot::pickStrategy() {
+    if (strategyPicked || currentGame == nullptr || getHouse() == nullptr) return;
+    const int houseID = getHouse()->getHouseID();
+    auto buildable = [&](Uint32 item) {
+        const auto& spec = currentGame->objectData.data[item][houseID];
+        return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
+            && spec.techLevel <= currentGame->techLevel;
+    };
+    const std::array<bool, 8> slots = fieldableMixSlots();
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
         || buildable(Unit_Trooper) || buildable(Unit_Troopers);
     const bool active = autonomousCustomHardBrutal();
@@ -77,22 +88,80 @@ void QuantBot::pickStrategy() {
     strategy = active ? QuantBotStrategy::pick(botConfig().strategy, seed, houseID,
                                                 QuantBotStrategy::eligibleMixes(slots, infantry))
                       : QuantBotStrategy::Choice{};
+    // Tuned and Bounded resolve their starting ratios now, once: the house's tuned ratios or the
+    // draw of seed and house, bounded over what the house can produce (saved, SAVEGAMEVERSION 9866).
+    strategyPrior = {};
+    if (strategy.mix == QuantBotStrategy::Mix::Tuned) {
+        const auto& tuned = botConfig().getTunedRatios(houseID);
+        if (*std::max_element(tuned.begin(), tuned.end()) > 0) strategyPrior = QuantBotStrategy::bound(tuned, slots);
+    } else if (strategy.mix == QuantBotStrategy::Mix::Bounded) {
+        strategyPrior = QuantBotStrategy::randomMix(seed, houseID, slots);
+    }
     strategyPicked = true;
-    SDL_Log("QUANTBOT_STRATEGY: house=%d mix=%s tempo=%s mode=%s active=%d", houseID,
+    resolveStrategyProfile();
+    const std::string start = QuantBotStrategy::ratiosText(startingPrior(slots));
+    SDL_Log("QUANTBOT_STRATEGY: house=%d mix=%s tempo=%s mode=%s active=%d start_mix=%s", houseID,
             QuantBotStrategy::name(strategy.mix), QuantBotStrategy::name(strategy.tempo),
-            QuantBotStrategy::modeText(botConfig().strategy).c_str(), int(active));
+            QuantBotStrategy::modeText(botConfig().strategy).c_str(), int(active), start.c_str());
     if (AITelemetry::log().enabled())
         traceDecision("strategy", AITelemetry::Record().set("mix", QuantBotStrategy::name(strategy.mix))
             .set("tempo", QuantBotStrategy::name(strategy.tempo))
             .set("mode", QuantBotStrategy::modeText(botConfig().strategy))
             .set("mix_weights", QuantBotStrategy::weightsText(botConfig().strategy.mixWeights))
             .set("tempo_weights", QuantBotStrategy::weightsText(botConfig().strategy.tempoWeights))
+            .set("start_mix", start)
             .set("seed", int64_t(seed)).set("active", active));
+}
+
+void QuantBot::resolveStrategyProfile() {
+    strategyProfile = QuantBotStrategy::profile(strategy.mix);
+    if (strategy.mix != QuantBotStrategy::Mix::Tuned && strategy.mix != QuantBotStrategy::Mix::Bounded) return;
+    for (size_t i = 0; i < strategyPrior.size(); ++i) strategyProfile.prior[i] = strategyPrior[i];
+    // No tuned ratios for this house: the configured opening, as Learned.
+    strategyProfile.priorBps = *std::max_element(strategyPrior.begin(), strategyPrior.end()) > 0 ? 10000 : 0;
 }
 
 const QuantBotStrategy::MixProfile* QuantBot::strategyMix() const {
     if (!strategyPicked || strategy.mix == QuantBotStrategy::Mix::Learned || !autonomousCustomHardBrutal()) return nullptr;
-    return &QuantBotStrategy::profile(strategy.mix);
+    return &strategyProfile;
+}
+
+UnitMixPolicy::Weights QuantBot::startingPrior(const std::array<bool,8>& available) const {
+    const auto& ratios = botConfig().getRatios(getHouse()->getHouseID());
+    UnitMixPolicy::Weights configured{};
+    configured[0] = static_cast<int>(ratios.tank*10000);
+    configured[1] = static_cast<int>(ratios.siegeTank*10000);
+    configured[2] = static_cast<int>(ratios.launcher*10000);
+    configured[3] = static_cast<int>(ratios.special*10000);
+    configured[4] = static_cast<int>(ratios.ornithopter*10000);
+    // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
+    if (!style().startBounds) {
+        const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+        UnitMixPolicy::Weights prior{};
+        for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
+        if (const auto* mix = strategyMix())
+            prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, available);
+        return prior;
+    }
+    // The starting mix is defined over the slots the house can produce in this game (ObjectData,
+    // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
+    // (docs/ai-play-styles.md, section 8). A pass then plays it over the slots producible at that
+    // pass, renormalised - the factories not yet standing do not re-shape it.
+    std::array<bool,8> slots = fieldableMixSlots();
+    for (size_t i = 0; i < 8; ++i) slots[i] = slots[i] || available[i];
+    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
+    UnitMixPolicy::Weights prior{};
+    for (size_t i = 0; i < 8; ++i) prior[i] = opening[i];
+    // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
+    // of the remembered enemy army).
+    if (const auto* mix = strategyMix())
+        prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : mix->prior, mix->priorBps, slots);
+    const auto bounded = QuantBotStrategy::bound(prior, slots);
+    UnitMixPolicy::Weights masked{};
+    for (size_t i = 0; i < 8; ++i) masked[i] = available[i] ? bounded[i] : 0;
+    const auto mix = UnitMixPolicy::normalize(masked);
+    for (size_t i = 0; i < 8; ++i) prior[i] = mix[i];
+    return prior;
 }
 
 const QuantBotStrategy::TempoProfile* QuantBot::strategyTempo() const {

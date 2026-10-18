@@ -245,17 +245,28 @@
 //     [Strategy] Mode / MixWeights / TempoWeights (hashed); the mix is the prior its learned unit
 //     mix starts from, the tempo its wave readiness. An 81 peer would build and attack
 //     differently and desync. Save 9865 (the strategy).
+// 83: QuantBot starting-mix bounds (docs/ai-play-styles.md, section 8): every starting unit mix
+//     (the configured opening, the presets, Counter) gives each producible mix slot 2%-50% before
+//     the learning, the presets are re-cut within those bounds, and the Tuned ([Unit Ratios Tuned],
+//     hashed) and Bounded (random within the bounds from seed and house) mixes are new. An 82 peer
+//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios).
+//     (Branch feat/ai-ratio-tuning only; never released.)
 // 84: QuantBot in a free-for-all: "outnumbered" (the perimeter hold, perimeter turrets and the
 //     test-only round 5 rules) measures the remembered army of the strongest single enemy team,
 //     not every enemy summed, and the forward bundle and the perimeter point move out of the
 //     house's own buildings and roads (a city base) towards the enemy. No saved state or command
-//     change; an 82 or 83 peer would order the same AI units differently and desync. (83 is
-//     feat/ai-ratio-tuning's.) Save 9865 unchanged.
+//     change; an 82 or 83 peer would order the same AI units differently and desync.
+//     (Branch fix/ai-army-stuck-in-base only; never released.)
 // 85: No population/economic victory. WinFlags bit 0x10 (set by original Dune II scenarios such
 //     as WinFlags=19/23) is ignored as upstream; a DuneCity campaign mission is no longer won when
-//     total city population reaches 500. An 82 peer would end the game differently. Save 9865
-//     unchanged (the retired threshold slot is still written as 0 and discarded on load).
-#define NETWORK_PROTOCOL_VERSION            85
+//     total city population reaches 500. An 82 peer would end the game differently. No saved
+//     state change (the retired threshold slot is still written as 0 and discarded on load).
+//     (Branch fix/remove-economic-victory only; never released.)
+// 86: 1.0.848 = 83 + 84 + 85 together: the starting-mix bounds and Tuned/Bounded mixes, the
+//     free-for-all "outnumbered" rule and city-free rally points, and no population victory. Any
+//     82-85 peer would build, attack or end the game differently and desync. Save 9866 (83's
+//     resolved Tuned/Bounded ratios); 9865 and older saves load.
+#define NETWORK_PROTOCOL_VERSION            86
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

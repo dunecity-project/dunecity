@@ -193,6 +193,20 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
         strategyPicked = false;
         strategy = QuantBotStrategy::Choice{};
     }
+    // SAVEGAMEVERSION 9866: the starting ratios a Tuned/Bounded strategy resolved to. A 9865 save
+    // holds none of those mixes (its mixes take their ratios from QuantBotStrategy::profile).
+    strategyPrior = {};
+    if (currentGame->getLoadedSavegameVersion() >= 9866) {
+        int total = 0;
+        for (auto& share : strategyPrior) {
+            share = stream.readUint16();
+            total += share;
+        }
+        const bool resolves = strategy.mix == QuantBotStrategy::Mix::Tuned || strategy.mix == QuantBotStrategy::Mix::Bounded;
+        if ((total != 0 && total != 10000) || (total != 0 && !resolves))
+            throw std::runtime_error("Invalid QuantBot strategy starting mix");
+    }
+    resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -333,6 +347,8 @@ void QuantBot::save(OutputStream& stream) const {
     stream.writeBool(strategyPicked);
     stream.writeUint8(static_cast<Uint8>(strategy.mix));
     stream.writeUint8(static_cast<Uint8>(strategy.tempo));
+    // SAVEGAMEVERSION 9866: the resolved Tuned/Bounded starting ratios (all zero otherwise).
+    for (const int share : strategyPrior) stream.writeUint16(static_cast<Uint16>(share));
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

@@ -884,6 +884,11 @@ private:
         int minYards = 0;
         /// Light vehicles kept raiding: each hunts the nearest enemy harvester (else refinery).
         int raidUnits = 0;
+        /// The in-game unit-mix learning (false: production keeps the bounded starting mix all
+        /// game; the "learning off" arm of docs/ai-play-styles.md, section 8).
+        bool learning = true;
+        /// The starting-mix bounds (false: the 1.0.847 unbounded starting mix, for comparison).
+        bool startBounds = true;
         bool active() const {
             return mixBps > 0 || counterBps > 0 || lightFirst || minWaveUnits != 6 || minWaveValue != 3000
                 || rocketTurrets != 2 || greedyHarvest || extraRefineries > 0 || minYards > 0 || raidUnits > 0;
@@ -905,12 +910,23 @@ private:
     /// (SAVEGAMEVERSION 9865); a 9864 save picks it afresh by the same function.
     QuantBotStrategy::Choice strategy;
     bool strategyPicked = false;
+    /// The starting ratios a Tuned or Bounded strategy resolved to when it was picked (the house's
+    /// [Unit Ratios Tuned], or QuantBotStrategy::randomMix of seed and house), bounded over the
+    /// slots the house can produce; all zero for every other mix. Saved (SAVEGAMEVERSION 9866): a
+    /// reload plays the mix it drew whatever config is loaded then. A 9865 save has no such mix.
+    UnitMixPolicy::Mix strategyPrior{};
     /// Picks the strategy if none is set (first update of a new game or a pre-9865 load).
     void pickStrategy();
     /// The strategy's mix / tempo while it applies (Custom Hard/Brutal; the tempo within its
     /// minutes), else null: the learned default and the configured readiness.
     const QuantBotStrategy::MixProfile* strategyMix() const;
     const QuantBotStrategy::TempoProfile* strategyTempo() const;
+    /// The mix slots this house can produce in this game (ObjectData and the game's tech level).
+    std::array<bool,8> fieldableMixSlots() const;
+    /// The starting mix over the \a available slots, before any combat evidence: the configured
+    /// opening, the strategy's prior in its place, then the starting-mix bounds (unless a test
+    /// style turns them off). The prior UnitMixPolicy::allocate blends the learning into.
+    UnitMixPolicy::Weights startingPrior(const std::array<bool,8>& available) const;
     /// The opening and wave rules of the style (if a test style is active) or else the tempo.
     bool lightFirstOpening() const;
     int minWaveUnits() const;
@@ -928,6 +944,9 @@ private:
     /// The attack-wave shape this player uses: the override if set, else the config value.
     int waveFormationShape() const;
 
+    /// profile(strategy.mix) with a Tuned/Bounded strategyPrior in place (strategyMix()).
+    QuantBotStrategy::MixProfile strategyProfile;
+    void resolveStrategyProfile();
     // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
     //
     // A Custom Hard/Brutal ground wave with WaveFormation=Blob is a hunt party: it gathers at a

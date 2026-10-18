@@ -183,6 +183,18 @@ QuantBotConfig::QuantBotConfig() {
     unitRatios.mercenary.special = 0.05f;
     unitRatios.mercenary.ornithopter = 0.10f;
 
+    // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned; percent of tank, siege tank, launcher,
+    // special, ornithopter, trike, raider trike, quad), measured on Construction Yard starts
+    // (docs/ai-play-styles.md, section 8): per house the round-2 mix that did best for it - the
+    // siege/Sonic refinement for Atreides (it also keeps quantbot_all_against_atreides 6/6; the
+    // winners' end composition took 40.7 minutes on one seed) and Ordos, the gradient mix for
+    // Harkonnen. Bounded like every starting mix (2%-50% per producible slot). Fremen, Sardaukar
+    // and Mercenary were not tuned: they play their configured opening.
+    tunedRatios = {};
+    tunedRatios[0] = {14, 16, 15, 22, 0, 0, 0, 33};   // Harkonnen
+    tunedRatios[1] = {9, 20, 13, 22, 13, 10, 0, 13};  // Atreides
+    tunedRatios[2] = {9, 17, 7, 13, 27, 0, 7, 20};    // Ordos
+
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);
     registerStructurePriority(Structure_Slab4, "Slab4", 0, 10);
@@ -664,6 +676,17 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
             SDL_Log("QuantBot config: invalid [Strategy] TempoWeights '%s', keeping %s", weights.c_str(),
                     QuantBotStrategy::weightsText(strategy.tempoWeights).c_str());
     }
+    // [Unit Ratios Tuned]: optional keys, never written by save(); a malformed value keeps the current one.
+    {
+        static const char* const kTunedHouses[6] = {"Harkonnen", "Atreides", "Ordos", "Fremen", "Sardaukar", "Mercenary"};
+        for (size_t house = 0; house < tunedRatios.size(); ++house) {
+            if (!iniFile.hasKey("Unit Ratios Tuned", kTunedHouses[house])) continue;
+            const std::string text = iniFile.getStringValue("Unit Ratios Tuned", kTunedHouses[house]);
+            if (!QuantBotStrategy::parseRatios(text, tunedRatios[house]))
+                SDL_Log("QuantBot config: invalid [Unit Ratios Tuned] %s '%s', keeping %s", kTunedHouses[house], text.c_str(),
+                        QuantBotStrategy::ratiosText(tunedRatios[house]).c_str());
+        }
+    }
 
     bool needsSave = false;
 
@@ -706,6 +729,11 @@ const QuantBotConfig::UnitRatios& QuantBotConfig::getRatios(int houseID) const {
         case HOUSE_MERCENARY: return unitRatios.mercenary;
         default: return unitRatios.mercenary;
     }
+}
+
+const UnitMixPolicy::Weights& QuantBotConfig::getTunedRatios(int houseID) const {
+    static const UnitMixPolicy::Weights none{};
+    return houseID >= 0 && size_t(houseID) < tunedRatios.size() ? tunedRatios[size_t(houseID)] : none;
 }
 
 const QuantBotConfig::TargetPriority& QuantBotConfig::getStructurePriority(int structureID) const {
@@ -1084,6 +1112,12 @@ std::string QuantBotConfig::getConfigHash() const {
         addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Mix>(i)), strategy.mixWeights[i]);
     for (size_t i = 0; i < strategy.tempoWeights.size(); ++i)
         addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Tempo>(i)), strategy.tempoWeights[i]);
+    configStr += "|TUNED";
+    for (const auto& ratios : tunedRatios) {
+        configStr += '|';
+        configStr += QuantBotStrategy::ratiosText(ratios);
+    }
+    configStr += "|/TUNED|";
     configStr += "|/STRATEGY|";
 
 

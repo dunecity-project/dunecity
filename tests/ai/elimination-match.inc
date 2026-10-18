@@ -39,7 +39,51 @@ inline int survivingTeam(Game& game) {
 
 namespace EliminationMatch {
 
-inline void sample(Game& game) {
+/// The unit-mix slot of a unit type (QuantBotStrategy: tank, siege tank, launcher, special,
+/// ornithopter, trike, raider trike, quad) or 8 for infantry, -1 for anything else.
+inline int mixSlot(Uint32 item) {
+    switch (item) {
+        case Unit_Tank: return 0;
+        case Unit_SiegeTank: return 1;
+        case Unit_Launcher: return 2;
+        case Unit_Devastator: case Unit_SonicTank: case Unit_Deviator: return 3;
+        case Unit_Ornithopter: return 4;
+        case Unit_Trike: return 5;
+        case Unit_RaiderTrike: return 6;
+        case Unit_Quad: return 7;
+        case Unit_Soldier: case Unit_Infantry: case Unit_Trooper: case Unit_Troopers: return 8;
+        default: return -1;
+    }
+}
+
+/// Per mix slot (+ infantry) of a house: the value built, lost and standing, and the combat reward
+/// credited to it (credits of damage value; House::getCombatReward), as "a/b/.../i".
+inline void sampleMix(Game& game, const House* house, int minute, bool final) {
+    const int houseID = house->getHouseID();
+    std::array<long long, 9> built{}, lost{}, army{}, reward{};
+    for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item) {
+        const int slot = mixSlot(item);
+        if (slot < 0) continue;
+        const long long price = game.objectData.data[item][houseID].price;
+        built[slot] += house->getNumBuiltItems(item) * price;
+        lost[slot] += house->getNumLostItems(item) * price;
+        reward[slot] += house->getCombatReward(item).total() / 1000;
+    }
+    for (const auto* unit : unitList)
+        if (unit->getOwner() == house && unit->getHealth() > 0) {
+            const int slot = mixSlot(unit->getItemID());
+            if (slot >= 0) army[slot] += game.objectData.data[unit->getItemID()][houseID].price;
+        }
+    auto join = [](const std::array<long long, 9>& values) {
+        std::string out;
+        for (const auto value : values) out += (out.empty() ? "" : "/") + std::to_string(value);
+        return out;
+    };
+    SDL_Log("UNIT_MIX_SAMPLE: minute=%d house=%d final=%d built=%s lost=%s army=%s reward=%s", minute, houseID, int(final),
+            join(built).c_str(), join(lost).c_str(), join(army).c_str(), join(reward).c_str());
+}
+
+inline void sample(Game& game, bool final = false) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : playingHouses(game)) {
         int armyValue = 0, armyUnits = 0, harvesters = 0, structures = 0, factories = 0;
@@ -63,6 +107,8 @@ inline void sample(Game& game) {
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), int(house->isAlive()),
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
                 house->getKillValue(), house->getLossValue());
+        // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
+        if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
     FfaArmy::sample(game);
 }
@@ -87,7 +133,7 @@ inline std::string run(Game& game, Uint32 end, int house) {
         if (game.getGameCycleCount() % minute == 0) sample(game);
         if ((winner = survivingTeam(game)) != 0) break;
     }
-    sample(game);
+    sample(game, true);
     std::string defeated;
     for (const House* other : playingHouses(game))
         if (!other->isAlive()) defeated += (defeated.empty() ? "" : ",") + std::to_string(other->getHouseID());
