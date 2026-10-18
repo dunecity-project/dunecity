@@ -1,3 +1,30 @@
+## 2026-10-18 — QuantBot FFA: armies stuck in base fixed (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Stefan (4P DuneCity FFA, four QuantBot Brutal, save `/tmp/mba-wtf-20261018/wtf.dls`): "all the units are
+stuck in the middle of the base". Write-up: `docs/formations.md`, "Free-for-all: the army deploys";
+evidence `~/Documents/projects/dunecity-results/army-stuck/` (`wtf/`, `wtf-fix1/` overlays, rendered
+screenshots, decision logs).
+
+- **Cause:** "outnumbered" (V perimeter hold) summed every enemy's remembered army: 3 equal enemies =
+  300%, so every house was garrisoned all game (0 waves in 19.8 min of his game, 276/276 attack checks
+  deferred); the garrison's perimeter point and the bundle lay inside the house's own city (1-7 tiles
+  from own buildings), 89-95% of each army inside its base.
+- **Fix:** `enemyThreatEstimate()` = strongest single enemy team (1v1 / one alliance unchanged);
+  bundle and perimeter points walk out of own buildings/roads towards the enemy. Protocol 84 (83 is
+  feat/ai-ratio-tuning's), no saved state change. Merged `perf/game-fps` e54a58bc and 5ff98662 first.
+- **Tests added:** `quantbot_ffa_army_deploys` (mandatory, AGENTS.md/CLAUDE.md); force probe section 7
+  FFA threat + city-streets perimeter checks; harness `rs<size>-dunecity|vanilla` FFA maps,
+  `FFA_ARMY_SAMPLE`/`army.csv`, `ffa-map.py`, `--ffa-screenshot`. Verified so far: build,
+  `quantbot_force_concentration` passed; the new regression runner passed on the fix (first wave 1.3 min,
+  eliminations 22.3/27.4 min).
+- **Running when handed over** (results dirs under `dunecity-results/army-stuck/`): mini queue
+  `ffa-base` (1.0.847 + harness, worktree `~/Documents/projects/dunecity-army-stuck-base`, branch
+  `test/ffa-baseline-847`), `ffa-fix`, `duel-fix` (Fortress + `/weak` default:none, 72), `cy-fix` (CY 1v1
+  default:none, 120); Air `duel-base` (same duels on 1.0.847; pull with `dunecity-air pull duel-base`).
+  Report: `vanilla-match.py --results <dir> --tags base|fix --ffa default --difficulty brutal --report`.
+  Not yet done: CY baseline arm, the full ctest set, MatchScoring's scoring (test/match-scoring), and
+  the open late-game stalemate (two cities trading waves into turrets until the 60-minute limit).
+
 ## 2026-10-18 — Game FPS round 2: real app on his Air, AI decision log setting, match activity, F12 breakdown, perf_regression menu launch (branch `perf/game-fps`, not released)
 
 Stefan: "your changes have broken the performance" (13 fps at 2 ms) and "make turning ai logging a

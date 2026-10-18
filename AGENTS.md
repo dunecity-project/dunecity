@@ -124,6 +124,20 @@ overrides 0 - and fails unless Atreides eliminates everyone within 40 game minut
 seed (about 3.5 minutes wall, three games at a time). Do not raise the limit or drop a seed to
 make a change pass; see `docs/quantbot-all-against-atreides.md`.
 
+They must also pass `quantbot_ffa_army_deploys`, the free-for-all counterpart (Stefan's 4P DuneCity
+game, 2026-10-18: "all the men sit in the base"):
+
+```bash
+ctest --test-dir build -R '^quantbot_ffa_army_deploys$' --output-on-failure
+```
+
+It plays a generated 4P 160x160 DuneCity free-for-all (seed 9101; Fortress starts, 20,000-credit
+armies, 40,000 cities, four QuantBot Brutal, his game options) and fails when no wave of 30+ units
+has left by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
+minutes in a row, or nobody is eliminated by minute 30 (a stalemate of armies at home is a draw;
+about 5 minutes wall). Do not loosen the thresholds to make a change pass; see
+`docs/formations.md`, "Free-for-all: the army deploys".
+
 The same changes, and anything touching the game loop or rendering, must also pass
 `perf_regression` (Stefan, 2026-10-18: "make sure you include performance testing as part of
 regression testing"):

@@ -146,6 +146,12 @@ Atreides QuantBot Brutal must eliminate the four AI Player (hard) houses on the 
 Never raise the limit or remove seeds to get a change through
 (`docs/quantbot-all-against-atreides.md`).
 
+They must also pass `ctest --test-dir build -R '^quantbot_ffa_army_deploys$'`: four QuantBot Brutal
+houses in a generated 4P 160x160 DuneCity free-for-all must launch a wave of 30+ units by minute 8,
+never keep an idle reserve 80%+ inside their own base for more than 6 minutes in a row, and
+eliminate a house by minute 30 (`docs/formations.md`, "Free-for-all: the army deploys"). Never
+loosen these thresholds to get a change through.
+
 The same changes, and game-loop or rendering changes, must also pass
 `ctest --test-dir build -R '^perf_regression$'`: Stefan's 4P DuneCity Brutal Random Skirmish map,
 6 game minutes headless, budgets on mean simulation CPU per cycle and per-house AI update time as

@@ -889,6 +889,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 40
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): four QuantBot Brutal
+        # houses in a generated 4P 160x160 DuneCity free-for-all (Fortress starts, 20,000-credit
+        # armies, 40,000 cities, Stefan's game options). Fails when no wave of 30+ units has left
+        # by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
+        # minutes in a row, or nobody is eliminated by minute 30 - 1.0.847 summed every enemy into
+        # "outnumbered" and never attacked. docs/formations.md, "Free-for-all: the army deploys".
+        add_test(NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
+        set_tests_properties(quantbot_ffa_army_deploys PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # Mandatory for every AI/unit/game-loop change (Stefan, 2026-10-18): Stefan's 4P DuneCity
         # Brutal Random Skirmish map, 6 game minutes headless, one path thread; fails when the mean
         # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of
