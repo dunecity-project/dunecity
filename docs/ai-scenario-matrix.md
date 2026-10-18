@@ -175,4 +175,4 @@ Problems found:
    (city population past the mission threshold, e.g. 505/500 at 8.6 min on Ordos level 4) with little or
    no fighting; mean win 16 min against 20 min vanilla.
 6. DuneCity games end later: Brutal v Medium on the DuneCity Random Skirmish map 2/8 time-outs, 4v4
-   fortress 2/3 time-outs, the 4P DuneCity map QH mirror 3/4 time-outs.
+   fortress 3/4 time-outs (the Hard team wins the fourth), the 4P DuneCity map QH mirror 3/4 time-outs.

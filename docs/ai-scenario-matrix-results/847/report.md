@@ -1,4 +1,4 @@
-# AI scenario matrix: 634 games
+# AI scenario matrix: 635 games
 
 placement scoring: 1st +1 ... last -1, time-out survivors share the top places minus 0.25 (1v1 draw -0.25); verdict = 95% interval of the paired difference against the control above / below 0
 
@@ -18,15 +18,15 @@ placement scoring: 1st +1 ... last -1, time-out survivors share the top places m
 | 7p-ffa-mcv-noarmy/vanilla | 4 | 1/4 | T1 QH 1 | 77.3 | - | - | time-out 3 |
 | 6p-ffa-small-smallarmy/dunecity | 4 | 0/4 | - | 60.0 | - | - | time-out 4 |
 | 8p-ffa-medium-smallarmy/vanilla | 4 | 1/4 | T2 QH 1 | 74.8 | - | - | time-out 3 |
-| 4v4-fortress-largearmy/dunecity | 3 | 1/3 | T1 QH 1 | 65.5 | wins 1 | 1/3 [0.06-0.79] | time-out 2 |
+| 4v4-fortress-largearmy/dunecity | 4 | 1/4 | T1 QH 1 | 69.1 | wins 1 | 1/4 [0.05-0.70] | time-out 3 |
 
 Placement score by controller (all games of the category; teams are entrants):
 
 | Controller | Houses | Mean score [95% CI] |
 |---|---|---|
 | QB (qBotBrutal) | 20 | +0.30 [+0.09, +0.50] |
-| QH (qBotHard) | 76 | +0.18 [+0.01, +0.35] |
-| QM (qBotMedium) | 68 | -0.13 [-0.30, +0.04] |
+| QH (qBotHard) | 80 | +0.15 [-0.01, +0.32] |
+| QM (qBotMedium) | 72 | -0.14 [-0.29, +0.02] |
 | AH (AIPlayerHard) | 32 | -0.28 [-0.50, -0.04] |
 | QE (qBotEasy) | 28 | -0.35 [-0.56, -0.14] |
 | AM (AIPlayerMedium) | 20 | -0.57 [-0.77, -0.36] |
@@ -154,7 +154,7 @@ QuantBot order QH by mean score: holds
 - skirmish 2p-medium-noarmy/dunecity: expectation wins:1 missed in 1/4
 - skirmish 3v3-medium-smallarmy/vanilla: expectation wins:1 inverted (0/4)
 - skirmish 6p-ffa-small-smallarmy/dunecity: every game a time-out
-- skirmish 4v4-fortress-largearmy/dunecity: expectation wins:1 missed in 2/3
+- skirmish 4v4-fortress-largearmy/dunecity: expectation wins:1 missed in 3/4
 - cy 1v1-qb-v-qe/dunecity: expectation wins:1:40 missed in 2/4
 - cy 1v1-qh-v-qm/dunecity: expectation wins:1 missed in 1/4
 - aaa qb-v-4ah/dunecity: expectation wins:2 missed in 1/6
