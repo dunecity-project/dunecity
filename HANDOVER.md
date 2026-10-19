@@ -44,14 +44,17 @@ removed, `fix/ai-difficulty-ladder` c766c262 with one spend-past-cap helper).
 - **Versions:** protocol 87 (history covers 83-86, the ladder and the quota); save 9868 (ratio's ten-slot
   mix state; 9866/9867 load and split; econ kept the 9865 layout; army/late-game/ladder change no saved
   state).
-- **Verified on 3e67a4cb** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3`
-  103/105 passed (incl. quantbot_strategy, perf_regression, all_against_atreides, menu_navigation_probe, the
-  four house_credit_storage tests). **Failed:** `quantbot_ffa_army_deploys` (seed 9101: 20 waves, 5 by
-  minute 8, largest 73, reserves out, but nobody eliminated by minute 30) and `quantbot_scenario_matrix`
-  (`skirmish/4p-ffa-medium-smallarmy/vanilla/90866` 60-min time-out). Both pass on `fix/ai-late-game-2`
-  alone; ffa_army_deploys passed on army+ratio. Ratio mixes x (V removal + ladder): LateGame2 is fixing it
-  on `fix/848-ffa-stalemate` (from 3e67a4cb). Menu probe `--size 1024x768 --size 640x480`: both
-  MENU_PROBE_PASS; no "Metaserver Maps" or online editor buttons.
+- **On 3e67a4cb** full `ctest -j3` was 103/105: `quantbot_ffa_army_deploys` (9101, nobody eliminated by
+  minute 30) and the matrix smoke 90866 (time-out) failed - not the tuned mixes (RatioTuning4's A/B), the
+  FFA finish; fixed by LateGame2's `fix/848-ffa-stalemate` e806e6ca (FinishWhenLeading on, protocol 87
+  comment extended, config hash changes), merged as e0d3a958 (HANDOVER conflict only).
+- **Verified on e0d3a958** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3`
+  **105/105 passed** (incl. quantbot_ffa_army_deploys 107 s, quantbot_scenario_matrix smoke 58 s,
+  quantbot_strategy, all_against_atreides, perf_regression, menu_navigation_probe, the four
+  house_credit_storage tests). Menu probe `--size 1024x768 --size 640x480`: both MENU_PROBE_PASS; no
+  "Metaserver Maps" or online editor buttons.
+- **Open for Main/Stefan:** Custom Medium plays the default Fixed:Tuned,Swarm mix (tuned on Hard only)
+  through the ladder's gate rename - not intended by RatioTuning4.
 
 ## 2026-10-19 — QuantBot designed tech-band mixes; F/S/M top band measured, Fremen accepted (branch `feat/ai-ratio-tuning`, protocol 84 after merging `fix/ai-army-stuck-in-base`, save 9868, not released)
 
