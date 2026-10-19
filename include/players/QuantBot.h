@@ -1066,13 +1066,15 @@ private:
     /// kForceSiegeStandoff (O, SiegeStandoff: wave launchers shell known turrets from outside their
     /// reach while the rest of the wave holds short of the turrets) and kForceMassAssault (Z,
     /// MassAssault: against a fortified objective the army waits for kAssaultLimitPercent of the
-    /// limit, then all of it hunts towards one objective of the weakest house).
+    /// limit, then all of it hunts towards one objective of the weakest house). On by default since
+    /// 1.0.848: kForceFinishLeading (FinishWhenLeading: H's target choice for the waves of a house
+    /// whose team army leads the strongest enemy team's remembered army, finishLeading()).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForceOpeningReadiness = 4194304,
+        kForceThreatTurrets = 1048576, kForceFinishLeading = 2097152, kForceOpeningReadiness = 4194304,
         kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
         kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728, kForceSpendAtCap = 268435456,
         kForceSiegeStandoff = 536870912, kForceMassAssault = 1073741824;
@@ -1113,6 +1115,9 @@ private:
     /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
     /// alone in a free-for-all or a 1v1).
     int64_t teamGroundArmyValue() const;
+    /// FinishWhenLeading: our team's ground army is worth more than the strongest enemy team's
+    /// remembered army (enemyThreatEstimate) - the leader of a free-for-all.
+    bool finishLeading() const { return teamGroundArmyValue() > enemyThreatEstimate(); }
     /// ForceConcentrationPolicy::outnumbered on teamGroundArmyValue() and enemyThreatEstimate(),
     /// once per cycle.
     bool outnumberedByEstimate() const;

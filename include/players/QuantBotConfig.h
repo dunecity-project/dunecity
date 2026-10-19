@@ -137,7 +137,8 @@ struct QuantBotConfig {
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
-    /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault;
+    /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
+    /// FinishWhenLeading;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -197,6 +198,10 @@ struct QuantBotConfig {
         /// minutes) for 70% of the military limit, then everything hunts towards one objective
         /// of the weakest known house.
         bool massAssault;
+        /// On by default (1.0.848): a house whose team army leads the strongest enemy team's
+        /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
+        /// choice) instead of the nearest.
+        bool finishWhenLeading;
     };
     ForceSettings force;
 

@@ -661,6 +661,7 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(baseline.force.perimeterTurrets);
         REQUIRE(baseline.force.sizedDefence);
         REQUIRE(baseline.force.openingReadiness);
+        REQUIRE(baseline.force.finishWhenLeading);
         REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
@@ -677,5 +678,6 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.spendAtCap = !c.force.spendAtCap; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.siegeStandoff = !c.force.siegeStandoff; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.massAssault = !c.force.massAssault; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWhenLeading = !c.force.finishWhenLeading; }));
     }
 }

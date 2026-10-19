@@ -279,7 +279,9 @@
 //     strongest enemy army; in DuneCity structures keep off reserved production plots, silos come
 //     before heavy-factory tech and Medium's opening walks to the heavy factory; and a spice quota
 //     (WinFlags 0x04) is met by the house's whole earned store, refined spice and city tax credits
-//     alike, in every game mode. Any 82-86 peer would build, attack or end the game differently and
+//     alike, in every game mode; and a Medium/Hard/Brutal house whose team army leads the strongest
+//     enemy team's sends its waves at the weakest known house (FinishWhenLeading, hashed). Any
+//     82-86 peer would build, attack or end the game differently and
 //     desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
 #define NETWORK_PROTOCOL_VERSION            87
 

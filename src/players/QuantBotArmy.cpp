@@ -1141,7 +1141,8 @@ void QuantBot::launchGroundHunt() {
     std::vector<const UnitBase*> hunters;                      // engine-Hunt ground members
     std::vector<const UnitBase*> finishers;                    // H / Z: hunt towards the weakest house
     const bool massAssault=trackedCustomWave && wholeArmy && forceVariant(kForceMassAssault);
-    const bool finishWave=trackedCustomWave && wholeArmy && (forceVariant(kForceFinishWeakest) || massAssault);
+    const bool finishWave=trackedCustomWave && wholeArmy && (forceVariant(kForceFinishWeakest) || massAssault
+        || (forceVariant(kForceFinishLeading) && finishLeading()));
     std::map<Uint32,std::vector<const UnitBase*>> assaults;    // campaign objective -> its attackers
     std::map<Uint32,std::vector<const UnitBase*>> flankers;    // campaign objective -> its flankers
     const ObjectBase* front=nullptr;
