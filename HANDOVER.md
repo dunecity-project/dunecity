@@ -1,3 +1,17 @@
+## 2026-10-19 — local 1.0.848 verified and installed on the MBA
+
+Staging = `integrate/848-trial` b93b06ec fast-forwarded (merges fix/ai-army-stuck-in-base, chore/remove-map-sharing,
+fix/remove-economic-victory, feat/ai-ratio-tuning 563517f9, fix/ai-late-game-2 c5ac60c0 incl. fix/ai-difficulty-ladder,
+fix/848-ffa-stalemate e806e6ca) + version bump 47456781. Protocol 87, save 9868. `agent-workspace stage verify`
+at 47456781: build, check-build-deps and CTest 105/105 passed (1185 s). Package (`cmake --install build-int`):
+executable SHA256 fe6dcb18a45e90f7122beba7af6fcfd7c9d2920e7146fc38ba0d80df052c59e8, no Homebrew/local links,
+signature and `--check-desktop-runtime` passed. Installed on the MBA 2026-10-19 20:45 AEDT by
+`/tmp/push-dunecity-1.0.848.sh` (same SHA256, signature and runtime check passed); 1.0.847 copied to
+`~/Library/Application Support/DuneCity App Backups/before-1.0.848-20261019-204506/`. Not pushed or published.
+Open after 1.0.848: 4P DuneCity FFA self-play still times out ~13/24; 6P DuneCity FFA undecided; Brutal ranks
+just below Hard in mixed skirmish; 3v3 Hard v Medium 1/4; FinishWhenLeading is on as a release fix but level
+head-to-head; Custom Medium now plays Fixed:Tuned,Swarm (tuned on Hard/Brutal only).
+
 ## 2026-10-19 — 1.0.848 blocker: FinishWhenLeading on by default (branch `fix/848-ffa-stalemate` from integrate/848-trial 3e67a4cb, protocol 87, save 9868; not released)
 
 Agent LateGame2 (diagnosis help: RatioTuning4). Write-up: `docs/formations.md`, "Free-for-all:
