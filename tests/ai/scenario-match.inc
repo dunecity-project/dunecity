@@ -157,7 +157,18 @@ struct HouseTrack {
     int awayPeak = 0;
     int sortieMinutes = 0;
     Uint32 eliminated = 0;
+    /// Where the house starts: its first structure, else its first unit (the map's start the
+    /// house was given; the ladder's house/start analysis, docs/ai-scenario-matrix.md).
+    Coord start{-1, -1};
 };
+
+inline Coord startOf(const House* house) {
+    for (const auto* structure : structureList)
+        if (structure->getOwner() == house) return structure->getLocation();
+    for (const auto* unit : unitList)
+        if (unit->getOwner() == house) return unit->getLocation();
+    return Coord(-1, -1);
+}
 
 /// Fighters of every house away from all of their own structures (once a minute).
 inline void measureSorties(const std::vector<const House*>& houses, std::map<int, HouseTrack>& tracks) {
@@ -205,6 +216,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     const size_t initialTriggers = game.getTriggerManager().getTriggers().size();
     int fired = 0, winner = 0;
     std::map<int, HouseTrack> tracks;
+    for (const House* house : houses) tracks[house->getHouseID()].start = startOf(house);
     EliminationMatch::sample(game);
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
@@ -240,11 +252,12 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const HouseTrack& track = tracks[house->getHouseID()];
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
-                house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes);
+                house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
+                track.start.x, track.start.y);
     }
     std::string outcome;
     int winnerTeam = winner;

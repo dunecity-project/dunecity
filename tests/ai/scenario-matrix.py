@@ -17,9 +17,11 @@ Every game is a real match played headless to its end by the balance probe (run-
             second for levels 2-8), vanilla and DuneCity: the human seat's QuantBot partner against the
             campaign's default enemy AI (QuantBot Easy, as the campaign menu starts it; one cell with
             the "scenario settings" CampaignAIPlayer). Hard must win; Easy and Medium are reported.
-  ladder    QuantBot against QuantBot 1v1, Brutal v Medium, Hard v Easy and Medium v Easy, both
-            sides of every seed, on a vanilla and a DuneCity Random Skirmish map and Habbanya-Penny:
-            the stronger difficulty must win.
+  ladder    QuantBot against QuantBot 1v1, every adjacent pair (Brutal v Hard, Hard v Medium, Medium v
+            Easy) plus Brutal v Medium and Hard v Easy, on a vanilla and a DuneCity Random Skirmish map,
+            Habbanya-Penny and a Construction Yard only start. Full tier: every seed twice, the houses
+            swapped (the same starts), so neither the house nor the start decides the ladder: the
+            stronger difficulty must win.
   mp        The most-played bundled multiplayer maps (dunelegacy.com usage statistics, 2026-10-18)
             1v1, 2v2 and 3v3: QuantBot Hard teams against QuantBot Hard teams, and against AI
             Player Hard teams (which they must beat).
@@ -69,11 +71,12 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'city_pop', 'win_type', 'digest', 'wall_s', 'error')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
-# Full-tier seeds per ladder cell (four maps: 32 games per pair); --ladder-seeds 18 gives 72 per pair.
-LADDER_SEEDS = 8
+# Full-tier seeds per ladder cell. Each seed is played twice with the houses swapped, so 18 seeds
+# on the four maps give 144 games per pair (--ladder-seeds 9: 72).
+LADDER_SEEDS = 18
 lock = threading.Lock()
 
 
@@ -87,13 +90,15 @@ def mp_map(name):
 
 
 def match(category, name, mod, slots, *, skirmish=None, path=None, houses=None, minutes=60, options=None,
-          expect=None, smoke=0, full=4, rotate=True, repeat=False):
+          expect=None, smoke=0, full=4, rotate=True, repeat=False, both_sides=False):
     """A match cell. slots: [(class code, team)] in slot order; houses: fixed houses (map-named),
     else the first len(slots) of HOUSES, rotated by the seed's index so every code plays every house.
-    expect: ('wins', team[, within minutes]) or ('loses', team): that team must win / another must."""
+    expect: ('wins', team[, within minutes]) or ('loses', team): that team must win / another must.
+    both_sides (full tier): every seed is played a second time ('#swap') with the houses rotated by
+    one more; the slots keep their order, so in a 1v1 each side keeps its start and swaps its house."""
     return dict(category=category, name=name, kind='match', mod=mod, slots=slots, skirmish=skirmish, path=path,
                 houses=houses, minutes=minutes, options=options, expect=expect, smoke=smoke, full=full,
-                rotate=rotate, repeat=repeat)
+                rotate=rotate, repeat=repeat, both_sides=both_sides)
 
 
 def team_slots(*teams):
@@ -163,17 +168,18 @@ def matrix(ladder_seeds=LADDER_SEEDS):
                               smoke=0))
     cells.append(dict(category='campaign', name='partner-hard-v-campaign-ai', kind='campaign', mod='vanilla',
                       partner='hard', enemy_ai='campaign', minutes=80, full=1, smoke=0, first_only=True))
-    # 5. Difficulty ladder: the stronger QuantBot must win, both sides of every seed. Three Random
-    # Skirmish/bundled maps and a Construction Yard only start; --ladder-seeds plays more seeds per cell.
+    # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
+    # Hard v Easy; three Random Skirmish/bundled maps and a Construction Yard only start; in the full tier
+    # both houses of every seed (each side keeps its start); --ladder-seeds plays more seeds per cell.
     ladder_maps = (('rs-vanilla', 'vanilla', dict(skirmish=skirmish_spec(96, 'small', 2))),
                    ('rs-dunecity', 'dunecity', dict(skirmish=skirmish_spec(96, 'small', 2))),
                    ('habbanya-penny', 'vanilla', dict(path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'))),
                    ('cy', 'vanilla', dict(skirmish=skirmish_spec(96, 'cy', 0))))
-    for strong, weak in (('QB', 'QM'), ('QH', 'QE'), ('QM', 'QE')):
+    for strong, weak in (('QB', 'QH'), ('QH', 'QM'), ('QM', 'QE'), ('QB', 'QM'), ('QH', 'QE')):
         for map_name, mod, where in ladder_maps:
             smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
             cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak), expect=('wins', 1),
-                               smoke=smoke, full=ladder_seeds, **where))
+                               smoke=smoke, full=ladder_seeds, both_sides=True, **where))
     # 6. Most-played bundled multiplayer maps (dunelegacy.com/usage.html, all time, 2026-10-18).
     for name, players in (('2P - 128x128 - 1v1 - Habbanya-Penny', 1), ('2P - 128x128 - 1v1 - Tuono-Orac', 1),
                           ('2P - 128x128 - 1v1 - Sihaya-Chvrches', 1), ('4P - 128x64 - 2v2 - Sihaya-Toto', 2),
@@ -236,6 +242,8 @@ def schedule(args):
             games.append(match_game(cell, index, seed))
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
                 games.append(dict(match_game(cell, index, seed), id=match_game(cell, index, seed)['id'] + '#replay'))
+            if cell['both_sides'] and args.tier == 'full':
+                games.append(match_game(cell, index + 1, seed, '#swap'))
     for cell in smoke_campaigns() if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ():
         games.append(cell)
     if args.shard:
@@ -253,7 +261,7 @@ def smoke_campaigns():
             campaign_game(dict(cell, mod='dunecity'), 'harkonnen', 9, 22, 42)]
 
 
-def match_game(cell, index, seed):
+def match_game(cell, index, seed, suffix=''):
     n = len(cell['slots'])
     houses = list(cell['houses'] or HOUSES[:n])
     if cell['rotate']:
@@ -261,7 +269,7 @@ def match_game(cell, index, seed):
         houses = houses[shift:] + houses[:shift]
     sides = [(house, team, code) for house, (code, team) in zip(houses, cell['slots'])]
     where = f'skirmish:{cell["skirmish"]},seed={seed}' if cell['skirmish'] else Path(cell['path']).stem
-    return dict(id=f'{cell["category"]}/{cell["name"]}/{cell["mod"]}/{seed}', category=cell['category'],
+    return dict(id=f'{cell["category"]}/{cell["name"]}/{cell["mod"]}/{seed}{suffix}', category=cell['category'],
                 cell=f'{cell["name"]}/{cell["mod"]}', kind='match', seed=seed, mod=cell['mod'], map=where,
                 sides=sides, minutes=cell['minutes'], options=cell['options'], expect=cell['expect'],
                 skirmish=f'{cell["skirmish"]},seed={seed}' if cell['skirmish'] else None, path=cell['path'])
@@ -388,7 +396,7 @@ def play(args, scratch, binary, game):
                            'army_value': h['army_value'], 'army_units': h['army_units'], 'away_peak': h['away_peak'],
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
-                           'drawn': int(p.drawn) if p else ''})
+                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', '')})
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
@@ -644,9 +652,10 @@ def class_table(rows, houses):
 
 
 def ladder_table(rows, houses, problems):
-    print('Ladder (stronger side\'s placement score; the order holds when the interval is above 0):\n')
-    print('| Pair | Map | Games | Strong W-L-T | Strong score [95% CI] | Order |')
-    print('|---|---|---|---|---|---|')
+    print('Ladder (stronger side\'s placement score; the order holds when the interval is above 0). The '
+          'interval resamples seeds: the two games of a seed (houses swapped) count as one mean.\n')
+    print('| Pair | Map | Games | Strong W-L-T | Strong score [95% CI] | Order | Strong wins as Harkonnen / Atreides |')
+    print('|---|---|---|---|---|---|---|')
     by_pair = defaultdict(list)
     for g in rows:
         if g['error']:
@@ -657,14 +666,25 @@ def ladder_table(rows, houses, problems):
         by_pair[(f'{strong} v {weak}', 'all maps')].append(g)
     for (pair, map_name), gs in sorted(by_pair.items()):
         strong = pair.split()[0]
-        scores = [float(h['score']) for g in gs for h in houses.get(g['id'], []) if h['code'] == strong]
+        per_seed = defaultdict(list)
+        as_house = defaultdict(lambda: [0, 0])
+        for g in gs:
+            for h in houses.get(g['id'], []):
+                if h['code'] != strong:
+                    continue
+                per_seed[(g['cell'], g['seed'])].append(float(h['score']))
+                house = next((key for key, number in HOUSE_NUMBERS.items() if str(number) == h['house']), h['house'])
+                as_house[house][1] += 1
+                as_house[house][0] += g['winner_team'] == '1'
+        scores = [statistics.mean(s) for s in per_seed.values()]
         w = sum(1 for g in gs if g['winner_team'] == '1')
         t = sum(1 for g in gs if g['winner_team'] == '0')
         low, _ = match_score.bootstrap(scores, 1) if scores else (0, 0)
         holds = 'holds' if low > 0 else ('INVERTED' if statistics.mean(scores) < 0 else 'not shown') if scores else '-'
         if map_name == 'all maps' and holds != 'holds':
             problems.append(f'ladder {pair}: order {holds} (strong score {fmt_ci(scores)})')
-        print(f'| {pair} | {map_name} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} |')
+        sides = ' / '.join(f'{as_house[h][0]}/{as_house[h][1]}' for h in ('harkonnen', 'atreides'))
+        print(f'| {pair} | {map_name} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} | {sides} |')
     print()
 
 
