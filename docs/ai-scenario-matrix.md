@@ -256,3 +256,70 @@ reverse All against Atreides 6/6 lost by Medium as required; All against Atreide
 min, DuneCity 6/6 (before 5/6). 7P FFA: no idle house (before QM idle 1/4). Regressions: 6P DuneCity FFA
 0/4 decided (before 3/4), the skirmish controller order is QH +0.26 > QB +0.18 > QM +0.12 > QE (Brutal
 plays 20 houses, interval -0.13..+0.48).
+
+## Difficulty separation (branch `fix/difficulty-separation`, protocol 88)
+
+Stefan: a clear ladder, Brutal > Hard > Medium > Easy. Data: `~/Documents/projects/dunecity-results/difficulty-sep/`
+(`before` = 1.0.848 game code, `after` = this branch; `armA`/`armF`/`armAF` A/B; `b*` bonus screens;
+`mirror-qh`; reports `before-report.md`, `after-report.md`; `ctest-final.log`).
+
+### What flattened Brutal v Medium (A/B, 72 games each, paired with 1.0.848 by game id)
+
+| Arm | QB v QM | QH v QM | QM v QE |
+|---|---|---|---|
+| 1.0.848 | +0.12 [-0.11, +0.34] | +0.12 [-0.09, +0.34] | +0.85 |
+| A: Medium without the strategy profile | +0.33 (paired +0.20 [+0.04, +0.38]) | +0.40 (+0.28 [+0.10, +0.46]) | +0.61 (-0.25) |
+| F: FinishWhenLeading Hard/Brutal only | +0.14 (+0.02 [-0.06, +0.10]) | +0.12 (+0.00) | +0.88 (+0.03) |
+| A + F | +0.35 (+0.23) | +0.36 (+0.24) | +0.58 (-0.27) |
+
+The cause is the strategy gate: 1.0.848 renamed `autonomousCustomHardBrutal` to `autonomousCustomArmy`
+(Medium/Hard/Brutal), so Custom Medium also played the default `Fixed:Tuned,Swarm` (tuned on Hard/Brutal).
+That made Medium as strong as Hard. FinishWhenLeading does nothing in these 1v1 pairs and stays on for
+Medium/Hard/Brutal (it is the free-for-all finish). Fix: `QuantBot::playsStrategy()` (Custom Hard/Brutal)
+gates the strategy pick, `strategyMix()` and `strategyTempo()`. Medium keeps the whole-army waves and its
+surplus spending, but plays the learned mix at the configured 60% readiness.
+
+### What Brutal does differently from Hard, and why it did not win more
+
+In a custom game Brutal and Hard run the same army code: whole-army waves, Tuned/Swarm, force
+concentration, air raids, repair, kiting, the same harvester planner and think rate. Nobody gets cheats.
+Brutal's own rules: a larger military limit (80,000 v 50,000 on 96x96), its own 25% threshold (on 96x96
+the same 20,000 gate as Hard's global 40%), a smaller held opening (6,250 v 7,500), rocket coverage tier 3,
+IX/Palace after 20/45 s instead of 35/60 s, 10% infantry, and in DuneCity an uncapped city and a bigger
+worker opening. In 1v1 games that end at 15-35 minutes neither house comes near its limit; both spend
+everything they earn (local telemetry: 148,100 v 145,950 credits spent by minute 15 over six games),
+so the extras do not show (Brutal v Hard +0.11 over 144 games). Opening at Hard's 30% share measured
+level (+0.23 alone; paired with the bonus +0.08 and -0.05), so it is not kept.
+
+**Brutal's documented resource advantage:** a Custom Brutal QuantBot house (not a campaign, not a support
+controller) is paid `QuantBot::kBrutalDeliveryBonusPercent` = **15%** on top of every refinery delivery
+(`House::addRefinedSpice`, the refinery and the Worfinery; the bonus is income, not refined spice, so the
+harvest statistics are unchanged). It applies while an enemy house has a controller that is not a Brutal
+QuantBot; among Brutal houses alone it would only inflate every army (`quantbot_ffa_army_deploys` 9101:
+nobody eliminated by minute 30 with it on). Dose (QB v QH, 72 games): 10% +0.44, 15% +0.51, 25% +0.78, 50% +0.97.
+No other difficulty gets a resource bonus. Easy is unchanged.
+
+### Ladder before/after (144 games per pair, 18 seeds x both houses x 4 maps; interval over seeds)
+
+| Pair | 1.0.848 W-L-T | 1.0.848 score | after W-L-T | after score |
+|---|---|---|---|---|
+| Brutal v Hard | 79-63-2 | +0.11 [-0.07, +0.28] | 103-39-2 | **+0.44 [+0.26, +0.61]** |
+| Hard v Medium | 72-57-15 | +0.08 [-0.08, +0.25] | 94-43-7 | **+0.34 [+0.16, +0.51]** |
+| Medium v Easy | 123-14-7 | +0.74 [+0.62, +0.85] | 114-24-6 | **+0.61 [+0.44, +0.77]** |
+| Brutal v Medium | 82-60-2 | +0.15 [-0.05, +0.34] | 123-19-2 | **+0.72 [+0.58, +0.85]** |
+| Hard v Easy | 133-10-1 | +0.85 [+0.74, +0.95] | 133-10-1 | +0.85 [+0.74, +0.95] |
+
+CY start: Brutal v Medium 13-23 (-0.28) -> 28-7 (+0.58); Brutal v Hard 18-17 -> 21-14 (+0.19); Medium v
+Easy 20-14-2 (+0.15, its weakest map). Ladder time-outs 27/720 -> 18/720. Skirmish category (52 games):
+controller order QB +0.38 > QH +0.37 > QM -0.03 > QE -0.49 (before QH +0.31 > QM +0.12 > QB +0.03 > QE
+-0.41); the 6P DuneCity FFA no longer times out in every game; time-outs 6 -> 7 of 52; no crash, no idle house.
+
+### House or start?
+
+The ladder used to alternate houses between seeds, so a seed's start and its house were confounded.
+In a Hard mirror (144 games, both houses of every seed, each side keeping its start) Harkonnen won 65,
+Atreides 74, 5 draws: there is no Harkonnen advantage overall. The start a seed gives decides more than
+the house (the same start won both games of a seed in 41 of 72 pairs, the same house in 27). The one
+house effect is Habbanya-Penny: Atreides 25-10 from either start (46:116 and 81:11). The ladder now plays
+every seed with both houses (`#swap`), so neither the house nor the start decides it, and the report
+lists the stronger side's wins as Harkonnen / Atreides.

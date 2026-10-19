@@ -1,3 +1,30 @@
+## 2026-10-19 — Difficulty separation: Brutal > Hard > Medium > Easy (branch `fix/difficulty-separation`, from 1.0.848 73404c33 + merged 1.0.849; protocol 88, save 9868; not released)
+
+Agent LadderFix. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty separation"; data
+`~/Documents/projects/dunecity-results/difficulty-sep/` (`before`, `after`, `armA|armF|armAF`, `b0o..b50`, `mirror-qh`,
+`*-report.md`, `ctest-final.log`).
+
+- **Cause of the flattening:** 1.0.848's gate rename gave Custom Medium the Hard/Brutal `Fixed:Tuned,Swarm` strategy.
+  A/B (72 games, paired with 1.0.848): Medium without it QB v QM +0.12 -> +0.33 (paired +0.20 [+0.04, +0.38]), QH v QM
+  +0.12 -> +0.40; FinishWhenLeading Hard/Brutal only changes nothing (+0.02/+0.00/+0.03) and stays on for all.
+- **Changes:** `QuantBot::playsStrategy()` (Custom Hard/Brutal) gates the strategy; Brutal's documented income bonus
+  `QuantBot::kBrutalDeliveryBonusPercent` = 15% on refinery deliveries (`House::addRefinedSpice`, `Player::getSpiceDeliveryBonusPercent`),
+  custom only, not for support controllers, only while an enemy is not all Brutal QuantBots. Brutal's own rules
+  (limit, threshold, tech timing, turrets) left it level with Hard (+0.11); Brutal opening at Hard's share measured level, not kept.
+  Easy unchanged. Protocol 88 (history + NetworkManagerTestCase).
+- **Ladder (144 games/pair, both houses of every seed), before -> after:** QB v QH +0.11 -> +0.44 [+0.26, +0.61];
+  QH v QM +0.08 -> +0.34 [+0.16, +0.51]; QM v QE +0.74 -> +0.61 [+0.44, +0.77] (6/144 time-outs); QB v QM +0.15 -> +0.72
+  [+0.58, +0.85]; QH v QE +0.85 both. CY: QB v QM -0.28 -> +0.58, QB v QH +0.02 -> +0.19.
+- **Harness:** `scenario-matrix.py` ladder has all five pairs, 18 seeds per map, each seed played with both houses
+  (`#swap`, same starts; 720 ladder games in the full tier, `--ladder-seeds 9` for 72/pair); the interval resamples seeds;
+  `houses.csv` has `start`. House bias: Hard mirror Harkonnen 65 / Atreides 74 / 5 draws; the seed's start decides
+  more than the house; only Habbanya-Penny favours Atreides (25-10).
+- **Tests** (Release `build`, 5dc9bdb9): `ctest -j3 -E perf_regression` 104/104 passed (incl. dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe, preplace_queue_probe,
+  skirmish_generator_tests, save_scenario_export, network_wire_harness, every quantbot_* incl. all_against_atreides,
+  strategy, ffa_army_deploys, scenario_matrix smoke, custom_attack); perf_regression passed alone. Before the
+  all-Brutal rule, `quantbot_ffa_army_deploys` failed (9101 nobody eliminated by 30).
+
 ## 2026-10-19 — local 1.0.849 verified and installed on the MBA
 
 1.0.848 + `fix/attack-moves-into-target` 9398cf8d (Attack button / A key on a spice bloom fires at it from
