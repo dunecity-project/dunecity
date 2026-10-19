@@ -1,34 +1,38 @@
-## 2026-10-18 — 1.0.848 trial integration (branch `integrate/848-trial`, worktree `~/Documents/projects/dunecity-int-848`, protocol 86, save 9868; not released, no version bump)
+## 2026-10-19 — 1.0.848 integration (branch `integrate/848-trial`, worktree `~/Documents/projects/dunecity-int-848`, protocol 87, save 9868; not released, no version bump)
 
 Agent Integrate848. From `integrate/feature-batch` b683286f (1.0.847), merged in order:
 `fix/ai-army-stuck-in-base` 8a8e4833 (with perf/game-fps, test/match-scoring, test/ai-scenario-matrix,
 exp/ai-late-game), `chore/remove-map-sharing` 0a9ff138, `fix/remove-economic-victory` f44564ee,
-`feat/ai-ratio-tuning` 4c3ee80b, then its newer tips 873030df (ten mix slots, tech bands, save 9868),
-e276196e (per-tech-band defaults; its own scenario-matrix merge drops the economic threshold too),
-99b63340 (its own army-fix merge, protocol 84 there; conflicts taken from this branch, protocol 86 kept)
-and 563517f9 (Fremen tuned top mix as a code default; config hash changes).
-- **Conflicts:** HANDOVER (all entries kept); protocol history and `NetworkManagerTestCase` (83/84/85
-  histories kept, one new 86); `tests/ai/elimination-match.inc` (FfaArmy include + ten-slot `sampleMix`,
-  the final sample logs both); `tests/ai/vanilla-match.py` (late-rule counters + `start_mix`; both
-  `army.csv` and `mix.csv`; `--tech` map copies also used for bundled maps, generated rs maps unchanged).
-- **Integration-only fix:** the scenario matrix read the removed `getEconomicVictoryThreshold()` and had
-  an `economic` win type; both dropped (`SCENARIO_RESULT`, `games.csv` column, campaign report). An
-  older `games.csv` is rewritten with the current columns on append.
-- **Versions:** protocol 86 (83 ratio + 84 army + 85 econ, all branch-only); save 9868 (ratio's ten-slot
-  mix state; 9866/9867 load and split, older saves as before; econ kept the 9865 layout, army changed no
-  saved state).
-- **Verified on 212125a8 and again on 0755f07e** (ratio 563517f9; Release `build`, `check-build-deps` clean
-  before/after): full `ctest -j3` 101/103 each time
-  passed (incl. perf_regression, quantbot_ffa_army_deploys, all_against_atreides, menu_navigation_probe,
-  workshop/no-population tests). **Failed (combination only; each branch alone passes):**
-  `quantbot_strategy` - TrikeSwarm lead share 1053 v Learned 672 bps, below the +400 margin (ratio's 50%
-  bound caps Atreides' trike prior while the army fix raises Learned's own trikes; RatioTuning4 reproduced
-  it on feat/ai-ratio-tuning a35c2c56 = ratio + army fix); `quantbot_scenario_matrix` -
-  `skirmish/4p-ffa-medium-smallarmy/vanilla/90866` 60-min time-out, nobody eliminated (QB/QH/QM/QE FFA;
-  reproduces on a35c2c56). Candidate for the first: LateGame2's 45dc0775 (removes V, changes the
-  check to "larger than Learned" after a 36-seed calibration) - not merged here, a Main/Stefan call.
-  Menu probe `--size 1024x768 --size 640x480`: both MENU_PROBE_PASS; Custom Game has no "Metaserver
-  Maps", editors/mod chooser have no online buttons.
+`feat/ai-ratio-tuning` (4c3ee80b, 873030df, e276196e, 99b63340, final 563517f9: Fremen tuned top mix and
+tech-band mixes), then `fix/ai-late-game-2` c5ac60c0 (quantbot_strategy check 49394f73, perimeter hold V
+removed, `fix/ai-difficulty-ladder` c766c262 with one spend-past-cap helper).
+- **Conflicts:** HANDOVER (all entries kept, one duplicate scenario-matrix entry dropped); protocol
+  history and `NetworkManagerTestCase` (one new 87); `tests/ai/elimination-match.inc` (FfaArmy include +
+  ten-slot `sampleMix`); `tests/ai/vanilla-match.py` (late-rule and M/O/Z counters + `start_mix`;
+  `army.csv` and `mix.csv`; `--tech` copies on the bundled-map path); `QuantBotBuild.cpp` heavy allocation
+  (ratio's ten-slot `mixItems`/`unitMix` kept, M's tank stop past the limit added); `QuantBotStyle.cpp`
+  `strategyMix` (ratio's `strategyProfile`, ladder's `autonomousCustomArmy` gate - so Custom Medium now
+  plays the default Fixed:Tuned,Swarm mix too); `strategy-probe.inc` (lead share larger than Learned);
+  `docs/ai-scenario-matrix.md`. Checked: the QuantBot source delta of the result against c5ac60c0 is
+  exactly ratio's own patch (plus M's tank stop).
+- **Integration-only fixes:** the scenario matrix's economic-victory references (threshold, win type)
+  dropped; an older `games.csv` is rewritten with the current columns on append.
+- **Spice quota and tax credits** (Stefan: "anything with a spice quota can be achieved with tax credits
+  also"): the ladder's `House::checkQuotaWin` counts the whole earned store in every game mode (the engine
+  checks the local house). New: the credit-storage probe makes every house the local house and checks a
+  quota met by taxes alone / spice + taxes / spice alone (taxes only with the city simulation, starting cash
+  never); new ctests `house_credit_storage_custom_{vanilla,dunecity}` run it in a custom game.
+- **Versions:** protocol 87 (history covers 83-86, the ladder and the quota); save 9868 (ratio's ten-slot
+  mix state; 9866/9867 load and split; econ kept the 9865 layout; army/late-game/ladder change no saved
+  state).
+- **Verified on 3e67a4cb** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3`
+  103/105 passed (incl. quantbot_strategy, perf_regression, all_against_atreides, menu_navigation_probe, the
+  four house_credit_storage tests). **Failed:** `quantbot_ffa_army_deploys` (seed 9101: 20 waves, 5 by
+  minute 8, largest 73, reserves out, but nobody eliminated by minute 30) and `quantbot_scenario_matrix`
+  (`skirmish/4p-ffa-medium-smallarmy/vanilla/90866` 60-min time-out). Both pass on `fix/ai-late-game-2`
+  alone; ffa_army_deploys passed on army+ratio. Ratio mixes x (V removal + ladder): LateGame2 is fixing it
+  on `fix/848-ffa-stalemate` (from 3e67a4cb). Menu probe `--size 1024x768 --size 640x480`: both
+  MENU_PROBE_PASS; no "Metaserver Maps" or online editor buttons.
 
 ## 2026-10-19 — QuantBot designed tech-band mixes; F/S/M top band measured, Fremen accepted (branch `feat/ai-ratio-tuning`, protocol 84 after merging `fix/ai-army-stuck-in-base`, save 9868, not released)
 
