@@ -961,6 +961,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
             set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
+        # The same probe in a custom game (a bundled multiplayer map), so the spice quota met by
+        # refined spice and city tax credits alike is checked outside campaigns too, for every house.
+        foreach(credit_mod IN ITEMS vanilla dunecity)
+            add_test(NAME house_credit_storage_custom_${credit_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --credit-storage-probe --repeatable
+                --mod ${credit_mod}
+                --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/2P - 128x128 - 1v1 - Habbanya-Penny.ini"
+                --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/credit-storage-custom-${credit_mod}-probe)
+            set_tests_properties(house_credit_storage_custom_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # Construction Yard pre-placement queue: sidebar planning, reservation commands
         # (chained and refused), save/load, placement on plan after moving a unit, the blocked
         # fallback with its ticker message, mixed queue order, cancel refunds, yard
