@@ -283,7 +283,13 @@
 //     enemy team's sends its waves at the weakest known house (FinishWhenLeading, hashed). Any
 //     82-86 peer would build, attack or end the game differently and
 //     desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
-#define NETWORK_PROTOCOL_VERSION            87
+// 88: Difficulty separation (fix/difficulty-separation): only Custom Hard and Brutal QuantBots play
+//     a production strategy (QuantBot::playsStrategy; 87 gave Custom Medium the default
+//     Fixed:Tuned,Swarm mix and tempo too), and a Custom Brutal QuantBot's house is paid
+//     QuantBot::kBrutalDeliveryBonusPercent on top of every refinery delivery
+//     (House::addRefinedSpice). An 87 peer would build and attack differently and desync. No saved
+//     state change; save 9868.
+#define NETWORK_PROTOCOL_VERSION            88
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

@@ -236,8 +236,8 @@ bool QuantBot::autonomousCustomArmy() const {
 
 bool QuantBot::playsStrategy() const {
     // 1.0.848 renamed the Hard/Brutal gate to autonomousCustomArmy() and so gave Custom Medium the
-    // Tuned/Swarm strategy too: Hard v Medium +0.12 and Brutal v Medium +0.12, both level, on the
-    // 72-game ladder; with Medium back on its learned mix Hard v Medium +0.40.
+    // Tuned/Swarm strategy too: Hard v Medium +0.12 and Brutal v Medium +0.12 on the 72-game ladder,
+    // both level; with Medium back on its learned mix +0.40 and +0.33 (paired +0.28 and +0.20).
     return autonomousCustomArmy() && (difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal);
 }
 

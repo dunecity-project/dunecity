@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 87;
+static constexpr int kWireProtocolVersion = 88;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -102,7 +102,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 87 is 1.0.848: 83-86 plus the difficulty ladder (Custom Medium whole-army path and surplus
     // budget, team-aware readiness, campaign partner) and a spice quota met by spice and tax
     // credits alike; save 9868.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 87);
+    // 88: only Custom Hard and Brutal play a production strategy; Custom Brutal's delivery bonus.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 88);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

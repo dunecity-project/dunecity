@@ -282,8 +282,9 @@ has two factors:
 - Telemetry: the `strategy` decision plus a `QUANTBOT_STRATEGY:` log line. Harness `houses.csv` has a
   `strategy` column.
 
-**Where strategies apply.** Custom Hard/Brutal only (`autonomousCustomHardBrutal()`). Every other bot
-plays Learned/Base.
+**Where strategies apply.** Custom Hard/Brutal only (`QuantBot::playsStrategy()`; 1.0.848's gate
+rename gave Custom Medium the strategy too, which flattened the difficulty ladder - see
+`docs/ai-scenario-matrix.md`, "Difficulty separation"). Every other bot plays Learned/Base.
 
 **Eligibility.** A mix needs at least half of its prior's weight in slots the house can build
 (ObjectData builder/tech level). Harkonnen therefore never draws Air or TrikeSwarm, and a fixed mix the
