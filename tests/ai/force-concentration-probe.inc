@@ -60,17 +60,20 @@ void runForceConcentrationProbe(Game& game) {
     const QuantBotConfig defaults;
     require(defaults.force.focusFire && defaults.force.converge && defaults.force.waveReadinessPercent==60
         && defaults.force.bundle && defaults.force.launchFromBundle
-        && defaults.force.perimeterTurrets && defaults.force.sizedDefence && defaults.force.openingReadiness,
+        && defaults.force.perimeterTurrets && defaults.force.sizedDefence && defaults.force.openingReadiness
+        && defaults.force.finishWhenLeading,
         "Compiled force defaults are not focus fire + converge + 60% waves + bundle + launch from it"
-        " + perimeter turrets + sized defence + opening readiness");
+        " + perimeter turrets + sized defence + opening readiness + finish when leading");
     const auto& loaded=getQuantBotConfig();
     require(loaded.force.focusFire && loaded.force.converge && loaded.force.waveReadinessPercent==60
         && loaded.force.bundle && loaded.force.launchFromBundle
-        && loaded.force.perimeterTurrets && loaded.force.sizedDefence && loaded.force.openingReadiness,
+        && loaded.force.perimeterTurrets && loaded.force.sizedDefence && loaded.force.openingReadiness
+        && loaded.force.finishWhenLeading,
         "The shipped QuantBot configuration did not load the force defaults");
     require(bot->forceBits()==(QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceBundle
             |QuantBot::kForceBundleGate|QuantBot::kForceThreatTurrets
-            |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness) && bot->waveReadinessPercent()==60,
+            |QuantBot::kForceSizedDefence|QuantBot::kForceOpeningReadiness|QuantBot::kForceFinishLeading)
+            && bot->waveReadinessPercent()==60,
         "Custom Hard does not use the configured force rules");
     // Custom Medium is an autonomous custom army (docs/ai-scenario-matrix.md, "Difficulty ladder").
     bot->difficulty=QuantBot::Difficulty::Medium;

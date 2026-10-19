@@ -1,3 +1,22 @@
+## 2026-10-19 — 1.0.848 blocker: FinishWhenLeading on by default (branch `fix/848-ffa-stalemate` from integrate/848-trial 3e67a4cb, protocol 87, save 9868; not released)
+
+Agent LateGame2 (diagnosis help: RatioTuning4). Write-up: `docs/formations.md`, "Free-for-all:
+finishing the game, 1.0.848"; data `~/Documents/projects/dunecity-results/late-game-2/trial-*` and
+`~/Documents/projects/dunecity-results/ratio-tuning/ab848/`.
+
+- **Failures on 3e67a4cb:** `quantbot_ffa_army_deploys` (9101: first elimination 33.1 min) and the
+  matrix smoke 90866 (time-out). Not caused by the tuned mixes (A/B: fails/ends the same way with old
+  mixes); 9101 passing before was chance (8-9 of 24 seeds eliminate anyone by minute 30).
+- **Fix:** `[Force Concentration] FinishWhenLeading` (hashed, default on, Medium/Hard/Brutal): the
+  house whose team army leads the strongest enemy team's sends its waves at the weakest known house.
+  Self-play 4P DuneCity time-outs 16 -> 13/24, first elimination 37.6 -> 31.3 min; level in the 4P
+  head-to-head (-0.013), Fortress, `/weak`, CY and the 72-game ladder pairs. Does not meet the strict
+  "interval above 0" rule; accepted as the release fix (see the write-up). 9101: eliminations 28.5/29.5;
+  90866 decided at 32.7.
+- **Tests** (Release `build`, ctest -j3, this commit's tree): 105/105 passed, incl. quantbot_ffa_army_deploys,
+  quantbot_scenario_matrix, quantbot_force_concentration, all_against_atreides, strategy, perf_regression,
+  dunelegacy_tests and the rest of the mandatory set. Ablation style `@nofinishlead`.
+
 ## 2026-10-19 — 1.0.848 integration (branch `integrate/848-trial`, worktree `~/Documents/projects/dunecity-int-848`, protocol 87, save 9868; not released, no version bump)
 
 Agent Integrate848. From `integrate/feature-batch` b683286f (1.0.847), merged in order:

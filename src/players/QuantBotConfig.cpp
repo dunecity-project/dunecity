@@ -314,6 +314,10 @@ QuantBotConfig::QuantBotConfig() {
     force.spendAtCap = false;
     force.siegeStandoff = false;
     force.massAssault = false;
+    // The leader finishes the weakest (docs/formations.md, "Free-for-all: finishing the game,
+    // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
+    // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
+    force.finishWhenLeading = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -596,6 +600,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
         iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
         iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
+        iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -693,6 +698,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.spendAtCap = iniFile.getBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
     force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
     force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
+    force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1162,6 +1168,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("spendAtCap", force.spendAtCap);
     addNamed("siegeStandoff", force.siegeStandoff);
     addNamed("massAssault", force.massAssault);
+    addNamed("finishWhenLeading", force.finishWhenLeading);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

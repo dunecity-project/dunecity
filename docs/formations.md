@@ -1066,6 +1066,50 @@ to Medium's surplus if the ladder needs it (6P 0/4 -> 2/4, level everywhere else
 
 **Harness.** `houses.csv` gains `surplus_peak siege_orders siege_holds assault_holds assault_waves`.
 
+### Free-for-all: finishing the game, 1.0.848 (branch `fix/848-ffa-stalemate`, protocol 87, save 9868)
+
+The 1.0.848 trial (integrate/848-trial 3e67a4cb: this work + `feat/ai-ratio-tuning` 563517f9 + the
+economy and map-sharing branches) failed `quantbot_ffa_army_deploys` (seed 9101, four Brutal, nobody
+eliminated by minute 30: first elimination at 33.1) and the smoke cell
+`skirmish/4p-ffa-medium-smallarmy/vanilla/90866` (time-out). Evidence:
+`~/Documents/projects/dunecity-results/late-game-2/trial-*`.
+
+- **Not a mix or threshold problem.** RatioTuning4's A/B on 3e67a4cb: 9101 fails with Medium on its
+  old mix, with every house on the old `Fixed:Learned,Swarm`, and with the start bounds off; 90866
+  ends in each of those variants, each with a different winner (one trajectory). The armies deploy
+  (46-76% outside their bases, no reserve home more than a minute); they do not finish anyone. Over
+  24 seeds of the test's own setup only 9/24 (c5ac60c0) and 8/24 (trial) eliminate anyone by minute
+  30: seed 9101 passing was chance.
+- **9101 trial decision log:** Atreides wears Sardaukar down and Ordos Harkonnen, each with waves of
+  30-40% of its army at the nearest base; both weak houses have no army by minute 25-30 and their
+  structures stand until 33-35. **90866:** spice runs out at minute 40; Brutal and Hard have spent
+  their armies and Easy keeps 15,000 at home, sending its 2-9-unit share.
+
+**Fix: FinishWhenLeading** (`[Force Concentration] FinishWhenLeading`, hashed, **on by default**;
+`QuantBot::kForceFinishLeading`, bit 2097152 that V's removal freed): a whole-army house (Medium,
+Hard, Brutal) whose team's ground army is worth more than the strongest enemy team's remembered army
+(`finishLeading()`) sends its ground waves at the weakest known house - H's choice
+(`finishTargetTeam`, `finishObjective`: remembered army plus 250 per known turret; its yard,
+factories and refinery counted 20 tiles nearer) - instead of the nearest base. A house that does not
+lead keeps the nearest objective, so H's cost (the mid-game house feeding the others, -0.167) is not
+paid. In a 1v1 the weakest house is the only enemy; only the objective's production priority differs.
+
+| FinishWhenLeading v trial default (3e67a4cb) | Games | Result |
+|---|---|---|
+| 4P DuneCity Brutal self-play, 24 seeds: time-outs | 24 each | 16 -> 13 of 24; eliminated per game 1.67 -> 1.96; first elimination median 37.6 -> 31.3 min; anyone by min 30: 8 -> 11 |
+| 4P FFA head-to-head rs160 DuneCity | 48 | -0.013 (-0.19..+0.17) level |
+| Fortress 1v1 / `/weak` (paired) / CY 1v1 | 48 / 48 / 50 | +0.000 (-0.42..+0.46) / +0.026 (+0.00..+0.08) / +0.040 (-0.52..+0.56), all level |
+| Matrix FFA cells, undecided (skirmish 3-8P / cy 4P) | 28 / 8 each | 9 -> 5 / 2 -> 3; 6P DuneCity 3/4 -> 4/4 time-outs |
+| Ladder, 72 games per pair (QB v QM, QH v QE, QM v QE) | 216 each | +0.15 -> +0.12 not shown, +0.81 -> +0.83 holds, +0.88 -> +0.85 holds |
+| Seed 9101 / smoke 90866 | 1 each | eliminations 28.5 and 29.5 min, won at 57.9 / decided at 32.7 min |
+
+**Decision and the rule.** The default rule asks for a head-to-head interval above 0; FinishWhenLeading
+is level there (-0.013) and everywhere else, while it ends more 4P DuneCity games (16 -> 13 time-outs,
+first elimination 6 minutes sooner) and makes both mandatory 1.0.848 tests pass. It goes on as the
+1.0.848 release fix on that basis (Main, 2026-10-19: "a behaviour fix, not a looser threshold"); the
+draw-rate gain is a direction over 24 seeds, not yet significant. Still open: the 6P DuneCity FFA cell
+(0/4 decided), and 4P DuneCity self-play still times out in 13 of 24.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

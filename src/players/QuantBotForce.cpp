@@ -99,7 +99,8 @@ int QuantBot::forceBits() const {
         | (force.turretPriority ? kForceTurretPriority : 0) | (force.pressOn ? kForcePressOn : 0)
         | (force.finishWeakest ? kForceFinishWeakest : 0) | (force.fortifiedWaves ? kForceFortifiedWaves : 0)
         | (force.sonicClearLane ? kForceSonicClearLane : 0) | (force.spendAtCap ? kForceSpendAtCap : 0)
-        | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0);
+        | (force.siegeStandoff ? kForceSiegeStandoff : 0) | (force.massAssault ? kForceMassAssault : 0)
+        | (force.finishWhenLeading ? kForceFinishLeading : 0);
 }
 
 int QuantBot::waveReadinessPercent() const {
