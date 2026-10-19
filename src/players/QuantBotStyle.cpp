@@ -114,7 +114,7 @@ void QuantBot::pickStrategy() {
     const UnitMixPolicy::Slots slots = fieldableMixSlots();
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
         || buildable(Unit_Trooper) || buildable(Unit_Troopers);
-    const bool active = autonomousCustomArmy();
+    const bool active = playsStrategy();
     const Uint32 seed = currentGame->getGameInitSettings().getRandomSeed();
     strategy = active ? QuantBotStrategy::pick(botConfig().strategy, seed, houseID,
                                                 QuantBotStrategy::eligibleMixes(slots, infantry))
@@ -155,7 +155,7 @@ void QuantBot::resolveStrategyProfile() {
 }
 
 const QuantBotStrategy::MixProfile* QuantBot::strategyMix() const {
-    if (!strategyPicked || strategy.mix == QuantBotStrategy::Mix::Learned || !autonomousCustomArmy()) return nullptr;
+    if (!strategyPicked || strategy.mix == QuantBotStrategy::Mix::Learned || !playsStrategy()) return nullptr;
     return &strategyProfile;
 }
 
@@ -200,7 +200,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
 }
 
 const QuantBotStrategy::TempoProfile* QuantBot::strategyTempo() const {
-    if (!strategyPicked || strategy.tempo == QuantBotStrategy::Tempo::Base || !autonomousCustomArmy()) return nullptr;
+    if (!strategyPicked || strategy.tempo == QuantBotStrategy::Tempo::Base || !playsStrategy()) return nullptr;
     const auto& tempo = QuantBotStrategy::profile(strategy.tempo);
     if (tempo.minutes > 0 && getGameCycleCount() >= Uint32(MILLI2CYCLES(tempo.minutes * 60000))) return nullptr;
     return &tempo;

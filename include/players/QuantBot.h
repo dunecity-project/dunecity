@@ -164,6 +164,11 @@ public:
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     int getCityPopulationLimit(int mapArea) const override;
+    /// Brutal's income bonus (docs/ai-scenario-matrix.md, "Difficulty separation"): a Custom
+    /// Brutal house that plays its own army (autonomousCustomArmy) is paid kBrutalDeliveryBonusPercent
+    /// on top of every refinery delivery. The only resource advantage of any difficulty.
+    static constexpr int kBrutalDeliveryBonusPercent = 25;
+    int getSpiceDeliveryBonusPercent() const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
 
@@ -382,6 +387,11 @@ private:
     /// concentrated wave instead of Easy's standing raid share) and of the mobile
     /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
     bool autonomousCustomArmy() const;
+    /// Does this house play a production strategy (QuantBotStrategy: the default Fixed:Tuned,Swarm
+    /// mix and tempo)? Custom Hard and Brutal only: the strategies were tuned there, and Custom
+    /// Medium keeps its learned mix and the configured wave readiness, so the strategy is one of
+    /// Hard's real advantages over Medium (docs/ai-scenario-matrix.md, "Difficulty separation").
+    bool playsStrategy() const;
     /// Count of hostile Ornithopters this house can actually see right now:
     /// alive, active and visible to our team. No fog cheating, and no sticky
     /// "was once attacked from the air" flag - the demand disappears with the

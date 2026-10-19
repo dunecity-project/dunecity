@@ -141,9 +141,7 @@ void Worfinery::updateStructureSpecificStuff() {
         extractionSpeed = (extractionSpeed * healthScale) / 5;
         // Same contract as Refinery::updateStructureSpecificStuff: scale the payment, never
         // the extraction. Tornie's Harvestank/Worfinery pair uses the same house factor.
-        FixPoint delivered = harvesterExtractSpice(unit, extractionSpeed);
-        delivered *= static_cast<int>(owner->getSpiceIncomeMultiplier());
-        owner->addCredits(delivered, true);
+        owner->addRefinedSpice(harvesterExtractSpice(unit, extractionSpeed));
         return;
     }
 

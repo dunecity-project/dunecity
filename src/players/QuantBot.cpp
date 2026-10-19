@@ -193,6 +193,11 @@ bool QuantBot::overridesMilitaryValueCap() const {
     return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
 }
 
+int QuantBot::getSpiceDeliveryBonusPercent() const {
+    // Custom games only, and never a support controller sharing a human's house.
+    return difficulty == Difficulty::Brutal && autonomousCustomArmy() ? kBrutalDeliveryBonusPercent : 0;
+}
+
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
     if (overridesMilitaryValueCap())
         return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
