@@ -44,11 +44,11 @@ int tiles(Coord a, Coord b) { return blockDistance(a, b).lround(); }
 } // namespace
 
 bool QuantBot::blobMarch() const {
-    return autonomousCustomHardBrutal() && waveFormationShape() == QuantBotConfig::kWaveFormationBlob;
+    return autonomousCustomArmy() && waveFormationShape() == QuantBotConfig::kWaveFormationBlob;
 }
 
 bool QuantBot::tacticalRetreat() const {
-    if (!autonomousCustomHardBrutal()) return false;
+    if (!autonomousCustomArmy()) return false;
     if (tacticalRetreatOverride >= 0) return tacticalRetreatOverride > 0;
     return blobMarch();
 }

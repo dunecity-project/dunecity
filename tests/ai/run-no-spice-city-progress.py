@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Check banked city income after ordinary AI games, without fixture grants.
 
-Every house that starts with a construction yard must bank more than 100 credits of city
-tax. Every house still alive after the 12 minutes must also have built a four-lot R/I
-opening. A house defeated meanwhile is reported (`defeated`) but not held to the lot count:
-on the 3 vs 1 64x64 map Atreides loses its army to its Harkonnen neighbour's starting units
-in minute 1-2 and its yard in minute 3-4, and whether it fits a third residential lot in
-first is chance (docs/no-spice-economy-817.md, docs/quantbot-all-against-atreides.md).
+Every house that starts with a construction yard and is still alive after the 12 minutes must
+have banked more than 100 credits of city tax and built a four-lot R/I opening. A house
+defeated meanwhile is reported (`defeated`, with its tax) but not held to either: on the 3 vs 1
+64x64 map the starting armies fight from minute 1, and a house whose zones and windtrap fall in
+minute 2-4 has no city left to tax. How early that happens is chance: over eight seeds of this
+map, with and without the since removed perimeter hold, a defeated house banked 12-6,056
+credits (median ~270-450), and whether it reached 100 changed with nothing but the opening
+skirmish's trajectory (docs/no-spice-economy-817.md, docs/quantbot-all-against-atreides.md,
+docs/formations.md "Free-for-all: finishing the game, round 2").
 """
 import argparse
 import configparser
@@ -73,8 +76,8 @@ for house, state in initial.items():
     zones = [built.get(str(i), 0) for i in (20, 21, 22)]
     results[house] = {'starting_cash': state['credits'], 'zones_built': zones,
                       'final_cash': result['credits'], 'defeated': not result['alive'], **economy}
-    assert economy.get('city_net_applied', 0) > 100, f'{house}: tax never became usable income'
     if result['alive']:
+        assert economy.get('city_net_applied', 0) > 100, f'{house}: tax never became usable income'
         assert sum(zones) >= 4 and zones[0] > 0 and zones[2] > 0, f'{house}: no funded R/I city opening'
 assert results, 'No active AI construction yard was checked'
 assert any(not r['defeated'] for r in results.values()), 'No surviving city was checked'

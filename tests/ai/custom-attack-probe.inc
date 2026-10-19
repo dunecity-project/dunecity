@@ -59,10 +59,11 @@ void runCustomAttackProbe(Game& game) {
         for(auto* unit:army)if(unit->getAttackMode()==HUNT)unit->setForced(true);
         bot->launchGroundHunt();
         require(hunters()==19,"A repeated dispatch or forced hunter exceeded the share");
-        reset(QuantBot::Difficulty::Medium);bot->launchGroundHunt();
-        require(hunters()==30,"Custom Medium did not send its 40-percent share");
-        bot->launchGroundHunt();require(hunters()==30,"Medium stacked waves");
-        for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+        // Custom Medium left the share path: it launches whole-army waves like Hard and Brutal
+        // (docs/ai-scenario-matrix.md, "Difficulty ladder"; quantbot_whole_army_dispatch).
+        reset(QuantBot::Difficulty::Medium);
+        require(bot->autonomousCustomArmy(),"Custom Medium is not an autonomous custom army");
+        for(auto difficulty:{QuantBot::Difficulty::Easy}) {
             reset(difficulty);bot->launchGroundHunt();
             auto* reserve=army.back();
             bot->squadRallyLocation=army[army.size()-2]->getLocation();

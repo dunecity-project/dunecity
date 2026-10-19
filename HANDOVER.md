@@ -50,6 +50,77 @@ Write-up `docs/ai-play-styles.md` 8.9 (bands) and 8.10 (top band). Stefan cut te
   4p-ffa-medium-smallarmy/vanilla/90866 times out (60 min, nobody eliminated): FFA finishing, not ratios.
 - Not run (scope cut): Brutal/Fortress/`/weak` with the band defaults; exploration at tech 3-6 (cancelled).
 
+## 2026-10-19 — FFA late game round 2: perimeter hold V removed, late-game candidates M/O/Z/H measured (none accepted), difficulty-ladder merged (branch `fix/ai-late-game-2`, protocol 84, save 9865; not released)
+
+Agent LateGame2. Write-up: `docs/formations.md`, "Free-for-all: finishing the game, round 2"; data
+`~/Documents/projects/dunecity-results/late-game-2/` (`v-*`, `v-probes`, `self-*`, `h2h-*`, `m-*` on the
+merged code, `bisect-6p-*`, `diag-spend-*`, `ctest-*.log`, `matrix-{before,after}-report.md`) and
+`~/Documents/projects/dunecity-results/scenario-matrix/late-game-2-after`.
+
+- **Commits:** 49394f73 (`fix/strategy-lead-check`, only `quantbot_strategy`: lead share larger than
+  Learned instead of +500 bps; 6 seeds x 6 mixes: margins +88..+2974, +500 failed 3/36 with V, 5/36
+  without); e99b35e1 V removed + no-spice low-cash tax check on surviving houses (a razed house banked
+  12-6,056 credits either way); 0938a4c4 candidates M `SpendAtCap`, O `SiegeStandoff`, Z `MassAssault`
+  (off, hashed, styles `@spend @standoff @assault @late2`); 05e8c11f `@spendfinish @spendfs`; a402ee37
+  merge of `fix/ai-difficulty-ladder` c766c262 with one spend-past-cap helper
+  (`QuantBotBuildPolicy::surplusMilitaryBudget(limit, credits, maxPercent=50)`; M passes 100;
+  `ForceConcentrationPolicy::surplusBudget` removed; M's heavy-only split is M's alone).
+- **V re-measured (no V - V):** 4P FFA +0.019 (-0.21..+0.23), Fortress -0.083 (-0.46..+0.29), `/weak`
+  +0.109 (-0.03..+0.26), CY -0.040 (-0.60..+0.52); 48-50 games each, all level. Nothing of V kept.
+- **Draws (4P self-play rs160, 24 seeds):** vanilla 0/24 in every arm. DuneCity merged default 11/24;
+  M 11/24; H 8/24; M+H 9/24; before the merge M 12/24, O 19/24, Z 15/24. Head-to-head: M +0.025
+  (-0.17..+0.24), H -0.167 (-0.38..+0.05), M+H -0.114, O -0.012, Z -0.226 (-0.45..+0.00). M and H
+  level on Fortress, `/weak` and CY. **None accepted** (each either ends no more games or scores below
+  the default); all stay off.
+- **6P DuneCity FFA (matrix cell, 4 seeds):** 3/4 decided before `fix/ai-difficulty-ladder`, 0/4 after;
+  maps unchanged. Bisection: Medium surplus off 0/4, old Medium waves 1/4, reachable readiness and
+  opening cap off 0/4 - no single part. Hard sits at its 63-70k cap beside a 7-47k Medium. M on: 2/4
+  (Hard 109-140k), H on: 3/4 but QM ranks above QH (H runs for Medium too). Open; see "What to try
+  next" in the write-up (H only for the leader; force rules Hard/Brutal only; M as the Hard/Brutal
+  answer to Medium's surplus).
+- **Scenario matrix full tier skirmish/cy/mp/aaa, undecided games:** before (`army-stuck-before-c`,
+  8a8e4833) skirmish 10/52, cy 5/28, mp 8/54, aaa 0/18; after (a402ee37) 6/52, 1/28, 8/54, 0/18. After's
+  flags: 6P DuneCity FFA 0/4, 2v2 DuneCity QH mirror 0/4 (nobody eliminated), 3v3 medium Hard team 1/4,
+  QH > QB > QM > QE; before's QM idle (7P FFA) gone.
+- **Cluster:** the PC lost every DuneCity unit to MAX_PATH until ClusterQueue moved its scratch to
+  `C:\s\` and re-queued them (22:30-23:00).
+- **Tests** (Release `build`, ctest -j3, a402ee37 + docs): 100/100 passed, incl. dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and all 35 quantbot_* (all_against_atreides, strategy, ffa_army_deploys,
+  scenario_matrix, no_spice_income_*).
+
+## 2026-10-19 — QuantBot difficulty ladder, team play, late campaign missions (branch `fix/ai-difficulty-ladder`, protocol 84 + merged `fix/ai-late-game-2` e99b35e1 (V removed), save 9865; not released)
+
+Agent DifficultyLadder. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty ladder, team games and late
+campaign missions"; data `~/Documents/projects/dunecity-results/difficulty-ladder/` (`before`, `c9`,
+`c5-campaign`, reports `*-report.md`, diagnoses `diag-CampaignLate|CampaignStall|TeamPlay3v3`).
+
+- **Ladder holds over 72 games each (after):** QB v QM +0.30 [+0.08, +0.50] (before +0.25), QH v QE +0.78
+  [+0.64, +0.92], QM v QE +0.64 [+0.46, +0.80] (before +0.20, 30/72 time-outs, Habbanya-Penny 0-0-18;
+  after 3/72, 17-0-1). Ladder now has a CY 96x96 map; `--ladder-seeds`, `--cells` in the matrix.
+- **Changes:** Custom Medium on the whole-army path (`autonomousCustomArmy`, renamed from
+  `autonomousCustomHardBrutal`); held opening capped at the own threshold share of Medium's limit;
+  reachable readiness (no credits+spice to reach it: attack with what you have); Medium spends banked
+  credits up to +50% past its cap; team-aware outnumbered/perimeter turrets/opening; campaign partner
+  harvester target counts competitors, ignores Palace missiles as contacts, measures waves against the
+  strongest enemy after 15 min; DuneCity: structures off reserved factory plots, silos below heavy-factory
+  tech, quota counts tax credits in the shared store (also for humans); Medium opening walks to the heavy
+  factory; generator regenerates asymmetric maps with a spiceless start (pinned digests unchanged).
+- **Campaign Hard partner:** vanilla 84/96 -> 92/96, DuneCity 90/96 -> 96/96; m20-22 Atreides/Harkonnen
+  4/12 -> 9/12; DuneCity Ordos m17, Harkonnen m3, Ordos m1 all won. Still lost: Atreides m20 x2, Harkonnen
+  m22 95897, Atreides m17 80762 (new).
+- **Open:** 3v3 Hard v Medium only 1/4 (Hard allies now sortie; Medium has the same tactics now, Hard only
+  its economy); 6P DuneCity FFA 0/4 decided (before 3/4); skirmish order QH > QB > QM > QE (QB 20 houses,
+  wide interval). Tried and reverted: strength-relative readiness (QB v QM 12-24, broke the FFA test), the
+  Medium-limit cap on every wave (c10: no better). `tests/ai/campaign-helper-economy-probe.inc` (not in
+  ctest) fails at its own fixture ("above-market harvesters") before any QuantBot logic.
+- **Protocol:** AI decisions changed in every custom game; the integrator must bump the protocol.
+- **Tests (Release `build`, HEAD game code 30338ce0):** ctest -j3 44/44 passed (all quantbot_*,
+  dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions,
+  rts_controls_probe, preplace_queue_probe, skirmish_generator_tests, save_scenario_export,
+  network_wire_harness) and perf_regression passed; the smoke 4P FFA 90866 is decided.
+
 ## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
 
 Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data

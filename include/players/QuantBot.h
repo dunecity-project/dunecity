@@ -374,13 +374,14 @@ private:
 
     /// Does this house answer a real attack on a building it owns with its whole
     /// ground army? Scoped exactly like the whole-army dispatch and the hunting
-    /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
+    /// launcher spacing - Custom Medium/Hard/Brutal, no campaign, no helper - and
     /// deliberately independent of the optional recovery policy.
     bool wholeArmyBaseDefence() const;
-    /// Is this an autonomous Custom Hard/Brutal controller? No campaign, no
-    /// support/helper house. The shared scope of the whole-army behaviours and of
-    /// the mobile anti-air floor.
-    bool autonomousCustomHardBrutal() const;
+    /// Is this an autonomous Custom Medium/Hard/Brutal controller? No campaign, no
+    /// support/helper house. The shared scope of the whole-army behaviours (one
+    /// concentrated wave instead of Easy's standing raid share) and of the mobile
+    /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    bool autonomousCustomArmy() const;
     /// Count of hostile Ornithopters this house can actually see right now:
     /// alive, active and visible to our team. No fog cheating, and no sticky
     /// "was once attacked from the air" flag - the demand disappears with the
@@ -1026,14 +1027,15 @@ private:
     /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
     /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
     /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
-    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, V, X and I
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, X and I
     /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
     /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
     /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
     /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
     /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
-    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U, V and X
-    /// are taken from QuantBotConfig::force, the others are test-only):
+    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U and X
+    /// are taken from QuantBotConfig::force, the others are test-only; the perimeter hold V was
+    /// removed in protocol 84 - docs/formations.md "Free-for-all: finishing the game"):
     /// kForceEstimate (E: D measures the remembered enemy army,
     /// enemyThreatEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
     /// that estimate outnumbers us, no wave launches and the reserve holds the protected
@@ -1058,26 +1060,33 @@ private:
     /// enemy house's production and economy), kForceFortifiedWaves (K: against an objective
     /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army)
     /// and kForceSonicClearLane (S, SonicClearLane: a hunting sonic tank whose wave would pass over
-    /// one of our own units shoots another enemy in reach whose lane is clear).
+    /// one of our own units shoots another enemy in reach whose lane is clear). Round 2 candidates
+    /// (all test-only, default off): kForceSpendAtCap (M, SpendAtCap: banked credits raise the
+    /// production budget above the military limit, for siege tanks, launchers and specials only),
+    /// kForceSiegeStandoff (O, SiegeStandoff: wave launchers shell known turrets from outside their
+    /// reach while the rest of the wave holds short of the turrets) and kForceMassAssault (Z,
+    /// MassAssault: against a fortified objective the army waits for kAssaultLimitPercent of the
+    /// limit, then all of it hunts towards one objective of the weakest house).
     static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
         kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
         kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
         kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
         kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
-        kForceThreatTurrets = 1048576, kForcePerimeterHold = 2097152, kForceOpeningReadiness = 4194304,
+        kForceThreatTurrets = 1048576, kForceOpeningReadiness = 4194304,
         kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
-        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728;
+        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728, kForceSpendAtCap = 268435456,
+        kForceSiegeStandoff = 536870912, kForceMassAssault = 1073741824;
     static constexpr int kNoForceOverride = -1;
     int forceVariantOverride = kNoForceOverride;
     /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
     int forceStrengthBps = 10000;
-    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, V, X, I,
-    /// T, P, H and K.
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, X, I,
+    /// T, P, H, K and S.
     int forceBits() const;
-    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomHardBrutal(); }
+    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
-    /// Hard/Brutal.
+    /// Medium/Hard/Brutal.
     int waveReadinessPercent() const;
     /// The readiness before any outnumbered raise: waveReadinessPercent(), or 100 under I while
     /// the house has not launched a ground wave yet (the opening).
@@ -1101,15 +1110,17 @@ private:
     int64_t enemyThreatEstimate() const;
     /// Health-weighted value of our own mobile ground fighters.
     int64_t ownGroundArmyValue() const;
-    /// ForceConcentrationPolicy::outnumbered on ownGroundArmyValue() and enemyThreatEstimate(),
+    /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
+    /// alone in a free-for-all or a 1v1).
+    int64_t teamGroundArmyValue() const;
+    /// ForceConcentrationPolicy::outnumbered on teamGroundArmyValue() and enemyThreatEstimate(),
     /// once per cycle.
     bool outnumberedByEstimate() const;
     mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
     mutable bool estimateOutnumbered = false;
-    /// kForceGarrison (G) or kForcePerimeterHold (V) in effect now: outnumbered by the
-    /// estimate, so no wave leaves and the reserve holds at home - G at the protected rally,
-    /// V on the base perimeter facing the enemy (perimeterPoint()).
-    bool garrisoned() const { return forceVariant(kForceGarrison | kForcePerimeterHold) && outnumberedByEstimate(); }
+    /// kForceGarrison (G, test-only) in effect now: outnumbered by the estimate, so no wave
+    /// leaves and the reserve holds at the protected rally.
+    bool garrisoned() const { return forceVariant(kForceGarrison) && outnumberedByEstimate(); }
     /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
     /// base centre along the observed front direction, the farthest own building within
     /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
@@ -1155,6 +1166,15 @@ private:
     /// target (no other targeting rule then applies to it this pass).
     bool sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
                           const std::vector<const UnitBase*>& friends);
+    /// kForceSiegeStandoff (O, test-only): wave launchers not shooting an armed unit in their reach
+    /// attack the nearest known enemy turret within kSiegeReachTiles beyond their range (they
+    /// outrange rocket turrets by a tile); wave members walking into a known turret's reach while
+    /// at least kSiegeMinLaunchers of those launchers are near them guard a point just outside it
+    /// (siegeHeld), released when the turret is gone, the launchers are, or after kSiegeMaxHoldMs.
+    /// Adds every unit it ordered or holds to \a handled (no other targeting rule this pass).
+    void siegeStandoff(std::set<Uint32>& handled);
+    /// O's held escorts: unit id -> the cycle its hold began. Not saved: the rule is test-only.
+    std::map<Uint32, Uint32> siegeHeld;
     /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
     /// or power line: what a player knows stands there.
     bool knownEnemyStructure(const StructureBase* structure) const;
@@ -1204,6 +1224,12 @@ private:
     /// The house attack threshold attack() starts from (credits of military value, before the
     /// campaign adjustment and the wave readiness scaling).
     int houseAttackThreshold() const;
+    /// The custom-game threshold actually required (campaign: \a required unchanged): 0 when the
+    /// house's credits and the spice left on the map cannot buy the difference to it
+    /// (SimpleArmyPolicy::reachableReadiness), and during a whole-army house's held opening (no
+    /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
+    /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    int reachableAttackThreshold(int required) const;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.
@@ -1245,8 +1271,10 @@ private:
     /// Splits the launched ground units; false (nothing ordered) when the wave cannot split.
     bool startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
     void updateSplits();
-    /// Held by a force controller (a split group or a muster): no rally or regroup orders.
-    bool forceHeld(Uint32 id) const { return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)); }
+    /// Held by a force controller (a split group, a muster or O's siege hold): no rally or regroup orders.
+    bool forceHeld(Uint32 id) const {
+        return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id));
+    }
     /// Telemetry for the duel reports only: never read by a decision, not saved.
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
@@ -1254,7 +1282,8 @@ private:
             splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
             turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
-            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0;
+            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0, surplusPeak = 0, siegeOrders = 0,
+            siegeHolds = 0, assaultHolds = 0, assaultWaves = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets

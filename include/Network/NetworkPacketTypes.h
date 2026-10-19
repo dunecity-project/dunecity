@@ -253,22 +253,35 @@
 //     so the same protocol also covers one mix slot per special (Devastator, Sonic Tank, Deviator;
 //     the observer allocation snapshot has ten slots), the tuned ratios per tech band and save 9868.
 //     (Branch feat/ai-ratio-tuning only; never released.)
-// 84: QuantBot in a free-for-all: "outnumbered" (the perimeter hold, perimeter turrets and the
-//     test-only round 5 rules) measures the remembered army of the strongest single enemy team,
-//     not every enemy summed, and the forward bundle and the perimeter point move out of the
-//     house's own buildings and roads (a city base) towards the enemy. No saved state or command
-//     change; an 82 or 83 peer would order the same AI units differently and desync.
-//     (Branch fix/ai-army-stuck-in-base only; never released.)
+// 84: QuantBot in a free-for-all: "outnumbered" (perimeter turrets and the test-only round 5
+//     rules) measures the remembered army of the strongest single enemy team, not every enemy
+//     summed, and the forward bundle and the perimeter point move out of the house's own
+//     buildings and roads (a city base) towards the enemy. The perimeter hold (V, PerimeterHold)
+//     is removed: an outnumbered house no longer holds its waves and reserve at home. No saved
+//     state or command change; an 82 or 83 peer would order the same AI units differently and
+//     desync. (Branches fix/ai-army-stuck-in-base, fix/ai-late-game-2 and fix/ai-difficulty-ladder
+//     only; never released.)
 // 85: No population/economic victory. WinFlags bit 0x10 (set by original Dune II scenarios such
 //     as WinFlags=19/23) is ignored as upstream; a DuneCity campaign mission is no longer won when
 //     total city population reaches 500. An 82 peer would end the game differently. No saved
 //     state change (the retired threshold slot is still written as 0 and discarded on load).
 //     (Branch fix/remove-economic-victory only; never released.)
-// 86: 1.0.848 = 83 + 84 + 85 together: the starting-mix bounds, Tuned/Bounded mixes, one mix slot
-//     per special and tuned ratios per tech band; the free-for-all "outnumbered" rule and city-free
-//     rally points; and no population victory. Any 82-85 peer would build, attack or end the game
-//     differently and desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
-#define NETWORK_PROTOCOL_VERSION            86
+// 86: 83 + 84 + 85 together on the 1.0.848 trial integration (integrate/848-trial only; never
+//     released).
+// 87: 1.0.848 = 83 + 84 + 85 + 86 and the difficulty ladder (fix/ai-difficulty-ladder): Custom
+//     Medium QuantBots play the whole-army path (autonomousCustomArmy) and spend banked credits up
+//     to +50% past their military cap (QuantBotBuildPolicy::surplusMilitaryBudget); a whole-army
+//     house's held opening ends at its own threshold share of Medium's limit, and readiness that
+//     credits plus map spice cannot reach attacks with what it has; "outnumbered", perimeter
+//     turrets and the opening readiness judge the house's team against the strongest enemy team;
+//     the campaign partner's harvester target counts competing houses, a Palace missile on a
+//     harvester is not a contact, and after 15 minutes its readiness is measured against the
+//     strongest enemy army; in DuneCity structures keep off reserved production plots, silos come
+//     before heavy-factory tech and Medium's opening walks to the heavy factory; and a spice quota
+//     (WinFlags 0x04) is met by the house's whole earned store, refined spice and city tax credits
+//     alike, in every game mode. Any 82-86 peer would build, attack or end the game differently and
+//     desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
+#define NETWORK_PROTOCOL_VERSION            87
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

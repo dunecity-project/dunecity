@@ -729,8 +729,8 @@ void runAirDefenseProbe(Game& game) {
             bot->supportMode=false;
             game.gameType=GameType::CustomGame;
             bot->gameMode=QuantBot::GameMode::Custom;
-            require(bot->autonomousCustomHardBrutal(),
-                "The anti-air floor fixture is not an autonomous Custom Hard/Brutal house");
+            require(bot->autonomousCustomArmy(),
+                "The anti-air floor fixture is not an autonomous Custom Medium/Hard/Brutal house");
 
             auto* factory=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,Structure_HeavyFactory,
                 origin.x+6,origin.y+2,true,true));
@@ -901,21 +901,20 @@ void runAirDefenseProbe(Game& game) {
             require(bot->visibleHostileAircraft()>0,
                 "The anti-air floor fixture lost its observed air threat");
 
-            // Authority boundaries: campaign, support mode and Easy/Medium are
-            // authored behaviour and never acquire the floor.
+            // Authority boundaries: campaign, support mode and Easy are
+            // authored behaviour and never acquire the floor; Medium does.
             game.gameType=GameType::Campaign;
-            require(!bot->autonomousCustomHardBrutal(),
+            require(!bot->autonomousCustomArmy(),
                 "The anti-air floor leaked into a campaign game");
             game.gameType=GameType::CustomGame;
             bot->supportMode=true;
-            require(!bot->autonomousCustomHardBrutal(),
+            require(!bot->autonomousCustomArmy(),
                 "The anti-air floor leaked into a human-helper support house");
             bot->supportMode=false;
-            for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
-                bot->difficulty=soft;
-                require(!bot->autonomousCustomHardBrutal(),
-                    "The anti-air floor leaked into Easy or Medium");
-            }
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            require(!bot->autonomousCustomArmy(),"The anti-air floor leaked into Easy");
+            bot->difficulty=QuantBot::Difficulty::Medium;
+            require(bot->autonomousCustomArmy(),"Medium lost the anti-air floor");
             bot->difficulty=QuantBot::Difficulty::Brutal;
 
             raider->setHealth(0);
@@ -1022,8 +1021,8 @@ void runAirDefenseProbe(Game& game) {
             bot->gameMode=QuantBot::GameMode::Custom;
             bot->militaryValueLimit=10000;
             owner->producedPower=100000;
-            require(bot->autonomousCustomHardBrutal(),
-                "The city trooper fixture is not an autonomous Custom Hard/Brutal house");
+            require(bot->autonomousCustomArmy(),
+                "The city trooper fixture is not an autonomous Custom Medium/Hard/Brutal house");
 
             auto* cityYard=dynamic_cast<BuilderBase*>(owner->placeStructure(NONE_ID,
                 Structure_ConstructionYard,origin.x+2,origin.y+22,true,true));
@@ -1149,13 +1148,11 @@ void runAirDefenseProbe(Game& game) {
             clearCityQueues();cityPass(roomyArmy);
             require(troopOrders()>0,"Restoring the city's cash did not restore the order");
 
-            // Authority boundaries: Easy/Medium, a support helper and a campaign
+            // Authority boundaries: Easy, a support helper and a campaign
             // game are authored behaviour and never raise city infantry.
-            for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
-                bot->difficulty=soft;
-                clearCityQueues();cityPass(roomyArmy);
-                require(troopOrders()==0,"Easy or Medium raised city rocket infantry");
-            }
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            clearCityQueues();cityPass(roomyArmy);
+            require(troopOrders()==0,"Easy raised city rocket infantry");
             bot->difficulty=QuantBot::Difficulty::Brutal;
             bot->supportMode=true;
             clearCityQueues();cityPass(roomyArmy);
@@ -1598,7 +1595,7 @@ void runAirDefenseProbe(Game& game) {
         " deviated vehicles are not reserved for repair while our own damaged ones still are;"
         " a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
         " infantry quota that counts queued orders, out of cash its working and strategic"
-        " reserves do not need, never on Easy/Medium, in support mode or in a campaign, founds"
+        " reserves do not need, never on Easy, in support mode or in a campaign, founds"
         " the WOR only under that demand and only with real troop content, and leaves the"
         " mobile anti-air launcher floor binding where launchers are producible;"
         " autonomous air offence is Hard/Brutal only: Easy/Medium deny a non-attacking enemy"

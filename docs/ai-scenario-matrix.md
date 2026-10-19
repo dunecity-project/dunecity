@@ -58,7 +58,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
 | `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
 | `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
-| `ladder` | QB v QM, QH v QE, QM v QE on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies) and Habbanya-Penny; 8 seeds per pair and map, sides alternating | the stronger QuantBot's placement score interval above 0 (over all maps) |
+| `ladder` | QB v QM, QH v QE, QM v QE on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies), Habbanya-Penny and a vanilla Construction Yard only 96x96 start; 8 seeds per pair and map (`--ladder-seeds 18`: 72 games per pair), sides alternating | the stronger QuantBot's placement score interval above 0 (over all maps) |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
 Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
@@ -99,7 +99,8 @@ Every game must also finish without a crash. 10 games, three at a time.
 python3 tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3 --build-dir build --results build/scenario-matrix-smoke
 # full tier, one machine
 python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/projects/dunecity-results/scenario-matrix/<tag>
-# a slice: --categories ladder campaign, --seeds-per-cell 2, --list (print the plan)
+# a slice: --categories ladder campaign, --seeds-per-cell 2, --cells 'QB-v-QM|3v3' (regex on
+# category/cell/mod), --ladder-seeds 18 (72 ladder games per pair), --list (print the plan)
 # report over any number of results directories (e.g. the four shards)
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
 ```
@@ -176,3 +177,82 @@ Problems found:
    level 4, with little or no fighting; mean win 16 min against 20 min vanilla.
 6. DuneCity games end later: Brutal v Medium on the DuneCity Random Skirmish map 2/8 time-outs, 4v4
    fortress 3/4 time-outs (the Hard team wins the fourth), the 4P DuneCity map QH mirror 3/4 time-outs.
+
+## Difficulty ladder, team games and late campaign missions (branch `fix/ai-difficulty-ladder`)
+
+Stefan: "Brutal > Medium, Hard > Easy, Medium > Easy". Before = `fix/ai-army-stuck-in-base` 8a8e4833 (+ the
+ladder's CY map), after = 5ad8968d (game code identical to the branch head). Results:
+`~/Documents/projects/dunecity-results/difficulty-ladder/` (`before`, `c9`, `c5-campaign`; reports
+`before-report.md`, `after-report.md`, `after-campaign-report.md`; diagnoses `diag-*`).
+
+### What Medium and Easy differed in, and why Habbanya-Penny timed out
+
+In custom games Easy and Medium shared one army behaviour: a standing raid share (Easy 25%, Medium 40% of
+the ground army per wave, the rest at home, `SimpleArmyPolicy::customAttack`), both at the global 40%
+attack threshold of their limits (Easy 15,000 / Medium 25,000 on 96-128 maps), no ornithopter raids. They
+differed only in limits, harvesters, defenders, infantry share and repair yards. On Habbanya-Penny both
+reached their caps (Medium 24,000 of 25,000 with 117,000-158,000 credits unspent, Easy 15,000 behind its
+turrets) and traded evenly for 60 minutes: 8/8 time-outs on 1.0.847.
+
+Brutal lost to Medium on small maps for the opposite reason: its first wave waited for 25% of its 80,000
+limit (20,000) while Medium's left at 10,000; in 23 of 72 games Brutal had 3,500-10,500 at home, never
+launched (sortie 0-2 minutes) and died to Medium's first wave at 17-27 minutes. On CY starts Medium's
+ornithopters also razed Brutal's undefended base at minute 9-10.
+
+### Changes
+
+- **Custom Medium joins the whole-army difficulties** (`QuantBot::autonomousCustomArmy`, formerly
+  `autonomousCustomHardBrutal`): one concentrated wave, recovery posture, force concentration, engine Hunt,
+  whole-army base defence. Easy keeps the raid share (Easy at its own level is unchanged). Air raids stay
+  Hard/Brutal.
+- **Held opening capped at Medium's limit:** a whole-army house that started without an army able to strike
+  ends its held opening at its own threshold share of at most Medium's limit (Brutal 6,250, Hard 7,500
+  (global 40% = 10,000), Medium 10,000 on 96-128 maps). Starting armies keep their thresholds
+  (`quantbot_ffa_army_deploys`). Applying it to every wave (c10) was not better and was reverted.
+- **Reachable readiness:** a custom house whose credits plus the spice left cannot buy its threshold attacks
+  with what it has (`SimpleArmyPolicy::reachableReadiness`).
+- **Medium spends banked credits:** up to half its cap above it from credits over 10,000
+  (`QuantBotBuildPolicy::surplusMilitaryBudget`; Medium x 1.5 stays below Hard's cap). +100% let the reverse
+  All against Atreides Medium hold off four Hard houses for 60 minutes.
+- **Team play:** "outnumbered" and the perimeter turret goal compare our team's ground army with the
+  strongest enemy team (`teamGroundArmyValue`), and the held opening ends once the team's army is worth the
+  house threshold. In 1.0.847 each Hard ally compared its own army with the whole Medium team, was
+  "outnumbered" and garrisoned, and none of the three launched a wave in any of 12 seeds (1/12 won).
+- **Campaign partner:** the economy push no longer plans 43-56 harvesters as if alone on the map (no army
+  for 12 minutes in missions 20-22); a Palace missile on a harvester is not a contact to scramble the army to
+  (vanilla/DuneCity m22); after 15 minutes the partner's wave readiness is measured against the strongest
+  enemy house's army (1.25x, at least 2,000, at most 75% of its limit) instead of a fixed 8,000.
+- **DuneCity campaign stalls:** structures keep off the reserved factory plots (five refineries on the heavy
+  factory's plot, Ordos m17: no heavy factory in 80 minutes); silos are built where the tech level has no
+  heavy factory; the spice quota counts the store's tax credits too in DuneCity (taxes fill the shared store
+  first, so Harkonnen m3 / Ordos m1 quotas could never be met - this also applies to human players).
+- **Medium starport opening** walks to the heavy factory when it may not add a repair yard (the 7P FFA
+  idle Medium had 17 harvesters and no factory).
+- **Random Skirmish generator:** an asymmetric map whose start has no spice within three times its own
+  field's seeding distance by ground is regenerated (next seed; the first connected one if none passes).
+  The 7P FFA idle house's nearest spice was 91 tiles round a massif. Symmetric maps are fair by construction
+  and unchanged; every pinned generator digest is unchanged.
+
+### Results (cluster, full tier)
+
+| Ladder pair (72 games) | Before W-L-T | Before score [95% CI] | After W-L-T | After score [95% CI] |
+|---|---|---|---|---|
+| QB v QM | 43-24-5 | +0.25 [+0.02, +0.47] | 46-24-2 | +0.30 [+0.08, +0.50] |
+| QH v QE | 62-9-1 | +0.73 [+0.57, +0.87] | 64-8-0 | +0.78 [+0.64, +0.92] |
+| QM v QE | 32-10-30 | +0.20 [+0.02, +0.38] | 58-11-3 | +0.64 [+0.46, +0.80] |
+
+QM v QE time-outs 30/72 -> 3/72; on Habbanya-Penny 0-0-18 -> 17-0-1. QB v QM by map after: Habbanya-Penny +0.82, rs-vanilla
++0.22, rs-dunecity +0.15, CY 0.00 (before -0.29).
+
+Campaign, Hard partner (QuantBot Easy enemies): vanilla 84/96 -> 92/96, DuneCity 90/96 -> 96/96 (no
+mission left unfinished; Ordos m17, Harkonnen m3, Ordos m1 all won); vanilla missions 20-22 Atreides and
+Harkonnen 4/12 -> 9/12. Still lost: Atreides m20 (both seeds; the Harkonnen enemy holds 11,000-16,000 and 8
+turrets, waves trade 1:1), Harkonnen m22 seed 95897 (a captured Devastator detonated in the base, a
+sandworm), Atreides m17 seed 80762 (new). Against `CampaignAIPlayer` 23/27 as before.
+
+Team games: 3v3 Hard v Medium 0/4 -> 1/4 (the Hard houses now sortie 5-21 minutes; a Medium team has the
+same army tactics now, so Hard's edge is its economy and limit only - not fixed); 4v4 fortress 1/3 -> 2/4;
+reverse All against Atreides 6/6 lost by Medium as required; All against Atreides vanilla 6/6 within 40
+min, DuneCity 6/6 (before 5/6). 7P FFA: no idle house (before QM idle 1/4). Regressions: 6P DuneCity FFA
+0/4 decided (before 3/4), the skirmish controller order is QH +0.26 > QB +0.18 > QM +0.12 > QE (Brutal
+plays 20 houses, interval -0.13..+0.48).

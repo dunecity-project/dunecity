@@ -340,6 +340,34 @@ inline bool inSonicPath(int tx, int ty, int ox, int oy) {
     return beside * beside <= length2;
 }
 
+/// M (SpendAtCap): banked credits above QuantBotBuildPolicy::kSurplusMilitaryReserve raise the
+/// production budget above the military limit (QuantBotBuildPolicy::surplusMilitaryBudget), by at
+/// most kSurplusMaxPercent of the limit. Above the limit only the heavy factory's siege tanks,
+/// launchers and specials are bought (no tanks, light vehicles, infantry or aircraft), so the
+/// surplus buys what kills a fortified city.
+constexpr int kSurplusMaxPercent = 100;
+
+/// Z (MassAssault): against a fortified objective (K's kFortifiedTurrets within
+/// kFortifiedRadiusTiles) of the weakest known house, a ready wave waits for kAssaultLimitPercent
+/// of the military limit, at most kAssaultMaxHoldMs after the last wave left; then every member
+/// hunts towards that one objective.
+constexpr int kAssaultLimitPercent = 70;
+constexpr int kAssaultMaxHoldMs = 240000;
+inline int64_t assaultReady(int64_t required, int64_t militaryLimit, int turrets) {
+    if (turrets < kFortifiedTurrets) return required;
+    return std::max(required, militaryLimit * kAssaultLimitPercent / 100);
+}
+
+/// O (SiegeStandoff): wave launchers (reach 9) look for known enemy turrets (rocket reach 8) up to
+/// kSiegeReachTiles beyond their own reach; a wave member closer than a turret's reach plus
+/// kSiegeHoldMarginTiles, with at least kSiegeMinLaunchers sieging launchers within
+/// kSiegeEscortTiles, guards a point that far from the turret, for at most kSiegeMaxHoldMs.
+constexpr int kSiegeReachTiles = 4;
+constexpr int kSiegeHoldMarginTiles = 2;
+constexpr int kSiegeEscortTiles = 12;
+constexpr int kSiegeMinLaunchers = 4;
+constexpr int kSiegeMaxHoldMs = 90000;
+
 // ---- Bundling the idle reserve -----------------------------------------------------------------
 
 /// The reserve gathers this share of the way from its home assembly point to the observed enemy

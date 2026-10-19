@@ -195,6 +195,13 @@ void QuantBot::build(int militaryValue) {
             if (QuantBotBuildPolicy::militaryItem(item) && data[item][houseID].enabled)
                 largestMilitaryUnitValue = std::max(largestMilitaryUnitValue, data[item][houseID].price);
     const int militaryBudget = planningMilitaryBudget(militaryValue, money, largestMilitaryUnitValue);
+    // M (SpendAtCap, test-only): the budget above the configured limit is for the heavy factory's
+    // siege tanks, launchers and specials; light vehicles, infantry, aircraft and tanks stop at it.
+    // (Custom Medium's surplus, planningMilitaryBudget(), buys anything.)
+    const bool surplusArmy = !militaryBudgetOverridden && difficulty != Difficulty::Medium
+        && forceVariant(kForceSpendAtCap) && militaryBudget > militaryValueLimit;
+    const int lightBudget = surplusArmy ? militaryValueLimit : militaryBudget;
+    if (surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, militaryValue - militaryValueLimit);
 	const bool citySimEnabled = currentGame && currentGame->isCitySimEnabled();
     // One reading of the remaining field, shared by the space decision here and
     // by the cash decisions further down. A tiny field that supports no worker
@@ -466,8 +473,10 @@ void QuantBot::build(int militaryValue) {
     const int spiceShare = lastCalculatedSpice / std::max(1, spiceCompetitors);
     // Same competitor count and, under city sim, the same target the space
     // reservation above already used.
+    // The campaign economy push no longer plans as the only house on the map: a target of 43-56
+    // harvesters left the Hard partner without an army for 12 minutes in missions 20-22.
     const int mapSpiceHarvesterTarget = vanillaEconomy
-        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, (campaignEconomyPush || style().greedyHarvest) ? 1 : spiceCompetitors, harvesterLimit)
+        ? DuneCity::vanillaHarvesterTarget(lastCalculatedSpice, style().greedyHarvest ? 1 : spiceCompetitors, harvesterLimit)
         : citySpiceWorkerTarget;
     const int spiceHarvesterTarget = citySimEnabled ? mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
@@ -1432,7 +1441,7 @@ void QuantBot::build(int militaryValue) {
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and
     // launchers are genuinely producible, so it cannot become a standing tax.
-    const int observedHostileAircraft = autonomousCustomHardBrutal()
+    const int observedHostileAircraft = autonomousCustomArmy()
         ? visibleHostileAircraft() : 0;
     const bool launcherFloorAuthorised = observedHostileAircraft > 0 && available[2]
         && launcherProductionAvailable;
@@ -2019,7 +2028,11 @@ void QuantBot::build(int militaryValue) {
         const int pendingCapacity=std::max(0,itemCount[Structure_Refinery]
             -getHouse()->getNumItems(Structure_Refinery))*data[Structure_Refinery][houseID].capacity;
         const int projectedCapacity=capacity+pendingCapacity;
-        return getHouse()->getNumItems(Structure_HeavyFactory)>0 && cityCoreInfrastructureReady
+        // Where the tech level has no heavy factory yet (DuneCity campaign levels 1-3), storage
+        // is not deferred for one: taxes fill the store and the spice quota waits on it.
+        return (getHouse()->getNumItems(Structure_HeavyFactory)>0
+                || data[Structure_HeavyFactory][houseID].techLevel>currentGame->techLevel)
+            && cityCoreInfrastructureReady
             && capacity > 0 && projectedCapacity < 999999
             && getHouse()->getEarnedCredits() >= projectedCapacity * 0.80_fix
             && itemCount[Structure_Silo] == getHouse()->getNumItems(Structure_Silo);
@@ -3261,7 +3274,7 @@ void QuantBot::build(int militaryValue) {
 					&& money > (citySimEnabled ? 500 : 700)
 					&& pBuilder->getProductionQueueSize() < 1
 					&& pBuilder->getBuildListSize() > 0
-					&& militaryValue < militaryBudget
+					&& militaryValue < lightBudget
 					&& ((citySimEnabled && itemCount[Structure_HeavyFactory] == 0)
 						|| ((!learningUnitMix && lightVehicleCount < 2)
                             || int64_t(lightVehicleValue) * 10000 < int64_t(vehiclePlanValue) * lightVehicleBps))) {
@@ -3284,7 +3297,7 @@ void QuantBot::build(int militaryValue) {
                             for (size_t i=UnitMixPolicy::kFirstLightSlot; i<kSlots; ++i)
                                 if (campaignAvailableToBuild(pBuilder,mixItems[i])
                                     && (itemID == NONE_ID || itemCount[mixItems[i]] < itemCount[itemID])) itemID = mixItems[i];
-                        if (itemID != NONE_ID && int64_t(militaryValue) + data[itemID][houseID].price <= militaryBudget
+                        if (itemID != NONE_ID && int64_t(militaryValue) + data[itemID][houseID].price <= lightBudget
                             && produceItemWithLogging(itemID, __LINE__, "adaptive_light_mix")) {
                             ++itemCount[itemID];
                             ++lightVehicleCount;
@@ -3307,7 +3320,7 @@ void QuantBot::build(int militaryValue) {
 				&& pBuilder->getProductionQueueSize() < 1
 				&& pBuilder->getBuildListSize() > 0
 				&& money > 450
-				&& militaryValue < militaryBudget
+				&& militaryValue < lightBudget
 				&& !getHouse()->isGroundUnitLimitReached()
 				&& ((!citySimEnabled && infantryCount < 3)
 					|| infantryValue * 100 < std::max(militaryValue, 1) * infantryPercent)) {
@@ -3323,7 +3336,7 @@ void QuantBot::build(int militaryValue) {
 				for (Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
 					if (!campaignAvailableToBuild(pBuilder,candidate)) continue;
 					const int value = data[candidate][houseID].price;
-					if (int64_t(militaryValue)+value > militaryBudget) continue;
+					if (int64_t(militaryValue)+value > lightBudget) continue;
 					if (citySimEnabled
 						&& (purchasePrice(pBuilder,candidate) > money - cityWorkingReserve
 							|| !infantryQuotaAdmits(value))) continue;
@@ -3345,7 +3358,7 @@ void QuantBot::build(int militaryValue) {
 				&& pBuilder->getProductionQueueSize() < 1
 				&& pBuilder->getBuildListSize() > 0
 				&& money > 300
-				&& militaryValue < militaryBudget
+				&& militaryValue < lightBudget
 				&& !getHouse()->isGroundUnitLimitReached()
 				&& (infantryCount < 3
 					|| infantryValue * 100 < std::max(militaryValue, 1) * infantryPercent)) {
@@ -3356,7 +3369,7 @@ void QuantBot::build(int militaryValue) {
 						itemID = candidate;
 					}
 				}
-				if (itemID != NONE_ID && int64_t(militaryValue)+data[itemID][houseID].price<=militaryBudget
+				if (itemID != NONE_ID && int64_t(militaryValue)+data[itemID][houseID].price<=lightBudget
                     && produceItemWithLogging(itemID, __LINE__)) {
 					itemCount[itemID]++;
 					infantryCount++;
@@ -3384,7 +3397,7 @@ void QuantBot::build(int militaryValue) {
                     air.carryalls = itemCount[Unit_Carryall];
                     air.carryallTarget = transportTarget;
                     air.armyValue = militaryValue;
-                    air.armyLimit = militaryBudget;
+                    air.armyLimit = lightBudget;
                     air.vehiclePlanValue = vehiclePlanValue;
                     air.airCommittedValue = ornithopterValue;
                     air.airTargetBps = unitMix[kOrnithopterSlot];
@@ -3579,7 +3592,9 @@ void QuantBot::build(int militaryValue) {
                             for (size_t i=0; i<types.size(); ++i) {
                                 const auto item = types[i] = mixItems[i];
                                 candidates[i] = {data[item][houseID].price, data[item][houseID].price * itemCount[item],
-                                    unitMix[i], campaignAvailableToBuild(pBuilder,item)};
+                                    unitMix[i], campaignAvailableToBuild(pBuilder,item)
+                                        && (item!=Unit_Tank || !surplusArmy
+                                            || int64_t(militaryValue)+data[item][houseID].price<=militaryValueLimit)};
                             }
                             const int normalHorizon = vehiclePlanValue;
                             const int expansionHorizon = vehiclePlanValue;
@@ -4562,6 +4577,15 @@ void QuantBot::build(int militaryValue) {
                         && data[Structure_RepairYard][houseID].enabled
                         && currentGame->techLevel >= data[Structure_RepairYard][houseID].techLevel) {
                         step = Structure_RepairYard;
+                    } else if (!canAddRepairYard(itemCount[Structure_RepairYard])
+                        && itemCount[Structure_HeavyFactory] == 0
+                        && data[Structure_HeavyFactory][houseID].enabled
+                        && currentGame->techLevel >= data[Structure_HeavyFactory][houseID].techLevel) {
+                        // Medium builds no repair yard of its own, but the yard was also this
+                        // ladder's only way to the light factory and so to vehicle production:
+                        // walk to the heavy factory instead (7P FFA: Medium idle with 17
+                        // harvesters and no factory, docs/ai-scenario-matrix.md).
+                        step = Structure_HeavyFactory;
                     }
                     // Walk missing prerequisites, stopping at a pending build.
                     // This uses each mod's actual tech tree, without adding heavy

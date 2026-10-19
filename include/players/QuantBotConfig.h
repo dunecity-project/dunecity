@@ -136,8 +136,9 @@ struct QuantBotConfig {
 
     /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
-    /// LaunchFromBundle, PerimeterHold, PerimeterTurrets, SizedDefence, OpeningReadiness,
-    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves, SonicClearLane; optional keys, the code defaults
+    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
+    /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault;
+    /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -154,11 +155,9 @@ struct QuantBotConfig {
         /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
         /// re-checked every 5 s and at most 60 s late.
         bool launchFromBundle;
-        /// While the remembered enemy army is worth 125% of ours, no wave leaves and the
-        /// reserve holds the enemy-facing base perimeter (round 5; the memory is saved, 9864).
-        bool perimeterHold;
-        /// While outnumbered so, rocket turrets go up on that perimeter: one per 1,000 credits
-        /// of the enemy's lead, at most eight there, never below the economy and unit reserve.
+        /// While the remembered enemy army (round 5; saved, 9864) is worth 125% of ours, rocket
+        /// turrets go up on the enemy-facing base perimeter: one per 1,000 credits of the enemy's
+        /// lead, at most eight there, never below the economy and unit reserve.
         bool perimeterTurrets;
         /// Defences count the enemy within 12 tiles and send 1.5x it, the bundle first; distant
         /// defenders of a building muster first (saved, 9864); a worker raid the troops in reach
@@ -187,6 +186,17 @@ struct QuantBotConfig {
         /// wave runs about nine tiles and hurts all but sonic tanks) shoots the nearest other
         /// enemy in its reach with a clear lane instead.
         bool sonicClearLane;
+        /// Round 2 late-game candidates (docs/formations.md, "Free-for-all: finishing the game").
+        /// Banked credits above a reserve raise the production budget above the military limit
+        /// (at most double), spent only on siege tanks, launchers and specials.
+        bool spendAtCap;
+        /// Wave launchers shell known enemy turrets from beyond the turrets' reach while the
+        /// wave's other ground units hold short of that reach, guarding them.
+        bool siegeStandoff;
+        /// Against an objective guarded by many seen turrets the army waits (at most four
+        /// minutes) for 70% of the military limit, then everything hunts towards one objective
+        /// of the weakest known house.
+        bool massAssault;
     };
     ForceSettings force;
 

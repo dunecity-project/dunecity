@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 86;
+static constexpr int kWireProtocolVersion = 87;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -95,11 +95,14 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // save 9868 (ten resolved ratios).
     // 84 judges a QuantBot "outnumbered" against the strongest enemy team (not every enemy
     // summed: free-for-all houses stayed home) and moves the bundle and the perimeter point out
-    // of the house's own city; no saved state change.
+    // of the house's own city, and removes the perimeter hold (V); no saved state change.
     // 85 removes the population/economic victory (WinFlags bit 0x10 ignored); no saved state
     // change.
-    // 86 is 1.0.848: 83, 84 and 85 together (they were branch-only); save 9868.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 86);
+    // 86 was 83 + 84 + 85 on the 1.0.848 trial integration only.
+    // 87 is 1.0.848: 83-86 plus the difficulty ladder (Custom Medium whole-army path and surplus
+    // budget, team-aware readiness, campaign partner) and a spice quota met by spice and tax
+    // credits alike; save 9868.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 87);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

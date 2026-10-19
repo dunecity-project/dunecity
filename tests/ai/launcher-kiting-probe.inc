@@ -516,14 +516,15 @@ void runLauncherKitingProbe(Game& game) {
             retire(friendly); retire(worker);
             retire(tank); retire(deviator);
 
-            // Easy, Medium and campaign games keep their own spacing paths.
+            // Easy and campaign games keep their own spacing paths; Medium is an autonomous
+            // custom army (docs/ai-scenario-matrix.md, "Difficulty ladder").
             closer->setLocation(origin+Coord(21,20));
             hunt(launcher,origin+Coord(20,20));
-            for(const auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
-                bot->difficulty=difficulty;
-                require(!bot->huntingLauncher(launcher) && !bot->escapeCloseThreatWhileHunting(launcher),
-                    "The hunting-launcher escape leaked into Easy or Medium");
-            }
+            bot->difficulty=QuantBot::Difficulty::Medium;
+            require(bot->huntingLauncher(launcher),"Medium lost the hunting-launcher escape");
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            require(!bot->huntingLauncher(launcher) && !bot->escapeCloseThreatWhileHunting(launcher),
+                "The hunting-launcher escape leaked into Easy");
             bot->difficulty=QuantBot::Difficulty::Brutal;
             game.gameType=GameType::Campaign;
             require(!bot->huntingLauncher(launcher) && !bot->escapeCloseThreatWhileHunting(launcher),
@@ -795,11 +796,10 @@ void runLauncherKitingProbe(Game& game) {
                 require(!bot->managesAutonomousRocketHunt(foot),
                     "The rocket filter leaked into a campaign game");
                 game.gameType=GameType::CustomGame;
-                for(const auto soft:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
-                    bot->difficulty=soft;
-                    require(!bot->managesAutonomousRocketHunt(foot),
-                        "The rocket filter leaked into Easy or Medium");
-                }
+                bot->difficulty=QuantBot::Difficulty::Easy;
+                require(!bot->managesAutonomousRocketHunt(foot),"The rocket filter leaked into Easy");
+                bot->difficulty=QuantBot::Difficulty::Medium;
+                require(bot->managesAutonomousRocketHunt(foot),"Medium lost the rocket filter");
                 bot->difficulty=QuantBot::Difficulty::Brutal;
                 require(bot->managesAutonomousRocketHunt(foot),
                     "Restoring the autonomous Custom Hard/Brutal house lost the filter");

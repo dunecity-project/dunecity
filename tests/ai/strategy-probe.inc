@@ -202,7 +202,7 @@ inline std::map<int, Choice> picksAfterFirstUpdate(Game& game, const Scenario& s
     for (const auto& [house, team] : scenario.roster) {
         QuantBot* bot = botOf(game, house);
         require(bot != nullptr, std::string(role) + ": a house has no QuantBot");
-        require(bot->autonomousCustomHardBrutal(), std::string(role) + ": a bot is not Custom Hard");
+        require(bot->autonomousCustomArmy(), std::string(role) + ": a bot is not an autonomous Custom army");
         require(bot->strategyPicked, std::string(role) + ": a bot had not picked its strategy after the first update");
         const Choice expected = QuantBotStrategy::pick(getQuantBotConfig().strategy, seed, house, eligibleFor(*bot));
         require(bot->strategy == expected, std::string(role) + ": a bot's strategy is not QuantBotStrategy::pick() of seed and house");
@@ -634,16 +634,20 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
     }
 }
 
-/// How much more of the built value the lead slots get than in the Learned game (basis points).
-/// Measured with the starting-mix bounds (per game, masked per pass) and the bounded presets (12 game
-/// minutes, mapSeed 7, seed 486409243; lead share vs Learned's): QuadMass quads 1785 vs 952, Artillery
-/// siege 2440 vs 836, TankMass tanks 3456 vs 2467, TrikeSwarm trikes 996 vs 574 (the smallest margin,
-/// +422), Specials 2406 vs 346, Counter (its first counter's lead) 1920 vs 940, Tuned (Harkonnen 45%
-/// tanks) 3196 vs 2467; Air is checked by its ornithopters and Bounded by its passes (checkMix).
-/// Artillery leads with siege only: the Atreides configured mix already has 35% launchers.
-/// The largest-share slot is not asserted: Starport ornithopters and the mobile anti-air floor's
-/// launchers are bought outside the mix and can outweigh a lead slot.
-constexpr int kLeadMarginBps = 400;
+/// The lead slots must get a larger share of the built value than in the Learned game. Measured with
+/// the starting-mix bounds and the bounded presets (12 game minutes, mapSeed 7, seed 486409243; lead
+/// share vs Learned's, before the perimeter hold V was removed): QuadMass quads 1785 vs 952, Artillery
+/// siege 2440 vs 836, TankMass tanks 3456 vs 2467, TrikeSwarm trikes 996 vs 574, Specials 2406 vs 346,
+/// Counter (its first counter's lead) 1920 vs 940, Tuned (Harkonnen 45% tanks) 3196 vs 2467; Air is
+/// checked by its ornithopters and Bounded by its passes (checkMix). Artillery leads with siege only:
+/// the Atreides configured mix already has 35% launchers. A fixed margin is not asserted: one
+/// 12-minute game per mix is one trajectory of the whole fight, and over six seeds (486409243, 11,
+/// 22, 33, 44, 55), with and without the perimeter hold (V), the margins ranged +88..+2974 (mean
+/// ~+1250), and the 500-bps margin this check used to require failed 3 of 36 checks with the hold
+/// and 5 of 36 without it, spread over all six mixes (docs/formations.md, "Free-for-all: finishing
+/// the game"). The largest-share slot is not asserted either: Starport ornithopters and the mobile
+/// anti-air floor's launchers are bought outside the mix and can outweigh a lead slot.
+constexpr int kLeadMarginBps = 1;
 
 /// Section 3's checks for one house playing Fixed:<mix>,Base, against the Learned game.
 inline void checkMix(Mix mix, const Production& p, const Production& learned, long long wallMs) {

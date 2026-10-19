@@ -658,7 +658,6 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(baseline.force.waveReadinessPercent == 60);
         REQUIRE(baseline.force.bundle);
         REQUIRE(baseline.force.launchFromBundle);
-        REQUIRE(baseline.force.perimeterHold);
         REQUIRE(baseline.force.perimeterTurrets);
         REQUIRE(baseline.force.sizedDefence);
         REQUIRE(baseline.force.openingReadiness);
@@ -667,7 +666,6 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.bundle = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.launchFromBundle = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterHold = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = false; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = false; }));
@@ -676,5 +674,8 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWeakest = !c.force.finishWeakest; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.fortifiedWaves = !c.force.fortifiedWaves; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.sonicClearLane = !c.force.sonicClearLane; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.spendAtCap = !c.force.spendAtCap; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.siegeStandoff = !c.force.siegeStandoff; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.massAssault = !c.force.massAssault; }));
     }
 }

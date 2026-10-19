@@ -194,9 +194,20 @@ bool QuantBot::overridesMilitaryValueCap() const {
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
-    if (!overridesMilitaryValueCap()) return militaryValueLimit;
-    return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
-                                                      productionCash, largestUnitValue);
+    if (overridesMilitaryValueCap())
+        return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
+                                                          productionCash, largestUnitValue);
+    // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
+    // (docs/ai-scenario-matrix.md, "Difficulty ladder"); at most half the cap, below Hard's.
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
+    // M (SpendAtCap, test-only, Custom Hard/Brutal): banked credits above the reserve buy heavy
+    // units beyond the limit, up to the limit again (QuantBotBuild.cpp keeps the other producers
+    // at the limit).
+    if (forceVariant(kForceSpendAtCap))
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash,
+                                                          ForceConcentrationPolicy::kSurplusMaxPercent);
+    return militaryValueLimit;
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
@@ -604,9 +615,9 @@ void QuantBot::update() {
 	}
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
-    // R, U and V and the late-game target choice H read it), before anything this pass consults it.
+    // R and U and the late-game target choices H and Z read it), before anything this pass consults it.
     if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
-                     | kForcePerimeterHold | kForceFinishWeakest) || style().counterBps > 0
+                     | kForceFinishWeakest | kForceMassAssault) || style().counterBps > 0
         || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front
@@ -862,7 +873,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			// Defend the harvester!
 			const Harvester* pHarvester = static_cast<const Harvester*>(pGroundUnit);
 			if (pHarvester->isActive()) {
-				scrambleUnitsAndDefend(pDamager,false,pObject);
+				// A Palace is a missile's launcher, not a contact: never scramble to it (vanilla
+				// m22: a Death Hand on a harvester sent the army into the Sardaukar base).
+				if (pDamager->getItemID() != Structure_Palace) scrambleUnitsAndDefend(pDamager,false,pObject);
                 auto& safety = harvesterSafety[pHarvester->getObjectID()];
                 safety.nextCheck = 0;
                 safety.retreatUntil = getGameCycleCount() + MILLI2CYCLES(30000);
