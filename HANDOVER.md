@@ -1,3 +1,36 @@
+## 2026-10-19 — Attack cursor on a spice bloom fires at it again (branch `fix/attack-moves-into-target` from 73404c33 / 1.0.848, worktree `~/Documents/projects/dunecity-attack-fix`; protocol 87 and save 9868 unchanged; not released)
+
+Agent AttackFix. Stefan (1.0.848, MBA): "attack is broken, it moves the unit into what it is attacking";
+narrowed by him to the Attack button / A key on a **spice bloom**.
+
+- **Cause:** `Game::handleSelectedObjectsAttackClick` (962f84b8, "Add modern RTS controls", first in
+  1.0.834, so 1.0.834-1.0.848) turns an Attack-cursor click on ground without an object into an
+  attack-move; only Ctrl kept the old fire at the position. A bloom is terrain, not an object, so the
+  units walked onto it (Dune Legacy sends `CMD_UNIT_ATTACKPOS`, which fires from weapon range and sets the
+  bloom off). Every unit type, alone or grouped, formations on or off (the click code is mod-independent;
+  the probe runs vanilla); right-click on a bloom is a move in both (unchanged). Clicks on enemy units and
+  structures already went to `handleAttackClick` (by code; not re-measured).
+- **Fix:** an explored spice bloom clicked with the Attack cursor is fired at (`handleAttackClick` ->
+  `CMD_UNIT_ATTACKPOS`, forced), like Ctrl+click; units that cannot shoot it (`!fightsOnAttackMove()`:
+  harvesters, MCVs, carryalls, Saboteurs) get no order. UI only: the same commands as before, so no
+  protocol bump. Tooltip and `docs/rts-controls.md` say so.
+- **Engine as in Dune Legacy (unchanged):** the first shot at a bloom ends the order
+  (`UnitBase::attack`). Launcher and Deviator rockets scatter (Bullet.cpp), so that one rocket can miss the
+  tile and the bloom stays; sonic waves never set a bloom off (Map::damage). Keeping the order until the
+  bloom goes off would need new saved unit state (`forced` is cleared when a unit stops, so it cannot mark
+  it); not done.
+- **Test:** `rts_controls_probe` section 8 (`RTS_CONTROLS_BLOOM_PASS`): Tank, Siege Tank, Launcher, Sonic
+  Tank, Devastator, Deviator, Soldier, Trooper, Trike, Raider, Quad and Ornithopter, each alone via the
+  panel's Attack button and the A key, then one ground group of all of them plus a Harvester and an MCV
+  (formation moves off and on, both routes): no attack-move, every unit takes the attack-position order,
+  fires only within weapon range, no ground unit enters the bloom tile, the bloom goes off (precise
+  weapons), the Harvester/MCV get no order. Fails on 73404c33 (`single 41 button: the Attack click on the
+  bloom became an attack-move`; with that check off: `unit 41 drove onto the bloom`).
+- **Tests** (Release `build`, ctest -j3): 46/46 passed (631 s): dunelegacy_tests, rts_controls_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and every quantbot_* (incl. all_against_atreides, ffa_army_deploys, scenario_matrix).
+
 ## 2026-10-19 — local 1.0.848 verified and installed on the MBA
 
 Staging = `integrate/848-trial` b93b06ec fast-forwarded (merges fix/ai-army-stuck-in-base, chore/remove-map-sharing,

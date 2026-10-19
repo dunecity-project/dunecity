@@ -11,7 +11,9 @@
 //      unit limit without being cancelled, and resumes when room frees up;
 //   5. queue, HOLD and repeat flags survive a save and load;
 //   6. a SAVEGAMEVERSION 9854 save (committed fixture) loads with empty queues and no repeat;
-//   7. a rendered frame shows the queued waypoint lines and a hotkey tooltip (smoke screenshot).
+//   7. a rendered frame shows the queued waypoint lines and a hotkey tooltip (smoke screenshot);
+//   8. the Attack button and the A key on a spice bloom fire at it from weapon range, for every
+//      firing unit type alone and as one group (formation moves off and on): nobody drives onto it.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -20,6 +22,7 @@
 #include <GameInterface.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/ObjectInterfaces/MultiUnitInterface.h>
+#include <GUI/ObjectInterfaces/UnitInterface.h>
 #include <mod/ModManager.h>
 #include <structures/BuilderBase.h>
 #include <units/UnitBase.h>
@@ -276,6 +279,160 @@ int runRtsControlsProbe() {
         rtsRequire(fired, "The holding launcher never fired back");
         retire(attacker); retire(launcherID);
         SDL_Log("RTS_CONTROLS_HOLD_PASS: the launcher stayed on its tile in HOLD for 900 cycles under fire and hit back");
+    }
+
+    // ---- 8. Attack cursor on a spice bloom --------------------------------------------------
+    // 1.0.834-1.0.848 turned a ground click of the Attack cursor into an attack-move, so the
+    // units drove onto the bloom instead of shooting it. Real input path: the panel's Attack
+    // button or the A key, then a left click on the bloom tile.
+    {
+        rtsRequire(pLocalHouse == owner && pLocalPlayer == tester, "The tester is not the local player");
+        const std::vector<int> kinds = {Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_SonicTank, Unit_Devastator,
+                                        Unit_Deviator, Unit_Soldier, Unit_Trooper, Unit_Trike, Unit_RaiderTrike,
+                                        Unit_Quad, Unit_Ornithopter};
+        const Coord bloomAt = O + Coord(19, 8);
+        auto resetFixture = [&] {
+            for(int dy = 0; dy < H; ++dy) for(int dx = 0; dx < W; ++dx) currentGameMap->getTile(O.x+dx, O.y+dy)->setType(Terrain_Sand);
+        };
+        enum class Route { Button, Key };
+        auto attackClick = [&](const std::vector<Uint32>& selection, Route route) {
+            game->unselectAll(game->selectedList);
+            game->selectedList.clear();
+            for(Uint32 id : selection) { game->selectedList.insert(id); unitOf(id)->setSelected(true); }
+            game->selectionChanged();
+            game->setCursorMode(Game::CursorMode_Normal);
+            if(route == Route::Button) {
+                game->pInterface->updateObjectInterface();
+                ObjectInterface* panel = game->pInterface->pObjectContainer;
+                if(auto* one = dynamic_cast<UnitInterface*>(panel)) one->attackButton.pOnClick();
+                else if(auto* many = dynamic_cast<MultiUnitInterface*>(panel)) many->attackButton.pOnClick();
+                else rtsRequire(false, "No unit panel with an Attack button");
+            } else {
+                SDL_KeyboardEvent key{};
+                key.type = SDL_KEYDOWN;
+                key.keysym.sym = SDLK_a;
+                game->handleKeyInput(key);
+            }
+            rtsRequire(game->currentCursorMode == Game::CursorMode_Attack, "The Attack cursor did not open");
+            rtsRequire(game->handleSelectedObjectsAttackClick(bloomAt.x, bloomAt.y), "The click on the bloom was not accepted");
+            rtsRequire(game->currentCursorMode == Game::CursorMode_Normal, "The Attack cursor stayed open after the click");
+            game->unselectAll(game->selectedList);
+            game->selectedList.clear();
+        };
+        // A shot at a bloom ends the order (UnitBase::attack, as in Dune Legacy). Sonic waves never
+        // set a bloom off (Map::damage), and Launcher and Deviator rockets scatter (Bullet.cpp), so
+        // their one shot may miss the tile: those must fire from range; the rest set it off.
+        auto setsOffBloom = [](int item) { return item != Unit_SonicTank && item != Unit_Launcher && item != Unit_Deviator; };
+        // One Attack click on the bloom by 'ids' plus 'bystanders' (units that cannot fire).
+        // Every firing unit takes the order as fire at the bloom's position (never an
+        // attack-move), fires only from within weapon range, and no ground unit enters the
+        // bloom tile; the bloom goes off when one of them can set it off; bystanders get no
+        // order. Alone, the unit must also fire. In a group the case ends when the bloom goes
+        // off: units still closing in then fire at the bare ground, as their order says, and
+        // are not measured further.
+        auto runCase = [&](const std::vector<Uint32>& ids, const std::vector<Uint32>& bystanders, Route route,
+                           const std::string& label) {
+            const bool alone = ids.size() == 1;
+            std::vector<Coord> start;
+            std::vector<int> items;
+            for(Uint32 id : ids) { start.push_back(unitOf(id)->getLocation()); items.push_back(unitOf(id)->getItemID()); }
+            std::vector<Uint32> selection = ids;
+            selection.insert(selection.end(), bystanders.begin(), bystanders.end());
+            attackClick(selection, route);
+            const bool anyTrigger = std::any_of(items.begin(), items.end(), setsOffBloom);
+            std::vector<Sint32> lastTimer(ids.size(), 0);
+            std::vector<int> fired(ids.size(), 0);
+            std::vector<bool> ordered(ids.size(), false);
+            int cycles = 0, bloomGoneAt = -1;
+            for(; cycles < 6000; ++cycles) {
+                step(1);
+                const bool bloomLeft = currentGameMap->getTile(bloomAt)->isSpiceBloom();
+                if(!bloomLeft && bloomGoneAt < 0) bloomGoneAt = cycles;
+                for(Uint32 id : selection)
+                    rtsRequire(unitOf(id) == nullptr || !unitOf(id)->isAttackMoving(),
+                               label + ": the Attack click on the bloom became an attack-move");
+                // A Harvester may go harvesting by itself, but never on the bloom's account.
+                for(Uint32 id : bystanders)
+                    rtsRequire(!bloomLeft || (unitOf(id)->attackPos.isInvalid() && unitOf(id)->getDestination() != bloomAt),
+                               label + ": a unit that cannot fire was sent to the bloom");
+                bool allFired = true;
+                for(size_t i = 0; i < ids.size(); ++i) {
+                    const UnitBase* unit = unitOf(ids[i]);
+                    rtsRequire(unit != nullptr, fmt::sprintf("%s: unit %d died at cycle %d", label, items[i], cycles));
+                    if(unit->attackPos == bloomAt) ordered[i] = true;
+                    const int range = unit->getWeaponRange();
+                    const FixPoint distance = blockDistance(unit->getLocation(), bloomAt);
+                    if(unit->isAGroundUnit()) {
+                        rtsRequire(unit->getLocation() != bloomAt && !(unit->isMoving() && unit->nextSpot == bloomAt),
+                                   fmt::sprintf("%s: unit %d drove onto the bloom", label, items[i]));
+                    }
+                    if(unit->primaryWeaponTimer > lastTimer[i]) {
+                        rtsRequire(distance <= range, fmt::sprintf("%s: unit %d fired from %d tiles, beyond its range %d",
+                                   label, items[i], distance.lround(), range));
+                        ++fired[i];
+                    }
+                    lastTimer[i] = unit->primaryWeaponTimer;
+                    allFired = allFired && fired[i] > 0;
+                }
+                if(alone ? allFired && (!anyTrigger || bloomGoneAt >= 0) : bloomGoneAt >= 0) break;
+            }
+            for(size_t i = 0; i < ids.size(); ++i) {
+                const UnitBase* unit = unitOf(ids[i]);
+                SDL_Log("RTS_CONTROLS_DIAG: %s item=%d start=(%d,%d) at=(%d,%d) bloom=(%d,%d) range=%d fired=%d cycles=%d bloomGone=%d",
+                        label.c_str(), items[i], start[i].x, start[i].y, unit->getLocation().x, unit->getLocation().y,
+                        bloomAt.x, bloomAt.y, unit->getWeaponRange(), fired[i], cycles, bloomGoneAt);
+                rtsRequire(ordered[i], fmt::sprintf("%s: unit %d was not ordered to fire at the bloom", label, items[i]));
+            }
+            rtsRequire(!alone || fired[0] > 0, label + ": the unit never fired at the bloom");
+            rtsRequire(!anyTrigger || bloomGoneAt >= 0, label + ": the bloom was never set off");
+            rtsRequire(bloomGoneAt < 0 || std::any_of(fired.begin(), fired.end(), [](int n) { return n > 0; }),
+                       label + ": the bloom went off without a shot");
+            for(Uint32 id : selection) retire(id);
+            // Let rockets in flight land before the next case lays a fresh bloom.
+            for(int i = 0; i < 1000 && !bulletList.empty(); ++i) step(1);
+            rtsRequire(bulletList.empty(), label + ": bullets still in flight after 1000 cycles");
+            resetFixture();
+        };
+        auto routeName = [](Route route) { return route == Route::Button ? "button" : "A key"; };
+        const bool formations = settings.general.formationMoves;
+        int cases = 0;
+        settings.general.formationMoves = false;
+        for(int item : kinds) {
+            for(Route route : {Route::Button, Route::Key}) {
+                resetFixture();
+                currentGameMap->getTile(bloomAt)->setType(Terrain_SpiceBloom);
+                const Uint32 id = spawn(owner, item, Coord(4, 8));
+                unitOf(id)->doSetAttackMode(GUARD);
+                runCase({id}, {}, route, fmt::sprintf("single %d %s", item, routeName(route)));
+                ++cases;
+            }
+        }
+        // One group of every firing ground type (the Ornithopter would set the bloom off before
+        // the rest move), with a Harvester and an MCV selected too, in rows either side of the
+        // bloom's row (the sonic tank alone in it: its wave hits everything on the line).
+        for(bool formation : {false, true}) {
+            for(Route route : {Route::Button, Route::Key}) {
+                settings.general.formationMoves = formation;
+                resetFixture();
+                currentGameMap->getTile(bloomAt)->setType(Terrain_SpiceBloom);
+                std::vector<Uint32> group;
+                int above = 0, below = 0;
+                for(int item : kinds) {
+                    if(item == Unit_Ornithopter) continue;
+                    Coord at(4, 8);
+                    if(item != Unit_SonicTank) at = (above <= below) ? Coord(3 + above % 3, 6 - above++ / 3 * 2)
+                                                                     : Coord(3 + below % 3, 10 + below++ / 3 * 2);
+                    group.push_back(spawn(owner, item, at));
+                    unitOf(group.back())->doSetAttackMode(GUARD);
+                }
+                const std::vector<Uint32> bystanders = {spawn(owner, Unit_Harvester, Coord(1, 1)), spawn(owner, Unit_MCV, Coord(1, 20))};
+                runCase(group, bystanders, route, fmt::sprintf("group formation=%d %s", int(formation), routeName(route)));
+                ++cases;
+            }
+        }
+        settings.general.formationMoves = formations;
+        SDL_Log("RTS_CONTROLS_BLOOM_PASS: %d Attack-cursor clicks on a spice bloom (button and A key, %zu unit types alone, "
+                "one ground group with formation moves off and on) fired from weapon range; nobody drove onto the bloom", cases, kinds.size());
     }
 
     // ---- 3. Three-waypoint Shift queue ----------------------------------------------------
