@@ -1,3 +1,12 @@
+## 2026-10-19 — local 1.0.849 verified and installed on the MBA
+
+1.0.848 + `fix/attack-moves-into-target` 9398cf8d (Attack button / A key on a spice bloom fires at it from
+range instead of attack-moving onto it; bug since 1.0.834, commit 962f84b8). UI-only: protocol 87, save 9868,
+compatible with 1.0.848. `agent-workspace stage verify` at 7cdb093e: CTest 105/105 (1360 s). Executable SHA256
+16a6b5fd06c4e25ea04d63c87b622f669c0aabd60e859debb6666eb4238de3bf, no Homebrew/local links, signature and
+runtime check passed. Installed on the MBA 2026-10-19 21:52 AEDT by `/tmp/push-dunecity-1.0.849.sh`; 1.0.848
+copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.849-20261019-215230/`. Not pushed.
+
 ## 2026-10-19 — Attack cursor on a spice bloom fires at it again (branch `fix/attack-moves-into-target` from 73404c33 / 1.0.848, worktree `~/Documents/projects/dunecity-attack-fix`; protocol 87 and save 9868 unchanged; not released)
 
 Agent AttackFix. Stefan (1.0.848, MBA): "attack is broken, it moves the unit into what it is attacking";
