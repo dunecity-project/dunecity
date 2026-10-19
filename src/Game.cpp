@@ -6511,11 +6511,15 @@ bool Game::handleSelectedObjectsHealClick(int xPos, int yPos) {
 bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
     // Attack cursor (docs/rts-controls.md): an object is attacked, the ground is attack-moved
     // to, and Ctrl on the ground keeps the old forced fire at that position. Shift queues.
+    // A spice bloom the player has seen is a target, not ground: as in Dune Legacy the units
+    // fire at it from range to set it off. An attack-move would drive them onto it.
     const SDL_Keymod mod = SDL_GetModState();
     const bool queued = (mod & KMOD_SHIFT) != 0;
-    const bool fireAtGround = (mod & KMOD_CTRL) != 0;
     const Tile* pTile = currentGameMap->tileExists(xPos, yPos) ? currentGameMap->getTile(xPos, yPos) : nullptr;
     const ObjectBase* pClicked = (pTile != nullptr && pTile->hasAnObject()) ? pTile->getObject() : nullptr;
+    const bool bloom = pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
+        && pTile->isExploredByTeam(pLocalHouse->getTeamID());
+    const bool fireAtGround = (mod & KMOD_CTRL) != 0 || bloom;
     UnitBase* pResponder = nullptr;
     std::vector<UnitBase*> attackMovers;
     for(Uint32 objectID : selectedList) {
@@ -6523,7 +6527,10 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
         House* pOwner = pObject->getOwner();
         if(pObject->isAUnit() && (pOwner == pLocalHouse) && pObject->isRespondable()) {
             auto* pUnit = static_cast<UnitBase*>(pObject);
-            if(pClicked != nullptr && queued) {
+            if(bloom && !pUnit->fightsOnAttackMove()) {
+                // Workers, transports and Saboteurs cannot shoot it; they would only walk onto it.
+                continue;
+            } else if(pClicked != nullptr && queued) {
                 cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
                     static_cast<Uint32>(UnitOrderType::AttackObject), pClicked->getObjectID(), 0));
                 pResponder = pUnit;

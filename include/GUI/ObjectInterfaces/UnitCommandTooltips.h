@@ -25,7 +25,7 @@ inline std::string move() {
 }
 inline std::string attackMove() {
     return withHotkey(_("Attack Move"), "A", true,
-        _("click ground to walk there fighting, an enemy to attack it, Ctrl+click ground to fire at it; Shift queues"));
+        _("click ground to walk there fighting, an enemy or a spice bloom to attack it, Ctrl+click ground to fire at it; Shift queues"));
 }
 inline std::string patrol() {
     return withHotkey(_("Patrol"), "Q", true, _("attack-move back and forth from here; Shift+click adds patrol points"));

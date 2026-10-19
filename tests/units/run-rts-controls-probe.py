@@ -79,6 +79,7 @@ with logfile.open('w') as log:
                    stdout=log, stderr=subprocess.STDOUT, check=True, timeout=900)
 text = logfile.read_text()
 for marker in ('RTS_CONTROLS_LEGACY_PASS:', 'RTS_CONTROLS_ATTACKMOVE_PASS:', 'RTS_CONTROLS_FORMATION_ORDERS_PASS:', 'RTS_CONTROLS_HOLD_PASS:',
+               'RTS_CONTROLS_BLOOM_PASS:',
                'RTS_CONTROLS_QUEUE_PASS:', 'RTS_CONTROLS_REPEAT_PASS:', 'RTS_CONTROLS_SAVE_PASS:',
                'RTS_CONTROLS_SMOKE_PASS:', 'RTS_CONTROLS_PROBE_PASS:'):
     if marker not in text:
