@@ -548,11 +548,19 @@ void QuantBot::build(int militaryValue) {
     // Brutal's economy step (docs/ai-scenario-matrix.md, "Difficulty separation"): it keeps an 8-12
     // worker opening floor and equal (not double) army capital per worker while it grows its fleet up
     // to its larger harvester limit. DuneCity custom games had it already (helpers included); vanilla
-    // custom games the house plays itself have it since 1.0.849.
+    // custom games the house plays itself have it since 1.0.849, while it faces no more enemy houses
+    // than its team has and is not outnumbered - against four AI Player Hard houses (All against
+    // Atreides) the economy-first opening lost 6 of 6.
     const bool brutalCityEconomy = citySimEnabled && gameMode == GameMode::Custom
         && difficulty == Difficulty::Brutal;
+    int ownTeamHouses = 0, enemyHouses = 0;
+    if (!brutalCityEconomy && difficulty == Difficulty::Brutal)
+        for (int i = 0; i < NUM_HOUSES; ++i)
+            if (const House* other = currentGame->getHouse(i); other && other->isAlive())
+                ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
-        && !supportMode && !isCampaignGameType(currentGame->gameType));
+        && !supportMode && !isCampaignGameType(currentGame->gameType)
+        && enemyHouses <= ownTeamHouses && !outnumberedByEstimate());
     const bool openingWorkerFloor = (citySimEnabled && gameMode == GameMode::Custom) || brutalEconomy;
     auto openingFleetIncomplete = [&]() {
         return openingWorkerFloor

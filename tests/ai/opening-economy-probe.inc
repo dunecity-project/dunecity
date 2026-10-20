@@ -615,7 +615,10 @@ void runOpeningEconomyProbe(Game& game) {
                 "Generation was bought before the income core existed");
             house->numItem[Unit_Harvester]=fieldWorkers;
             // Legacy campaign reconstruction shares the same gate.
+            // A campaign house's update has no custom map-size ceiling (configuredCustomHarvesterLimit):
+            // its limit is the spice budget, as the update would set it.
             bot->gameMode=QuantBot::GameMode::Campaign;game.gameType=GameType::Campaign;
+            bot->harvesterLimit=1300000/2000;
             require(powerBuild(100000,demand-windOutput,1300000)>0,
                 "Legacy campaign reconstruction never closes a raw power deficit");
             require(powerBuild(100000,demand,1300000)>0,
@@ -630,18 +633,22 @@ void runOpeningEconomyProbe(Game& game) {
             "custom and campaign, all difficulties");
     }
 
-    // Default must ignore the old cap in saved houses; explicit options win.
+    // Default must ignore the old engine cap in saved houses; explicit options win. In a custom game
+    // the difficulty's configured map-size limit is the AI's own ceiling (docs/ai-scenario-matrix.md,
+    // "Difficulty separation"); without one the remaining spice decides.
     house->maxHarvesters=60;
     game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=-1;
     bot->lastCalculatedSpice=1300000;bot->update();
-    require(house->getMaxHarvesters()==0 && bot->harvesterLimit>100,"Default retained map-size worker ceiling");
+    const int configuredWorkers=bot->configuredCustomHarvesterLimit();
+    const int defaultWorkers=configuredWorkers>0 ? std::min(configuredWorkers,650) : 650;
+    require(house->getMaxHarvesters()==0 && bot->harvesterLimit==defaultWorkers,"Default retained map-size worker ceiling");
     const int saved=house->numItem[Unit_Harvester];house->numItem[Unit_Harvester]=100;
     require(!house->isUnitLimitReached(Unit_Harvester),"Default still blocks the 101st worker");
     game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=100;bot->update();
     require(house->getMaxHarvesters()==100 && house->isUnitLimitReached(Unit_Harvester)
-        && bot->harvesterLimit==100,"Explicit100 cap ignored");
+        && bot->harvesterLimit==std::min(100,defaultWorkers),"Explicit100 cap ignored");
     game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=0;bot->update();
-    require(!house->isUnitLimitReached(Unit_Harvester) && bot->harvesterLimit>100,"Explicit unlimited froze AI production");
+    require(!house->isUnitLimitReached(Unit_Harvester) && bot->harvesterLimit==defaultWorkers,"Explicit unlimited froze AI production");
     bot->lastCalculatedSpice=1000;bot->update();
     require(bot->harvesterLimit<=1,"Unlimited engine cap removed finite-spice planning");
     house->numItem[Unit_Harvester]=saved;
@@ -750,7 +757,11 @@ void runOpeningEconomyProbe(Game& game) {
         // Restore the finite-spice planning the harvester-cap fixture above
         // deliberately starved, so refining decisions see a real field again.
         clearOrders();bot->lastCalculatedSpice=1300000;bot->update();
-        require(bot->harvesterLimit>10,"Fixture could not restore a funded worker plan");
+        require(bot->harvesterLimit>10 || bot->harvesterLimit==bot->configuredCustomHarvesterLimit(),
+            "Fixture could not restore a funded worker plan");
+        // The progression fixtures below model fleets of up to 15+ workers: lift an Easy/Medium
+        // configured custom ceiling (8/15 on this map) to the field's spice budget.
+        bot->harvesterLimit=std::max(bot->harvesterLimit,1300000/2000);
         // Expire unrelated structure-loss recovery bookkeeping from fixture setup.
         game.gameCycleCount+=MILLI2CYCLES(200000);
         const int fieldWorkers=house->numItem[Unit_Harvester];

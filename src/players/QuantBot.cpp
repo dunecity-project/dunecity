@@ -198,12 +198,13 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     // support controller follows its human partner.
     if (supportMode || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
         || isCampaignGameType(currentGame->gameType)) return 0;
-    const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
+    // Maps above 64x64 (the Large and Huge classes: Easy 8/15, Medium 15/25, Hard 40/40, Brutal
+    // 100/50). The Small and Medium class values (2-10 workers) are campaign-era fleet sizes that
+    // would starve every custom economy on a 64x64 map; there the spice budget alone decides, as before.
     const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
-    return mapsize <= 1024 ? settings.harvesterLimitCustomSmallMap
-        : mapsize <= 4096 ? settings.harvesterLimitCustomMediumMap
-        : mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap
-        : settings.harvesterLimitCustomHugeMap;
+    if (mapsize <= 4096) return 0;
+    const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
+    return mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
