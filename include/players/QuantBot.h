@@ -164,15 +164,6 @@ public:
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     int getCityPopulationLimit(int mapArea) const override;
-    /// Brutal's income bonus (docs/ai-scenario-matrix.md, "Difficulty separation"): a Custom
-    /// Brutal house that plays its own army (autonomousCustomArmy: no campaign, no support
-    /// controller) and has an enemy that is not all Brutal QuantBots is paid
-    /// kBrutalDeliveryBonusPercent on top of every refinery delivery. The only
-    /// resource advantage of any difficulty: Brutal's own rules (larger limit, earlier tech,
-    /// more turrets) left it level with Hard in 1v1 (+0.11 over 144 ladder games); 10% gave
-    /// +0.44, 15% +0.51, 25% +0.78 over 72.
-    static constexpr int kBrutalDeliveryBonusPercent = 15;
-    int getSpiceDeliveryBonusPercent() const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
 

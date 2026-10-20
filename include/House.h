@@ -246,10 +246,6 @@ public:
     FixPoint getEarnedCreditRoom() const;
     void enforceCreditCapacity();
     void addCredits(FixPoint newCredits, bool wasRefined = false);
-    /// A refinery's payment for \a cargo unloaded this tick: the cargo times the lobby's spice
-    /// income multiplier (refined income), plus the delivery bonus a controller of this house
-    /// takes (Player::getSpiceDeliveryBonusPercent: Custom Brutal QuantBot) as unrefined credits.
-    void addRefinedSpice(FixPoint cargo);
     void addCityCredits(FixPoint amount);
     void addCityTaxReceipts(FixPoint grossAmount);
     /// How a withdrawal was funded. Starting cash is storage-exempt, so a

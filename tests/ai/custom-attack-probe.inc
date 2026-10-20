@@ -64,19 +64,14 @@ void runCustomAttackProbe(Game& game) {
         reset(QuantBot::Difficulty::Medium);
         require(bot->autonomousCustomArmy(),"Custom Medium is not an autonomous custom army");
         // The difficulty steps (docs/ai-scenario-matrix.md, "Difficulty separation"): the production
-        // strategy is Hard's and Brutal's, the delivery bonus Brutal's alone.
-        require(!bot->playsStrategy() && bot->getSpiceDeliveryBonusPercent()==0,
-            "Custom Medium plays the Hard/Brutal strategy or takes Brutal's income bonus");
+        // strategy is Hard's and Brutal's alone.
+        require(!bot->playsStrategy(),"Custom Medium plays the Hard/Brutal strategy");
         reset(QuantBot::Difficulty::Hard);
-        require(bot->playsStrategy() && bot->getSpiceDeliveryBonusPercent()==0,
-            "Custom Hard lost its strategy or took Brutal's income bonus");
+        require(bot->playsStrategy(),"Custom Hard lost its strategy");
         reset(QuantBot::Difficulty::Brutal);
-        require(bot->playsStrategy()
-            && bot->getSpiceDeliveryBonusPercent()==QuantBot::kBrutalDeliveryBonusPercent,
-            "Custom Brutal lost its strategy or its income bonus");
+        require(bot->playsStrategy(),"Custom Brutal lost its strategy");
         reset(QuantBot::Difficulty::Easy);
-        require(!bot->playsStrategy() && bot->getSpiceDeliveryBonusPercent()==0,
-            "Custom Easy plays a strategy or takes Brutal's income bonus");
+        require(!bot->playsStrategy(),"Custom Easy plays a strategy");
         for(auto difficulty:{QuantBot::Difficulty::Easy}) {
             reset(difficulty);bot->launchGroundHunt();
             auto* reserve=army.back();

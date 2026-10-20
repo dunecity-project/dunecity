@@ -193,25 +193,6 @@ bool QuantBot::overridesMilitaryValueCap() const {
     return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
 }
 
-int QuantBot::getSpiceDeliveryBonusPercent() const {
-    // Custom games only, and never a support controller sharing a human's house.
-    if (difficulty != Difficulty::Brutal || !autonomousCustomArmy()) return 0;
-    // The bonus is Brutal's step above the other difficulties: it applies while an enemy house has
-    // a controller that is not a Brutal QuantBot (a human, the AI Player, a lower QuantBot; the
-    // local observer is detached and owns no house). Among Brutal houses only it would just inflate
-    // every army alike and stretch the game (quantbot_ffa_army_deploys: nobody eliminated by
-    // minute 30 with it on).
-    for (int i = 0; i < NUM_HOUSES; ++i) {
-        const House* other = currentGame->getHouse(i);
-        if (!other || other->getTeamID() == getHouse()->getTeamID()) continue;
-        for (const auto& player : other->getPlayerList()) {
-            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
-            if (!bot || bot->difficulty != Difficulty::Brutal || bot->supportMode) return kBrutalDeliveryBonusPercent;
-        }
-    }
-    return 0;
-}
-
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
     if (overridesMilitaryValueCap())
         return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,

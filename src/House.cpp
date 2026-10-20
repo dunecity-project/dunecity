@@ -478,18 +478,6 @@ void House::addCredits(FixPoint newCredits, bool wasRefined) {
     }
 }
 
-void House::addRefinedSpice(FixPoint cargo) {
-    // An integer multiply of the fixed-point amount is exact, so a load unloaded over many
-    // ticks - or interrupted part way - still pays exactly the delivered cargo times the factor.
-    const FixPoint delivered = cargo * static_cast<int>(spiceIncomeMultiplier);
-    addCredits(delivered, true);
-    // A controller's bonus is income but not refined spice: the harvest statistics and
-    // anything reading them keep counting what the harvesters brought in.
-    int bonusPercent = 0;
-    for (const auto& player : players) bonusPercent = std::max(bonusPercent, player->getSpiceDeliveryBonusPercent());
-    if (bonusPercent > 0) addCredits(delivered * bonusPercent / 100);
-}
-
 
 
 
