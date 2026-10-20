@@ -9,6 +9,7 @@
 // ends the match as closing the window does. The frame costs come from the AI decision log's
 // performance windows (DUNECITY_AI_TELEMETRY=1); this file only prints the calibration loop.
 #include <Game.h>
+#include "../ai/probe-digest.inc"   // game-perf.inc's main-loop mode digests through it
 #include "game-perf.inc"
 #include <Menu/MainMenu.h>
 #include <Menu/RandomSkirmishMenu.h>

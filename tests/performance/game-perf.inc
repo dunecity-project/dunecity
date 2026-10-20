@@ -122,28 +122,69 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
     // Stefan plays at 2 ms, where the engine runs up to 10 cycles per displayed frame.
     settings.gameOptions.gameSpeed = std::getenv("BALANCE_PERF_GAME_SPEED") ? std::atoi(std::getenv("BALANCE_PERF_GAME_SPEED")) : 2;
     stopAt = game.getGameCycleCount() + cycles;
+    const Uint32 firstCycle = game.getGameCycleCount();
     // The engine has no cycle limit; a timer ends the loop (bQuitGame is only read by the loop).
     const SDL_TimerID timer = SDL_AddTimer(20, [](Uint32 interval, void*) -> Uint32 {
         if (currentGame != nullptr && currentGame->getGameCycleCount() >= stopAt) currentGame->bQuitGame = true;
         return interval;
     }, nullptr);
+    // The same PROBE_DIGEST lines as the stepped loop, at the same cycles, from the cycles the
+    // interactive loop actually ran (Game::beforeCycleHook): frame pacing may change how many
+    // cycles a frame runs, never what they do. A single-player game also adapts its path budget
+    // to the measured frame rate (Game::applySinglePlayerBudgetAdjustment), which the stepped
+    // loop never does; digests stop at the first such change, which is reported.
+    static size_t startBudget = 0;
+    static bool budgetChanged = false;
+    startBudget = game.negotiatedBudget;   // test-only: -fno-access-control
+    budgetChanged = false;
+    game.beforeCycleHook = [](Game& g) {
+        if (!budgetChanged && g.negotiatedBudget != startBudget) {
+            budgetChanged = true;
+            std::printf("GAME_PERF_BUDGET_CHANGED: cycle=%u budget=%zu->%zu\n", g.getGameCycleCount(),
+                        startBudget, static_cast<size_t>(g.negotiatedBudget));
+        }
+        if (!budgetChanged && g.getGameCycleCount() < stopAt) ProbeDigest::periodic(g);
+    };
+    const auto histogramBefore = game.frameTiming.frameMsHistogram;
+    const uint64_t limitedBefore = game.frameTiming.catchUpLimitedFrames;
     const double calibrationBefore = calibrationMs();
     const auto start = Clock::now();
     const double cpuStart = threadCpuMs();
     game.runMainLoop();
     const double wallMs = msSince(start), cpuMs = threadCpuMs() - cpuStart;
     SDL_RemoveTimer(timer);
+    game.beforeCycleHook = nullptr;
     const auto& t = game.frameTiming;
     const double frames = std::max(1, t.frameCount);
+    // Rendered frame-time percentiles (1 ms buckets: the bucket's upper edge) and frames over 33 ms.
+    std::vector<uint32_t> histogram(t.frameMsHistogram.size());
+    uint64_t histogramFrames = 0, over33 = 0;
+    for (size_t ms = 0; ms < histogram.size(); ++ms) {
+        histogram[ms] = t.frameMsHistogram[ms] - histogramBefore[ms];
+        histogramFrames += histogram[ms];
+        if (ms >= 33) over33 += histogram[ms];
+    }
+    const auto frameMsAt = [&](double p) {
+        const uint64_t rank = static_cast<uint64_t>(p * static_cast<double>(histogramFrames));
+        uint64_t seen = 0;
+        for (size_t ms = 0; ms < histogram.size(); ++ms) if ((seen += histogram[ms]) > rank) return ms + 1.0;
+        return static_cast<double>(histogram.size());
+    };
+    const Uint32 ranCycles = game.getGameCycleCount() - firstCycle;
     std::printf("GAME_PERF_MAINLOOP: {\"cycles\":%d,\"frames\":%d,\"wall_ms\":%.0f,\"main_thread_cpu_ms\":%.0f,"
                 "\"fps\":%.2f,\"cycles_per_frame\":%.2f,\"game_speed_ms\":%d,\"frame_ms_mean\":%.2f,\"frame_ms_max\":%.1f,"
                 "\"ai_ms_per_frame\":%.2f,\"units_ms_per_frame\":%.2f,\"structures_ms_per_frame\":%.2f,"
                 "\"path_ms_per_frame\":%.2f,\"render_ms_per_frame\":%.2f,\"render_ms_max\":%.1f,\"calibration_ms\":%.2f,"
-                "\"units_end\":%zu}\n",
+                "\"units_end\":%zu,\"first_cycle\":%u,\"ran_cycles\":%u,\"cycles_per_s\":%.1f,\"histogram_frames\":%llu,"
+                "\"frame_p50\":%.0f,\"frame_p95\":%.0f,\"frame_p99\":%.0f,\"frames_over_33ms\":%llu,"
+                "\"catchup_limited_frames\":%llu}\n",
                 t.totalGameCycles, t.frameCount, wallMs, cpuMs, t.frameCount * 1000.0 / std::max(1.0, t.totalMs),
                 t.totalGameCycles / frames, game.getGameSpeed(), t.totalMs / frames, t.maxTotalMs, t.aiMs / frames,
                 t.unitsMs / frames, t.structuresMs / frames, t.pathfindingMs / frames, t.renderingMs / frames,
-                t.maxRenderingMs, calibrationBefore, unitList.size());
+                t.maxRenderingMs, calibrationBefore, unitList.size(), firstCycle, ranCycles,
+                ranCycles * 1000.0 / std::max(1.0, wallMs), static_cast<unsigned long long>(histogramFrames),
+                frameMsAt(0.50), frameMsAt(0.95), frameMsAt(0.99), static_cast<unsigned long long>(over33),
+                static_cast<unsigned long long>(t.catchUpLimitedFrames - limitedBefore));
     std::fflush(stdout);
 }
 
@@ -207,11 +248,15 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     renderMean = render.empty() ? 0.0 : renderMean / render.size();
     // A displayed frame = frameCycles consecutive cycles of simulation (+ the mean render time
     // when rendering was measured), as the game's main loop runs them at 2 ms game speed.
+    // frameCpu: the same frames from the cycles' thread CPU time, which a busy machine does not
+    // inflate (perf_regression budgets it).
+    std::vector<double> frameCpu;
     int over33 = 0, over50 = 0, over100 = 0;
     for (size_t i = 0; i + frameCycles <= samples.size(); i += frameCycles) {
-        double frame = renderMean;
-        for (int k = 0; k < frameCycles; ++k) frame += samples[i + k].sim;
+        double frame = renderMean, cpuFrame = renderMean;
+        for (int k = 0; k < frameCycles; ++k) { frame += samples[i + k].sim; cpuFrame += samples[i + k].cpu; }
         frames.push_back(frame);
+        frameCpu.push_back(cpuFrame);
         over33 += frame > 33.3; over50 += frame > 50.0; over100 += frame > 100.0;
     }
     double frameMean = 0;
@@ -266,12 +311,12 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     std::printf("GAME_PERF_RESULT: {\"first_cycle\":%u,\"cycles\":%zu,\"loop_ms\":%.0f,\"units_end\":%d,"
                 "\"frame_cycles\":%d,\"sim\":%s,\"cpu\":%s,\"cpu_total_ms\":%.0f,\"calibration_ms\":%.3f,"
                 "\"ai\":%s,\"city\":%s,\"units\":%s,\"structures\":%s,\"path\":%s,"
-                "\"render\":%s,\"frame\":%s,\"frames_over_33ms\":%d,\"frames_over_50ms\":%d,\"frames_over_100ms\":%d,"
+                "\"render\":%s,\"frame\":%s,\"frame_cpu\":%s,\"frames_over_33ms\":%d,\"frames_over_50ms\":%d,\"frames_over_100ms\":%d,"
                 "\"frames\":%zu,\"est_fps\":%.2f,\"house\":{%s},\"ai_scopes_ms\":{%s},\"ai_scope_totals_ms\":{%s}}\n",
                 first, samples.size(), loopMs, unitsEnd, frameCycles, stats(sim).c_str(), stats(cpu).c_str(), cpuTotal,
                 calibration, stats(ai).c_str(),
                 stats(city).c_str(), stats(units).c_str(), stats(structures).c_str(), stats(path).c_str(),
-                stats(render).c_str(), stats(frames).c_str(), over33, over50, over100, frames.size(),
+                stats(render).c_str(), stats(frames).c_str(), stats(frameCpu).c_str(), over33, over50, over100, frames.size(),
                 frameMean > 0 ? 1000.0 / frameMean : 0.0, houseJson.c_str(), scopeJson.c_str(), totalJson.c_str());
     std::fflush(stdout);
     if (csvPath != nullptr && csvPath[0] != '\0') {

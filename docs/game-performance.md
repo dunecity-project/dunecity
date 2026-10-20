@@ -202,9 +202,74 @@ Stepped probe on his save, mini (base M4, other agents' load 5-7), 7,500 cycles 
 | 1.0.849 | 2.78 / 32.7 / 98.6 | 1.70 / 98.2 | 0.33 / 18.1 / 24.7 | 27.8 / 87.9 | 206 / 62 | 35.9 |
 | perf/fps-8house | 1.42 / 12.4 / 57.4 | 0.69 / 56.9 | 0.13 / 2.8 / 16.2 | 14.2 / 35.7 | 9 / 6 | 70.2 |
 
-Not done on this branch: frame pacing (a per-frame simulation time budget so a frame stops
-catching up before ~16 ms), rendered and Air (AC / Low Power Mode) measurements (his game was
-open the whole session), 1.0.833/1.0.847 comparison (the 9868 save does not load there; no
-rebuilt tags), an 8-house case in `perf_regression`, and the remaining ~57 ms single house
-update: it is inside `checkAllUnits`' unit pass after the per-unit loop (per-iteration scopes
-peak at 6 ms; `orderBundleWalkers`/bundling is the next suspect).
+First pass's open items, closed by the second pass below except the rendered Air runs and the
+1.0.833/1.0.847 comparison (the 9868 save does not load there).
+
+### Second pass (2026-10-21, agent FpsFix2): the 57 ms spike, frame pacing, perf_regression
+
+**The 57 ms house update** was `manageHarvesterSafety`, not bundling. Every harvester of a house
+is checked on the same pass (`nextCheck` = now + 2 s for all of them), and each threatened one
+swept every spice tile (~72,000) in map order, route-testing (`escapeCorridor`, a line walk of
+up to 384 steps) every candidate that beat the running best. From a far map corner that is
+10,000-12,000 failing corridors per harvester before the nearby winner: one pass of house 3
+had 18 sweeps, 201,038 corridor tests, 29.6 ms of 33 ms. Exact fix:
+`TacticalSafetyPolicy::lowestSafeCandidate` tests corridors in ascending (score, position)
+order (score bands that double) until the first safe one, which is exactly the candidate the
+sequential sweep kept (first safe one of the lowest score; unit test against the old loop on
+3,000 random cases); the sweep's spice list also records plain tiles (no mountain, no ground
+object), where `canPass()` is true for every unit. One corridor test per sweep instead of
+~11,000; `checkAllUnits` worst pass 56 -> 11 ms. The decision log's `rejected_routes` now counts
+only failed tests of candidates at least as good as the pick (telemetry only).
+
+**Frame pacing** (`include/FramePacing.h`, `Game::runMainLoop`): a single-player frame stops
+running due cycles once they have used 16 ms (`FramePacing::kCatchUpBudgetMs`; the first cycle
+always runs); the owed time carries to the next frame under the existing 24 ms cap, so a game
+that cannot keep up runs slower than its set speed instead of drawing at 20 fps. Network games:
+no-op (the ten-cycle cap alone, so a paced peer never holds lockstep back). Only cycles per
+frame change; the guardrail still counts only ten-cycle frames. Telemetry `frame.catchup_limited`;
+`FrameTiming::frameMsHistogram` (whole-match 1 ms buckets) for frame percentiles.
+`Game::beforeCycleHook` (test probes only) lets game-perf digest the interactive loop's cycles.
+Note that a single-player game's path budget also follows the measured frame rate
+(`applySinglePlayerBudgetAdjustment`, unchanged), so interactive single-player cycles were
+never independent of wall time; the stepped probe never adapts.
+
+**perf_regression** now also continues the save itself for 2 game minutes (`--eight-house 2`,
+`--scenario eight-house`): `tests/performance/data/eight-house-384` holds the save (gzip,
+419 KB), both Workshop manifests and the three files this tree lacks; the other 849 mod files
+are this tree's dunecity skins and `config/` ini files, found by SHA-256 (a changed skin fails
+by name). Budgets, multiples of the calibration loop: p99 simulation CPU per cycle 3.0, p99
+modelled 10-cycle frame (CPU) 9.0; then the same minutes through the headless main loop at 2 ms
+with pacing: its 750-cycle `PROBE_DIGEST`s must equal the stepped run's (up to any frame-rate
+path-budget change, which is reported), p99 frame wall time <= 8.0. Mini:
+
+| | cpu p99 | frame-CPU p99 | main-loop frame p99 | result |
+|---|---|---|---|---|
+| 1.0.849 (4018fe36) | 5.4-6.3 | 13.3-16.8 | 18.7 | fails all three |
+| this branch | 1.3-2.2 | 3.7-6.2 | 5.8 (10 digests equal) | passes |
+
+Measurements, `fpsstillfucked.dls` from cycle 73,528, 7,500 cycles, game speed 2 ms. "Main
+loop" is `Game::runMainLoop` headless (dummy video driver, software renderer, ~5-7 ms per
+frame), not a 1440x900 ScaleHD window. 1.0.849 main-loop runs use the 1.0.849 source plus the
+frame histogram and digest hook only (`/private/tmp/dunecity-fps-849-base`). Digests: 21 over
+15,000 cycles of the stepped probe equal 1.0.849's; 10 of the main loop with pacing equal the
+stepped run's on the mini and on the Air.
+
+| | host / power | sim ms/cycle mean / p99 / max | 10-cycle frame p50 / p95 / p99 | frames > 33 ms | model fps |
+|---|---|---|---|---|---|
+| 1.0.849 | mini (load 5-7) | 2.78 / 32.7 / 98.6 | 23.8 / 54.1 / 87.9 | 27.5 % | 35.9 |
+| this branch | mini | 1.34 / 11.6 / 24.3 | 12.2 / 24.9 / 33.3 | 0.9 % | 74.9 |
+| 1.0.849 | Air M5, battery, Low Power Mode | 4.36 / 54.2 / 134.9 | 37.8 / 89.7 / 144.1 | 58.4 % | 22.9 |
+| this branch | Air, battery, Low Power Mode | 1.89 / 17.3 / 41.6 | 16.9 / 36.8 / 49.8 | 7.3 % | 52.9 |
+
+| main loop, headless | host / power | fps | frame p50 / p95 / p99 ms | frames > 33 ms | cycles/s (500 = set speed) | pacing-limited frames |
+|---|---|---|---|---|---|---|
+| 1.0.849 | mini | 32.1 | 27 / 61 / 97 | 34.5 % | 310 | - |
+| this branch | mini | 57.6 | 17 / 30 / 35 | 1.5 % | 470 | 125 of 928 |
+| 1.0.849 | Air, battery, LPM | 18.6 | 47 / 116 / 172 | 77.0 % | 183 | - |
+| this branch | Air, battery, LPM | 42.3 | 23 / 37 / 48 | 7.6 % | 354 | 433 of 926 |
+
+Not measured: a rendered 1440x900 ScaleHD window (mini or Air) and the Air on AC (it stayed on
+battery in Low Power Mode; its power settings were not touched). Remaining spikes: the 100-cycle
+build pass (`ai.build.evaluate`, worst 20-29 ms: heavy-factory `findPlaceLocation` falling back to
+whole-map passes, `factoryClearance`'s O(map) clearance per danger refresh) and the city growth
+phase (worst 16-18 ms).

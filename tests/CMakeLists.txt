@@ -35,6 +35,7 @@ target_sources(dunelegacy_tests
         BlobWavePolicyTestCase.cpp
         ForceConcentrationPolicyTestCase.cpp
         FormationPlannerTestCase.cpp
+        FramePacingTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
@@ -912,11 +913,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of
         # a calibration loop timed in the same process. Then 30 s of a game started the way a
         # player starts it (main menu -> Random Skirmish -> Start, the app's whole per-frame work);
-        # fails when per-frame time outside simulation and rendering exceeds its budget.
-        # docs/game-performance.md.
+        # fails when per-frame time outside simulation and rendering exceeds its budget. Then 2
+        # game minutes of Stefan's 8-house 384x384 save (1.0.849 fpsstillfucked.dls, rebuilt from
+        # tests/performance/data/eight-house-384); fails when the p99 simulation CPU per cycle or
+        # the p99 modelled 10-cycle frame exceeds its budget (1.0.849: 6.3 and 16.8 x calibration,
+        # budgets 3 and 9). docs/game-performance.md.
         add_test(NAME perf_regression COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/performance/game-perf.py --scenario stefan-map --minutes 6
-            --path-workers 1 --menu-launch 30 --check --label perf_regression --build-dir ${CMAKE_BINARY_DIR})
+            --path-workers 1 --menu-launch 30 --eight-house 2 --check --label perf_regression
+            --build-dir ${CMAKE_BINARY_DIR})
         set_tests_properties(perf_regression PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # MANDATORY with quantbot_all_against_atreides (AGENTS.md, CLAUDE.md): the smoke tier of
         # the AI scenario matrix (docs/ai-scenario-matrix.md) - one fast game per category: a

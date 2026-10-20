@@ -1,3 +1,20 @@
+## 2026-10-21 — 8-house FPS, second pass: harvester-safety spike, frame pacing, 8-house perf_regression (branch `perf/fps-8house`, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
+
+Agent FpsFix2. Details and tables: `docs/game-performance.md`, "Second pass". Evidence
+`~/Documents/projects/dunecity-results/fps-8house` (results.jsonl, digest15k.jsonl, regression8.jsonl, air-results.jsonl).
+
+- **57 ms spike:** `manageHarvesterSafety` route-tested ~11,000 failing corridors per threatened harvester
+  (all of a house's harvesters are checked on the same pass). Now `TacticalSafetyPolicy::lowestSafeCandidate`
+  (same pick, unit-tested against the old loop) + plain-tile flag: worst `checkAllUnits` 56 -> 11 ms.
+  21 digests over 15,000 cycles equal 1.0.849.
+- **Frame pacing** (`include/FramePacing.h`): single-player frames stop catching up after 16 ms of cycles;
+  network games unchanged. Headless main loop on the save: mini 32 -> 58 fps (p99 97 -> 35 ms), Air on battery
+  in Low Power Mode 18.6 -> 42.3 fps (p99 172 -> 48 ms); 10 main-loop digests equal the stepped run.
+- **perf_regression** also runs the save (fixture `tests/performance/data/eight-house-384`, 484 KB): cpu p99,
+  frame-CPU p99 and paced main-loop frame p99 budgets; 1.0.849 fails all three.
+- **Not done:** rendered 1440x900 window runs (mini or Air), Air on AC; remaining build-pass (20-29 ms) and
+  city-growth (16-18 ms) spikes.
+
 ## 2026-10-21 — 8-house 384x384 FPS: map-area work removed from AI, city sim and object removal (branch `perf/fps-8house` from 4018fe36 / 1.0.849, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
 
 Agent FpsFix. Stefan's `fpsstillfucked.dls` (4P - 384x384 - new beginning, eight QuantBot Hard, ~810

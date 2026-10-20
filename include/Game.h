@@ -288,6 +288,11 @@ public:
     */
     void runMainLoop();
 
+    /// Test probes only (tests/performance/game-perf.inc): runMainLoop() calls this before
+    /// each game cycle it runs, untimed, so a probe can digest the interactive loop's cycles
+    /// at the same points as its stepped loop. Never set by the game.
+    void (*beforeCycleHook)(Game&) = nullptr;
+
     inline void quitGame() { bQuitGame = true;};
 
     /**
@@ -957,6 +962,10 @@ public:
         int gameCyclesThisFrame = 0;
         int totalGameCycles = 0;
         int frameCount = 0;
+        // Whole-match rendered frame times in 1 ms buckets (last bucket: 199 ms and over) and
+        // the frames whose catch-up the frame pacing stopped (FramePacing.h). Never reset.
+        std::array<uint32_t, 200> frameMsHistogram{};
+        uint64_t catchUpLimitedFrames = 0;
         
         // Pathfinding detailed stats
         int pathsProcessedThisCycle = 0;
