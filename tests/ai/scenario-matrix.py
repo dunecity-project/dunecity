@@ -18,10 +18,10 @@ Every game is a real match played headless to its end by the balance probe (run-
             campaign's default enemy AI (QuantBot Easy, as the campaign menu starts it; one cell with
             the "scenario settings" CampaignAIPlayer). Hard must win; Easy and Medium are reported.
   ladder    QuantBot against QuantBot 1v1, every adjacent pair (Brutal v Hard, Hard v Medium, Medium v
-            Easy) plus Brutal v Medium and Hard v Easy, on a vanilla and a DuneCity Random Skirmish map,
-            Habbanya-Penny and a Construction Yard only start. Full tier: every seed twice, the houses
-            swapped (the same starts), so neither the house nor the start decides the ladder: the
-            stronger difficulty must win.
+            Easy) plus Brutal v Medium and Hard v Easy. Decided on long games: Random Skirmish 128x128
+            and 160x160, vanilla and DuneCity, medium bases, 75/90 minutes; the short maps (96x96,
+            Habbanya-Penny, a CY start) are reported. Full tier: every seed twice, the houses swapped
+            (the same starts), so neither the house nor the start decides: the stronger must win.
   mp        The most-played bundled multiplayer maps (dunelegacy.com usage statistics, 2026-10-18)
             1v1, 2v2 and 3v3: QuantBot Hard teams against QuantBot Hard teams, and against AI
             Player Hard teams (which they must beat).
@@ -74,8 +74,8 @@ HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'a
                 'sortie_minutes', 'place', 'score', 'drawn', 'start')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
-# Full-tier seeds per ladder cell. Each seed is played twice with the houses swapped, so 18 seeds
-# on the four maps give 144 games per pair (--ladder-seeds 9: 72).
+# Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
+# swapped, so 18 seeds on the four long maps give 144 games per pair (and 72 on the short maps).
 LADDER_SEEDS = 18
 lock = threading.Lock()
 
@@ -169,17 +169,23 @@ def matrix(ladder_seeds=LADDER_SEEDS):
     cells.append(dict(category='campaign', name='partner-hard-v-campaign-ai', kind='campaign', mod='vanilla',
                       partner='hard', enemy_ai='campaign', minutes=80, full=1, smoke=0, first_only=True))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
-    # Hard v Easy; three Random Skirmish/bundled maps and a Construction Yard only start; in the full tier
-    # both houses of every seed (each side keeps its start); --ladder-seeds plays more seeds per cell.
-    ladder_maps = (('rs-vanilla', 'vanilla', dict(skirmish=skirmish_spec(96, 'small', 2))),
-                   ('rs-dunecity', 'dunecity', dict(skirmish=skirmish_spec(96, 'small', 2))),
-                   ('habbanya-penny', 'vanilla', dict(path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'))),
-                   ('cy', 'vanilla', dict(skirmish=skirmish_spec(96, 'cy', 0))))
+    # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
+    # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
+    # Skirmish 128x128 and 160x160, vanilla and DuneCity, medium bases and no army, 75/90 minutes - long
+    # enough for the difficulty's harvester and military limits to matter. Short maps (96x96 small bases,
+    # Habbanya-Penny, a CY start; mostly decided in 15-35 minutes) are reported with half the seeds.
+    long_maps = tuple((f'long-rs{size}-{mod}', mod, dict(skirmish=skirmish_spec(size, 'medium', 0), minutes=minutes))
+                      for size, minutes in ((128, 75), (160, 90)) for mod in ('vanilla', 'dunecity'))
+    short_maps = (('rs-vanilla', 'vanilla', dict(skirmish=skirmish_spec(96, 'small', 2))),
+                  ('rs-dunecity', 'dunecity', dict(skirmish=skirmish_spec(96, 'small', 2))),
+                  ('habbanya-penny', 'vanilla', dict(path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'))),
+                  ('cy', 'vanilla', dict(skirmish=skirmish_spec(96, 'cy', 0))))
     for strong, weak in (('QB', 'QH'), ('QH', 'QM'), ('QM', 'QE'), ('QB', 'QM'), ('QH', 'QE')):
-        for map_name, mod, where in ladder_maps:
-            smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
-            cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak), expect=('wins', 1),
-                               smoke=smoke, full=ladder_seeds, both_sides=True, **where))
+        for maps, seeds in ((long_maps, ladder_seeds), (short_maps, ladder_seeds // 2)):
+            for map_name, mod, where in maps:
+                smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
+                cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak),
+                                   expect=('wins', 1), smoke=smoke, full=seeds, both_sides=True, **where))
     # 6. Most-played bundled multiplayer maps (dunelegacy.com/usage.html, all time, 2026-10-18).
     for name, players in (('2P - 128x128 - 1v1 - Habbanya-Penny', 1), ('2P - 128x128 - 1v1 - Tuono-Orac', 1),
                           ('2P - 128x128 - 1v1 - Sihaya-Chvrches', 1), ('4P - 128x64 - 2v2 - Sihaya-Toto', 2),
@@ -653,9 +659,11 @@ def class_table(rows, houses):
 
 def ladder_table(rows, houses, problems):
     print('Ladder (stronger side\'s placement score; the order holds when the interval is above 0). The '
-          'interval resamples seeds: the two games of a seed (houses swapped) count as one mean.\n')
-    print('| Pair | Map | Games | Strong W-L-T | Strong score [95% CI] | Order | Strong wins as Harkonnen / Atreides |')
-    print('|---|---|---|---|---|---|---|')
+          'interval resamples seeds: the two games of a seed (houses swapped) count as one mean. The long '
+          'maps (`long-*`: 128x128 and 160x160, 75/90 minutes) decide; the short maps are reported only.\n')
+    print('| Pair | Map | Games | Strong W-L-T | Strong score [95% CI] | Order | Mean / max minutes '
+          '| Strong wins as Harkonnen / Atreides |')
+    print('|---|---|---|---|---|---|---|---|')
     by_pair = defaultdict(list)
     for g in rows:
         if g['error']:
@@ -663,7 +671,7 @@ def ladder_table(rows, houses, problems):
         name = g['cell'].split('/')[0]
         strong, _, weak, map_name = name.split('-', 3)
         by_pair[(f'{strong} v {weak}', map_name)].append(g)
-        by_pair[(f'{strong} v {weak}', 'all maps')].append(g)
+        by_pair[(f'{strong} v {weak}', 'long maps' if map_name.startswith('long-') else 'short maps')].append(g)
     for (pair, map_name), gs in sorted(by_pair.items()):
         strong = pair.split()[0]
         per_seed = defaultdict(list)
@@ -681,10 +689,13 @@ def ladder_table(rows, houses, problems):
         t = sum(1 for g in gs if g['winner_team'] == '0')
         low, _ = match_score.bootstrap(scores, 1) if scores else (0, 0)
         holds = 'holds' if low > 0 else ('INVERTED' if statistics.mean(scores) < 0 else 'not shown') if scores else '-'
-        if map_name == 'all maps' and holds != 'holds':
-            problems.append(f'ladder {pair}: order {holds} (strong score {fmt_ci(scores)})')
+        if map_name == 'long maps' and holds != 'holds':
+            problems.append(f'ladder {pair}: order {holds} on the long maps (strong score {fmt_ci(scores)})')
+        minutes = [float(g['minutes']) for g in gs if g['minutes']]
+        length = f'{statistics.mean(minutes):.1f} / {max(minutes):.0f}' if minutes else '-'
         sides = ' / '.join(f'{as_house[h][0]}/{as_house[h][1]}' for h in ('harkonnen', 'atreides'))
-        print(f'| {pair} | {map_name} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} | {sides} |')
+        print(f'| {pair} | {map_name} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} '
+              f'| {length} | {sides} |')
     print()
 
 
@@ -755,7 +766,8 @@ parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only th
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
-                    help='Full tier: seeds per ladder cell (4 maps, 2 sides alternating; 18 = 72 games per pair)')
+                    help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
+                         'pair; the short maps get half)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')
