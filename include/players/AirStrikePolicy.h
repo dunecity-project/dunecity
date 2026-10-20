@@ -93,6 +93,27 @@ inline bool holdsInterception(int heldRank, int bestRank) {
 }
 inline int safetyRange(int weaponRange) { return weaponRange + 5; }
 
+// Row half-widths of the combat-distance disc of radius `range`: element |dy|
+// is the largest |dx| with blockDistance((0,0),(dx,dy)) <= range (never below
+// zero, since blockDistance((0,0),(0,dy)) == dy). blockDistance depends only
+// on |dx| and |dy|, is symmetric in them, and is nondecreasing in each: both
+// branches add a nonnegative fixed-point multiple of one difference to the
+// other, and crossing from diffX == diffY to diffX == diffY + 1 adds exactly
+// one. So every row of the disc is the single run [-span, span] and the spans
+// never widen as |dy| grows, which lets one shrinking pointer evaluate the
+// very predicate the per-tile scan used O(range) times instead of (2r+1)^2.
+inline std::vector<int> coverageSpans(int range) {
+    std::vector<int> spans;
+    if (range<0) return spans;
+    spans.resize(static_cast<size_t>(range)+1);
+    int dx=range;
+    for (int dy=0;dy<=range;++dy) {
+        while (dx>=0 && !(blockDistance(Coord(0,0),Coord(dx,dy))<=range)) --dx;
+        spans[dy]=dx;
+    }
+    return spans;
+}
+
 // One shared coverage map per tactical pass; no per-target scan of all weapons.
 // Use the combat distance metric, including diagonal range, plus manoeuvre room.
 //
@@ -107,18 +128,14 @@ public:
         : width_(width), height_(height), blocked_(width*height,false),
           launchers_(static_cast<size_t>(width)*height,0) {}
     void add(Coord centre, int range) {
-        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
-            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
-                if (blockDistance(centre,Coord(x,y))<=range) blocked_[y*width_+x]=true;
+        forEachCovered(centre,range,[this](size_t index) { blocked_[index]=true; });
     }
     /// Mobile rocket cover. Counted, not latched, so overlaps raise the price.
     void addMobileLauncher(Coord centre, int range) {
-        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
-            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
-                if (blockDistance(centre,Coord(x,y))<=range) {
-                    auto& count=launchers_[static_cast<size_t>(y)*width_+x];
-                    if (count<std::numeric_limits<int>::max()) ++count;
-                }
+        forEachCovered(centre,range,[this](size_t index) {
+            auto& count=launchers_[index];
+            if (count<std::numeric_limits<int>::max()) ++count;
+        });
     }
     /// Strict layer: every observed anti-air weapon at its real reach against
     /// aircraft, latched rather than counted. Built only for the difficulties
@@ -131,10 +148,7 @@ public:
     bool strictEnabled() const { return strictEnabled_; }
     void addStrict(Coord centre, int range) {
         if(!strictEnabled_) return;
-        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
-            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
-                if (blockDistance(centre,Coord(x,y))<=range)
-                    strict_[static_cast<size_t>(y)*width_+x]=true;
+        forEachCovered(centre,range,[this](size_t index) { strict_[index]=true; });
     }
     bool strictSafe(Coord point) const {
         if(!strictEnabled_) return false;
@@ -193,22 +207,52 @@ public:
     }
     Coord escape(Coord from) const {
         // Closest safe straight exit; deterministic and used only during danger.
+        // The answer is the minimum Manhattan distance below width+height,
+        // ties going to the first point in raster order (y, then x). Walking
+        // the diamonds outward and each diamond row by row, left point before
+        // right, visits candidates in exactly that order, so the first pass
+        // is the raster scan's choice without testing the rest of the map.
         Coord best; best.invalidate();
-        int distance=width_+height_;
-        for(int y=0;y<height_;++y) for(int x=0;x<width_;++x) {
-            const Coord point(x,y);
-            const int d=std::abs(x-from.x)+std::abs(y-from.y);
-            if(d<distance && safe(point) && clearWithdrawal(from,point)) {
-                best=point; distance=d;
+        if (width_<=0 || height_<=0) return best;
+        const int nearX=std::max({0,-from.x,from.x-(width_-1)});
+        const int nearY=std::max({0,-from.y,from.y-(height_-1)});
+        const int farX=std::max(std::abs(from.x),std::abs(from.x-(width_-1)));
+        const int farY=std::max(std::abs(from.y),std::abs(from.y-(height_-1)));
+        const int last=std::min(farX+farY,width_+height_-1);
+        for (int d=nearX+nearY;d<=last;++d) {
+            for (int y=std::max(0,from.y-d);y<=std::min(height_-1,from.y+d);++y) {
+                const int reach=d-std::abs(y-from.y);
+                for (const int x : {from.x-reach,from.x+reach}) {
+                    if (x<0 || x>=width_) continue;
+                    const Coord point(x,y);
+                    if (safe(point) && clearWithdrawal(from,point)) return point;
+                    if (reach==0) break;
+                }
             }
         }
         return best;
     }
 private:
+    // Visits the index of every map tile within blockDistance `range` of
+    // `centre`, the same tile set the per-tile predicate scan produced.
+    template<typename Visit>
+    void forEachCovered(Coord centre, int range, Visit visit) {
+        if (range<0) return;
+        if (static_cast<size_t>(range)>=spansByRange_.size()) spansByRange_.resize(static_cast<size_t>(range)+1);
+        auto& spans=spansByRange_[range];
+        if (spans.empty()) spans=coverageSpans(range);
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y) {
+            const int span=spans[std::abs(y-centre.y)];
+            const size_t row=static_cast<size_t>(y)*width_;
+            for (int x=std::max(0,centre.x-span);x<=std::min(width_-1,centre.x+span);++x)
+                visit(row+x);
+        }
+    }
     int width_,height_;
     std::vector<bool> blocked_;        ///< Absolute cover: rocket turrets, Deviators.
     std::vector<int> launchers_;       ///< How many mobile launchers cover each tile.
     std::vector<bool> strict_;         ///< Any observed anti-air at its anti-air reach.
+    std::vector<std::vector<int>> spansByRange_; ///< coverageSpans(range), built on first use.
     bool strictEnabled_ = false;
 };
 } // namespace AirStrikePolicy

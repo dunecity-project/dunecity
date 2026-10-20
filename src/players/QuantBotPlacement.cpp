@@ -245,31 +245,34 @@ int QuantBot::rearScore(Coord pos, Coord base) const {
     return std::clamp(fromSite-fromBase, -20, 20) * 40;
 }
 
-void QuantBot::invalidateAnchorField() {
-    // Called only where this house actually changes tile ownership. The next
-    // placement search inside the same build() rebuilds the field from the live
-    // map, so no search can ever read ownership from before its own mutation.
-    if (!buildAnchors.active) return;
-    if (buildAnchors.valid) ++buildAnchors.invalidations;
-    buildAnchors.valid = false;
-}
-
-void QuantBot::buildAnchorField(DuneCity::BoxAnyField& field) const {
+const DuneCity::BoxAnyField& QuantBot::anchorField() const {
     // Map::isWithinBuildRange() is a box dilation of this house's owned tiles
     // evaluated pointwise: BUILDRANGE is 2, so each query scans 5x5 tiles and
     // stops at the first owned one. The marker here is exactly that scan's
     // per-tile test, isConstructionAnchor(tile->getOwner(), houseID), and
     // BoxAnyField clips its queries to the map just as getTile_internal() skips
     // off-map probes — so anyWithin(x,y,BUILDRANGE) answers the same question
-    // for every coordinate, map edges included. Tile ownership is not mutated
-    // by the callers below, so one field per call is a snapshot of the same
-    // state every individual probe would have read.
+    // for every coordinate, map edges included.
     const int houseID=getHouse()->getHouseID();
     const Map& map=getMap();
-    field.build(map.getSizeX(),map.getSizeY(),[&](int x,int y) {
-        const auto* tile=map.getTile(x,y);
-        return tile && DuneCity::isConstructionAnchor(tile->getOwner(),houseID);
-    });
+    const int width=map.getSizeX(), height=map.getSizeY();
+    auto& cache=anchorFieldCache;
+    const Uint64 ownership=Tile::ownerRevision(houseID);
+    if (cache.valid && cache.ownership==ownership && cache.map==&map && cache.width==width && cache.height==height) {
+        ++cache.hits;
+        return cache.field;
+    }
+    AITelemetry::PerformanceScope anchorScope("ai.placement.anchor_field", getGameCycleCount(), houseID);
+    // Tiles are stored column by column: read the owners in that order, then
+    // build the field from the row-major marks.
+    std::vector<uint8_t> owned(static_cast<size_t>(width)*height,0);
+    for (int x=0; x<width; ++x)
+        for (int y=0; y<height; ++y)
+            owned[static_cast<size_t>(y)*width+x]=DuneCity::isConstructionAnchor(map.getTile(x,y)->getOwner(),houseID);
+    cache.field.build(width,height,[&](int x,int y) { return owned[static_cast<size_t>(y)*width+x]!=0; });
+    cache.ownership=ownership; cache.map=&map; cache.width=width; cache.height=height; cache.valid=true;
+    ++cache.builds;
+    return cache.field;
 }
 
 bool QuantBot::nearRecentStructureLoss(int x, int y, int width, int height) const {
@@ -400,7 +403,7 @@ void QuantBot::clearPlacementCache(bool geometryChanged, bool reuseForBuilder) {
         placementCache.clear();
         // Correctness does not depend on this: the distance fields re-verify
         // their inputs on every use. Released here so a finished build pass
-        // does not hold four map-sized fields.
+        // holds no field.
         placementDistances.invalidate();
     }
     placementCacheExcludedBuilder=excluded;
@@ -536,10 +539,10 @@ Coord QuantBot::findRedevelopmentSite(Uint32 item) {
             }
             score += blockDistance(pos,base).lround()-rearScore(pos,base);
             const auto rank=TacticalSafetyPolicy::factorySiteRank(dangerAt(pos,size,true),
-                TacticalSafetyPolicy::footprintClearance(factoryEnemyClearance,getMap().getSizeX(),getMap().getSizeY(),
+                TacticalSafetyPolicy::footprintClearance(factoryClearance(),getMap().getSizeX(),getMap().getSizeY(),
                     x,y,size.x,size.y),0,-score);
             const auto reactorRank=TacticalSafetyPolicy::reactorSiteRank(0,dangerAt(pos,size,true),
-                TacticalSafetyPolicy::footprintClearance(factoryEnemyClearance,getMap().getSizeX(),getMap().getSizeY(),
+                TacticalSafetyPolicy::footprintClearance(factoryClearance(),getMap().getSizeX(),getMap().getSizeY(),
                     x,y,size.x,size.y),true,rearScore(pos,base),-score);
             if (item==Structure_NuclearPlant ? reactorRank>bestReactorRank
                 : TacticalSafetyPolicy::productionFactory(item) ? rank>bestFactoryRank : score<bestScore) {
@@ -646,11 +649,11 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         if ((newSensitive && pollutes) || (newPolluter && sensitive))
             pollutionSeparation.add(location.x,location.y,size.x,size.y);
     };
-    // Collecting the contributions is a walk over a few thousand entries; the
-    // four chamfer builds it feeds are map-sized. So always collect, compare the
-    // list element by element against the cached one, and rebuild only the
-    // fields whose inputs actually moved. The nearest-origin fields are
-    // independent of the planned item, so they survive across itemIDs.
+    // The contributions are a walk over a few thousand entries and the fields
+    // only bucket them (CityDistanceField answers each query from the source
+    // rectangles). Compare the list element by element against the cached one
+    // and rebuild only the fields whose inputs actually moved. The nearest-origin
+    // fields are independent of the planned item, so they survive across itemIDs.
     auto prepareCityDistances = [&] {
         if (cityDistancesReady) return;
         cityDistancesReady=true;
@@ -718,35 +721,13 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool roadingFallbackItem = currentGame->isCitySimEnabled() && (itemIsBuilder || factoryPlacement);
     bool roadingRelaxed = false;
 
-    // Owned-tile field for the build-range gate. This point is only reached on a
-    // placementCache miss. Inside build() the field is shared across that call's
-    // searches and rebuilt only where this house actually changes ownership;
-    // outside build() each search scans fresh, exactly as before. Reservations
-    // and planningBuilder do not move an owned tile, so they do not invalidate.
+    // Owned-tile field for the build-range gate (anchorField(): rebuilt only when
+    // this house's tile ownership changed). Reservations and planningBuilder do
+    // not move an owned tile.
     const bool gateByBuildRange = itemID != Structure_ConstructionYard;
-    DuneCity::BoxAnyField localAnchorField;
     const DuneCity::BoxAnyField* buildRangeField = nullptr;
     size_t buildRangeSkipped = 0;
-    if (gateByBuildRange) {
-        if (buildAnchors.active) {
-            if (!buildAnchors.valid) {
-                AITelemetry::PerformanceScope anchorScope("ai.placement.anchor_field",
-                    getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
-                buildAnchorField(buildAnchors.field);
-                buildAnchors.valid = true;
-                ++buildAnchors.builds;
-            } else {
-                ++buildAnchors.hits;
-            }
-            buildRangeField = &buildAnchors.field;
-        } else {
-            AITelemetry::PerformanceScope anchorScope("ai.placement.anchor_field",
-                getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
-            buildAnchorField(localAnchorField);
-            ++buildAnchors.builds;
-            buildRangeField = &localAnchorField;
-        }
-    }
+    if (gateByBuildRange) buildRangeField = &anchorField();
 
     // Reactor blast spacing: the own buildings and reservations it is tested against do not
     // change during the search, so collect them once instead of walking every structure on the
@@ -1275,7 +1256,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 const int rear = (itemID == Structure_NuclearPlant || factoryPlacement) ? rearScore(Coord(placeLocationX, placeLocationY), baseCenter) : 0;
                 locationScore += rear;
                 const int enemyClearance = (factoryPlacement || itemID == Structure_NuclearPlant) ? TacticalSafetyPolicy::footprintClearance(
-                    factoryEnemyClearance,mapW,mapH,placeLocationX,placeLocationY,newSizeX,newSizeY) : 0;
+                    factoryClearance(),mapW,mapH,placeLocationX,placeLocationY,newSizeX,newSizeY) : 0;
                 const auto factoryRank = TacticalSafetyPolicy::factorySiteRank(lossRisk,enemyClearance,siteTier,locationScore);
                 const bool clearsReactor = itemID != Structure_NuclearPlant || clearsReactorAt(placeLocationX, placeLocationY);
                 const int fireRisk = itemID == Structure_NuclearPlant ? dangerAt(Coord(placeLocationX,placeLocationY),Coord(newSizeX,newSizeY)) : 0;
@@ -1321,12 +1302,10 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         "ai.placement.build_range_skipped",static_cast<int64_t>(buildRangeSkipped),
         static_cast<int>(itemID),false);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
-        "ai.anchor.field_builds",static_cast<int64_t>(buildAnchors.builds),-1,false);
+        "ai.anchor.field_builds",static_cast<int64_t>(anchorFieldCache.builds),-1,false);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
-        "ai.anchor.field_hits",static_cast<int64_t>(buildAnchors.hits),-1,false);
-    AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
-        "ai.anchor.field_invalidations",static_cast<int64_t>(buildAnchors.invalidations),-1,false);
-    buildAnchors.builds = buildAnchors.hits = buildAnchors.invalidations = 0;
+        "ai.anchor.field_hits",static_cast<int64_t>(anchorFieldCache.hits),-1,false);
+    anchorFieldCache.builds = anchorFieldCache.hits = 0;
     placementScoreDetails[itemID] = bestQuality;
 	return bestLocation;
 }
@@ -2652,8 +2631,6 @@ bool QuantBot::commitBatteryClearance(const BuilderBase* builder, Uint32 itemToB
         removed.set(std::to_string(id), AITelemetry::Record().set("item", zone->getItemID())
             .set("demand", demand).set("land_value", sim->getLandValueMap().worldGet(z.x, z.y))
             .set("density", getMap().getTile(z.x, z.y)->getCityZoneDensity()));
-        // Invalidate before mutation, including its callbacks.
-        invalidateAnchorField();
         zone->demolish();
         ++displaced;
     }

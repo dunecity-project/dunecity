@@ -58,9 +58,6 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
 
 void QuantBot::build(int militaryValue) {
     AITelemetry::PerformanceScope perfScope("ai.build", getGameCycleCount(), getHouse()->getHouseID());
-    // Shares one owned-tile field across this call's placement searches. The
-    // guard clears it on every exit, so it never outlives this invocation.
-    BuildAnchorScope anchorScope(*this);
     AITelemetry::PerformanceScope phaseScope("ai.build.evaluate",getGameCycleCount(),getHouse()->getHouseID());
     refreshTacticalDanger();
     planningBuilder = NONE_ID;
@@ -5827,8 +5824,6 @@ void QuantBot::build(int militaryValue) {
                                 .set("demand",demand).set("land_value",sim->getLandValueMap().worldGet(z.x,z.y))
                                 .set("density",getMap().getTile(z.x,z.y)->getCityZoneDensity()));
                             itemCount[zone->getItemID()]--;
-                            // Invalidate before mutation, including its callbacks.
-                            invalidateAnchorField();
                             zone->demolish();
                         }
                         traceDecision("redevelopment_committed", AITelemetry::Record().set("builder",planningBuilder)
@@ -6263,9 +6258,6 @@ void QuantBot::build(int militaryValue) {
 						if (location.isValid()) {
 							traceDecision("placement_request", AITelemetry::Record().set("builder", pConstYard->getObjectID())
                                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y));
-                            // Invalidate before placement and its callbacks; a
-                            // failed attempt can conservatively rebuild too.
-                            invalidateAnchorField();
                             const bool placed = doPlaceStructure(pConstYard, location.x, location.y);
                             // A road retry keeps its place ahead of the remaining
                             // queue; do not accidentally consume the next plan.

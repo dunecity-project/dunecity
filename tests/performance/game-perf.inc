@@ -236,17 +236,39 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     std::string scopeJson;
     for (size_t i = 0; i < scopes.size() && i < 25; ++i)
         scopeJson += (scopeJson.empty() ? "" : ",") + std::string("\"") + scopes[i].second + "\":" + std::to_string(scopes[i].first / 1000);
+    // The same scopes summed over every house and item (placement scopes are keyed by item),
+    // and the city simulation's scopes: "scope": [ms, calls, worst call ms].
+    struct Total { long long sum = 0; unsigned long long count = 0; long long maximum = 0; };
+    std::map<std::string, Total> totalsByScope;
+    for (const auto& entry : AITelemetry::log().performanceMetrics) {
+        const auto& [scope, house, item, duration] = entry.first;
+        if (!duration || !((house >= 0 && scope.rfind("ai.", 0) == 0) || scope.rfind("city.", 0) == 0)) continue;
+        Total& total = totalsByScope[scope];
+        total.sum += entry.second.sum;
+        total.count += entry.second.count;
+        total.maximum = std::max<long long>(total.maximum, entry.second.maximum);
+    }
+    std::vector<std::pair<long long, std::string>> totals;
+    for (const auto& [scope, total] : totalsByScope) totals.emplace_back(total.sum, scope);
+    std::sort(totals.rbegin(), totals.rend());
+    std::string totalJson;
+    for (size_t i = 0; i < totals.size() && i < 60; ++i) {
+        const Total& total = totalsByScope[totals[i].second];
+        totalJson += (totalJson.empty() ? "" : ",") + std::string("\"") + totals[i].second + "\":["
+            + std::to_string(total.sum / 1000) + "," + std::to_string(total.count) + ","
+            + std::to_string(total.maximum / 1000) + "]";
+    }
     int unitsEnd = samples.empty() ? 0 : samples.back().unitCount;
     std::printf("GAME_PERF_RESULT: {\"first_cycle\":%u,\"cycles\":%zu,\"loop_ms\":%.0f,\"units_end\":%d,"
                 "\"frame_cycles\":%d,\"sim\":%s,\"cpu\":%s,\"cpu_total_ms\":%.0f,\"calibration_ms\":%.3f,"
                 "\"ai\":%s,\"city\":%s,\"units\":%s,\"structures\":%s,\"path\":%s,"
                 "\"render\":%s,\"frame\":%s,\"frames_over_33ms\":%d,\"frames_over_50ms\":%d,\"frames_over_100ms\":%d,"
-                "\"frames\":%zu,\"est_fps\":%.2f,\"house\":{%s},\"ai_scopes_ms\":{%s}}\n",
+                "\"frames\":%zu,\"est_fps\":%.2f,\"house\":{%s},\"ai_scopes_ms\":{%s},\"ai_scope_totals_ms\":{%s}}\n",
                 first, samples.size(), loopMs, unitsEnd, frameCycles, stats(sim).c_str(), stats(cpu).c_str(), cpuTotal,
                 calibration, stats(ai).c_str(),
                 stats(city).c_str(), stats(units).c_str(), stats(structures).c_str(), stats(path).c_str(),
                 stats(render).c_str(), stats(frames).c_str(), over33, over50, over100, frames.size(),
-                frameMean > 0 ? 1000.0 / frameMean : 0.0, houseJson.c_str(), scopeJson.c_str());
+                frameMean > 0 ? 1000.0 / frameMean : 0.0, houseJson.c_str(), scopeJson.c_str(), totalJson.c_str());
     std::fflush(stdout);
     if (csvPath != nullptr && csvPath[0] != '\0') {
         std::ofstream csv(csvPath);

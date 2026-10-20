@@ -119,9 +119,32 @@ bool shouldDrawTerrainBelowStructure(int itemID) noexcept {
     }
 }
 
+// Tile ownership revisions (Tile::ownerRevision): one counter per house, bumped by every
+// setOwner() to or from it, and an epoch bumped by every tile constructed or loaded.
+Uint32 ownerRevisions[NUM_HOUSES] = {};
+Uint32 ownerEpoch = 0;
+
+void bumpOwnerRevision(int houseID) noexcept {
+    if (houseID >= 0 && houseID < NUM_HOUSES) ++ownerRevisions[houseID];
+}
+
 } // namespace
 
+Uint64 Tile::ownerRevision(int houseID) noexcept {
+    const Uint32 revision = houseID >= 0 && houseID < NUM_HOUSES ? ownerRevisions[houseID] : 0;
+    return (static_cast<Uint64>(ownerEpoch) << 32) | revision;
+}
+
+void Tile::setOwner(int newOwner) noexcept {
+    if (newOwner != owner) {
+        bumpOwnerRevision(owner);
+        bumpOwnerRevision(newOwner);
+    }
+    owner = newOwner;
+}
+
 Tile::Tile() {
+    ++ownerEpoch;
     type = Terrain_Sand;
 
     for (auto i = 0; i < NUM_HOUSES; i++) {
@@ -152,6 +175,7 @@ Tile::Tile() {
 Tile::~Tile() = default;
 
 void Tile::load(InputStream& stream) {
+    ++ownerEpoch;
     type = stream.readUint32();
 
     stream.readBools(&explored[0], &explored[1], &explored[2], &explored[3], &explored[4], &explored[5], &explored[6], &explored[7]);
@@ -350,6 +374,7 @@ void Tile::save(OutputStream& stream) const {
 
 void Tile::assignAirUnit(Uint32 newObjectID) {
     assignedAirUnitList.push_back(newObjectID);
+    Map::noteObjectAssigned(*this);
 }
 
 void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
@@ -358,6 +383,7 @@ void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
     // bump the revision on placement/destruction, mountain changes in setType(),
     // and repaired zone footprints in Game::loadSaveGame().
     assignedNonInfantryGroundObjectList.push_back(newObjectID);
+    Map::noteObjectAssigned(*this);
 }
 
 int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
@@ -388,12 +414,14 @@ int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
     }
 
     assignedInfantryList.push_back(newObjectID);
+    Map::noteObjectAssigned(*this);
     return newPosition;
 }
 
 
 void Tile::assignUndergroundUnit(Uint32 newObjectID) {
     assignedUndergroundUnitList.push_back(newObjectID);
+    Map::noteObjectAssigned(*this);
 }
 
 void Tile::blitGround(int xPos, int yPos) {
@@ -840,19 +868,23 @@ void Tile::selectAllPlayersUnitsOfType(int houseID, int itemID, ObjectBase** las
 
 void Tile::unassignAirUnit(Uint32 objectID) {
     assignedAirUnitList.remove(objectID);
+    Map::noteObjectReleased(*this);
 }
 
 void Tile::unassignNonInfantryGroundObject(Uint32 objectID) {
     // Structure destruction invalidates routes explicitly in ~StructureBase.
     assignedNonInfantryGroundObjectList.remove(objectID);
+    Map::noteObjectReleased(*this);
 }
 
 void Tile::unassignUndergroundUnit(Uint32 objectID) {
     assignedUndergroundUnitList.remove(objectID);
+    Map::noteObjectReleased(*this);
 }
 
 void Tile::unassignInfantry(Uint32 objectID, int currentPosition) {
     assignedInfantryList.remove(objectID);
+    Map::noteObjectReleased(*this);
 }
 
 void Tile::unassignObject(Uint32 objectID) {

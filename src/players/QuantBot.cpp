@@ -1022,7 +1022,7 @@ void QuantBot::refreshTacticalDanger() {
     };
     for (const auto* unit : getUnitList()) if (unit->isActive()) observe(unit);
     for (const auto* structure : getStructureList()) observe(structure);
-    factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger,w,h);
+    factoryEnemyClearanceStale = true;
     for (const auto& loss : recentStructureLosses) {
         const Uint32 age = now - loss.cycle;
         const Uint32 lifetime=loss.item==Structure_HeavyFactory ? MILLI2CYCLES(900000) : MILLI2CYCLES(300000);
@@ -1044,6 +1044,14 @@ void QuantBot::refreshTacticalDanger() {
         traceDecision("tactical_safety_snapshot", AITelemetry::Record().set("visible_threats",threats)
             .set("recent_structure_losses",recentStructureLosses.size()).set("unsafe_fields",unsafeFields.size()));
     }
+}
+
+const std::vector<int>& QuantBot::factoryClearance() const {
+    if (factoryEnemyClearanceStale) {
+        factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger, getMap().getSizeX(), getMap().getSizeY());
+        factoryEnemyClearanceStale = false;
+    }
+    return factoryEnemyClearance;
 }
 
 int QuantBot::dangerAt(Coord pos, Coord size, bool losses) const {

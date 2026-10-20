@@ -391,7 +391,7 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
     s.writeUint32(tacticalDanger.size()); for(auto v : tacticalDanger) s.writeUint32(v);
     s.writeUint32(harvesterDanger.size()); for(auto v : harvesterDanger) s.writeUint32(v);
     s.writeUint32(lossDanger.size()); for(auto v : lossDanger) s.writeUint32(v);
-    s.writeUint32(factoryEnemyClearance.size()); for(auto v : factoryEnemyClearance) s.writeUint32(v);
+    s.writeUint32(factoryClearance().size()); for(auto v : factoryClearance()) s.writeUint32(v);
     s.writeUint32(visibleHarvestLaunchers.size()); for(auto v : visibleHarvestLaunchers) s.writeUint32(v);
     s.writeUint32(visibleEnemyBases.size()); for(auto v : visibleEnemyBases) coord(v);
     s.writeUint32(builderPlaceLocations.size()); for(const auto& e : builderPlaceLocations) { s.writeUint32(e.first); s.writeUint32(e.second.size()); for(auto v : e.second) coord(v); }
@@ -449,7 +449,7 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
     tacticalDanger.clear(); for(Uint32 n=count(); n; --n) tacticalDanger.push_back(s.readUint32());
     harvesterDanger.clear(); for(Uint32 n=count(); n; --n) harvesterDanger.push_back(s.readUint32());
     lossDanger.clear(); for(Uint32 n=count(); n; --n) lossDanger.push_back(s.readUint32());
-    factoryEnemyClearance.clear(); for(Uint32 n=count(); n; --n) factoryEnemyClearance.push_back(s.readUint32());
+    factoryEnemyClearance.clear(); factoryEnemyClearanceStale=false; for(Uint32 n=count(); n; --n) factoryEnemyClearance.push_back(s.readUint32());
     visibleHarvestLaunchers.clear(); for(Uint32 n=count(); n; --n) visibleHarvestLaunchers.push_back(s.readUint32());
     visibleEnemyBases.clear(); for(Uint32 n=count(); n; --n) visibleEnemyBases.push_back(coord());
     builderPlaceLocations.clear(); for(Uint32 n=count(); n; --n) { auto id=s.readUint32(); auto& list=builderPlaceLocations[id]; for(Uint32 m=count(); m; --m) list.push_back(coord()); }

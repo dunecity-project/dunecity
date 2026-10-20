@@ -631,7 +631,14 @@ private:
     std::vector<PlannedStructure> cityProductionPlots;
     bool planningCityProductionPlots = false;
     struct RecentStructureLoss { Coord location; Coord size; Uint32 cycle; Uint32 item; };
-    std::vector<int> tacticalDanger, harvesterDanger, lossDanger, factoryEnemyClearance;
+    std::vector<int> tacticalDanger, harvesterDanger, lossDanger;
+    /// TacticalSafetyPolicy::enemyClearance(tacticalDanger): read through factoryClearance().
+    /// refreshTacticalDanger() only marks it stale; the two map-sized passes run when a
+    /// placement (or the save) reads it. tacticalDanger changes only in that refresh and
+    /// in load, so the deferred value is the one the refresh would have computed.
+    mutable std::vector<int> factoryEnemyClearance;
+    mutable bool factoryEnemyClearanceStale = false;
+    const std::vector<int>& factoryClearance() const;
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
@@ -659,51 +666,26 @@ private:
     /// Total price of this house's military units: every unit type except
     /// carryalls, harvesters, MCVs and sandworms. Computed live at each use.
     int militaryUnitValue() const;
-    /// Builds this house's owned-tile indicator so Map::isWithinBuildRange()
-    /// can be answered in O(1) instead of a 5x5 probe per tile. Rebuilt per
-    /// use; holds no state across decisions.
-    void buildAnchorField(DuneCity::BoxAnyField& field) const;
-
-    /// Owned-tile field shared by the placement searches of ONE build() call.
+    /// This house's owned-tile indicator, so Map::isWithinBuildRange() can be
+    /// answered in O(1) instead of a 5x5 probe per tile.
     ///
-    /// The field depends only on tile ownership. It therefore survives changes
-    /// to reservations or planningBuilder — those do not move a single owned
-    /// tile — and is invalidated only where this house actually mutates the
-    /// world inside build(): a zone demolition and a structure placement. No
-    /// simulation tick runs inside build(), so no other actor can change
-    /// ownership while the cache is live.
-    ///
-    /// Lifetime is bounded by BuildAnchorScope below: `active` is only ever
-    /// true inside one build() invocation and the guard clears the field on
-    /// every exit path, including exceptions. Nothing here is serialised or
-    /// read across cycles.
-    struct BuildAnchorCache {
-        bool active = false;
-        bool valid = false;
+    /// The field is a pure function of {tile owner == this house}, which changes
+    /// only through Tile::setOwner() and tiles being constructed or loaded; all of
+    /// them move Tile::ownerRevision(houseID). The field is therefore rebuilt only
+    /// when that revision (or the map) differs from the one it was built at, and is
+    /// otherwise exactly the field a fresh scan of all tiles would produce. The
+    /// reference stays valid until ownership next changes. Derived state, never
+    /// serialised.
+    const DuneCity::BoxAnyField& anchorField() const;
+    struct AnchorFieldCache {
         DuneCity::BoxAnyField field;
-        uint64_t builds = 0, hits = 0, invalidations = 0;
+        Uint64 ownership = 0;
+        const Map* map = nullptr;
+        int width = 0, height = 0;
+        bool valid = false;
+        uint64_t builds = 0, hits = 0;
     };
-    BuildAnchorCache buildAnchors;
-
-    /// RAII activation of buildAnchors for exactly one build() invocation.
-    class BuildAnchorScope {
-    public:
-        explicit BuildAnchorScope(QuantBot& bot) : bot_(bot) {
-            bot_.buildAnchors.active = true;
-            bot_.buildAnchors.valid = false;
-        }
-        ~BuildAnchorScope() {
-            bot_.buildAnchors.active = false;
-            bot_.buildAnchors.valid = false;
-            bot_.buildAnchors.field = DuneCity::BoxAnyField();
-        }
-        BuildAnchorScope(const BuildAnchorScope&) = delete;
-        BuildAnchorScope& operator=(const BuildAnchorScope&) = delete;
-    private:
-        QuantBot& bot_;
-    };
-    /// Called where this house actually changes tile ownership inside build().
-    void invalidateAnchorField();
+    mutable AnchorFieldCache anchorFieldCache;
 
     /// Ordered spice-tile membership shared by the harvester candidate sweeps of
     /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership only, in
@@ -781,7 +763,7 @@ private:
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
 
-    /// The four map-sized placement distance fields, reused across searches.
+    /// The four placement distance fields (CityDistanceField), reused across searches.
     /// The key is the contribution list itself -- every live owned structure and
     /// every reservation that is not the planning builder's, in the order
     /// findPlaceLocation visits them -- so reuse is exact rather than inferred
@@ -814,8 +796,7 @@ private:
             originFieldsValid = false; pollutionValid = false;
             key.clear(); key.shrink_to_fit();
             width = 0; height = 0;
-            // Release the map-sized cells too, so a finished build pass does not
-            // keep four of them per bot alive until the next one.
+            // Release the source lists too; a finished build pass keeps nothing.
             nearestResidential = CityDistanceField(0,0); nearestCommercial = CityDistanceField(0,0);
             nearestIndustrial = CityDistanceField(0,0); pollutionSeparation = CityDistanceField(0,0);
         }

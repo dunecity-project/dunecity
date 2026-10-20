@@ -2,12 +2,15 @@
 
 #include <DataTypes.h>
 #include <FormationPlanner.h>
+#include <players/AirStrikePolicy.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/QuantBotConfig.h>
 
 #include <cstdint>
+#include <limits>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -680,4 +683,131 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.force.massAssault = !c.force.massAssault; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWhenLeading = !c.force.finishWhenLeading; }));
     }
+}
+
+namespace {
+
+// The coverage layers as the per-tile blockDistance scan built them before the
+// span fill, kept verbatim so the fill is checked tile for tile.
+class RasterCoverageReference {
+public:
+    RasterCoverageReference(int width, int height)
+        : width_(width), height_(height), blocked_(width*height,false),
+          launchers_(static_cast<size_t>(width)*height,0),
+          strict_(static_cast<size_t>(width)*height,false) {}
+    void add(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range) blocked_[y*width_+x]=true;
+    }
+    void addMobileLauncher(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range) {
+                    auto& count=launchers_[static_cast<size_t>(y)*width_+x];
+                    if (count<std::numeric_limits<int>::max()) ++count;
+                }
+    }
+    void addStrict(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range)
+                    strict_[static_cast<size_t>(y)*width_+x]=true;
+    }
+    bool blocked(int x, int y) const { return blocked_[static_cast<size_t>(y)*width_+x]; }
+    int launchers(int x, int y) const { return launchers_[static_cast<size_t>(y)*width_+x]; }
+    bool strict(int x, int y) const { return strict_[static_cast<size_t>(y)*width_+x]; }
+private:
+    int width_,height_;
+    std::vector<bool> blocked_;
+    std::vector<int> launchers_;
+    std::vector<bool> strict_;
+};
+
+// The full raster escape the ring search replaced, verbatim over the same
+// safe()/clearWithdrawal() predicates.
+Coord rasterEscape(const AirStrikePolicy::Coverage& coverage, int width, int height, Coord from) {
+    Coord best; best.invalidate();
+    int distance=width+height;
+    for(int y=0;y<height;++y) for(int x=0;x<width;++x) {
+        const Coord point(x,y);
+        const int d=std::abs(x-from.x)+std::abs(y-from.y);
+        if(d<distance && coverage.safe(point) && coverage.clearWithdrawal(from,point)) {
+            best=point; distance=d;
+        }
+    }
+    return best;
+}
+
+} // namespace
+
+TEST_CASE("Air coverage spans equal the blockDistance disc", "[quantbot][air]") {
+    REQUIRE(AirStrikePolicy::coverageSpans(-1).empty());
+    for (int range=0;range<=64;++range) {
+        const std::vector<int> spans=AirStrikePolicy::coverageSpans(range);
+        REQUIRE(spans.size()==static_cast<size_t>(range)+1);
+        int mismatches=0;
+        for (int dy=-range-2;dy<=range+2;++dy)
+            for (int dx=-range-2;dx<=range+2;++dx) {
+                const bool inDisc=blockDistance(Coord(0,0),Coord(dx,dy))<=range;
+                const bool inSpan=std::abs(dy)<=range && std::abs(dx)<=spans[std::abs(dy)];
+                if (inDisc!=inSpan) ++mismatches;
+            }
+        INFO("range " << range);
+        REQUIRE(mismatches==0);
+    }
+}
+
+TEST_CASE("Air coverage fill and ring escape match the raster scans", "[quantbot][air]") {
+    std::mt19937 rng(0xA1C0FE);
+    auto pick=[&](int lo, int hi) { return lo+static_cast<int>(rng()%static_cast<unsigned>(hi-lo+1)); };
+    int escapes=0, trappedEscapes=0;
+    for (int trial=0;trial<240;++trial) {
+        // Every tenth map is degenerate: empty, a single tile or a single line.
+        const int width=trial%10==0 ? pick(0,2) : pick(1,28);
+        const int height=trial%10==0 ? pick(0,2) : pick(1,28);
+        AirStrikePolicy::Coverage coverage(width,height);
+        RasterCoverageReference reference(width,height);
+        const bool strict=trial%2==0;
+        if (strict) coverage.enableStrict();
+        const int defenders=pick(0,10);
+        for (int i=0;i<defenders;++i) {
+            // Centres beyond every edge and empty (negative) ranges included.
+            const Coord centre(pick(-10,width+10),pick(-10,height+10));
+            const int range=pick(-1,14);
+            switch (pick(0,2)) {
+            case 0: coverage.add(centre,range); reference.add(centre,range); break;
+            case 1: coverage.addMobileLauncher(centre,range); reference.addMobileLauncher(centre,range); break;
+            default:
+                coverage.addStrict(centre,range);
+                if (strict) reference.addStrict(centre,range);
+                break;
+            }
+        }
+        INFO("trial " << trial << " map " << width << "x" << height);
+        int layerMismatches=0;
+        for (int y=0;y<height;++y) for (int x=0;x<width;++x) {
+            const Coord point(x,y);
+            if (coverage.safe(point,std::numeric_limits<int>::max())==reference.blocked(x,y)) ++layerMismatches;
+            if (coverage.mobileLaunchersAt(point)!=reference.launchers(x,y)) ++layerMismatches;
+            if (strict && coverage.strictSafe(point)==reference.strict(x,y)) ++layerMismatches;
+        }
+        REQUIRE(layerMismatches==0);
+        for (int probe=0;probe<10;++probe) {
+            // Origins on the map, just off it, and far enough off that no tile
+            // is nearer than width+height (the raster's own cut-off).
+            const int spread=width+height+4;
+            const Coord from(pick(-spread,width+spread),pick(-spread,height+spread));
+            const Coord expected=rasterEscape(coverage,width,height,from);
+            const Coord actual=coverage.escape(from);
+            INFO("from " << from.x << "," << from.y);
+            REQUIRE(actual.x==expected.x);
+            REQUIRE(actual.y==expected.y);
+            ++escapes;
+            if (expected.isInvalid()) ++trappedEscapes;
+        }
+    }
+    // The draw must exercise both outcomes, or the comparison proves little.
+    CHECK(trappedEscapes>0);
+    CHECK(trappedEscapes<escapes);
 }

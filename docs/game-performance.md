@@ -158,3 +158,53 @@ time outside the measured components: mini headless 143 fps, 489 cycles/s, other
 - Spreading houses' 100-cycle build passes so two never land in one 10-cycle frame (houses 1 and 3
   are 8 cycles apart) would change AI timing, i.e. game results; not done.
 - No duel-report perf column.
+
+## Eight houses on a 384x384 map (2026-10-20/21, branch `perf/fps-8house`, agent FpsFix)
+
+Stefan (1.0.849, MBA, `fpsstillfucked.dls`: "4P - 384x384 - new beginning", eight QuantBot Hard,
+~810 units, Game Speed 2 ms, battery + Low Power Mode): "fix the fucking fps lag". His perf log:
+every frame 10 cycles, 37-90 ms, AI 17-60 ms per frame, `[CITYSIM SPIKE]` 20-34 ms every 78 cycles.
+Raw data and `sample` reports: `~/Documents/projects/dunecity-results/fps-8house` on the mini.
+
+Cause: work proportional to the map area (147,456 tiles, 9x a 128x128 map) done per call, per
+house. `sample` of the stepped probe on his save (mini): QuantBot placement's four chamfer
+distance fields (`CityDistanceField::build`, 6,063 map-sized builds in 7,500 cycles, 0.83 ms each,
+for 27,509 queries), `Map::removeObjectFromMap` walking every tile per unit pickup/death, the
+city effects scan's per-sand-tile 11x11 stamp (~12 million updates per scan) and seven whole-map
+origin walks in row order over column-major tiles, the rock survey's candidates x enemies
+clearance loop and per-tile loss-history walks, the anchor field rebuilt per search, the
+harvester sweep's unsafe-field walk per spice tile, the air-coverage raster `escape()` and
+(2r+1)^2 `blockDistance` stamps.
+
+Changes (all exact; `PROBE_DIGEST` every 750 cycles identical over 7,500 cycles of his save):
+
+- `CityDistanceField` answers each query from the bucketed source rectangles (closed-form
+  Chebyshev gap) instead of filling every cell; test against the old chamfer field.
+- `Map::removeObjectFromMap` visits only tiles in an object-tile bitset maintained by `Tile`'s
+  assign/unassign (full scan and rebuild if an assignment ever hits a non-current map).
+- City effects: origin walks collect from `structureList` sorted by origin tile (same set and
+  order); tile scan column-major; the sand-as-water stamp summed with a summed-area table
+  (saturating adds of non-negative values; falls back to per-tile stamps otherwise).
+- QuantBot: anchor field cached per house on `Tile::ownerRevision` (bumped by every real
+  `setOwner` and tile construction/load), replacing the per-`build()` scope and manual
+  invalidations; `RockExpansionPolicy::choose` uses one chessboard distance transform (off-map
+  enemy indices measured directly, as before) and a per-formation reserved flag; rock survey
+  loss tests stamped once; harvester sweep's remembered-field test stamped once, spice list
+  read column-major; `factoryEnemyClearance` computed when read (placement/save), not per
+  danger refresh; `AirStrikePolicy::Coverage` row spans and ring-ordered `escape()`.
+- `game-perf.inc` reports `ai_scope_totals_ms` (all houses and items, city scopes: ms, calls,
+  worst call). The decision log keeps 512 metric keys, so counts can be truncated.
+
+Stepped probe on his save, mini (base M4, other agents' load 5-7), 7,500 cycles from cycle 73,528:
+
+| | sim ms/cycle mean / p99 / max | AI mean / max | city mean / p99 / max | 10-cycle frame mean / p99 | frames > 33 / > 50 ms (of 750) | model fps |
+|---|---|---|---|---|---|---|
+| 1.0.849 | 2.78 / 32.7 / 98.6 | 1.70 / 98.2 | 0.33 / 18.1 / 24.7 | 27.8 / 87.9 | 206 / 62 | 35.9 |
+| perf/fps-8house | 1.42 / 12.4 / 57.4 | 0.69 / 56.9 | 0.13 / 2.8 / 16.2 | 14.2 / 35.7 | 9 / 6 | 70.2 |
+
+Not done on this branch: frame pacing (a per-frame simulation time budget so a frame stops
+catching up before ~16 ms), rendered and Air (AC / Low Power Mode) measurements (his game was
+open the whole session), 1.0.833/1.0.847 comparison (the 9868 save does not load there; no
+rebuilt tags), an 8-house case in `perf_regression`, and the remaining ~57 ms single house
+update: it is inside `checkAllUnits`' unit pass after the per-unit loop (per-iteration scopes
+peak at 6 ms; `orderBundleWalkers`/bundling is the next suspect).
