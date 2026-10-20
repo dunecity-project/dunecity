@@ -545,12 +545,19 @@ void QuantBot::build(int militaryValue) {
         && currentGame->techLevel >= data[Unit_Carryall][houseID].techLevel
         && currentGame->techLevel >= data[Structure_HighTechFactory][houseID].techLevel
         && !getHouse()->isAirUnitLimitReached();
+    // Brutal's economy step (docs/ai-scenario-matrix.md, "Difficulty separation"): it keeps an 8-12
+    // worker opening floor and equal (not double) army capital per worker while it grows its fleet up
+    // to its larger harvester limit. DuneCity custom games had it already (helpers included); vanilla
+    // custom games the house plays itself have it since 1.0.849.
     const bool brutalCityEconomy = citySimEnabled && gameMode == GameMode::Custom
         && difficulty == Difficulty::Brutal;
+    const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
+        && !supportMode && !isCampaignGameType(currentGame->gameType));
+    const bool openingWorkerFloor = (citySimEnabled && gameMode == GameMode::Custom) || brutalEconomy;
     auto openingFleetIncomplete = [&]() {
-        return citySimEnabled && gameMode == GameMode::Custom
+        return openingWorkerFloor
             && !getHouse()->isGroundUnitLimitReached()
-            && CityEconomyInvestmentPolicy::openingWorkersNeeded(itemCount[Unit_Harvester],fundedHarvesterTarget,brutalCityEconomy);
+            && CityEconomyInvestmentPolicy::openingWorkersNeeded(itemCount[Unit_Harvester],fundedHarvesterTarget,brutalEconomy);
     };
     auto openingWorkersNeeded = [&]() {
         return openingFleetIncomplete() && !harvesterFactories.empty();
@@ -575,7 +582,7 @@ void QuantBot::build(int militaryValue) {
     };
     auto needsFirstTransport = [&]() {
         // Preserve early carryalls while Brutal continues growing its fleet.
-        if (brutalCityEconomy ? CityEconomyInvestmentPolicy::openingWorkersNeeded(itemCount[Unit_Harvester],fundedHarvesterTarget)
+        if (brutalEconomy ? CityEconomyInvestmentPolicy::openingWorkersNeeded(itemCount[Unit_Harvester],fundedHarvesterTarget)
                               : openingWorkersNeeded()) return false;
         return QuantBotBuildPolicy::firstTransportNeeded(transportTechAvailable,
             itemCount[Structure_HeavyFactory],getHouse()->getNumItems(Unit_Harvester),
@@ -1006,7 +1013,7 @@ void QuantBot::build(int militaryValue) {
         return CityEconomyInvestmentPolicy::preferFactoryHarvester(itemCount[Unit_Harvester],
             citySimEnabled ? fundedHarvesterTarget : spiceHarvesterTarget,militaryValue,militaryBudget,
             data[Unit_Harvester][houseID].price,canBuildMilitaryVehicle(factory),
-            citySimEnabled && gameMode == GameMode::Custom,brutalCityEconomy);
+            openingWorkerFloor,brutalEconomy);
     };
 
     CityEconomyInvestmentPolicy::Investment lastEconomyInvestment;
@@ -3174,7 +3181,7 @@ void QuantBot::build(int militaryValue) {
                 const bool openingWorker = openingWorkersNeeded() && getHouse()->hasPower();
                 const bool workerProducer = pBuilder->getItemID() == Structure_HeavyFactory
                     && campaignAvailableToBuild(pBuilder,Unit_Harvester)
-                    && (openingWorker || (brutalCityEconomy && factoryPrefersHarvester(pBuilder)));
+                    && (openingWorker || (brutalEconomy && factoryPrefersHarvester(pBuilder)));
                 const bool firstCarryall = needsFirstTransport() && carryallBuildAvailable && getHouse()->hasPower();
                 const bool transportProducer = firstCarryall && pBuilder->getItemID() == Structure_HighTechFactory
                     && campaignAvailableToBuild(pBuilder,Unit_Carryall);
@@ -3525,7 +3532,7 @@ void QuantBot::build(int militaryValue) {
                             && itemCount[Unit_Harvester] < (vanillaEconomy ? spiceHarvesterTarget : fundedHarvesterTarget)
                             && campaignAvailableToBuild(pBuilder,Unit_Harvester) && !getHouse()->isGroundUnitLimitReached()
                             && money + ((vanillaEconomy || harvesterInvestmentReserve() > 0) ? reserve.reserved : 0) >= data[Unit_Harvester][houseID].price
-                                + ((campaignEconomyPush || harvesterInvestmentReserve() > 0) ? 0 : vanillaEconomy ? 1000 : (openingWorkersNeeded() || brutalCityEconomy) ? 0 : data[Unit_Tank][houseID].price)) {
+                                + ((campaignEconomyPush || harvesterInvestmentReserve() > 0) ? 0 : (openingWorkersNeeded() || brutalEconomy) ? 0 : vanillaEconomy ? 1000 : data[Unit_Tank][houseID].price)) {
                             const int workerCash=(vanillaEconomy || harvesterInvestmentReserve()>0)
                                 ? std::max(0,reserve.reserved-capitalReserve(pBuilder->getObjectID())) : 0;
                             money+=workerCash;

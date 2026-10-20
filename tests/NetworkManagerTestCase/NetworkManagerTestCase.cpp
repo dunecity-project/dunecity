@@ -102,7 +102,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 87 is 1.0.848: 83-86 plus the difficulty ladder (Custom Medium whole-army path and surplus
     // budget, team-aware readiness, campaign partner) and a spice quota met by spice and tax
     // credits alike; save 9868.
-    // 88: only Custom Hard and Brutal play a production strategy; Custom Brutal's delivery bonus.
+    // 88: only Custom Hard and Brutal play a production strategy; custom harvester fleets follow the
+    // difficulty's configured limit; Brutal's opening worker floor in vanilla custom games too.
     REQUIRE(NETWORK_PROTOCOL_VERSION == 88);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

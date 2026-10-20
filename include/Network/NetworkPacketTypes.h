@@ -285,10 +285,11 @@
 //     desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
 // 88: Difficulty separation (fix/difficulty-separation): only Custom Hard and Brutal QuantBots play
 //     a production strategy (QuantBot::playsStrategy; 87 gave Custom Medium the default
-//     Fixed:Tuned,Swarm mix and tempo too), and a Custom Brutal QuantBot's house is paid
-//     QuantBot::kBrutalDeliveryBonusPercent on top of every refinery delivery
-//     (House::addRefinedSpice). An 87 peer would build and attack differently and desync. No saved
-//     state change; save 9868.
+//     Fixed:Tuned,Swarm mix and tempo too); a custom QuantBot's harvester fleet is capped by its
+//     difficulty's configured HarvesterLimit*Map (QuantBot::configuredCustomHarvesterLimit; 87
+//     overwrote it with the spice budget), and a custom Brutal house keeps its opening worker floor
+//     and equal army capital per worker in vanilla games too (DuneCity only in 87). An 87 peer would
+//     build and attack differently and desync. No saved state change; save 9868.
 #define NETWORK_PROTOCOL_VERSION            88
 
 // Mod transfer limits

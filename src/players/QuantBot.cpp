@@ -193,6 +193,19 @@ bool QuantBot::overridesMilitaryValueCap() const {
     return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
 }
 
+int QuantBot::configuredCustomHarvesterLimit() const {
+    // Custom games the house plays itself only: campaigns keep their scripted fleets and a
+    // support controller follows its human partner.
+    if (supportMode || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
+        || isCampaignGameType(currentGame->gameType)) return 0;
+    const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
+    const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
+    return mapsize <= 1024 ? settings.harvesterLimitCustomSmallMap
+        : mapsize <= 4096 ? settings.harvesterLimitCustomMediumMap
+        : mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap
+        : settings.harvesterLimitCustomHugeMap;
+}
+
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
     if (overridesMilitaryValueCap())
         return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
@@ -567,6 +580,12 @@ void QuantBot::update() {
     // Only opposing Brutal houses receive the seven-worker difficulty ceiling.
     if (const int ceiling = harvesterCountCeiling(); ceiling > 0)
         baseHarvesterLimit = std::min(baseHarvesterLimit, ceiling);
+    // A custom game's difficulty harvester limit for the map size (QuantBot Config.ini
+    // HarvesterLimit*Map: on 96-128 maps Easy 8, Medium 15, Hard 40, Brutal 100) is a real ceiling:
+    // until 1.0.849 the spice budget above overwrote it and every difficulty planned the same fleet
+    // (docs/ai-scenario-matrix.md, "Difficulty separation").
+    if (const int configured = configuredCustomHarvesterLimit(); configured > 0)
+        baseHarvesterLimit = std::min(baseHarvesterLimit, configured);
 	// Apply spice-based reduction for all modes and difficulties
 	int maxHarvestersForSpice = lastCalculatedSpice / 2000;
 	int oldLimit = harvesterLimit;

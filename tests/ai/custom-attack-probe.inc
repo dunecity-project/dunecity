@@ -72,6 +72,19 @@ void runCustomAttackProbe(Game& game) {
         require(bot->playsStrategy(),"Custom Brutal lost its strategy");
         reset(QuantBot::Difficulty::Easy);
         require(!bot->playsStrategy(),"Custom Easy plays a strategy");
+        // The configured harvester limits take effect in custom games and rise with the difficulty.
+        int previousLimit=0;
+        for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,
+                             QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            reset(difficulty);
+            const int limit=bot->configuredCustomHarvesterLimit();
+            require(limit>previousLimit,"A custom difficulty's harvester limit does not exceed the one below");
+            previousLimit=limit;
+        }
+        bot->supportMode=true;
+        require(bot->configuredCustomHarvesterLimit()==0,"A support controller took the custom harvester limit");
+        bot->supportMode=false;
+        reset(QuantBot::Difficulty::Easy);
         for(auto difficulty:{QuantBot::Difficulty::Easy}) {
             reset(difficulty);bot->launchGroundHunt();
             auto* reserve=army.back();

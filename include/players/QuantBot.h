@@ -163,6 +163,9 @@ public:
     int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
+    /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
+    /// in a custom game the house plays itself; 0 elsewhere (no ceiling from the config).
+    int configuredCustomHarvesterLimit() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
