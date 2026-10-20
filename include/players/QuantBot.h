@@ -688,15 +688,20 @@ private:
     mutable AnchorFieldCache anchorFieldCache;
 
     /// Ordered spice-tile membership shared by the harvester candidate sweeps of
-    /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership only, in
-    /// the original y-then-x order. Everything that can change as earlier
-    /// harvesters are ordered — peers, plannedDestination reservations,
-    /// unsafeFields memory, danger, passability and routes — is still evaluated
-    /// per candidate, per harvester. Lives in a checkAllUnits() local and is
-    /// passed down by pointer; other callers pass nothing and get a fresh scan.
+    /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership, in the
+    /// original y-then-x order, and per tile whether it is plain: neither mountain
+    /// nor holding a ground object, so every unit's canPass() is true there and no
+    /// per-harvester rule applies. Nothing in the pass moves objects onto tiles or
+    /// changes terrain except an MCV deploy, which invalidates the cache. Everything
+    /// that can change as earlier harvesters are ordered — peers, plannedDestination
+    /// reservations, unsafeFields memory, danger, passability of occupied tiles and
+    /// routes — is still evaluated per candidate, per harvester. Lives in a
+    /// checkAllUnits() local and is passed down by pointer; other callers pass
+    /// nothing and get a fresh scan.
     struct SpiceFieldCache {
         bool valid = false;
         std::vector<Coord> tiles;
+        std::vector<uint8_t> plain;   // parallel to tiles
         uint64_t builds = 0, hits = 0, invalidations = 0;
     };
     /// The house's oldest surviving construction yard: the main base anchor.

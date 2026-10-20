@@ -328,6 +328,44 @@ TEST_CASE("Harvester escape permits leaving danger but rejects crossing another 
     REQUIRE_FALSE(escapeCorridor(0,0,0,0,[](int,int) { return 100; }));
 }
 
+TEST_CASE("Harvester field choice picks what the sequential corridor sweep picked", "[tactical][harvester]") {
+    // The sweep it replaces (QuantBot::manageHarvesterSafety before 2026-10-21): every
+    // candidate beating the running best is route-tested, the first safe one of the lowest
+    // score wins. Random scores with many ties and wide ranges, random safe sets from
+    // none to all; the pick must be the same and only candidates at least as good as it
+    // may be tested.
+    uint32_t state = 12345u;
+    auto next = [&] { state ^= state << 13; state ^= state >> 17; state ^= state << 5; return state; };
+    for (int round = 0; round < 3000; ++round) {
+        const size_t count = next() % 400;
+        const int range = 1 + static_cast<int>(next() % (round % 3 == 0 ? 8 : 3000));
+        const uint32_t safeShare = next() % 101;
+        std::vector<int> scores(count);
+        std::vector<bool> safe(count);
+        for (size_t k = 0; k < count; ++k) {
+            scores[k] = static_cast<int>(next() % range);
+            safe[k] = next() % 100 < safeShare;
+        }
+        int expected = -1, best = std::numeric_limits<int>::max();
+        for (size_t k = 0; k < count; ++k) {
+            if (scores[k] >= best || !safe[k]) continue;
+            best = scores[k]; expected = static_cast<int>(k);
+        }
+        int rejected = -1, tests = 0;
+        const int pick = TacticalSafetyPolicy::lowestSafeCandidate(scores, [&](int k) {
+            ++tests;
+            if (expected >= 0) {
+                // Never a candidate worse than the pick (lower (score, position) first).
+                REQUIRE(std::make_pair(scores[k], k) <= std::make_pair(scores[expected], expected));
+            }
+            return static_cast<bool>(safe[k]);
+        }, rejected);
+        REQUIRE(pick == expected);
+        REQUIRE(rejected == tests - (pick >= 0 ? 1 : 0));
+        if (pick < 0) REQUIRE(tests == static_cast<int>(count));
+    }
+}
+
 #include <players/RedevelopmentPolicy.h>
 TEST_CASE("Redevelopment compares normalized demand and displacement", "[city][placement]") {
     using RedevelopmentPolicy::displacementCost;

@@ -236,23 +236,27 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     std::string scopeJson;
     for (size_t i = 0; i < scopes.size() && i < 25; ++i)
         scopeJson += (scopeJson.empty() ? "" : ",") + std::string("\"") + scopes[i].second + "\":" + std::to_string(scopes[i].first / 1000);
-    // The same scopes summed over every house and item (placement scopes are keyed by item),
-    // and the city simulation's scopes: "scope": [ms, calls, worst call ms].
+    // The same scopes summed over every house and item (placement scopes are keyed by item;
+    // those also appear per item as "scope#item"), and the city simulation's scopes:
+    // "scope": [ms, calls, worst call ms].
     struct Total { long long sum = 0; unsigned long long count = 0; long long maximum = 0; };
     std::map<std::string, Total> totalsByScope;
     for (const auto& entry : AITelemetry::log().performanceMetrics) {
         const auto& [scope, house, item, duration] = entry.first;
         if (!duration || !((house >= 0 && scope.rfind("ai.", 0) == 0) || scope.rfind("city.", 0) == 0)) continue;
-        Total& total = totalsByScope[scope];
-        total.sum += entry.second.sum;
-        total.count += entry.second.count;
-        total.maximum = std::max<long long>(total.maximum, entry.second.maximum);
+        for (const std::string& key : {scope, item >= 0 ? scope + "#" + std::to_string(item) : std::string()}) {
+            if (key.empty()) continue;
+            Total& total = totalsByScope[key];
+            total.sum += entry.second.sum;
+            total.count += entry.second.count;
+            total.maximum = std::max<long long>(total.maximum, entry.second.maximum);
+        }
     }
     std::vector<std::pair<long long, std::string>> totals;
     for (const auto& [scope, total] : totalsByScope) totals.emplace_back(total.sum, scope);
     std::sort(totals.rbegin(), totals.rend());
     std::string totalJson;
-    for (size_t i = 0; i < totals.size() && i < 60; ++i) {
+    for (size_t i = 0; i < totals.size() && i < 80; ++i) {
         const Total& total = totalsByScope[totals[i].second];
         totalJson += (totalJson.empty() ? "" : ",") + std::string("\"") + totals[i].second + "\":["
             + std::to_string(total.sum / 1000) + "," + std::to_string(total.count) + ","
