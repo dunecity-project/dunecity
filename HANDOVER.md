@@ -1,29 +1,28 @@
-## 2026-10-19 — Difficulty separation: Brutal > Hard > Medium > Easy (branch `fix/difficulty-separation`, from 1.0.848 73404c33 + merged 1.0.849; protocol 88, save 9868; not released)
+## 2026-10-21 — Difficulty separation: Brutal > Hard > Medium > Easy on long games (branch `fix/difficulty-separation`, from 1.0.848 73404c33 + merged 1.0.849; protocol 88, save 9868; not released)
 
 Agent LadderFix. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty separation"; data
-`~/Documents/projects/dunecity-results/difficulty-sep/` (`before`, `after`, `armA|armF|armAF`, `b0o..b50`, `mirror-qh`,
-`*-report.md`, `ctest-final.log`).
+`~/Documents/projects/dunecity-results/difficulty-sep/` (`before`, `after2`, `armA|armF|armAF`, `sfix-long`, `e1`,
+`mirror-qh`, `*-report.md`, `ctest-bea4449c.log`).
 
-- **Cause of the flattening:** 1.0.848's gate rename gave Custom Medium the Hard/Brutal `Fixed:Tuned,Swarm` strategy.
-  A/B (72 games, paired with 1.0.848): Medium without it QB v QM +0.12 -> +0.33 (paired +0.20 [+0.04, +0.38]), QH v QM
-  +0.12 -> +0.40; FinishWhenLeading Hard/Brutal only changes nothing (+0.02/+0.00/+0.03) and stays on for all.
-- **Changes:** `QuantBot::playsStrategy()` (Custom Hard/Brutal) gates the strategy; Brutal's documented income bonus
-  `QuantBot::kBrutalDeliveryBonusPercent` = 15% on refinery deliveries (`House::addRefinedSpice`, `Player::getSpiceDeliveryBonusPercent`),
-  custom only, not for support controllers, only while an enemy is not all Brutal QuantBots. Brutal's own rules
-  (limit, threshold, tech timing, turrets) left it level with Hard (+0.11); Brutal opening at Hard's share measured level, not kept.
-  Easy unchanged. Protocol 88 (history + NetworkManagerTestCase).
-- **Ladder (144 games/pair, both houses of every seed), before -> after:** QB v QH +0.11 -> +0.44 [+0.26, +0.61];
-  QH v QM +0.08 -> +0.34 [+0.16, +0.51]; QM v QE +0.74 -> +0.61 [+0.44, +0.77] (6/144 time-outs); QB v QM +0.15 -> +0.72
-  [+0.58, +0.85]; QH v QE +0.85 both. CY: QB v QM -0.28 -> +0.58, QB v QH +0.02 -> +0.19.
-- **Harness:** `scenario-matrix.py` ladder has all five pairs, 18 seeds per map, each seed played with both houses
-  (`#swap`, same starts; 720 ladder games in the full tier, `--ladder-seeds 9` for 72/pair); the interval resamples seeds;
-  `houses.csv` has `start`. House bias: Hard mirror Harkonnen 65 / Atreides 74 / 5 draws; the seed's start decides
-  more than the house; only Habbanya-Penny favours Atreides (25-10).
-- **Tests** (Release `build`, 5dc9bdb9): `ctest -j3 -E perf_regression` 104/104 passed (incl. dunelegacy_tests,
-  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe, preplace_queue_probe,
-  skirmish_generator_tests, save_scenario_export, network_wire_harness, every quantbot_* incl. all_against_atreides,
-  strategy, ffa_army_deploys, scenario_matrix smoke, custom_attack); perf_regression passed alone. Before the
-  all-Brutal rule, `quantbot_ffa_army_deploys` failed (9101 nobody eliminated by 30).
+- **Cause of the flattening:** 1.0.848's gate rename gave Custom Medium the Hard/Brutal `Fixed:Tuned,Swarm` strategy
+  (A/B, short maps: QB v QM +0.12 -> +0.33, QH v QM +0.12 -> +0.40); FinishWhenLeading has no effect in 1v1 and stays on.
+- **Changes:** `QuantBot::playsStrategy()` (Custom Hard/Brutal) gates the strategy. Stefan rejected the income bonus
+  (removed, with `House::addRefinedSpice`): instead the configured `HarvesterLimit*Map` is a real ceiling in custom
+  games above 64x64 (`QuantBot::configuredCustomHarvesterLimit`; it was overwritten by the spice budget, so every
+  difficulty planned the same 60-70-worker target), and Brutal's 8-12 worker opening floor and 1:1 army capital per
+  worker apply in vanilla custom games too, but not against a coalition or while outnumbered (All against Atreides
+  lost 6/6 without that gate). The military limit already binds in long games (Hard ends at its 50k/70k cap, Brutal
+  goes to 175-365k in DuneCity): unchanged. No resource bonus anywhere.
+- **Ladder** (scenario-matrix.py, now decided on long maps: Random Skirmish 128x128/160x160, both mods, medium bases,
+  75/90 min, 144 games per pair, both houses of every seed; short maps reported with 72): long before -> after
+  QB v QH +0.34 -> +0.64 [+0.50, +0.76] (paired +0.30), QH v QM +0.36 -> +0.46 [+0.34, +0.59], QM v QE +0.87 -> +0.93,
+  QB v QM +0.46 -> +0.83, QH v QE +0.94 -> +1.00. Short maps after: QB v QH +0.19 [-0.05, +0.42] (not shown), QH v QM
+  +0.25 [-0.01, +0.50], QM v QE +0.85, QB v QM +0.51. Long time-outs after: 13/17/5 of 144 (QB v QH / QH v QM / QM v QE).
+- **House bias:** Hard mirror Harkonnen 65 / Atreides 74 / 5 draws; the seed's start decides more than the house;
+  only Habbanya-Penny favours Atreides (25-10).
+- **Tests** (Release `build`, bea4449c): `ctest -j3 -E perf_regression` 104/104 passed (whole mandatory set incl.
+  all_against_atreides, ffa_army_deploys, scenario_matrix smoke, strategy, opening-economy probes, custom_attack);
+  perf_regression passed alone (53 s, mini load ~6 from cluster games).
 
 ## 2026-10-19 — local 1.0.849 verified and installed on the MBA
 

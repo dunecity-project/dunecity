@@ -58,7 +58,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
 | `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
 | `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
-| `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE, on a vanilla and a DuneCity Random Skirmish map (96x96, small bases, small armies), Habbanya-Penny and a vanilla Construction Yard only 96x96 start; 18 seeds per pair and map, each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair (`--ladder-seeds 9`: 72) | the stronger QuantBot's placement score interval above 0 (over all maps; the interval resamples seeds) |
+| `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE. Long maps (the decision): Random Skirmish 128x128 (75 min) and 160x160 (90 min), vanilla and DuneCity, medium bases, no army, 18 seeds each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair. Short maps (reported): 96x96 small bases vanilla and DuneCity, Habbanya-Penny, a vanilla CY 96x96 start, 9 seeds x both houses: 72 per pair | the stronger QuantBot's placement score interval above 0 over the long maps (the interval resamples seeds); game length per cell |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
 Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
@@ -90,7 +90,7 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 
 Every game must also finish without a crash. 10 games, three at a time.
 
-**Full** (`--tier full`, 1,283 games, 720 of them ladder): the whole matrix.
+**Full** (`--tier full`, 1,643 games, 1,080 of them ladder): the whole matrix.
 
 ## Running
 
@@ -100,7 +100,7 @@ python3 tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3 --build-dir bu
 # full tier, one machine
 python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/projects/dunecity-results/scenario-matrix/<tag>
 # a slice: --categories ladder campaign, --seeds-per-cell 2, --cells 'QB-v-QM|3v3' (regex on
-# category/cell/mod), --ladder-seeds 9 (72 ladder games per pair), --list (print the plan)
+# category/cell/mod), --ladder-seeds 9 (72 long ladder games per pair), --list (print the plan)
 # report over any number of results directories (e.g. the four shards)
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
 ```
@@ -259,11 +259,12 @@ plays 20 houses, interval -0.13..+0.48).
 
 ## Difficulty separation (branch `fix/difficulty-separation`, protocol 88)
 
-Stefan: a clear ladder, Brutal > Hard > Medium > Easy. Data: `~/Documents/projects/dunecity-results/difficulty-sep/`
-(`before` = 1.0.848 game code, `after` = this branch; `armA`/`armF`/`armAF` A/B; `b*` bonus screens;
-`mirror-qh`; reports `before-report.md`, `after-report.md`; `ctest-final.log`).
+Stefan: a clear ladder, Brutal > Hard > Medium > Easy; "brutal should have a higher harvester limit and military
+limit"; "don't test on such short timelines". Data: `~/Documents/projects/dunecity-results/difficulty-sep/`
+(`before` = 1.0.848 game code, `after2` = this branch; `armA`/`armF`/`armAF` the A/B; `sfix-long`, `e1` screens;
+`mirror-qh`; reports `*-report.md`; `ctest-bea4449c.log`).
 
-### What flattened Brutal v Medium (A/B, 72 games each, paired with 1.0.848 by game id)
+### What flattened Brutal v Medium (A/B on the short maps, 72 games each, paired with 1.0.848 by game id)
 
 | Arm | QB v QM | QH v QM | QM v QE |
 |---|---|---|---|
@@ -272,54 +273,62 @@ Stefan: a clear ladder, Brutal > Hard > Medium > Easy. Data: `~/Documents/projec
 | F: FinishWhenLeading Hard/Brutal only | +0.14 (+0.02 [-0.06, +0.10]) | +0.12 (+0.00) | +0.88 (+0.03) |
 | A + F | +0.35 (+0.23) | +0.36 (+0.24) | +0.58 (-0.27) |
 
-The cause is the strategy gate: 1.0.848 renamed `autonomousCustomHardBrutal` to `autonomousCustomArmy`
-(Medium/Hard/Brutal), so Custom Medium also played the default `Fixed:Tuned,Swarm` (tuned on Hard/Brutal).
-That made Medium as strong as Hard. FinishWhenLeading does nothing in these 1v1 pairs and stays on for
-Medium/Hard/Brutal (it is the free-for-all finish). Fix: `QuantBot::playsStrategy()` (Custom Hard/Brutal)
-gates the strategy pick, `strategyMix()` and `strategyTempo()`. Medium keeps the whole-army waves and its
-surplus spending, but plays the learned mix at the configured 60% readiness.
+The cause is the strategy gate: 1.0.848 renamed `autonomousCustomHardBrutal` to `autonomousCustomArmy`, so
+Custom Medium also played the default `Fixed:Tuned,Swarm` (tuned on Hard/Brutal). FinishWhenLeading does
+nothing in 1v1 and stays on. Fix: `QuantBot::playsStrategy()` (Custom Hard/Brutal) gates the strategy pick,
+`strategyMix()` and `strategyTempo()`.
 
-### What Brutal does differently from Hard, and why it did not win more
+### Brutal's limits did not take effect
 
-In a custom game Brutal and Hard run the same army code: whole-army waves, Tuned/Swarm, force
-concentration, air raids, repair, kiting, the same harvester planner and think rate. Nobody gets cheats.
-Brutal's own rules: a larger military limit (80,000 v 50,000 on 96x96), its own 25% threshold (on 96x96
-the same 20,000 gate as Hard's global 40%), a smaller held opening (6,250 v 7,500), rocket coverage tier 3,
-IX/Palace after 20/45 s instead of 35/60 s, 10% infantry, and in DuneCity an uncapped city and a bigger
-worker opening. In 1v1 games that end at 15-35 minutes neither house comes near its limit; both spend
-everything they earn (local telemetry: 148,100 v 145,950 credits spent by minute 15 over six games),
-so the extras do not show (Brutal v Hard +0.11 over 144 games). Opening at Hard's 30% share measured
-level (+0.23 alone; paired with the bonus +0.08 and -0.05), so it is not kept.
+In a custom game Brutal and Hard ran the same army and economy code; nobody gets cheats. The configured
+`HarvesterLimit*Map` (96-128 maps: Easy 8, Medium 15, Hard 40, Brutal 100; 160+: 15/25/40/50) was overwritten
+every update by the spice budget (`max(1, spice/2000)`), so every difficulty planned the same fleet: on a
+96x96 ladder map the target was 63-73 workers for both Brutal and Hard, and both actually ran 4-30 harvesters,
+held back by the same army-first spending rule. The military limit (Brutal 80,000/100,000 v Hard
+50,000/70,000) binds only in long games: in long DuneCity games Hard ends at its cap (52,760 on 128x128,
+74,330 on 160x160 at most) while Brutal's armies reach 175,000-365,000, so that limit already works and needs
+no change.
 
-**Brutal's documented resource advantage:** a Custom Brutal QuantBot house (not a campaign, not a support
-controller) is paid `QuantBot::kBrutalDeliveryBonusPercent` = **15%** on top of every refinery delivery
-(`House::addRefinedSpice`, the refinery and the Worfinery; the bonus is income, not refined spice, so the
-harvest statistics are unchanged). It applies while an enemy house has a controller that is not a Brutal
-QuantBot; among Brutal houses alone it would only inflate every army (`quantbot_ffa_army_deploys` 9101:
-nobody eliminated by minute 30 with it on). Dose (QB v QH, 72 games): 10% +0.44, 15% +0.51, 25% +0.78, 50% +0.97.
-No other difficulty gets a resource bonus. Easy is unchanged.
+Changes (no resource bonus; a 15% delivery bonus tried earlier was removed):
+- **The configured harvester limit is a real ceiling** in custom games above 64x64
+  (`QuantBot::configuredCustomHarvesterLimit`; up to 64x64 the campaign-era values of 2-10 workers would starve
+  every economy, so the spice budget alone decides there as before; campaigns and support controllers unchanged).
+- **Brutal's economy step in vanilla custom games** (DuneCity custom games had it already): an 8-12 worker opening
+  floor and equal, not double, army capital per worker while the fleet grows towards its larger limit
+  (`QuantBotBuild.cpp` `brutalEconomy`, `CityEconomyInvestmentPolicy::preferFactoryHarvester`). Not while it faces
+  more enemy houses than its team has or is outnumbered: against four AI Player Hard houses (All against
+  Atreides) the economy-first opening lost 6 of 6.
 
-### Ladder before/after (144 games per pair, 18 seeds x both houses x 4 maps; interval over seeds)
+Harvesters over time (local, QB v QH, vanilla): before, both houses ran 4/6/9/14/19/25 at minutes 3/6/9/12/15/20
+(Hard 4/6/9/13/19/27); after, Brutal 12/21/32/37 at minutes 9/12/15/20 against Hard 7/11/17/24 (CY start), and
+on Habbanya-Penny Brutal 42-81 at minutes 15-25 against Hard's 40-worker cap.
 
-| Pair | 1.0.848 W-L-T | 1.0.848 score | after W-L-T | after score |
-|---|---|---|---|---|
-| Brutal v Hard | 79-63-2 | +0.11 [-0.07, +0.28] | 103-39-2 | **+0.44 [+0.26, +0.61]** |
-| Hard v Medium | 72-57-15 | +0.08 [-0.08, +0.25] | 94-43-7 | **+0.34 [+0.16, +0.51]** |
-| Medium v Easy | 123-14-7 | +0.74 [+0.62, +0.85] | 114-24-6 | **+0.61 [+0.44, +0.77]** |
-| Brutal v Medium | 82-60-2 | +0.15 [-0.05, +0.34] | 123-19-2 | **+0.72 [+0.58, +0.85]** |
-| Hard v Easy | 133-10-1 | +0.85 [+0.74, +0.95] | 133-10-1 | +0.85 [+0.74, +0.95] |
+### Ladder before/after
 
-CY start: Brutal v Medium 13-23 (-0.28) -> 28-7 (+0.58); Brutal v Hard 18-17 -> 21-14 (+0.19); Medium v
-Easy 20-14-2 (+0.15, its weakest map). Ladder time-outs 27/720 -> 18/720. Skirmish category (52 games):
-controller order QB +0.38 > QH +0.37 > QM -0.03 > QE -0.49 (before QH +0.31 > QM +0.12 > QB +0.03 > QE
--0.41); the 6P DuneCity FFA no longer times out in every game; time-outs 6 -> 7 of 52; no crash, no idle house.
+Long maps decide (Random Skirmish 128x128 and 160x160, vanilla and DuneCity, medium bases, no army, 75/90
+minutes; 144 games per pair, 18 seeds x both houses; interval over seeds). Short maps (96x96 small bases,
+Habbanya-Penny, CY 96x96; mostly over in 15-35 minutes) are reported: 1.0.848 144 games, after 72.
+
+| Pair | Long 1.0.848 W-L-T, score, mean/max min | Long after | Paired | Short 1.0.848 | Short after |
+|---|---|---|---|---|---|
+| Brutal v Hard | 91-38-15, +0.34 [+0.22, +0.48], 41/90 | 113-18-13, **+0.64 [+0.50, +0.76]**, 41/90 | +0.30 [+0.17, +0.43] | +0.11 [-0.08, +0.29] | +0.19 [-0.05, +0.42] |
+| Hard v Medium | 92-36-16, +0.36 [+0.23, +0.49], 46/90 | 99-28-17, **+0.46 [+0.34, +0.59]**, 45/90 | +0.10 [-0.02, +0.23] | +0.08 [-0.09, +0.24] | +0.25 [-0.01, +0.50] |
+| Medium v Easy | 133-7-4, +0.87 [+0.80, +0.94], 39/75 | 137-2-5, **+0.93 [+0.87, +0.98]**, 33/75 | +0.06 [-0.01, +0.13] | +0.74 [+0.62, +0.85] | +0.85 [+0.74, +0.95] |
+| Brutal v Medium | 105-39-0, +0.46 [+0.31, +0.61], 35/60 | 132-12-0, **+0.83 [+0.71, +0.93]**, 36/69 | +0.38 [+0.24, +0.53] | +0.15 [-0.05, +0.34] | +0.51 [+0.26, +0.73] |
+| Hard v Easy | 140-4-0, +0.94 [+0.89, +0.99], 33/63 | 144-0-0, **+1.00**, 29/50 | +0.06 [+0.01, +0.11] | +0.85 [+0.74, +0.94] | +0.94 [+0.86, +1.00] |
+
+Time-outs on the long maps after: QB v QH 13/144 (DuneCity 128x128 10), QH v QM 17/144 (DuneCity 160x160 14),
+QM v QE 5/144. On the long maps the ladder already held on 1.0.848 for the adjacent pairs; the flattening was
+on the short maps, where Brutal v Hard is still not shown (+0.19) - those games end before limits matter.
+Vanilla games stay short even on 128x128/160x160 maps (mean 22-36 minutes); DuneCity games run 35-71.
+
+Skirmish category (52 games, mixed controllers): QH +0.42, QB +0.18 [-0.12, +0.49] (20 houses, all in free-for-alls
+where the vanilla economy step is off), QM -0.08, QE -0.47; 9 time-outs, no crash.
 
 ### House or start?
 
-The ladder used to alternate houses between seeds, so a seed's start and its house were confounded.
-In a Hard mirror (144 games, both houses of every seed, each side keeping its start) Harkonnen won 65,
-Atreides 74, 5 draws: there is no Harkonnen advantage overall. The start a seed gives decides more than
-the house (the same start won both games of a seed in 41 of 72 pairs, the same house in 27). The one
-house effect is Habbanya-Penny: Atreides 25-10 from either start (46:116 and 81:11). The ladder now plays
-every seed with both houses (`#swap`), so neither the house nor the start decides it, and the report
-lists the stronger side's wins as Harkonnen / Atreides.
+The ladder used to alternate houses between seeds, so a seed's start and its house were confounded. In a Hard
+mirror (144 games, both houses of every seed, each side keeping its start) Harkonnen won 65, Atreides 74, 5
+draws: no Harkonnen advantage overall. The start decides more than the house (the same start won both games of
+a seed in 41 of 72 pairs, the same house in 27); the one house effect is Habbanya-Penny, Atreides 25-10 from
+either start. Every ladder seed is now played with both houses (`#swap`).
