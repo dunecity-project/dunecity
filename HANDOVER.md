@@ -1,3 +1,12 @@
+## 2026-10-22 — local 1.0.850 verified (MBA install pending: Air unreachable)
+
+1.0.849 + `fix/difficulty-separation` 31654a95 + `perf/fps-8house` ef34cf02 (HANDOVER conflict only) + version
+bump ed3e0b21. Protocol 88, save 9868. `agent-workspace stage verify` at ed3e0b21: CTest 105/105 (1204 s).
+Package: executable SHA256 acebbe73147cd6e8b831a8e52cca55f73e97beebf22ce0229779dc6a9d5a232f, no Homebrew/local
+links, signature and runtime check passed; zip `/tmp/dunecity-1.0.850-macos.zip`, installer
+`/tmp/push-dunecity-1.0.850.sh`. The MBA install timed out over SSH (Air asleep or off the network); rerun the
+installer when it is reachable. Not pushed.
+
 ## 2026-10-21 — Difficulty separation: Brutal > Hard > Medium > Easy on long games (branch `fix/difficulty-separation`, from 1.0.848 73404c33 + merged 1.0.849; protocol 88, save 9868; not released)
 
 Agent LadderFix. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty separation"; data
