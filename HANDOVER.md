@@ -1,3 +1,14 @@
+## 2026-10-22 — 1.0.850 published to production
+
+PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)
+passed CI and was merged with `--admin` as main b5b83abf; tag v1.0.850. **Build Dune Legacy** 39689107720 succeeded:
+GitHub release v1.0.850 (latest, 13 assets: EXE, Windows ZIP, DMG, macOS ZIP, AppImage, DEB, RPM, tar.gz, three
+updates-*.txt feeds and two appcasts; the macOS feed names 1.0.850). Website: release job commit 9c9eb29 (download
+links, changelog.html with the 1.0.850 notes), New-in prose 54dba60 on index.html and dune-city.html, Deploy to Droplet
+succeeded; live pages show "New in 1.0.850", v1.0.850 DMG links and `#v1.0.850` on changelog.html. **Sync SourceForge
+release** 39694353449 succeeded. **Publish browser build** 39694353427 pushed 133735b; live `play/build.json` is
+1.0.850 (sourceCommit b5b83abf), dunecity.wasm 200.
+
 ## 2026-10-22 — local 1.0.850 verified and installed on the MBA
 
 1.0.849 + `fix/difficulty-separation` 31654a95 + `perf/fps-8house` ef34cf02 (HANDOVER conflict only) + version
