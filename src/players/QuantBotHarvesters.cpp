@@ -30,10 +30,12 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
         getGameCycleCount(), getHouse()->getHouseID());
     const Coord origin = harvester->getLocation(), destination = harvester->getDestination();
     auto distance = [](Coord a, Coord b) { return std::max(std::abs(a.x-b.x),std::abs(a.y-b.y)); };
+    const int mapW = getMap().getSizeX(), mapH = getMap().getSizeY();
+    // harvesterDanger's size stays a live test: scrambleUnitsAndDefend() below can refresh it.
     auto danger = [&](Coord p) {
-        return p.isValid() && p.x < getMap().getSizeX() && p.y < getMap().getSizeY()
-            && harvesterDanger.size() == static_cast<size_t>(getMap().getSizeX()*getMap().getSizeY())
-            ? harvesterDanger[p.y*getMap().getSizeX()+p.x] : 0;
+        return p.isValid() && p.x < mapW && p.y < mapH
+            && harvesterDanger.size() == static_cast<size_t>(mapW*mapH)
+            ? harvesterDanger[p.y*mapW+p.x] : 0;
     };
     const bool threatened = danger(origin) > 0;
     // Remember evacuations before the first hit too. Losing sight of an enemy
@@ -118,7 +120,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     // earlier harvesters just wrote into plannedDestination are included
     // exactly as before; nothing is retained across harvester decisions.
     DuneCity::ChebyshevWeightField crowdField(3, 12);
-    crowdField.build(peers, getMap().getSizeX(), getMap().getSizeY());
+    crowdField.build(peers, mapW, mapH);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
         "harvester.crowd_peers",static_cast<int64_t>(peers.size()),-1,false);
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
@@ -127,23 +129,36 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     Coord best = Coord::Invalid();
     int bestScore = std::numeric_limits<int>::max();
     int safeFields = 0, rejectedRoutes = 0;
-    // Spice membership is the only thing shared between the harvesters of one
-    // checkAllUnits() pass; it is a property of the tile, not of a harvester.
-    // Everything that genuinely varies per harvester or changes as earlier
-    // harvesters are ordered — danger, remembered unsafe fields, passability,
-    // routes, peers and their plannedDestination reservations — is still
-    // evaluated per candidate below, in the original order. The list is built in
-    // the same y-then-x order the scan used, and holds exactly the tiles the
-    // scan's hasSpice() test admitted, so the visit order, the remaining
-    // predicate order and the safeFields/rejectedRoutes counts are unchanged.
+    // Spice membership and plain-tile flags are the only things shared between the
+    // harvesters of one checkAllUnits() pass; they are properties of the tile, not
+    // of a harvester. Everything that genuinely varies per harvester or changes as
+    // earlier harvesters are ordered — danger, remembered unsafe fields, passability
+    // of occupied tiles, routes, peers and their plannedDestination reservations —
+    // is still evaluated per candidate below. The list is built in the same y-then-x
+    // order the scan used, and holds exactly the tiles the scan's hasSpice() test
+    // admitted, so the candidates, their order and the safeFields count are unchanged.
     SpiceFieldCache localSpice;
     SpiceFieldCache& spice = spiceCache ? *spiceCache : localSpice;
     if (!spice.valid) {
         AITelemetry::PerformanceScope spiceScope("ai.harvester.spice_list",
             getGameCycleCount(), getHouse()->getHouseID());
         spice.tiles.clear();
-        for (int y = 0; y < getMap().getSizeY(); ++y) for (int x = 0; x < getMap().getSizeX(); ++x)
-            if (getMap().getTile(x,y)->hasSpice()) spice.tiles.emplace_back(x,y);
+        spice.plain.clear();
+        // Tiles are stored column by column: read them in that order, then list
+        // the spice tiles in the scan's y-then-x order. 1 = spice on a plain tile
+        // (no mountain, no ground object: canPass() is true for every unit there),
+        // 2 = spice on any other tile, whose canPass() stays a live per-harvester call.
+        std::vector<uint8_t> spiceAt(static_cast<size_t>(mapW)*mapH, 0);
+        for (int x = 0; x < mapW; ++x) for (int y = 0; y < mapH; ++y) {
+            const Tile* tile = getMap().getTile(x,y);
+            if (tile->hasSpice())
+                spiceAt[static_cast<size_t>(y)*mapW+x] = !tile->isMountain() && !tile->hasAGroundObject() ? 1 : 2;
+        }
+        for (int y = 0; y < mapH; ++y) for (int x = 0; x < mapW; ++x)
+            if (const uint8_t at = spiceAt[static_cast<size_t>(y)*mapW+x]) {
+                spice.tiles.emplace_back(x,y);
+                spice.plain.push_back(at == 1);
+            }
         spice.valid = true;
         ++spice.builds;
     } else {
@@ -151,15 +166,44 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     }
     AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),
         "harvester.spice_tiles",static_cast<int64_t>(spice.tiles.size()),-1,false);
-    for (const Coord candidate : spice.tiles) {
-        if (danger(candidate)>0 || memoryPenalty(candidate)>0
-            || !harvester->canPass(candidate.x,candidate.y)) continue;
-        ++safeFields;
-        const int score = distance(origin,candidate)*3 + crowdPenalty(candidate);
-        if (score >= bestScore) continue;
-        if (!routeSafe(candidate)) { ++rejectedRoutes; continue; }
-        bestScore = score; best = candidate;
+    // memoryPenalty(p) > 0 exactly when some field that is still cooling down
+    // with a positive penalty lies within 6 tiles: stamp those once instead of
+    // walking every remembered field for every spice tile. unsafeFields does not
+    // change during the sweep.
+    std::vector<uint8_t> remembered(static_cast<size_t>(mapW)*mapH, 0);
+    for (const auto& field : unsafeFields) {
+        if (now-field.cycle >= MILLI2CYCLES(120000)
+            || 12-static_cast<int>((now-field.cycle)/MILLI2CYCLES(10000)) <= 0) continue;
+        const Coord at = field.location;
+        for (int y = std::max(0,at.y-6); y <= std::min(mapH-1,at.y+6); ++y)
+            for (int x = std::max(0,at.x-6); x <= std::min(mapW-1,at.x+6); ++x)
+                remembered[static_cast<size_t>(y)*mapW+x] = 1;
     }
+    // The scan's predicates in the same order: spice tiles are on the map, so
+    // danger() is the cell's value when the danger field covers the map (it does
+    // not change during the sweep), and a plain tile passes canPass(). The scan
+    // then kept the first route-safe candidate of the lowest score, which
+    // lowestSafeCandidate() finds testing only candidates at least as good: the
+    // scan tested every candidate that beat its running best, thousands of long
+    // failing corridors from the far map rows for a harvester at the other end
+    // of a 384x384 map. rejectedRoutes counts those failed tests (telemetry).
+    const int* dangerCells = harvesterDanger.size() == static_cast<size_t>(mapW*mapH) ? harvesterDanger.data() : nullptr;
+    std::vector<int> scores;
+    std::vector<Coord> candidates;
+    scores.reserve(spice.tiles.size());
+    candidates.reserve(spice.tiles.size());
+    for (size_t i = 0; i < spice.tiles.size(); ++i) {
+        const Coord candidate = spice.tiles[i];
+        const size_t cell = static_cast<size_t>(candidate.y)*mapW+candidate.x;
+        if ((dangerCells && dangerCells[cell]>0) || remembered[cell]
+            || (!spice.plain[i] && !harvester->canPass(candidate.x,candidate.y))) continue;
+        ++safeFields;
+        scores.push_back(distance(origin,candidate)*3 + crowdPenalty(candidate));
+        candidates.push_back(candidate);
+    }
+    const int pick = TacticalSafetyPolicy::lowestSafeCandidate(scores,
+        [&](int k) { return routeSafe(candidates[k]); }, rejectedRoutes);
+    if (pick >= 0) { bestScore = scores[pick]; best = candidates[pick]; }
     const bool foundSpice = best.isValid();
     // A partial load can continue harvesting elsewhere. Only unload a full load,
     // finish a real return trip, or salvage cargo when no safe field exists.
@@ -206,8 +250,8 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     // If no safe spice corridor exists, disperse to the nearest safe open tile.
     // There is deliberately no base-centre attraction.
     if (!foundSpice) {
-        for (int y = std::max(0,origin.y-20); y <= std::min(getMap().getSizeY()-1,origin.y+20); ++y)
-            for (int x = std::max(0,origin.x-20); x <= std::min(getMap().getSizeX()-1,origin.x+20); ++x) {
+        for (int y = std::max(0,origin.y-20); y <= std::min(mapH-1,origin.y+20); ++y)
+            for (int x = std::max(0,origin.x-20); x <= std::min(mapW-1,origin.x+20); ++x) {
                 const Coord candidate(x,y);
                 if (danger(candidate)>0 || !harvester->canPass(x,y)) continue;
                 const int score = distance(origin,candidate)*3 + crowdPenalty(candidate);

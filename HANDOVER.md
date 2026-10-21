@@ -24,6 +24,43 @@ Agent LadderFix. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty separation"
   all_against_atreides, ffa_army_deploys, scenario_matrix smoke, strategy, opening-economy probes, custom_attack);
   perf_regression passed alone (53 s, mini load ~6 from cluster games).
 
+## 2026-10-21 — 8-house FPS, second pass: harvester-safety spike, frame pacing, 8-house perf_regression (branch `perf/fps-8house`, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
+
+Agent FpsFix2. Details and tables: `docs/game-performance.md`, "Second pass". Evidence
+`~/Documents/projects/dunecity-results/fps-8house` (results.jsonl, digest15k.jsonl, regression8.jsonl, air-results.jsonl).
+
+- **57 ms spike:** `manageHarvesterSafety` route-tested ~11,000 failing corridors per threatened harvester
+  (all of a house's harvesters are checked on the same pass). Now `TacticalSafetyPolicy::lowestSafeCandidate`
+  (same pick, unit-tested against the old loop) + plain-tile flag: worst `checkAllUnits` 56 -> 11 ms.
+  21 digests over 15,000 cycles equal 1.0.849.
+- **Frame pacing** (`include/FramePacing.h`): single-player frames stop catching up after 16 ms of cycles;
+  network games unchanged. Headless main loop on the save: mini 32 -> 58 fps (p99 97 -> 35 ms), Air on battery
+  in Low Power Mode 18.6 -> 42.3 fps (p99 172 -> 48 ms); 10 main-loop digests equal the stepped run.
+- **perf_regression** also runs the save (fixture `tests/performance/data/eight-house-384`, 484 KB): cpu p99,
+  frame-CPU p99 and paced main-loop frame p99 budgets; 1.0.849 fails all three.
+- **Not done:** rendered 1440x900 window runs (mini or Air), Air on AC; remaining build-pass (20-29 ms) and
+  city-growth (16-18 ms) spikes.
+
+## 2026-10-21 — 8-house 384x384 FPS: map-area work removed from AI, city sim and object removal (branch `perf/fps-8house` from 4018fe36 / 1.0.849, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
+
+Agent FpsFix. Stefan's `fpsstillfucked.dls` (4P - 384x384 - new beginning, eight QuantBot Hard, ~810
+units, 2 ms): 37-90 ms frames. Cause: per-call work proportional to the 147,456-tile map (placement
+distance fields, whole-map object removal, city sand stamp and origin walks, rock survey, anchor field,
+harvester and air-coverage scans). All changes exact; details, numbers and what is not done in
+`docs/game-performance.md`, "Eight houses on a 384x384 map". Evidence `~/Documents/projects/dunecity-results/fps-8house`.
+
+- **Stepped probe, his save, mini:** sim 2.78 -> 1.42 ms/cycle, p99 32.7 -> 12.4, max 98.6 -> 57.4; city
+  p99 18.1 -> 2.8 ms; 10-cycle frames over 33 ms 206 -> 9 of 750. 11 `PROBE_DIGEST`s (every 750 cycles,
+  7,500 cycles) identical to 1.0.849.
+- **Not done:** frame pacing (sim time budget per frame), rendered/Air AC and Low Power Mode runs (his
+  game stayed open), 1.0.833/847 comparison, an 8-house `perf_regression` case, the remaining ~57 ms
+  `checkAllUnits` spike after the per-unit loop.
+- **Tests** (Release `build`, ctest -j3): 45/45 passed (568 s): dunelegacy_tests (new: chamfer-field
+  equivalence, rock survey vs per-enemy scan incl. off-map enemies, air coverage spans/escape),
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and every quantbot_* (incl. all_against_atreides, ffa_army_deploys, scenario_matrix).
+
 ## 2026-10-19 — local 1.0.849 verified and installed on the MBA
 
 1.0.848 + `fix/attack-moves-into-target` 9398cf8d (Attack button / A key on a spice bloom fires at it from

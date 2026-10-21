@@ -16,6 +16,7 @@
  */
 
 #include <Game.h>
+#include <FramePacing.h>
 #include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
@@ -3695,9 +3696,20 @@ void Game::runMainLoop() {
         
         // PHASE 1.3: CYCLE GUARDRAIL - Prevent renderer starvation
         static constexpr int kMaxCyclesPerFrame = 10;
-        
-        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle))) 
-              && cyclesExecuted < kMaxCyclesPerFrame) {
+        // Frame pacing (include/FramePacing.h): a single-player frame also stops catching up
+        // once its cycles have used FramePacing::kCatchUpBudgetMs; the time still owed carries
+        // over to the next frame. Only the number of cycles per frame changes.
+        const Uint64 catchUpStart = SDL_GetPerformanceCounter();
+        const bool networkGame = pNetworkManager != nullptr;
+        bool catchUpBudgetSpent = false;
+        const auto mayRunAnotherCycle = [&] {
+            catchUpBudgetSpent = !FramePacing::mayRunAnotherCycle(cyclesExecuted,
+                getElapsedMs(catchUpStart, SDL_GetPerformanceCounter()), networkGame);
+            return !catchUpBudgetSpent;
+        };
+
+        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle)))
+              && cyclesExecuted < kMaxCyclesPerFrame && mayRunAnotherCycle()) {
             loopIterations++;
             
             Uint64 networkWaitStart = SDL_GetPerformanceCounter();
@@ -3723,6 +3735,8 @@ void Game::runMainLoop() {
             commandsMsThisFrame+=getElapsedMs(commandsStart,SDL_GetPerformanceCounter());
 
             if(!bWaitForNetwork && !isGamePaused() && (!pNetworkManager || !pNetworkManager->lateJoinPaused())) {
+                // Test probes only (tests/performance/game-perf.inc): the cycle's digest, untimed.
+                if (beforeCycleHook != nullptr) beforeCycleHook(*this);
                 // Time the core simulation step for CPU load detection
                 const Uint64 simStart = SDL_GetPerformanceCounter();
                 try {
@@ -3857,6 +3871,9 @@ void Game::runMainLoop() {
         frameTiming.totalTurretScans += frameTiming.turretScansThisFrame;
         frameTiming.turretScanMs += frameTiming.turretScanMsThisFrame;
         frameTiming.frameCount++;
+        ++frameTiming.frameMsHistogram[std::min<size_t>(frameTiming.frameMsHistogram.size() - 1,
+                                                        static_cast<size_t>(thisFrameMs))];
+        if (catchUpBudgetSpent) ++frameTiming.catchUpLimitedFrames;
 
         if(bShowFPS) {
             const auto smooth = [](float& value, double sample) { value = 0.95f*value + 0.05f*static_cast<float>(sample); };
@@ -3888,6 +3905,7 @@ void Game::runMainLoop() {
             record("frame.input",inputMsThisFrame);
             record("frame.commands",commandsMsThisFrame);
             perf.performance(gameCycleCount,-1,"frame.cycles",frameTiming.gameCyclesThisFrame,-1,false);
+            perf.performance(gameCycleCount,-1,"frame.catchup_limited",catchUpBudgetSpent,-1,false);
             perf.performance(gameCycleCount,-1,"frame.units_count",unitList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.structures_count",structureList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.tick_ms",getGameSpeed(),-1,false);

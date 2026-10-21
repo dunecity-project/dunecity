@@ -1803,6 +1803,124 @@ TEST_CASE("An MCV boxed in on four sides still reaches new rock through a diagon
     CHECK_FALSE(choose(w,h,tiles,{start},{},{}).valid());
 }
 
+// The survey before the precomputed enemy-distance field and reserved
+// formation flags, kept verbatim as the reference for the faster survey.
+static RockExpansionPolicy::Site legacyRockChoose(int w,int h,const std::vector<RockExpansionPolicy::Tile>& tiles,
+                   const std::vector<int>& starts,const std::vector<int>& enemies,
+                   const std::vector<int>& reserved, int mainBase=-1) {
+    using namespace RockExpansionPolicy;
+    const int n=w*h;
+    std::vector<int> component(n,-1),distance(n,-1),freeCount;
+    std::vector<bool> occupied;
+    std::vector<int> queue; queue.reserve(n);
+    auto neighbours=[&](int i,auto visit) {
+        if(i%w) visit(i-1); if(i%w+1<w) visit(i+1);
+        if(i>=w) visit(i-w); if(i+w<n) visit(i+w);
+    };
+    auto driveNeighbours=[&](int i,auto visit) {
+        const int x=i%w,y=i/w;
+        for(int dy=-1;dy<=1;++dy) for(int dx=-1;dx<=1;++dx)
+            if((dx||dy)&&x+dx>=0&&x+dx<w&&y+dy>=0&&y+dy<h) visit(i+dy*w+dx);
+    };
+    for(int i=0;i<n;++i) if(tiles[i].rock && component[i]<0) {
+        const int id=int(freeCount.size()); freeCount.push_back(0);occupied.push_back(false);
+        queue.clear();queue.push_back(i);component[i]=id;
+        for(size_t j=0;j<queue.size();++j) {
+            const int at=queue[j];freeCount[id]+=tiles[at].free;
+            occupied[id]=occupied[id]||tiles[at].owned;
+            neighbours(at,[&](int next) {if(tiles[next].rock&&component[next]<0){component[next]=id;queue.push_back(next);}});
+        }
+    }
+    queue.clear();
+    for(int i:starts) if(i>=0&&i<n&&tiles[i].walkable&&!tiles[i].unsafe&&distance[i]<0){distance[i]=0;queue.push_back(i);}
+    for(size_t j=0;j<queue.size();++j) {
+        const int at=queue[j];
+        driveNeighbours(at,[&](int next){if(tiles[next].walkable&&!tiles[next].unsafe&&distance[next]<0){distance[next]=distance[at]+1;queue.push_back(next);}});
+    }
+    std::vector<int> sum((w+1)*(h+1));
+    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+        const int i=y*w+x;
+        sum[(y+1)*(w+1)+x+1]=sum[y*(w+1)+x+1]+sum[(y+1)*(w+1)+x]-sum[y*(w+1)+x]
+            +int(tiles[i].rock&&tiles[i].free&&!tiles[i].unsafe);
+    }
+    Site best;
+    for(int y=0;y<h-1;++y) for(int x=0;x<w-1;++x) {
+        const int i=y*w+x,c=component[i];
+        if(c<0||occupied[c]||freeCount[c]<48||distance[i]<0)continue;
+        bool valid=true;
+        for(int d:{0,1,w,w+1}) if(!tiles[i+d].rock||!tiles[i+d].free||tiles[i+d].unsafe)valid=false;
+        for(int r:reserved) if(component[r]==c)valid=false;
+        if(!valid)continue;
+        const int x0=std::max(0,x-6),x1=std::min(w,x+8),y0=std::max(0,y-6),y1=std::min(h,y+8);
+        const int room=sum[y1*(w+1)+x1]-sum[y0*(w+1)+x1]-sum[y1*(w+1)+x0]+sum[y0*(w+1)+x0];
+        if(room<48)continue;
+        int clearance=w+h;
+        for(int e:enemies) clearance=std::min(clearance,std::max(std::abs(x-e%w),std::abs(y-e/w)));
+        if(clearance<12)continue;
+        const int baseDistance=mainBase>=0 ? std::abs(x-mainBase%w)+std::abs(y-mainBase/w) : distance[i];
+        const Site candidate{x,y,room,clearance,distance[i],baseDistance};
+        if(betterSite(candidate,best))best=candidate;
+    }
+    return best;
+}
+
+TEST_CASE("Expansion survey matches the per-enemy scan on random maps and enemy sets", "[quantbot][expansion][performance]") {
+    using namespace RockExpansionPolicy;
+    uint32_t state=0x5eed1234u;
+    auto next=[&](uint32_t bound) { state=state*1664525u+1013904223u; return bound ? (state>>8)%bound : 0u; };
+    int validSites=0,enemyLimited=0,reservedRejections=0;
+    for(int round=0;round<600;++round) {
+        const int w=1+int(next(round%5==0 ? 8 : 72)),h=1+int(next(round%7==0 ? 8 : 72)),n=w*h;
+        std::vector<Tile> tiles(n);
+        for(auto& tile:tiles) {
+            tile.walkable=next(10)!=0; tile.free=next(12)!=0;
+            tile.unsafe=next(40)==0; tile.owned=next(3000)==0;
+        }
+        // Rectangular formations, so sites pass the 48-tile room checks.
+        const int formations=int(next(6));
+        for(int f=0;f<formations;++f) {
+            const int x0=int(next(w)),y0=int(next(h)),x1=std::min(w,x0+4+int(next(20))),y1=std::min(h,y0+4+int(next(20)));
+            for(int y=y0;y<y1;++y) for(int x=x0;x<x1;++x) tiles[y*w+x].rock=true;
+        }
+        std::vector<int> starts,enemies,reserved;
+        for(int s=int(next(4));s>0;--s) starts.push_back(int(next(n)));
+        // Empty, few, many, duplicated, map-edge and off-map enemies (an aircraft past
+        // an edge: indices beyond the map, below it, or wrapping into the next row).
+        const int enemyCount=round%4==0 ? 0 : round%4==1 ? int(next(4)) : int(next(round%4==2 ? 40 : 900));
+        for(int e=0;e<enemyCount;++e) {
+            switch(next(5)) {
+            case 0: enemies.push_back(int(next(h))*w+(next(2) ? 0 : w-1)); break;
+            case 1: enemies.push_back((next(2) ? 0 : h-1)*w+int(next(w))); break;
+            case 2: if(!enemies.empty()) { enemies.push_back(enemies[next(uint32_t(enemies.size()))]); break; } [[fallthrough]];
+            case 3: if(next(8)==0) {
+                const int x=int(next(w+6))-3,y=int(next(h+6))-3;
+                enemies.push_back(y*w+x); break;
+            } [[fallthrough]];
+            default: enemies.push_back(int(next(n)));
+            }
+        }
+        for(int r=int(next(round%3==0 ? 0 : 6));r>0;--r) reserved.push_back(int(next(n)));
+        const int mainBase=next(2) ? int(next(n)) : -1;
+        const auto expected=legacyRockChoose(w,h,tiles,starts,enemies,reserved,mainBase);
+        const auto actual=choose(w,h,tiles,starts,enemies,reserved,mainBase);
+        CAPTURE(round,w,h,enemies.size(),reserved.size(),mainBase);
+        REQUIRE(actual.x==expected.x); REQUIRE(actual.y==expected.y);
+        REQUIRE(actual.room==expected.room); REQUIRE(actual.clearance==expected.clearance);
+        REQUIRE(actual.distance==expected.distance); REQUIRE(actual.baseDistance==expected.baseDistance);
+        validSites+=expected.valid();
+        enemyLimited+=expected.valid()&&expected.clearance<w+h;
+        if(!reserved.empty()) {
+            const auto unreserved=legacyRockChoose(w,h,tiles,starts,enemies,{},mainBase);
+            reservedRejections+=unreserved.x!=expected.x||unreserved.y!=expected.y;
+        }
+    }
+    // The random maps must exercise real sites, enemy-limited clearance and
+    // formations closed by a reservation, not just agree on "no site".
+    CHECK(validSites>50);
+    CHECK(enemyLimited>10);
+    CHECK(reservedRejections>0);
+}
+
 TEST_CASE("Campaign opening follows authored trigger with independent bounded delays", "[quantbot][campaign]") {
     using namespace CampaignDifficultyPolicy;
     std::set<uint32_t> offsets;

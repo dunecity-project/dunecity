@@ -14,6 +14,10 @@ Scenarios:
                            taken from the Workshop revision his save pins), played from its start
                            with his roster (four QuantBot Brutal, spectated), match seed and game
                            options. Loads on every release since 1.0.833.
+  --scenario eight-house   tests/performance/data/eight-house-384: Stefan's fpsstillfucked.dls (1.0.849,
+                           "4P - 384x384 - new beginning", eight QuantBot Hard, ~810 units, cycle
+                           73,528), continued; the two Workshop revisions it pins are rebuilt from
+                           the fixture and this tree (build_eight_house_fixture).
   --save FILE --save-profile DIR
                            continue a saved match (DIR/workshop/revisions supplies the mod and map
                            revisions the save pins, e.g. a copy of the player's profile's).
@@ -26,6 +30,8 @@ Scenarios:
   game-perf.py --summary R.jsonl
 """
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import re
@@ -48,6 +54,59 @@ SCENARIOS = {
                    'options': DATA / 'stefan-game-options.ini', 'difficulty': 'brutal', 'mod': 'dunecity'},
 }
 CYCLES_PER_MINUTE = 3750   # MILLI2CYCLES(60000) at 16 ms per cycle
+EIGHT_HOUSE = DATA / 'eight-house-384'
+# Where the 8-house mod revision's other files live in this tree (found by their SHA-256).
+EIGHT_HOUSE_SOURCES = ('mods/dunecity/graphics_skins', 'config')
+# perf_regression budgets of the 8-house case, as multiples of the calibration loop (see
+# docs/game-performance.md "perf_regression: eight houses on 384x384").
+EIGHT_BUDGETS = {'cpu_p99': 3.0, 'frame_cpu_p99': 9.0, 'mainloop_frame_p99': 8.0}
+
+
+def build_eight_house_fixture(scratch):
+    """The 8-house save and a profile whose Workshop store holds the two revisions it pins (the
+    "Dune City" mod 746bae13, the 384x384 map 76deda62), rebuilt from tests/performance/data/
+    eight-house-384: the save and both manifests are stored there (gzip), with the three files
+    this tree does not have; the mod revision's other files are this tree's dunecity
+    graphics skins and config/ ini files. Every file is checked against its manifest hash, so a
+    changed skin fails here by name rather than as a load error. Returns (save, profile)."""
+    out = scratch / 'eight-house'
+    save, profile = out / 'fpsstillfucked.dls', out / 'profile'
+    if save.is_file():
+        return save, profile
+    own = {}
+    for path in (EIGHT_HOUSE / 'files').iterdir():
+        data = gzip.decompress(path.read_bytes()) if path.suffix == '.gz' else path.read_bytes()
+        own[hashlib.sha256(data).hexdigest()] = data
+    tree = None
+    for name, version in json.loads((EIGHT_HOUSE / 'versions.json').read_text()).items():
+        packed = EIGHT_HOUSE / (name + '.manifest.gz')
+        manifest = gzip.decompress(packed.read_bytes()) if packed.is_file() else (EIGHT_HOUSE / (name + '.manifest')).read_bytes()
+        if hashlib.sha256(manifest).hexdigest() != name:
+            raise RuntimeError('Fixture manifest %s does not match its name' % name)
+        target = profile / 'workshop/revisions' / name
+        for line in manifest.decode().splitlines():
+            if not line.startswith('file='):
+                continue
+            digest, _, path = line[5:].split(',', 2)
+            data = own.get(digest)
+            if data is None:
+                if tree is None:
+                    tree = {}
+                    for base in EIGHT_HOUSE_SOURCES:
+                        for candidate in (root / base).rglob('*'):
+                            if candidate.is_file():
+                                tree.setdefault(hashlib.sha256(candidate.read_bytes()).hexdigest(), candidate)
+                if digest not in tree:
+                    raise RuntimeError('8-house fixture: no file in %s has the bytes of %s (%s); the mod '
+                                       'revision cannot be rebuilt' % (', '.join(EIGHT_HOUSE_SOURCES), bytes.fromhex(path).decode(), digest))
+                data = tree[digest].read_bytes()
+            destination = target / 'files' / bytes.fromhex(path).decode()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+        (target / 'manifest').write_bytes(manifest)
+        (target / 'version').write_text(str(version))
+    save.write_bytes(gzip.decompress((EIGHT_HOUSE / 'fpsstillfucked.dls.gz').read_bytes()))
+    return save, profile
 
 
 def prepare_foreign_tree(source):
@@ -86,9 +145,10 @@ def prepare_foreign_tree(source):
 
 def patch_foreign_runner(runner):
     """--rendered on an older release: its runner always forced the dummy video driver. With
-    GAME_PERF_VIEWPORT=WxH it opens a real (Cocoa) window of that size instead."""
+    GAME_PERF_VIEWPORT=WxH it opens a real (Cocoa) window of that size instead. Runners with
+    --real-video (1.0.84x) need nothing."""
     text = runner.read_text()
-    if 'GAME_PERF_VIEWPORT' in text:
+    if 'GAME_PERF_VIEWPORT' in text or "'--real-video'" in text:
         return
     dummy = "SDL_VIDEODRIVER='dummy',"
     anchor = "\nif args.custom_map:\n    env['BALANCE_CUSTOM_MAP']"
@@ -260,6 +320,10 @@ def run_one(args, scratch, index):
     source = args.source.resolve()
     prepare_foreign_tree(source)
     scenario = dict(SCENARIOS.get(args.scenario, {}))
+    save_profile = args.save_profile
+    if args.scenario == 'eight-house' and not (args.save or args.map):
+        save, save_profile = build_eight_house_fixture(scratch)
+        scenario = {'save': save}
     if args.save: scenario = {'save': args.save}
     if args.map: scenario = {'map': args.map, 'house': args.house, 'seed': args.seed, 'options': args.game_options,
                              'difficulty': args.difficulty, 'mod': args.mod}
@@ -272,7 +336,7 @@ def run_one(args, scratch, index):
     options = None
     if 'save' in scenario:
         command += ['--load-save', str(Path(scenario['save']).resolve()), '--mod', args.mod, '--minutes', '120']
-        if args.save_profile: command += ['--save-profile', str(args.save_profile.resolve())]
+        if save_profile: command += ['--save-profile', str(Path(save_profile).resolve())]
     else:
         command += ['--custom-map', str(Path(scenario['map']).resolve()), '--house', scenario['house'],
                     '--local-spectator', '--free-for-all', '--mod', scenario['mod'],
@@ -289,7 +353,7 @@ def run_one(args, scratch, index):
     if args.csv: env['BALANCE_PERF_CSV'] = str(Path(args.csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
     if args.dump_map: env['BALANCE_PERF_DUMP_MAP'] = str(Path(args.dump_map).resolve())
     if args.mainloop or args.rendered: env['BALANCE_PERF_MAINLOOP'] = '1'
-    if args.rendered and source == root:
+    if args.rendered and "'--real-video'" in (source / 'tests/ai/run-campaign-balance.py').read_text():
         command += ['--real-video', '--viewport', args.viewport or '1440x900']
     elif args.rendered:
         env['GAME_PERF_VIEWPORT'] = args.viewport or '1440x900'   # patch_foreign_runner
@@ -305,6 +369,8 @@ def run_one(args, scratch, index):
         if result is None:
             raise RuntimeError('No GAME_PERF_MAINLOOP in ' + str(out / 'run.log'))
         result['mode'] = 'rendered' if args.rendered else 'mainloop'
+        changed = re.search(r'GAME_PERF_BUDGET_CHANGED: (\S+ \S+)', log)
+        result['budget_changed'] = changed.group(1) if changed else None
         result['windows'] = telemetry_windows(out / 'profile')
         perf_log = out / 'profile/DuneCity-Performance.log'
         if perf_log.is_file():
@@ -379,7 +445,7 @@ def main():
     parser.add_argument('--source', type=Path, default=root, help='Source tree whose probe runs (default: this one)')
     parser.add_argument('--build-dir', type=Path, default=root / 'build')
     parser.add_argument('--prebuilt-probe', type=Path)
-    parser.add_argument('--scenario', choices=sorted(SCENARIOS), default='stefan-map')
+    parser.add_argument('--scenario', choices=sorted(SCENARIOS) + ['eight-house'], default='stefan-map')
     parser.add_argument('--save', type=Path)
     parser.add_argument('--save-profile', type=Path, help='With --save: profile whose workshop/revisions has the pinned revisions')
     parser.add_argument('--map', type=Path)
@@ -423,6 +489,15 @@ def main():
     parser.add_argument('--budget-menu-other', type=float, default=0.3,
                         help='menu launch: mean per-frame time outside simulation and rendering / calibration '
                              '(mini, headless: 0.032)')
+    parser.add_argument('--eight-house', type=float, default=0, metavar='MINUTES',
+                        help='Also continue the 8-house 384x384 save (--scenario eight-house) for MINUTES game '
+                             'minutes, stepped; with --check its own budgets below apply')
+    parser.add_argument('--budget-eight-cpu-p99', type=float, default=EIGHT_BUDGETS['cpu_p99'],
+                        help='8-house: p99 simulation CPU per cycle / calibration')
+    parser.add_argument('--budget-eight-mainloop-frame-p99', type=float, default=EIGHT_BUDGETS['mainloop_frame_p99'],
+                        help='8-house main loop (headless, 2 ms, frame pacing): p99 frame wall time / calibration')
+    parser.add_argument('--budget-eight-frame-p99', type=float, default=EIGHT_BUDGETS['frame_cpu_p99'],
+                        help='8-house: p99 of the modelled frame (--frame-cycles cycles of simulation CPU) / calibration')
     args = parser.parse_args()
     if args.summary:
         summarize(args.summary)
@@ -432,6 +507,21 @@ def main():
         runs = [lambda index=index: run_one(args, scratch, index) for index in range(args.repeat)]
         if args.menu_launch:
             runs.append(lambda: run_menu_launch(args, scratch))
+        if args.eight_house:
+            eight = argparse.Namespace(**vars(args))
+            eight.scenario, eight.minutes, eight.label = 'eight-house', args.eight_house, args.label + '-eight-house'
+            eight.save = eight.map = eight.save_profile = eight.csv = None
+            eight.mainloop = eight.rendered = False
+            runs.append(lambda: run_one(eight, scratch, args.repeat + 1))
+            # The same minutes through the interactive main loop (headless, 2 ms game speed, frame
+            # pacing): its cycles must digest exactly as the stepped run's, its frames stay bounded.
+            loop = argparse.Namespace(**vars(eight))
+            # Path search on its worker threads, as players run it: main-thread path time stays
+            # below the floor that lets the frame-rate path budget adaptation act.
+            loop.mainloop, loop.label, loop.path_workers = True, eight.label + '-mainloop', 0
+            runs.append(lambda: run_one(loop, scratch, args.repeat + 2))
+        failed = False
+        stepped_digests = {}
         for run in runs:
             result = run()
             line = json.dumps(result)
@@ -453,22 +543,49 @@ def main():
                       % (result['label'], result['mode'], frame['count'], 1000.0 / frame['mean_ms'] if frame['mean_ms'] else 0,
                          frame['mean_ms'], result['windows'].get('frame.ai', {}).get('mean_ms', 0),
                          result['windows'].get('frame.render', {}).get('mean_ms', 0)), flush=True)
+            if result['mode'] == 'stepped':
+                stepped_digests[result['scenario']] = result['digests']
             if args.check:
-                failures = check_budgets(result, args)
+                failures = check_budgets(result, args, stepped_digests)
                 for failure in failures:
-                    print('PERF_BUDGET_FAILED: ' + failure, flush=True)
-                if failures:
-                    sys.exit(1)
-                print('PERF_BUDGET_OK', flush=True)
+                    print('PERF_BUDGET_FAILED: %s: %s' % (result['label'], failure), flush=True)
+                failed = failed or bool(failures)
+        if args.check:
+            if failed:
+                sys.exit(1)
+            print('PERF_BUDGET_OK', flush=True)
 
 
-def check_budgets(result, args):
+def check_budgets(result, args, stepped_digests=None):
     """perf_regression budgets, as multiples of the calibration loop measured in the same process."""
     if result['mode'] == 'menu-launch':
         cal = result['calibration_ms']
         measured = {'menu_other': (result['other_ms'] / cal, args.budget_menu_other)}
+    elif result['mode'] == 'mainloop' and result['scenario'] == 'eight-house':
+        # Frame pacing: the interactive loop's PROBE_DIGEST lines at the 750-cycle checkpoints are
+        # the stepped run's (each list ends with its run's final digest, at different cycles), and
+        # the frames stay bounded.
+        reference = (stepped_digests or {}).get('eight-house', [])
+        checkpoints = [d for d in result['digests'] if d in reference or int(d.split()[0][6:]) % 750 == 0]
+        common = min(len(reference) - 1, len(checkpoints))
+        if reference[:common] != checkpoints[:common]:
+            return ['main-loop digests differ from the stepped run: %s vs %s' % (checkpoints[:common], reference[:common])]
+        if common < 2:
+            print('PERF_PACING_WARNING: only %d checkpoints before the path budget changed (%s)'
+                  % (common, result.get('budget_changed')), flush=True)
+        cal = result['calibration_ms']
+        measured = {'eight_mainloop_frame_p99': (result['frame_p99'] / cal, args.budget_eight_mainloop_frame_p99)}
+        print('PERF_PACING: %d checkpoint digests match; frames=%d p50/p95/p99=%.0f/%.0f/%.0f ms, %d catch-up limited, '
+              '%.0f cycles/s' % (common, result['histogram_frames'], result['frame_p50'], result['frame_p95'],
+                                 result['frame_p99'], result['catchup_limited_frames'], result['cycles_per_s']), flush=True)
     elif result['mode'] != 'stepped':
         return ['--check needs a stepped run (no --mainloop/--rendered)']
+    elif result['scenario'] == 'eight-house':
+        cal = result['calibration_ms']
+        measured = {
+            'eight_cpu_p99': (result['cpu']['p99'] / cal, args.budget_eight_cpu_p99),
+            'eight_frame_cpu_p99': (result['frame_cpu']['p99'] / cal, args.budget_eight_frame_p99),
+        }
     else:
         cal = result['calibration_ms']
         houses = result['house'].values()
