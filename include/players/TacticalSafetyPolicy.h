@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <tuple>
+#include <utility>
 #include <data.h>
 #include <players/CityPlacementPolicy.h>
 
@@ -99,6 +100,49 @@ bool escapeCorridor(int x, int y, int tx, int ty, Danger danger) {
         previous = next;
     }
     return previous == 0;
+}
+
+/// The candidate this sequential sweep picks, with far fewer route tests:
+///
+///     best = INT_MAX; pick = -1;
+///     for (k = 0; k < scores.size(); ++k) {
+///         if (scores[k] >= best) continue;
+///         if (!safe(k)) continue;
+///         best = scores[k]; pick = k;
+///     }
+///
+/// That loop keeps the first safe candidate of the lowest score: the lowest
+/// (score, position) among the candidates safe() accepts. It tests every
+/// candidate that improves on the running best, which, scanned in map order
+/// from a far corner, is thousands of failing long corridors before the
+/// nearby winner. Here candidates are tested in ascending (score, position)
+/// order, in score bands that double in width, until the first safe one, so
+/// only candidates at least as good as the winner are tested. safe() must be a
+/// pure function of k. Scores are non-negative. \a rejected counts the tests
+/// that failed. Returns the position, or -1 when no candidate is safe.
+template<class Safe>
+int lowestSafeCandidate(const std::vector<int>& scores, Safe safe, int& rejected) {
+    rejected = 0;
+    if (scores.empty()) return -1;
+    const auto [minIt, maxIt] = std::minmax_element(scores.begin(), scores.end());
+    const long long highest = *maxIt;
+    long long low = static_cast<long long>(*minIt) - 1, width = 16;
+    std::vector<std::pair<int,int>> band;
+    for (;;) {
+        const long long high = std::min(highest, low + width);
+        band.clear();
+        for (size_t k = 0; k < scores.size(); ++k)
+            if (scores[k] > low && scores[k] <= high) band.emplace_back(scores[k], static_cast<int>(k));
+        std::sort(band.begin(), band.end());
+        for (const auto& [score, k] : band) {
+            (void)score;
+            if (safe(k)) return k;
+            ++rejected;
+        }
+        if (high >= highest) return -1;
+        low = high;
+        width *= 2;
+    }
 }
 
 }

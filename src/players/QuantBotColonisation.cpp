@@ -52,38 +52,59 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     // tileOwner==houseID, and getTile_internal() simply skips off-map probes,
     // which is the same clipping the box query performs — so the predicate is
     // unchanged for every input, including map edges.
-    DuneCity::BoxAnyField anchorField;
-    buildAnchorField(anchorField);
-    auto anchorsInRange=[&](int x,int y) { return anchorField.anyWithin(x,y,BUILDRANGE); };
+    const DuneCity::BoxAnyField& anchors=anchorField();
     survey.next("ai.rock_survey.tilescan");
+    // The loss tests per tile, stamped once from the loss history instead of
+    // walking the whole history for each of the w*h tiles: blocked[] is
+    // nearRecentStructureLoss(x,y,1,1) (each loss marks the tiles its test can
+    // accept), yardLosses[] counts lostYardsNear(x,y,kRepeatedYardLossRadius).
+    std::vector<char> blocked(static_cast<size_t>(w)*h,0);
+    std::vector<int> yardLosses(static_cast<size_t>(w)*h,0);
+    const Uint32 now=getGameCycleCount();
+    for(const auto& loss:recentStructureLosses) {
+        const Coord at=loss.location,size=loss.size;
+        for(int y=std::max(0,at.y-1);y<=std::min(h-1,at.y+size.y);++y)
+            for(int x=std::max(0,at.x-1);x<=std::min(w-1,at.x+size.x);++x)
+                if(CityPlacementPolicy::recentLossBlocks(x,y,1,1,at.x,at.y,size.x,size.y,now-loss.cycle,MILLI2CYCLES(60000)))
+                    blocked[y*w+x]=1;
+        if(loss.item!=Structure_ConstructionYard) continue;
+        const int r=kRepeatedYardLossRadius;
+        for(int y=std::max(0,at.y-r);y<=std::min(h-1,at.y+r);++y)
+            for(int x=std::max(0,at.x-r);x<=std::min(w-1,at.x+r);++x) ++yardLosses[y*w+x];
+    }
+    const bool dangerKnown=tacticalDanger.size()==static_cast<size_t>(w*h);
     std::vector<RockExpansionPolicy::Tile> tiles(w*h);
     std::vector<char> buildable(static_cast<size_t>(w)*h,0);
+    std::vector<char> freeInRange(static_cast<size_t>(w)*h,0);
     std::vector<int> starts,enemies,reserved;
-    int freeBase=0;
-    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+    // Column by column (tiles are stored x-major); every value is per tile, and
+    // the order-dependent start list is collected row by row afterwards.
+    for(int x=0;x<w;++x) for(int y=0;y<h;++y) {
         const auto* tile=getMap().getTile(x,y);
-        const auto* ground=tile->getNonInfantryGroundObject();
+        const bool structure=tile->hasAStructure();
         auto& out=tiles[y*w+x];
         out.rock=tile->isRock()&&!tile->isMountain();
-        out.free=!tile->hasAStructure() && (!tile->hasAGroundObject() || ground==mcv);
-        out.walkable=!tile->isMountain()&&!tile->hasAStructure();
-        out.owned=tile->hasAStructure()&&tile->getOwner()==getHouse()->getHouseID();
+        out.free=!structure && (!tile->hasAGroundObject() || tile->getNonInfantryGroundObject()==mcv);
+        out.walkable=!tile->isMountain()&&!structure;
+        out.owned=structure&&tile->getOwner()==getHouse()->getHouseID();
         // A site that already swallowed repeated construction yards is not
         // expanded onto again just because the short-term loss block expired:
         // redeploying there without cover is what turned single losses into a
-        // chain of replacements.
-        out.unsafe=dangerAt(Coord(x,y),Coord(1,1))>0||nearRecentStructureLoss(x,y,1,1)
-            ||lostYardsNear(x,y,kRepeatedYardLossRadius)>=kRepeatedYardLossLimit;
-        const bool inBuildRange=out.rock&&anchorsInRange(x,y);
-        if(inBuildRange&&out.free) {
-            ++freeBase;
-            if(!mcv)starts.push_back(y*w+x);
-        }
+        // chain of replacements. (dangerAt() of one tile is its grid value.)
+        out.unsafe=(dangerKnown&&tacticalDanger[y*w+x]>0)||blocked[y*w+x]
+            ||yardLosses[y*w+x]>=kRepeatedYardLossLimit;
+        const bool inBuildRange=out.rock&&anchors.anyWithin(x,y,BUILDRANGE);
+        freeInRange[y*w+x]=inBuildRange&&out.free;
         // Room for a future building, which is not the same as a free tile:
         // zoned and reserved ground is spoken for, and a unit parked on rock
         // is traffic, not a reason to call the base full.
-        if(!mcv) buildable[y*w+x]=inBuildRange&&!out.unsafe&&!tile->hasAStructure()&&!tile->hasCityZone()
+        if(!mcv) buildable[y*w+x]=inBuildRange&&!out.unsafe&&!structure&&!tile->hasCityZone()
             &&!overlapsReservedStructure(x,y,1,1);
+    }
+    int freeBase=0;
+    for(int i=0;i<w*h;++i) if(freeInRange[i]) {
+        ++freeBase;
+        if(!mcv)starts.push_back(i);
     }
     if(!mcv) {
         survey.next("ai.rock_survey.footprints");

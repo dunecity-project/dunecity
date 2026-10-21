@@ -256,6 +256,12 @@ bool Player::doPlaceStructure(const ConstructionYard* pConstYard, int x, int y) 
     }
 }
 
+void Player::doMoveOwnUnitsOffPlot(const ConstructionYard* pConstYard, Uint32 itemID, int x, int y) const {
+    if(pConstYard->getOwner() == getHouse() && pConstYard->isActive()) {
+        const_cast<ConstructionYard*>(pConstYard)->moveOwnUnitsOffPlot(itemID, x, y, true);
+    }
+}
+
 void Player::doSpecialWeapon(const Palace* pPalace) const {
     if(pPalace->getOwner() == getHouse() && pPalace->isActive()) {
         const_cast<Palace*>(pPalace)->doSpecialWeapon();
@@ -354,7 +360,8 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
 } // namespace
 
 int Player::aiFormationShape() {
-    return getQuantBotConfig().waveFormation;
+    // Blob is a QuantBot hunt-party behaviour, not a shape: every other AI group moves as None.
+    return QuantBotConfig::formationShapeOf(getQuantBotConfig().waveFormation);
 }
 
 void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced, int shape) const {

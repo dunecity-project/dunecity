@@ -261,6 +261,10 @@ target_sources(dunecity
         players/QuantBotBuild.cpp
         players/QuantBotPlacement.cpp
         players/QuantBotArmy.cpp
+        players/QuantBotBlob.cpp
+        players/QuantBotForce.cpp
+        players/QuantBotStyle.cpp
+        players/QuantBotStrategy.cpp
         players/QuantBotAir.cpp
         players/QuantBotHarvesters.cpp
         players/QuantBotCampaign.cpp
@@ -274,7 +278,7 @@ target_sources(dunecity
         mod/WorkshopStore.cpp
         mod/Workshop.cpp
         mod/WorkshopClient.cpp
-        Menu/WorkshopCommunityMenu.cpp
+        Menu/WorkshopTransferMenu.cpp
         mod/ModManager.cpp
 
         # Structures
@@ -442,9 +446,11 @@ if(APPLE)
     target_sources(dunecity
         PRIVATE
             ${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
     )
     # Enable Objective-C ARC (Automatic Reference Counting)
     set_source_files_properties(${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
         PROPERTIES
             COMPILE_FLAGS "-fobjc-arc"
     )

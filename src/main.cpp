@@ -128,7 +128,8 @@ EM_JS(int, dunecityReadRelayDevelopmentParameter, (), {
 #define HAS_ASYNC
 #endif
 
-#if defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ )
+// clang-cl defines __clang__ but uses the MSVC ABI and library, which have no <cxxabi.h>.
+#if !defined(_MSC_VER) && (defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ ))
 #include <cxxabi.h>
 inline std::string demangleSymbol(const char* symbolname) {
     int status = 0;
@@ -741,7 +742,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Killed Sandworms Drop Spice = false     # If true, killed sandworms drop some spice\n"
                                 "Manual Carryall Drops = false           # If true, player can request carryall to transport units\n"
                                 "Maximum Number of Units Override = 0    # Override the maximum number of units each house is allowed to build (-1 = use map default, 0 = unlimited, >0 = specific limit)\n"
-                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 = use map size defaults from ObjectData.ini, >=0 = specific limit)\n";
+                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 or 0 = unlimited, each AI picks its own target; >0 = specific limit)\n";
 
     // replace player name, language, server port and metaserver
     std::string playername = getDefaultPlayerName();
@@ -1153,6 +1154,8 @@ int main(int argc, char *argv[]) {
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs
                 ? SDL_LOG_PRIORITY_VERBOSE : SDL_LOG_PRIORITY_WARN);
+            settings.general.aiDecisionLog = myINIFile.getBoolValue("General","AI Decision Log",
+                SettingsClass::GeneralClass::defaultAIDecisionLog);
             settings.general.showTutorialHints = myINIFile.getBoolValue("General","Show Tutorial Hints",true);
             settings.general.duneCityCampaignSkin = std::clamp(
                 myINIFile.getIntValue("General", "DuneCity Campaign Skin", 0), 0, 1);

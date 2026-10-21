@@ -61,19 +61,63 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
         sum[(y+1)*(w+1)+x+1]=sum[y*(w+1)+x+1]+sum[(y+1)*(w+1)+x]-sum[y*(w+1)+x]
             +int(tiles[i].rock&&tiles[i].free&&!tiles[i].unsafe);
     }
+    // One MCV per new formation. A reserved tile blocks exactly the formation
+    // it lies in, so flagging that formation once answers the per-candidate
+    // "any reserved tile in my component" scan for every site.
+    std::vector<bool> reservedComponent(freeCount.size(),false);
+    for(int r:reserved) if(component[r]>=0) reservedComponent[component[r]]=true;
+    // Chebyshev distance to the nearest enemy, capped at w+h (the clearance of
+    // a map without enemies), replacing a min over every enemy per candidate.
+    // The forward pass relays from left/up-left/up/up-right, the backward pass
+    // from the mirror. Together they are exact for the chessboard metric:
+    // every tile has a shortest king path from its nearest enemy made of a
+    // diagonal/vertical leg and a straight run along a row, and those legs can
+    // always be ordered forward steps first, backward steps second. Every
+    // in-map distance is below w+h, so the result is
+    // the old min(w+h, distance to each enemy) tile by tile.
+    // An enemy index is decoded as before, (e%w, e/w); one that decodes off the
+    // map (an aircraft beyond the edge) cannot seed the field and is measured
+    // directly per candidate, as the old loop measured every enemy.
+    std::vector<int> enemyDistance(n,w+h);
+    std::vector<std::pair<int,int>> offMapEnemies;
+    if(n>0) for(int e:enemies) {
+        const int ex=e%w,ey=e/w;
+        if(ex>=0&&ey>=0&&ey<h) enemyDistance[ey*w+ex]=0;
+        else offMapEnemies.emplace_back(ex,ey);
+    }
+    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+        int& d=enemyDistance[y*w+x];
+        if(x>0) d=std::min(d,enemyDistance[y*w+x-1]+1);
+        if(y>0) {
+            const int up=(y-1)*w+x;
+            if(x>0) d=std::min(d,enemyDistance[up-1]+1);
+            d=std::min(d,enemyDistance[up]+1);
+            if(x+1<w) d=std::min(d,enemyDistance[up+1]+1);
+        }
+    }
+    for(int y=h-1;y>=0;--y) for(int x=w-1;x>=0;--x) {
+        int& d=enemyDistance[y*w+x];
+        if(x+1<w) d=std::min(d,enemyDistance[y*w+x+1]+1);
+        if(y+1<h) {
+            const int down=(y+1)*w+x;
+            if(x+1<w) d=std::min(d,enemyDistance[down+1]+1);
+            d=std::min(d,enemyDistance[down]+1);
+            if(x>0) d=std::min(d,enemyDistance[down-1]+1);
+        }
+    }
     Site best;
     for(int y=0;y<h-1;++y) for(int x=0;x<w-1;++x) {
         const int i=y*w+x,c=component[i];
         if(c<0||occupied[c]||freeCount[c]<48||distance[i]<0)continue;
         bool valid=true;
         for(int d:{0,1,w,w+1}) if(!tiles[i+d].rock||!tiles[i+d].free||tiles[i+d].unsafe)valid=false;
-        for(int r:reserved) if(component[r]==c)valid=false; // One MCV per new formation.
+        if(reservedComponent[c])valid=false;
         if(!valid)continue;
         const int x0=std::max(0,x-6),x1=std::min(w,x+8),y0=std::max(0,y-6),y1=std::min(h,y+8);
         const int room=sum[y1*(w+1)+x1]-sum[y0*(w+1)+x1]-sum[y1*(w+1)+x0]+sum[y0*(w+1)+x0];
         if(room<48)continue;
-        int clearance=w+h;
-        for(int e:enemies) clearance=std::min(clearance,std::max(std::abs(x-e%w),std::abs(y-e/w)));
+        int clearance=enemyDistance[i];
+        for(const auto& [ex,ey]:offMapEnemies) clearance=std::min(clearance,std::max(std::abs(x-ex),std::abs(y-ey)));
         if(clearance<12)continue;
         // Manhattan map distance from the main construction yard. MCV BFS
         // remains the independent reachability check and final travel tie-break.

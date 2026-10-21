@@ -205,7 +205,92 @@
 //     slot is also the member's form-up tile, so the group walks straight into its shape
 //     without a march. A 74 peer refuses the kind and would leave the units where they are.
 //     Save 9861.
-#define NETWORK_PROTOCOL_VERSION            75
+// 76: QuantBot hunt parties (Blob waves). WaveFormation accepts Blob: a Custom Hard/Brutal
+//     QuantBot wave gathers, marches as one blob, releases into Hunt on contact, reforms and
+//     falls back a short way to reform; its party state is saved. A 75 peer would order the
+//     same AI units differently and desynchronise. Save 9862.
+// 77: QuantBot AI decisions change, no saved state or command change: the Custom Hard/Brutal
+//     front battery stays in the 8-12 band, walls follow only the fixed-count defence
+//     turrets, and a harvester override of 0 is "no ceiling" for every AI (QuantBot initial
+//     limit, Mentat). A 76 peer would order different buildings and desync. Save 9862.
+// 78: QuantBot force concentration defaults, no saved state or command change: Custom
+//     Hard/Brutal hunters focus fire, wave members not yet fighting converge on a fight of
+//     their army nearby, and waves launch at 60% of the former readiness ([Force
+//     Concentration] in QuantBot Config, hashed). A 77 peer would order the same AI units
+//     differently and desync. Save 9862.
+// 79: QuantBot force concentration round 4: the Custom Hard/Brutal idle reserve bundles at a
+//     forward rally and ready waves launch from the bundle ([Force Concentration] Bundle,
+//     LaunchFromBundle, hashed; the bundle and the gate's wait are saved, 9863), and focus
+//     fire and converging leave a hunting launcher's close-range escape alone. A 78 peer
+//     would order the same AI units differently and desync. Save 9863.
+// 80: QuantBot force concentration round 5, defence while outnumbered: a remembered enemy
+//     army; while it outnumbers ours no Custom Hard/Brutal wave leaves, the reserve holds the
+//     enemy-facing base perimeter and rocket turrets are added there; defences are sized at
+//     1.5x the threat with the bundle first, distant defenders muster, and a worker raid the
+//     troops in reach cannot match gets nobody ([Force Concentration] PerimeterHold,
+//     PerimeterTurrets, SizedDefence, hashed; the remembered army and the musters are saved,
+//     9864). Also the footprint rule: own units are traffic to the AI's site search, idle ones
+//     are asked off planned sites, a finished building waits for them, and the hold applies in
+//     the city simulation. A 79 peer would order the same AI units differently and desync.
+//     Save 9864.
+// 81: Formation march without jams, and QuantBot opening readiness; no saved state or command
+//     change. A marching member that fell behind routes round a member keeping the pace rather
+//     than queueing behind it, and a member waiting for a laggard gives way to a formation-mate
+//     stepping onto its tile (it may be planned through). A Custom Hard/Brutal QuantBot whose
+//     starting army cannot launch a wave (a Construction Yard start) holds its first ground
+//     wave for full readiness ([Force Concentration] OpeningReadiness, hashed). An 80 peer
+//     would move the same units differently and desync. Save 9864 unchanged.
+// 82: QuantBot strategies (docs/ai-play-styles.md, "Strategies"): every Custom Hard/Brutal
+//     QuantBot plays a unit-mix strategy and a tempo picked once from the game seed, its house and
+//     [Strategy] Mode / MixWeights / TempoWeights (hashed); the mix is the prior its learned unit
+//     mix starts from, the tempo its wave readiness. An 81 peer would build and attack
+//     differently and desync. Save 9865 (the strategy).
+// 83: QuantBot starting-mix bounds (docs/ai-play-styles.md, section 8): every starting unit mix
+//     (the configured opening, the presets, Counter) gives each producible mix slot 2%-50% before
+//     the learning, the presets are re-cut within those bounds, and the Tuned ([Unit Ratios Tuned],
+//     hashed) and Bounded (random within the bounds from seed and house) mixes are new. An 82 peer
+//     would build differently and desync. Save 9866 (the resolved Tuned/Bounded ratios). Unreleased,
+//     so the same protocol also covers one mix slot per special (Devastator, Sonic Tank, Deviator;
+//     the observer allocation snapshot has ten slots), the tuned ratios per tech band and save 9868.
+//     (Branch feat/ai-ratio-tuning only; never released.)
+// 84: QuantBot in a free-for-all: "outnumbered" (perimeter turrets and the test-only round 5
+//     rules) measures the remembered army of the strongest single enemy team, not every enemy
+//     summed, and the forward bundle and the perimeter point move out of the house's own
+//     buildings and roads (a city base) towards the enemy. The perimeter hold (V, PerimeterHold)
+//     is removed: an outnumbered house no longer holds its waves and reserve at home. No saved
+//     state or command change; an 82 or 83 peer would order the same AI units differently and
+//     desync. (Branches fix/ai-army-stuck-in-base, fix/ai-late-game-2 and fix/ai-difficulty-ladder
+//     only; never released.)
+// 85: No population/economic victory. WinFlags bit 0x10 (set by original Dune II scenarios such
+//     as WinFlags=19/23) is ignored as upstream; a DuneCity campaign mission is no longer won when
+//     total city population reaches 500. An 82 peer would end the game differently. No saved
+//     state change (the retired threshold slot is still written as 0 and discarded on load).
+//     (Branch fix/remove-economic-victory only; never released.)
+// 86: 83 + 84 + 85 together on the 1.0.848 trial integration (integrate/848-trial only; never
+//     released).
+// 87: 1.0.848 = 83 + 84 + 85 + 86 and the difficulty ladder (fix/ai-difficulty-ladder): Custom
+//     Medium QuantBots play the whole-army path (autonomousCustomArmy) and spend banked credits up
+//     to +50% past their military cap (QuantBotBuildPolicy::surplusMilitaryBudget); a whole-army
+//     house's held opening ends at its own threshold share of Medium's limit, and readiness that
+//     credits plus map spice cannot reach attacks with what it has; "outnumbered", perimeter
+//     turrets and the opening readiness judge the house's team against the strongest enemy team;
+//     the campaign partner's harvester target counts competing houses, a Palace missile on a
+//     harvester is not a contact, and after 15 minutes its readiness is measured against the
+//     strongest enemy army; in DuneCity structures keep off reserved production plots, silos come
+//     before heavy-factory tech and Medium's opening walks to the heavy factory; and a spice quota
+//     (WinFlags 0x04) is met by the house's whole earned store, refined spice and city tax credits
+//     alike, in every game mode; and a Medium/Hard/Brutal house whose team army leads the strongest
+//     enemy team's sends its waves at the weakest known house (FinishWhenLeading, hashed). Any
+//     82-86 peer would build, attack or end the game differently and
+//     desync. Save 9868 (83's ten-slot mix state); 9867 and older saves load.
+// 88: Difficulty separation (fix/difficulty-separation): only Custom Hard and Brutal QuantBots play
+//     a production strategy (QuantBot::playsStrategy; 87 gave Custom Medium the default
+//     Fixed:Tuned,Swarm mix and tempo too); a custom QuantBot's harvester fleet is capped by its
+//     difficulty's configured HarvesterLimit*Map (QuantBot::configuredCustomHarvesterLimit; 87
+//     overwrote it with the spice budget), and a custom Brutal house keeps its opening worker floor
+//     and equal army capital per worker in vanilla games too (DuneCity only in 87). An 87 peer would
+//     build and attack differently and desync. No saved state change; save 9868.
+#define NETWORK_PROTOCOL_VERSION            88
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

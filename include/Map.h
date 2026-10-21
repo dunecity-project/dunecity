@@ -65,7 +65,19 @@ public:
     void damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Uint32 bulletID, FixPoint damage, int damageRadius, bool air, bool affectTerrain = true, Uint32 interceptedAirUnit = NONE_ID,
                 const DeviationReward::Provenance& provenance = DeviationReward::Provenance());
     static Coord getMapPos(int angle, const Coord& source);
+    /// Removes objectID from every tile list that holds it. Visits only the tiles of
+    /// objectTiles instead of all sizeX*sizeY: the same tiles change, in the same order.
     void removeObjectFromMap(Uint32 objectID);
+
+    /// Tiles that may hold an assigned object (air, infantry, underground or other
+    /// ground list): a superset of the occupied tiles, one bit per tile index.
+    /// Tile calls these after its lists change; objects are only ever assigned to
+    /// the tiles of currentGameMap. An assignment to a tile of no current map is
+    /// counted, and the next removeObjectFromMap then scans every tile and rebuilds
+    /// the set. Derived state, never serialised.
+    static void noteObjectAssigned(const Tile& tile);
+    static void noteObjectReleased(const Tile& tile);
+    void rebuildObjectTiles();
     void spiceRemoved(const Coord& coord);
     void selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int realX, int realY, bool objectARGMode);
 
@@ -95,6 +107,9 @@ public:
     // not invalidate it; detailed routes still use the ordinary pathfinder.
     void invalidateTerrainConnectivity() noexcept { vehicleTerrainRegions.clear(); }
     bool terrainAttackReachable(const ObjectBase& seeker, const ObjectBase& target) const;
+    /// The terrain-connected vehicle region of a tile (0 = a mountain or off the map): two tiles
+    /// with the same nonzero region are connected for vehicles, ignoring occupants.
+    int vehicleTerrainRegion(const Coord& at) const;
     void restoreObserverPathingRevision(Uint32 revision) noexcept { pathingRevision=revision; }
 
     Sint32 getSizeX() const noexcept {
@@ -216,6 +231,9 @@ private:
     mutable std::vector<int> vehicleTerrainRegions; // Derived; never serialized.
     mutable unsigned terrainConnectivityBuilds = 0;
     std::vector<Uint32> activeDeadUnitTiles;        // Tile indices with running dead-unit timers. Derived; never serialized.
+    std::vector<Uint64> objectTiles;                // Bit per tile index; see noteObjectAssigned(). Derived; never serialized.
+    Uint64 objectTilesUntrackedMark = 0;            // untracked assignments counted when objectTiles was last complete
+    size_t tileIndexOf(const Tile& tile) const noexcept;
     void ensureTerrainConnectivity() const;
 
     void init_tile_location();

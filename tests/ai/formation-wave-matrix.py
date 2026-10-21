@@ -12,11 +12,15 @@ import csv
 import shutil
 import statistics
 import subprocess
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import require_free_space, scratch_dir  # noqa: E402
+
 MAPS = {
     'faceoff': '2P - 64x64 - Face Off.ini',
     'penny': '2P - 128x128 - 1v1 - Habbanya-Penny.ini',
@@ -54,11 +58,15 @@ def read(path):
 
 
 def run_matrix(args):
+    require_free_space()
+    with scratch_dir('formation-wave-matrix', args.scratch) as scratch:
+        play_matrix(args, scratch)
+
+
+def play_matrix(args, scratch):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
     done = {tuple(row[k] for k in KEY) for row in read(results / 'runs.csv')}
-    scratch = Path(args.scratch)
-    scratch.mkdir(parents=True, exist_ok=True)
     for seed in args.seeds:
         for map_key in args.maps:
             for shape in args.shapes:
@@ -92,7 +100,7 @@ def run_matrix(args):
                 if outcome.returncode != 0:
                     (results / f'failed-{"-".join(map(str, key))}.txt').write_text(
                         outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-80:]))
-                shutil.rmtree(out, ignore_errors=True)
+                finish_game(scratch, out, outcome.returncode != 0)
                 print(f'{"/".join(map(str, key))}: {len(waves)} waves, {wall} s, {result}', flush=True)
 
 
@@ -179,7 +187,8 @@ def report(args):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--results', required=True, help='Directory for runs.csv, waves.csv, houses.csv')
-parser.add_argument('--scratch', help='Directory for the (deleted) run directories')
+parser.add_argument('--scratch', help='Directory for the (deleted) run directories '
+                                      '(default: leased agent scratch, removed after a successful matrix)')
 parser.add_argument('--tag', default='baseline', help='Label of the code variant being measured')
 parser.add_argument('--difficulty', choices=('hard', 'brutal'), default='hard')
 parser.add_argument('--minutes', type=int, default=30)
@@ -192,6 +201,4 @@ args = parser.parse_args()
 if args.report:
     report(args)
 else:
-    if not args.scratch:
-        parser.error('--scratch is required to run the matrix.')
     run_matrix(args)

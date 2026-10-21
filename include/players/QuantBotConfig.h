@@ -20,10 +20,13 @@
 
 #include <DataTypes.h>
 #include <data.h>
+#include <players/QuantBotStrategy.h>
 
 #include <map>
 #include <string>
 #include <unordered_map>
+
+class INIFile;
 
 /**
  * Configuration structure for QuantBot AI behavior.
@@ -124,23 +127,132 @@ struct QuantBotConfig {
         int dispatchBypassBps;        // Share of CONFIGURED limit that bypasses it
         int recallOrdersPerPass;      // Fair recall/hold orders per AI pass
         bool frontBatteriesEnabled;   // Enemy-facing rocket batteries
+        /// House-level withdrawals: severe local defeat, sustained attrition, core attack
+        /// and the local squad pull-back. Off by default: with them the all-against-Atreides
+        /// match loses a seed and wins 2-5 minutes later (quantbot_all_against_atreides).
+        bool withdrawalsEnabled;
     };
     RecoverySettings recovery;
+
+    /// How a Custom Hard/Brutal army concentrates force (docs/formations.md, "Concentrating
+    /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
+    /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
+    /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
+    /// FinishWhenLeading;
+    /// optional keys, the code defaults
+    /// apply when absent. Hashed for multiplayer.
+    struct ForceSettings {
+        /// Hunting ground fighters shoot the best target in reach: fighters first, then the
+        /// one with the fewest hit points (ForceConcentrationPolicy::betterTarget).
+        bool focusFire;
+        /// Wave members not yet fighting join a fight of their army within 24 tiles.
+        bool converge;
+        /// The wave readiness and house attack threshold as a percentage of the difficulty's
+        /// (100 = unchanged; smaller = smaller, more frequent waves). Clamped to 10-300.
+        int waveReadinessPercent;
+        /// The idle reserve stands bundled at a forward rally a quarter of the way from the
+        /// assembly point to the observed enemy base (saved: SAVEGAMEVERSION 9863).
+        bool bundle;
+        /// With bundle: a ready wave launches once 70% of its value stands in the bundle,
+        /// re-checked every 5 s and at most 60 s late.
+        bool launchFromBundle;
+        /// While the remembered enemy army (round 5; saved, 9864) is worth 125% of ours, rocket
+        /// turrets go up on the enemy-facing base perimeter: one per 1,000 credits of the enemy's
+        /// lead, at most eight there, never below the economy and unit reserve.
+        bool perimeterTurrets;
+        /// Defences count the enemy within 12 tiles and send 1.5x it, the bundle first; distant
+        /// defenders of a building muster first (saved, 9864); a worker raid the troops in reach
+        /// cannot match gets nobody.
+        bool sizedDefence;
+        /// A house whose starting army cannot launch a wave at WaveReadinessPercent (a
+        /// Construction Yard start, not a Fortress with an army) holds its first ground wave
+        /// for full readiness (ForceConcentrationPolicy::openingReadiness; docs/formations.md,
+        /// "Scenario tests").
+        bool openingReadiness;
+        /// Late game (docs/formations.md, "Free-for-all: finishing the game"): a wave hunter
+        /// standing in an enemy turret's reach while it is not shooting an armed unit attacks
+        /// that turret (ranged units from beyond it where they outrange it).
+        bool turretPriority;
+        /// A wave member whose engine Hunt ran out of visible targets hunts on towards the
+        /// nearest enemy structure its house has seen, instead of standing in the field or
+        /// walking back to the bundle; the next wave meets it there.
+        bool pressOn;
+        /// A ground wave goes for the weakest enemy house it knows of (remembered army and
+        /// seen turrets), hunting towards that house's production and economy.
+        bool finishWeakest;
+        /// Against an objective guarded by many seen turrets a ready wave waits (at most three
+        /// minutes) for a bigger army before it leaves.
+        bool fortifiedWaves;
+        /// A hunting sonic tank whose wave would pass over one of its own team's units (the
+        /// wave runs about nine tiles and hurts all but sonic tanks) shoots the nearest other
+        /// enemy in its reach with a clear lane instead.
+        bool sonicClearLane;
+        /// Round 2 late-game candidates (docs/formations.md, "Free-for-all: finishing the game").
+        /// Banked credits above a reserve raise the production budget above the military limit
+        /// (at most double), spent only on siege tanks, launchers and specials.
+        bool spendAtCap;
+        /// Wave launchers shell known enemy turrets from beyond the turrets' reach while the
+        /// wave's other ground units hold short of that reach, guarding them.
+        bool siegeStandoff;
+        /// Against an objective guarded by many seen turrets the army waits (at most four
+        /// minutes) for 70% of the military limit, then everything hunts towards one objective
+        /// of the weakest known house.
+        bool massAssault;
+        /// On by default (1.0.848): a house whose team army leads the strongest enemy team's
+        /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
+        /// choice) instead of the nearest.
+        bool finishWhenLeading;
+    };
+    ForceSettings force;
+
+    /// The strategy each Custom Hard/Brutal QuantBot plays (docs/ai-play-styles.md,
+    /// "Strategies"): a unit-mix strategy and a tempo, each picked once per game from weights.
+    /// INI: [Strategy] Mode = Random | Fixed:<mix>,<tempo>, MixWeights, TempoWeights; optional
+    /// keys (not written by save()), the code defaults apply when absent. Hashed for multiplayer.
+    QuantBotStrategy::Settings strategy;
+    /// The Tuned mix strategy's starting ratios per house (docs/ai-play-styles.md, section 8),
+    /// indexed by house id (Harkonnen, Atreides, Ordos, Fremen, Sardaukar, Mercenary) and tech band
+    /// (0 = the house's top mix, used in every band without its own; 1-9 = the band whose first tech
+    /// level that is, QuantBot::techBand) over the mix slots tank, siege tank, launcher, Devastator,
+    /// Sonic Tank, Deviator, ornithopter, trike, raider trike, quad (percent).
+    /// INI: [Unit Ratios Tuned] <House> = t,s,l,dv,so,de,o,tr,r,q and <House>_Tech<N> = ... or
+    /// <House>_Tech<N> = Opening (that band plays the configured opening, bounded: a band whose
+    /// tuned mix did not beat it); optional keys (not written by save()), the code defaults apply
+    /// when absent; all zero = none (the house's top mix, or with none at all the configured opening).
+    /// Hashed.
+    static constexpr size_t kTunedBands = 10;
+    std::array<std::array<UnitMixPolicy::Weights, kTunedBands>, 6> tunedRatios{};
+    /// Bands (1-9) that play the configured opening although the house has a top mix.
+    std::array<std::array<bool, kTunedBands>, 6> tunedOpening{};
+    /// The tuned ratios of a house in the tech band starting at \a band: none (all zero) for an
+    /// Opening band, else the band's own mix, else the house's top mix (renormalised over the band's
+    /// slots when bounded); all zero for none.
+    const UnitMixPolicy::Weights& getTunedRatios(int houseID, int band = 0) const;
 
     // === General AI behavior ===
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
-    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, otherwise the
-    /// FormationPlanner::Shape index the wave marches in as a hunting formation.
-    /// INI: [General Behavior] WaveFormation = None (default) | Box | Pincer | Column | Staggered | Echelon.
+    /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
+    /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into
+    /// engine Hunt on contact ("Blob waves"); otherwise the FormationPlanner::Shape index the wave
+    /// marches in as a hunting formation.
+    /// INI: [General Behavior] WaveFormation = None (default) | Blob | Box | Pincer | Column | Staggered | Echelon.
     static constexpr int kWaveFormationNone = -1;
+    /// Not a FormationPlanner::Shape: never passed to the planner (formationShapeOf()).
+    static constexpr int kWaveFormationBlob = -3;
     int waveFormation;
-    /// "None" or a kept shape name (case-insensitive) to a waveFormation
+    /// "None", "Blob" or a kept shape name (case-insensitive) to a waveFormation
     /// value; anything else returns 'fallback'.
     static int parseWaveFormation(const std::string& name, int fallback);
     static const char* waveFormationName(int value);
+    /// The planner shape a waveFormation value stands for, for every formation move that is
+    /// not a QuantBot hunt party (AIPlayer, CampaignAIPlayer, QuantBot's recall and campaign
+    /// waves): Blob is not a shape, so it moves those groups like None.
+    static int formationShapeOf(int waveFormation) {
+        return waveFormation == kWaveFormationBlob ? kWaveFormationNone : waveFormation;
+    }
 
     // Priority tables (configurable)
     const TargetPriority& getStructurePriority(int structureID) const;
@@ -153,6 +265,11 @@ struct QuantBotConfig {
     
     // Load from INI file (creates default file if not exists)
     bool load(const std::string& filepath);
+
+    /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this
+    /// config - any QuantBot Config.ini key, the others keep their values - without creating or
+    /// writing the file. False if the file does not exist.
+    bool applyOverrides(const std::string& filepath);
     
     // Save to INI file
     bool save(const std::string& filepath) const;
@@ -171,6 +288,10 @@ struct QuantBotConfig {
     static std::string normalizeKey(const std::string& value);
 
 private:
+    /// Reads every key present in iniFile over the current values; true if the priority tables
+    /// differ from the file's (load() then rewrites it).
+    bool readFrom(const INIFile& iniFile);
+
     void registerStructurePriority(int structureID, const std::string& name, int build, int target);
     void registerUnitPriority(int unitID, const std::string& name, int build, int target);
 

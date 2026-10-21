@@ -19,7 +19,6 @@ public:
 private:
     void onEdit();
     void onCreateNew();
-    void onLoadFromMetaserver();
     void refreshModList(const std::string& select = "");
     void updateModDetails();
     Purpose purpose;
@@ -27,7 +26,7 @@ private:
     Label titleLabel, instructionsLabel, detailsLabel, newModLabel, statusLabel;
     ListBox modListBox;
     TextBox newModNameTextBox;
-    TextButton createButton, metaserverButton, editButton, backButton;
+    TextButton createButton, editButton, backButton;
     std::vector<ModInfo> mods;
 };
 #endif

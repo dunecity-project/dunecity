@@ -88,8 +88,7 @@ Game::updateGameState()  [runs every tick at ~62.5 Hz]
   ├── cmdManager.executeCommands()
   ├── house[i]->update()              // AI city-building
   ├── processObjects()                // WindTrap registers power sources
-  ├── citySimulation_->advancePhase() // one of 16 city phases per tick
-  └── economic victory check
+  └── citySimulation_->advancePhase() // one of 16 city phases per tick
 ```
 
 ### City Simulation Phases (16 per cycle)

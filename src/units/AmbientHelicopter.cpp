@@ -215,8 +215,11 @@ void AmbientHelicopter::pickPatrolDestination()
 
     if(chosen.isInvalid()) {
         const int spread = std::max(1, radius / 3);
-        chosen = Coord(home.x + currentGame->randomGen.rand(-spread, spread),
-                       home.y + currentGame->randomGen.rand(-spread, spread));
+        // x drawn before y in separate statements: argument evaluation order is unspecified
+        // (MSVC evaluates right to left), and the shared simulation RNG must agree across peers.
+        const int dx = currentGame->randomGen.rand(-spread, spread);
+        const int dy = currentGame->randomGen.rand(-spread, spread);
+        chosen = Coord(home.x + dx, home.y + dy);
         chosen.x = std::clamp(chosen.x, 0, currentGameMap->getSizeX() - 1);
         chosen.y = std::clamp(chosen.y, 0, currentGameMap->getSizeY() - 1);
     }

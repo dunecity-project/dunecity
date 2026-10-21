@@ -48,6 +48,21 @@ TEST_CASE("Workshop downloaded bytes must match manifest and corrupt cache can b
     REQUIRE(other.get(r.hash).hash==r.hash);
     REQUIRE_THROWS(other.importRevision(r.manifest,std::string(64,'0'),1,r.directory));
 }
+TEST_CASE("Opening a profile drops the retired sharing queue and keeps every revision","[workshop][outbox]") {
+    namespace fs=std::filesystem;
+    Fixture f;auto mod=f.save();
+    // An older release left queued uploads and a collection receipt beside the revision.
+    const auto cache=f.root/"cache";
+    fs::create_directories(cache/"outbox");
+    for(const auto& marker:{mod.hash,std::string(64,'c')}) std::ofstream(cache/"outbox"/marker)<<"collect";
+    std::ofstream(cache/"revisions"/mod.hash/"collected")<<std::string(64,'d');
+    Workshop::Store reopened(cache);
+    REQUIRE_FALSE(fs::exists(cache/"outbox"));
+    REQUIRE(reopened.get(mod.hash).hash==mod.hash);
+    REQUIRE(reopened.list("mod").size()==1);
+    Workshop::Store again(cache); // A later start has nothing left to remove.
+    REQUIRE(again.get(mod.hash).hash==mod.hash);
+}
 TEST_CASE("Workshop rejects unsafe paths case aliases and noncanonical manifests","[workshop]") {
     Fixture f;auto r=f.save();
     auto bad=r.manifest;bad.replace(bad.find("kind=mod"),8,"kind=map");REQUIRE_THROWS(Workshop::parseManifest(bad));
@@ -151,4 +166,26 @@ TEST_CASE("Repeated map metadata updates replace complete INI values", "[worksho
     std::ifstream input(f.source/"roundtrip.ini");
     const std::string text((std::istreambuf_iterator<char>(input)), {});
     REQUIRE(text.find("; keep comment")!=std::string::npos);
+}
+
+#include <mod/BundledGameOptions.h>
+TEST_CASE("Bundled GameOptions.ini reaches the disk byte for byte with LF line endings", "[workshop][installer]") {
+    // The installer identity hashes BundledGameOptions::vanilla()/city(); ModManager seeds the
+    // vanilla and dunecity mods with BundledGameOptions::write. A CRLF file (text-mode stream on
+    // Windows) left the bundled mods unrecognised there.
+    Fixture f;
+    for(const std::string& text : {BundledGameOptions::vanilla(), BundledGameOptions::city()}) {
+        REQUIRE(text.find('\r')==std::string::npos);
+        const auto path=f.source/"GameOptions.ini";
+        f.write("GameOptions.ini",std::string(4096,'x')+"\r\n");   // a longer, stale file is replaced
+        REQUIRE(BundledGameOptions::write(path,text));
+        std::ifstream input(path,std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+        REQUIRE(bytes.find('\r')==std::string::npos);
+        REQUIRE(bytes==text);
+        REQUIRE(Workshop::hashBytes(bytes)==Workshop::hashBytes(text));
+    }
+    REQUIRE(BundledGameOptions::vanilla().find("City Effects = false\n")!=std::string::npos);
+    REQUIRE(BundledGameOptions::city().find("City Effects = true\n")!=std::string::npos);
+    REQUIRE_FALSE(BundledGameOptions::write(f.root/"missing"/"GameOptions.ini",BundledGameOptions::vanilla()));
 }

@@ -2884,61 +2884,47 @@ bool UnitBase::update() {
         // cycle's targeting decides what the unit does.
         if(!orderQueue.empty() && !pickedUp) updateOrderQueue();
 
-        // Time targeting
-        Uint64 targetStart = SDL_GetPerformanceCounter();
+        // Phase timing for DuneCity-Performance.log only; never read by a decision. One clock
+        // read per phase boundary, and none at all when FrameTiming::unitPhases is off.
+        auto& timing = currentGame->frameTiming;
+        const bool timed = timing.unitPhases;
+        Uint64 lapStart = timed ? SDL_GetPerformanceCounter() : 0;
+        const auto lap = [&](double& total, double& thisFrame) {
+            if(!timed) return;
+            const Uint64 now = SDL_GetPerformanceCounter();
+            const double ms = currentGame->getElapsedMs(lapStart, now);
+            total += ms;
+            thisFrame += ms;
+            lapStart = now;
+        };
+
         targeting();
-        Uint64 targetEnd = SDL_GetPerformanceCounter();
-        double targetMs = currentGame->getElapsedMs(targetStart, targetEnd);
-        currentGame->frameTiming.unitTargetingMs += targetMs;
-        currentGame->frameTiming.unitTargetingMsThisFrame += targetMs;
-        
+        lap(timing.unitTargetingMs, timing.unitTargetingMsThisFrame);
+
         // Dynasty updates movement and body rotation before its route script.
         // In particular, a tile arrival can start the next step on this tick.
         const bool dynastyTiming=usesDynastyGroundTiming();
         if(dynastyTiming) {
-            const Uint64 earlyMoveStart=SDL_GetPerformanceCounter();
             move();
-            const Uint64 earlyTurnStart=SDL_GetPerformanceCounter();
-            const double earlyMoveMs=currentGame->getElapsedMs(earlyMoveStart,earlyTurnStart);
-            currentGame->frameTiming.unitMoveMs+=earlyMoveMs;
-            currentGame->frameTiming.unitMoveMsThisFrame+=earlyMoveMs;
+            lap(timing.unitMoveMs, timing.unitMoveMsThisFrame);
             if(active) turn();
-            const double earlyTurnMs=currentGame->getElapsedMs(earlyTurnStart,SDL_GetPerformanceCounter());
-            currentGame->frameTiming.unitTurnMs+=earlyTurnMs;
-            currentGame->frameTiming.unitTurnMsThisFrame+=earlyTurnMs;
+            lap(timing.unitTurnMs, timing.unitTurnMsThisFrame);
         }
-        // Time navigate
-        Uint64 navStart = SDL_GetPerformanceCounter();
         if(active) navigate();
-        Uint64 navEnd = SDL_GetPerformanceCounter();
-        double navMs = currentGame->getElapsedMs(navStart, navEnd);
-        currentGame->frameTiming.unitNavigateMs += navMs;
-        currentGame->frameTiming.unitNavigateMsThisFrame += navMs;
-        
-        // Time move
-        Uint64 moveStart = SDL_GetPerformanceCounter();
-        if(!dynastyTiming) move();
-        Uint64 moveEnd = SDL_GetPerformanceCounter();
-        double moveMs = currentGame->getElapsedMs(moveStart, moveEnd);
-        currentGame->frameTiming.unitMoveMs += moveMs;
-        currentGame->frameTiming.unitMoveMsThisFrame += moveMs;
-        
+        lap(timing.unitNavigateMs, timing.unitNavigateMsThisFrame);
+
+        if(!dynastyTiming) {
+            move();
+            lap(timing.unitMoveMs, timing.unitMoveMsThisFrame);
+        }
+
         if(active) {
-            // Time turn
-            Uint64 turnStart = SDL_GetPerformanceCounter();
-            if(!dynastyTiming) turn();
-            Uint64 turnEnd = SDL_GetPerformanceCounter();
-            double turnMs = currentGame->getElapsedMs(turnStart, turnEnd);
-            currentGame->frameTiming.unitTurnMs += turnMs;
-            currentGame->frameTiming.unitTurnMsThisFrame += turnMs;
-            
-            // Time updateVisibleUnits
-            Uint64 visStart = SDL_GetPerformanceCounter();
+            if(!dynastyTiming) {
+                turn();
+                lap(timing.unitTurnMs, timing.unitTurnMsThisFrame);
+            }
             updateVisibleUnits();
-            Uint64 visEnd = SDL_GetPerformanceCounter();
-            double visMs = currentGame->getElapsedMs(visStart, visEnd);
-            currentGame->frameTiming.unitVisibilityMs += visMs;
-            currentGame->frameTiming.unitVisibilityMsThisFrame += visMs;
+            lap(timing.unitVisibilityMs, timing.unitVisibilityMsThisFrame);
         }
     }
 
@@ -3028,11 +3014,20 @@ void UnitBase::updateVisibleUnits() {
 }
 
 bool UnitBase::marchesWith(const UnitBase* other) const {
-    // Both members of one formation on its march (not forming up), the other one not waiting
-    // for a member that fell behind: it moves on at the pace, so it is no obstacle.
-    return other != nullptr && other != this && formationGroup != 0 && formationFormUp.isInvalid()
-        && other->formationGroup == formationGroup && other->owner == owner && other->formationFormUp.isInvalid()
-        && other->formationMarch != FormationPlanner::March::Hold;
+    // Both members of one formation on its march (not forming up): the other one moves on, so it
+    // is no obstacle - this unit waits behind it and plans its routes through it. A member holding
+    // for one that fell behind counts while it has a next step: FormationOrders::update() makes it
+    // give way to a mate stepping onto its tile. But a unit that fell behind its place (Recover)
+    // routes round a member keeping the pace: following it, it could never close the gap.
+    if(other == nullptr || other == this || formationGroup == 0 || formationFormUp.isValid()
+       || other->formationGroup != formationGroup || other->owner != owner || other->formationFormUp.isValid())
+        return false;
+    switch(other->formationMarch) {
+        case FormationPlanner::March::Hold: return other->nextSpotFound;
+        case FormationPlanner::March::Pace: return formationMarch != FormationPlanner::March::Recover;
+        case FormationPlanner::March::Recover:
+        default: return true;
+    }
 }
 
 bool UnitBase::canPathThrough(int xPos, int yPos) const {

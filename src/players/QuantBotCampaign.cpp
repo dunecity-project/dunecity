@@ -84,7 +84,7 @@ void QuantBot::noteCampaignOriginalState(bool legacySave) {
         }
     }
     campaignBaseline.refineries=refineries;
-    const auto& settings=getQuantBotConfig().getSettings(int(difficulty));
+    const auto& settings=botConfig().getSettings(int(difficulty));
     int allowedRefineries=difficulty==Difficulty::Hard && getGameInitSettings().getMission()>=21 ? 2 : refineries;
     allowedRefineries=std::max(allowedRefineries,settings.refineryMinimum);
     int allowance=std::max(0,settings.harvesterLimitPerRefineryMultiplier*allowedRefineries);
@@ -201,7 +201,7 @@ int QuantBot::campaignAllyHarvesterLimit() const {
     return currentGame && isCampaignGameType(currentGame->gameType)
         && difficulty == Difficulty::Brutal && isAlliedWithHuman()
         && currentGame->getGameInitSettings().getMission() >= CampaignControls::firstMission(8)
-        && currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride < 0
+        && currentGame->getGameInitSettings().getGameOptions().harvesterCeiling() == 0
         ? 20 : 0;
 }
 
@@ -254,6 +254,24 @@ CampaignDifficultyPolicy::Pressure QuantBot::campaignPressure() const {
 
 int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     int required = std::max(0, configuredThreshold);
+    // The human's ally measures its wave against the strongest opposing house's army (unit counts
+    // x prices, as the production allocator values them) after the opening, not against a
+    // skirmish-sized limit a campaign enemy never fields: it held 5,650-7,780 for 20 minutes
+    // against two empty enemy armies (vanilla Harkonnen m21) waiting for 8,000.
+    if (isAlliedWithHuman() && !isCampaignEnemy() && getGameCycleCount() >= MILLI2CYCLES(15 * 60000)) {
+        int strongest = 0;
+        for (int h=0; h<NUM_HOUSES; ++h) {
+            const House* house = getHouse(h);
+            if (!house || !house->isAlive() || house->getTeamID()==getHouse()->getTeamID()) continue;
+            int value = 0;
+            for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item)
+                if (item != Unit_Carryall && item != Unit_Harvester && item != Unit_MCV && item != Unit_Sandworm
+                    && item != Unit_Frigate)
+                    value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
+            strongest = std::max(strongest, value);
+        }
+        required = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
+    }
     // Once the map is depleted, stop waiting for a larger army. A leftover
     // cash balance or a few cheap survivors must not keep the game idle.
     // Dispatch still enforces home reserves, opening and enemy wave limits.

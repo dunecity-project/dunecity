@@ -58,7 +58,6 @@ MAX_TRAFFIC_DISTANCE = 20     # CityEffects.h kMaxTrafficDistance
 SUPPLY_RADIUS = 16            # CityEffects.h kSupplyRadius
 POLLUTION_RADIUS = 5          # CityEffects.h kPollutionRadius
 POLICE_RADIUS = 23            # CityEffects.h kPoliceRadius
-ECONOMIC_POP_TARGET = 500     # CitySimulation.h economicVictoryThreshold_
 
 LEGAL_TERRAIN = set("-^~+%@OQgGbrRB")
 ROCKISH = set("%")            # rock; slabs do not exist in a fresh INI
@@ -520,10 +519,6 @@ def validate(path: Path, expect: Optional[dict] = None) -> Report:
         quota_set = any(int(get(ini[s], "Quota") or 0) > 0 for s in declared)
         if not quota_set:
             rep.err("WinFlags has the QUOTA bit but no house declares a Quota")
-    if expect and win_flags & 0x10:
-        rep.err("Prebuilt city scenarios must not use the fixed 500-population instant-win condition")
-    if win_flags & 0x10 and not zones:
-        rep.err("WinFlags has the ECONOMIC bit but the map has no city zones")
 
     for key, val in ini.get("reinforcements", []):
         parts = [p.strip() for p in val.split(',')]
@@ -616,9 +611,6 @@ def validate(path: Path, expect: Optional[dict] = None) -> Report:
                f"police/turret coverage radius ({POLICE_RADIUS}), e.g. {unpoliced_res[:4]}")
         (rep.warn if scenario or len(unpoliced_res) <= expect.get("allow_unpoliced_res", 0) else rep.err)(msg)
 
-    if win_flags & 0x10:
-        rep.note(f"ECONOMIC victory active: local house must reach "
-                 f"{ECONOMIC_POP_TARGET} internal population")
     return rep
 
 

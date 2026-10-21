@@ -84,13 +84,15 @@ with (out/'build.log').open('w') as log:
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 profile = out/'profile'
 with managed_profile(profile):
-    active = prepare_profile(profile, args.profile_from)
+    active = prepare_profile(profile, args.profile_from, [args.save])
     if active: print('SIM_PROBE_PROFILE: active_mod='+active)
     if args.diagnostics:
         config=configparser.ConfigParser(interpolation=None,strict=False)
         config.read(profile/'Dune City.ini')
         if not config.has_section('General'): config.add_section('General')
         config.set('General','Diagnostic Logs','true' if args.diagnostics=='on' else 'false')
+        # "on" is the whole development capture, including the separate AI decision log.
+        config.set('General','AI Decision Log','true' if args.diagnostics=='on' else 'false')
         with (profile/'Dune City.ini').open('w') as handle: config.write(handle)
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SIM_PROBE_SAVE=str(args.save.resolve()), SIM_PROBE_CYCLES=str(args.cycles), SIM_PROBE_OUTPUT=str(out/'final.dls'),
                DUNECITY_PATH_WORKERS=args.path_workers, DUNECITY_PATH_WORKER_DELAY_US=args.worker_delay_us)

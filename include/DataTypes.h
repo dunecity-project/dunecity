@@ -196,6 +196,10 @@ public:
         static constexpr bool defaultDiagnosticLogs = true;
 #endif
         bool            diagnosticLogs = defaultDiagnosticLogs;
+        /// Per-game AI decision log (ai-decisions/<session>/events.jsonl, up to 256 MB a game).
+        /// Independent of diagnosticLogs; DUNECITY_AI_TELEMETRY=1/0 overrides it for tools.
+        static constexpr bool defaultAIDecisionLog = false;
+        bool            aiDecisionLog = defaultAIDecisionLog;
         bool            multiplePlayersPerHouse = false; ///< Custom game lobby: allow two players per house (remembered across games)
         bool            campaignOnline = true;     ///< Campaign setup: last Offline/Online co-op choice (remembered across games)
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)
@@ -364,7 +368,7 @@ public:
         bool        killedSandwormsDropSpice;
         bool        manualCarryallDrops;
         int         maximumNumberOfUnitsOverride;
-        int         maximumNumberOfHarvestersOverride;
+        int         maximumNumberOfHarvestersOverride; // -1 (unchecked) or 0: unlimited; see harvesterCeiling()
         int         maximumNumberOfConstructionYardsOverride; // -1 or 0: unlimited
         bool        immortalHumanPlayer;
         bool        cityEffects;        ///< DuneCity: enable pollution/land-value/crime/zone-growth pipeline
@@ -373,6 +377,13 @@ public:
         /// yard places it there when finished. Off = build, then place. Match-wide (every peer
         /// runs the same rule; the command executor refuses reservations when off).
         bool        planBuildingSites;
+
+        /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
+        /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.
+        /// Every engine and AI reader goes through this, so no reader can take 0 as "zero harvesters".
+        int harvesterCeiling() const {
+            return maximumNumberOfHarvestersOverride > 0 ? maximumNumberOfHarvestersOverride : 0;
+        }
     } gameOptions;
 };
 

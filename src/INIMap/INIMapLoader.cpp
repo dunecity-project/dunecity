@@ -606,8 +606,7 @@ void INIMapLoader::loadHouses()
         }
 
         // Only an explicit lobby setting imposes a harvester ceiling.
-        const int maxHarvesters = std::max(0,
-            currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride);
+        const int maxHarvesters = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
 
         int quota = inifile->getIntValue(houseName,"Quota",0);
 
@@ -1114,8 +1113,7 @@ House* INIMapLoader::getOrCreateHouse(int houseID) {
             }
         }
 
-        const int maxHarvesters = std::max(0,
-            currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride);
+        const int maxHarvesters = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
         auto pNewHouse = std::make_unique<House>(houseID, 0, maxUnits, maxHarvesters, team, 0);
 
         const GameInitSettings::HouseInfoList& houseInfoList = pGame->getGameInitSettings().getHouseInfoList();

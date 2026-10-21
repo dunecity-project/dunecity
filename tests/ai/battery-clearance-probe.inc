@@ -325,9 +325,9 @@ void runBatteryClearanceProbe(Game& game) {
         bot->clearPlacementCache();
         require(!bot->findBatteryClearanceSite().isValid(),"Clearance leaked into a campaign game");
         game.gameType=restoreType;
-        bot->difficulty=QuantBot::Difficulty::Medium;
+        bot->difficulty=QuantBot::Difficulty::Easy;
         bot->clearPlacementCache();
-        require(!bot->findBatteryClearanceSite().isValid(),"Clearance leaked into Medium");
+        require(!bot->findBatteryClearanceSite().isValid(),"Clearance leaked into Easy");
         bot->difficulty=QuantBot::Difficulty::Brutal;
         bot->supportMode=true;
         bot->clearPlacementCache();

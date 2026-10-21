@@ -84,19 +84,21 @@ public:
     /// Every plot the house has reserved in any of its yards, in structure-list order.
     static std::vector<PlacementReservation::Footprint> reservedFootprints(const House* house);
 
+    /**
+        Ask this house's units standing on the plot to move off it (deterministic). The
+        pre-placement queue and the AI's planned sites (Player::doMoveOwnUnitsOffPlot) both
+        keep their plots clear with it.
+        \param  idleOnly    only units that are standing still and not holding position; units
+                            walking through or holding are left alone
+    */
+    void moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly);
+
 private:
     /// The same placement the CMD_PLACE_STRUCTURE path performs.
     bool placeFinishedStructure(int x, int y);
 
     /// Places, waits for units, or falls back, once the reserved front order is finished.
     void updateReservedPlacement();
-
-    /**
-        Ask this house's units standing on the plot to move off it (deterministic).
-        \param  idleOnly    only units that are standing still and not holding position; units
-                            walking through or holding are left alone
-    */
-    void moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly);
 
     /// Once a second, own idle units are moved off every planned plot of this yard.
     void keepPlannedPlotsClear();

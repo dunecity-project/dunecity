@@ -348,7 +348,7 @@ protected:
 
     FixPoint storedCredits;   ///< current number of credits that are stored in refineries/silos
     FixPoint startingCredits; ///< number of starting credits this player still has
-    FixPoint cityCredits;     ///< spendable city tax income, excluded from the harvested-spice quota
+    FixPoint cityCredits;     ///< spendable city tax income; counts towards a spice quota like stored spice
     FixPoint cityTaxReceipts; ///< cumulative gross city tax collected this mission (statistic only: never spent, never reduced by police costs or credit caps)
     /// Delivery income factor for this house (SAVEGAMEVERSION 9851). Part of the simulation:
     /// it is mixed into the state digest and read at every refinery payout.

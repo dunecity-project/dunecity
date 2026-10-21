@@ -50,7 +50,13 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9859 adds the hunting-formation flag (formation shapes, hunt in formation).
     // 9860 adds the form-up tile, resume kind and pace unit type (one-speed formation march).
     // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
-    REQUIRE(SAVEGAMEVERSION == 9861);
+    // 9862 adds the QuantBot hunt parties (Blob waves).
+    // 9863 adds the QuantBot reserve bundle and the launch gate's wait (force concentration).
+    // 9864 adds the QuantBot remembered enemy army and defence musters (defence while outnumbered).
+    // 9865 adds the QuantBot strategy (unit-mix strategy and tempo).
+    // 9866 adds the starting ratios a Tuned/Bounded strategy resolved to.
+    // 9868 gives every special its own unit-mix slot (ten slots instead of eight).
+    REQUIRE(SAVEGAMEVERSION == 9868);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

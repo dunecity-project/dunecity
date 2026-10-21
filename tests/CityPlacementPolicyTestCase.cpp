@@ -328,6 +328,44 @@ TEST_CASE("Harvester escape permits leaving danger but rejects crossing another 
     REQUIRE_FALSE(escapeCorridor(0,0,0,0,[](int,int) { return 100; }));
 }
 
+TEST_CASE("Harvester field choice picks what the sequential corridor sweep picked", "[tactical][harvester]") {
+    // The sweep it replaces (QuantBot::manageHarvesterSafety before 2026-10-21): every
+    // candidate beating the running best is route-tested, the first safe one of the lowest
+    // score wins. Random scores with many ties and wide ranges, random safe sets from
+    // none to all; the pick must be the same and only candidates at least as good as it
+    // may be tested.
+    uint32_t state = 12345u;
+    auto next = [&] { state ^= state << 13; state ^= state >> 17; state ^= state << 5; return state; };
+    for (int round = 0; round < 3000; ++round) {
+        const size_t count = next() % 400;
+        const int range = 1 + static_cast<int>(next() % (round % 3 == 0 ? 8 : 3000));
+        const uint32_t safeShare = next() % 101;
+        std::vector<int> scores(count);
+        std::vector<bool> safe(count);
+        for (size_t k = 0; k < count; ++k) {
+            scores[k] = static_cast<int>(next() % range);
+            safe[k] = next() % 100 < safeShare;
+        }
+        int expected = -1, best = std::numeric_limits<int>::max();
+        for (size_t k = 0; k < count; ++k) {
+            if (scores[k] >= best || !safe[k]) continue;
+            best = scores[k]; expected = static_cast<int>(k);
+        }
+        int rejected = -1, tests = 0;
+        const int pick = TacticalSafetyPolicy::lowestSafeCandidate(scores, [&](int k) {
+            ++tests;
+            if (expected >= 0) {
+                // Never a candidate worse than the pick (lower (score, position) first).
+                REQUIRE(std::make_pair(scores[k], k) <= std::make_pair(scores[expected], expected));
+            }
+            return static_cast<bool>(safe[k]);
+        }, rejected);
+        REQUIRE(pick == expected);
+        REQUIRE(rejected == tests - (pick >= 0 ? 1 : 0));
+        if (pick < 0) REQUIRE(tests == static_cast<int>(count));
+    }
+}
+
 #include <players/RedevelopmentPolicy.h>
 TEST_CASE("Redevelopment compares normalized demand and displacement", "[city][placement]") {
     using RedevelopmentPolicy::displacementCost;
@@ -566,6 +604,70 @@ TEST_CASE("Placement fields are rebuilt after a reservation changes", "[ai][plac
     REQUIRE(next.get(2,3)==7);
     REQUIRE(first.get(9,7)==5);
     REQUIRE(next.get(9,7)==0);
+}
+TEST_CASE("Placement distance fields equal the former map-sized chamfer field", "[ai][placement][regression]") {
+    // The field of 1.0.849 and earlier: every map cell, two chamfer passes (exact for the
+    // unit-cost eight-neighbour metric). The query-based field must answer get()
+    // and footprint() identically for every cell, edge and off-map probe.
+    struct Chamfer {
+        int w,h; std::vector<int> cells;
+        Chamfer(int width,int height):w(width),h(height),cells(width*height,CityDistanceField::missing) {}
+        int get(int x,int y) const { return x<0||y<0||x>=w||y>=h ? CityDistanceField::missing : cells[y*w+x]; }
+        void add(int x,int y,int rw,int rh) {
+            for (int yy=std::max(0,y); yy<std::min(h,y+rh); ++yy)
+                for (int xx=std::max(0,x); xx<std::min(w,x+rw); ++xx) cells[yy*w+xx]=0;
+        }
+        void build() {
+            for (int y=0;y<h;++y) for (int x=0;x<w;++x) {
+                int& d=cells[y*w+x];
+                if (x>0) d=std::min(d,get(x-1,y)+1);
+                if (y>0) for (int dx=-1;dx<=1;++dx) d=std::min(d,get(x+dx,y-1)+1);
+            }
+            for (int y=h-1;y>=0;--y) for (int x=w-1;x>=0;--x) {
+                int& d=cells[y*w+x];
+                if (x+1<w) d=std::min(d,get(x+1,y)+1);
+                if (y+1<h) for (int dx=-1;dx<=1;++dx) d=std::min(d,get(x+dx,y+1)+1);
+            }
+        }
+        int footprint(int x,int y,int fw,int fh) const {
+            int d=CityDistanceField::missing;
+            for (int yy=y;yy<y+fh;++yy) for (int xx=x;xx<x+fw;++xx) d=std::min(d,get(xx,yy));
+            return d;
+        }
+    };
+    unsigned random=12345;
+    auto next=[&] {random=random*1664525u+1013904223u;return random>>8;};
+    for (unsigned scenario=0; scenario<60; ++scenario) {
+        const int w=1+int(next()%97), h=1+int(next()%83);
+        Chamfer reference(w,h);
+        CityDistanceField field(w,h);
+        // Sparse to dense, clustered or scattered, including rectangles off the map.
+        const unsigned sources=scenario%7==0 ? 0u : 1u+next()%(scenario%3==0 ? 3u : 60u);
+        const int clusterX=int(next()%w), clusterY=int(next()%h), spread=1+int(next()%(w+h));
+        for (unsigned i=0; i<sources; ++i) {
+            const int x=clusterX-spread+int(next()%(2*spread+1))-1, y=clusterY-spread+int(next()%(2*spread+1))-1;
+            const int rw=1+int(next()%4), rh=1+int(next()%4);
+            reference.add(x,y,rw,rh); field.add(x,y,rw,rh);
+        }
+        reference.build(); field.build();
+        for (int y=-2; y<h+2; ++y) for (int x=-2; x<w+2; ++x) {
+            REQUIRE(field.get(x,y)==reference.get(x,y));
+            for (int fh=1; fh<=3; ++fh) for (int fw=1; fw<=3; ++fw)
+                REQUIRE(field.footprint(x,y,fw,fh)==reference.footprint(x,y,fw,fh));
+        }
+    }
+    // A Huge map with a few far-apart cities, as in an eight-house 384x384 game.
+    Chamfer reference(384,384);
+    CityDistanceField field(384,384);
+    for (int i=0; i<40; ++i) {
+        const int x=(i%4)*96+int(next()%20), y=(i/10)*90+int(next()%30);
+        reference.add(x,y,2,2); field.add(x,y,2,2);
+    }
+    reference.build(); field.build();
+    for (int y=0; y<384; y+=3) for (int x=0; x<384; x+=5) {
+        REQUIRE(field.get(x,y)==reference.get(x,y));
+        REQUIRE(field.footprint(x,y,2,2)==reference.footprint(x,y,2,2));
+    }
 }
 
 TEST_CASE("Police placement removes the most occupied-building crime before tax or spacing preferences", "[city][placement]") {

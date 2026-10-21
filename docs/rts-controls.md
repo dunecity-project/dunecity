@@ -15,7 +15,9 @@ H harvester return, R repair / Shift+R road tool, M move, C capture, Shift+1..8 
   (same convention as Stop).
 - Target semantics in Attack cursor: click an enemy object → attack that object (unchanged).
   Click ground → ATTACK-MOVE (new). `Ctrl` + click ground → forced fire at that position (the old
-  attack-ground behaviour, preserved).
+  attack-ground behaviour, preserved). Click an explored spice bloom → fire at it from weapon range
+  to set it off, as in Dune Legacy (units that cannot shoot it get no order); never an attack-move,
+  which would drive the units onto the bloom.
 - Behaviour: unit walks to the point; any enemy within max(weapon range, view range) of the unit on the
   way is engaged; after the fight the unit resumes the walk. Leash: a unit does not chase more than 8
   tiles from where it broke off the walk, then resumes. On arrival the unit enters AREAGUARD at the
@@ -133,7 +135,8 @@ behaviour probe and the rendered smoke frame pass.
 
 ## Controls as built
 - Attack cursor (A, WASD: Shift+A): object → attack; ground → attack-move; Ctrl+ground → old
-  forced fire. Shift queues and keeps the cursor.
+  forced fire; explored spice bloom → fire at it from range (Shift does not queue it).
+  Shift queues and keeps the cursor.
 - Patrol (Q, WASD: Shift+Q): route = unit position at execution + point(s); Shift adds points
   before the closing anchor; legs within 2 tiles are refused.
 - Hold (H): harvesters return (Shift+H queues the return), all other selected units HOLD.

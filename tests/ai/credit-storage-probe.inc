@@ -261,9 +261,58 @@ void runCreditStorageProbe(Game& game) {
     game.finished=false; game.won=false;
     house->quota=savedQuota; game.winFlags=savedWinFlags;
 
+    // --- 11. A spice quota is met by the house's whole earned store: refined spice and city tax
+    //         credits alike (Stefan, 1.0.848: "anything with a spice quota can be achieved with tax
+    //         credits also"). Run in a campaign and in a custom game, for every house in the game
+    //         as the local house (the engine checks the local house's quota). Without the city
+    //         simulation there are no taxes, and only refined spice counts. Starting cash never does.
+    {
+        const bool city=game.isCitySimEnabled();
+        House* const savedLocal=pLocalHouse;
+        int checked=0;
+        for(int h=0;h<NUM_HOUSES;++h) {
+            House* quotaHouse=game.getHouse(h);
+            if(!quotaHouse) continue;
+            const int savedHouseQuota=quotaHouse->quota, savedCapacity=quotaHouse->capacity;
+            const FixPoint savedStored=quotaHouse->storedCredits, savedCity=quotaHouse->cityCredits,
+                savedStarting=quotaHouse->startingCredits;
+            pLocalHouse=quotaHouse;
+            game.winFlags|=WINLOSEFLAGS_QUOTA;
+            quotaHouse->quota=1000; quotaHouse->capacity=5000;
+            quotaHouse->storedCredits=0; quotaHouse->cityCredits=0; quotaHouse->startingCredits=5000;
+            game.finished=false; game.won=false;
+            quotaHouse->addCityCredits(999);
+            require(!game.finished,"Starting cash or 999 tax credits met a 1000-credit quota");
+            quotaHouse->addCityCredits(1);
+            if(city) require(game.finished && game.won,"City tax credits alone did not meet the spice quota");
+            else require(!game.finished,"Tax credits met a spice quota without the city simulation");
+
+            quotaHouse->storedCredits=0; quotaHouse->cityCredits=0;
+            game.finished=false; game.won=false;
+            quotaHouse->addCredits(600,true);
+            require(!game.finished,"600 refined spice met a 1000-credit quota");
+            quotaHouse->addCityCredits(400);
+            require(game.finished==city && game.won==city,
+                city ? "Refined spice and tax credits together did not meet the spice quota"
+                     : "Tax credits counted towards a spice quota without the city simulation");
+            quotaHouse->addCredits(400,true);
+            require(game.finished && game.won,"1000 refined spice did not meet the spice quota");
+
+            quotaHouse->quota=savedHouseQuota; quotaHouse->capacity=savedCapacity;
+            quotaHouse->storedCredits=savedStored; quotaHouse->cityCredits=savedCity;
+            quotaHouse->startingCredits=savedStarting;
+            game.finished=false; game.won=false;
+            ++checked;
+        }
+        pLocalHouse=savedLocal; game.winFlags=savedWinFlags;
+        require(checked>=2,"Fewer than two houses to check the spice quota with");
+        SDL_Log("CREDIT_STORAGE_QUOTA: game_type=%d city=%d houses=%d",int(game.gameType),int(city),checked);
+    }
+
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=credit-storage outcome=passed");
     SDL_Log("CREDIT_STORAGE_PROBE_PASS: exempt starting cash, shared spice/tax storage in both orders, "
             "fractional boundary, refunds into the capped pool, immediate loss on silo destruction, "
             "capacity growth admitting income, loading skip with clamp on the first update, "
-            "save/load/resume pools, gross statistics, credit ceiling and retained-only quota");
+            "save/load/resume pools, gross statistics, credit ceiling, retained-only quota and a spice "
+            "quota met by spice and tax credits for every house");
 }

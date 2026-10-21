@@ -32,9 +32,11 @@ class Harvester;
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
 #include <players/ArmyPosturePolicy.h>
+#include <players/BlobWavePolicy.h>
+#include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
-#include <players/SpecialUnitPolicy.h>
+#include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
 
@@ -43,6 +45,7 @@ class Harvester;
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <memory>
 #include <array>
 #include <optional>
 #include <vector>
@@ -110,15 +113,19 @@ public:
 
     /// Observational data for the compact end-of-match metaserver summary.
     /// It is not saved or consulted by simulation decisions.
-    const std::array<int, 8>& getLastUnitMixBps() const { return lastUnitMixBps; }
+    const UnitMixPolicy::Mix& getLastUnitMixBps() const { return lastUnitMixBps; }
+    /// The unit of each mix slot (UnitMixPolicy::kSlots order).
+    static constexpr std::array<Uint32, UnitMixPolicy::kSlots> kMixItems = {Unit_Tank, Unit_SiegeTank,
+        Unit_Launcher, Unit_Devastator, Unit_SonicTank, Unit_Deviator, Unit_Ornithopter, Unit_Trike,
+        Unit_RaiderTrike, Unit_Quad};
 
     /**
         Read-only record of the allocation the last production pass actually used: the
         same performance scores and the same intended army-value shares that produced
         lastUnitMixBps, taken at that pass. Purely observational - nothing in the
         simulation reads it, and a reader must never recompute learning from it.
-        Slot order is the production mix order: Tank, Siege Tank, Launcher, the
-        grouped special heavies, Ornithopter, Trike, Raider Trike, Quad.
+        Slot order is the production mix order: Tank, Siege Tank, Launcher, Devastator,
+        Sonic Tank, Deviator, Ornithopter, Trike, Raider Trike, Quad (UnitMixPolicy::kSlots).
     */
     struct AllocationSnapshot {
         struct Slot {
@@ -127,10 +134,7 @@ public:
             int targetBps = 0;       ///< Intended share of army value, basis points.
             bool allocated = false;  ///< Producible in that pass; otherwise no target exists.
         };
-        /// Slot 3 is the grouped special heavies (Devastator/Sonic Tank/Deviator):
-        /// one score and one share for the whole group, never per variant.
-        static constexpr size_t kSpecialGroupSlot = 3;
-        std::array<Slot, 8> slots{};
+        std::array<Slot, UnitMixPolicy::kSlots> slots{};
         bool ready = false;          ///< A real production pass has filled this.
         Uint32 cycle = 0;            ///< Game cycle of that pass.
         bool learning = false;       ///< Scores came from the measured learning window.
@@ -138,7 +142,7 @@ public:
         /// Mobile anti-air share protected in that pass while a hostile wing was
         /// observed, in basis points; zero when no floor was in force.
         int antiAirFloorBps = 0;
-        /// Aggregate infantry admission quota, separate from the eight-slot mix.
+        /// Aggregate infantry admission quota, separate from the unit-mix slots.
         int infantryQuotaBps = 0;
     };
     const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
@@ -159,6 +163,9 @@ public:
     int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
+    /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
+    /// in a custom game the house plays itself; 0 elsewhere (no ceiling from the config).
+    int configuredCustomHarvesterLimit() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
@@ -177,6 +184,7 @@ public:
     void onDecrementUnits(int itemID) override;
     void onIncrementUnitKills(int itemID) override;
     void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) override;
+    void onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) override;
     void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) override;
 
 private:
@@ -314,7 +322,7 @@ private:
     Uint32 lastTelemetrySnapshotCycle = 0;
     Uint32 lastCityBuildingSnapshotCycle = 0;
     uint64_t telemetryState = 0; // Runtime only; never part of save/simulation state.
-    std::array<int, 8> lastUnitMixBps{};
+    UnitMixPolicy::Mix lastUnitMixBps{};
     /// Written once per production pass beside lastUnitMixBps, read only by the
     /// observational Stats UI and the supplemental observer runtime.
     AllocationSnapshot allocationSnapshot{};
@@ -369,13 +377,19 @@ private:
 
     /// Does this house answer a real attack on a building it owns with its whole
     /// ground army? Scoped exactly like the whole-army dispatch and the hunting
-    /// launcher spacing - Custom Hard/Brutal, no campaign, no helper - and
+    /// launcher spacing - Custom Medium/Hard/Brutal, no campaign, no helper - and
     /// deliberately independent of the optional recovery policy.
     bool wholeArmyBaseDefence() const;
-    /// Is this an autonomous Custom Hard/Brutal controller? No campaign, no
-    /// support/helper house. The shared scope of the whole-army behaviours and of
-    /// the mobile anti-air floor.
-    bool autonomousCustomHardBrutal() const;
+    /// Is this an autonomous Custom Medium/Hard/Brutal controller? No campaign, no
+    /// support/helper house. The shared scope of the whole-army behaviours (one
+    /// concentrated wave instead of Easy's standing raid share) and of the mobile
+    /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    bool autonomousCustomArmy() const;
+    /// Does this house play a production strategy (QuantBotStrategy: the default Fixed:Tuned,Swarm
+    /// mix and tempo)? Custom Hard and Brutal only: the strategies were tuned there, and Custom
+    /// Medium keeps its learned mix and the configured wave readiness, so the strategy is one of
+    /// Hard's real advantages over Medium (docs/ai-scenario-matrix.md, "Difficulty separation").
+    bool playsStrategy() const;
     /// Count of hostile Ornithopters this house can actually see right now:
     /// alive, active and visible to our team. No fog cheating, and no sticky
     /// "was once attacked from the air" flag - the demand disappears with the
@@ -625,7 +639,14 @@ private:
     std::vector<PlannedStructure> cityProductionPlots;
     bool planningCityProductionPlots = false;
     struct RecentStructureLoss { Coord location; Coord size; Uint32 cycle; Uint32 item; };
-    std::vector<int> tacticalDanger, harvesterDanger, lossDanger, factoryEnemyClearance;
+    std::vector<int> tacticalDanger, harvesterDanger, lossDanger;
+    /// TacticalSafetyPolicy::enemyClearance(tacticalDanger): read through factoryClearance().
+    /// refreshTacticalDanger() only marks it stale; the two map-sized passes run when a
+    /// placement (or the save) reads it. tacticalDanger changes only in that refresh and
+    /// in load, so the deferred value is the one the refresh would have computed.
+    mutable std::vector<int> factoryEnemyClearance;
+    mutable bool factoryEnemyClearanceStale = false;
+    const std::vector<int>& factoryClearance() const;
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
@@ -637,6 +658,12 @@ private:
     void refreshTacticalDanger();
     int dangerAt(Coord pos, Coord size = Coord(1, 1), bool losses = false) const;
     bool reactorClearance(Uint32 item, Coord pos) const;
+    /// The footprints (x, y, w, h) a placement of @a item must keep reactor blast clearance from:
+    /// for a reactor every own protected building, for a protected building every own reactor
+    /// (standing or reserved by another builder); empty for anything else. reactorClearance()
+    /// is clearsBlastSites() over this list; a placement search builds it once per search.
+    std::vector<std::array<int, 4>> reactorBlastSites(Uint32 item) const;
+    static bool clearsBlastSites(const std::vector<std::array<int, 4>>& sites, Coord pos, Coord size);
     int rearScore(Coord pos, Coord base) const;
     int recentFactoryLossCount() const;
     struct SpiceFieldCache;
@@ -647,62 +674,42 @@ private:
     /// Total price of this house's military units: every unit type except
     /// carryalls, harvesters, MCVs and sandworms. Computed live at each use.
     int militaryUnitValue() const;
-    /// Builds this house's owned-tile indicator so Map::isWithinBuildRange()
-    /// can be answered in O(1) instead of a 5x5 probe per tile. Rebuilt per
-    /// use; holds no state across decisions.
-    void buildAnchorField(DuneCity::BoxAnyField& field) const;
-
-    /// Owned-tile field shared by the placement searches of ONE build() call.
+    /// This house's owned-tile indicator, so Map::isWithinBuildRange() can be
+    /// answered in O(1) instead of a 5x5 probe per tile.
     ///
-    /// The field depends only on tile ownership. It therefore survives changes
-    /// to reservations or planningBuilder — those do not move a single owned
-    /// tile — and is invalidated only where this house actually mutates the
-    /// world inside build(): a zone demolition and a structure placement. No
-    /// simulation tick runs inside build(), so no other actor can change
-    /// ownership while the cache is live.
-    ///
-    /// Lifetime is bounded by BuildAnchorScope below: `active` is only ever
-    /// true inside one build() invocation and the guard clears the field on
-    /// every exit path, including exceptions. Nothing here is serialised or
-    /// read across cycles.
-    struct BuildAnchorCache {
-        bool active = false;
-        bool valid = false;
+    /// The field is a pure function of {tile owner == this house}, which changes
+    /// only through Tile::setOwner() and tiles being constructed or loaded; all of
+    /// them move Tile::ownerRevision(houseID). The field is therefore rebuilt only
+    /// when that revision (or the map) differs from the one it was built at, and is
+    /// otherwise exactly the field a fresh scan of all tiles would produce. The
+    /// reference stays valid until ownership next changes. Derived state, never
+    /// serialised.
+    const DuneCity::BoxAnyField& anchorField() const;
+    struct AnchorFieldCache {
         DuneCity::BoxAnyField field;
-        uint64_t builds = 0, hits = 0, invalidations = 0;
+        Uint64 ownership = 0;
+        const Map* map = nullptr;
+        int width = 0, height = 0;
+        bool valid = false;
+        uint64_t builds = 0, hits = 0;
     };
-    BuildAnchorCache buildAnchors;
-
-    /// RAII activation of buildAnchors for exactly one build() invocation.
-    class BuildAnchorScope {
-    public:
-        explicit BuildAnchorScope(QuantBot& bot) : bot_(bot) {
-            bot_.buildAnchors.active = true;
-            bot_.buildAnchors.valid = false;
-        }
-        ~BuildAnchorScope() {
-            bot_.buildAnchors.active = false;
-            bot_.buildAnchors.valid = false;
-            bot_.buildAnchors.field = DuneCity::BoxAnyField();
-        }
-        BuildAnchorScope(const BuildAnchorScope&) = delete;
-        BuildAnchorScope& operator=(const BuildAnchorScope&) = delete;
-    private:
-        QuantBot& bot_;
-    };
-    /// Called where this house actually changes tile ownership inside build().
-    void invalidateAnchorField();
+    mutable AnchorFieldCache anchorFieldCache;
 
     /// Ordered spice-tile membership shared by the harvester candidate sweeps of
-    /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership only, in
-    /// the original y-then-x order. Everything that can change as earlier
-    /// harvesters are ordered — peers, plannedDestination reservations,
-    /// unsafeFields memory, danger, passability and routes — is still evaluated
-    /// per candidate, per harvester. Lives in a checkAllUnits() local and is
-    /// passed down by pointer; other callers pass nothing and get a fresh scan.
+    /// ONE checkAllUnits() invocation. Holds tile hasSpice() membership, in the
+    /// original y-then-x order, and per tile whether it is plain: neither mountain
+    /// nor holding a ground object, so every unit's canPass() is true there and no
+    /// per-harvester rule applies. Nothing in the pass moves objects onto tiles or
+    /// changes terrain except an MCV deploy, which invalidates the cache. Everything
+    /// that can change as earlier harvesters are ordered — peers, plannedDestination
+    /// reservations, unsafeFields memory, danger, passability of occupied tiles and
+    /// routes — is still evaluated per candidate, per harvester. Lives in a
+    /// checkAllUnits() local and is passed down by pointer; other callers pass
+    /// nothing and get a fresh scan.
     struct SpiceFieldCache {
         bool valid = false;
         std::vector<Coord> tiles;
+        std::vector<uint8_t> plain;   // parallel to tiles
         uint64_t builds = 0, hits = 0, invalidations = 0;
     };
     /// The house's oldest surviving construction yard: the main base anchor.
@@ -745,11 +752,31 @@ private:
     void recordLostColonists();
     Uint32 planningBuilder = NONE_ID;
     bool overlapsReservedStructure(int x, int y, int width, int height) const;
+    // ---- The footprint rule (docs/formations.md "Planned sites and the army") --------------
+    // This house's own ground units are traffic on a site it plans, not an obstacle: the site
+    // is chosen as if they were not there, they are asked off it (the pre-placement queue's
+    // idle-unit rule) and the finished building waits for them while they leave. Another
+    // house's unit, a structure, or an own unit that was ordered away and cannot leave still
+    // blocks the site.
+    /// An own unit standing here is in the way for good: unresponsive, or ordered away and stuck.
+    bool ownUnitCannotLeave(const UnitBase* unit) const;
+    /// A mountain, a structure, another house's unit or an own unit that cannot leave.
+    bool tileBlocksOwnPlacement(const Tile* tile) const;
+    /// Map::okayToPlaceStructure with own leaving-capable units ignored (other units, structures
+    /// and mountains still block). tilesRequired/item as the engine check.
+    bool placeableAmongOwnUnits(int x, int y, int width, int height, Uint32 item) const;
+    /// Does any unit of this house stand on the footprint?
+    bool ownUnitsOnFootprint(int x, int y, int width, int height) const;
+    /// Is p inside any planned site of this house (every yard's reservation)? Holding, bundle,
+    /// muster, recall and guard slots skip such tiles.
+    bool onPlannedSite(Coord p) const;
+    /// Once per unit pass: idle own units standing on a planned site are asked off it.
+    void keepPlannedSitesClear();
     OrnithopterStrikeTeam ornithopterStrikeTeam;
     std::unordered_map<Uint32, Coord> placementCache; ///< Per-build-cycle cache for findPlaceLocation results
     Uint32 placementCacheExcludedBuilder = NONE_ID;
 
-    /// The four map-sized placement distance fields, reused across searches.
+    /// The four placement distance fields (CityDistanceField), reused across searches.
     /// The key is the contribution list itself -- every live owned structure and
     /// every reservation that is not the planning builder's, in the order
     /// findPlaceLocation visits them -- so reuse is exact rather than inferred
@@ -782,8 +809,7 @@ private:
             originFieldsValid = false; pollutionValid = false;
             key.clear(); key.shrink_to_fit();
             width = 0; height = 0;
-            // Release the map-sized cells too, so a finished build pass does not
-            // keep four of them per bot alive until the next one.
+            // Release the source lists too; a finished build pass keeps nothing.
             nearestResidential = CityDistanceField(0,0); nearestCommercial = CityDistanceField(0,0);
             nearestIndustrial = CityDistanceField(0,0); pollutionSeparation = CityDistanceField(0,0);
         }
@@ -817,6 +843,105 @@ private:
     ArmyPosturePolicy::Posture armyPosture = ArmyPosturePolicy::Posture::Offensive;
     Uint32 postureSince = 0;
     ArmyPosturePolicy::AttritionLedger attrition;
+    /// Test-only (tests/ai play styles, docs/ai-play-styles.md): this player's own copy of the
+    /// QuantBot config with a style's keys applied (QuantBotConfig::applyOverrides), so two
+    /// QuantBots of one match can play different styles. Never set by the game, not saved and
+    /// not part of the config hash; null = the one global config, as in every real game.
+    std::shared_ptr<const QuantBotConfig> configOverride;
+    /// The config this player plays by: configOverride if set, else getQuantBotConfig().
+    const QuantBotConfig& botConfig() const { return configOverride ? *configOverride : getQuantBotConfig(); }
+    /// Test-only play-style behaviours a config key cannot express (tests/ai play styles,
+    /// `[Play Style]` in a tests/ai/play-styles/*.ini file; docs/ai-play-styles.md). The
+    /// defaults are inert: every real game plays with them. Custom Hard/Brutal only. Never set by
+    /// the game, not saved, not hashed.
+    struct PlayStyle {
+        /// Share (basis points) of the final unit mix taken from `mix` (0 = the learned mix only).
+        int mixBps = 0;
+        /// The style's composition in the group form (tank, siege tank, launcher, special,
+        /// ornithopter, trike, raider trike, quad; the special share is split between the specials
+        /// the house can build); unavailable slots are dropped.
+        UnitMixPolicy::GroupWeights mix{};
+        /// Game minutes the style mix applies for (0 = the whole game).
+        int mixMinutes = 0;
+        /// Counter-composition: blend the mix towards the counters of the remembered enemy army
+        /// (light -> tanks, armour -> launchers and siege, launchers -> quads and tanks, air -> launchers).
+        int counterBps = 0;
+        /// Rush opening: the light factory right after the first refinery, before every other
+        /// structure, and ground waves do not wait for a repair yard.
+        bool lightFirst = false;
+        /// A viable main wave (default 6 units and 3,000 credits).
+        int minWaveUnits = 6, minWaveValue = 3000;
+        /// Baseline rocket turrets after the repair yard (default 2).
+        int rocketTurrets = 2;
+        /// Harvest as if no other house shared the spice (more harvesters and refineries).
+        bool greedyHarvest = false;
+        /// Refineries beyond the harvester-driven target.
+        int extraRefineries = 0;
+        /// Construction yards (incl. MCVs) the house keeps at least once a heavy factory stands.
+        int minYards = 0;
+        /// Light vehicles kept raiding: each hunts the nearest enemy harvester (else refinery).
+        int raidUnits = 0;
+        /// The in-game unit-mix learning (false: production keeps the bounded starting mix all
+        /// game; the "learning off" arm of docs/ai-play-styles.md, section 8).
+        bool learning = true;
+        /// The starting-mix bounds (false: the 1.0.847 unbounded starting mix, for comparison).
+        bool startBounds = true;
+        bool active() const {
+            return mixBps > 0 || counterBps > 0 || lightFirst || minWaveUnits != 6 || minWaveValue != 3000
+                || rocketTurrets != 2 || greedyHarvest || extraRefineries > 0 || minYards > 0 || raidUnits > 0;
+        }
+    };
+    PlayStyle playStyle;
+    /// playStyle if this is a Custom Hard/Brutal QuantBot, else the inert defaults.
+    const PlayStyle& style() const;
+    /// The raiders of PlayStyle::raidUnits (id order; runtime only, not saved).
+    std::set<Uint32> styleRaiders;
+    /// Re-selects the raiders (unit pass): drops the lost and busy, tops up with free light vehicles.
+    void updateStyleRaiders();
+    /// Orders a raider at the nearest enemy harvester (else refinery); false if it has no prey.
+    bool raidWithStyle(const UnitBase* raider);
+    /// The unit mix with the style mix and counter-composition applied (unit production).
+    UnitMixPolicy::Mix styledUnitMix(const UnitMixPolicy::Mix& mix, const UnitMixPolicy::Slots& available) const;
+    /// The strategy this house plays (QuantBotStrategy; docs/ai-play-styles.md, "Strategies"):
+    /// picked once by pickStrategy() from the game seed, the house and the config, saved
+    /// (SAVEGAMEVERSION 9865); a 9864 save picks it afresh by the same function.
+    QuantBotStrategy::Choice strategy;
+    bool strategyPicked = false;
+    /// The starting ratios a Tuned or Bounded strategy resolved to when it was picked (the house's
+    /// [Unit Ratios Tuned] for the game's tech band, or QuantBotStrategy::randomMix of seed and
+    /// house), bounded over the slots the house can produce; all zero for every other mix. Saved
+    /// (SAVEGAMEVERSION 9866; ten slots, one per special, since 9868 - an older save's special
+    /// share is split between the house's specials): a reload plays the mix it drew whatever
+    /// config is loaded then. A 9865 save has no such mix.
+    UnitMixPolicy::Mix strategyPrior{};
+    /// Picks the strategy if none is set (first update of a new game or a pre-9865 load).
+    void pickStrategy();
+    /// The strategy's mix / tempo while it applies (Custom Hard/Brutal; the tempo within its
+    /// minutes), else null: the learned default and the configured readiness.
+    const QuantBotStrategy::MixProfile* strategyMix() const;
+    const QuantBotStrategy::TempoProfile* strategyTempo() const;
+    /// The mix slots this house can produce at \a tech (default: the game's tech level): the unit
+    /// is enabled, priced and has a builder, its tech level is at most \a tech, and its builder
+    /// and every prerequisite structure can be obtained at \a tech (ObjectData, recursively).
+    UnitMixPolicy::Slots fieldableMixSlots(int tech = -1) const;
+    /// The first tech level of the game's tech band for this house: the lowest level at which
+    /// the house fields the same slots as at the game's tech level (tests/ai/tech-bands.py).
+    int techBand() const;
+    /// fieldableMixSlots() of the game's tech level, computed once (runtime only, not saved).
+    mutable UnitMixPolicy::Slots fieldableSlots{};
+    mutable bool fieldableSlotsCached = false;
+    /// The starting mix over the \a available slots, before any combat evidence: the configured
+    /// opening, the strategy's prior in its place, then the starting-mix bounds (unless a test
+    /// style turns them off). The prior UnitMixPolicy::allocate blends the learning into.
+    UnitMixPolicy::Weights startingPrior(const UnitMixPolicy::Slots& available) const;
+    /// The opening and wave rules of the style (if a test style is active) or else the tempo.
+    bool lightFirstOpening() const;
+    int minWaveUnits() const;
+    int minWaveValue() const;
+    /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.
+    bool infantryStrategy() const { const auto* mix = strategyMix(); return mix && mix->infantryPercent > 0; }
+    /// QuantBotStrategy::counterPrior of the remembered enemy army and the hostile wing in sight.
+    UnitMixPolicy::Weights enemyCounterPrior() const;
     /// Test-only (tests/ai/formation-duel.py): this player's attack-wave shape instead of
     /// QuantBotConfig::waveFormation, so two QuantBots of one match can march in different
     /// shapes. Never set by the game, not saved and not part of the config hash; production
@@ -825,6 +950,391 @@ private:
     int waveFormationOverride = kNoWaveFormationOverride;
     /// The attack-wave shape this player uses: the override if set, else the config value.
     int waveFormationShape() const;
+
+    /// profile(strategy.mix) with a Tuned/Bounded strategyPrior in place (strategyMix()).
+    QuantBotStrategy::MixProfile strategyProfile;
+    /// The strategy's starting ratios over this house's mix slots: strategyPrior (Tuned,
+    /// Bounded) or the preset's group form expanded over the house's specials.
+    UnitMixPolicy::Weights strategyStart{};
+    void resolveStrategyProfile();
+    // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
+    //
+    // A Custom Hard/Brutal ground wave with WaveFormation=Blob is a hunt party: it gathers at a
+    // rally point towards its objective, marches as one blob leg by leg (the fast members wait
+    // at each leg's end for the rest), releases into engine Hunt on contact, reforms when the
+    // fight is quiet and, when locally outmatched, falls back a few tiles to reform instead of
+    // going home (the tactical retreat). Saved under the SAVEGAMEVERSION 9862 gate.
+    struct BlobParty {
+        BlobWavePolicy::Phase phase = BlobWavePolicy::Phase::Gather;
+        Uint32 since = 0;                   ///< cycle the phase (or the march's leg) began
+        Uint32 objective = NONE_ID;         ///< what the march heads for
+        Coord goal = Coord::Invalid();      ///< the march's destination (objective's nearest point)
+        Coord rally = Coord::Invalid();     ///< gather, reform or fall-back point; the leg's end
+        Coord threat = Coord::Invalid();    ///< where the last contact was
+        Uint32 lastContact = 0;             ///< last cycle a member was in contact or hit
+        Uint32 lastArrival = 0;             ///< gather/reform: last cycle the gathered count grew
+        Uint32 gathered = 0;                ///< gather/reform: that count
+        Uint32 legCycles = 0;               ///< time limit of the current gather, reform or leg
+        Uint32 outmatchedSince = std::numeric_limits<Uint32>::max();
+        Uint32 progressCycle = 0;           ///< march: last cycle the anchor got closer
+        Sint32 progressRemaining = std::numeric_limits<Sint32>::max();
+        Uint8 fallbacks = 0;                ///< tactical fall-backs so far
+        /// Test-only (+e): cycle the staged party began holding for superiority (max: not
+        /// holding). Not saved: never set without the test-only override.
+        Uint32 holdSince = std::numeric_limits<Uint32>::max();
+        std::set<Uint32> members;           ///< ordered: identical iteration on every peer
+    };
+    std::vector<BlobParty> blobParties;
+    /// Corruption bound for a loaded party list, not a design limit (one party per launch).
+    static constexpr Uint32 kBlobPartyLimit = 256;
+    /// Test-only (tests/ai/formation-duel.py ablations): -1 = the tactical fall-back runs with
+    /// Blob waves, 0 = never, 1 = also for plain Hunt waves. Never set by the game, not saved,
+    /// not hashed.
+    int tacticalRetreatOverride = -1;
+    /// Test-only Blob-wave variants (tests/ai/formation-duel.py, label suffix +v/+r/+k): bits of
+    /// kBlobVehiclePace (foot infantry neither sets the pace nor holds a gather or leg; 75%
+    /// quorum), kBlobRealFight (only a real fight releases the blob; a lone scout or harvester
+    /// is shot by the nearest members while the blob marches on) and kBlobKeepDamaged (members
+    /// below 60% stay with a party that has not met a fight yet instead of driving to repair).
+    /// Never set by the game, not saved, not hashed.
+    static constexpr int kBlobVehiclePace = 1, kBlobRealFight = 2, kBlobKeepDamaged = 4;
+    /// kBlobStage (+s): no gather at home; the blob marches in one leg to a staging point just
+    /// outside enemy reach near its objective, waits there for the rest and then attacks all
+    /// at once. kBlobSuperiority (+e, with +s): it attacks from the staging point only with
+    /// local superiority, else holds for reinforcements (later waves join it) for a while.
+    static constexpr int kBlobStage = 8, kBlobSuperiority = 16;
+    int blobVariantOverride = 0;
+
+    // ---- Concentrating force (docs/formations.md, "Concentrating force") -----------------
+    /// The rules as bits (tests/ai/formation-duel.py label flags, uppercase): bits of
+    /// kForceFocusFire (F: hunting ground units shoot the best target in reach - fighters
+    /// first, then the one with the fewest hit points), kForceConverge (C: wave members not
+    /// fighting join a fight of their army nearby), kForcePool (P: an attacked building gets
+    /// 2x the threat within 12 tiles from up to 40 tiles), kForceRecall (H: when the troops
+    /// nearby cannot answer a base attack, the raiding army comes home for it), kForceMuster
+    /// (M: distant defenders muster just outside the fight and engage together),
+    /// kForceBigWaves / kForceSmallWaves (L / Q: wave readiness 150% / 60%), kForceNoOverkill
+    /// (N: focus fire by attack value - the most enemy damage per hit point - without overkill,
+    /// in object-id order), kForceBundle (B: the idle reserve keeps bundled at a forward rally a
+    /// quarter of the way to the observed enemy base), kForceBundleOld (O, with B: the pre-1.0.602
+    /// rule - the closer of that rally and the army's centre of mass), kForceBundleGate (W, with
+    /// B: a ready wave launches only once 70% of it stands in the bundle, at most 60 s late),
+    /// kForceSplit (S: the wave splits in two halves that approach the objective from 90 degrees
+    /// apart and attack together) and kForceFlank (T: 70% main force head-on, 30% flanking from
+    /// 90 degrees, attacking together). Custom Hard/Brutal only. The game takes F, C, B, W, U, X and I
+    /// from QuantBotConfig::force (and the wave size from its WaveReadinessPercent); the duel
+    /// harness sets forceVariantOverride to exactly the bits of a label (0 = all off: the
+    /// rules before protocol 78). The override is never set by the game, not saved, not hashed.
+    /// kForceStrengthReadiness (D, test-only: while the observed enemy ground army outweighs
+    /// ours by kOutnumberedReadinessBps, waves wait for full readiness - 100% - instead of a
+    /// smaller configured one). Round 5 defence rules (docs/formations.md "Round 5"; U and X
+    /// are taken from QuantBotConfig::force, the others are test-only; the perimeter hold V was
+    /// removed in protocol 84 - docs/formations.md "Free-for-all: finishing the game"):
+    /// kForceEstimate (E: D measures the remembered enemy army,
+    /// enemyThreatEstimate(), instead of what is visible this cycle), kForceGarrison (G: while
+    /// that estimate outnumbers us, no wave launches and the reserve holds the protected
+    /// rally under turret cover; the enemy attacks into it), kForceStrengthWaves (A: a ready
+    /// wave launches only when its value is forceStrengthBps of the estimate), kForceReserve
+    /// (R: while the estimate exceeds our army, the share it exceeds it by - at most half -
+    /// stays home, the units nearest the protected rally), kForceSizedDefence (X: a defence
+    /// counts the enemy within 12 tiles, sends 1.5x it from up to 40 tiles with the bundle
+    /// first, distant defenders muster for a building, and a worker under attack gets nobody
+    /// when the troops in reach cannot match the threat) and kForceFallBack (Y: a wave
+    /// locally outmatched for the configured time falls back to the protected rally - the
+    /// recovery's local withdrawal, which is off with withdrawals - and relaunches from there).
+    /// kForceOpeningReadiness (I - recorded as E before the 1.0.846 merge - [Force Concentration]
+    /// OpeningReadiness, default on since protocol 81: a house that started without an army able
+    /// to launch a wave - a Construction Yard start - holds its first ground wave for full
+    /// readiness; ForceConcentrationPolicy::openingReadiness, docs/formations.md "Scenario tests").
+    /// Late game (docs/formations.md, "Free-for-all: finishing the game"; [Force Concentration]
+    /// TurretPriority, PressOn, FinishWeakest, FortifiedWaves): kForceTurretPriority (T: a wave
+    /// hunter in an enemy turret's reach that is not shooting an armed unit attacks the turret),
+    /// kForcePressOn (P: a wave member out of visible targets hunts on to the nearest enemy
+    /// structure seen), kForceFinishWeakest (H: a ground wave hunts towards the weakest known
+    /// enemy house's production and economy), kForceFortifiedWaves (K: against an objective
+    /// guarded by many seen turrets a ready wave waits, at most three minutes, for a bigger army)
+    /// and kForceSonicClearLane (S, SonicClearLane: a hunting sonic tank whose wave would pass over
+    /// one of our own units shoots another enemy in reach whose lane is clear). Round 2 candidates
+    /// (all test-only, default off): kForceSpendAtCap (M, SpendAtCap: banked credits raise the
+    /// production budget above the military limit, for siege tanks, launchers and specials only),
+    /// kForceSiegeStandoff (O, SiegeStandoff: wave launchers shell known turrets from outside their
+    /// reach while the rest of the wave holds short of the turrets) and kForceMassAssault (Z,
+    /// MassAssault: against a fortified objective the army waits for kAssaultLimitPercent of the
+    /// limit, then all of it hunts towards one objective of the weakest house). On by default since
+    /// 1.0.848: kForceFinishLeading (FinishWhenLeading: H's target choice for the waves of a house
+    /// whose team army leads the strongest enemy team's remembered army, finishLeading()).
+    static constexpr int kForceFocusFire = 1, kForceConverge = 2, kForcePool = 4, kForceRecall = 8,
+        kForceMuster = 16, kForceBigWaves = 32, kForceSmallWaves = 64, kForceNoOverkill = 128,
+        kForceBundle = 256, kForceBundleOld = 512, kForceBundleGate = 1024, kForceSplit = 2048,
+        kForceFlank = 4096, kForceStrengthReadiness = 8192, kForceEstimate = 16384, kForceGarrison = 32768,
+        kForceStrengthWaves = 65536, kForceReserve = 131072, kForceSizedDefence = 262144, kForceFallBack = 524288,
+        kForceThreatTurrets = 1048576, kForceFinishLeading = 2097152, kForceOpeningReadiness = 4194304,
+        kForceTurretPriority = 8388608, kForcePressOn = 16777216, kForceFinishWeakest = 33554432,
+        kForceFortifiedWaves = 67108864, kForceSonicClearLane = 134217728, kForceSpendAtCap = 268435456,
+        kForceSiegeStandoff = 536870912, kForceMassAssault = 1073741824;
+    static constexpr int kNoForceOverride = -1;
+    int forceVariantOverride = kNoForceOverride;
+    /// kForceStrengthWaves' k, basis points of the enemy estimate (duel variant /k<percent>).
+    int forceStrengthBps = 10000;
+    /// The force bits in effect: the override if set, else the configured F, C, B, W, U, X, I,
+    /// T, P, H, K and S.
+    int forceBits() const;
+    bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
+    /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
+    /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
+    /// Medium/Hard/Brutal.
+    int waveReadinessPercent() const;
+    /// The readiness before any outnumbered raise: waveReadinessPercent(), or 100 under I while
+    /// the house has not launched a ground wave yet (the opening).
+    int openingReadinessPercent() const;
+    /// The readiness a launch uses now: openingReadinessPercent(), raised to 100 by D while the
+    /// house is outnumbered (outnumberedByObservedArmy(), with E outnumberedByEstimate()).
+    int launchReadinessPercent();
+    /// Health-weighted value of the visible enemy mobile ground fighters of the strongest enemy
+    /// team against ours (wherever they stand): ForceConcentrationPolicy::outnumbered. One
+    /// unit-list pass.
+    bool outnumberedByObservedArmy() const;
+    /// The remembered enemy army: every enemy mobile ground fighter seen within the last
+    /// kSightingMemoryMs that still exists, at its health-weighted value when last seen.
+    struct Sighting { int64_t value = 0; Uint32 cycle = 0; };
+    std::map<Uint32, Sighting> enemySightings;
+    /// Records the visible enemy fighters and forgets the dead and the long unseen (unit pass).
+    void updateEnemySightings();
+    /// The threat the remembered enemy army poses: the strongest single enemy team's share of it
+    /// (every remembered fighter in a 1v1 or against one alliance; in a free-for-all not the sum
+    /// of houses that also fight each other).
+    int64_t enemyThreatEstimate() const;
+    /// Health-weighted value of our own mobile ground fighters.
+    int64_t ownGroundArmyValue() const;
+    /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
+    /// alone in a free-for-all or a 1v1).
+    int64_t teamGroundArmyValue() const;
+    /// FinishWhenLeading: our team's ground army is worth more than the strongest enemy team's
+    /// remembered army (enemyThreatEstimate) - the leader of a free-for-all.
+    bool finishLeading() const { return teamGroundArmyValue() > enemyThreatEstimate(); }
+    /// ForceConcentrationPolicy::outnumbered on teamGroundArmyValue() and enemyThreatEstimate(),
+    /// once per cycle.
+    bool outnumberedByEstimate() const;
+    mutable Uint32 estimateCycle = std::numeric_limits<Uint32>::max();
+    mutable bool estimateOutnumbered = false;
+    /// kForceGarrison (G, test-only) in effect now: outnumbered by the estimate, so no wave
+    /// leaves and the reserve holds at the protected rally.
+    bool garrisoned() const { return forceVariant(kForceGarrison) && outnumberedByEstimate(); }
+    /// The base perimeter on the observed enemy side (docs/formations.md "Round 5"): from the
+    /// base centre along the observed front direction, the farthest own building within
+    /// kPerimeterBaseTiles (its projection, depth) and a standable tile kPerimeterStandoffTiles
+    /// beyond it (point) - further out if that is still among our buildings or roads (a city
+    /// base; builtUpDistance). Derived from the world once per cycle; invalid without a base or a front.
+    struct Perimeter {
+        Coord anchor = Coord::Invalid(), forward = Coord(0, 0), point = Coord::Invalid();
+        int length = 0;         ///< isqrt of |forward|^2
+        int depth = 0;          ///< tiles from the anchor to the outermost building, along forward
+    };
+    const Perimeter& perimeter() const;
+    mutable Perimeter perimeterCache;
+    mutable Uint32 perimeterCycle = std::numeric_limits<Uint32>::max();
+    /// kForceThreatTurrets (U): rocket turrets wanted on the perimeter now - one per
+    /// kPerimeterCreditsPerTurret of the estimate's lead over our army, at most
+    /// kPerimeterTurretsMax, none when we are not outnumbered.
+    int perimeterTurretGoal() const;
+    /// Our rocket turrets standing on the perimeter band.
+    int perimeterTurrets() const;
+    /// A legal rocket-turret site on the perimeter band (bounded box, deterministic), or invalid.
+    Coord findPerimeterTurretLocation();
+    /// Health-weighted value of the living units among \a ids.
+    int64_t groundValueOf(const std::vector<Uint32>& ids) const;
+    /// kForceReserve: of a wave about to launch (\a ids), the units that stay home -
+    /// ForceConcentrationPolicy::reserveShareBps of its value, nearest the protected rally first
+    /// (ties by id). Empty when we are not outnumbered.
+    std::vector<Uint32> homeReserve(const std::vector<Uint32>& ids) const;
+    /// Does \a unit stand in the bundle (within 8 tiles of the bundle point or centre)?
+    bool standsInBundle(const UnitBase* unit) const;
+    /// One pass of the force rules over the army (unit phase, after the hunt parties).
+    void concentrateForces();
+    /// Focus fire for one hunting ground unit; true if it was given a new target.
+    bool focusFire(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies);
+    /// Attack-value focus fire without overkill over \a hunters (sorted by object id).
+    void focusFireNoOverkill(const std::vector<const UnitBase*>& hunters, const std::vector<const ObjectBase*>& enemies);
+    /// kForceTurretPriority (T): \a unit, a hunter not shooting an armed unit in its reach, attacks
+    /// the nearest enemy turret among \a turrets that has it in reach (or that it reaches); true if
+    /// it was given that target.
+    bool attackTurretInReach(const UnitBase* unit, const std::vector<const ObjectBase*>& turrets);
+    /// kForceSonicClearLane (S): \a unit, a hunting sonic tank, keeps a target whose lane is clear
+    /// of \a friends (our team's ground units within reach, sonic tanks excluded) or switches to the
+    /// nearest enemy in its reach among \a enemies whose lane is; true if it is now on a clear-lane
+    /// target (no other targeting rule then applies to it this pass).
+    bool sonicClearTarget(const UnitBase* unit, const std::vector<const ObjectBase*>& enemies,
+                          const std::vector<const UnitBase*>& friends);
+    /// kForceSiegeStandoff (O, test-only): wave launchers not shooting an armed unit in their reach
+    /// attack the nearest known enemy turret within kSiegeReachTiles beyond their range (they
+    /// outrange rocket turrets by a tile); wave members walking into a known turret's reach while
+    /// at least kSiegeMinLaunchers of those launchers are near them guard a point just outside it
+    /// (siegeHeld), released when the turret is gone, the launchers are, or after kSiegeMaxHoldMs.
+    /// Adds every unit it ordered or holds to \a handled (no other targeting rule this pass).
+    void siegeStandoff(std::set<Uint32>& handled);
+    /// O's held escorts: unit id -> the cycle its hold began. Not saved: the rule is test-only.
+    std::map<Uint32, Uint32> siegeHeld;
+    /// An enemy structure our team has seen (its tile is explored), alive, not a wall, slab, road
+    /// or power line: what a player knows stands there.
+    bool knownEnemyStructure(const StructureBase* structure) const;
+    /// kForceFinishWeakest (H): the enemy team to finish - of the teams with a known structure,
+    /// the weakest by remembered army plus kKnownTurretValue per known turret (ties: fewer known
+    /// structures, then the lower team id); -1 when none is known.
+    int finishTargetTeam() const;
+    /// H's objective for a wave led by \a lead: the nearest known structure of \a team the lead can
+    /// reach by ground, production and economy (yard, factories, refinery) counted 20 tiles nearer.
+    const ObjectBase* finishObjective(const UnitBase* lead, int team) const;
+    /// kForcePressOn (P): the nearest known enemy structure to \a unit (of \a team, or any when -1)
+    /// it can reach by ground, from \a known (the known enemy structures of this pass), or nullptr.
+    const StructureBase* pressOnTarget(const UnitBase* unit, const std::vector<const StructureBase*>& known,
+                                       int team) const;
+    /// kForceFortifiedWaves (K): known enemy turrets within kFortifiedRadiusTiles of \a objective.
+    int knownTurretsNear(const ObjectBase* objective) const;
+    /// Distant defenders gathering before they engage at an attacked building (kForceMuster).
+    struct Muster {
+        Uint32 building = NONE_ID;
+        Coord point = Coord::Invalid();
+        Uint32 since = 0;
+        std::set<Uint32> members;
+    };
+    std::vector<Muster> musters;
+    const Muster* musterOf(Uint32 id) const;
+    /// Sends \a ids to muster for \a building (joining its muster if there is one).
+    void startMuster(const ObjectBase* building, const std::vector<Uint32>& ids);
+    void updateMusters();
+    /// Bundling (kForceBundle; QuantBotConfig::force.bundle, on by default): where the idle
+    /// reserve gathers, chosen at most every 30 s (bundleCycle) or when it becomes unsafe.
+    /// Saved with bundleCentre and bundleGateSince (SAVEGAMEVERSION 9863): the throttle and
+    /// the gate's wait decide orders, so a reload must not re-run them early.
+    Coord bundlePoint = Coord::Invalid();
+    /// With kForceBundleOld: the army's centre of mass at the last unit pass (the second
+    /// gathering point; the launch gate reads it between passes).
+    Coord bundleCentre = Coord::Invalid();
+    Uint32 bundleCycle = std::numeric_limits<Uint32>::max();
+    /// First cycle a ready wave waited for the bundle (kForceBundleGate); 0 = not waiting.
+    Uint32 bundleGateSince = 0;
+    /// The bundle point, out of our own base by \a clearance tiles where the line towards the
+    /// enemy allows it (ForceConcentrationPolicy::bundleClearance; docs/formations.md
+    /// "Free-for-all: the army deploys").
+    Coord forwardBundlePoint(int clearance);
+    /// Tiles (Chebyshev, at most \a limit) from \a p to the nearest tile of one of our buildings
+    /// or a road: how far a point is from the built-up base. Rings outward, bounded box.
+    int builtUpDistance(Coord p, int limit) const;
+    /// The house attack threshold attack() starts from (credits of military value, before the
+    /// campaign adjustment and the wave readiness scaling).
+    int houseAttackThreshold() const;
+    /// The custom-game threshold actually required (campaign: \a required unchanged): 0 when the
+    /// house's credits and the spice left on the map cannot buy the difference to it
+    /// (SimpleArmyPolicy::reachableReadiness), and during a whole-army house's held opening (no
+    /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
+    /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
+    int reachableAttackThreshold(int required) const;
+    /// Bundling waits until the house could attack: its military value reaches the house
+    /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
+    /// losses - the reserve keeps to the home rally and defends the base.
+    bool bundleArmyReady() const;
+    /// A withdrawal or recovery holds reinforcements at the protected shelter (so does the
+    /// garrison, kForceGarrison): bundling and its launch gate stand aside for the home rally then.
+    bool reserveHeldHome() const {
+        return recoveryActive() && (ArmyPosturePolicy::holdsReinforcementsAtHome(armyPosture) || localSquadWithdraw
+                                    || garrisoned());
+    }
+    /// A reserve unit that has to walk to the bundle, ordered after the unit pass.
+    struct BundleWalker { Uint32 id; int distance; Coord at; };
+    /// Keeps an idle reserve unit posted at the bundle. False when bundling does not own the
+    /// unit (a role, a tracked wave member, a posture that holds reinforcements at home, no
+    /// bundle): the home rally decides then. A unit outside the bundle that can take an order
+    /// is appended to \a walkers.
+    bool bundleUnit(const UnitBase* unit, int radius, std::vector<BundleWalker>& walkers);
+    /// Orders at most kBundleOrdersPerPass of \a walkers to the bundle, farthest first (object
+    /// id on ties), whatever the order of the unit list.
+    void orderBundleWalkers(std::vector<BundleWalker>& walkers, int radius);
+    /// Share of \a ids (value, basis points) standing within \a radius of the bundle.
+    int bundledShareBps(const std::vector<Uint32>& ids, int radius);
+    void saveForceState(OutputStream& stream) const;
+    void loadForceState(InputStream& stream);
+    /// The remembered enemy army and the musters (SAVEGAMEVERSION 9864); a 9863 save has neither.
+    void saveDefenceMemory(OutputStream& stream) const;
+    void loadDefenceMemory(InputStream& stream);
+    /// A split wave (kForceSplit / kForceFlank): two groups walk to release points on two
+    /// sides of the objective, wait for each other and then attack it together.
+    struct Split {
+        Uint32 since = 0;
+        Uint32 objective = NONE_ID;
+        Coord target = Coord::Invalid();
+        Coord point[2] = {Coord::Invalid(), Coord::Invalid()};
+        std::set<Uint32> members[2];
+    };
+    std::vector<Split> splits;
+    const Split* splitOf(Uint32 id) const;
+    /// Splits the launched ground units; false (nothing ordered) when the wave cannot split.
+    bool startSplit(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    void updateSplits();
+    /// Held by a force controller (a split group, a muster or O's siege hold): no rally or regroup orders.
+    bool forceHeld(Uint32 id) const {
+        return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id));
+    }
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct ForceStats {
+        int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,
+            stageHolds = 0, staged = 0, bundleOrders = 0, gateHolds = 0, gateTimeouts = 0, splits = 0,
+            splitReleases = 0, splitTimeouts = 0, fullReadiness = 0, garrisonHolds = 0, strengthHolds = 0,
+            reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
+            turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
+            finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0, surplusPeak = 0, siegeOrders = 0,
+            siegeHolds = 0, assaultHolds = 0, assaultWaves = 0;
+    };
+    ForceStats forceStats;
+    /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
+    /// around its objective (ForceConcentrationPolicy::superior)?
+    bool huntPartySuperior(const BlobParty& party) const;
+    /// Is \a contact (met at \a at) a real fight for this party rather than a lone scout?
+    bool huntPartyRealFight(const BlobParty& party, const ObjectBase* contact) const;
+    /// Sends the members nearest \a contact (at most three) to shoot it; the party marches on.
+    void huntPartySkirmish(const BlobParty& party, const ObjectBase* contact);
+    /// Telemetry for the duel reports only: never read by a decision, not saved.
+    struct BlobStats {
+        int parties = 0, gathered = 0, gatherTimeouts = 0, releases = 0, reforms = 0, fallbacks = 0,
+            fallbackReturns = 0, legs = 0, dissolved = 0, stalls = 0, repairs = 0;
+    };
+    BlobStats blobStats;
+    /// This house's waves gather and march as a blob (WaveFormation=Blob, Custom Hard/Brutal).
+    bool blobMarch() const;
+    /// This house's hunt parties fall back a few tiles to reform when locally outmatched.
+    bool tacticalRetreat() const;
+    /// Hunt parties run at all (either of the two above).
+    bool huntParties() const { return blobMarch() || tacticalRetreat(); }
+    /// The party \a id belongs to, or nullptr.
+    BlobParty* huntPartyOf(Uint32 id);
+    const BlobParty* huntPartyOf(Uint32 id) const;
+    /// Makes the launched ground units one hunt party heading for \a objective.
+    void startHuntParty(const std::vector<const UnitBase*>& units, const ObjectBase* objective);
+    /// One pass over every party (the unit phase of update()).
+    void updateHuntParties();
+    /// A member was hit: a gathering, marching or reforming party releases into the fight.
+    void huntPartyMemberHit(const UnitBase* unit, const ObjectBase* damager);
+    /// Ends a party; \a hunt gives its idle members engine Hunt (as None would have).
+    void dissolveHuntParty(BlobParty& party, bool hunt, const char* reason);
+    void releaseHuntParty(BlobParty& party, Coord contact, const char* reason);
+    void startPartyMarch(BlobParty& party);
+    void startPartyLeg(BlobParty& party, const UnitBase* anchor);
+    void startPartyGather(BlobParty& party, BlobWavePolicy::Phase phase, Coord point);
+    void startPartyFallback(BlobParty& party);
+    /// Sends every active member to its own tile around \a point in Area Guard; \a onlyIdle
+    /// re-sends only members that stand idle away from it.
+    void sendHuntParty(const BlobParty& party, Coord point, bool forced, bool onlyIdle);
+    /// The member closest to the members' centroid (vehicles first), or nullptr.
+    const UnitBase* huntPartyAnchor(const BlobParty& party) const;
+    /// A usable rally/leg/fall-back tile near \a desired that a party standing at \a anchor can
+    /// reach; \a safe also keeps it out of observed enemy weapon reach.
+    Coord huntPartyPoint(Coord desired, const UnitBase* anchor, bool safe) const;
+    /// A tile within \a radius of \a centre for \a unit not yet in \a reserved, or Coord::Invalid().
+    Coord huntPartySlot(const UnitBase* unit, Coord centre, int radius, std::set<int64_t>& reserved) const;
+    /// The visible enemy nearest the anchor within a member's huntTowardRange(), or nullptr.
+    const ObjectBase* huntPartyContact(const BlobParty& party, const UnitBase* anchor) const;
+    const ObjectBase* huntPartyObjective(const BlobParty& party, const UnitBase* anchor) const;
+    void saveHuntParties(OutputStream& stream) const;
+    void loadHuntParties(InputStream& stream);
     /// Tracked Custom wave. Same type as the campaign wave, so membership,
     /// objective and save/load are the proven ones.
     CampaignDifficultyPolicy::Wave customWave;
@@ -955,6 +1465,12 @@ private:
     /// launcher's band, never its whole range: an outranged enemy at the edge of
     /// that range is a target, not a threat.
     int launcherEscapeRange(const UnitBase* launcher, const ObjectBase* threat) const;
+    /// The enemy a hunting launcher has to step away from this pass (the escape's own
+    /// choice: \a knownThreat if it qualifies, else the nearest qualifying enemy in a bounded
+    /// tile box, lowest id on ties), or nullptr when the escape does not apply. \a desiredRange
+    /// receives the stand-off. Focus fire and converging leave such a launcher to the escape.
+    const ObjectBase* closeThreatWhileHunting(const UnitBase* launcher, const ObjectBase* knownThreat = nullptr,
+                                              int* desiredRange = nullptr) const;
     /// Short close-range escape for a hunting launcher. \a knownThreat is the
     /// authoritative damager of a damage callback; without one the nearest
     /// qualifying closing enemy is used. Hunt and tracked army membership are
@@ -1083,8 +1599,7 @@ private:
     ArmyPosturePolicy::DispatchGate offensiveDispatchGate(const ArmySurvey& survey) const;
     /// Front battery goal for this base, zero when the feature is off or the
     /// economy is not ready. Never lowers the established counter-air goal.
-    int frontBatteryGoal(int coverageCap, int refineries, int heavyFactories,
-                         int repairYards, const ArmySurvey& survey) const;
+    int frontBatteryGoal(int coverageCap, int refineries, int heavyFactories, int repairYards) const;
     /// Observed enemy approach direction for battery siting, from visible enemy
     /// bases and remembered structure losses only.
     Coord observedFrontDirection(Coord anchor) const;

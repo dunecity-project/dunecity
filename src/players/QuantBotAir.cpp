@@ -712,7 +712,7 @@ bool QuantBot::authorizesAircraftTarget(const UnitBase* aircraft, const ObjectBa
 }
 
 Coord QuantBot::findBestDeathHandTarget(int enemyHouseID) {
-	const QuantBotConfig& config = getQuantBotConfig();
+	const QuantBotConfig& config = botConfig();
 	const int myTeam = getHouse()->getTeamID();
 
     const Coord reactorTarget = findNuclearMissileTarget();

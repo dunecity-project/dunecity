@@ -41,13 +41,13 @@ def main():
                    + cflags + [strip] + [str(ROOT / p) for p in sources] + libs + ['-o', str(binary)])
         subprocess.run(command, check=True, cwd=ROOT)
     service = ServiceFixture()
-    # Inject one real HTTP 429 before the final catalog request. The harness advances the
+    # Inject one real HTTP 429 before the first manifest request. The harness advances the
     # SDL retry clock, while the production client still decides whether/what to retry.
     flag = Path(service.tmp) / 'rate-once'
     observed = Path(service.tmp) / 'rate-observed'
     flag.write_text('1')
     router = Path(service.tmp) / 'router.php'
-    injection = ("if (($_SERVER['REQUEST_URI'] ?? '') === '/v1/content/list' && file_exists("
+    injection = ("if (($_SERVER['REQUEST_URI'] ?? '') === '/v1/content/manifest' && file_exists("
                  + php_literal(str(flag)) + ")) { unlink(" + php_literal(str(flag))
                  + "); file_put_contents(" + php_literal(str(observed)) + ", '1'); "
                  + "http_response_code(429); header('Content-Type: text/plain'); "

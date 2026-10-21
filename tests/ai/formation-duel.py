@@ -12,15 +12,18 @@ cancel within a pair.
 One probe binary is built first (run-campaign-balance.py), then the games run in parallel
 processes. Each game appends one row to games.csv and its waves to waves.csv, and its run
 directory is deleted straight away; games already in games.csv are skipped, so an interrupted
-round-robin resumes. --report prints the markdown tables used in docs/formations.md.
+round-robin resumes. Without --scratch the batch runs in leased agent scratch, removed when it
+succeeds, and refuses to start below the free-space floor (DUNECITY_MIN_FREE_GB, 25 GB).
+--report prints the markdown tables used in docs/formations.md, scored by tests/ai/match_score.py
+(placement score, time-outs negative, verdict on the paired difference; --scoring legacy for the old rule).
 """
 import argparse
 import csv
 import itertools
-import random
 import shutil
 import statistics
 import subprocess
+import sys
 import threading
 import time
 from collections import defaultdict
@@ -28,22 +31,44 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+import match_score  # noqa: E402
+
 # 'none' is the control: plain engine-Hunt waves without a formation (WaveFormation=None).
-# The control and the five kept shapes (the research rounds also played combined, line, wedge, vee, diamond).
-SHAPES = ('none', 'box', 'pincer', 'column', 'staggered', 'echelon')
+# The control, Blob waves (hunt parties) and the five kept shapes (the research rounds also played
+# combined, line, wedge, vee, diamond). A label may carry a Blob-wave ablation: blob/noretreat (no
+# tactical fall-back), none/retreat (the fall-back for plain Hunt waves).
+SHAPES = ('none', 'blob', 'box', 'pincer', 'column', 'staggered', 'echelon')
 SIZES = (64, 128, 192)
 SEEDS = (7101, 7202, 7303)
 # The two houses of a game, by the seed's position in --seeds (sonic tanks, devastators and
 # deviators all appear).
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 KEY = ('tag', 'difficulty', 'size', 'seed', 'house_a', 'shape_a', 'house_b', 'shape_b')
+# Per house; the hunt-party counters (QuantBot::blobStats) are zero without parties.
+PARTY_FIELDS = ('parties', 'gathered', 'gather_timeouts', 'releases', 'reforms', 'fallbacks', 'fallback_returns',
+                'legs', 'dissolved', 'stalls', 'repairs')
+# Per house: the home trade (units destroyed within 12 tiles of a building - the enemy's near ours
+# are home kills, ours near ours home losses) and the force-candidate counters (QuantBot::forceStats).
+FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recalled', 'musters', 'muster_releases',
+                'stage_holds', 'staged', 'bundle_orders', 'gate_holds', 'gate_timeouts', 'splits', 'split_releases',
+                'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
+                'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
+                'turrets_lost', 'raid_orders', 'turret_targets', 'press_on_orders', 'finish_waves', 'fortified_holds',
+                'sonic_retargets', 'surplus_peak', 'siege_orders', 'siege_holds', 'assault_holds', 'assault_waves')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
-                'army_value', 'army_units')
+                'army_value', 'army_units', 'strategy') + PARTY_FIELDS + FORCE_FIELDS
+# The army value curve: each side's mobile armed value at these game minutes (the 5-minute
+# FORMATION_HOUSE samples; after the game ended, the value at the end).
+CURVE_MINUTES = (10, 20, 30)
+CURVE_FIELDS = tuple(f'army{minute}' for minute in CURVE_MINUTES)
 GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
-    f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS)
+    f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS + CURVE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
                'arrival_spread_s', 'shots30', 'loss60', 'kill60', 'survivors', 'lost_before_contact', 'formed',
-               'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s')
+               'formup_s', 'formation_end_s', 'in_formation_at_contact', 'in_formation_10s', 'together_at_contact',
+               'engaged10')
 HOUSE_NUMBERS = {'harkonnen': '0', 'atreides': '1', 'ordos': '2'}
 lock = threading.Lock()
 
@@ -63,6 +88,16 @@ def read(path):
 def append(path, fields, rows):
     with lock:
         new = not path.exists()
+        if not new:
+            with path.open(newline='') as handle:
+                header = next(csv.reader(handle), [])
+            if list(header) != list(fields):
+                # Written by an older harness: rewrite it with the current columns (missing ones empty).
+                old = read(path)
+                with path.open('w', newline='') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(old)
         with path.open('a', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)
             if new:
@@ -81,7 +116,7 @@ def pairs(args):
 def schedule(args):
     """Every game of the round-robin, a whole seed at a time so partial results stay balanced."""
     games = []
-    for index, seed in enumerate(args.seeds):
+    for index, seed in enumerate(args.seeds, args.house_offset):
         houses = HOUSE_PAIRS if args.all_houses else (HOUSE_PAIRS[index % len(HOUSE_PAIRS)],)
         for house_a, house_b in houses:
             for size in args.sizes:
@@ -93,29 +128,37 @@ def schedule(args):
 
 def build_probe(args, scratch):
     probe = scratch / 'probe'
-    binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
-    if binary.exists() and not args.rebuild:
-        return binary
+    if not args.rebuild:
+        try:
+            binary = probe_binary(probe)
+            if binary.exists():
+                return binary
+        except OSError:
+            pass
     shutil.rmtree(probe, ignore_errors=True)
-    subprocess.run(['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    subprocess.run([sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                     '--output-dir', str(probe), '--duel-map-size', '64', '--duel-map-seed', '1',
                     '--duel-sides', 'atreides:box,harkonnen:box', '--local-spectator', '--enemy-difficulty', 'hard',
                     '--partner-difficulty', 'hard', '--minutes', '1', '--capture-mib', '256'],
                    cwd=root, check=True, capture_output=True, text=True)
     shutil.rmtree(probe / 'profile', ignore_errors=True)
-    return binary
+    return probe_binary(probe)
 
 
 def play(args, scratch, binary, key):
     tag, difficulty, size, seed, house_a, shape_a, house_b, shape_b = key
-    out = scratch / '-'.join(key)
+    # Flat: a label with a slash (none+F/weak) would nest one game's run directory inside
+    # another's (none+F), whose clean-up then deletes it mid-game.
+    out = scratch / '-'.join(key).replace('/', '_')
     shutil.rmtree(out, ignore_errors=True)
-    command = ['python3', str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
+    command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(out), '--duel-map-size', size,
                '--duel-map-seed', seed, '--duel-sides', f'{house_a}:{shape_a},{house_b}:{shape_b}',
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
-               '--wall-timeout', str(args.wall_timeout)]
+               '--wall-timeout', str(args.wall_timeout), '--path-workers', str(args.path_workers)]
+    if not args.ai_telemetry:
+        command.append('--no-ai-telemetry')
     started = time.time()
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
     wall = round(time.time() - started)
@@ -130,10 +173,14 @@ def play(args, scratch, binary, key):
                map_skipped=next((parse(l, 'FORMATION_DUEL_MAP:').get('skipped', '') for l in lines
                                  if 'FORMATION_DUEL_MAP:' in l), ''),
                error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}')
+    samples = {(s.get('house'), s.get('minute')): s.get('army_value', '')
+               for s in (parse(l, 'FORMATION_HOUSE:') for l in lines if 'FORMATION_HOUSE:' in l)}
     for side, house in (('a', house_a), ('b', house_b)):
         data = houses.get(HOUSE_NUMBERS[house], {})
         for field in HOUSE_FIELDS:
             row[f'{field}_{side}'] = data.get(field, '')
+        for minute in CURVE_MINUTES:
+            row[f'army{minute}_{side}'] = samples.get((HOUSE_NUMBERS[house], str(minute)), data.get('army_value', ''))
     shape_of = {HOUSE_NUMBERS[house_a]: shape_a, HOUSE_NUMBERS[house_b]: shape_b}
     waves = []
     for l in lines:
@@ -144,37 +191,41 @@ def play(args, scratch, binary, key):
                       **{k: wave.get(k, '') for k in WAVE_FIELDS}})
     results = Path(args.results)
     if row['error']:
-        (results / f'failed-{"-".join(key)}.txt').write_text(
+        # Ablation labels carry a slash (blob/noretreat): keep the file name flat.
+        (results / f'failed-{"-".join(key).replace("/", "_")}.txt').write_text(
             outcome.stdout[-4000:] + '\n' + outcome.stderr[-4000:] + '\n' + '\n'.join(lines[-60:]))
     else:
         append(results / 'waves.csv', KEY + ('shape',) + WAVE_FIELDS, waves)
         append(results / 'games.csv', GAME_FIELDS, [row])
-    shutil.rmtree(out, ignore_errors=True)
+    finish_game(scratch, out, bool(row['error']))
     return row
 
 
 def run(args):
     results = Path(args.results)
     results.mkdir(parents=True, exist_ok=True)
-    scratch = Path(args.scratch)
-    scratch.mkdir(parents=True, exist_ok=True)
     done = {tuple(r[k] for k in KEY) for r in read(results / 'games.csv')}
     todo = [key for key in schedule(args) if key not in done]
+    # Still a whole seed at a time, but the biggest maps of a seed first: they take longest,
+    # and starting them last leaves the other slots idle at the end of the seed.
+    todo.sort(key=lambda key: (args.seeds.index(int(key[3])), -int(key[2])))
     print(f'{len(todo)} games to play ({len(done)} already in games.csv)', flush=True)
     if not todo:
         return
-    binary = build_probe(args, scratch)
-    started = time.time()
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
-        for count, future in enumerate(as_completed(futures), 1):
-            row = future.result()
-            winner = {HOUSE_NUMBERS[row['house_a']]: row['shape_a'], HOUSE_NUMBERS[row['house_b']]: row['shape_b']}.get(
-                row['winner'], 'time-out')
-            print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["size"]}/{row["seed"]} '
-                  f'{row["house_a"]}:{row["shape_a"]} v {row["house_b"]}:{row["shape_b"]} -> {winner} '
-                  f'({row["end_s"]} s game, {row["wall_s"]} s wall){" " + row["error"] if row["error"] else ""}',
-                  flush=True)
+    require_free_space()
+    with scratch_dir('formation-duel', args.scratch) as scratch:
+        binary = build_probe(args, scratch)
+        started = time.time()
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            futures = [pool.submit(play, args, scratch, binary, key) for key in todo]
+            for count, future in enumerate(as_completed(futures), 1):
+                row = future.result()
+                winner = {HOUSE_NUMBERS[row['house_a']]: row['shape_a'],
+                          HOUSE_NUMBERS[row['house_b']]: row['shape_b']}.get(row['winner'], 'time-out')
+                print(f'[{count}/{len(todo)} {round(time.time() - started)} s] {row["size"]}/{row["seed"]} '
+                      f'{row["house_a"]}:{row["shape_a"]} v {row["house_b"]}:{row["shape_b"]} -> {winner} '
+                      f'({row["end_s"]} s game, {row["wall_s"]} s wall){" " + row["error"] if row["error"] else ""}',
+                      flush=True)
 
 
 # ---- Report ---------------------------------------------------------------------------
@@ -186,34 +237,60 @@ def number(value, default=0.0):
         return default
 
 
-def sides(game, margin):
-    """(shape, opponent, score, own house fields, opponent fields, strict score) for both sides of a game.
+def sides(game, args):
+    """(shape, opponent, score, own house fields, opponent fields, strict score, opponent score, drawn)
+    for both sides of a game.
 
-    The strict score counts eliminations only (1 win, 0 loss, 0.5 time-out). The score adjudicates
-    a time-out on the unit trade: the side whose killed unit value exceeds the other's by at least
-    'margin' credits wins it, otherwise it stays a draw."""
+    The score is match_score's placement score (win +1, loss -1, time-out --draw-score for both), or with
+    --scoring legacy the old one (1 win, 0 loss; a time-out goes to the side whose killed unit value
+    exceeds the other's by at least --adjudicate credits, else 0.5). The strict score counts
+    eliminations only (1 win, 0 loss, 0.5 time-out) in both modes; drawn = the game timed out."""
     winner = game['winner']
     result = []
     for me, them in (('a', 'b'), ('b', 'a')):
         house = HOUSE_NUMBERS[game[f'house_{me}']]
-        own = {f: number(game[f'{f}_{me}']) for f in HOUSE_FIELDS}
-        other = {f: number(game[f'{f}_{them}']) for f in HOUSE_FIELDS}
-        strict = 0.5 if winner in ('', '-1') else (1.0 if winner == house else 0.0)
-        score = strict
-        if strict == 0.5:
-            trade = own['kill_value'] - other['kill_value']
-            score = 1.0 if trade >= margin else (0.0 if trade <= -margin else 0.5)
-        result.append((game[f'shape_{me}'], game[f'shape_{them}'], score, own, other, strict))
+        rival = HOUSE_NUMBERS[game[f'house_{them}']]
+        own = {f: number(game.get(f'{f}_{me}')) for f in HOUSE_FIELDS + CURVE_FIELDS}
+        other = {f: number(game.get(f'{f}_{them}')) for f in HOUSE_FIELDS + CURVE_FIELDS}
+        score, strict = match_score.legacy_score(winner == house, winner == rival, own['kill_value'],
+                                                 other['kill_value'], args.adjudicate)
+        opponent = 1.0 - score
+        if args.scoring == 'placement':
+            mine, theirs = match_score.duel(winner == house, winner == rival, args.draw_score)
+            score, opponent = mine.score, theirs.score
+        result.append((game[f'shape_{me}'], game[f'shape_{them}'], score, own, other, strict, opponent, strict == 0.5))
     return result
 
 
-def bootstrap(scores, rounds=2000):
-    """95% interval of the mean score, resampling games (fixed seed: the report is reproducible)."""
-    if not scores:
-        return (0.0, 0.0)
-    rng = random.Random(20261015)
-    means = sorted(statistics.mean(rng.choices(scores, k=len(scores))) for _ in range(rounds))
-    return means[int(0.025 * rounds)], means[int(0.975 * rounds) - 1]
+def bootstrap(scores):
+    return match_score.bootstrap(scores, 20261015)
+
+
+def compare(rows, args):
+    """The default rule over side rows of sides(): the row's shape against its opponent, per game."""
+    return match_score.compare([(r[2], r[6], r[7], r[7]) for r in rows], 20261015, args.scoring)
+
+
+def judged(comparison, args):
+    """'difference (interval)' in placement scoring, the score's interval in legacy."""
+    c = comparison
+    if args.scoring == 'legacy':
+        return f'{c.low:.2f}-{c.high:.2f}'
+    return f'{c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
+
+
+def write_scores(games, args):
+    rows = []
+    for game in games:
+        decisive = game['winner'] not in ('', '-1')
+        for side, record in zip('ab', sides(game, args)):
+            rows.append({'game': '/'.join(game[k] for k in KEY), 'side': side, 'house': game[f'house_{side}'],
+                         'label': record[0], 'eliminated': int(record[5] == 0.0),
+                         'eliminated_s': game['end_s'] if record[5] == 0.0 else '',
+                         'place': {1.0: 1, 0.0: 2, 0.5: 1.5}[record[5]], 'score': f'{record[2]:.4f}',
+                         'drawn': int(record[7]), 'end_s': game['end_s'], 'decisive': int(decisive),
+                         'kill_value': game.get(f'kill_value_{side}', ''), 'loss_value': game.get(f'loss_value_{side}', '')})
+    match_score.write_scores(args.scores, rows)
 
 
 def report(args):
@@ -230,15 +307,21 @@ def report(args):
         return
     per = defaultdict(list)
     for game in games:
-        for shape, opponent, score, own, other, strict in sides(game, args.adjudicate):
-            per[shape].append((game, opponent, score, own, other, strict))
+        for shape, opponent, score, own, other, strict, rival, drawn in sides(game, args):
+            per[shape].append((game, opponent, score, own, other, strict, rival, drawn))
+    if args.scores:
+        write_scores(games, args)
+    legacy = args.scoring == 'legacy'
+    # Legacy: the strict score (eliminations only); placement: the share of time-outs.
+    extra_name = 'Strict score' if legacy else 'Time-outs'
+    extra = lambda rows: statistics.mean(r[5] if legacy else (1.0 if r[7] else 0.0) for r in rows)
     decided = sum(g['winner'] not in ('', '-1') for g in games)
     win_times = [number(g['end_s']) / 60 for g in games if g['winner'] not in ('', '-1')]
     print(f'{len(games)} games ({args.difficulty}, tag {args.tag}), {decided} decided by elimination '
           f'({100 * decided / len(games):.0f}%), median time to win {statistics.median(win_times) if win_times else 0:.1f} min, '
-          f'time limit {args.minutes} min; time-outs adjudicated on a unit trade of {args.adjudicate:.0f} credits or more.\n')
+          f'time limit {args.minutes} min; {match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
     print('| Rank | Shape | Games | Score | 95% CI | By size ' + ' / '.join(str(s) for s in args.sizes)
-          + ' | By seed (min-max) | Eliminations W-D-L | Strict score | Value margin / game | Enemy structures / game | Win time min |')
+          + f' | By seed (min-max) | Eliminations W-D-L | {extra_name} | Value margin / game | Enemy structures / game | Win time min |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|')
     table = []
     for shape, rows in per.items():
@@ -256,7 +339,7 @@ def report(args):
         wins = [number(r[0]['end_s']) / 60 for r in rows if r[5] == 1.0]
         w = sum(s == 1.0 for s in stricts); d = sum(s == 0.5 for s in stricts); l = sum(s == 0.0 for s in stricts)
         table.append((mean, shape, len(rows), f'{w}-{d}-{l}', low, high, by_size, by_seed, margin, structures,
-                      statistics.median(wins) if wins else 0, statistics.mean(stricts)))
+                      statistics.median(wins) if wins else 0, extra(rows)))
     table.sort(key=lambda t: (-t[0], -t[8]))
     for rank, (mean, shape, n, wdl, low, high, by_size, by_seed, margin, structures, win_time, strict) in enumerate(table, 1):
         print(f'| {rank} | {shape} | {n} | {mean:.3f} | {low:.2f}-{high:.2f} | {" / ".join(by_size)} | '
@@ -264,7 +347,8 @@ def report(args):
 
     if 'none' in per:
         print('\nAgainst the control (None: no formation, the plain engine-Hunt waves), same maps, seeds and houses:\n')
-        print('| Shape | Games v None | Score v None | 95% CI | Eliminations W-D-L | Strict score | Value margin / game | Verdict |')
+        print('| Shape | Games v None | Score v None | ' + ('95% CI' if legacy else 'Difference v None (95% CI)')
+              + f' | Eliminations W-D-L | {extra_name} | Value margin / game | Verdict |')
         print('|---|---|---|---|---|---|---|---|')
         for t in table:
             shape = t[1]
@@ -273,17 +357,16 @@ def report(args):
             rows = [r for r in per[shape] if r[1] == 'none']
             if not rows:
                 continue
-            scores = [r[2] for r in rows]
             stricts = [r[5] for r in rows]
-            low, high = bootstrap(scores)
+            c = compare(rows, args)
             w = sum(s == 1.0 for s in stricts); d = sum(s == 0.5 for s in stricts); l = sum(s == 0.0 for s in stricts)
-            verdict = 'beats None' if low > 0.5 else ('loses to None' if high < 0.5 else 'not distinguishable from None')
-            print(f'| {shape} | {len(rows)} | {statistics.mean(scores):.3f} | {low:.2f}-{high:.2f} | {w}-{d}-{l} | '
-                  f'{statistics.mean(stricts):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | {verdict} |')
-        every = [r[2] for shape in per if shape != 'none' for r in per[shape] if r[1] == 'none']
+            verdict = {'beats': 'beats None', 'loses to': 'loses to None'}.get(c.verdict, 'not distinguishable from None')
+            print(f'| {shape} | {len(rows)} | {c.candidate:.3f} | {judged(c, args)} | {w}-{d}-{l} | '
+                  f'{extra(rows):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | {verdict} |')
+        every = [r for shape in per if shape != 'none' for r in per[shape] if r[1] == 'none']
         if every:
-            low, high = bootstrap(every)
-            print(f'| all shapes | {len(every)} | {statistics.mean(every):.3f} | {low:.2f}-{high:.2f} | | | | |')
+            c = compare(every, args)
+            print(f'| all shapes | {len(every)} | {c.candidate:.3f} | {judged(c, args)} | | | | |')
 
     order = [t[1] for t in table]
     print('\nHead to head (row shape\'s score against the column shape, both houses, all sizes and seeds):\n')
@@ -335,6 +418,8 @@ def export(args):
         s['waves'] += 1
         for field in ('members', 'kill60', 'loss60', 'survivors', 'lost_before_contact', 'shots30'):
             s[field] += number(wave[field])
+        if number(wave['contact_s'], -1) >= 0:
+            s['contact_s'] += number(wave['contact_s'])
         if number(wave['arrived']) >= 2:
             s['spread_waves'] += 1
             s['arrival_spread_s'] += number(wave['arrival_spread_s'])
@@ -344,9 +429,14 @@ def export(args):
         if number(wave.get('in_formation_10s'), -1) >= 0:
             s['waves_10s'] += 1
             s['in_formation_10s'] += number(wave['in_formation_10s'])
+        if number(wave.get('together_at_contact'), -1) >= 0:
+            s['met_waves'] += 1
+            s['met_members'] += number(wave['members'])
+            s['together_at_contact'] += number(wave['together_at_contact'])
+            s['engaged10'] += number(wave.get('engaged10'))
     fields = ('tag', 'difficulty', 'size', 'seed', 'shape', 'waves', 'members', 'kill60', 'loss60', 'survivors',
               'lost_before_contact', 'shots30', 'spread_waves', 'arrival_spread_s', 'contact_waves', 'in_formation_at_contact',
-              'waves_10s', 'in_formation_10s')
+              'waves_10s', 'in_formation_10s', 'met_waves', 'met_members', 'together_at_contact', 'engaged10', 'contact_s')
     with (target / 'waves-by-shape.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
@@ -356,57 +446,164 @@ def export(args):
 
 
 def pairing_report(args):
-    """Per pairing (--pairs x:y), from x's side: the score, eliminations and game length, and the
-    waves of both sides (formation at contact and 10 s later, first-minute trade, survival)."""
+    """Per pairing (--pairs x:y), from x's side: the score, eliminations and game length; the
+    waves of both sides (arrival spread, members together at contact and engaged within 10 s of
+    it, formation at contact and 10 s later, first-minute trade, survival); and how often the
+    hunt-party steps fired per game. With --baseline B, each x is also paired with B's side in the
+    games B played against the same y with the same difficulty, size, seed and houses."""
     results = Path(args.results)
     tags, sizes, seeds = set(args.tag.split(',')), {str(s) for s in args.sizes}, {str(s) for s in args.seeds}
     def wanted(row):
         return (row['tag'] in tags and row['difficulty'] == args.difficulty and row['size'] in sizes
                 and row['seed'] in seeds)
     games = [g for g in read(results / 'games.csv') if wanted(g)]
+    # --baseline-tag: the same pairings played by another code version (tag), from --baseline-results.
+    baseline_games = []
+    if args.baseline_tag:
+        baseline_games = [g for g in read(Path(args.baseline_results or results) / 'games.csv')
+                          if g['tag'] == args.baseline_tag and g['difficulty'] == args.difficulty
+                          and g['size'] in sizes and g['seed'] in seeds]
+        games = [g for g in games if g['tag'] != args.baseline_tag]
     waves = [w for w in read(results / 'waves.csv') if wanted(w)]
-    print(f'{args.difficulty}, tag {args.tag}, sizes {" ".join(map(str, args.sizes))}; time-outs adjudicated on a unit '
-          f'trade of {args.adjudicate:.0f} credits or more.\n')
-    print('| Pairing | Games | Score | 95% CI | Eliminations W-L / time-outs | Strict score | Value margin / game | '
-          'Median game min | Verdict |')
-    print('|---|---|---|---|---|---|---|---|---|')
-    wave_rows = []
+    if args.scores:
+        write_scores(games, args)
+    legacy = args.scoring == 'legacy'
+    print(f'{args.difficulty}, tag {args.tag}, sizes {" ".join(map(str, args.sizes))}; '
+          f'{match_score.describe(args.scoring, args.draw_score, args.adjudicate)}.\n')
+    print('| Pairing | Games | Score | Opponent score | ' + ('95% CI' if legacy else 'Difference (95% CI)')
+          + ' | Eliminations W-L / time-outs | ' + ('Strict score' if legacy else 'Time-outs')
+          + ' | Value margin / game | Median game min | Verdict |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    wave_rows, party_rows, defence_rows, force_rows, baseline_rows, tag_rows = [], [], [], [], [], []
+    # The setup of a side row, for --baseline: difficulty, size, seed, own house, opponent's house.
+    setup = lambda g, me, them: (g['difficulty'], g['size'], g['seed'], g[f'house_{me}'], g[f'house_{them}'])
     for x, y in pairs(args):
         mine = [g for g in games if {g['shape_a'], g['shape_b']} == {x, y}]
-        rows = [s for g in mine for s in sides(g, args.adjudicate) if s[0] == x]
+        rows = [s for g in mine for s in sides(g, args) if s[0] == x]
         if not rows:
             continue
-        scores = [r[2] for r in rows]
-        low, high = bootstrap(scores)
+        c = compare(rows, args)
         w = sum(r[5] == 1.0 for r in rows); l = sum(r[5] == 0.0 for r in rows); d = sum(r[5] == 0.5 for r in rows)
-        verdict = f'beats {y}' if low > 0.5 else (f'loses to {y}' if high < 0.5 else 'not distinguishable')
-        print(f'| {x} v {y} | {len(rows)} | {statistics.mean(scores):.3f} | {low:.2f}-{high:.2f} | {w}-{l} / {d} | '
-              f'{statistics.mean(r[5] for r in rows):.3f} | {statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | '
+        verdict = f'{c.verdict} {y}' if c.verdict != 'level with' else 'not distinguishable'
+        print(f'| {x} v {y} | {len(rows)} | {c.candidate:.3f} | {c.control:.3f} | {judged(c, args)} | {w}-{l} / {d} | '
+              f'{statistics.mean(r[5] if legacy else (1.0 if r[7] else 0.0) for r in rows):.3f} | '
+              f'{statistics.mean(r[3]["kill_value"] - r[4]["kill_value"] for r in rows):+.0f} | '
               f'{statistics.median(number(g["end_s"]) / 60 for g in mine):.1f} | {verdict} |')
+        if args.baseline and x != args.baseline:
+            base = {}
+            for g in games:
+                if {g['shape_a'], g['shape_b']} == {args.baseline, y}:
+                    for me, them in (('a', 'b'), ('b', 'a')):
+                        if g[f'shape_{me}'] == args.baseline:
+                            base.setdefault(setup(g, me, them), sides(g, args)[me == 'b'])
+            paired = []
+            for g in mine:
+                for me, them in (('a', 'b'), ('b', 'a')):
+                    if g[f'shape_{me}'] == x and setup(g, me, them) in base:
+                        own, other = sides(g, args)[me == 'b'], base[setup(g, me, them)]
+                        paired.append((own[2], other[2], own[7], other[7]))
+            b = match_score.compare(paired, 20261015, 'placement')
+            if b:
+                baseline_rows.append(f'| {x} v {y} | {b.n} | {b.candidate:.3f} | {b.control:.3f} | '
+                                     f'{b.difference:+.3f} ({b.low:+.2f}..{b.high:+.2f}) | '
+                                     f'{100 * b.candidate_draws:.0f}% / {100 * b.control_draws:.0f}% | {b.verdict} {args.baseline} |')
+        if args.baseline_tag:
+            base = {}
+            for g in baseline_games:
+                if {g['shape_a'], g['shape_b']} == {x, y}:
+                    for me, them in (('a', 'b'), ('b', 'a')):
+                        if g[f'shape_{me}'] == x:
+                            base.setdefault(setup(g, me, them), sides(g, args)[me == 'b'])
+            paired = []
+            for g in mine:
+                for me, them in (('a', 'b'), ('b', 'a')):
+                    if g[f'shape_{me}'] == x and setup(g, me, them) in base:
+                        own, other = sides(g, args)[me == 'b'], base[setup(g, me, them)]
+                        paired.append((own[2], other[2], own[7], other[7]))
+            b = match_score.compare(paired, 20261015, 'placement')
+            if b:
+                tag_rows.append(f'| {x} v {y} | {b.n} | {b.candidate:.3f} | {b.control:.3f} | '
+                                f'{b.difference:+.3f} ({b.low:+.2f}..{b.high:+.2f}) | '
+                                f'{100 * b.candidate_draws:.0f}% / {100 * b.control_draws:.0f}% | {b.verdict} tag {args.baseline_tag} |')
         keys = {tuple(g[k] for k in KEY) for g in mine}
+        # Defence and pace, from x's side: structures lost (the opponent's kills), the home trade,
+        # how long x's eliminations took, and the per-game force-candidate counters.
+        wins = [number(g['end_s']) / 60 for g in mine for s in sides(g, args) if s[0] == x and s[5] == 1.0]
+        home_kill = sum(r[3]['home_kill'] for r in rows); home_loss = sum(r[3]['home_loss'] for r in rows)
+        curve = lambda side: '/'.join(f'{statistics.mean(r[side][f] for r in rows) / 1000:.0f}' for f in CURVE_FIELDS)
+        defence_rows.append(f'| {x} v {y} | {statistics.mean(r[4]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{statistics.mean(r[3]["structures_destroyed"] for r in rows):.1f} | '
+                            f'{home_loss / len(rows):.0f} | {home_kill / len(rows):.0f} | {home_kill / max(1, home_loss):.2f} | '
+                            f'{curve(3)} | {curve(4)} | '
+                            f'{statistics.median(wins) if wins else 0:.1f} | {len(wins)} |')
+        if any(r[3][f] for r in rows for f in FORCE_FIELDS[2:]):
+            force_rows.append(f'| {x} v {y} | ' + ' | '.join(f'{statistics.mean(r[3][f] for r in rows):.1f}'
+                                                          for f in FORCE_FIELDS[2:]) + ' |')
         for shape in (x, y):
             sw = [wv for wv in waves if tuple(wv[k] for k in KEY) in keys and wv['shape'] == shape]
             members = sum(number(wv['members']) for wv in sw)
             kill = sum(number(wv['kill60']) for wv in sw); loss = sum(number(wv['loss60']) for wv in sw)
-            contact = [wv for wv in sw if number(wv['in_formation_at_contact'], -1) >= 0]
-            later = [wv for wv in sw if number(wv.get('in_formation_10s'), -1) >= 0]
-            share = lambda ws, f: 100 * sum(number(wv[f]) for wv in ws) / max(1, sum(number(wv['members']) for wv in ws))
+            met = [wv for wv in sw if number(wv['contact_s'], -1) >= 0]
+            contact = [number(wv['contact_s']) for wv in met]
+            spread = [number(wv['arrival_spread_s']) for wv in sw if number(wv['arrived']) >= 2]
+            share = lambda ws, f: 100 * sum(number(wv.get(f)) for wv in ws) / max(1, sum(number(wv['members']) for wv in ws))
+            formed = [wv for wv in sw if number(wv['in_formation_at_contact'], -1) >= 0]
             wave_rows.append(f'| {x} v {y} | {shape} | {len(sw)} | {members / max(1, len(sw)):.1f} | '
-                             f'{share(contact, "in_formation_at_contact"):.0f}% | {share(later, "in_formation_10s"):.0f}% | '
+                             f'{statistics.median(contact) if contact else 0:.0f} | {statistics.mean(spread) if spread else 0:.0f} | '
+                             f'{share([wv for wv in met if number(wv.get("together_at_contact"), -1) >= 0], "together_at_contact"):.0f}% | '
+                             f'{share([wv for wv in met if number(wv.get("engaged10"), -1) >= 0], "engaged10"):.0f}% | '
+                             f'{share(formed, "in_formation_at_contact"):.0f}% | '
                              f'{kill / max(1, len(sw)):.0f} | {loss / max(1, len(sw)):.0f} | {kill / max(1, loss):.2f} | '
                              f'{100 * sum(number(wv["survivors"]) for wv in sw) / max(1, members):.0f}% |')
-    print('\nWaves of both sides (members in formation at contact and 10 s later as a share of members; first-minute '
-          'value killed and lost from contact; members alive 5 min after launch):\n')
-    print('| Pairing | Side | Waves | Members / wave | In formation at contact | In formation +10 s | Killed 60 s | '
-          'Lost 60 s | Killed / lost | Survival |')
-    print('|---|---|---|---|---|---|---|---|---|---|')
+            own = [s[3] for g in mine for s in sides(g, args) if s[0] == shape]
+            if own and any(o['parties'] for o in own):
+                per = lambda f: statistics.mean(o[f] for o in own)
+                party_rows.append(f'| {x} v {y} | {shape} | ' + ' | '.join(f'{per(f):.1f}' for f in PARTY_FIELDS) + ' |')
+    if baseline_rows:
+        print(f'\nPaired against {args.baseline} (each side against the same opponent, same difficulty, size, seed '
+              f'and houses; difference = own score - {args.baseline}\'s, 95% bootstrap; time-outs own / baseline):\n')
+        print(f'| Pairing | Paired games | Score | {args.baseline} score | Difference (95% CI) | Time-outs | Verdict |')
+        print('|---|---|---|---|---|---|---|')
+        print('\n'.join(baseline_rows))
+    if tag_rows:
+        print(f'\nPaired against tag {args.baseline_tag} (the same pairing and side in the same setup - difficulty, '
+              f'size, seed and houses - played by the baseline tag\'s code; difference = own score - baseline\'s, '
+              f'95% bootstrap; time-outs own / baseline):\n')
+        print(f'| Pairing | Paired games | Score | Tag {args.baseline_tag} score | Difference (95% CI) | Time-outs | Verdict |')
+        print('|---|---|---|---|---|---|---|')
+        print('\n'.join(tag_rows))
+    print('\nWaves of both sides (median contact time after launch; base-arrival spread; living members within 8 '
+          'tiles of the main body at contact and members engaging within 10 s of contact, as a share of members; '
+          'first-minute value killed and lost from contact; members alive 5 min after launch):\n')
+    print('| Pairing | Side | Waves | Members / wave | Contact s | Arrival spread s | Together at contact | '
+          'Engaged within 10 s | In formation at contact | Killed 60 s | Lost 60 s | Killed / lost | Survival |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     print('\n'.join(wave_rows))
+    if party_rows:
+        print('\nHunt-party steps per game (QuantBot::blobStats):\n')
+        print('| Pairing | Side | ' + ' | '.join(PARTY_FIELDS) + ' |')
+        print('|---|---|' + '---|' * len(PARTY_FIELDS))
+        print('\n'.join(party_rows))
+    print('\nDefence and pace, first side of each pairing (per game: own structures lost and enemy structures '
+          'destroyed; home trade = enemy value destroyed within 12 tiles of own buildings against own value lost '
+          'there; army value curve = mean mobile armed value in thousands at game minutes '
+          f'{"/".join(map(str, CURVE_MINUTES))}, own and enemy; median minutes to an elimination win):\n')
+    print('| Pairing | Structures lost | Structures destroyed | Home loss | Home kill | Home kill / loss | Own army k | '
+          'Enemy army k | Win min | Wins |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    print('\n'.join(defence_rows))
+    if force_rows:
+        print('\nForce-candidate counters per game, first side (QuantBot::forceStats):\n')
+        print('| Pairing | ' + ' | '.join(FORCE_FIELDS[2:]) + ' |')
+        print('|---|' + '---|' * len(FORCE_FIELDS[2:]))
+        print('\n'.join(force_rows))
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--results', required=True, help='Directory for games.csv and waves.csv')
-parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories')
+parser.add_argument('--scratch', help='Directory for the probe binary and the (deleted) run directories '
+                                      '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--tag', default='round1', help='Label of the code variant being measured')
 parser.add_argument('--difficulty', choices=('hard', 'brutal'), default='hard')
 parser.add_argument('--minutes', type=int, default=40, help='Game minutes before a game is a time-out')
@@ -418,18 +615,31 @@ parser.add_argument('--versus', help='Play only the pairs that include this shap
 parser.add_argument('--pairs', help='Play (and report) exactly these shape pairs: x:y,x:y')
 parser.add_argument('--all-houses', action='store_true',
                     help='Play every seed with all three house pairs (three times the games) instead of one pair per seed')
+parser.add_argument('--house-offset', type=int, default=0,
+                    help='The house pair of the first seed (the pair cycles with the seed\'s position plus this), '
+                         'so a run split by seed across machines plays the pairs the whole list would')
 parser.add_argument('--jobs', type=int, default=6, help='Games played in parallel')
+parser.add_argument('--path-workers', type=int, default=1,
+                    help='Pathfinding threads per game (DUNECITY_PATH_WORKERS). 1, inline, gives the most games per '
+                         'hour when the batch fills the cores; results are identical for any count')
+parser.add_argument('--ai-telemetry', action='store_true',
+                    help='Keep the per-game AI decision log (events.jsonl); off by default, nothing here reads it')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--export', help='Write games.csv and waves-by-shape.csv (the files kept in git) to this directory')
 parser.add_argument('--adjudicate', type=float, default=1000,
-                    help='Report: a time-out goes to the side ahead on killed unit value by at least this many credits')
+                    help='Report, --scoring legacy only: a time-out goes to the side ahead on killed unit value by at '
+                         'least this many credits')
+parser.add_argument('--baseline', help='Pairing report: also pair each first side with this shape\'s side against the '
+                                       'same opponent in the same setups (e.g. the old default, for a candidate v none)')
+parser.add_argument('--baseline-tag', help='Pairing report: also pair each pairing\'s first side with the same side in the '
+                                           'same setup played by this tag (another code version, e.g. the last release)')
+parser.add_argument('--baseline-results', help='Directory of the --baseline-tag games.csv (default --results)')
+match_score.add_arguments(parser)
 args = parser.parse_args()
 if args.report:
     pairing_report(args) if args.pairs else report(args)
 elif args.export:
     export(args)
 else:
-    if not args.scratch:
-        parser.error('--scratch is required to play.')
     run(args)

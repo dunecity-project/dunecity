@@ -16,9 +16,11 @@
  */
 
 #include <Game.h>
+#include <FramePacing.h>
 #include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
+#include <misc/GameActivity.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -74,7 +76,6 @@ std::mutex Game::performanceLogMutex;
 #include <PathWorkerPool.h>
 #include <mod/ModManager.h>
 #include <Network/WorkshopGameContent.h>
-#include <Network/MapCollection.h>
 
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/QstBox.h>
@@ -122,11 +123,6 @@ std::mutex Game::performanceLogMutex;
 namespace {
 
 constexpr Uint32 SAVE_SETUP_COLOR_MARKER = 0x53434F4C; // "SCOL"
-
-constexpr std::array<Uint32, 8> analyticsMixItems = {
-    Unit_Tank, Unit_SiegeTank, Unit_Launcher, 9999, // QBot's special-unit group
-    Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad
-};
 
 std::string analyticsGameType(GameType type) {
     switch (type) {
@@ -957,28 +953,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             .set("immortal_human_player", gameInitSettings.getGameOptions().immortalHumanPlayer)
             .set("harvester_limit_override", gameInitSettings.getGameOptions().maximumNumberOfHarvestersOverride))
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
-        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.diagnosticLogs);
+        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
-    collectCustomMap(loadedSave);
-}
-
-/**
-    A genuinely started offline custom match offers its scenario to the community
-    catalogue. This runs only once the scenario itself has loaded, so a map that
-    never produced a playable game is never collected. pin() already recorded the
-    original map bytes and the selected mod locally; collecting only writes that
-    revision to the Workshop outbox, which the menu and game loops drain later, so
-    an offline player never waits for, and never fails because of, the metaserver.
-*/
-void Game::collectCustomMap(bool loadedSave) {
-    if(currentGameMap == nullptr) return;
-    try {
-        if(MapCollection::collect(Workshop::store(), gameInitSettings.getGameType(), bReplay, loadedSave,
-                                  gameInitSettings.getMapRevisionHash(), Workshop::queueCollection))
-            SDL_Log("Metaserver: this custom map is queued for the community catalogue.");
-    } catch(const std::exception& error) {
-        SDL_Log("Metaserver map collection deferred: %s", error.what());
-    }
 }
 
 void Game::startMatchAnalytics() {
@@ -1137,36 +1113,19 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
             if (qbot && finishedMatch) {
                 std::vector<std::string> unitRows;
                 const auto& mix = qbot->getLastUnitMixBps();
-                for (size_t i = 0; i < analyticsMixItems.size(); ++i) {
-                    const int item = analyticsMixItems[i];
-                    int built = 0;
-                    int lost = 0;
-                    int destroyed = 0;
-                    int64_t rewardMilli = 0;
-                    int64_t damageValueMilli = 0;
-                    int64_t killBonusMilli = 0;
-                    int64_t lostValue = 0;
-                    const std::array<Uint32, 3> specialItems = {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
-                    const bool specialGroup = item == 9999;
-                    const auto collect = [&](Uint32 unit) {
-                        built += currentHouse->getNumBuiltItems(unit);
-                        lost += currentHouse->getNumLostItems(unit);
-                        destroyed += currentHouse->getNumKilledItems(unit);
-                        const auto& reward = currentHouse->getCombatReward(unit);
-                        rewardMilli += reward.total();
-                        damageValueMilli += reward.damageMilli;
-                        killBonusMilli += reward.killBonusMilli;
-                        lostValue += int64_t(currentHouse->getNumLostItems(unit)) * objectData.data[unit][h].price;
-                    };
-                    if (specialGroup) {
-                        for (const auto unit : specialItems) collect(unit);
-                    } else {
-                        collect(item);
-                    }
+                for (size_t i = 0; i < QuantBot::kMixItems.size(); ++i) {
+                    const Uint32 item = QuantBot::kMixItems[i];
+                    const auto& reward = currentHouse->getCombatReward(item);
+                    const int built = currentHouse->getNumBuiltItems(item);
+                    const int lost = currentHouse->getNumLostItems(item);
+                    const int destroyed = currentHouse->getNumKilledItems(item);
+                    const int64_t rewardMilli = reward.total();
+                    const int64_t damageValueMilli = reward.damageMilli;
+                    const int64_t killBonusMilli = reward.killBonusMilli;
+                    const int64_t lostValue = int64_t(lost) * objectData.data[item][h].price;
                     std::ostringstream unit;
                     unit << "{\"item_id\":" << item
-                         << ",\"item_name\":" << AITelemetry::Record::quote(
-                                specialGroup ? "special" : getItemNameByID(item))
+                         << ",\"item_name\":" << AITelemetry::Record::quote(getItemNameByID(item))
                          << ",\"target_weight_bps\":" << mix[i]
                          << ",\"built\":" << built
                          << ",\"lost\":" << lost
@@ -2942,11 +2901,22 @@ void Game::drawScreen()
     }
 
     if(bShowFPS) {
-        std::string strFPS = fmt::sprintf("fps: %.1f ", 1000.0f/averageFrameTime);
-
-        sdl2::texture_ptr pFPSTexture = pFontManager->createTextureWithText(strFPS, COLOR_WHITE, 14);
-        SDL_Rect drawLocation = calcDrawingRect(pFPSTexture.get(),sideBarPos.x - strFPS.length()*8, 60);
-        SDL_RenderCopy(renderer, pFPSTexture.get(), nullptr, &drawLocation);
+        // F12: frame rate, achieved game speed and where each frame's time goes (smoothed).
+        // "speed" below the target means the simulation cannot keep up with the chosen game speed.
+        const float fps = 1000.0f/averageFrameTime;
+        const auto& o = frameOverlay;
+        const std::string lines[] = {
+            fmt::sprintf("fps: %.1f  cycles/frame: %.1f  speed: %.0f of %d cycles/s",
+                fps, o.cycles, fps*o.cycles, 1000/std::max(1, getGameSpeed())),
+            fmt::sprintf("ms/frame: AI %.1f  city %.1f  units %.1f  structures %.1f  path %.1f  render %.1f  other %.1f",
+                o.ai, o.city, o.units, o.structures, o.path, o.render, o.other)};
+        int y = 60;
+        for(const auto& line : lines) {
+            sdl2::texture_ptr pLineTexture = pFontManager->createTextureWithText(line, COLOR_WHITE, 14);
+            SDL_Rect drawLocation = calcDrawingRect(pLineTexture.get(), sideBarPos.x - 8, y, HAlign::Right, VAlign::Top);
+            SDL_RenderCopy(renderer, pLineTexture.get(), nullptr, &drawLocation);
+            y += drawLocation.h + 2;
+        }
     }
 
     if(bShowTime) {
@@ -3600,6 +3570,8 @@ void Game::setupView()
 
 void Game::runMainLoop() {
     SDL_Log("Starting game...");
+    // macOS: keep a covered/background game window at full speed for the whole match.
+    const GameActivity::Scope matchActivity;
     initializeGameLoop();
     
     // Update Discord Rich Presence for in-game status
@@ -3686,14 +3658,6 @@ void Game::runMainLoop() {
             lastDiscordUpdate = discordNow;
         }
 
-        // Keep draining the Workshop outbox while an offline match runs, so a player who
-        // starts a custom game and keeps playing still contributes that map. Networked
-        // games are pumped by NetworkManager and menus by MenuBase; this adds no second
-        // pump to either. The transfer is bounded and non-blocking.
-        if (!pNetworkManager) {
-            Workshop::updatePublications();
-        }
-
         renderFrame();
 
         const int frameEnd = SDL_GetTicks();
@@ -3732,9 +3696,20 @@ void Game::runMainLoop() {
         
         // PHASE 1.3: CYCLE GUARDRAIL - Prevent renderer starvation
         static constexpr int kMaxCyclesPerFrame = 10;
-        
-        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle))) 
-              && cyclesExecuted < kMaxCyclesPerFrame) {
+        // Frame pacing (include/FramePacing.h): a single-player frame also stops catching up
+        // once its cycles have used FramePacing::kCatchUpBudgetMs; the time still owed carries
+        // over to the next frame. Only the number of cycles per frame changes.
+        const Uint64 catchUpStart = SDL_GetPerformanceCounter();
+        const bool networkGame = pNetworkManager != nullptr;
+        bool catchUpBudgetSpent = false;
+        const auto mayRunAnotherCycle = [&] {
+            catchUpBudgetSpent = !FramePacing::mayRunAnotherCycle(cyclesExecuted,
+                getElapsedMs(catchUpStart, SDL_GetPerformanceCounter()), networkGame);
+            return !catchUpBudgetSpent;
+        };
+
+        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle)))
+              && cyclesExecuted < kMaxCyclesPerFrame && mayRunAnotherCycle()) {
             loopIterations++;
             
             Uint64 networkWaitStart = SDL_GetPerformanceCounter();
@@ -3760,6 +3735,8 @@ void Game::runMainLoop() {
             commandsMsThisFrame+=getElapsedMs(commandsStart,SDL_GetPerformanceCounter());
 
             if(!bWaitForNetwork && !isGamePaused() && (!pNetworkManager || !pNetworkManager->lateJoinPaused())) {
+                // Test probes only (tests/performance/game-perf.inc): the cycle's digest, untimed.
+                if (beforeCycleHook != nullptr) beforeCycleHook(*this);
                 // Time the core simulation step for CPU load detection
                 const Uint64 simStart = SDL_GetPerformanceCounter();
                 try {
@@ -3894,6 +3871,24 @@ void Game::runMainLoop() {
         frameTiming.totalTurretScans += frameTiming.turretScansThisFrame;
         frameTiming.turretScanMs += frameTiming.turretScanMsThisFrame;
         frameTiming.frameCount++;
+        ++frameTiming.frameMsHistogram[std::min<size_t>(frameTiming.frameMsHistogram.size() - 1,
+                                                        static_cast<size_t>(thisFrameMs))];
+        if (catchUpBudgetSpent) ++frameTiming.catchUpLimitedFrames;
+
+        if(bShowFPS) {
+            const auto smooth = [](float& value, double sample) { value = 0.95f*value + 0.05f*static_cast<float>(sample); };
+            const double measured = frameTiming.aiMsThisFrame + frameTiming.citySimMsThisFrame
+                + frameTiming.unitsMsThisFrame + frameTiming.structuresMsThisFrame
+                + frameTiming.pathfindingMsThisFrame + frameTiming.renderingMsThisFrame;
+            smooth(frameOverlay.cycles, frameTiming.gameCyclesThisFrame);
+            smooth(frameOverlay.ai, frameTiming.aiMsThisFrame);
+            smooth(frameOverlay.city, frameTiming.citySimMsThisFrame);
+            smooth(frameOverlay.units, frameTiming.unitsMsThisFrame);
+            smooth(frameOverlay.structures, frameTiming.structuresMsThisFrame);
+            smooth(frameOverlay.path, frameTiming.pathfindingMsThisFrame);
+            smooth(frameOverlay.render, frameTiming.renderingMsThisFrame);
+            smooth(frameOverlay.other, std::max(0.0, thisFrameMs - measured));
+        }
 
         auto& perf = AITelemetry::log();
         if (perf.enabled()) {
@@ -3910,6 +3905,7 @@ void Game::runMainLoop() {
             record("frame.input",inputMsThisFrame);
             record("frame.commands",commandsMsThisFrame);
             perf.performance(gameCycleCount,-1,"frame.cycles",frameTiming.gameCyclesThisFrame,-1,false);
+            perf.performance(gameCycleCount,-1,"frame.catchup_limited",catchUpBudgetSpent,-1,false);
             perf.performance(gameCycleCount,-1,"frame.units_count",unitList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.structures_count",structureList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.tick_ms",getGameSpeed(),-1,false);
@@ -4219,13 +4215,6 @@ void Game::updateGameState() {
             currentGame->addToNewsTicker(fmt::sprintf(_("WARNING: Power shortage! %d zones unpowered"), unpowered));
         }
 
-        if ((winFlags & WINLOSEFLAGS_ECONOMIC) && !finished) {
-            int32_t threshold = citySimulation_->getEconomicVictoryThreshold();
-            if (threshold > 0 && citySimulation_->getTotalPop() >= threshold) {
-                setGameWon();
-            }
-        }
-
         // City aircraft are launched by the Airport itself, in
         // Airport::updateCityAircraft() — the direct counterpart of Micropolis
         // simulate.cpp::doAirport(). Keeping a second map-wide spawn loop here
@@ -4398,7 +4387,7 @@ void Game::resumeGame()
         }
         return;
     }
-    if(bPause && settings.general.diagnosticLogs) {
+    if(bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",false).set("source","resume"));
     }
@@ -4413,7 +4402,7 @@ void Game::pauseGame(const char* source) {
     if(pNetworkManager != nullptr) {
         return;
     }
-    if(!bPause && settings.general.diagnosticLogs) {
+    if(!bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",true).set("source",source).set("menu_open",bMenu));
     }
@@ -6540,11 +6529,15 @@ bool Game::handleSelectedObjectsHealClick(int xPos, int yPos) {
 bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
     // Attack cursor (docs/rts-controls.md): an object is attacked, the ground is attack-moved
     // to, and Ctrl on the ground keeps the old forced fire at that position. Shift queues.
+    // A spice bloom the player has seen is a target, not ground: as in Dune Legacy the units
+    // fire at it from range to set it off. An attack-move would drive them onto it.
     const SDL_Keymod mod = SDL_GetModState();
     const bool queued = (mod & KMOD_SHIFT) != 0;
-    const bool fireAtGround = (mod & KMOD_CTRL) != 0;
     const Tile* pTile = currentGameMap->tileExists(xPos, yPos) ? currentGameMap->getTile(xPos, yPos) : nullptr;
     const ObjectBase* pClicked = (pTile != nullptr && pTile->hasAnObject()) ? pTile->getObject() : nullptr;
+    const bool bloom = pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
+        && pTile->isExploredByTeam(pLocalHouse->getTeamID());
+    const bool fireAtGround = (mod & KMOD_CTRL) != 0 || bloom;
     UnitBase* pResponder = nullptr;
     std::vector<UnitBase*> attackMovers;
     for(Uint32 objectID : selectedList) {
@@ -6552,7 +6545,10 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
         House* pOwner = pObject->getOwner();
         if(pObject->isAUnit() && (pOwner == pLocalHouse) && pObject->isRespondable()) {
             auto* pUnit = static_cast<UnitBase*>(pObject);
-            if(pClicked != nullptr && queued) {
+            if(bloom && !pUnit->fightsOnAttackMove()) {
+                // Workers, transports and Saboteurs cannot shoot it; they would only walk onto it.
+                continue;
+            } else if(pClicked != nullptr && queued) {
                 cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
                     static_cast<Uint32>(UnitOrderType::AttackObject), pClicked->getObjectID(), 0));
                 pResponder = pUnit;

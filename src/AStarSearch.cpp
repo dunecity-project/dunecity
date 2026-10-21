@@ -39,6 +39,12 @@ static size_t gPoolFallbackAllocs = 0;
 
 #define MAX_NODES_CHECKED   (128*128)
 
+namespace {
+// Map::getMapPos offsets, indexed by angle (RIGHT, RIGHTUP, UP, LEFTUP, LEFT, LEFTDOWN, DOWN, RIGHTDOWN).
+constexpr int kNeighbourX[NUM_ANGLES] = { 1,  1,  0, -1, -1, -1, 0, 1 };
+constexpr int kNeighbourY[NUM_ANGLES] = { 0, -1, -1, -1,  0,  1, 1, 1 };
+}
+
 Uint32 AStarSearch::nextGeneration(TilePoolEntry& entry) {
     if(entry.generation == std::numeric_limits<Uint32>::max()) {
         // One wrap in 4 billion searches: reset every entry to generation 0 so
@@ -221,14 +227,18 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
             }
 
             if (numNodesChecked < MAX_NODES_CHECKED) {
-                // Parent direction is identical for all eight neighbours.
+                // Parent direction, the cost so far and the unit's kind are the same for all
+                // eight neighbours (the current node is off the heap, so nothing below
+                // changes its entry).
                 const auto& current = getMapData(currentCoord);
                 const bool hasParent = current.parentCoord.isValid();
                 const int parentAngle = hasParent
                     ? currentGameMap->getPosAngle(current.parentCoord, currentCoord) : 0;
+                const FixPoint currentG = current.g;
+                const bool flying = pUnit->isAFlyingUnit();
                 //push a node for each direction we could go
-                for (int angle=0; angle<=7; angle++) {
-                    Coord nextCoord = pMap->getMapPos(angle, currentCoord);
+                for (int angle=0; angle<NUM_ANGLES; angle++) {
+                    const Coord nextCoord(currentCoord.x + kNeighbourX[angle], currentCoord.y + kNeighbourY[angle]);
                     if (!pMap->tileExists(nextCoord)) continue;
                     auto& next = getMapData(nextCoord);
                     // Closed nodes cannot be improved. Avoid object lookups
@@ -240,12 +250,12 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                     }
                     if(next.passability == 2) {
                         Tile& nextTile = *(pMap->getTile(nextCoord));
-                        FixPoint g = getMapData(currentCoord).g;
+                        FixPoint g = currentG;
 
                         {
-                            FixPoint terrainCost = pUnit->isAFlyingUnit() ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) nextTile.getType());
+                            FixPoint terrainCost = flying ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) nextTile.getType());
                             // Road tiles are faster for ground units; reduce path cost to match.
-                            if(!pUnit->isAFlyingUnit() && nextTile.isRoad()) {
+                            if(!flying && nextTile.isRoad()) {
                                 terrainCost /= ROADSPEEDMULTIPLIER;
                             }
                             if((nextCoord.x != currentCoord.x) && (nextCoord.y != currentCoord.y)) {
@@ -348,11 +358,12 @@ void AStarSearch::save(OutputStream& stream) const {
         stream.writeSint32(count);
     }
 
-    // Heap order matters: extractMin() depends on the exact array layout.
+    // Heap order matters: extractMin() depends on the exact array layout. Each slot's f
+    // is its tile's f and is restored from the tile entries below.
     stream.writeUint32(static_cast<Uint32>(openList.size()));
-    for(const Coord& coord : openList) {
-        stream.writeSint32(coord.x);
-        stream.writeSint32(coord.y);
+    for(const OpenEntry& slot : openList) {
+        stream.writeSint32(slot.coord.x);
+        stream.writeSint32(slot.coord.y);
     }
 
     // Only entries this search touched are live; everything else is logically
@@ -442,9 +453,9 @@ std::unique_ptr<AStarSearch> AStarSearch::load(InputStream& stream) {
     }
     search->openList.resize(openCount);
     for(Uint32 i = 0; i < openCount; ++i) {
-        search->openList[i].x = stream.readSint32();
-        search->openList[i].y = stream.readSint32();
-        requireOnMap(search->openList[i], "frontier entry");
+        search->openList[i].coord.x = stream.readSint32();
+        search->openList[i].coord.y = stream.readSint32();
+        requireOnMap(search->openList[i].coord, "frontier entry");
     }
 
     // The restored buffer carries a fresh generation, so every entry not written
@@ -502,8 +513,8 @@ std::unique_ptr<AStarSearch> AStarSearch::load(InputStream& stream) {
             if(entry.openListIndex >= openCount) {
                 THROW(std::runtime_error, "Suspended search heap index %zu outside the frontier", entry.openListIndex);
             }
-            const size_t flatIndex = static_cast<size_t>(search->openList[entry.openListIndex].y) * static_cast<size_t>(mapSizeX)
-                                   + static_cast<size_t>(search->openList[entry.openListIndex].x);
+            const size_t flatIndex = static_cast<size_t>(search->openList[entry.openListIndex].coord.y) * static_cast<size_t>(mapSizeX)
+                                   + static_cast<size_t>(search->openList[entry.openListIndex].coord.x);
             if(flatIndex != index) {
                 THROW(std::runtime_error, "Suspended search heap entry %zu does not point back at its tile", entry.openListIndex);
             }
@@ -520,6 +531,10 @@ std::unique_ptr<AStarSearch> AStarSearch::load(InputStream& stream) {
     if(openListEntries != openCount) {
         THROW(std::runtime_error, "Suspended search frontier has %u slots but %zu tiles claim them",
               openCount, openListEntries);
+    }
+    // Every slot points back at a restored tile that is on the heap (checked above).
+    for(OpenEntry& slot : search->openList) {
+        slot.f = search->getMapData(slot.coord).f;
     }
     search->passabilityEpoch = 0;
 

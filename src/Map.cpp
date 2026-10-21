@@ -53,6 +53,7 @@ Map::Map(int xSize, int ySize)
     tiles.resize(sizeX * sizeY);
 
     init_tile_location();
+    rebuildObjectTiles();
 }
 
 
@@ -71,6 +72,41 @@ void Map::load(InputStream& stream) {
 
     init_tile_location();
     rebuildActiveDeadUnitTiles();
+    rebuildObjectTiles();
+}
+
+namespace {
+// Object assignments to a tile that belongs to no current map (see Map::noteObjectAssigned).
+Uint64 untrackedObjectAssignments = 0;
+}
+
+size_t Map::tileIndexOf(const Tile& tile) const noexcept {
+    const Tile* base = tiles.data();
+    if (&tile < base || &tile >= base + tiles.size()) return static_cast<size_t>(-1);
+    return static_cast<size_t>(&tile - base);
+}
+
+void Map::noteObjectAssigned(const Tile& tile) {
+    const size_t index = currentGameMap ? currentGameMap->tileIndexOf(tile) : static_cast<size_t>(-1);
+    if (index == static_cast<size_t>(-1)) {
+        ++untrackedObjectAssignments;
+        return;
+    }
+    currentGameMap->objectTiles[index >> 6] |= Uint64(1) << (index & 63);
+}
+
+void Map::noteObjectReleased(const Tile& tile) {
+    if (tile.hasAnObject() || currentGameMap == nullptr) return;
+    const size_t index = currentGameMap->tileIndexOf(tile);
+    if (index != static_cast<size_t>(-1))
+        currentGameMap->objectTiles[index >> 6] &= ~(Uint64(1) << (index & 63));
+}
+
+void Map::rebuildObjectTiles() {
+    objectTiles.assign((tiles.size() + 63) / 64, 0);
+    for (size_t index = 0; index < tiles.size(); ++index)
+        if (tiles[index].hasAnObject()) objectTiles[index >> 6] |= Uint64(1) << (index & 63);
+    objectTilesUntrackedMark = untrackedObjectAssignments;
 }
 
 void Map::registerDeadUnitTile(Tile& tile) {
@@ -159,6 +195,12 @@ void Map::ensureTerrainConnectivity() const {
             }
         }
     }
+}
+
+int Map::vehicleTerrainRegion(const Coord& at) const {
+    if (!tileExists(at)) return 0;
+    ensureTerrainConnectivity();
+    return vehicleTerrainRegions[tile_index(at.x,at.y)];
 }
 
 bool Map::terrainAttackReachable(const ObjectBase& seeker, const ObjectBase& target) const {
@@ -761,8 +803,20 @@ Coord Map::findClosestEdgePoint(const Coord& origin, const Coord& buildingSize) 
 
 
 void Map::removeObjectFromMap(Uint32 objectID) {
-    for (auto& tile : tiles)
-        tile.unassignObject(objectID);
+    // Tiles outside objectTiles hold no object, so unassignObject() would leave
+    // them unchanged; the remaining tiles are visited in the same index order.
+    if (this != currentGameMap || objectTilesUntrackedMark != untrackedObjectAssignments) {
+        for (auto& tile : tiles)
+            tile.unassignObject(objectID);
+        if (this == currentGameMap) rebuildObjectTiles();
+        return;
+    }
+    for (size_t word = 0; word < objectTiles.size(); ++word) {
+        // A copy: unassignObject() clears the bits of tiles it empties.
+        Uint64 bits = objectTiles[word];
+        for (size_t bit = 0; bits != 0; ++bit, bits >>= 1)
+            if (bits & 1) tiles[word * 64 + bit].unassignObject(objectID);
+    }
 }
 
 void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int realX, int realY, bool objectARGMode) {

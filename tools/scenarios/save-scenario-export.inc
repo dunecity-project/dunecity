@@ -586,7 +586,7 @@ std::unique_ptr<Game> loadSavedGame(const std::string& path) {
     }
     auto game = std::make_unique<Game>();
     currentGame = game.get();
-    game->bReplay = true;   // no briefing, no analytics, no map collection
+    game->bReplay = true;   // no briefing, no analytics
     game->initGame(GameInitSettings(path));
     game->bReplay = false;
     game->initializeGameLoop();

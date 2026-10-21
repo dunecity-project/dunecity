@@ -11,7 +11,6 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
-        MapCollectionTestCase.cpp
         # Random Skirmish generator: the pure generator over the real map generator/mirror.
         SkirmishGeneratorTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
@@ -33,11 +32,16 @@ target_sources(dunelegacy_tests
         OrdinaryDamagePolicyTestCase.cpp
         QuantBotBuildPolicyTestCase.cpp
         ArmyPosturePolicyTestCase.cpp
+        BlobWavePolicyTestCase.cpp
+        ForceConcentrationPolicyTestCase.cpp
         FormationPlannerTestCase.cpp
+        FramePacingTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.
         ${CMAKE_SOURCE_DIR}/src/players/QuantBotConfig.cpp
+        ${CMAKE_SOURCE_DIR}/src/players/QuantBotStrategy.cpp
+        QuantBotStrategyTestCase.cpp
         QuantBotCityPolicyTestCase.cpp
         QuantBotSchedulePolicyTestCase.cpp
         MatchControlTestCase.cpp
@@ -190,7 +194,8 @@ target_compile_options(dunelegacy_tests
 # Add test
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
-add_test(NAME map_collection_tests COMMAND dunelegacy_tests "[mapcollection]")
+# Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
+add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
 add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
@@ -401,7 +406,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests map_collection_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
@@ -437,6 +442,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
             --selftest --force --match-seconds 10 --min-structures 4 --min-units 19)
         set_tests_properties(save_scenario_export PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # A save pinned to an authored mod's exact Workshop revision loads once the mod
+        # exists only in workshop/revisions, and a retired upload queue in that profile is
+        # deleted without any publication.
+        add_test(NAME save_pinned_workshop_revision COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
+            --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/pinned-revision-save
+            --selftest --fixture-draft "Pinned Draft" --force --match-seconds 5)
+        set_tests_properties(save_pinned_workshop_revision PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         add_test(NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
         set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)
@@ -819,12 +832,50 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wave-formation-probe)
         set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        # Custom Hard/Brutal launcher spacing while hunting: an enemy that is
-        # already too close makes a hunting launcher move away over real game
-        # cycles, keeping engine Hunt, its tracked army membership and its
-        # firing range, while a distant enemy - even one that just hit it -
-        # produces no order, and human/repair/transit/defence authority, other
-        # hunters, Deviators, Easy/Medium and campaign games keep theirs.
+        # QuantBot hunt parties (docs/formations.md, Blob waves): a mixed Hard wave with
+        # WaveFormation Blob gathers every available fighter at a rally point, marches leg by
+        # leg with its fast members kept near the slow ones, releases into engine Hunt on
+        # contact, reforms when quiet, falls back a short way when overwhelmed and returns; the
+        # gather times out on stragglers; party orders do not depend on unit order; the party
+        # survives a save and load mid-gather, mid-march and mid-reform; None keeps today's orders.
+        add_test(NAME quantbot_blob_waves COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --blob-wave-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/blob-wave-probe)
+        set_tests_properties(quantbot_blob_waves PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot force concentration defaults (docs/formations.md, "Concentrating force"):
+        # Custom Hard/Brutal hunters focus the damaged enemy fighter in reach, a wave member not
+        # fighting walks to its army's fight nearby, and a wave launches at 60% readiness; the
+        # idle reserve gathers at the bundle (capped orders, farthest first), a ready wave waits
+        # for it (at most 60 s) and launches from it, an attacked building pulls defenders out
+        # of it, and save/load mid-gather restores the bundle; the orders do not depend on unit
+        # order, Medium is untouched, and the duel override 0 is the previous behaviour.
+        add_test(NAME quantbot_force_concentration COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --force-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
+        set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # QuantBot strategies (docs/ai-play-styles.md, "Strategies"), tests/ai/strategy-probe.inc:
+        # two peers of the same four-house vanilla game pick the same seeded strategies and stay
+        # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks
+        # it, the checkpoint load continues to the host's digest); every mix strategy's production
+        # passes play its prior before combat evidence, favour its lead slots and still learn;
+        # Learned/Base plays exactly the configured default's game.
+        add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
+            --mod vanilla --seed 486409243 --no-ai-telemetry --path-workers 1
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 64x64 - Four Chambers.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategy-probe)
+        set_tests_properties(quantbot_strategy PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Custom Hard/Brutal launcher spacing while hunting, with the production force rules
+        # on: an enemy that is already too close makes a hunting launcher move away over real
+        # game cycles, keeping engine Hunt, its tracked army membership and its firing range,
+        # and focus fire gives it no order meanwhile; standing off, it takes and hits the focus
+        # target. A distant enemy - even one that just hit it - produces no escape, and
+        # human/repair/transit/defence authority, other hunters, Deviators, Easy/Medium and
+        # campaign games keep theirs.
         add_test(NAME quantbot_launcher_kiting COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
             --level 9 --mod dunecity
@@ -837,6 +888,52 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
         set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
+        # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
+        # (local spectator) against four AI Player (hard) houses, his Game Options (unit and
+        # harvester overrides 0). Atreides must eliminate every house within 40 game minutes
+        # on all six seeds; 1.0.796 does so (32-37 min), 1.0.812-1.0.842 lose or take 42-71.
+        # docs/quantbot-all-against-atreides.md.
+        add_test(NAME quantbot_all_against_atreides COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 40
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
+        set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): four QuantBot Brutal
+        # houses in a generated 4P 160x160 DuneCity free-for-all (Fortress starts, 20,000-credit
+        # armies, 40,000 cities, Stefan's game options). Fails when no wave of 30+ units has left
+        # by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
+        # minutes in a row, or nobody is eliminated by minute 30 - 1.0.847 summed every enemy into
+        # "outnumbered" and never attacked. docs/formations.md, "Free-for-all: the army deploys".
+        add_test(NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
+        set_tests_properties(quantbot_ffa_army_deploys PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # Mandatory for every AI/unit/game-loop change (Stefan, 2026-10-18): Stefan's 4P DuneCity
+        # Brutal Random Skirmish map, 6 game minutes headless, one path thread; fails when the mean
+        # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of
+        # a calibration loop timed in the same process. Then 30 s of a game started the way a
+        # player starts it (main menu -> Random Skirmish -> Start, the app's whole per-frame work);
+        # fails when per-frame time outside simulation and rendering exceeds its budget. Then 2
+        # game minutes of Stefan's 8-house 384x384 save (1.0.849 fpsstillfucked.dls, rebuilt from
+        # tests/performance/data/eight-house-384); fails when the p99 simulation CPU per cycle or
+        # the p99 modelled 10-cycle frame exceeds its budget (1.0.849: 6.3 and 16.8 x calibration,
+        # budgets 3 and 9). docs/game-performance.md.
+        add_test(NAME perf_regression COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/performance/game-perf.py --scenario stefan-map --minutes 6
+            --path-workers 1 --menu-launch 30 --eight-house 2 --check --label perf_regression
+            --build-dir ${CMAKE_BINARY_DIR})
+        set_tests_properties(perf_regression PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
+        # MANDATORY with quantbot_all_against_atreides (AGENTS.md, CLAUDE.md): the smoke tier of
+        # the AI scenario matrix (docs/ai-scenario-matrix.md) - one fast game per category: a
+        # 4-house Random Skirmish free-for-all, a Construction Yard only duel (replayed: its final
+        # state digest must reproduce), the reverse All against Atreides (Medium against four
+        # Hard must lose), Hard v Easy on both sides, a 2v2 on Sihaya-Toto and three campaign
+        # missions (levels 1, 4, 9; vanilla and DuneCity) the Hard partner must win. Fails on a
+        # crash, a missed expected winner, a time-out, nobody eliminated or idle armies.
+        add_test(NAME quantbot_scenario_matrix COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3
+            --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/scenario-matrix-smoke)
+        set_tests_properties(quantbot_scenario_matrix PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # Spice income: the lobby's per-house delivery factor reaches the live house, a real
         # refinery unloading a real harvester pays exactly the delivered cargo times that
         # factor at every accepted step, and the factor survives a save and load. All three
@@ -849,6 +946,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/spice-income-${spice_mod}-probe)
             set_tests_properties(house_spice_income_${spice_mod} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
+        # No population victory: Atreides level 4 (SCENA008-010, WinFlags=19) must not
+        # end when the city passes 500 population; vanilla must behave the same.
+        foreach(popwin_mod IN ITEMS vanilla dunecity)
+            add_test(NAME campaign_no_population_victory_${popwin_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --no-population-victory-probe --repeatable
+                --level 4 --house atreides
+                --mod ${popwin_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/no-population-victory-${popwin_mod}-probe)
+            set_tests_properties(campaign_no_population_victory_${popwin_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
         # Credit storage: refined spice and city taxes share the refinery/silo
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
         # City tax only exists with the dunecity mod, so both mods are measured.
@@ -858,6 +965,17 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --mod ${credit_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
             set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        endforeach()
+        # The same probe in a custom game (a bundled multiplayer map), so the spice quota met by
+        # refined spice and city tax credits alike is checked outside campaigns too, for every house.
+        foreach(credit_mod IN ITEMS vanilla dunecity)
+            add_test(NAME house_credit_storage_custom_${credit_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --credit-storage-probe --repeatable
+                --mod ${credit_mod}
+                --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/2P - 128x128 - 1v1 - Habbanya-Penny.ini"
+                --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/credit-storage-custom-${credit_mod}-probe)
+            set_tests_properties(house_credit_storage_custom_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         endforeach()
         # Construction Yard pre-placement queue: sidebar planning, reservation commands
         # (chained and refused), save/load, placement on plan after moving a unit, the blocked

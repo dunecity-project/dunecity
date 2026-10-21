@@ -20,8 +20,12 @@ void runArmyRecoveryProbe(Game& game) {
     for(const auto& player:owner->getPlayerList())
         if(auto* candidate=dynamic_cast<QuantBot*>(player.get()))bot=candidate;
     require(bot,"Recovery fixture missing bot");
+    // The wave fixtures stand where they are spawned: the bundle launch gate (on by default)
+    // would hold them up to 60 s. Bundling and the gate have their own probe
+    // (quantbot_force_concentration); this one keeps the other production force rules.
+    bot->forceVariantOverride=QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceSmallWaves;
 
-    // Custom Hard/Brutal is the only mode this behaviour runs in.
+    // Custom Medium/Hard/Brutal is the only mode this behaviour runs in.
     game.gameType=GameType::CustomGame;
     bot->difficulty=QuantBot::Difficulty::Brutal;
     bot->gameMode=QuantBot::GameMode::Custom;
@@ -34,6 +38,8 @@ void runArmyRecoveryProbe(Game& game) {
     bot->postureSince=0;
     getQuantBotConfig().recovery.enabled=true;
     getQuantBotConfig().recovery.frontBatteriesEnabled=true;
+    // The withdrawal machine is off by default; this fixture verifies it when enabled.
+    getQuantBotConfig().recovery.withdrawalsEnabled=true;
     require(bot->recoveryActive(),"Recovery gate refused Custom Brutal");
 
     if (std::getenv("BALANCE_BATTERY_CLEARANCE_ONLY")) {
@@ -44,8 +50,10 @@ void runArmyRecoveryProbe(Game& game) {
 
     // The gate itself: nothing below may leak into other modes.
     {
+        bot->difficulty=QuantBot::Difficulty::Easy;
+        require(!bot->recoveryActive(),"Recovery leaked into Easy");
         bot->difficulty=QuantBot::Difficulty::Medium;
-        require(!bot->recoveryActive(),"Recovery leaked into Medium");
+        require(bot->recoveryActive(),"Recovery refused Medium");
         bot->difficulty=QuantBot::Difficulty::Hard;
         require(bot->recoveryActive(),"Recovery refused Hard");
         game.gameType=GameType::Campaign;
@@ -1181,6 +1189,9 @@ void runArmyRecoveryProbe(Game& game) {
             for(auto* unit:waveUnits){bot->doSetAttackMode(unit,GUARD);unit->setForced(false);}
             for(auto* unit:homeUnits){bot->doSetAttackMode(unit,GUARD);unit->setForced(false);}
             bot->militaryValueLimit=1000000;   // Far above anything assembled.
+            // ...yet reachable: spice left to buy it, so the gate is the configured threshold, not
+            // SimpleArmyPolicy::reachableReadiness's "attack with what you have".
+            bot->lastCalculatedSpice=2000000;
             bot->launchGroundHunt();
             require(bot->customWave.members.empty(),
                 "An unready Brutal house still issued a fresh wave");
@@ -1484,14 +1495,15 @@ void runArmyRecoveryProbe(Game& game) {
             bot->lastSurveyCycle=std::numeric_limits<Uint32>::max();
             bot->lastSurvey=bot->surveyArmy();
             // Economy gate: no battery without refineries, a factory and a yard.
-            require(bot->frontBatteryGoal(27,1,1,1,bot->lastSurvey)==0,
+            require(bot->frontBatteryGoal(27,1,1,1)==0,
                 "A battery was planned before the economy that pays for it");
-            const int goal=bot->frontBatteryGoal(27,2,1,1,bot->lastSurvey);
-            require(goal>=24,"A mature base did not scale past twenty-four emplacements");
-            const int small=bot->frontBatteryGoal(9,2,1,1,bot->lastSurvey);
-            require(small>=FrontBatteryPolicy::kOpeningBandMin
-                && small<=FrontBatteryPolicy::kOpeningBandMax+1,
-                "A small base did not land in the opening band");
+            // The battery stays in the 8-12 band however big the base grows
+            // (FrontBatteryPolicy::batteryGoal): the army answers the front.
+            const int goal=bot->frontBatteryGoal(27,2,1,1);
+            require(goal==FrontBatteryPolicy::kOpeningBandMax,
+                "A mature base's battery left the 8-12 band");
+            const int small=bot->frontBatteryGoal(9,2,1,1);
+            require(small==9,"A small base did not get its own demand inside the band");
             // A ground-only opponent must still produce useful defence.
             require(goal>2,"A ground-only front still capped the battery at the baseline");
 
@@ -1571,7 +1583,7 @@ void runArmyRecoveryProbe(Game& game) {
             const int goalNow=bot->frontBatteryGoal(
                 RocketTurretPolicy::coverageTurretCap(demand),
                 owner->getNumItems(Structure_Refinery),owner->getNumItems(Structure_HeavyFactory),
-                owner->getNumItems(Structure_RepairYard),bot->lastSurvey);
+                owner->getNumItems(Structure_RepairYard));
             const int allowance=FrontBatteryPolicy::frontAllowance(goalNow);
             int frontTurrets=0;
             for(const auto* structure:structureList) {
@@ -1594,35 +1606,6 @@ void runArmyRecoveryProbe(Game& game) {
             require(bot->findTurretPlaceLocation(Structure_RocketTurret)==site,
                 "The emplacement pass cache changed its answer");
             enemyBase->setHealth(0);
-        }
-
-        // ---- 13. Special allocator learns instead of taking array order ----
-        {
-            SpecialUnitPolicy::Candidates specials{};
-            const std::array<Uint32,3> items={Unit_Devastator,Unit_SonicTank,Unit_Deviator};
-            for(size_t s=0;s<items.size();++s) {
-                specials[s].item=items[s];
-                specials[s].price=currentGame->objectData.data[items[s]][owner->getHouseID()].price;
-                specials[s].available=true;
-                specials[s].affordable=true;
-            }
-            // Equal evidence, equal share, both affordable: this is the logged
-            // condition that always chose the Devastator from array order.
-            const int blind=SpecialUnitPolicy::select(specials);
-            require(blind>=0,"No special was selectable with everything available");
-            specials[size_t(blind)].committedValue+=specials[size_t(blind)].price;
-            const int second=SpecialUnitPolicy::select(specials);
-            require(second!=blind,"The special choice did not rotate across the group");
-            // Measured evidence then decides, in either direction.
-            specials[0].rewardMilli=1'000'000'000; specials[0].lossMilli=50'000'000'000;
-            specials[1].rewardMilli=80'000'000'000; specials[1].lossMilli=2'000'000'000;
-            specials[2].available=false;
-            require(SpecialUnitPolicy::select(specials)==1,
-                "The measurably better special was not chosen");
-            std::swap(specials[0].rewardMilli,specials[1].rewardMilli);
-            std::swap(specials[0].lossMilli,specials[1].lossMilli);
-            require(SpecialUnitPolicy::select(specials)==0,
-                "The special choice is fixed rather than measured");
         }
 
         // ---- 14. Save, load and older-save defaults ------------------------

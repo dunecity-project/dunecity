@@ -149,7 +149,33 @@
 // 9861: Form up where they stand (docs/formations.md): a save or replay may carry
 //       CMD_UNIT_FORMATION_MOVE commands of order kind FormUp, which a 9860 build refuses,
 //       so it must not load them. The layout is unchanged: a 9860 save loads as it is.
-#define SAVEGAMEVERSION     9861
+// 9862: QuantBot hunt parties (Blob waves, docs/formations.md): each party's phase, objective,
+//       rally/fall-back point, contact and gather clocks, fall-back count, members and the
+//       members waiting for the rear, appended to the QuantBot block. A 9861 save loads with no
+//       party: its waves carry on as plain engine hunters.
+// 9863: QuantBot force concentration (docs/formations.md, "Round 4"): the reserve bundle point,
+//       the army-centre gathering point, the bundle's 30 s re-choice clock and the launch
+//       gate's first-hold cycle, appended to the QuantBot block. A 9862 save loads with no
+//       bundle: it is chosen afresh at the first unit pass.
+// 9864: QuantBot defence while outnumbered (docs/formations.md, "Round 5"): the remembered
+//       enemy army (each sighted fighter's id, value and last-seen cycle) and the defence
+//       musters (building, point, clock, members), appended to the QuantBot block after the
+//       bundle. A 9863 save (1.0.844) loads with no memory and no muster.
+// 9865: QuantBot strategies (docs/ai-play-styles.md, "Strategies"): whether the strategy was
+//       picked, its unit-mix strategy and its tempo, appended to the QuantBot block after the
+//       musters. A 9864 save loads unpicked; the first update picks by the same pure function
+//       of the game seed, the house and the config.
+// 9866: QuantBot starting-mix bounds and tuned/bounded mixes (docs/ai-play-styles.md, section 8):
+//       the starting ratios a Tuned or Bounded strategy resolved to (eight 16-bit basis points,
+//       all zero for every other mix), appended to the QuantBot block after the strategy. A 9865
+//       save loads as it is: none of its mixes needs them.
+// 9868: QuantBot mix slots per special (docs/ai-play-styles.md, section 8): the resolved
+//       Tuned/Bounded starting ratios hold ten slots (tank, siege tank, launcher, Devastator,
+//       Sonic Tank, Deviator, ornithopter, trike, raider trike, quad) instead of the eight with one
+//       special group. A 9866/9867 save loads its eight; the special share is split between the
+//       specials the house can build. (The learning window keeps its eight-slot serialized form:
+//       every production pass replaces it with the house's match totals before it is read.)
+#define SAVEGAMEVERSION     9868
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
@@ -177,7 +203,8 @@
 #define WINLOSEFLAGS_HUMAN_HAS_BUILDINGS    0x02
 #define WINLOSEFLAGS_QUOTA                  0x04
 #define WINLOSEFLAGS_TIMEOUT                0x08
-#define WINLOSEFLAGS_ECONOMIC               0x10
+// Bit 0x10 (set in some original Dune II scenarios, WinFlags=19/23) has no meaning and is ignored,
+// as in Dune II and upstream Dune Legacy. DuneCity has no population/economic victory.
 
 #define MAX_XSIZE 512
 #define MAX_YSIZE 512

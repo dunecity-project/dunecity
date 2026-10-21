@@ -288,6 +288,11 @@ public:
     */
     void runMainLoop();
 
+    /// Test probes only (tests/performance/game-perf.inc): runMainLoop() calls this before
+    /// each game cycle it runs, untimed, so a probe can digest the interactive loop's cycles
+    /// at the same points as its stepped loop. Never set by the game.
+    void (*beforeCycleHook)(Game&) = nullptr;
+
     inline void quitGame() { bQuitGame = true;};
 
     /**
@@ -665,8 +670,6 @@ public:
 private:
 
     void startMatchAnalytics();
-    /// Offer a started offline custom match's scenario to the community catalogue.
-    void collectCustomMap(bool loadedSave);
     void finishMatchAnalytics();
     std::string buildMatchAnalyticsPayload(bool finishedMatch) const;
 
@@ -959,6 +962,10 @@ public:
         int gameCyclesThisFrame = 0;
         int totalGameCycles = 0;
         int frameCount = 0;
+        // Whole-match rendered frame times in 1 ms buckets (last bucket: 199 ms and over) and
+        // the frames whose catch-up the frame pacing stopped (FramePacing.h). Never reset.
+        std::array<uint32_t, 200> frameMsHistogram{};
+        uint64_t catchUpLimitedFrames = 0;
         
         // Pathfinding detailed stats
         int pathsProcessedThisCycle = 0;
@@ -1059,6 +1066,10 @@ public:
         double unitMoveMsThisFrame = 0.0;
         double unitTurnMsThisFrame = 0.0;
         double unitVisibilityMsThisFrame = 0.0;
+        /// Whether UnitBase::update measures the phases above. The measurement reads the clock
+        /// around every phase of every unit and only feeds DuneCity-Performance.log; nothing in
+        /// the simulation reads it. Headless batch probes switch it off (docs/headless-performance.md).
+        bool unitPhases = true;
         int unitCount = 0;
         
         // Simulation timing for CPU load detection (post-vsync)
@@ -1197,7 +1208,11 @@ private:
     sdl2::texture_ptr spectatorLabel;
     bool    bReplay = false;                    ///< Is this game actually a replay
 
-    bool    bShowFPS = false;                   ///< Show the FPS
+    bool    bShowFPS = false;                   ///< Show the FPS and the frame breakdown (F12)
+    /// Smoothed per-frame costs for the F12 overlay; timing only, never read by the simulation.
+    struct FrameOverlay {
+        float cycles = 0, ai = 0, city = 0, units = 0, structures = 0, path = 0, render = 0, other = 0;
+    } frameOverlay;
 
     bool    bShowTime = false;                  ///< Show how long this game is running
 

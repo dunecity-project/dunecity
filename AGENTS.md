@@ -18,6 +18,28 @@ points to `dunecity-quantbot-split` and must not be reused here. The older gener
 registered staging lane. Keep separate trees for genuinely different toolchains
 or sanitizer configurations. Do not copy or relocate configured CMake trees.
 
+### Disk hygiene (worktrees, builds, game scratch)
+
+- One configured build tree per active worktree. When your branch is merged into
+  `integrate/feature-batch` or `origin/main`, delete that worktree's `build*/` and,
+  if it is clean, the worktree. `scripts/prune-merged-worktrees.sh` (dry run by
+  default) lists merged, clean, idle worktrees with their build sizes; `--apply`
+  deletes their build trees, `--remove-worktree` also removes those worktrees
+  (branches are kept). Never apply it to a worktree another agent is using.
+- Game batches (formation-duel, formation-wave-matrix, headless-bench,
+  run-all-against-atreides) run `agent-scratch guard` first (refuse below 25 GB free)
+  and, unless you pass `--scratch`, run in leased scratch under
+  `/private/tmp/dunecity-work`, all through `tests/performance/probe_profile.py`.
+  Each game's directory is deleted as soon as its rows are written; a failed game
+  keeps its logs, saves and replay (not mods, workshop revisions or the decision log)
+  in `<scratch>/failed`, at most 5 per batch, and the batch is kept 72 h as failed.
+  Probe profiles drop their regenerated mods/revisions when a run ends, and copy only
+  the workshop revisions a save or `ws-*` mod pins, never the whole store. Keep results
+  in `--results`, never in scratch. Ad-hoc scratch: `agent-scratch new --project
+  dunecity --purpose X` and `agent-scratch finish PATH` (or `--failed`). The hourly
+  sweep removes dead owners' scratch and idle `/private/tmp` agent scratch
+  (`agent-scratch sweep --dry-run`).
+
 ## Read first
 
 1. **`HANDOVER.md`** — state of the current, uncommitted work: what was fixed, what is still
@@ -85,6 +107,69 @@ binary outside ctest.
   `*-REVIEW.md`, `*-ANALYSIS.md`) are session scratch and are gitignored. Fold whatever outlives
   the session into `HANDOVER.md`; if a note is genuinely reference material, put it under `docs/`
   with a lowercase name so it is tracked deliberately.
+
+## AI and unit behaviour: mandatory regression matches
+
+Every change that can alter AI decisions or unit behaviour (anything under `src/players/`,
+`include/players/`, unit/structure/combat/pathfinding code, `QuantBot Config` defaults, game
+option semantics) must pass `quantbot_all_against_atreides` and `quantbot_scenario_matrix`
+before it is merged:
+
+```bash
+ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matrix' --output-on-failure
+```
+
+`quantbot_all_against_atreides` plays Stefan's setup to the end on six seeds - vanilla,
+`5P - 128x128 - All against Atreides`, Atreides QuantBot Brutal (spectated) against four AI Player
+(hard) houses, unit and harvester overrides 0 - and fails unless Atreides eliminates everyone within
+40 game minutes on every seed (about 3.5 minutes wall, three games at a time). Do not raise the limit
+or drop a seed to make a change pass; see `docs/quantbot-all-against-atreides.md`.
+
+`quantbot_scenario_matrix` is the smoke tier of the AI scenario matrix (`docs/ai-scenario-matrix.md`):
+one fast game per kind - a 4-house Random Skirmish free-for-all, a Construction Yard only duel
+(replayed to the same final digest), the reverse All against Atreides (Medium against four Hard must
+lose), the Hard v Easy ladder on both sides, a 2v2 on Sihaya-Toto and campaign missions of levels 1, 4
+and 9 the Hard partner must win - and fails on a crash, a missed expected winner, a time-out, nobody
+eliminated or idle armies (a few minutes wall). Changes with a wide reach (unit mix, attack timing,
+economy, campaign AI) also run the full tier on the runners and compare its table with the last one.
+
+They must also pass `quantbot_ffa_army_deploys`, the free-for-all counterpart (Stefan's 4P DuneCity
+game, 2026-10-18: "all the men sit in the base"):
+
+```bash
+ctest --test-dir build -R '^quantbot_ffa_army_deploys$' --output-on-failure
+```
+
+It plays a generated 4P 160x160 DuneCity free-for-all (seed 9101; Fortress starts, 20,000-credit
+armies, 40,000 cities, four QuantBot Brutal, his game options) and fails when no wave of 30+ units
+has left by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
+minutes in a row, or nobody is eliminated by minute 30 (a stalemate of armies at home is a draw;
+about 5 minutes wall). Do not loosen the thresholds to make a change pass; see
+`docs/formations.md`, "Free-for-all: the army deploys".
+
+The same changes, and anything touching the game loop or rendering, must also pass
+`perf_regression` (Stefan, 2026-10-18: "make sure you include performance testing as part of
+regression testing"):
+
+```bash
+ctest --test-dir build -R '^perf_regression$' --output-on-failure
+```
+
+It plays Stefan's 4P DuneCity Brutal Random Skirmish map headless for 6 game minutes and fails when
+the mean simulation CPU per cycle or a house's AI update exceeds its budget (multiples of a
+calibration loop, so it works on any Mac). Run it on a quiet machine; see `docs/game-performance.md`
+(also `tests/performance/game-perf.py --rendered` for real-window frame rates at 2 ms game speed).
+
+## AI test games: scoring and the default rule
+
+AI test games (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py` reports) are
+scored by `tests/ai/match_score.py`. The score is placement: 1st +1, last -1, linear in between. A
+time-out is a draw and draws are negative: survivors share the top places minus 0.25, so a 1v1 draw is
+-0.25. There is no kill-value adjudication. A candidate behaviour becomes a default only when the 95%
+bootstrap interval of its paired score difference against the control is above 0, and it is not worse
+on Fortress, Brutal and `/weak`. Report the time-out rate of each arm. Do not reintroduce the old
+1/0/0.5 rule except through `--scoring legacy` to compare old reports. See
+`docs/ai-play-styles.md` section 7.
 
 ## Release and hosting handover
 

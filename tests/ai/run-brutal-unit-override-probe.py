@@ -70,7 +70,7 @@ for mod in ('vanilla', 'dunecity', 'Dune2R'):
                UNIT_OVERRIDE_PROBE_MOD=mod, UNIT_OVERRIDE_PROBE_OUT=str(out))
     profile = out / ('profile-' + mod)
     profile.mkdir(parents=True, exist_ok=True)
-    (profile / 'Dune City.ini').write_text('[General]\nDiagnostic Logs = true\nPlay Intro = false\n')
+    (profile / 'Dune City.ini').write_text('[General]\nDiagnostic Logs = true\nAI Decision Log = true\nPlay Intro = false\n')
     existing_events = set(profile.glob('ai-decisions/*/events.jsonl'))
     logfile = out / ('run-' + mod + '.log')
     with logfile.open('w') as log:

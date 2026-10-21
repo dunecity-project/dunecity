@@ -1,0 +1,15 @@
+tag,difficulty,map,seed,sides,slot,house,label,eliminated_s,place,alive,kill_value,loss_value,structures_destroyed,units_destroyed,structures,army_value,army_units,home_kill,home_loss,focus,converges,bundle_orders,gate_holds,gate_timeouts,raid_orders
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@raid,1,atreides,default,,1,1,183710,110000,73,820,169,50140,143,330,6300,2804,3308,11995,80,8,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@raid,2,harkonnen,default@raid,2539.2,2,0,87940,164640,6,289,0,0,0,57380,97430,374,0,0,0,0,1209
+s1c,hard,habbanya-penny,8303,atreides:default@raid|harkonnen:default,1,atreides,default@raid,,1,1,167920,128010,83,837,178,49200,157,4820,6900,1968,5257,13874,87,9,872
+s1c,hard,habbanya-penny,8303,atreides:default@raid|harkonnen:default,2,harkonnen,default,2605.0,2,0,99770,145520,8,393,0,0,0,31090,38370,611,1497,4780,30,3,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@swarm,1,atreides,default,,1,1,219590,146940,96,957,192,49740,139,4340,6810,3377,2610,14941,105,8,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@swarm,2,harkonnen,default@swarm,2933.0,2,0,120490,198700,12,426,0,0,0,25010,52100,523,816,4613,40,5,0
+s1c,hard,habbanya-penny,8303,atreides:default@swarm|harkonnen:default,1,atreides,default@swarm,,1,1,216530,167420,87,961,178,48180,131,11480,8230,2998,3291,14008,119,10,0
+s1c,hard,habbanya-penny,8303,atreides:default@swarm|harkonnen:default,2,harkonnen,default,3004.0,2,0,144260,199820,11,457,0,0,0,35420,58290,412,129,3522,22,2,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@rush,1,atreides,default,,1,1,331340,248270,127,1419,138,48920,133,5180,18800,2982,2842,17044,100,9,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@rush,2,harkonnen,default@rush,3320.6,2,0,200990,291570,7,648,0,0,0,18420,37650,1576,4651,16834,121,12,0
+s1c,hard,habbanya-penny,8303,atreides:default@rush|harkonnen:default,1,atreides,default@rush,3253.1,2,0,227000,289730,3,857,1,0,0,8280,34040,1110,738,7988,56,7,0
+s1c,hard,habbanya-penny,8303,atreides:default@rush|harkonnen:default,2,harkonnen,default,,1,1,264460,206730,114,1095,150,49950,139,6560,8360,3324,16158,19915,136,13,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@turtle,1,atreides,default,,1,1,223740,129690,106,999,185,49370,129,3020,7800,3323,4967,12020,92,9,0
+s1c,hard,habbanya-penny,8303,atreides:default|harkonnen:default@turtle,2,harkonnen,default@turtle,2946.9,2,0,107450,206750,9,324,0,0,0,38100,65220,225,670,5505,13,1,0

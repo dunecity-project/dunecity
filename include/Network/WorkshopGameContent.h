@@ -81,7 +81,9 @@ inline bool applyMapRevisionForSelectedMod(const std::string& path, GameInitSett
     return true;
 }
 // Called before advertising/starting. Save/checkpoint bytes are never treated as map INI files.
-inline void pin(GameInitSettings& init, bool publish = false, bool queue = false) {
+// publish: an online host of an authored mod uploads that exact mod before advertising so
+// joiners can download the pinned revision. Maps always travel with the game setup itself.
+inline void pin(GameInitSettings& init, bool publish = false) {
     auto& mods = ModManager::instance();
     Workshop::Revision mod;
     if(isSave(init) && init.getModRevisionHash().empty()) {
@@ -97,9 +99,7 @@ inline void pin(GameInitSettings& init, bool publish = false, bool queue = false
     if(!init.getModRevisionHash().empty()) resolveMod(init);
     const bool approved = OnlineModPolicy::approved();
     if(approved) {
-        // Approved packages avoid a blocking upload before play, but their
-        // hosted maps still belong in the metaserver catalogue.
-        queue = queue || publish;
+        // Approved packages are installed everywhere; nothing is uploaded for them.
         publish = false;
         if(init.getModRevisionHash().empty()
            && init.getGameType() != GameType::CustomGame && init.getGameType() != GameType::CustomMultiplayer) {
@@ -115,10 +115,7 @@ inline void pin(GameInitSettings& init, bool publish = false, bool queue = false
         init.setModRevision(mod.hash, mod.version);
         init.setModIdentity(mods.getActiveModName(), mods.getEffectiveChecksums().combined);
     }
-    if(queue) Workshop::queuePublish(mod);
-    if(queue && isSave(init) && !init.getMapRevisionHash().empty())
-        Workshop::queuePublish(Workshop::store().get(init.getMapRevisionHash()));
-    if(publish && !Workshop::publishWithProgress(mod, false))
+    if(publish && !Workshop::publishWithProgress(mod))
         throw std::runtime_error("The mod could not be shared. The game has not been advertised.");
     if(publish) { mod = Workshop::store().get(mod.hash); init.setModRevision(mod.hash, mod.version); }
     if(init.getGameType() == GameType::CustomGame || init.getGameType() == GameType::CustomMultiplayer) {
@@ -130,10 +127,6 @@ inline void pin(GameInitSettings& init, bool publish = false, bool queue = false
         }
         if(map.modHash != mod.hash) throw std::runtime_error("The selected map revision requires a different mod revision.");
         init.setMapRevision(map.hash, map.version, map.manifest);
-        if(queue) Workshop::queuePublish(map);
-        if(publish && !Workshop::publishWithProgress(map, false))
-            throw std::runtime_error("The map could not be shared. The game has not been advertised.");
-        if(publish) { map = Workshop::store().get(map.hash); init.setMapRevision(map.hash, map.version, map.manifest); }
     }
 }
 // Does the mod name the host announced denote this game's pinned revision?

@@ -43,14 +43,17 @@ inline bool openingWorkersNeeded(int workers, int target, bool brutal = false) {
 }
 // This is production priority, not a worker cap. While the army is short,
 // keep twice the harvester capital in military strength (equal capital on
-// Brutal city games, allowing faster compounding). Rebuild
+// Brutal custom games, allowing faster compounding: Brutal's economy step,
+// docs/ai-scenario-matrix.md "Difficulty separation"). Rebuild
 // a collapsed workforce first; once army needs are met, expand to the spice target.
+// openingFloor: the opening worker floor applies (custom DuneCity games, and every
+// custom Brutal game).
 inline bool preferFactoryHarvester(int workers, int target, int armyValue,
-                                   int armyTarget, int workerPrice, bool canBuildMilitary, bool cityOpening = false, bool brutal = false) {
+                                   int armyTarget, int workerPrice, bool canBuildMilitary, bool openingFloor = false, bool brutal = false) {
     if (workers >= target) return false;
-    if ((cityOpening && openingWorkersNeeded(workers,target,brutal)) || workers < 2 || !canBuildMilitary || armyValue >= armyTarget) return true;
+    if ((openingFloor && openingWorkersNeeded(workers,target,brutal)) || workers < 2 || !canBuildMilitary || armyValue >= armyTarget) return true;
     return int64_t(armyValue) >= std::min<int64_t>(armyTarget,
-        int64_t(std::max(0,workers))*std::max(0,workerPrice)*(cityOpening && brutal ? 1 : 2));
+        int64_t(std::max(0,workers))*std::max(0,workerPrice)*(openingFloor && brutal ? 1 : 2));
 }
 // A profitable refinery may supply the opening fleet even beyond four bays.
 // Remaining spice, worker demand and the return comparison bound expansion;

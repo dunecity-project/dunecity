@@ -183,6 +183,46 @@ QuantBotConfig::QuantBotConfig() {
     unitRatios.mercenary.special = 0.05f;
     unitRatios.mercenary.ornithopter = 0.10f;
 
+    // Tuned starting mixes ([Unit Ratios Tuned], Mix=Tuned; percent of tank, siege tank, launcher,
+    // Devastator, Sonic Tank, Deviator, ornithopter, trike, raider trike, quad), measured on
+    // Construction Yard starts (docs/ai-play-styles.md, section 8): per house the round-2 mix that
+    // did best for it - the siege/Sonic refinement for Atreides (it also keeps
+    // quantbot_all_against_atreides 6/6; the winners' end composition took 40.7 minutes on one
+    // seed) and Ordos, the gradient mix for Harkonnen; each house's one special keeps the former
+    // special share. Bounded like every starting mix (2%-50% per producible slot). Index 0 is the
+    // house's top mix (every tech band without its own); [house][N] the band from tech level N.
+    tunedRatios = {};
+    tunedOpening = {};
+    tunedRatios[0][0] = {14, 16, 15, 22, 0, 0, 0, 0, 0, 33};   // Harkonnen (Devastator)
+    tunedRatios[1][0] = {9, 20, 13, 0, 22, 0, 13, 10, 0, 13};  // Atreides (Sonic Tank)
+    tunedRatios[2][0] = {9, 17, 7, 0, 0, 13, 27, 0, 7, 20};    // Ordos (Deviator)
+    // Fremen: the x8 winners' end composition (section 8.10; v the configured opening +0.24
+    // (+0.05..+0.42) over two fresh-seed runs, n=630). Sardaukar and Mercenary: none (no candidate
+    // beat the configured opening), so their top band plays it.
+    tunedRatios[3][0] = {11, 10, 13, 5, 8, 0, 18, 11, 13, 11};
+    // Lower tech bands: set by design from what each band can field (tests/ai/tech-bands.py; not
+    // measured, docs/ai-play-styles.md 8.9): two light slots split evenly; light units only at 3
+    // (quads the strongest); tank-heavy at 4 (50% tanks); tanks and launchers lead at 5 (40/25); siege
+    // added at 6 (30/25/20); the light remainder follows the house's top mix (Harkonnen quads, the
+    // Atreides trike/quad, Ordos raider/quad). A band with one fieldable slot plays it alone.
+    tunedRatios[0][4] = {50, 0, 0, 0, 0, 0, 0, 0, 0, 50};      // Harkonnen: tank, quad
+    tunedRatios[0][5] = {40, 0, 25, 0, 0, 0, 0, 0, 0, 35};
+    tunedRatios[0][6] = {30, 25, 20, 0, 0, 0, 0, 0, 0, 25};
+    tunedRatios[1][3] = {0, 0, 0, 0, 0, 0, 0, 50, 0, 50};      // Atreides: trike, quad
+    tunedRatios[1][4] = {50, 0, 0, 0, 0, 0, 0, 20, 0, 30};
+    tunedRatios[1][5] = {40, 0, 25, 0, 0, 0, 0, 15, 0, 20};
+    tunedRatios[1][6] = {30, 25, 20, 0, 0, 0, 0, 10, 0, 15};
+    tunedRatios[2][3] = {0, 0, 0, 0, 0, 0, 0, 0, 50, 50};      // Ordos: raider trike, quad
+    tunedRatios[2][4] = {50, 0, 0, 0, 0, 0, 0, 0, 20, 30};
+    tunedRatios[2][5] = {40, 0, 25, 0, 0, 0, 0, 0, 15, 20};    // tech 5-6 (siege needs the IX band)
+    for (const size_t house : {size_t(3), size_t(4), size_t(5)}) {   // Fremen, Sardaukar, Mercenary
+        if (house != 4) tunedRatios[house][2] = {0, 0, 0, 0, 0, 0, 0, 50, 50, 0};   // Sardaukar: 1-2 none
+        tunedRatios[house][3] = {0, 0, 0, 0, 0, 0, 0, 30, 30, 40};
+        tunedRatios[house][4] = {50, 0, 0, 0, 0, 0, 0, 15, 15, 20};
+        tunedRatios[house][5] = {40, 0, 25, 0, 0, 0, 0, 10, 10, 15};
+        tunedRatios[house][6] = {30, 25, 20, 0, 0, 0, 0, 8, 7, 10};
+    }
+
     // === TARGET PRIORITY TABLES (defaults mirror original game weights) ===
     registerStructurePriority(Structure_Slab1, "Slab1", 0, 5);
     registerStructurePriority(Structure_Slab4, "Slab4", 0, 10);
@@ -246,6 +286,38 @@ QuantBotConfig::QuantBotConfig() {
     recovery.dispatchBypassBps = 8000;          // 80% of the CONFIGURED limit
     recovery.recallOrdersPerPass = 12;
     recovery.frontBatteriesEnabled = true;
+    recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
+
+    // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
+    // Measured in duels (docs/formations.md, "Concentrating force", rounds 3 and 4): focus
+    // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
+    // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
+    force.focusFire = true;
+    force.converge = true;
+    force.waveReadinessPercent = 60;
+    force.bundle = true;
+    force.launchFromBundle = true;
+    // Round 5 (defence while outnumbered, /weak duels): perimeter turrets and sized defences
+    // (UX). The perimeter hold V was removed in protocol 84 (placement-score ablation, docs/
+    // formations.md "Free-for-all: finishing the game"); an old PerimeterHold key is ignored.
+    force.perimeterTurrets = true;
+    force.sizedDefence = true;
+    // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
+    // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
+    force.openingReadiness = true;
+    // Late game (docs/formations.md, "Free-for-all: finishing the game"): candidates, off.
+    force.turretPriority = false;
+    force.pressOn = false;
+    force.finishWeakest = false;
+    force.fortifiedWaves = false;
+    force.sonicClearLane = false;
+    force.spendAtCap = false;
+    force.siegeStandoff = false;
+    force.massAssault = false;
+    // The leader finishes the weakest (docs/formations.md, "Free-for-all: finishing the game,
+    // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
+    // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
+    force.finishWhenLeading = true;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -279,6 +351,7 @@ static void saveRecoverySettings(INIFile& iniFile, const std::string& section,
     iniFile.setIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
     iniFile.setIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
     iniFile.setBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
+    iniFile.setBoolValue(section, "WithdrawalsEnabled", settings.withdrawalsEnabled);
 }
 
 static void loadRecoverySettings(const INIFile& iniFile, const std::string& section,
@@ -301,6 +374,7 @@ static void loadRecoverySettings(const INIFile& iniFile, const std::string& sect
     settings.dispatchBypassBps = iniFile.getIntValue(section, "DispatchBypassBps", settings.dispatchBypassBps);
     settings.recallOrdersPerPass = iniFile.getIntValue(section, "RecallOrdersPerPass", settings.recallOrdersPerPass);
     settings.frontBatteriesEnabled = iniFile.getBoolValue(section, "FrontBatteriesEnabled", settings.frontBatteriesEnabled);
+    settings.withdrawalsEnabled = iniFile.getBoolValue(section, "WithdrawalsEnabled", settings.withdrawalsEnabled);
 }
 
 // Helper function to save difficulty settings to INI
@@ -385,12 +459,14 @@ int QuantBotConfig::parseWaveFormation(const std::string& name, int fallback) {
     };
     const std::string key = compact(name);
     if (key == "NONE" || key == "OFF") return kWaveFormationNone;
+    if (key == "BLOB") return kWaveFormationBlob;
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (key == compact(FormationPlanner::shapeName(shape))) return static_cast<int>(shape);
     return fallback;
 }
 
 const char* QuantBotConfig::waveFormationName(int value) {
+    if (value == kWaveFormationBlob) return "Blob";
     for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
         if (static_cast<int>(shape) == value) return FormationPlanner::shapeName(shape);
     return "None";
@@ -507,6 +583,25 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
 
+        // === FORCE CONCENTRATION ===
+        iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
+        iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
+        iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
+        iniFile.setBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+        iniFile.setBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
+        iniFile.setBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
+        iniFile.setBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+        iniFile.setBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
+        iniFile.setBoolValue("Force Concentration", "PressOn", force.pressOn);
+        iniFile.setBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
+        iniFile.setBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
+        iniFile.setBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
+        iniFile.setBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
+        iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
+        iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
+        iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
         savePriorities(iniFile, "Unit Priorities", unitPriorities);
@@ -536,43 +631,7 @@ bool QuantBotConfig::load(const std::string& filepath) {
         }
         
         INIFile iniFile(filepath);
-        
-        // === LOAD DIFFICULTY SETTINGS ===
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Defend", defend);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Easy", easy);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Medium", medium);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Hard", hard);
-        loadDifficultySettings(iniFile, "Difficulty Settings", "Brutal", brutal);
-        
-        // === UNIT RATIOS (single set for all difficulties) ===
-        loadUnitRatios(iniFile, "Unit Ratios", "Atreides", unitRatios.atreides);
-        loadUnitRatios(iniFile, "Unit Ratios", "Harkonnen", unitRatios.harkonnen);
-        loadUnitRatios(iniFile, "Unit Ratios", "Ordos", unitRatios.ordos);
-        loadUnitRatios(iniFile, "Unit Ratios", "Fremen", unitRatios.fremen);
-        loadUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
-        loadUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
-        
-        // === LOAD ARMY RECOVERY AND FRONT BATTERIES ===
-        loadRecoverySettings(iniFile, "Army Recovery", recovery);
-
-        // === LOAD GENERAL BEHAVIOR ===
-        attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
-        attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
-        minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
-        {
-            const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
-            const int parsed = parseWaveFormation(shape, INT_MIN);
-            if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
-            else waveFormation = parsed;
-        }
-
-        bool needsSave = false;
-
-        // === LOAD TARGET PRIORITIES ===
-        loadPriorities(iniFile, "Structure Priorities", structurePriorities, normalizedStructureNames, needsSave);
-        loadPriorities(iniFile, "Unit Priorities", unitPriorities, normalizedUnitNames, needsSave);
-
-        if (needsSave) {
+        if (readFrom(iniFile)) {
             save(filepath);
         }
         
@@ -584,6 +643,113 @@ bool QuantBotConfig::load(const std::string& filepath) {
         SDL_Log("Using default QuantBot configuration");
         return false;
     }
+}
+
+bool QuantBotConfig::applyOverrides(const std::string& filepath) {
+    if (!existsFile(filepath)) return false;
+    INIFile iniFile(filepath);
+    readFrom(iniFile);
+    return true;
+}
+
+bool QuantBotConfig::readFrom(const INIFile& iniFile) {
+    // === LOAD DIFFICULTY SETTINGS ===
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Defend", defend);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Easy", easy);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Medium", medium);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Hard", hard);
+    loadDifficultySettings(iniFile, "Difficulty Settings", "Brutal", brutal);
+    
+    // === UNIT RATIOS (single set for all difficulties) ===
+    loadUnitRatios(iniFile, "Unit Ratios", "Atreides", unitRatios.atreides);
+    loadUnitRatios(iniFile, "Unit Ratios", "Harkonnen", unitRatios.harkonnen);
+    loadUnitRatios(iniFile, "Unit Ratios", "Ordos", unitRatios.ordos);
+    loadUnitRatios(iniFile, "Unit Ratios", "Fremen", unitRatios.fremen);
+    loadUnitRatios(iniFile, "Unit Ratios", "Sardaukar", unitRatios.sardaukar);
+    loadUnitRatios(iniFile, "Unit Ratios", "Mercenary", unitRatios.mercenary);
+    
+    // === LOAD ARMY RECOVERY AND FRONT BATTERIES ===
+    loadRecoverySettings(iniFile, "Army Recovery", recovery);
+
+    // === LOAD GENERAL BEHAVIOR ===
+    attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
+    attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
+    minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
+    {
+        const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
+        const int parsed = parseWaveFormation(shape, INT_MIN);
+        if (parsed == INT_MIN) SDL_Log("QuantBot config: unknown WaveFormation '%s', keeping %s", shape.c_str(), waveFormationName(waveFormation));
+        else waveFormation = parsed;
+    }
+    force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+    force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
+    force.waveReadinessPercent = std::clamp(
+        iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
+    force.bundle = iniFile.getBoolValue("Force Concentration", "Bundle", force.bundle);
+    force.launchFromBundle = iniFile.getBoolValue("Force Concentration", "LaunchFromBundle", force.launchFromBundle);
+    force.perimeterTurrets = iniFile.getBoolValue("Force Concentration", "PerimeterTurrets", force.perimeterTurrets);
+    force.sizedDefence = iniFile.getBoolValue("Force Concentration", "SizedDefence", force.sizedDefence);
+    force.openingReadiness = iniFile.getBoolValue("Force Concentration", "OpeningReadiness", force.openingReadiness);
+    force.turretPriority = iniFile.getBoolValue("Force Concentration", "TurretPriority", force.turretPriority);
+    force.pressOn = iniFile.getBoolValue("Force Concentration", "PressOn", force.pressOn);
+    force.finishWeakest = iniFile.getBoolValue("Force Concentration", "FinishWeakest", force.finishWeakest);
+    force.fortifiedWaves = iniFile.getBoolValue("Force Concentration", "FortifiedWaves", force.fortifiedWaves);
+    force.sonicClearLane = iniFile.getBoolValue("Force Concentration", "SonicClearLane", force.sonicClearLane);
+    force.spendAtCap = iniFile.getBoolValue("Force Concentration", "SpendAtCap", force.spendAtCap);
+    force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
+    force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
+    force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+    // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
+    if (iniFile.hasKey("Strategy", "Mode")) {
+        const std::string mode = iniFile.getStringValue("Strategy", "Mode");
+        if (!QuantBotStrategy::parseMode(mode, strategy))
+            SDL_Log("QuantBot config: invalid [Strategy] Mode '%s', keeping %s", mode.c_str(), QuantBotStrategy::modeText(strategy).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "MixWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "MixWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.mixWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] MixWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.mixWeights).c_str());
+    }
+    if (iniFile.hasKey("Strategy", "TempoWeights")) {
+        const std::string weights = iniFile.getStringValue("Strategy", "TempoWeights");
+        if (!QuantBotStrategy::parseWeights(weights, strategy.tempoWeights))
+            SDL_Log("QuantBot config: invalid [Strategy] TempoWeights '%s', keeping %s", weights.c_str(),
+                    QuantBotStrategy::weightsText(strategy.tempoWeights).c_str());
+    }
+    // [Unit Ratios Tuned]: optional keys, never written by save(); a malformed value keeps the current one.
+    // <House> is the house's top mix, <House>_Tech<N> the mix of its tech band from level N (or
+    // "Opening": that band plays the configured opening; a mix or an empty value clears it).
+    {
+        static const char* const kTunedHouses[6] = {"Harkonnen", "Atreides", "Ordos", "Fremen", "Sardaukar", "Mercenary"};
+        for (size_t house = 0; house < tunedRatios.size(); ++house) {
+            for (size_t band = 0; band < kTunedBands; ++band) {
+                const std::string key = band == 0 ? std::string(kTunedHouses[house])
+                                                  : std::string(kTunedHouses[house]) + "_Tech" + std::to_string(band);
+                if (!iniFile.hasKey("Unit Ratios Tuned", key)) continue;
+                const std::string text = iniFile.getStringValue("Unit Ratios Tuned", key);
+                std::string word = text;
+                word.erase(std::remove_if(word.begin(), word.end(), [](unsigned char c) { return std::isspace(c); }), word.end());
+                std::transform(word.begin(), word.end(), word.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                if (band > 0 && word == "opening") {
+                    tunedRatios[house][band] = {};
+                    tunedOpening[house][band] = true;
+                } else if (QuantBotStrategy::parseRatios(text, tunedRatios[house][band])) {
+                    tunedOpening[house][band] = false;
+                } else {
+                    SDL_Log("QuantBot config: invalid [Unit Ratios Tuned] %s '%s', keeping %s", key.c_str(), text.c_str(),
+                            QuantBotStrategy::ratiosText(tunedRatios[house][band]).c_str());
+                }
+            }
+        }
+    }
+
+    bool needsSave = false;
+
+    // === LOAD TARGET PRIORITIES ===
+    loadPriorities(iniFile, "Structure Priorities", structurePriorities, normalizedStructureNames, needsSave);
+    loadPriorities(iniFile, "Unit Priorities", unitPriorities, normalizedUnitNames, needsSave);
+    return needsSave;
 }
 
 const QuantBotConfig::DifficultySettings& QuantBotConfig::getSettings(int difficulty) const {
@@ -619,6 +785,18 @@ const QuantBotConfig::UnitRatios& QuantBotConfig::getRatios(int houseID) const {
         case HOUSE_MERCENARY: return unitRatios.mercenary;
         default: return unitRatios.mercenary;
     }
+}
+
+const UnitMixPolicy::Weights& QuantBotConfig::getTunedRatios(int houseID, int band) const {
+    static const UnitMixPolicy::Weights none{};
+    if (houseID < 0 || size_t(houseID) >= tunedRatios.size()) return none;
+    const size_t h = size_t(houseID);
+    const auto& house = tunedRatios[h];
+    if (band > 0 && size_t(band) < kTunedBands) {
+        if (tunedOpening[h][size_t(band)]) return none;
+        if (*std::max_element(house[size_t(band)].begin(), house[size_t(band)].end()) > 0) return house[size_t(band)];
+    }
+    return house[0];
 }
 
 const QuantBotConfig::TargetPriority& QuantBotConfig::getStructurePriority(int structureID) const {
@@ -971,7 +1149,43 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("dispatchBypassBps", recovery.dispatchBypassBps);
     addNamed("recallOrdersPerPass", recovery.recallOrdersPerPass);
     addNamed("frontBatteries", recovery.frontBatteriesEnabled);
+    addNamed("withdrawals", recovery.withdrawalsEnabled);
     configStr += "|/REC|";
+    configStr += "|FORCE";
+    addNamed("focusFire", force.focusFire);
+    addNamed("converge", force.converge);
+    addNamed("waveReadinessPercent", force.waveReadinessPercent);
+    addNamed("bundle", force.bundle);
+    addNamed("launchFromBundle", force.launchFromBundle);
+    addNamed("perimeterTurrets", force.perimeterTurrets);
+    addNamed("sizedDefence", force.sizedDefence);
+    addNamed("openingReadiness", force.openingReadiness);
+    addNamed("turretPriority", force.turretPriority);
+    addNamed("pressOn", force.pressOn);
+    addNamed("finishWeakest", force.finishWeakest);
+    addNamed("fortifiedWaves", force.fortifiedWaves);
+    addNamed("sonicClearLane", force.sonicClearLane);
+    addNamed("spendAtCap", force.spendAtCap);
+    addNamed("siegeStandoff", force.siegeStandoff);
+    addNamed("massAssault", force.massAssault);
+    addNamed("finishWhenLeading", force.finishWhenLeading);
+    configStr += "|/FORCE|";
+    configStr += "|STRATEGY";
+    addNamed("random", strategy.random);
+    addNamed("fixedMix", static_cast<int>(strategy.fixedMix));
+    addNamed("fixedTempo", static_cast<int>(strategy.fixedTempo));
+    for (size_t i = 0; i < strategy.mixWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Mix>(i)), strategy.mixWeights[i]);
+    for (size_t i = 0; i < strategy.tempoWeights.size(); ++i)
+        addNamed(QuantBotStrategy::name(static_cast<QuantBotStrategy::Tempo>(i)), strategy.tempoWeights[i]);
+    configStr += "|TUNED";
+    for (size_t h = 0; h < tunedRatios.size(); ++h)
+        for (size_t band = 0; band < kTunedBands; ++band) {
+            configStr += '|';
+            configStr += tunedOpening[h][band] ? std::string("opening") : QuantBotStrategy::ratiosText(tunedRatios[h][band]);
+        }
+    configStr += "|/TUNED|";
+    configStr += "|/STRATEGY|";
 
 
     // Use FNV-1a hash (consistent across platforms and compilers)

@@ -24,6 +24,7 @@
 #include <GUI/TextButton.h>
 #include <GUI/Label.h>
 #include <GUI/Spacer.h>
+#include <players/UnitMixPolicy.h>
 
 #include <array>
 #include <memory>
@@ -119,7 +120,7 @@ private:
     Label allocationStateLabel;
     HBox allocationHeader;
     Label allocationNameHeader, allocationPerformanceHeader, allocationGoalHeader;
-    std::array<AllocationRow, 8> allocationRows;
+    std::array<AllocationRow, UnitMixPolicy::kSlots> allocationRows;
     Label allocationNoteLabel;
 
     Label tableHeadingLabel;

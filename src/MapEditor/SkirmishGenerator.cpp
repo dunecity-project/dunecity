@@ -403,6 +403,15 @@ int distanceToRect2(const Rect& r, int x, int y) {
     return dx * dx + dy * dy;
 }
 
+/// A random tile, x drawn before y. Not Coord(random.rand(..), random.rand(..)): the order in
+/// which function arguments are evaluated is unspecified (clang: left to right, MSVC: right to
+/// left), so the same seed generated a different map on Windows than on macOS and the browser.
+Coord randomTile(Random& random, int size) {
+    const int x = static_cast<int>(random.rand(0, size - 1));
+    const int y = static_cast<int>(random.rand(0, size - 1));
+    return Coord(x, y);
+}
+
 /// The map editor's spot walk: @a steps random unit steps from @a at, clamped to the map.
 template<class Visit>
 void walk(Random& random, int size, Coord at, int steps, Visit visit) {
@@ -497,7 +506,7 @@ MapData shapeRock(const TerrainSpec& spec, uint32_t mapSeed, int rockFields) {
     // Rock islands scattered over the sand.
     const int islands = std::max(2, area / 2048);
     for(int i = 0; i < islands; ++i) {
-        const Coord at(random.rand(0, size - 1), random.rand(0, size - 1));
+        const Coord at = randomTile(random, size);
         const int steps = static_cast<int>(random.rand(15, 70)) * size / 128 + 8;
         walk(random, size, at, steps, [&](int x, int y) { paintMirrored(map, *mirror, x, y, Terrain_Rock, onSand); });
     }
@@ -654,8 +663,7 @@ void addSpice(MapData& map, const TerrainSpec& spec, uint32_t mapSeed) {
     auto onThin = [](TERRAINTYPE t) { return t == Terrain_Spice; };
     int spice = spiceTiles(map);
     for(size_t field = 0; spice < walkTarget && field < 96; ++field) {
-        const Coord at = field < seeds.size() ? seeds[field]
-                                              : Coord(random.rand(0, size - 1), random.rand(0, size - 1));
+        const Coord at = field < seeds.size() ? seeds[field] : randomTile(random, size);
         const int steps = spotSize * static_cast<int>(random.rand(2, 5)) / 8;
         walk(random, size, at, steps, [&](int x, int y) {
             if(isSandTile(map(x, y))) paintMirrored(map, *mirror, x, y, Terrain_Spice, onSand);
@@ -1121,6 +1129,9 @@ void Params::clamp(int houseCount) {
         if(side->playerClass.empty() && side != &playerSide && side != &startSide) side->playerClass = "qBotMedium";
     }
     startSide.playerClass.clear();     // a start's controller is chosen in the lobby
+    // Watching is a single-player choice; a hosted map's players and observers are the lobby's.
+    if(multiplayer) spectate = false;
+    if(spectateClass.empty()) spectateClass = "qBotMedium";
     allies = std::clamp(allies, 0, kMaxAllies);
     enemies = std::clamp(enemies, kMinEnemies, kMaxEnemies);
     houseCount = std::max(2, houseCount);
@@ -1156,6 +1167,8 @@ void Params::load(const INIFile& config) {
         mode = static_cast<Mode>(config.getIntValue(kSection, "Mode", indexOf(mode)));
         // Before the mod choice existed the mode named the mod: DuneCity or vanilla.
         mod = config.getStringValue(kSection, "Mod", mode == Mode::DuneCity ? "dunecity" : "vanilla");
+        spectate = config.getBoolValue(kSection, "Spectate", spectate);
+        spectateClass = config.getStringValue(kSection, "Spectate AI", spectateClass);
     }
     techLevel = config.getIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
@@ -1185,6 +1198,8 @@ void Params::save(INIFile& config) const {
     if(!multiplayer) {
         config.setIntValue(kSection, "Mode", indexOf(mode));
         config.setStringValue(kSection, "Mod", mod);
+        config.setBoolValue(kSection, "Spectate", spectate);
+        config.setStringValue(kSection, "Spectate AI", spectateClass);
     }
     config.setIntValue(kSection, "Tech Level", techLevel);
     for(auto [side, prefix] : {std::pair<const Side*, std::string>{&allySide, "Ally "}, {&enemySide, "Enemy "}, {&playerSide, "Player "}}) {
@@ -1402,6 +1417,35 @@ bool groundConnected(const MapData& map, const std::vector<Coord>& points) {
     });
 }
 
+/// Every start reaches spice by ground within three times the distance its own field was
+/// seeded at (addSpice: (w + h) / 4 + kRimMax + 6 toward the middle). That seed lands on rock
+/// or behind a massif on some maps, and the start then has no field of its own at all (7P
+/// FFA seed 44452: 91 tiles round a massif; its house refined 20 credits in 27 minutes).
+bool spiceNearEveryStart(const MapData& map, const std::vector<Rect>& plateaus) {
+    const int w = map.getSizeX(), h = map.getSizeY();
+    for(const Rect& r : plateaus) {
+        const int limit = 3 * ((r.w + r.h) / 4 + kRimMax + 6);
+        const Coord start(r.x + r.w / 2, r.y + r.h / 2);
+        std::vector<int> steps(w * h, -1);
+        std::deque<Coord> queue{start};
+        steps[start.y * w + start.x] = 0;
+        bool found = false;
+        while(!queue.empty() && !found) {
+            const Coord c = queue.front(); queue.pop_front();
+            if(isSpiceTerrain(map(c.x, c.y))) { found = true; break; }
+            if(steps[c.y * w + c.x] >= limit) continue;
+            for(const Coord& d : {Coord(1,0), Coord(0,1), Coord(-1,0), Coord(0,-1)}) {
+                const int nx = c.x + d.x, ny = c.y + d.y;
+                if(!map.isInsideMap(nx, ny) || steps[ny * w + nx] >= 0 || map(nx, ny) == Terrain_Mountain) continue;
+                steps[ny * w + nx] = steps[c.y * w + c.x] + 1;
+                queue.emplace_back(nx, ny);
+            }
+        }
+        if(!found) return false;
+    }
+    return true;
+}
+
 int displayedPopulation(const std::vector<Placement>& placements, int house) {
     int population = 0;
     for(const Placement& p : placements)
@@ -1580,11 +1624,21 @@ Result generate(const Params& requested, const Catalogue& houseCatalogue) {
 
     std::vector<Coord> starts;
     for(const Plan& plan : plans) starts.push_back(plan.setup.start);
+    // The first ground-connected terrain whose every start has spice of its own; failing that,
+    // the first ground-connected one, as before. A symmetric map gives every start the same
+    // surroundings, so it is fair by construction and not checked.
+    int fallback = -1;
     for(int attempt = 0; attempt < kMaxTerrainAttempts; ++attempt) {
         result.mapSeed = params.seed + static_cast<uint32_t>(attempt);
         result.attempts = attempt + 1;
         result.map = buildTerrain(spec, result.mapSeed);
-        if(groundConnected(result.map, starts)) break;
+        if(!groundConnected(result.map, starts)) continue;
+        if(spec.spice == Spice::None || params.symmetric || spiceNearEveryStart(result.map, plateaus)) { fallback = -1; break; }
+        if(fallback < 0) fallback = attempt;
+    }
+    if(fallback >= 0) {
+        result.mapSeed = params.seed + static_cast<uint32_t>(fallback);
+        result.map = buildTerrain(spec, result.mapSeed);
     }
     if(!groundConnected(result.map, starts)) {
         // Only mountains block ground units; levelling them always connects the starts.

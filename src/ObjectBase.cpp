@@ -348,6 +348,9 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
             if (reward.kills > 0)
                 for (const auto& player : beneficiary->getPlayerList())
                     player->onHostileUnitKilled(itemID, originalHouseID);
+            else if (hostile && !isAUnit() && healthBefore > 0 && getHealth() <= 0)
+                for (const auto& player : beneficiary->getPlayerList())
+                    player->onHostileStructureDestroyed(itemID, originalHouseID);
             if (AITelemetry::log().enabled() && reward.hits > 0)
                 for (const auto& player : beneficiary->getPlayerList())
                     player->onCombatReward(damagerID, objectID, reward);

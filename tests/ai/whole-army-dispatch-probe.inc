@@ -24,6 +24,10 @@ void runWholeArmyDispatchProbe(Game& game) {
     for(const auto& player:owner->getPlayerList())
         if(auto* candidate=dynamic_cast<QuantBot*>(player.get()))bot=candidate;
     require(bot,"Whole-army fixture missing bot");
+    // The wave fixtures stand where they are spawned: the bundle launch gate (on by default)
+    // would hold them up to 60 s. Bundling and the gate have their own probe
+    // (quantbot_force_concentration); this one keeps the other production force rules.
+    bot->forceVariantOverride=QuantBot::kForceFocusFire|QuantBot::kForceConverge|QuantBot::kForceSmallWaves;
 
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;
@@ -1006,7 +1010,7 @@ void runWholeArmyDispatchProbe(Game& game) {
             getQuantBotConfig().recovery.enabled=true;
         }
 
-        // ---- Easy, Medium and campaign behaviour are untouched --------------
+        // ---- Easy and campaign behaviour are untouched; Medium dispatches like Hard ----
         {
             bot->defenceAssignments.clear();
             bot->customWave.members.clear();
@@ -1021,28 +1025,31 @@ void runWholeArmyDispatchProbe(Game& game) {
             }
             bot->militaryValueLimit=999999;
             getQuantBotConfig().easy.attackForceMilitaryValueRatio=0.25f;
-            getQuantBotConfig().medium.attackForceMilitaryValueRatio=0.40f;
             auto share=[&]{
                 int n=0; for(auto* unit:eligible) if(unit->getAttackMode()==HUNT) ++n; return n;
             };
-            for(const auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
-                bot->difficulty=difficulty;
-                require(!bot->recoveryActive(),"Whole-army dispatch leaked into Easy or Medium");
-                for(auto* unit:eligible) {
-                    bot->doSetAttackMode(unit,GUARD);
-                    bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
-                    unit->setForced(false);
-                }
-                bot->customWave.members.clear();
-                bot->launchGroundHunt();
-                const int sent=share();
-                SDL_Log("WHOLE_ARMY_DIAG: shared difficulty=%d sent=%d of %zu",
-                    int(difficulty),sent,eligible.size());
-                require(sent>0 && sent<int(eligible.size()),
-                    "Easy or Medium stopped keeping its established home reserve");
-                require(bot->customWave.members.empty(),
-                    "Easy or Medium started tracking a Hard/Brutal army");
+            // Medium is an autonomous custom army (docs/ai-scenario-matrix.md, "Difficulty
+            // ladder"): the whole-army scope, not Easy's standing raid share.
+            bot->difficulty=QuantBot::Difficulty::Medium;
+            require(bot->autonomousCustomArmy() && bot->recoveryActive(),
+                "Medium is not an autonomous custom army");
+            bot->difficulty=QuantBot::Difficulty::Easy;
+            require(!bot->autonomousCustomArmy() && !bot->recoveryActive(),
+                "Whole-army dispatch leaked into Easy");
+            for(auto* unit:eligible) {
+                bot->doSetAttackMode(unit,GUARD);
+                bot->doMove2Pos(unit,unit->getX(),unit->getY(),false);
+                unit->setForced(false);
             }
+            bot->customWave.members.clear();
+            bot->launchGroundHunt();
+            const int sent=share();
+            SDL_Log("WHOLE_ARMY_DIAG: shared difficulty=%d sent=%d of %zu",
+                int(bot->difficulty),sent,eligible.size());
+            require(sent>0 && sent<int(eligible.size()),
+                "Easy stopped keeping its established home reserve");
+            require(bot->customWave.members.empty(),
+                "Easy started tracking a whole-army wave");
             game.gameType=GameType::Campaign;
             bot->difficulty=QuantBot::Difficulty::Brutal;
             require(!bot->recoveryActive(),"Whole-army dispatch leaked into a campaign game");

@@ -34,31 +34,26 @@ inline bool economyReady(int refineries, int heavyFactories, int repairYards) {
     return refineries >= 2 && heavyFactories >= 1 && repairYards >= 1;
 }
 
-/// Provisional floor and ceiling of the opening band, used only to keep a very
-/// small coverage demand from producing a one-turret "battery" once the economy
-/// gate has opened. The upper bound is not a cap on mature bases: the demand
-/// term below is free to exceed it.
+/// Floor and ceiling of the battery: every eligible base gets one once the economy
+/// gate has opened. A tiny coverage demand still gets a usable battery rather than a
+/// one-turret one.
 constexpr int kOpeningBandMin = 8;
 constexpr int kOpeningBandMax = 12;
 
-/// How much an observed front disadvantage may raise the goal, in basis points
-/// of the demand-derived figure. Provisional: at most half again.
-constexpr int kFrontThreatBoostDivisorBps = 20000;
-
-/// Demand-scaled battery goal.
+/// Battery goal: the coverage demand, clamped to the 8-12 band.
 ///
 /// `coverageCap` is RocketTurretPolicy::coverageTurretCap(coverageDemand).
-/// `frontThreatBps` is observed hostile front power as a share of our own
-/// holding power, clamped by the caller to [0, 10000]; it is an honest
-/// observation proxy, not a predicted battle outcome.
-inline int batteryGoal(int coverageCap, bool economyReady, int frontThreatBps, bool enabled = true) {
+///
+/// The band is a ceiling as well as a floor. Coverage demand grows with every
+/// building, and the former open-ended goal (the demand, plus up to half again for
+/// an observed threat) bought a big rich base 90-100 rocket turrets and, through the
+/// wall rule, as many walls - about 30,000 credits that the army needed. That lost
+/// or stretched quantbot_all_against_atreides to 70+ minutes on 1.0.812-1.0.842;
+/// a front threat term alone did not prevent it, because the enemy that is not yet
+/// beaten is exactly the threat. The army answers the front; the battery covers it.
+inline int batteryGoal(int coverageCap, bool economyReady, bool enabled = true) {
     if (!enabled || !economyReady) return 0;
-    int goal = std::max(0, coverageCap);
-    goal = std::max(goal, kOpeningBandMin);
-    if (goal < kOpeningBandMax && std::max(0, coverageCap) < kOpeningBandMin)
-        goal = kOpeningBandMin; // A tiny base still gets a usable opening battery.
-    goal += int(int64_t(goal) * std::clamp(frontThreatBps, 0, 10000) / kFrontThreatBoostDivisorBps);
-    return goal;
+    return std::clamp(coverageCap, kOpeningBandMin, kOpeningBandMax);
 }
 
 /// Share of the goal that may stand on the enemy-facing half-plane. The rest is

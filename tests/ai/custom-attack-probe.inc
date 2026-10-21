@@ -59,10 +59,36 @@ void runCustomAttackProbe(Game& game) {
         for(auto* unit:army)if(unit->getAttackMode()==HUNT)unit->setForced(true);
         bot->launchGroundHunt();
         require(hunters()==19,"A repeated dispatch or forced hunter exceeded the share");
-        reset(QuantBot::Difficulty::Medium);bot->launchGroundHunt();
-        require(hunters()==30,"Custom Medium did not send its 40-percent share");
-        bot->launchGroundHunt();require(hunters()==30,"Medium stacked waves");
-        for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+        // Custom Medium left the share path: it launches whole-army waves like Hard and Brutal
+        // (docs/ai-scenario-matrix.md, "Difficulty ladder"; quantbot_whole_army_dispatch).
+        reset(QuantBot::Difficulty::Medium);
+        require(bot->autonomousCustomArmy(),"Custom Medium is not an autonomous custom army");
+        // The difficulty steps (docs/ai-scenario-matrix.md, "Difficulty separation"): the production
+        // strategy is Hard's and Brutal's alone.
+        require(!bot->playsStrategy(),"Custom Medium plays the Hard/Brutal strategy");
+        reset(QuantBot::Difficulty::Hard);
+        require(bot->playsStrategy(),"Custom Hard lost its strategy");
+        reset(QuantBot::Difficulty::Brutal);
+        require(bot->playsStrategy(),"Custom Brutal lost its strategy");
+        reset(QuantBot::Difficulty::Easy);
+        require(!bot->playsStrategy(),"Custom Easy plays a strategy");
+        // The configured harvester limits take effect in custom games above 64x64 and rise with the
+        // difficulty; up to 64x64 the spice budget alone decides (no configured ceiling).
+        const bool limitedMap=currentGameMap->getSizeX()*currentGameMap->getSizeY()>4096;
+        int previousLimit=0;
+        for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,
+                             QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            reset(difficulty);
+            const int limit=bot->configuredCustomHarvesterLimit();
+            require(limitedMap ? limit>previousLimit : limit==0,
+                "A custom difficulty's harvester limit does not exceed the one below (or binds on a small map)");
+            previousLimit=limit;
+        }
+        bot->supportMode=true;
+        require(bot->configuredCustomHarvesterLimit()==0,"A support controller took the custom harvester limit");
+        bot->supportMode=false;
+        reset(QuantBot::Difficulty::Easy);
+        for(auto difficulty:{QuantBot::Difficulty::Easy}) {
             reset(difficulty);bot->launchGroundHunt();
             auto* reserve=army.back();
             bot->squadRallyLocation=army[army.size()-2]->getLocation();

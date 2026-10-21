@@ -88,6 +88,33 @@ Mod, house, AI and AI partner stay drop-downs.
 - The player gets their own Base, Army and City from "You start with", plus an optional AI partner
   sharing their house, on a plateau as large as the largest opponent's.
 
+## Spectate
+Stefan's ask: "add spectator mode to skirmish". The single-player screen's **Spectate** checkbox
+(Players column, below "Enemies are allied") is Custom Game's offline Spectate, not a second
+mechanism: `RandomSkirmish::makeInit` sets `GameInitSettings::setLocalSpectator(true)` and seats an
+AI where the human would sit, and the game observes exactly as a spectated Custom Game does (whole
+map visible, inspect any building, no orders; `Game::setupSpectatorView`). Local only: the flag is
+never serialized or sent, and no protocol, save or map format changed.
+
+- **Your house AI** (right below Spectate, shown only while it is ticked; hidden otherwise, as the
+  City rows are for a non-city mod, because a drop-down has no disabled look; Spectate's tooltip
+  says where the choice appears): the AI that plays the
+  watched house, from the same list as the Allies/Enemies AI boxes (no helpers, no human);
+  default QuantBot Medium. Chosen over reusing the AI partner box because the partner keeps its
+  own meaning and a separate box keeps the difficulty explicit; an unknown or helper class in the
+  config falls back to QuantBot Medium on the screen and to `DEFAULTAIPLAYERCLASS` in `makeInit`.
+- **The player's rows stay meaningful**, none is disabled: "Your house" picks the watched house,
+  and the "You start with" section (shown as "Your house starts with" while spectating) still
+  gives it its AI partner, Base, Army and City. With a partner the house holds both AIs, as a
+  Custom Game row with two AI players does.
+- The generated map is the same with Spectate on or off (same name, same INI, Save map unchanged);
+  only the roster differs. Allies and enemies are AI as always, so every house is AI.
+- Saved in `[Random Skirmish]` as `Spectate` and `Spectate AI`, single player only: the
+  multiplayer Random Map screen has no Spectate (online watching is the hot-join spectator flow),
+  never reads or writes these keys, and `Params::clamp` turns `spectate` off for a hosted map.
+- Start builds the match through `RandomSkirmishMenu::prepareStart` (generate, remember, build
+  the start) and then plays it with `startSinglePlayerGame`, as before.
+
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
   (`generateRandomMap`, which itself is unchanged):
@@ -275,6 +302,9 @@ generated", and "random settings on army and city must apply equally to each pla
     many rows and columns.
   - Zone-level parsing: bundled maps parse as "no level", and malformed fields are rejected.
   - Last-used parameters round-trip through the config file, and corrupt values are clamped.
+  - Spectate: `Spectate`/`Spectate AI` round-trip, the map INI is identical with it on or off, the
+    hosted screen neither loads nor saves it (and clamps it off), and an empty AI falls back to
+    QuantBot Medium.
   - Random Army/City (`[random]`): over 12 seeds on a 6-house DuneCity map, every house set to
     Random shares one army budget and one city target, in range, deterministic per seed; a side
     with a preset keeps it while the Random sides still share; different seeds draw at least
@@ -328,6 +358,20 @@ generated", and "random settings on army and city must apply equally to each pla
     `build/skirmish-probe/ingame-player-base.png` and `ingame-player-city.png`.
   - **partner-quantbot** (vanilla 96, qBotMedium partner): loads with HumanPlayer + qBotMedium in
     the player's house, power 300/200.
+  - **spectate** (DuneCity 96, Ordos + 1 ally + 2 allied enemies, seed 20261018, Small player base
+    with a 1,000-person city, qBotSupportMedium partner): on the real screen Spectate starts off
+    with a tooltip and the Your house AI row hidden (screenshot
+    `random-skirmish-spectate-off-1024x768.bmp`); clicking it shows the AI row and renames the
+    header, the player's rows stay enabled, and the box lists no helper or human (screenshot
+    `random-skirmish-spectate-1024x768.bmp`). The init `prepareStart` builds (Start's own step)
+    is a local-spectator one with no `HumanPlayer`; the match is observed (`localObserver`, local
+    view = the unregistered `OBSERVER_PLAYER_ID`), holds 4 houses with no human player anywhere,
+    Ordos played by qBotHard + qBotSupportMedium with its Construction Yard, and runs one game
+    minute (3,750 cycles) with a clean log, still observing (in-game frame `ingame-spectator.png`,
+    "Spectating" label and full minimap). A new screen restores Spectate and QuantBot Hard;
+    clicking Spectate off hides the AI row again, and Start's init then seats the human and the partner
+    in Ordos and the human controls it; Spectate off is remembered. The multiplayer screen
+    (mp-lobby) has neither control.
   - **render:** whole-map PNGs (4 px per tile) and measurements of two editor random maps and
     the generated Stefan and vanilla 2v2 maps; every match case also writes `loaded-<case>.png`
     and, after its smoke run, `played-<case>.png`. `--render-save <file.dls>` draws the map a

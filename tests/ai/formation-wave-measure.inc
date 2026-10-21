@@ -22,6 +22,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace FormationWaveMeasure {
@@ -39,6 +40,18 @@ constexpr Uint32 kTradeWindowCycles = MILLI2CYCLES(60 * 1000);
 constexpr int kKillCreditTiles = 10;
 /// Army value samples, every this many game minutes.
 constexpr int kSampleMinutes = 5;
+/// Members "together" at contact: within this many tiles of the member nearest their centre.
+constexpr int kTogetherTiles = 8;
+/// Members "arriving together": engaged within this long of the wave's contact.
+constexpr Uint32 kTogetherWindowCycles = MILLI2CYCLES(10 * 1000);
+/// Defence trade (docs/formations.md, "Concentrating force"): a unit destroyed this close to a
+/// building of its own house is a home loss for that house; this close to a building of another
+/// team it is a home kill for that building's house. Sampled every kHomeSampleCycles.
+constexpr int kHomeTiles = 12;
+constexpr Uint32 kHomeSampleCycles = 16;
+struct HomeTrade { int kill = 0, loss = 0; };
+/// Per house id, for FormationDuel::report.
+inline std::map<int, HomeTrade>& homeTrade() { static std::map<int, HomeTrade> trade; return trade; }
 
 struct Wave {
     int house = -1;
@@ -56,6 +69,7 @@ struct Wave {
     Uint32 formationEnd = 0;            ///< first cycle no member was in a formation
     int inFormationAtContact = -1;      ///< members in formation on the contact cycle
     int inFormation10s = -1;            ///< members in formation 10 s after the contact
+    int togetherAtContact = -1;         ///< living members within kTogetherTiles of the anchor at contact
     int lossValue = 0;                  ///< member value destroyed in the trade window
     int killValue = 0;                  ///< enemy value destroyed near the wave in the trade window
     int survivors = -1;                 ///< members alive at the end of the wave window
@@ -86,23 +100,50 @@ inline double spreadOf(const std::map<Uint32, Uint32>& times) {
 inline void report(const Wave& wave) {
     int lostBeforeContact = 0;
     for (const auto& [id, cycle] : wave.died) if (wave.contact == 0 || cycle < wave.contact) ++lostBeforeContact;
+    int engaged10 = 0;
+    for (const auto& [id, cycle] : wave.engaged) if (wave.contact != 0 && cycle <= wave.contact + kTogetherWindowCycles) ++engaged10;
     SDL_Log("FORMATION_WAVE: house=%d launched=%u members=%zu engaged=%zu arrived=%zu lost=%zu "
             "contact_s=%.1f engage_spread_s=%.1f arrival_spread_s=%.1f shots30=%d loss60=%d kill60=%d "
             "survivors=%d lost_before_contact=%d formed=%d formup_s=%.1f formation_end_s=%.1f "
-            "in_formation_at_contact=%d in_formation_10s=%d",
+            "in_formation_at_contact=%d in_formation_10s=%d together_at_contact=%d engaged10=%d",
             wave.house, wave.launched, wave.members.size(), wave.engaged.size(), wave.arrival.size(),
             wave.died.size(), since(wave.contact, wave.launched), spreadOf(wave.engaged), spreadOf(wave.arrival),
             wave.shots, wave.lossValue, wave.killValue, wave.survivors, lostBeforeContact, wave.formed,
             wave.formed && wave.sawForming ? since(wave.formUpEnd, wave.launched) : -1.0,
-            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s);
+            wave.formed ? since(wave.formationEnd, wave.launched) : -1.0, wave.inFormationAtContact, wave.inFormation10s,
+            wave.togetherAtContact, wave.contact != 0 ? engaged10 : -1);
+}
+
+/// A live building's footprint, collected once per cycle for inTargetArea.
+struct Footprint {
+    int team;
+    Coord first, last;   ///< inclusive corner tiles
+};
+
+inline std::vector<Footprint> liveFootprints() {
+    std::vector<Footprint> footprints;
+    footprints.reserve(structureList.size());
+    for (const auto* structure : structureList) {
+        if (structure->getHealth() <= 0) continue;
+        const Coord location = structure->getLocation();
+        footprints.push_back({structure->getOwner()->getTeamID(), location,
+                              location + structure->getStructureSize() - Coord(1, 1)});
+    }
+    return footprints;
 }
 
 /// Is this unit inside the enemy base area: within kTargetAreaTiles of a live enemy building?
-inline bool inTargetArea(const UnitBase* unit, int myTeam) {
-    for (const auto* structure : structureList) {
-        if (structure->getOwner()->getTeamID() == myTeam || structure->getHealth() <= 0) continue;
-        if (blockDistance(unit->getLocation(), structure->getClosestPoint(unit->getLocation())).lround()
-                <= kTargetAreaTiles) return true;
+/// The building's closest tile is its footprint clamped to the unit (StructureBase::getClosestPoint).
+/// blockDistance is at least the larger axis offset, so a building more than kTargetAreaTiles
+/// away along either axis can never round to within reach and is skipped without the exact test.
+inline bool inTargetArea(const UnitBase* unit, int myTeam, const std::vector<Footprint>& footprints) {
+    const Coord at = unit->getLocation();
+    for (const Footprint& footprint : footprints) {
+        if (footprint.team == myTeam) continue;
+        const Coord closest(std::clamp(at.x, footprint.first.x, footprint.last.x),
+                            std::clamp(at.y, footprint.first.y, footprint.last.y));
+        if (std::abs(at.x - closest.x) > kTargetAreaTiles || std::abs(at.y - closest.y) > kTargetAreaTiles) continue;
+        if (blockDistance(at, closest).lround() <= kTargetAreaTiles) return true;
     }
     return false;
 }
@@ -136,10 +177,24 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
     std::vector<Wave> waves;
     std::map<const QuantBot*, Uint32> lastLaunch;
     std::map<const QuantBot*, std::set<Uint32>> knownMembers;
-    std::map<Uint32, Sint32> lastPrimaryTimer;
-    std::map<Uint32, Known> previous;        // every object last cycle, while a trade window is open
+    std::unordered_map<Uint32, Sint32> lastPrimaryTimer;
+    // Every object last cycle, while a trade window is open. Each vanished object is credited on
+    // its own, so the iteration order of these maps cannot change any total.
+    std::unordered_map<Uint32, Known> previous;
     int nextSample = kSampleMinutes;
-
+    // Home trade: every ground unit at the last sample (location, value, owner house).
+    struct Home { Coord location; int value = 0; int house = -1; int team = -1; };
+    std::map<Uint32, Home> homeUnits;
+    auto homeOf = [](Coord at, int team, bool own) {
+        // The house whose building is within kHomeTiles: own team's (own) or another team's.
+        for (const auto* structure : structureList) {
+            if (structure->getHealth() <= 0 || !structure->getOwner()) continue;
+            if ((structure->getOwner()->getTeamID() == team) != own) continue;
+            if (blockDistance(at, structure->getClosestPoint(at)).lround() <= kHomeTiles)
+                return int(structure->getOwner()->getHouseID());
+        }
+        return -1;
+    };
     while (!game.finished && game.getGameCycleCount() < endCycle && !(stop && stop())) {
         // Where every live member of a wave in contact stood before this cycle, for kill credit.
         std::vector<std::pair<size_t, Coord>> memberSpots;
@@ -154,6 +209,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
 
         game.updateGameState();
         const Uint32 now = game.getGameCycleCount();
+        const std::vector<Footprint> footprints = liveFootprints();
 
         // New dispatches: a changed launch cycle with at least three new ground members.
         for (int h = 0; h < NUM_HOUSES; ++h) {
@@ -175,7 +231,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 for (const Uint32 id : bot->customWave.members) {
                     if (known.count(id)) continue;
                     const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(id));
-                    if (unit && unit->isAGroundUnit() && unit->isActive() && !inTargetArea(unit, myTeam)) {
+                    if (unit && unit->isAGroundUnit() && unit->isActive() && !inTargetArea(unit, myTeam, footprints)) {
                         wave.members.push_back(id);
                         wave.value[id] = priceOf(unit);
                         if (unit->isInFormation()) ++wave.formed;
@@ -204,7 +260,7 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 if (unit->isFormationForming()) ++forming;
                 if (unit->isInFormation()) ++inFormation;
                 if (!unit->isActive()) continue;
-                const bool inBase = inTargetArea(unit, myTeam);
+                const bool inBase = inTargetArea(unit, myTeam, footprints);
                 if (inBase && !wave.arrival.count(id)) wave.arrival[id] = now;
                 const auto last = lastPrimaryTimer.find(id);
                 const bool fired = last != lastPrimaryTimer.end() && unit->primaryWeaponTimer > last->second;
@@ -214,7 +270,29 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 }
                 if (fired && wave.contact != 0 && now < wave.contact + kContactWindowCycles) ++wave.shots;
             }
-            if (wave.contact == now) wave.inFormationAtContact = inFormation;
+            if (wave.contact == now) {
+                wave.inFormationAtContact = inFormation;
+                // How many members are with the main body when the wave first meets the enemy.
+                std::vector<Coord> at;
+                for (const Uint32 id : wave.members) {
+                    const auto* unit = dynamic_cast<const UnitBase*>(game.getObjectManager().getObject(id));
+                    if (unit && unit->getHealth() > 0 && unit->isActive()) at.push_back(unit->getLocation());
+                }
+                int together = 0;
+                if (!at.empty()) {
+                    Sint64 sx = 0, sy = 0;
+                    for (const Coord& p : at) { sx += p.x; sy += p.y; }
+                    const Sint64 n = Sint64(at.size());
+                    Coord anchor = at.front();
+                    Sint64 best = -1;
+                    for (const Coord& p : at) {
+                        const Sint64 dx = p.x * n - sx, dy = p.y * n - sy, d = dx * dx + dy * dy;
+                        if (best < 0 || d < best) { best = d; anchor = p; }
+                    }
+                    for (const Coord& p : at) if (blockDistance(anchor, p).lround() <= kTogetherTiles) ++together;
+                }
+                wave.togetherAtContact = together;
+            }
             if (wave.contact != 0 && now == wave.contact + Uint32(MILLI2CYCLES(10000))) wave.inFormation10s = inFormation;
             if (forming > 0) wave.sawForming = true;
             if (wave.sawForming && wave.formUpEnd == 0 && forming == 0) wave.formUpEnd = now;
@@ -229,8 +307,9 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
 
         // Kill credit: an enemy of a wave that vanished this cycle within kKillCreditTiles of a
         // member that was alive at the start of the cycle, while that wave's trade window is open.
-        std::map<Uint32, Known> current;
+        std::unordered_map<Uint32, Known> current;
         if (tradeOpen || !previous.empty()) {
+            current.reserve(unitList.size() + structureList.size());
             for (const auto* unit : unitList)
                 if (unit->getHealth() > 0) current[unit->getObjectID()] = {unit->getLocation(), priceOf(unit), unit->getOwner()->getTeamID()};
             for (const auto* structure : structureList)
@@ -247,10 +326,26 @@ inline void run(Game& game, Uint32 endCycle, const std::function<bool()>& stop =
                 }
             }
         }
-        previous = tradeOpen ? std::move(current) : std::map<Uint32, Known>{};
+        previous = tradeOpen ? std::move(current) : std::unordered_map<Uint32, Known>{};
 
         for (const auto* unit : unitList) lastPrimaryTimer[unit->getObjectID()] = unit->primaryWeaponTimer;
         if (now >= Uint32(MILLI2CYCLES(nextSample * 60000))) { sampleHouses(game, nextSample); nextSample += kSampleMinutes; }
+        if (now % kHomeSampleCycles == 0) {
+            std::map<Uint32, Home> current;
+            for (const auto* unit : unitList)
+                if (unit->getHealth() > 0 && unit->isActive() && unit->isAGroundUnit() && unit->getOwner())
+                    current[unit->getObjectID()] = {unit->getLocation(), priceOf(unit), int(unit->getOwner()->getHouseID()),
+                                                    unit->getOwner()->getTeamID()};
+            for (const auto& [id, known] : homeUnits) {
+                if (current.count(id)) continue;
+                const auto* still = game.getObjectManager().getObject(id);
+                if (still && still->getHealth() > 0) continue;     // inside a carryall or a bay
+                if (homeOf(known.location, known.team, true) == known.house) homeTrade()[known.house].loss += known.value;
+                const int defender = homeOf(known.location, known.team, false);
+                if (defender >= 0) homeTrade()[defender].kill += known.value;
+            }
+            homeUnits = std::move(current);
+        }
     }
 
     int reported = 0;
