@@ -14,6 +14,7 @@
 // Kept to APIs that exist since 1.0.833 so the same file measures older releases
 // (game-perf.py --source copies it into a throwaway tag worktree).
 #include <players/AIDecisionLog.h>
+#include <units/GroundUnit.h>
 
 #include <algorithm>
 #include <chrono>
@@ -108,7 +109,7 @@ struct MotionTrace {
         if (path == nullptr || path[0] == '\0' || out.is_open()) return;
         out.open(path);
         out << "cycle,cycles,frame,id,item,house,x,y,dx,dy,lx,ly,nx,ny,moving,jsm,route_tick,step_start,step_end,now,"
-               "formation,awaiting,active,flying\n";
+               "awaiting,active,flying\n";
     }
     void record(Game& g) {
         if (!out.is_open()) return;
@@ -127,7 +128,7 @@ struct MotionTrace {
                 << u->getItemID() << ',' << u->getOwner()->getHouseID() << ',' << x << ',' << y << ',' << dx << ',' << dy << ','
                 << u->location.x << ',' << u->location.y << ',' << u->nextSpot.x << ',' << u->nextSpot.y << ','
                 << u->moving << ',' << u->justStoppedMoving << ',' << u->dynastyRouteTick << ',' << u->dynastyStepStart << ','
-                << u->dynastyStepEnd << ',' << now << ',' << u->formationGroup << ','
+                << u->dynastyStepEnd << ',' << now << ','
                 << (ground ? static_cast<GroundUnit*>(u)->awaitingPickup : false) << ',' << u->isActive() << ','
                 << u->isAFlyingUnit() << '\n';
         }

@@ -32,7 +32,7 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
 - **Unit motion trace**: `--motion-csv FILE` writes one row per unit whose position changed:
   cycle, cycles since the previous row, frame, id, item, house, `realX/realY` (what the unit is
   drawn at) and the change, location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick
-  and step start/end, formation, carryall wait, active, flying. Stepped: before every cycle;
+  and step start/end, carryall wait, active, flying. Stepped: before every cycle;
   `--mainloop`/`--rendered`: before each frame's first cycle, i.e. the positions the frame just
   drew. Used for Stefan's `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps and
   missed route ticks").
