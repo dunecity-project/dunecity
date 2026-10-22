@@ -39,6 +39,12 @@ void TimeoutTrigger::save(OutputStream& stream) const
 
 void TimeoutTrigger::trigger()
 {
+    if(currentGame->watchesWithoutSide()) {
+        // Nothing here has a side the time limit could favour: the match ends, won only by a
+        // team that is already alone on the map (a time-out is otherwise a draw).
+        currentGame->setWatchedGameOver(currentGame->soleSurvivingTeam(), true);
+        return;
+    }
     if((currentGame->loseFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
         // player has won
         currentGame->setGameWon();

@@ -658,7 +658,8 @@ Game::~Game() {
                 .set("deviation_rewards", house[h]->deviationRewardStats()));
         }
         AITelemetry::log().write(gameCycleCount, -1, -1, "game_summary", AITelemetry::Record()
-            .set("local_result", finished ? (won ? "victory" : "defeat") : "ended_without_result")
+            .set("local_result", finished ? (watchedWinnerTeam >= 0 ? "watched_to_end" : won ? "victory" : "defeat") : "ended_without_result")
+            .set("winner_team", watchedWinnerTeam)
             .set("local_house", pLocalHouse ? pLocalHouse->getHouseID() : -1).set("houses", roster));
     }
     AITelemetry::log().stop();
@@ -2968,7 +2969,10 @@ void Game::drawScreen()
     if(finished) {
         std::string message;
 
-        if(won) {
+        if(watchedWinnerTeam >= 0) {
+            // Nobody here had a side left: name the winner instead.
+            message = watchedResultText();
+        } else if(won) {
             message = _("You Have Completed Your Mission.");
         } else {
             message = _("You Have Failed Your Mission.");
@@ -2976,6 +2980,17 @@ void Game::drawScreen()
 
         sdl2::texture_ptr pFinishMessageTexture = pFontManager->createTextureWithText(message.c_str(), COLOR_WHITE, 28);
         SDL_Rect drawLocation = calcDrawingRect(pFinishMessageTexture.get(), sideBarPos.x/2, topBarPos.h + (getRendererHeight()-topBarPos.h)/2, HAlign::Center, VAlign::Center);
+        if(watchedWinnerTeam > 0) {
+            // On a plate framed in the winner's colour: some house colours (Rebels' greys)
+            // are too dark to read as text on the map.
+            SDL_Rect plate{drawLocation.x - 18, drawLocation.y - 10, drawLocation.w + 36, drawLocation.h + 20};
+            renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 176));
+            const Uint32 frame = watchedResultColor(1);
+            for(int i = 0; i < 3; ++i) {
+                SDL_Rect border{plate.x + i, plate.y + i, plate.w - 2 * i, plate.h - 2 * i};
+                renderDrawRect(renderer, &border, frame);
+            }
+        }
         SDL_RenderCopy(renderer, pFinishMessageTexture.get(), nullptr, &drawLocation);
     }
 
@@ -4906,6 +4921,10 @@ int Game::whatNext()
         case GameType::Skirmish: {
             if(bQuitGame == true) {
                 return GAME_RETURN_TO_MENU;
+            } else if(watchedWinnerTeam >= 0) {
+                // Watched to the end: the winner's statistics, not this side's debriefing.
+                whatNextParam = GAME_RETURN_TO_MENU;
+                return GAME_CUSTOM_GAME_STATS;
             } else if(won == true) {
                 whatNextParam = GAME_RETURN_TO_MENU;
                 return GAME_DEBRIEFING_WIN;
@@ -5438,6 +5457,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     }
     logLoadStage("complete");
     finished = false;
+    watchedWinnerTeam = -1;
+    watchedTimeUp = false;
 
     return true;
     } catch(const InputStream::exception& e) {
@@ -5757,6 +5778,13 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
     
     // If host disconnected, the game cannot continue - end it
     if(bHost) {
+        // The players leave once their match is decided; a view that has already seen that
+        // result ends normally instead of reporting a lost connection.
+        if(watchedWinnerTeam >= 0) {
+            SDL_Log("Host '%s' left after the game was decided - ending normally", name.c_str());
+            finishedLevel = true;
+            return;
+        }
         if(isSpectating() && pNetworkManager && pNetworkManager->joinFailure().empty())
             pNetworkManager->failObserver("The connection to the host was interrupted.\nPlease try joining again.");
         SDL_Log("Host '%s' disconnected - ending game", name.c_str());
@@ -5783,7 +5811,8 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
 }
 
 void Game::setGameWon() {
-    // An observer takes no side and keeps watching when its view house wins or loses.
+    // An observer takes no side: its view house winning or losing is not the end of its game.
+    // It ends once the whole match is decided (checkWatchedGameDecided, setWatchedGameOver).
     if(isObserving()) return;
     if(!bQuitGame && !finished) {
         won = true;
@@ -5802,6 +5831,78 @@ void Game::setGameLost() {
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
         soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
     }
+}
+
+namespace {
+/// Teams with a house still alive: the houses House::lose() counts (team 0 never dies).
+std::set<int> survivingTeams(const std::array<std::unique_ptr<House>, NUM_HOUSES>& houses) {
+    std::set<int> teams;
+    for(const auto& h : houses) if(h && h->getTeamID() != 0 && h->isAlive()) teams.insert(h->getTeamID());
+    return teams;
+}
+}
+
+int Game::soleSurvivingTeam() const {
+    const auto teams = survivingTeams(house);
+    return teams.size() == 1 ? *teams.begin() : 0;
+}
+
+bool Game::watchesWithoutSide() const {
+    // A campaign mission ends on its own rules; a network co-op spectator follows the host into
+    // the next mission instead.
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return false;
+    if(isObserving()) return true;
+    // A player whose team is still in the game keeps the original rules.
+    if(pLocalHouse == nullptr) return false;
+    for(const auto& h : house)
+        if(h && h->isAlive() && h->getTeamID() == pLocalHouse->getTeamID()) return false;
+    return true;
+}
+
+void Game::checkWatchedGameDecided() {
+    if(finished || bQuitGame || gameState != GameState::Running) return;
+    if((winFlags & (WINLOSEFLAGS_AI_NO_BUILDINGS | WINLOSEFLAGS_HUMAN_HAS_BUILDINGS)) == 0) return;
+    if(!watchesWithoutSide()) return;
+    const auto teams = survivingTeams(house);
+    if(teams.size() > 1) return;
+    setWatchedGameOver(teams.empty() ? 0 : *teams.begin());
+}
+
+void Game::setWatchedGameOver(int winningTeam, bool timeUp) {
+    if(bQuitGame || finished || !watchesWithoutSide()) return;
+    won = false;
+    finished = true;
+    finishedLevelCycle = gameCycleCount;
+    watchedWinnerTeam = std::max(0, winningTeam);
+    watchedTimeUp = timeUp;
+    SDL_Log("Game over for the local view at cycle %u: %s", gameCycleCount, watchedResultText().c_str());
+}
+
+std::string Game::watchedResultText() const {
+    if(watchedWinnerTeam <= 0) return watchedTimeUp ? _("Time is up - no winner") : _("No house is left standing");
+    // The houses that took part (a player each); a map's spare houses only as a fallback.
+    std::vector<int> members;
+    for(int pass = 0; pass < 2 && members.empty(); ++pass)
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(house[h] && house[h]->getTeamID() == watchedWinnerTeam && (pass == 1 || !house[h]->getPlayerList().empty()))
+                members.push_back(h);
+    if(members.size() == 1)
+        return fmt::sprintf(_("House %s has won"), getHouseNameByNumber(static_cast<HOUSETYPE>(members.front())));
+    std::string names;
+    for(size_t i = 0; i < members.size(); ++i) {
+        if(i > 0) names += (i + 1 == members.size()) ? _(" and ") : std::string(", ");
+        names += getHouseNameByNumber(static_cast<HOUSETYPE>(members[i]));
+    }
+    return fmt::sprintf(_("Team %d has won: %s"), watchedWinnerTeam, names);
+}
+
+Uint32 Game::watchedResultColor(int shade) const {
+    // The first winning house's colour; shade 3 is how its row in the statistics draws it.
+    for(int pass = 0; watchedWinnerTeam > 0 && pass < 2; ++pass)
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(house[h] && house[h]->getTeamID() == watchedWinnerTeam && (pass == 1 || !house[h]->getPlayerList().empty()))
+                return getHouseColorRGB(getHouseVisualHouse(h), shade);
+    return COLOR_WHITE;
 }
 
 

@@ -59,7 +59,17 @@ CustomGameStatsMenu::CustomGameStatsMenu() : MenuBase()
     captionLabel.setTextColor(localHouseColor);
     captionLabel.setAlignment(Alignment_HCenter);
     mainVBox.addWidget(&captionLabel, 24);
-    mainVBox.addWidget(VSpacer::create(24));
+    if(currentGame->getWatchedWinnerTeam() >= 0) {
+        // Watched to the end (spectating, or out of the game): who won, in their colour.
+        resultLabel.setText(currentGame->watchedResultText());
+        resultLabel.setTextColor(currentGame->watchedResultColor());
+        resultLabel.setAlignment(Alignment_HCenter);
+        mainVBox.addWidget(VSpacer::create(6));
+        mainVBox.addWidget(&resultLabel, 24);
+        mainVBox.addWidget(VSpacer::create(10));
+    } else {
+        mainVBox.addWidget(VSpacer::create(24));
+    }
     mainVBox.addWidget(Spacer::create(), 0.05);
     mainVBox.addWidget(&mainHBox, 0.80);
     mainHBox.addWidget(&playerStatListVBox, 1.0);

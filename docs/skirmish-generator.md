@@ -114,6 +114,24 @@ never serialized or sent, and no protocol, save or map format changed.
   never reads or writes these keys, and `Params::clamp` turns `spectate` off for a hosted map.
 - Start builds the match through `RandomSkirmishMenu::prepareStart` (generate, remember, build
   the start) and then plays it with `startSinglePlayerGame`, as before.
+- **The end** (Stefan, after 1.0.850: "when there is a winner and player is spectating the game
+  should end"). Until then an observer's `setGameWon/Lost` were no-ops and House::lose()
+  only judged the view house's team, so a spectated match never ended. Now a view without a side -
+  an observer (offline Spectate in Random Skirmish or Custom Game, or a network spectator), or a
+  player whose whole team is out on a map without "human has buildings" in WinFlags (e.g.
+  Equilibrium) - ends once the match is decided for everybody: `Game::checkWatchedGameDecided`
+  after every House::lose() (one team left, team 0 excluded; needs an elimination WinFlag), any
+  house reaching its quota (observers only; a player still ends only on its own quota), or the
+  time limit (a draw unless one team is alone). The game shows "House X has won" / "Team N has
+  won: A and B" (or "Time is up - no winner") on a plate framed in the winner's colour, runs the
+  usual six-second end, then the statistics (with the same line in the winner's colour) and the
+  menu; a skirmish-type game goes to the statistics instead of a debriefing. Campaign and co-op
+  campaign missions keep their own rules. Players' win/lose is unchanged. Nothing simulated
+  changes (`finished` is local), so every peer, spectator included, ends at the same cycle with
+  the same state; a spectator whose game is decided and whose host then leaves ends normally
+  instead of reporting a lost connection. No protocol or save change. Test:
+  `spectator_game_end_probe` (`tests/spectator/run-game-end-probe.py`; `--baseline` reports the
+  old behaviour).
 
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
