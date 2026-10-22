@@ -86,6 +86,53 @@ Stefan: "when there is a winner and player is spectating the game should end." A
   local PHP service); the in-process probe uses the same `isObserving()` path. A spectator lagging more than the
   six-second end behind a host that leaves still gets the old "connection interrupted" message.
 
+## 2026-10-22 — City airplane: straight legs, 16 headings, shot down = Death Hand (branch `fix/city-airplane`, from 1.0.850 afb2315c; protocol 90, save 9868; not released)
+
+Agent AirplaneFix2 (continuing the interrupted AirplaneFix work). Stefan: "stop the plane from turning eratically ...
+also when the plane gets shot down it should make the equivalent of a nuclear missile attack".
+
+- **Cause of the zig-zag:** the plane steered with Micropolis `turnTo(getDir())`. `getDir`'s table never answers due
+  east/west (`dispY * 2 < dispY` never holds), so for any waypoint under ~63 degrees off the horizontal it flipped
+  between NE and SE (NW/SW) as each 45-degree step crossed the line: 45-degree legs ~2.5 tiles long.
+- **Steering:** `CityAircraft::airplaneSteer` (CityAircraftPolicy.h) keeps a continuous FixPoint heading, turns at most
+  the original 45 degrees per turn step, lands exactly on the bearing, ignores <2.8-degree noise and holds course
+  while the straight course already passes within half the arrival distance of the waypoint. Speeds on the 8 original
+  headings are unchanged; the in-between ones use the mean axis/diagonal magnitude.
+- **Art:** `city_airplane.png` is 8x5 cells: row 1 holds 8 in-between headings rotated 22.5 degrees from the original
+  axis frames by `scripts/import-micropolis-aircraft.py` (Scale2x x3 + nearest rotation, only original colours,
+  `--check` reproducible); take-off rows moved to 2..4 (`airplaneTakeoffRow`). Drawn on the nearest of 16 headings.
+- **Crash:** `AmbientAirplane::handleDamage` -> `crash()` -> `Bullet::detonateDeathHand` (the Palace missile's own
+  impact, factored out of `Bullet::destroy`: 17 centres, radius 2 tiles, damage 200, explosions, shake), credited to
+  the shooter, friendly fire as for the Death Hand. Leaving the map / landing never reaches it.
+- **AI risk (checked):** turrets and launchers target planes automatically, and planes fly random waypoints across
+  the whole map, so without a guard every plane crossing a defended base would be shot down onto it (a Death Hand on
+  your own turrets: 200 damage on every structure under a blast centre, units within 2 tiles of one). Guard:
+  `AmbientAirplane::crashEndangers` in the canAttack of RocketTurret, Launcher, EliteLauncher, Trooper, Scoutpost -
+  hold fire while the crash, here or anywhere along the course a turret rocket would need to reach it, would hit its
+  own team (exact Map::damage rules: centre on a structure footprint, unit within the radius). Re-checked every cycle
+  (UnitBase/TurretBase drop a target that fails canAttack), so a plane flying onto the base is released; a rocket
+  already in flight cannot be recalled (that is what the lead covers). QuantBot's air defence assigns only via canAttack.
+- **Probe** (`city_aircraft_probe`, new phases; `--phases` to select): straight legs before -> after: 48 fixed legs
+  0.181 -> 0.017 heading changes per tile, reversals 327 -> 0 (legs with a reversal 42 -> 0); natural flight 0.374 ->
+  0.023 changes per tile, 18 -> 0 left-right oscillations. Crash: every witness's HP equals a Death Hand on the same
+  spot, same kills (+ the plane), 17 explosions; departure: no blast, no damage, no kill; anti-air: open ground fire,
+  own wall 3 tiles off fire, 2 tiles off hold, owner's side fire, inbound hold, outbound fire.
+- **Frame strips:** `tests/units/city-airplane-frame-strip.py` renders a probe trace (`flight-path-*.csv`,
+  `straight-legs-*.csv`). Before/after PNGs, probe CSVs and the FFA sweep are in
+  `~/Documents/projects/dunecity-results/city-airplane/`.
+- **quantbot_ffa_army_deploys reworked (Main's call):** on this branch seed 9101 had nobody eliminated by minute 45
+  (it was 26.9 with only the steering change). A 12-seed sweep (9101-9112, 45-minute cap; control = planes shot
+  down as before, no blast, no hold-fire) found the same rate: eliminated by minute 30 in 6/12 control v 5/12 final,
+  0-2 planes shot down per game. So it was chance, not a regression. The deploy checks (30+ wave by minute 8, reserve
+  not >6 minutes at home) still run on 9101. The elimination check now passes when at least one of 9101, 9103,
+  9105 (three games in parallel inside the test) has a house eliminated by minute 30. 1.0.847's stuck army still
+  fails, because its waves never leave. Rationale is in the runner docstring, the CMake comment and docs/formations.md.
+- Crashes log `City airplane of house H shot down at x,y by house S (cycle C): Death Hand impact`.
+- **Tests** (c56ba0b0): `dunecity-queue ctest` job 20261022T215443-ctest-5f17fe, 105/105 passed (pro/pc/mini),
+  incl. dunelegacy_tests, city_aircraft_probe, perf_regression, quantbot_ffa_army_deploys (9101 none, 9103 21.3,
+  9105 25.8 min) and every quantbot_*. `import-micropolis-aircraft.py --check` reproduces the sheet.
+- `platform/web/package-lock.json` (git+ssh URL from a local npm run) is left uncommitted on purpose.
+
 ## 2026-10-22 — 1.0.850 published to production
 
 PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)

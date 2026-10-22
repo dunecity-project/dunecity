@@ -30,6 +30,7 @@
 #include <House.h>
 #include <Game.h>
 #include <Map.h>
+#include <units/AmbientAirplane.h>
 
 #include <algorithm>
 
@@ -72,7 +73,8 @@ void RocketTurret::updateStructureSpecificStuff() {
 bool RocketTurret::canAttack(const ObjectBase* object) const {
     if((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
-        && (object->getItemID() == Unit_Ornithopter || object->isVisible(getOwner()->getTeamID()))) {
+        && (object->getItemID() == Unit_Ornithopter || object->isVisible(getOwner()->getTeamID()))
+        && !AmbientAirplane::crashEndangers(*this, *object)) {
         return true;
     } else {
         return false;

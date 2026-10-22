@@ -883,9 +883,11 @@ house, 20,000-credit armies, 40,000 cities, Rock High, Spice Medium, his game op
 label, one game per seed), `army.csv` and an army-deployment report table.
 
 **Regression test** `quantbot_ffa_army_deploys` (`tests/ai/run-ffa-army-deploys.py`, mandatory, AGENTS.md):
-rs160-dunecity seed 9101, four QuantBot Brutal; fails without a 30+ unit wave by minute 8, with a
-house's idle reserve 80%+ inside its base for more than 6 minutes in a row, or with nobody eliminated
-by minute 30. Fixed code (60-minute calibration run): first wave at minute 1.3 (66 units by minute 8),
+rs160-dunecity, four QuantBot Brutal; fails without a 30+ unit wave by minute 8 or with a house's idle
+reserve 80%+ inside its base for more than 6 minutes in a row (both on seed 9101), or when none of seeds
+9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 30. Since 2026-10-22 the
+elimination check spans three seeds: one seed finishing by minute 30 is chance (a 12-seed sweep: 6/12 v
+5/12 before/after the city-airplane change, which moved 9101 itself from 26.9 to none). Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
 longest inside stretch 1 minute, eliminations at 22.3 and 27.4 minutes, ~10 minutes wall for 60
 game minutes. Probe `quantbot_force_concentration` section 7 adds: two enemy houses' two tanks each on
 different teams do not outnumber our two (sum 1,200 v strongest team 600), allied they do; city

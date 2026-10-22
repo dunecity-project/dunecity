@@ -19,6 +19,8 @@ parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path)
 parser.add_argument('--mods', default='dunecity',
                     help='comma separated mods to run the probe under')
+parser.add_argument('--phases', default='',
+                    help='comma separated probe phases to run (default: all)')
 args = parser.parse_args()
 build = args.build_dir.resolve()
 out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(prefix='dunecity-city-aircraft-probe-'))
@@ -54,6 +56,8 @@ cc[cc.index('-o') + 1] = str(obj)
 cc[cc.index('-c') + 1] = str(source)
 map_path = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
 cc.append('-DPROBE_MAP_PATH="' + str(map_path) + '"')
+large_map_path = root / 'data/maps/multiplayer/2P - 128x128 - 1v1 - Habbanya-Penny.ini'
+cc.append('-DPROBE_LARGE_MAP_PATH="' + str(large_map_path) + '"')
 # The fixture writes the production traffic-density layer and reads private unit
 # state. Only this diagnostic binary gets that access; nothing ships with it.
 cc.append('-fno-access-control')
@@ -78,6 +82,8 @@ for mod in [m.strip() for m in args.mods.split(',') if m.strip()]:
     env = dict(os.environ, DUNECITY_USERDIR=str(out / ('profile-' + mod)),
                SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                CITY_AIRCRAFT_PROBE_MOD=mod, CITY_AIRCRAFT_PROBE_OUT=str(out))
+    if args.phases:
+        env['CITY_AIRCRAFT_PROBE_PHASES'] = args.phases
     logfile = out / ('run-' + mod + '.log')
     with logfile.open('w') as log:
         subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,

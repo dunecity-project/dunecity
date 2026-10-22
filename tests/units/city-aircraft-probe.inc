@@ -27,6 +27,7 @@
 #include <Map.h>
 #include <Tile.h>
 #include <Bullet.h>
+#include <DynastyProjectile.h>
 #include <SpatialGrid.h>
 #include <sand.h>
 #include <mod/ModManager.h>
@@ -67,11 +68,14 @@ void record(const std::string& phase, const std::string& detail) {
 }
 
 std::string gMapData;
+/// A 128x128 map for the straight-flight phase: the 51x31 fixture is crossed in
+/// a few seconds, too short for legs long enough to show a zig-zag.
+std::string gLargeMapData;
 
-std::unique_ptr<Game> newCityGame(int seed) {
+std::unique_ptr<Game> newCityGame(int seed, const std::string& mapData = gMapData) {
     auto game = std::make_unique<Game>();
     currentGame = game.get();
-    GameInitSettings init("city-aircraft.ini", gMapData, "City aircraft", true, settings.gameOptions);
+    GameInitSettings init("city-aircraft.ini", mapData, "City aircraft", true, settings.gameOptions);
     init.randomSeed = seed;
     GameInitSettings::HouseInfo owner(HOUSE_ATREIDES, 1);
     owner.addPlayerInfo({"City tester", "HumanPlayer"});
@@ -280,7 +284,7 @@ void checkOriginalArtLoaded() {
 
     struct ArtSpec { int objPic; int itemID; int cell; int rows; };
     for(const ArtSpec& spec : {ArtSpec{ObjPic_CityHelicopter, Unit_AmbientHelicopter, 2 * D2_TILESIZE, 1},
-                               ArtSpec{ObjPic_CityAirplane, Unit_AmbientAirplane, 3 * D2_TILESIZE, 4}}) {
+                               ArtSpec{ObjPic_CityAirplane, Unit_AmbientAirplane, 3 * D2_TILESIZE, CA::kAirplaneSheetRows}}) {
         for(int house = 0; house < NUM_HOUSES; ++house) {
             auto art = pGFXManager->getObjPic(spec.objPic, house);
             for(int zoom = 0; zoom < NUM_ZOOMLEVEL; ++zoom) {
@@ -302,7 +306,7 @@ void checkOriginalArtLoaded() {
         cityRequire(unit->graphicID == static_cast<int>(spec.objPic), "aircraft is not using the original art");
         unit->cancelDeployment();
     }
-    record("art", "helicopter=8x1x32 airplane=8x4x48 zoom_levels="
+    record("art", "helicopter=8x1x32 airplane=8x5x48 zoom_levels="
                 + std::to_string(NUM_ZOOMLEVEL) + " houses=" + std::to_string(NUM_HOUSES));
     game.reset();
     currentGame = nullptr;
@@ -821,11 +825,15 @@ void checkEnemyAirDefence() {
         cityRequire(tank != nullptr, "could not place the ground-weapon control");
         tank->doSetAttackMode(STOP);
 
-        // Hold the aircraft still so the kill is a damage test, not a chase.
+        // Hold the aircraft still so the kill is a damage test, not a chase. The
+        // airplane crashes with a Death Hand's blast, which the turret will not
+        // set off over itself (AmbientAirplane::crashEndangers): the blast centres
+        // reach two tiles, so it is shot down four tiles out, inside the turret's
+        // view range and clear of the blast.
         game->objectData.data[item][HOUSE_ATREIDES].maxspeed = 0;
         auto* aircraft = dynamic_cast<AirUnit*>(owner->createUnit(item, true));
         cityRequire(aircraft != nullptr, "could not create the city aircraft");
-        aircraft->deploy(site + Coord(3, 0));
+        aircraft->deploy(site + Coord(item == Unit_AmbientAirplane ? 4 : 3, 0));
         aircraft->currentMaxSpeed = 0;
         aircraft->setVisible(VIS_ALL, true);
         const Uint32 aircraftID = aircraft->getObjectID();
@@ -974,7 +982,7 @@ void checkSaveContinuation() {
     cityRequire(loadedCopter->getReportCooldown() == savedCooldown, "the helicopter lost its report cooldown");
     cityRequire(loadedCopter->getReportCount() == savedReports, "the helicopter lost its report tally");
     cityRequire(loadedPlane->getTakeoffFrame() == savedTakeoff, "the airplane lost its take-off frame");
-    cityRequire(loadedPlane->drawnFrame == savedTakeoff - 8,
+    cityRequire(loadedPlane->drawnFrame == CA::airplaneTakeoffRow(savedTakeoff),
                 "the airplane lost its take-off artwork row immediately after loading");
     cityRequire(loadedPlane->getRemainingTicks() == savedBudget, "the airplane lost its flight budget");
 
@@ -1084,6 +1092,492 @@ void checkDepartureSaveContinuation() {
     currentGame = nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// straight flight
+// ---------------------------------------------------------------------------
+
+/// Stefan, 2026-10-22: "stop the plane from turning eratically it should move in
+/// straight lines mostly not turn left and right all the time".
+///
+/// Heading changes are read off the engine's own `angle` (eighths of a turn).
+/// A change is a cycle on which the heading differs from the cycle before; its
+/// sign is left (counter-clockwise) or right. A reversal is a change whose sign
+/// is opposite to the previous one: flying to one fixed waypoint, a plane that
+/// does not zig-zag only ever turns one way. An oscillation is a reversal less
+/// than kOscillationTiles after the previous change - the left-right-left of the
+/// zig-zag, as opposed to a new waypoint that happens to lie the other way.
+constexpr double kOscillationTiles = 4.0;
+/// Leg budget: the start-of-leg correction plus at most two more per leg. The
+/// zig-zag turned every five sprite ticks (2.5 tiles), 0.4 per tile.
+constexpr double kMaxLegChangesPerTile = 0.05;
+constexpr int kMaxLegChanges = 3;
+/// Whole flight, take-off to leaving the map, waypoints drawn by the engine.
+constexpr double kMaxFlightChangesPerTile = 0.15;
+/// One game minute at GAMESPEED_DEFAULT (16 ms per cycle).
+constexpr int kCyclesPerGameMinute = 60000 / GAMESPEED_DEFAULT;
+
+struct TurnLog {
+    int changes = 0;
+    int reversals = 0;
+    int oscillations = 0;
+    double tiles = 0.0;
+    int cycles = 0;
+    int lastSign = 0;
+    double tilesAtLastChange = -1e9;
+    bool primed = false;
+    FixPoint lastAngle;
+
+    void observe(const AmbientAirplane* plane, double stepTiles) {
+        tiles += stepTiles;
+        ++cycles;
+        if(!primed) { lastAngle = plane->angle; primed = true; return; }
+        if(plane->angle == lastAngle) return;
+        FixPoint diff = plane->angle - lastAngle;
+        while(diff > 4) diff -= 8;
+        while(diff <= -4) diff += 8;
+        const int sign = diff > 0 ? 1 : -1;
+        ++changes;
+        if(lastSign != 0 && sign != lastSign) {
+            ++reversals;
+            if(tiles - tilesAtLastChange < kOscillationTiles) ++oscillations;
+        }
+        lastSign = sign;
+        tilesAtLastChange = tiles;
+        lastAngle = plane->angle;
+    }
+    void add(const TurnLog& other) {
+        changes += other.changes;
+        reversals += other.reversals;
+        oscillations += other.oscillations;
+        tiles += other.tiles;
+        cycles += other.cycles;
+    }
+    double changesPerTile() const { return tiles > 0 ? changes / tiles : 0.0; }
+    double changesPerMinute() const {
+        return cycles > 0 ? changes * static_cast<double>(kCyclesPerGameMinute) / cycles : 0.0;
+    }
+};
+
+/// One row per cycle, for tests/units/city-airplane-frame-strip.py: position,
+/// heading and the sheet cell the renderer draws (column drawnAngle, row
+/// drawnFrame), so a frame strip shows exactly what the player saw.
+void traceRow(std::ofstream& out, int leg, int cycle, const AmbientAirplane* p) {
+    out << leg << ',' << cycle << ',' << lround(p->realX) << ',' << lround(p->realY) << ','
+        << p->angle.toDouble() << ',' << static_cast<int>(p->drawnAngle) << ',' << p->drawnFrame << ','
+        << p->getTakeoffFrame() << ',' << p->getDestination().x << ',' << p->getDestination().y << '\n';
+}
+
+std::ofstream openTrace(const std::string& name) {
+    std::ofstream trace(gCityAircraftOut + "/" + name + "-" + gCityAircraftMod + ".csv");
+    trace << "leg,cycle,x,y,angle,drawn_angle,drawn_frame,takeoff_frame,dest_x,dest_y\n";
+    return trace;
+}
+
+/// 48 legs from the map centre to fixed waypoints 7.5 degrees apart. Each starts
+/// on the original eight-way bearing (what a plane that has just picked the
+/// waypoint flies), and ends when the plane arrives and draws its next one.
+void checkStraightFlightLegs() {
+    auto game = newCityGame(1820, gLargeMapData);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    game->updateGameState();
+
+    const int w = currentGameMap->getSizeX(), h = currentGameMap->getSizeY();
+    cityRequire(w >= 96 && h >= 96, "the straight-flight map is too small for long legs");
+    const Coord centre(w / 2, h / 2);
+    const int radius = std::min(w, h) / 2 - 8;
+    constexpr int kBearings = 48;
+
+    std::ofstream trace = openTrace("straight-legs");
+    TurnLog all;
+    int arrived = 0, legsWithReversal = 0, worstLeg = 0, worstLegChanges = 0;
+    for(int leg = 0; leg < kBearings; ++leg) {
+        const double theta = 2.0 * M_PI * leg / kBearings;
+        const Coord target(centre.x + static_cast<int>(std::lround(radius * std::cos(theta))),
+                           centre.y - static_cast<int>(std::lround(radius * std::sin(theta))));
+        auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+        cityRequire(plane != nullptr, "could not create the straight-leg airplane");
+        plane->deploy(centre);
+        plane->setVisible(VIS_ALL, true);
+        plane->setFlightDestination(target);
+        const Coord from = plane->micropolisPosition(), to = plane->micropolisDestination();
+        const ANGLETYPE start = CA::directionToAngle(CA::getDir(from.x, from.y, to.x, to.y).direction);
+        plane->angle = FixPoint(static_cast<int>(start));
+        plane->drawnAngle = static_cast<Sint8>(start);
+        const Uint32 planeID = plane->getObjectID();
+
+        TurnLog log;
+        long prevX = lround(plane->realX), prevY = lround(plane->realY);
+        bool reached = false;
+        for(int cycle = 0; cycle < 2000; ++cycle) {
+            game->updateGameState();
+            auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+            cityRequire(live != nullptr, "a straight-leg airplane vanished over the map");
+            if(live->getDestination() != target) { reached = true; break; }
+            const long x = lround(live->realX), y = lround(live->realY);
+            log.observe(live, std::hypot(static_cast<double>(x - prevX), static_cast<double>(y - prevY)) / TILESIZE);
+            prevX = x;
+            prevY = y;
+            traceRow(trace, leg, cycle, live);
+        }
+        if(reached) ++arrived;
+        if(log.reversals > 0) ++legsWithReversal;
+        if(log.changes > worstLegChanges) { worstLegChanges = log.changes; worstLeg = leg; }
+        all.add(log);
+        SDL_Log("CITY_AIRCRAFT leg=%d bearing_deg=%.1f target=%d,%d tiles=%.1f changes=%d reversals=%d arrived=%d",
+                leg, 360.0 * leg / kBearings, target.x, target.y, log.tiles, log.changes, log.reversals, reached);
+
+        if(auto* live = game->getObjectManager().getObject(planeID)) {
+            live->setVisible(VIS_ALL, false);
+            live->destroy();
+        }
+    }
+
+    record("straight", "legs=" + std::to_string(kBearings) + " arrived=" + std::to_string(arrived)
+                     + " tiles=" + std::to_string(static_cast<long>(all.tiles))
+                     + " heading_changes=" + std::to_string(all.changes)
+                     + " changes_per_tile=" + std::to_string(all.changesPerTile())
+                     + " changes_per_game_minute=" + std::to_string(all.changesPerMinute())
+                     + " reversals=" + std::to_string(all.reversals)
+                     + " legs_with_reversal=" + std::to_string(legsWithReversal)
+                     + " worst_leg=" + std::to_string(worstLeg)
+                     + " worst_leg_changes=" + std::to_string(worstLegChanges));
+    cityRequire(arrived == kBearings, "a straight-flight leg never reached its waypoint");
+    cityRequire(legsWithReversal == 0,
+                std::to_string(legsWithReversal) + " legs turned left and right on the way to one waypoint");
+    cityRequire(worstLegChanges <= kMaxLegChanges,
+                "leg " + std::to_string(worstLeg) + " changed heading " + std::to_string(worstLegChanges)
+                + " times on the way to one waypoint");
+    cityRequire(all.changesPerTile() <= kMaxLegChangesPerTile,
+                "the plane changes heading " + std::to_string(all.changesPerTile())
+                + " times per tile flown towards a fixed waypoint");
+    game.reset();
+    currentGame = nullptr;
+}
+
+/// A whole natural flight on the large map: the original take-off, the engine's
+/// own random waypoints, the departure. Writes the trace the frame strips use.
+void checkStraightNaturalFlight() {
+    auto game = newCityGame(1821, gLargeMapData);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    game->updateGameState();
+
+    const Coord runway(currentGameMap->getSizeX() / 4, currentGameMap->getSizeY() / 2);
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the natural-flight airplane");
+    plane->deploy(runway);
+    plane->setVisible(VIS_ALL, true);
+    plane->beginTakeoff();
+    const Uint32 planeID = plane->getObjectID();
+
+    std::ofstream trace = openTrace("flight-path");
+    TurnLog log;
+    std::set<std::pair<int, int>> cells;
+    int waypoints = 0;
+    Coord lastDestination = plane->getDestination();
+    long prevX = lround(plane->realX), prevY = lround(plane->realY);
+    for(int cycle = 0; cycle < 26000; ++cycle) {
+        game->updateGameState();
+        auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+        if(live == nullptr) break;
+        traceRow(trace, 0, cycle, live);
+        cells.insert({live->drawnAngle, live->drawnFrame});
+        if(live->getDestination() != lastDestination) {
+            lastDestination = live->getDestination();
+            ++waypoints;
+        }
+        const long x = lround(live->realX), y = lround(live->realY);
+        if(live->getTakeoffFrame() == 0)
+            log.observe(live, std::hypot(static_cast<double>(x - prevX), static_cast<double>(y - prevY)) / TILESIZE);
+        prevX = x;
+        prevY = y;
+    }
+    cityRequire(game->getObjectManager().getObject(planeID) == nullptr,
+                "the natural flight did not end within the cycle budget");
+
+    record("straight", "natural_flight tiles=" + std::to_string(static_cast<long>(log.tiles))
+                     + " cycles=" + std::to_string(log.cycles)
+                     + " waypoints=" + std::to_string(waypoints)
+                     + " heading_changes=" + std::to_string(log.changes)
+                     + " changes_per_tile=" + std::to_string(log.changesPerTile())
+                     + " changes_per_game_minute=" + std::to_string(log.changesPerMinute())
+                     + " reversals=" + std::to_string(log.reversals)
+                     + " oscillations=" + std::to_string(log.oscillations)
+                     + " sheet_cells_drawn=" + std::to_string(cells.size()));
+    cityRequire(log.oscillations == 0,
+                std::to_string(log.oscillations) + " left-right oscillations in one natural flight");
+    cityRequire(log.changesPerTile() <= kMaxFlightChangesPerTile,
+                "a natural flight changes heading " + std::to_string(log.changesPerTile()) + " times per tile");
+    game.reset();
+    currentGame = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// crash blast
+// ---------------------------------------------------------------------------
+
+/// Atreides witnesses around the crash point. Every one is at least two tiles
+/// from it, outside the one-tile splash of the turret rockets that bring the
+/// plane down, so what reaches them is the crash blast alone; the outer ring is
+/// beyond the Death Hand's reach and has to come through untouched.
+struct BlastWitness { int dx, dy, itemID; };
+const BlastWitness kBlastWitnesses[] = {
+    {2, 0, Unit_Tank},  {0, 2, Unit_Tank},   {-2, 0, Unit_Tank},  {0, -2, Unit_Tank},
+    {2, 2, Unit_Trike}, {-2, -2, Unit_Quad}, {3, 0, Unit_Tank},   {0, 3, Unit_Trike},
+    {-3, 1, Unit_Quad}, {1, -3, Unit_Tank},  {3, 3, Unit_Trike},  {4, 0, Unit_Tank},
+    {0, -4, Unit_Quad}, {-4, -1, Unit_Tank}, {2, -2, Structure_Wall}, {-2, 2, Structure_Wall},
+    {6, 0, Unit_Tank},  {0, 6, Unit_Quad},   {0, -6, Structure_Wall},
+};
+
+struct BlastOutcome {
+    std::vector<int> health;   ///< per witness; 0 once destroyed
+    std::vector<int> full;     ///< per witness, as placed
+    int shooterUnitKills = 0;
+    int shooterStructureKills = 0;
+    Coord centre;              ///< world coordinates of the detonation
+    int newExplosions = 0;
+};
+
+/// One fixture, two ways: a hostile (Harkonnen) rocket turret shoots an
+/// Atreides city airplane down at `site`, or - same map, same witnesses, no
+/// plane - a Death Hand impact (Bullet_LargeRocket with the Palace's damage,
+/// fired by the same turret) lands on `deathHandAt`.
+BlastOutcome runBlastFixture(bool shootPlane, const Coord& deathHandAt) {
+    auto game = newCityGame(1830);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    auto* enemy = game->getHouse(HOUSE_HARKONNEN);
+    powerHouse(owner);
+    powerHouse(enemy);
+    game->updateGameState();
+
+    const Coord site(30, 15);
+    clearGround(site + Coord(-8, -7), 16, 15);
+    auto* turret = dynamic_cast<RocketTurret*>(
+        enemy->placeStructure(NONE_ID, Structure_RocketTurret, site.x - 7, site.y, true, true));
+    cityRequire(turret != nullptr, "could not place the blast-test turret");
+    turret->setVisible(VIS_ALL, true);
+    turret->attackMode = STOP;   // shoots only what it is told to
+
+    BlastOutcome outcome;
+    std::vector<Uint32> witnessIDs;
+    for(const BlastWitness& witness : kBlastWitnesses) {
+        const Coord at = site + Coord(witness.dx, witness.dy);
+        ObjectBase* object = isStructure(witness.itemID)
+            ? static_cast<ObjectBase*>(owner->placeStructure(NONE_ID, witness.itemID, at.x, at.y, true, true))
+            : static_cast<ObjectBase*>(owner->placeUnit(witness.itemID, at.x, at.y, true));
+        cityRequire(object != nullptr, "could not place a blast witness");
+        object->setVisible(VIS_ALL, true);
+        if(auto* unit = dynamic_cast<UnitBase*>(object)) unit->doSetAttackMode(STOP);
+        witnessIDs.push_back(object->getObjectID());
+        outcome.full.push_back(lround(object->getHealth()));
+    }
+
+    const int unitKillsBefore = enemy->getNumDestroyedUnits();
+    const int structureKillsBefore = enemy->getNumDestroyedStructures();
+    size_t explosionsBefore = 0;
+    if(shootPlane) {
+        game->objectData.data[Unit_AmbientAirplane][HOUSE_ATREIDES].maxspeed = 0;
+        auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+        cityRequire(plane != nullptr, "could not create the plane to shoot down");
+        plane->deploy(site);
+        plane->currentMaxSpeed = 0;
+        plane->setVisible(VIS_ALL, true);
+        const Uint32 planeID = plane->getObjectID();
+        cityRequire(turret->canAttack(plane), "the hostile turret may not shoot the plane down");
+        turret->doAttackObject(plane);
+        bool down = false;
+        for(int cycle = 0; cycle < 4000 && !down; ++cycle) {
+            auto* live = game->getObjectManager().getObject(planeID);
+            outcome.centre = live->getCenterPoint();
+            explosionsBefore = game->getExplosionList().size();
+            game->updateGameState();
+            live = game->getObjectManager().getObject(planeID);
+            down = live == nullptr || live->getHealth() <= 0;
+        }
+        cityRequire(down, "the hostile turret could not shoot the plane down");
+    } else {
+        outcome.centre = deathHandAt;
+        explosionsBefore = game->getExplosionList().size();
+        Coord at = deathHandAt;
+        auto* missile = new Bullet(turret->getObjectID(), &at, &at, Bullet_LargeRocket,
+                                   DynastyProjectile::deathHandDamage, false, nullptr);
+        bulletList.push_back(missile);
+        missile->destroy();   // Bullet::destroy() is the Death Hand impact
+    }
+    outcome.newExplosions = static_cast<int>(game->getExplosionList().size() - explosionsBefore);
+    for(int cycle = 0; cycle < 10; ++cycle) game->updateGameState();
+
+    for(Uint32 id : witnessIDs) {
+        const ObjectBase* object = game->getObjectManager().getObject(id);
+        outcome.health.push_back(object ? lround(object->getHealth()) : 0);
+    }
+    outcome.shooterUnitKills = enemy->getNumDestroyedUnits() - unitKillsBefore;
+    outcome.shooterStructureKills = enemy->getNumDestroyedStructures() - structureKillsBefore;
+    game.reset();
+    currentGame = nullptr;
+    return outcome;
+}
+
+std::string joinHealth(const std::vector<int>& health) {
+    std::string text;
+    for(size_t i = 0; i < health.size(); ++i) text += (i ? "/" : "") + std::to_string(health[i]);
+    return text;
+}
+
+void checkShotDownPlaneDetonates() {
+    const BlastOutcome crash = runBlastFixture(true, Coord());
+    const BlastOutcome deathHand = runBlastFixture(false, crash.centre);
+    record("crash", "crash_centre=" + std::to_string(crash.centre.x) + ',' + std::to_string(crash.centre.y)
+                  + " crash_health=" + joinHealth(crash.health)
+                  + " death_hand_health=" + joinHealth(deathHand.health)
+                  + " crash_kills=" + std::to_string(crash.shooterUnitKills) + '+'
+                  + std::to_string(crash.shooterStructureKills)
+                  + " death_hand_kills=" + std::to_string(deathHand.shooterUnitKills) + '+'
+                  + std::to_string(deathHand.shooterStructureKills)
+                  + " crash_explosions=" + std::to_string(crash.newExplosions)
+                  + " death_hand_explosions=" + std::to_string(deathHand.newExplosions));
+
+    int damaged = 0;
+    for(size_t i = 0; i < deathHand.health.size(); ++i) {
+        const BlastWitness& witness = kBlastWitnesses[i];
+        const std::string where = "witness " + std::to_string(i) + " at offset ("
+            + std::to_string(witness.dx) + ',' + std::to_string(witness.dy) + ")";
+        cityRequire(crash.health[i] == deathHand.health[i],
+                    where + " has " + std::to_string(crash.health[i]) + " HP after the crash but "
+                    + std::to_string(deathHand.health[i]) + " after a Death Hand on the same spot");
+        if(std::max(std::abs(witness.dx), std::abs(witness.dy)) >= 6)
+            cityRequire(deathHand.health[i] == deathHand.full[i],
+                        where + " is outside the Death Hand's reach but was damaged");
+        else if(deathHand.health[i] < deathHand.full[i])
+            ++damaged;
+    }
+    cityRequire(damaged > 0, "the Death Hand reference damaged nothing; the fixture proves nothing");
+    // The shooter is credited exactly as a Death Hand's owner is, plus the plane.
+    cityRequire(crash.shooterUnitKills == deathHand.shooterUnitKills + 1,
+                "the shooter's unit kills differ from a Death Hand's");
+    cityRequire(crash.shooterStructureKills == deathHand.shooterStructureKills,
+                "the shooter's structure kills differ from a Death Hand's");
+    // Seventeen blast centres, one large explosion each (all inside the map here).
+    cityRequire(deathHand.newExplosions == 17, "the Death Hand reference did not explode at 17 centres");
+    cityRequire(crash.newExplosions >= deathHand.newExplosions,
+                "the crash did not produce the Death Hand's explosions");
+}
+
+/// A plane that simply flies off the edge ends without any blast.
+void checkDepartingPlaneDoesNotDetonate() {
+    auto game = newCityGame(1831);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    auto* enemy = game->getHouse(HOUSE_HARKONNEN);
+    powerHouse(owner);
+    game->updateGameState();
+
+    const int w = currentGameMap->getSizeX();
+    const Coord start(w - 4, 15);
+    clearGround(start + Coord(-4, -4), 8, 9);
+    std::vector<Uint32> witnessIDs;
+    std::vector<int> fullHealth;
+    for(const Coord offset : {Coord(0, 2), Coord(0, -2), Coord(2, 0), Coord(-2, 1), Coord(1, 3)}) {
+        auto* unit = owner->placeUnit(Unit_Tank, start.x + offset.x, start.y + offset.y, true);
+        cityRequire(unit != nullptr, "could not place a departure witness");
+        unit->doSetAttackMode(STOP);
+        witnessIDs.push_back(unit->getObjectID());
+        fullHealth.push_back(lround(unit->getHealth()));
+    }
+
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the departing airplane");
+    plane->deploy(start);
+    plane->setVisible(VIS_ALL, true);
+    plane->remainingTicks = 0;
+    const Uint32 planeID = plane->getObjectID();
+    const int killsBefore = enemy->getNumDestroyedUnits() + owner->getNumDestroyedUnits();
+    bool gone = false;
+    int explosionsAtExit = -1;
+    for(int cycle = 0; cycle < 2000 && !gone; ++cycle) {
+        const size_t before = game->getExplosionList().size();
+        game->updateGameState();
+        gone = game->getObjectManager().getObject(planeID) == nullptr;
+        if(gone) explosionsAtExit = static_cast<int>(game->getExplosionList().size() - before);
+    }
+    cityRequire(gone, "the departing plane never left the map");
+    for(int cycle = 0; cycle < 10; ++cycle) game->updateGameState();
+    for(size_t i = 0; i < witnessIDs.size(); ++i) {
+        const ObjectBase* object = game->getObjectManager().getObject(witnessIDs[i]);
+        cityRequire(object != nullptr && lround(object->getHealth()) == fullHealth[i],
+                    "a plane leaving the map damaged a unit under its exit path");
+    }
+    cityRequire(explosionsAtExit == 0, "a plane leaving the map exploded");
+    cityRequire(enemy->getNumDestroyedUnits() + owner->getNumDestroyedUnits() == killsBefore,
+                "a plane leaving the map was counted as a kill");
+    record("crash", "departure_blast=none witnesses_untouched=" + std::to_string(witnessIDs.size()));
+    game.reset();
+    currentGame = nullptr;
+}
+
+/// Anti-air holds its fire while bringing the plane down would set the crash
+/// blast off over its own side - where the plane is, and where it will be by
+/// the time a rocket reaches it.
+void checkAntiAirSparesOwnSide() {
+    auto game = newCityGame(1832);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    auto* enemy = game->getHouse(HOUSE_HARKONNEN);
+    powerHouse(owner);
+    powerHouse(enemy);
+    game->updateGameState();
+
+    const Coord turretAt(14, 15);
+    clearGround(Coord(10, 4), 22, 24);
+    auto* turret = dynamic_cast<RocketTurret*>(
+        enemy->placeStructure(NONE_ID, Structure_RocketTurret, turretAt.x, turretAt.y, true, true));
+    cityRequire(turret != nullptr, "could not place the anti-air turret");
+    turret->setVisible(VIS_ALL, true);
+    auto* launcher = enemy->placeUnit(Unit_Launcher, turretAt.x + 6, turretAt.y - 7, true);
+    cityRequire(launcher != nullptr, "could not place the anti-air launcher");
+    launcher->doSetAttackMode(STOP);
+    launcher->setVisible(VIS_ALL, true);
+
+    const auto hover = [&](const Coord& at, ANGLETYPE heading, bool moving) {
+        auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+        cityRequire(plane != nullptr, "could not create the anti-air test plane");
+        plane->deploy(at);
+        plane->setVisible(VIS_ALL, true);
+        plane->angle = FixPoint(static_cast<int>(heading));
+        plane->drawnAngle = static_cast<Sint8>(heading);
+        plane->currentMaxSpeed = moving ? game->objectData.data[Unit_AmbientAirplane][HOUSE_ATREIDES].maxspeed : 0;
+        return plane;
+    };
+
+    // Clear sky six tiles east of the turret: fair game.
+    auto* clear = hover(turretAt + Coord(6, 0), RIGHT, false);
+    cityRequire(turret->canAttack(clear), "the turret may not shoot a plane over open ground");
+    cityRequire(launcher->canAttack(clear), "the launcher may not shoot a plane over open ground");
+    // A Harkonnen wall three tiles east of it is beyond every blast centre: still fair game.
+    auto* farWall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 9, turretAt.y, true, true);
+    cityRequire(farWall != nullptr, "could not place the out-of-reach wall");
+    cityRequire(turret->canAttack(clear), "the turret holds fire over a wall the blast cannot reach");
+    // A Harkonnen wall two tiles east, under the blast's (128, 0) centre: it would land on its own side.
+    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 8, turretAt.y, true, true);
+    cityRequire(wall != nullptr, "could not place the own-side wall");
+    cityRequire(!turret->canAttack(clear), "the turret shoots a plane down over its own wall");
+    cityRequire(!launcher->canAttack(clear), "the launcher shoots a plane down over its own wall");
+    // The plane's owner may still be hit: that is the point of shooting it there.
+    auto* ownWall = owner->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 6, turretAt.y + 9, true, true);
+    cityRequire(ownWall != nullptr, "could not place the plane owner's wall");
+    auto* overOwner = hover(turretAt + Coord(5, 8), RIGHT, false);
+    cityRequire(turret->canAttack(overOwner), "the turret spares a plane over its owner's own side");
+
+    // In flight: seven tiles north, flying south straight at the turret, the
+    // plane is over the turret by the time a rocket gets there. Flying north it
+    // is not.
+    auto* inbound = hover(turretAt + Coord(0, -7), DOWN, true);
+    cityRequire(!turret->canAttack(inbound), "the turret shoots a plane that is flying onto it");
+    auto* outbound = hover(turretAt + Coord(0, -7), UP, true);
+    cityRequire(turret->canAttack(outbound), "the turret spares a plane that is flying away");
+    record("crash", "anti_air_spares_own_side=1 open_ground=fire wall_3_tiles=fire wall_2_tiles=hold"
+                    " owner_side=fire inbound=hold outbound=fire");
+    game.reset();
+    currentGame = nullptr;
+}
+
 } // namespace
 
 int runCityAircraftProbe() {
@@ -1094,22 +1588,36 @@ int runCityAircraftProbe() {
     std::ifstream map(PROBE_MAP_PATH);
     gMapData.assign((std::istreambuf_iterator<char>(map)), std::istreambuf_iterator<char>());
     cityRequire(!gMapData.empty(), "fixture map is empty");
+    std::ifstream largeMap(PROBE_LARGE_MAP_PATH);
+    gLargeMapData.assign((std::istreambuf_iterator<char>(largeMap)), std::istreambuf_iterator<char>());
+    cityRequire(!gLargeMapData.empty(), "large fixture map is empty");
 
     gCityAircraftCsv.open(gCityAircraftOut + "/" + gCityAircraftMod + ".csv");
     gCityAircraftCsv << "mod,phase,detail\n";
 
-    checkOriginalArtLoaded();
-    checkOriginalMotion();
-    checkSparseCongestedRoad();
-    checkAirportLaunch();
-    checkUnpoweredAirportLaunchesNothing();
-    checkTrafficPatrolAndReports();
-    checkAirplaneFlight();
-    checkOutsideWaypointHandling();
-    checkDepartureThroughEachEdge();
-    checkEnemyAirDefence();
-    checkSaveContinuation();
-    checkDepartureSaveContinuation();
+    // CITY_AIRCRAFT_PROBE_PHASES=a,b runs only those phases (diagnosis); unset runs all.
+    const char* only = std::getenv("CITY_AIRCRAFT_PROBE_PHASES");
+    const std::string selected = only ? std::string(",") + only + "," : std::string();
+    const auto phase = [&](const char* name, void (*check)()) {
+        if(selected.empty() || selected.find(std::string(",") + name + ",") != std::string::npos) check();
+    };
+    phase("art", checkOriginalArtLoaded);
+    phase("motion", checkOriginalMotion);
+    phase("sparse", checkSparseCongestedRoad);
+    phase("launch", checkAirportLaunch);
+    phase("unpowered", checkUnpoweredAirportLaunchesNothing);
+    phase("patrol", checkTrafficPatrolAndReports);
+    phase("flight", checkAirplaneFlight);
+    phase("waypoints", checkOutsideWaypointHandling);
+    phase("departure", checkDepartureThroughEachEdge);
+    phase("straight_legs", checkStraightFlightLegs);
+    phase("straight_flight", checkStraightNaturalFlight);
+    phase("defence", checkEnemyAirDefence);
+    phase("crash", checkShotDownPlaneDetonates);
+    phase("crash_departure", checkDepartingPlaneDoesNotDetonate);
+    phase("anti_air", checkAntiAirSparesOwnSide);
+    phase("continuation", checkSaveContinuation);
+    phase("departure_continuation", checkDepartureSaveContinuation);
 
     gCityAircraftCsv.close();
     SDL_Log("CITY_AIRCRAFT_PROBE_PASS: %s", gCityAircraftMod.c_str());

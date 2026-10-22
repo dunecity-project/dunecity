@@ -256,7 +256,7 @@ static const Coord objPicTiles[] {
     { 4, 1 },   // ObjPic_Chemipost
     { 4, 1 },   // ObjPic_ChaosFactory
     { 8, 1 },   // ObjPic_CityHelicopter (one 32x32 original frame per heading)
-    { 8, 4 },   // ObjPic_CityAirplane (48x48: cruise headings + three take-off rows)
+    { 8, 5 },   // ObjPic_CityAirplane (48x48: 8 original + 8 in-between headings, three take-off rows)
 };
 static_assert(sizeof(objPicTiles) / sizeof(objPicTiles[0]) == NUM_OBJPICS,
               "objPicTiles must have one entry per ObjPic enum value");
@@ -478,7 +478,9 @@ GFXManager::GFXManager() {
         //
         // The unmodified sprite art from micropolis-activity/images/obj2-*.xpm
         // (helicopter) and obj3-*.xpm (airplane), re-packed by
-        // scripts/import-micropolis-aircraft.py into ANGLETYPE column order.
+        // scripts/import-micropolis-aircraft.py into ANGLETYPE column order. The
+        // airplane adds a row of in-between headings rotated from the original
+        // axis frames by the same script, so it can be drawn on sixteen headings.
         // Civilian aircraft are not house-coloured in the original, so these
         // share one surface set like the other city atlases.
         {
