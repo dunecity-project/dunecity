@@ -42,6 +42,7 @@ private:
     VBox            mainVBox;
 
     Label           captionLabel;
+    Label           resultLabel;    ///< The winner, when the local view only watched the end
 
     HBox            mainHBox;
 

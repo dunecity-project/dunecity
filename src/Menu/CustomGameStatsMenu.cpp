@@ -59,7 +59,17 @@ CustomGameStatsMenu::CustomGameStatsMenu() : MenuBase()
     captionLabel.setTextColor(localHouseColor);
     captionLabel.setAlignment(Alignment_HCenter);
     mainVBox.addWidget(&captionLabel, 24);
-    mainVBox.addWidget(VSpacer::create(24));
+    if(currentGame->getWatchedWinnerTeam() >= 0) {
+        // Watched to the end (spectating, or out of the game): who won, in their colour.
+        resultLabel.setText(currentGame->watchedResultText());
+        resultLabel.setTextColor(currentGame->watchedResultColor());
+        resultLabel.setAlignment(Alignment_HCenter);
+        mainVBox.addWidget(VSpacer::create(6));
+        mainVBox.addWidget(&resultLabel, 24);
+        mainVBox.addWidget(VSpacer::create(10));
+    } else {
+        mainVBox.addWidget(VSpacer::create(24));
+    }
     mainVBox.addWidget(Spacer::create(), 0.05);
     mainVBox.addWidget(&mainHBox, 0.80);
     mainHBox.addWidget(&playerStatListVBox, 1.0);
@@ -80,11 +90,12 @@ CustomGameStatsMenu::CustomGameStatsMenu() : MenuBase()
             house->getHarvestedSpice().toDouble(),house->getCityTaxReceipts().toDouble()}};
     };
     std::array<double,4> maxima{};
-    for(int i=0;i<NUM_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
+    // Player houses only: the Natives (worms, crime troopers) are no contestant and get no row.
+    for(int i=0;i<NUM_PLAYER_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
         const auto totals=values(house);
         for(int column=0;column<columns;++column) maxima[column]=std::max(maxima[column],totals[column]);
     }
-    for(int i=0;i<NUM_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
+    for(int i=0;i<NUM_PLAYER_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
         auto& row=houseStat[i];
         const auto totals=values(house);
         const int visualColor=getHouseVisualHouse(i);

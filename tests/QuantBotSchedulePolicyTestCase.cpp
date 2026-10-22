@@ -23,7 +23,7 @@ using namespace QuantBotSchedulePolicy;
 
 namespace {
 constexpr int kInterval = 50;      // AIUPDATEINTERVAL
-constexpr int kSlots    = static_cast<int>(NUM_HOUSES);
+constexpr int kSlots    = NUM_PLAYER_HOUSES;   // QuantBot::update's ring: the houses that can have an AI
 constexpr uint32_t kCycles = 1200; // > 1000 cycles, 24 full intervals
 
 // The original predicate, written out independently of the header.

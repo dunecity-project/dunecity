@@ -108,16 +108,21 @@ EXTERN std::array<int, NUM_HOUSES> houseToVisualHouse;  ///< runtime visual colo
 static const int houseToPaletteIndex[NUM_HOUSES] = {
     PALCOLOR_HARKONNEN, PALCOLOR_ATREIDES, PALCOLOR_ORDOS, PALCOLOR_FREMEN,
     PALCOLOR_SARDAUKAR, PALCOLOR_MERCENARY, PALCOLOR_NEUTRAL, PALCOLOR_REBELS,
-    PALCOLOR_HARKONNEN, PALCOLOR_NEUTRAL, PALCOLOR_REBELS, PALCOLOR_MERCENARY
+    PALCOLOR_HARKONNEN, PALCOLOR_NEUTRAL, PALCOLOR_REBELS, PALCOLOR_MERCENARY,
+    PALCOLOR_HARKONNEN  // Natives: remapped through its private ramp (HOUSECOLOR_NATIVES)
 };    ///< the base colors for the different house identities
 static const int houseColorToPaletteIndex[NUM_HOUSE_COLOR_SLOTS] = {
     PALCOLOR_HARKONNEN, PALCOLOR_ATREIDES, PALCOLOR_ORDOS, PALCOLOR_FREMEN,
     PALCOLOR_SARDAUKAR, PALCOLOR_MERCENARY, PALCOLOR_NEUTRAL, PALCOLOR_REBELS, PALCOLOR_HARKONNEN,
     PALCOLOR_HARKONNEN, PALCOLOR_ATREIDES, PALCOLOR_ORDOS, PALCOLOR_FREMEN,
     PALCOLOR_SARDAUKAR, PALCOLOR_MERCENARY,
-    PALCOLOR_HARKONNEN, PALCOLOR_HARKONNEN, PALCOLOR_HARKONNEN
+    PALCOLOR_HARKONNEN, PALCOLOR_HARKONNEN, PALCOLOR_HARKONNEN,
+    PALCOLOR_HARKONNEN  // HOUSECOLOR_NATIVES: private ramp
 };    ///< palette ramp used by house colors, including custom visual-only colors
-static const char houseChar[] = { 'H', 'A', 'O', 'F', 'S', 'M', 'N', 'R', 'C', 'W', 'K', 'T' };
+/// ObjectData "(X)" suffix letters. Natives has none ('?' never matches a key), so it always
+/// gets the plain values of every [Unit] section.
+static const char houseChar[] = { 'H', 'A', 'O', 'F', 'S', 'M', 'N', 'R', 'C', 'W', 'K', 'T', '?' };
+static_assert(sizeof(houseChar) == NUM_HOUSES, "houseChar needs one letter per house");
 
 int getHousePaletteIndex(HOUSETYPE house);
 int getHouseColorPaletteIndexFromSlot(int colorSlot);

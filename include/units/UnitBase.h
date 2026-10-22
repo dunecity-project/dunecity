@@ -228,6 +228,13 @@ public:
     /// This cycle's march (FormationPlanner::marchState), decided before units move.
     void setFormationMarch(FormationPlanner::March march) { formationMarch = march; }
     void leaveFormation();
+    /**
+        Hands this unit to newOwner for good: owner and original house both change, the unit
+        counts move from the old original house to the new one without booking a loss or a
+        build, and the unit leaves its formation and every selection. Orders, target and
+        attack mode are kept. Used to give sandworms to the Natives house.
+    */
+    void transferOwnership(House* newOwner);
     /// The pace this unit sets in a formation: its speed on open sand, undamaged, unloaded, off-road.
     FixPoint getFormationReferenceSpeed() const;
     /// Contact: the enemy this unit is targeting within huntTowardRange(), or nullptr.

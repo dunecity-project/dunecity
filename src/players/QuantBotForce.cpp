@@ -143,10 +143,12 @@ int QuantBot::launchReadinessPercent() {
 
 namespace {
 
-/// A mobile ground fighter (what the army comparisons count), alive and on the map.
+/// A mobile ground fighter (what the army comparisons count), alive and on the map. Only the
+/// army and threat aggregations call this, so units of the Natives (crime troopers) are left
+/// out here: they are no team's army. Local targeting does not use it and still fights them.
 bool groundFighter(const UnitBase* unit) {
-    return unit->getOwner() && unit->getHealth() > 0 && unit->isActive() && unit->isAGroundUnit()
-        && unit->canAttack() && mobileCombatItem(unit->getItemID());
+    return unit->getOwner() && !unit->getOwner()->isNatives() && unit->getHealth() > 0 && unit->isActive()
+        && unit->isAGroundUnit() && unit->canAttack() && mobileCombatItem(unit->getItemID());
 }
 
 int64_t healthValue(const UnitBase* unit) {
@@ -182,7 +184,9 @@ void QuantBot::updateEnemySightings() {
     const Uint32 memory = Uint32(MILLI2CYCLES(Force::kSightingMemoryMs));
     for (auto it = enemySightings.begin(); it != enemySightings.end();) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(it->first));
+        // A unit now owned by the Natives (never sighted as one) is no enemy army either.
         const bool gone = !unit || unit->getHealth() <= 0 || !unit->getOwner() || unit->getOwner()->getTeamID() == myTeam
+            || unit->getOwner()->isNatives()
             || ArmyPosturePolicy::elapsed(now, it->second.cycle) > memory;
         it = gone ? enemySightings.erase(it) : std::next(it);
     }

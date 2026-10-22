@@ -444,6 +444,9 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // every order issued at the end of this function is an explicit target.
         const int rank=underAttack ? AirStrikePolicy::underAttackRank(attackingBase)
             : AirStrikePolicy::targetRank(object->isAStructure(),defensiveContact,true);
+        // Worms and crime troopers (the Natives) are answered when they threaten what we own,
+        // never raided as an enemy house's army.
+        if (rank==AirStrikePolicy::RaidRank && object->getOwner()->isNatives()) return;
         // Difficulty policy. Hard and Brutal keep every rank they have today,
         // including the configured raid flag. The remaining difficulties may
         // only answer an attack on something we own; their one offensive option

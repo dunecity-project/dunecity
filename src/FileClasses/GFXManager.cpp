@@ -265,7 +265,7 @@ static void applyRebelsTint(SDL_Surface* surface, int colorSlot);
 static bool usesPrivateVisualColorRamp(int colorSlot) {
     return isDuneCityHouseColorSlot(colorSlot) || isTornieRebelsColorSlot(colorSlot) || isVanillaRebelsColorSlot(colorSlot)
         || colorSlot == HOUSE_CUSTOM || isCustomHouseColorSlot(colorSlot)
-        || isTornieGuestHouseColorSlot(colorSlot);
+        || isTornieGuestHouseColorSlot(colorSlot) || colorSlot == HOUSECOLOR_NATIVES;
 }
 static int getVisualRemapPaletteIndex(int colorSlot) {
     return usesPrivateVisualColorRamp(colorSlot)
@@ -2164,7 +2164,8 @@ GFXManager::GFXManager() {
         static const std::array<int, 6> buildingPictures{
             Picture_NuclearPlant, Picture_PoliceStation, Picture_Stadium,
             Picture_Airport, -1, -1};
-        for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
+        // Player houses only: the Natives house never owns a zone or civic building.
+        for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
             for(std::size_t zone = 0; zone < zonePictures.size(); ++zone) {
                 SDL_Surface* atlas = duneCityDune2ZonePic[zone][house][0].get();
                 const int columns = std::max(1, objPicTiles[zoneObjectPictures[zone]].x);
@@ -6425,9 +6426,11 @@ void GFXManager::loadDuneCitySkinOverrides() {
     // Start the Dune2 skin as a byte-for-byte visual clone of Stefan's native
     // SimCity atlas. Exact mounted cells are overlaid below; missing cells and
     // houses therefore retain native art instead of becoming blank.
+    // Player houses only: the Natives house never owns a zone or civic building, so its slot
+    // stays empty (setDuneCityHouseGraphicsSkin then copies nothing for it).
     for(std::size_t zoneIndex = 0; zoneIndex < zoneObjPics.size(); ++zoneIndex) {
         const unsigned int id = zoneObjPics[zoneIndex];
-        for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
+        for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
             for(int zoom = 0; zoom < NUM_ZOOMLEVEL; ++zoom) {
                 if(objPic[id][house][zoom]) {
                     duneCitySimCityZonePic[zoneIndex][house][zoom] = copySurface(objPic[id][house][zoom].get());
@@ -6438,7 +6441,7 @@ void GFXManager::loadDuneCitySkinOverrides() {
     }
     for(std::size_t buildingIndex = 0; buildingIndex < buildingObjPics.size(); ++buildingIndex) {
         const unsigned int id = buildingObjPics[buildingIndex];
-        for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
+        for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
             for(int zoom = 0; zoom < NUM_ZOOMLEVEL; ++zoom) {
                 if(objPic[id][house][zoom]) {
                     duneCitySimCityBuildingPic[buildingIndex][house][zoom] = copySurface(objPic[id][house][zoom].get());

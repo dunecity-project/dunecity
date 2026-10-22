@@ -1253,7 +1253,8 @@ Catalogue startCatalogue(const Catalogue& catalogue, int starts) {
     Catalogue shared;
     shared.itemNames = catalogue.itemNames;
     shared.sizes = catalogue.sizes;
-    starts = std::clamp(starts, 0, static_cast<int>(NUM_HOUSES));
+    // A start becomes a house slot; the Natives slot (HOUSE_NATIVES) is never a start.
+    starts = std::clamp(starts, 0, NUM_PLAYER_HOUSES);
     for(int i = 0; i < starts; ++i) {
         shared.houses.push_back(i);
         shared.houseNames[i] = "Player" + std::to_string(i + 1);

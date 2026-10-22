@@ -771,8 +771,12 @@ void INIMapLoader::loadUnits()
                 attackmode = AREAGUARD;
             }
 
+            // A worm's house string only decides whether it is placed (unused houses still
+            // drop it); the worm itself belongs to the Natives house, and naming a house that
+            // has no other units must not conjure up an empty anonymous house for it.
+            House* placer = itemID == Unit_Sandworm ? pGame->getOrCreateNativesHouse() : getOrCreateHouse(houseID);
             for(int i = 0; i < Num2Place; i++) {
-                UnitBase* newUnit = getOrCreateHouse(houseID)->placeUnit(itemID, getXPos(pos), getYPos(pos), true);
+                UnitBase* newUnit = placer->placeUnit(itemID, getXPos(pos), getYPos(pos), true);
                 if(newUnit == nullptr) {
                     logWarning(key.getLineNumber(), "Invalid or occupied position for '" + UnitStr + "': '" + std::to_string(pos) + "'!");
                     continue;

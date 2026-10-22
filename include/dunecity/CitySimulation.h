@@ -14,12 +14,17 @@
 
 class InputStream;
 class OutputStream;
+class House;
+class StructureBase;
+class UnitBase;
 
 namespace DuneCity {
 
 /// Per-house city state — population, demand, economy, civic buildings.
 /// Density maps (pollution, crime, land value) remain global (shared environment).
-static constexpr int kMaxCityHouses = NUM_HOUSES;
+/// One slot per house that can hold a city. The Natives house never owns a structure, so it has
+/// none (and the 9818+ save layout of these slots is unchanged by it).
+static constexpr int kMaxCityHouses = NUM_PLAYER_HOUSES;
 
 struct HouseCityState {
     int resPop = 0, comPop = 0, indPop = 0;
@@ -203,6 +208,19 @@ public:
     /// if insufficient funds. Implemented in CityEffectsRuntime.cpp so it
     /// can access pLocalHouse directly.
     bool spendCityFunds(int32_t amount);
+
+    /// Troopers a crime outbreak raised: all owned by the Natives house (nullptr when none rose
+    /// because the origin's owner has no opposing house with a base).
+    struct CrimeTroops {
+        House* natives = nullptr;
+        std::vector<UnitBase*> units;
+    };
+    /**
+        Raises up to \a requested Natives troopers at the city building \a origin whose district's
+        crime broke into unrest, each hunting \a origin. Called by the effects scan; public so a
+        probe can drive the real spawn path.
+    */
+    CrimeTroops raiseCrimeTroopers(const StructureBase* origin, int requested);
 
 private:
     bool initialized_ = false;

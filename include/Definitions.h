@@ -175,7 +175,15 @@
 //       special group. A 9866/9867 save loads its eight; the special share is split between the
 //       specials the house can build. (The learning window keeps its eight-slot serialized form:
 //       every production pass replaces it with the house's match totals before it is read.)
-#define SAVEGAMEVERSION     9868
+// 9871: The Natives house (HOUSE_NATIVES = 12, NUM_HOUSES 13): the object data, the house table
+//       and every tile's explored/last-seen state carry a thirteenth house. 9869/9870 are left to
+//       parallel branches. A 9868 or older save loads its twelve, gets no Natives house until one
+//       is needed, and its sandworms are re-tagged to Natives on load (Game::loadSaveGame);
+//       troopers an older save's crime raised cannot be told from a house's own and keep their
+//       owner.
+#define SAVEGAMEVERSION     9871
+/// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
+#define SAVEGAMEVERSION_NATIVES 9871
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

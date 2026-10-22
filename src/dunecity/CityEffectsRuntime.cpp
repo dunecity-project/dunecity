@@ -732,38 +732,14 @@ void CitySimulation::runEffectsScans() {
         const int rate=cityCrimeUnrestRate(meanCrime,displayedPopulation);
         const StructureBase* origin = unrestOrigins[index];
         if (!origin) continue;
-        // Use an existing opposing faction; never commandeer a playable house
-        // slot or create a new victory participant for ambient unrest.
-        House* hostile = nullptr;
-        const int firstHouse = static_cast<int>((index + currentGame->getGameCycleCount() / MILLI2CYCLES(60000)) % NUM_HOUSES);
-        for (int offset = 0; offset < NUM_HOUSES; ++offset) {
-            const int h = (firstHouse + offset) % NUM_HOUSES;
-            House* candidate = currentGame->getHouse(h);
-            if (candidate && candidate->getTeamID() != origin->getOwner()->getTeamID()
-                && candidate->getNumStructures() > 0
-                && currentGame->objectData.data[Unit_Trooper][h].enabled) { hostile = candidate; break; }
-        }
-        int spawned = 0;
+        const CrimeTroops troops = raiseCrimeTroopers(origin, requested);
+        House* const hostile = troops.natives;
+        const int spawned = static_cast<int>(troops.units.size());
         AITelemetry::Record members;
+        for (const UnitBase* unit : troops.units)
+            members.set(std::to_string(unit->getObjectID()), AITelemetry::Record().set("x",unit->getLocation().x)
+                .set("y",unit->getLocation().y).set("origin",origin->getObjectID()));
         const Coord hotspot = origin->getLocation();
-        const auto sites = crimeSpawnSites(hotspot.x,hotspot.y,mapWidth_,mapHeight_);
-        size_t nextSite = 0;
-        if (hostile) for (int n = 0; n < requested; ++n) {
-            if (hostile->isUnitLimitReached(Unit_Trooper)) break;
-            UnitBase* unit = hostile->createUnit(Unit_Trooper);
-            if (!unit) break;
-            // All members emerge at the same hotspot, filling nearby legal
-            // infantry slots before expanding the group outwards.
-            while (nextSite < sites.size() && !unit->canPass(sites[nextSite].first,sites[nextSite].second)) ++nextSite;
-            if (nextSite == sites.size()) { unit->cancelDeployment(); break; }
-            const Coord spot(sites[nextSite].first,sites[nextSite].second);
-            unit->deploy(spot);
-            unit->setGuardPoint(spot);
-            unit->doSetAttackMode(HUNT);
-            unit->doAttackObject(origin, true);
-            members.set(std::to_string(unit->getObjectID()), AITelemetry::Record().set("x",spot.x).set("y",spot.y).set("origin",origin->getObjectID()));
-            ++spawned;
-        }
         AITelemetry::log().write(currentGame->getGameCycleCount(), origin->getOwner()->getHouseID(), -1,
             "crime_unrest", AITelemetry::Record().set("district", static_cast<int>(index % districtsPerHouse))
                 .set("crime",unrestCrime[index]).set("origin",origin->getObjectID())
@@ -1705,6 +1681,43 @@ void CitySimulation::runDailyBudget() {
                     annualRevenue, annualPaid.toDouble(), lround(net.toDouble()));
         }
     }
+}
+
+CitySimulation::CrimeTroops CitySimulation::raiseCrimeTroopers(const StructureBase* origin, int requested) {
+    CrimeTroops troops;
+    if (!origin || !origin->getOwner() || requested <= 0) return troops;
+    // Troops rise only while the city has a real opponent (an opposing house with a base and
+    // troopers enabled), as before; they always belong to the Natives house, never to a playable
+    // house, so unrest never adds to an enemy's army, AI or unit limit.
+    bool opposed = false;
+    for (int h = 0; h < NUM_HOUSES && !opposed; ++h) {
+        const House* candidate = currentGame->getHouse(h);
+        opposed = candidate && !candidate->isNatives()
+            && candidate->getTeamID() != origin->getOwner()->getTeamID()
+            && candidate->getNumStructures() > 0
+            && currentGame->objectData.data[Unit_Trooper][h].enabled;
+    }
+    if (!opposed) return troops;
+    troops.natives = currentGame->getOrCreateNativesHouse();
+    const Coord hotspot = origin->getLocation();
+    const auto sites = crimeSpawnSites(hotspot.x,hotspot.y,mapWidth_,mapHeight_);
+    size_t nextSite = 0;
+    for (int n = 0; n < requested; ++n) {
+        if (troops.natives->isUnitLimitReached(Unit_Trooper)) break;
+        UnitBase* unit = troops.natives->createUnit(Unit_Trooper);
+        if (!unit) break;
+        // All members emerge at the same hotspot, filling nearby legal
+        // infantry slots before expanding the group outwards.
+        while (nextSite < sites.size() && !unit->canPass(sites[nextSite].first,sites[nextSite].second)) ++nextSite;
+        if (nextSite == sites.size()) { unit->cancelDeployment(); break; }
+        const Coord spot(sites[nextSite].first,sites[nextSite].second);
+        unit->deploy(spot);
+        unit->setGuardPoint(spot);
+        unit->doSetAttackMode(HUNT);
+        unit->doAttackObject(origin, true);
+        troops.units.push_back(unit);
+    }
+    return troops;
 }
 
 }  // namespace DuneCity

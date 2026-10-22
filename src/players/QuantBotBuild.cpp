@@ -207,8 +207,8 @@ void QuantBot::build(int militaryValue) {
     // Under city sim this is exactly mapSpiceHarvesterTarget below, because
     // vanillaEconomy is false there; the city divisor is also the stricter one.
     int spiceCompetitors = 0;
-    for (int h = 0; h < NUM_HOUSES; ++h)
-        if (getHouse(h) && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
+    for (int h = 0; h < NUM_HOUSES; ++h)  // the Natives harvest nothing
+        if (getHouse(h) && !getHouse(h)->isNatives() && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
     const int citySpiceWorkerTarget = QuantBotBuildPolicy::desiredSpiceHarvesters(
         lastCalculatedSpice, spiceCompetitors, harvesterLimit);
     // Space is reserved on the same terms as cash. A house whose field supports
@@ -553,7 +553,8 @@ void QuantBot::build(int militaryValue) {
     int ownTeamHouses = 0, enemyHouses = 0;
     if (!brutalCityEconomy && difficulty == Difficulty::Brutal)
         for (int i = 0; i < NUM_HOUSES; ++i)
-            if (const House* other = currentGame->getHouse(i); other && other->isAlive())
+            // The Natives (team 0) are always "alive" but are no enemy house.
+            if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
         && !supportMode && !isCampaignGameType(currentGame->gameType)
@@ -1314,7 +1315,7 @@ void QuantBot::build(int militaryValue) {
         AITelemetry::Record opponents;
         for (int h = 0; h < NUM_HOUSES; ++h) {
             const auto* house = currentGame->getHouse(h);
-            if (!house) continue;
+            if (!house || house->isNatives()) continue;  // no opponent: worms and crime troopers only
             int survivingMilitary = 0;
             for (Uint32 type=Unit_FirstID; type<=Unit_LastID; ++type)
                 if (type != Unit_Carryall && type != Unit_Harvester && type != Unit_MCV && type != Unit_Sandworm)
@@ -2652,7 +2653,8 @@ void QuantBot::build(int militaryValue) {
 
 						for (int i = 0; i < NUM_HOUSES; i++) {
 							if (getHouse(i) != nullptr) {
-								if (getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
+								// The Natives have no base to strike.
+								if (!getHouse(i)->isNatives() && getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
 									enemyHouseBuildingCount = getHouse(i)->getNumStructures();
 									enemyHouseID = i;
 								}
