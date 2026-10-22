@@ -1050,7 +1050,8 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
     if (finishedMatch) {
         std::set<int> survivingTeams;
         for (const auto& currentHouse : house) {
-            if (currentHouse && currentHouse->getTeamID() != 0 && currentHouse->isAlive()) {
+            // The Natives house plays on team 0 and is never a survivor (see survivingTeams below).
+            if (currentHouse && currentHouse->getTeamID() != 0 && !currentHouse->isNatives() && currentHouse->isAlive()) {
                 survivingTeams.insert(currentHouse->getTeamID());
             }
         }
@@ -5834,10 +5835,12 @@ void Game::setGameLost() {
 }
 
 namespace {
-/// Teams with a house still alive: the houses House::lose() counts (team 0 never dies).
+/// Teams with a house still alive: the houses House::lose() counts (team 0 never dies). The
+/// Natives house (worms, crime troopers) is on team 0 and is skipped by name as well, so its
+/// units never keep a decided match running or count as the winner.
 std::set<int> survivingTeams(const std::array<std::unique_ptr<House>, NUM_HOUSES>& houses) {
     std::set<int> teams;
-    for(const auto& h : houses) if(h && h->getTeamID() != 0 && h->isAlive()) teams.insert(h->getTeamID());
+    for(const auto& h : houses) if(h && h->getTeamID() != 0 && !h->isNatives() && h->isAlive()) teams.insert(h->getTeamID());
     return teams;
 }
 }
