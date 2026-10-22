@@ -24,6 +24,7 @@
 #include <ctime>
 #include <fstream>
 #include <functional>
+#include <type_traits>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -136,6 +137,13 @@ struct MotionTrace {
 };
 inline MotionTrace motionTrace;
 
+/// While it exists, realX/realY are what Game::drawScreen draws: UnitBase::DrawnStepScope where the
+/// build has it, the simulated positions in older releases (which drew those).
+template <typename Unit, typename = void> struct DrawnPositions {};
+template <typename Unit> struct DrawnPositions<Unit, std::void_t<typename Unit::DrawnStepScope>> {
+    typename Unit::DrawnStepScope scope;
+};
+
 inline double percentile(std::vector<double> values, double p) {
     if (values.empty()) return 0.0;
     std::sort(values.begin(), values.end());
@@ -188,7 +196,7 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
         }
         if (!budgetChanged && g.getGameCycleCount() < stopAt) ProbeDigest::periodic(g);
         // A frame's first cycle: the positions renderFrame() just drew.
-        if (g.frameTiming.gameCyclesThisFrame == 0) motionTrace.record(g);
+        if (g.frameTiming.gameCyclesThisFrame == 0) { const DrawnPositions<UnitBase> drawn; motionTrace.record(g); }
     };
     const auto histogramBefore = game.frameTiming.frameMsHistogram;
     const uint64_t limitedBefore = game.frameTiming.catchUpLimitedFrames;

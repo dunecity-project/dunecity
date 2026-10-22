@@ -30,12 +30,12 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
   `game-perf.inc` into that (throwaway) worktree and patches its probe and runner.
 - `--summary R.jsonl` prints tables; `--check` is `perf_regression` (below).
 - **Unit motion trace**: `--motion-csv FILE` writes one row per unit whose position changed:
-  cycle, cycles since the previous row, frame, id, item, house, `realX/realY` (what the unit is
-  drawn at) and the change, location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick
-  and step start/end, carryall wait, active, flying. Stepped: before every cycle;
-  `--mainloop`/`--rendered`: before each frame's first cycle, i.e. the positions the frame just
-  drew. Used for Stefan's `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps and
-  missed route ticks").
+  cycle, cycles since the previous row, frame, id, item, house, `realX/realY` and the change,
+  location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick and step start/end, carryall
+  wait, active, flying. Stepped: the simulated positions, before every cycle; `--mainloop`/
+  `--rendered`: the drawn positions (inside `UnitBase::DrawnStepScope`, where the build has it)
+  before each frame's first cycle, i.e. what that frame drew. Used for Stefan's `skipping.dls`
+  (`docs/unit-route-comparison.md`, "Drawing chained steps").
 
 ## Findings
 

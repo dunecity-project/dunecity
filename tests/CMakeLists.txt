@@ -624,8 +624,8 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
         set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Smooth unit motion at 2 ms game speed through the real main loop and frame pacing:
-        # chained Dynasty steps never stand still mid-step or jump a tile, per cycle and per
-        # rendered frame, and a unit whose carryall wait was cancelled drives on at its speed.
+        # units on chained Dynasty steps are drawn moving (UnitBase::DrawnStepScope), never
+        # standing still mid-step or jumping a tile, per cycle and per rendered frame.
         add_test(NAME unit_motion_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-motion-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-motion-probe)

@@ -1,26 +1,28 @@
-## 2026-10-22 — Unit jitter: chained Dynasty steps and missed route ticks (branch `fix/unit-jitter`, worktree `~/Documents/projects/dunecity-unit-jitter`, from 1.0.850 afb2315c; protocol 92, save 9868; not released)
+## 2026-10-22 — Unit jitter: chained Dynasty steps drawn moving (branch `fix/unit-jitter`, worktree `~/Documents/projects/dunecity-unit-jitter`, from 1.0.850 afb2315c; protocol 88, save 9868, simulation unchanged; not released)
 
 Agents UnitJitter (killed by the omp restart) and UnitJitter2. Stefan: "occasionally some units jump from one tile to
 the next instead of showing the animations" (`skipping.dls`, 1.0.850, 2 ms game speed). Write-up:
-`docs/unit-route-comparison.md`, "Chained steps and missed route ticks". Evidence
-`~/Documents/projects/dunecity-results/unit-jitter2/` (before/after save traces, `trace-summary.json`, probe runs);
-the save's mod revisions are in `../unit-jitter/save-profile`.
+`docs/unit-route-comparison.md`, "Drawing chained steps". Evidence `~/Documents/projects/dunecity-results/unit-jitter2/`
+(save traces, `trace-summary.json`, probe runs); the save's mod revisions are in `../unit-jitter/save-profile`.
 
-- **Cause (simulation, not drawing):** a Dynasty step that started on the cycle the previous one ended kept
-  `justStoppedMoving` (only `move()`'s idle branch cleared it), so `GroundUnit::checkPos` snapped the unit to its tile
-  centre every cycle of the step: still for half a step, a whole-tile jump, still again. In the save: Tanks driving
-  diagonally over rock, every tile. Second fault: a unit that missed route ticks (`GroundUnit::navigate` skips one
-  awaiting a carryall) began its next steps at past ticks, a tile per cycle until caught up.
-- **Fix:** `UnitBase::moveDynastyStep` clears the flag while a step is under way; `UnitBase::navigate` moves a stale
-  route tick to its cadence's next tick. Protocol 92 (positions, targeting distances, crushing differ). No render change.
-- **Save traces** (`game-perf.py --save skipping.dls --motion-csv`, 3,750 cycles from 85,728; ground units, moves
-  under 200 world units): whole-tile moves per cycle 131 -> 7, per rendered frame (main loop, 8.3 cycles/frame) 127 ->
-  7; moving units with a stale flag 121 -> 0, Tanks 101 -> 0. The 7 left (both builds) are harvesters/a trike leaving
-  a structure.
-- **unit_motion_probe** (new ctest, `tests/units/run-unit-motion-probe.py`): 2 ms main loop with frame pacing
-  (1-10 cycles/frame), phase-aligned shuttles so steps chain, a cancelled carryall wait. 1.0.850 code: 136 cycle
-  violations, 227 mid-step stalls, 118 whole-tile frame jumps; only the flag fix: 23/0/6 (the carryall waiter);
-  both: 0/0/0, 113 chained steps, max 3.65 px per frame.
+- **Cause:** a Dynasty step that starts on the cycle the previous one ended keeps `justStoppedMoving`, so
+  `GroundUnit::checkPos` holds the unit on its tile centre every cycle of the step: drawn as simulated it stands still
+  for half a step, jumps a whole tile, stands still again. In the save: Tanks driving diagonally over rock, every tile.
+- **Fix (render only, Main's decision):** `Game::drawScreen` holds `UnitBase::DrawnStepScope`, which draws such units
+  at their step's interpolation and restores the simulated position afterwards. Stepped save trace and digests are
+  identical to 1.0.850 (digest cf73fa59e7d63c5b at 89477).
+- **Save traces** (3,750 cycles from 85,728; ground units, moves under 200 world units): drawn whole-tile moves per
+  rendered frame (main loop, 8.3 cycles/frame) 127 -> 9; held units 118 -> 0, Tanks 104 -> 0. The 9 left are
+  harvesters/a raider trike reappearing from a structure.
+- **unit_motion_probe** (new ctest): 2 ms main loop with frame pacing (5 cycles/frame, 1-10), phase-aligned shuttles
+  so steps chain; checks drawn positions per cycle and per frame. Render fix: 0 violations, 113 chained steps, 6,782
+  held cycles drawn moving, max 3.44 px per frame. Drawn as simulated (1.0.850, plus a carryall-wait case since
+  removed): 136 cycle violations, 227 mid-step stalls, 118 whole-tile frame jumps.
+- **Not fixed here:** a unit whose carryall wait ends (missed route ticks) moves a tile per cycle until caught up (once
+  in the save). Sim fix for both faults: branch `fix/dynasty-step-stale-stop` 036776cb (protocol 92) - shifts
+  trajectories (`quantbot_all_against_atreides` 4/6, `ffa_army_deploys`, `strategy` fail; the route part alone also
+  flips the same two seeds). Effective speed is the same with and without it (chained Launcher/Sonic/Deviator: 1,804
+  cycles per 29 sand tiles both ways); extra crushing not measured. For Stefan to decide.
 
 ## 2026-10-22 — 1.0.850 published to production
 
