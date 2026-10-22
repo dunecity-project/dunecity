@@ -201,6 +201,37 @@ public:
     void setGameLost();
 
     /**
+        Ends the game for a local view that has no side in it any more - an observer (offline
+        Spectate or a network spectator), or a player whose whole team is out on a map that lets
+        it keep watching - once the match is decided for everybody: one team is left (or none)
+        under the map's elimination rules. Called after every house defeat. Campaign missions
+        and players who still have a side keep the original win/lose rules. Reads only state
+        every peer simulates identically, so all of them end at the same cycle.
+    */
+    void checkWatchedGameDecided();
+
+    /**
+        A watched game is over: \a winningTeam won it, or nobody did (0). The local view
+        shows the winner instead of "You have won/lost" and then leaves through the usual
+        end-of-game flow. \a timeUp marks the map's time limit as the reason.
+    */
+    void setWatchedGameOver(int winningTeam, bool timeUp = false);
+
+    /// The one team with a house still alive, 0 when two or more teams remain or none does.
+    int soleSurvivingTeam() const;
+
+    /// An observer, or a player whose whole team is out of the game: nothing local can win or lose.
+    bool watchesWithoutSide() const;
+
+    /// After a watched game is over: the team that won it, 0 for nobody; -1 otherwise.
+    int getWatchedWinnerTeam() const { return watchedWinnerTeam; }
+
+    /// The end-of-game line for a watched game ("House Atreides has won", ...) and the winner's
+    /// colour (\a shade as getHouseColorRGB; white without a winner).
+    std::string watchedResultText() const;
+    Uint32 watchedResultColor(int shade = 3) const;
+
+    /**
         Draws the cursor.
     */
     void drawCursor() const;
@@ -1222,6 +1253,9 @@ private:
     bool    won = false;                        ///< If the game is finished, is it won or lost
     Uint32  finishedLevelCycle = 0;             ///< MULTIPLAYER FIX (Issue #9): Cycle-based (was finishedLevelTime)
     bool    finishedLevel = false;              ///< Set, when the game is really finished and the end message was shown
+    /// Runtime only, never saved or sent: see setWatchedGameOver(). -1 while no watched game is over.
+    int     watchedWinnerTeam = -1;
+    bool    watchedTimeUp = false;
 
     std::unique_ptr<GameInterface>          pInterface;                             ///< This is the whole interface (top bar and side bar)
     std::unique_ptr<Window>                 pInGameMenu;                            ///< This is the menu that is opened by the option button

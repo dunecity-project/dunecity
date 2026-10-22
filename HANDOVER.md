@@ -1,3 +1,37 @@
+## 2026-10-22 — Spectated games end when decided (branch `fix/spectator-game-end`, from staging afb2315c = 1.0.850; protocol 88, save 9868 unchanged; not released)
+
+Stefan: "when there is a winner and player is spectating the game should end." Agent SpectatorEnd, worktree
+`~/Documents/projects/dunecity-spectator-end`. Write-up: `docs/skirmish-generator.md`, Spectate, "The end". Evidence
+`~/Documents/projects/dunecity-results/spectator-game-end/` (baseline and fixed probe summaries, screenshots, ctest.log).
+
+- **Cause:** `Game::setGameWon/Lost` return for an observer (1.0.817 "keeps watching"), and House::lose() judges the
+  game only relative to pLocalHouse's team (for an observer a view anchor). A spectated match, offline or network,
+  therefore never ended; nor did a player's whose house was out on a map without WinFlags 2 (Equilibrium, WinFlags=1).
+  Quota counted pLocalHouse only; the time limit called the no-op setters.
+- **Fix:** a view without a side (`Game::watchesWithoutSide`: observer, or the local team all dead; never Campaign /
+  CampaignCoop) ends through `Game::setWatchedGameOver(team)`: after every House::lose()
+  (`checkWatchedGameDecided`: one team or none left among team != 0, with an elimination WinFlag), any house's quota
+  (observers), or the time limit (draw unless one team is alone). Shows "House X has won" / "Team N has won: A and B"
+  / "Time is up - no winner" on a plate framed in the winner's colour instead of "You Have Completed/Failed Your
+  Mission.", the usual six-second end, then Custom Game statistics with the same line in the winner's colour (also for
+  skirmish-type games instead of a debriefing), then the menu. A decided spectator whose host then leaves ends
+  normally (no "connection interrupted"). Telemetry `game_summary.local_result` = `watched_to_end`, `winner_team`.
+  Players' rules unchanged. Runtime-only state; `finished` is local, nothing simulated changes: no protocol or save bump.
+- **Reproduced** (`run-game-end-probe.py --baseline` on afb2315c): every spectated case still running 3,750 cycles
+  after the last enemy went out (vanilla/DuneCity FFA and 2v2, quota, time limit, the eliminated Equilibrium player,
+  the observer beside two players) and a natural Brutal-vs-Easy spectated 1v1 decided at 3.8 minutes never ended.
+- **Tests** (Release `build`, check-build-deps before/after): new `spectator_game_end_probe` (cases above + played
+  control: win on the last enemy, loss on its own house, own-quota rule, digests identical to baseline; multiplayer:
+  host loses at 212, guest wins at 273, spectator ends at 273, one state digest for all three); `ctest -j3` of
+  dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, skirmish_generator_probe, save_scenario_export,
+  network_wire_harness, menu_navigation_probe, all 35 quantbot_* (incl. all_against_atreides, ffa_army_deploys,
+  scenario_matrix), local_spectator_* (5), observed_startup_unplaceable_unit, spectator_game_end_probe: 53/53 passed
+  (855 s); perf_regression alone passed (89 s).
+- Not exercised: a real two-process network spectator over WebRTC (`tests/network/run-late-join-probe.py` needs the
+  local PHP service); the in-process probe uses the same `isObserving()` path. A spectator lagging more than the
+  six-second end behind a host that leaves still gets the old "connection interrupted" message.
+
 ## 2026-10-22 — 1.0.850 published to production
 
 PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)

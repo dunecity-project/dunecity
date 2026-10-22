@@ -542,6 +542,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/spectator-setup-probe)
         set_tests_properties(local_spectator_setup_probe PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        # Stefan: "when there is a winner and player is spectating the game should end." Real
+        # matches end for a view without a side: spectated Random Skirmish FFA and 2v2 in both
+        # mods, a player out on a WinFlags=1 map, quota and time-limit rules, and a spectator
+        # beside two networked players (same end cycle and state digest as the winning player);
+        # the winner is named in its colour in the game and the statistics; played games unchanged.
+        add_test(NAME spectator_game_end_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-game-end-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-game-end-probe)
+        set_tests_properties(spectator_game_end_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

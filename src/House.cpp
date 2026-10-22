@@ -458,9 +458,15 @@ void House::setSpiceIncomeMultiplier(Uint32 multiplier) {
 // taxes share that store (getEarnedCreditRoom) and taxes fill it first, so a quota counted on
 // spice alone could never be met (Harkonnen m3, Ordos m1: 80 minutes, docs/ai-scenario-matrix.md).
 static void checkQuotaWin(House& house) {
-    if(&house != pLocalHouse || (currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
+    if((currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
+    // A player only ends on its own house's quota (original rule). An observer has no house:
+    // any house that meets its quota wins the match for its team.
+    const bool observing = currentGame->isObserving();
+    if(&house != pLocalHouse && !observing) return;
     const FixPoint banked = currentGame->isCitySimEnabled() ? house.getEarnedCredits() : house.getStoredCredits();
-    if(banked >= house.getQuota()) house.win();
+    if(banked < house.getQuota()) return;
+    if(observing) currentGame->setWatchedGameOver(house.getTeamID());
+    else house.win();
 }
 
 void House::addCredits(FixPoint newCredits, bool wasRefined) {
@@ -1065,6 +1071,9 @@ void House::lose(bool bSilent) {
             }
         }
     }
+    // An observer, or a player whose team is already out, has no side for the checks above:
+    // its game ends once the match is decided for everybody.
+    currentGame->checkWatchedGameDecided();
 }
 
 
