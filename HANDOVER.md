@@ -1,3 +1,25 @@
+## 2026-10-22 — 1.0.851 integration trial: Natives house + city airplane + unit jitter (branch `integrate/851-trial`, worktree `~/Documents/projects/dunecity-int-851`, from staging afb2315c = 1.0.850; protocol 94, save 9871; no version bump yet)
+
+Agent Integrate851. Evidence `~/Documents/projects/dunecity-results/int-851/`.
+
+- **Merged in order:** `feat/natives-house` d23806d9 (with `fix/spectator-game-end` 9d16268e), `fix/city-airplane`
+  831b1060, then `fix/unit-jitter` edbc0121 as a squash of its net diff from afb2315c: that branch sits on
+  `fix/dynasty-step-stale-stop` 036776cb (sim fix, protocol 92, not accepted) and takes its simulation changes back,
+  so a true merge would have marked the excluded branch as merged. Not merged: `fix/dynasty-step-stale-stop`,
+  `fix/turret-air-range`.
+- **Conflicts:** HANDOVER (all entries kept), `NetworkPacketTypes.h` and `NetworkManagerTestCase` (93 v 90) resolved
+  to one protocol **94** with history for 89 (spectator end, no bump), 90, 93 and 94. Save 9871 (Natives) unchanged.
+- **Cross-branch:** a shot-down plane's Death Hand hits Natives worms and troopers exactly as a Palace Death Hand on
+  the same spot (worms 1000 -> 780/994 in reach, troopers in reach destroyed, out of reach untouched) and every
+  kill is credited to the house that shot the plane down (Natives itself when a crime trooper does it). The
+  anti-air hold-fire guard (`AmbientAirplane::crashWouldHit`) now never counts Natives objects as own side: before,
+  a team-0 shooter (a crime trooper, or a custom map's anonymous team-0 house) held fire over Natives worms/troopers.
+  New `city_aircraft_probe` phases `crash_natives`, `anti_air_natives`.
+- **Tests:** `dunecity-queue ctest` job 20261022T223709-ctest-573408 at fbba9ef2: 108/108 passed (mini 55, pro 38,
+  pc 15), incl. natives_probe, unit_motion_probe, city_aircraft_probe, spectator_game_end_probe, perf_regression,
+  quantbot_ffa_army_deploys, quantbot_scenario_matrix (smoke PASS). `run-menu-probe.py --size 1024x768 --size
+  640x480` passed locally (build `build/`, check-build-deps before/after).
+
 ## 2026-10-22 — The Natives house: every sandworm and every city-crime trooper belongs to a hidden non-player house (branch `feat/natives-house`, worktree `~/Documents/projects/dunecity-natives`, from staging afb2315c = 1.0.850 + merged `fix/spectator-game-end` 9d16268e; protocol 93, save 9871; not released)
 
 Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house - a new house that isn't
