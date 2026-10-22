@@ -48,7 +48,10 @@ public:
         Anti-air rule for the canAttack() of every weapon that can hit aircraft:
         true when `target` is a city airplane and shooting it down would set its
         crash blast off over `attacker`'s own team - where the plane is now, or
-        where it will be by the time a missile fired now reaches it.
+        where it will be by the time a missile fired now reaches it. Natives
+        objects (worms, crime troopers) are nobody's own team, not even the
+        Natives' own: they share team 0 with any anonymous house a custom map
+        creates, and a blast over them never holds anyone's fire.
     */
     static bool crashEndangers(const ObjectBase& attacker, const ObjectBase& target);
 

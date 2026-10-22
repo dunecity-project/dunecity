@@ -1340,8 +1340,13 @@ struct BlastOutcome {
 /// One fixture, two ways: a hostile (Harkonnen) rocket turret shoots an
 /// Atreides city airplane down at `site`, or - same map, same witnesses, no
 /// plane - a Death Hand impact (Bullet_LargeRocket with the Palace's damage,
-/// fired by the same turret) lands on `deathHandAt`.
-BlastOutcome runBlastFixture(bool shootPlane, const Coord& deathHandAt) {
+/// fired by the same turret) lands on `deathHandAt`. The witnesses are the
+/// plane owner's, or with `nativeWitnesses` the Natives house's (a sandworm
+/// witness gets a sand tile of its own; the rock around keeps it there).
+BlastOutcome runBlastFixture(bool shootPlane, const Coord& deathHandAt,
+                             const std::vector<BlastWitness>& witnesses
+                                 = {std::begin(kBlastWitnesses), std::end(kBlastWitnesses)},
+                             bool nativeWitnesses = false) {
     auto game = newCityGame(1830);
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     auto* enemy = game->getHouse(HOUSE_HARKONNEN);
@@ -1359,12 +1364,14 @@ BlastOutcome runBlastFixture(bool shootPlane, const Coord& deathHandAt) {
 
     BlastOutcome outcome;
     std::vector<Uint32> witnessIDs;
-    for(const BlastWitness& witness : kBlastWitnesses) {
+    House* const witnessOwner = nativeWitnesses ? game->getOrCreateNativesHouse() : owner;
+    for(const BlastWitness& witness : witnesses) {
         const Coord at = site + Coord(witness.dx, witness.dy);
+        if(witness.itemID == Unit_Sandworm) currentGameMap->getTile(at.x, at.y)->setType(Terrain_Sand);
         ObjectBase* object = isStructure(witness.itemID)
-            ? static_cast<ObjectBase*>(owner->placeStructure(NONE_ID, witness.itemID, at.x, at.y, true, true))
-            : static_cast<ObjectBase*>(owner->placeUnit(witness.itemID, at.x, at.y, true));
-        cityRequire(object != nullptr, "could not place a blast witness");
+            ? static_cast<ObjectBase*>(witnessOwner->placeStructure(NONE_ID, witness.itemID, at.x, at.y, true, true))
+            : static_cast<ObjectBase*>(witnessOwner->placeUnit(witness.itemID, at.x, at.y, true));
+        cityRequire(object != nullptr && object->getOwner() == witnessOwner, "could not place a blast witness");
         object->setVisible(VIS_ALL, true);
         if(auto* unit = dynamic_cast<UnitBase*>(object)) unit->doSetAttackMode(STOP);
         witnessIDs.push_back(object->getObjectID());
@@ -1460,6 +1467,42 @@ void checkShotDownPlaneDetonates() {
     cityRequire(deathHand.newExplosions == 17, "the Death Hand reference did not explode at 17 centres");
     cityRequire(crash.newExplosions >= deathHand.newExplosions,
                 "the crash did not produce the Death Hand's explosions");
+}
+
+/// Release 1.0.851 cross-check of the city airplane against the Natives house:
+/// a plane shot down over Natives worms and crime troopers hits them exactly as
+/// a Death Hand on the same spot does, and everything it destroys is credited
+/// to the house that brought the plane down (here Harkonnen, not the Natives
+/// and not the plane's owner).
+const std::vector<BlastWitness> kNativesBlastWitnesses = {
+    {2, 0, Unit_Trooper},   {0, -2, Unit_Trooper},  {-2, 1, Unit_Trooper}, {1, 3, Unit_Trooper},
+    {0, 2, Unit_Sandworm},  {-3, -1, Unit_Sandworm},
+    {6, 0, Unit_Trooper},   {0, 6, Unit_Sandworm},
+};
+
+void checkShotDownPlaneOverNatives() {
+    const BlastOutcome crash = runBlastFixture(true, Coord(), kNativesBlastWitnesses, true);
+    const BlastOutcome deathHand = runBlastFixture(false, crash.centre, kNativesBlastWitnesses, true);
+    record("crash", "natives_crash_health=" + joinHealth(crash.health)
+                  + " natives_death_hand_health=" + joinHealth(deathHand.health)
+                  + " natives_full=" + joinHealth(crash.full)
+                  + " natives_crash_kills=" + std::to_string(crash.shooterUnitKills)
+                  + " natives_death_hand_kills=" + std::to_string(deathHand.shooterUnitKills));
+    for(size_t i = 0; i < kNativesBlastWitnesses.size(); ++i) {
+        const BlastWitness& witness = kNativesBlastWitnesses[i];
+        const std::string where = "Natives witness " + std::to_string(i) + " at offset ("
+            + std::to_string(witness.dx) + ',' + std::to_string(witness.dy) + ")";
+        cityRequire(crash.health[i] == deathHand.health[i],
+                    where + " has " + std::to_string(crash.health[i]) + " HP after the crash but "
+                    + std::to_string(deathHand.health[i]) + " after a Death Hand on the same spot");
+        if(std::max(std::abs(witness.dx), std::abs(witness.dy)) >= 6)
+            cityRequire(crash.health[i] == crash.full[i], where + " is outside the blast's reach but was damaged");
+        else
+            cityRequire(crash.health[i] < crash.full[i], where + " is inside the blast's reach but took no damage");
+    }
+    cityRequire(deathHand.shooterUnitKills > 0, "the Death Hand reference killed no Natives unit; the fixture proves nothing");
+    cityRequire(crash.shooterUnitKills == deathHand.shooterUnitKills + 1,
+                "the shooter is not credited with the Natives units the crash destroyed (plus the plane)");
 }
 
 /// A plane that simply flies off the edge ends without any blast.
@@ -1578,6 +1621,66 @@ void checkAntiAirSparesOwnSide() {
     currentGame = nullptr;
 }
 
+/// Release 1.0.851 cross-check: the hold-fire guard never counts Natives worms
+/// or crime troopers as anybody's own side. A turret fires over them, a Natives
+/// trooper fires over its own house's units, and a team-0 house (the anonymous
+/// owner a custom map creates for an unlisted house shares team 0 with the
+/// Natives) fires over them too - while still holding over its own wall.
+void checkAntiAirIgnoresNatives() {
+    auto game = newCityGame(1833);
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    auto* enemy = game->getHouse(HOUSE_HARKONNEN);
+    House* natives = game->getOrCreateNativesHouse();
+    powerHouse(owner);
+    powerHouse(enemy);
+    game->updateGameState();
+
+    const Coord turretAt(14, 15);
+    clearGround(Coord(10, 4), 22, 24);
+    auto* turret = dynamic_cast<RocketTurret*>(
+        enemy->placeStructure(NONE_ID, Structure_RocketTurret, turretAt.x, turretAt.y, true, true));
+    cityRequire(turret != nullptr, "could not place the anti-air turret");
+    turret->setVisible(VIS_ALL, true);
+
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    cityRequire(plane != nullptr, "could not create the anti-air test plane");
+    plane->deploy(turretAt + Coord(6, 0));
+    plane->setVisible(VIS_ALL, true);
+    plane->angle = FixPoint(static_cast<int>(RIGHT));
+    plane->drawnAngle = static_cast<Sint8>(RIGHT);
+    plane->currentMaxSpeed = 0;
+    cityRequire(turret->canAttack(plane), "the turret may not shoot a plane over open ground");
+
+    // Natives units under the blast: a trooper under the (128, 0) centre, a worm beside the plane.
+    const auto placeNative = [&](int itemID, const Coord& at) {
+        if(itemID == Unit_Sandworm) currentGameMap->getTile(at.x, at.y)->setType(Terrain_Sand);
+        UnitBase* unit = natives->placeUnit(itemID, at.x, at.y, true);
+        cityRequire(unit != nullptr && unit->getOwner() == natives, "could not place a Natives unit");
+        unit->doSetAttackMode(STOP);
+        unit->setVisible(VIS_ALL, true);
+        return unit;
+    };
+    placeNative(Unit_Trooper, turretAt + Coord(8, 0));
+    placeNative(Unit_Sandworm, turretAt + Coord(6, 1));
+    cityRequire(AmbientAirplane::crashEndangers(*turret, *plane) == false && turret->canAttack(plane),
+                "the turret holds fire over Natives units");
+
+    // A Natives crime trooper does not spare its own house's worms and troopers either.
+    auto* nativeShooter = placeNative(Unit_Trooper, turretAt + Coord(4, -4));
+    cityRequire(nativeShooter->canAttack(plane), "a Natives trooper holds fire over Natives units");
+
+    // A team-0 house shares the Natives' team number but not their side.
+    enemy->teamID = 0;
+    cityRequire(turret->canAttack(plane), "a team-0 house's turret holds fire over Natives units");
+    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 6, turretAt.y - 2, true, true);
+    cityRequire(wall != nullptr, "could not place the team-0 house's wall");
+    cityRequire(!turret->canAttack(plane), "a team-0 house's turret shoots a plane down over its own wall");
+    record("crash", "anti_air_natives=1 turret_over_natives=fire natives_over_natives=fire"
+                    " team0_over_natives=fire team0_own_wall=hold");
+    game.reset();
+    currentGame = nullptr;
+}
+
 } // namespace
 
 int runCityAircraftProbe() {
@@ -1616,6 +1719,8 @@ int runCityAircraftProbe() {
     phase("crash", checkShotDownPlaneDetonates);
     phase("crash_departure", checkDepartingPlaneDoesNotDetonate);
     phase("anti_air", checkAntiAirSparesOwnSide);
+    phase("crash_natives", checkShotDownPlaneOverNatives);
+    phase("anti_air_natives", checkAntiAirIgnoresNatives);
     phase("continuation", checkSaveContinuation);
     phase("departure_continuation", checkDepartureSaveContinuation);
 

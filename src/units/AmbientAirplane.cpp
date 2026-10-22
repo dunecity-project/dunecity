@@ -305,6 +305,7 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint lead) const
 
     // Every own-side object a blast centre could reach: the farthest centre is
     // two tiles out on either axis, and a unit is hit within the blast radius of one.
+    // Natives objects are never own-side (crashEndangers).
     constexpr int spread = 2 * TILESIZE + Bullet::deathHandBlastRadius;
     const int mapW = currentGameMap->getSizeX(), mapH = currentGameMap->getSizeY();
     const int minX = std::max(0, (std::min(from.x, to.x) - spread) / TILESIZE);
@@ -315,7 +316,10 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint lead) const
     const auto collect = [&](const std::list<Uint32>& objects) {
         for(Uint32 id : objects) {
             const ObjectBase* object = currentGame->getObjectManager().getObject(id);
-            if(object != nullptr && object != this && object->getOwner()->getTeamID() == teamID) ownIDs.insert(id);
+            if(object != nullptr && object != this && object->getOwner()->getTeamID() == teamID
+               && !object->getOwner()->isNatives()) {
+                ownIDs.insert(id);
+            }
         }
     };
     for(int y = minY; y <= maxY; ++y) {
