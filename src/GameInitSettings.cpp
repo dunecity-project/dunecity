@@ -24,6 +24,7 @@
 #include <misc/InputStream.h>
 #include <misc/string_util.h>
 #include <misc/exceptions.h>
+#include <misc/SaveCompat.h>
 #include <mmath.h>
 
 #include <globals.h>
@@ -283,6 +284,7 @@ void GameInitSettings::configureCoopSave(const GameInitSettings& saved, const Ho
     modChecksum = saved.modChecksum;
     modRevisionHash = saved.modRevisionHash;
     modRevisionVersion = saved.modRevisionVersion;
+    savedGameVersion = saved.savedGameVersion;
     mapRevisionHash = saved.mapRevisionHash;
     mapRevisionVersion = saved.mapRevisionVersion;
     mapRevisionManifest = saved.mapRevisionManifest;
@@ -306,10 +308,11 @@ void GameInitSettings::enableCoop(bool campaign, const std::string& serverName) 
 GameInitSettings GameInitSettings::readSaveSetup(InputStream& stream, HouseInfoList& houses) {
     if(stream.readUint32() != SAVEMAGIC) THROW(std::runtime_error, "Not a valid savegame.");
     const auto version = stream.readUint32();
-    stream.readString();
+    const auto writtenBy = stream.readString();
     if(version < 9705 || version > SAVEGAMEVERSION) THROW(std::runtime_error, "Unsupported savegame version.");
     if(version >= 9806) { stream.readString(); stream.readString(); }
     GameInitSettings saved(stream);
+    saved.savedGameVersion = savedGameVersionOf(writtenBy);
     if(version <= 9820) saved.migrateLegacyHouseColorSlots();
     const auto count = stream.readUint32();
     if(count > NUM_HOUSES) THROW(std::runtime_error, "Invalid saved house count.");

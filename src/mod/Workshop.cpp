@@ -3,6 +3,7 @@
 #include <mod/Dune2RAssetManager.h>
 #include <mod/ModTransferValidation.h>
 #include <FileClasses/INIFile.h>
+#include <config.h>
 #include <misc/fnkdat.h>
 #include <misc/WebRuntime.h>
 #include <fstream>
@@ -60,6 +61,9 @@ std::string mapID(const std::string& name,const std::string& data) {
     // Old maps have no identity. Keep their named author lineage until first editor save.
     return hashBytes("legacy-map/"+store().owner()+"/"+name+"/"+ini.getStringValue("BASIC","Author","")).substr(0,32);
 }
+bool bundledMod(const std::string& modName) {
+    return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R";
+}
 }
 Store& store() { static Store value(userPath("workshop")); return value; }
 Revision saveMod(const std::string& modName) {
@@ -78,7 +82,7 @@ Revision saveMod(const std::string& modName) {
     }
     auto info=manager.getModInfo(modName);
     auto id=meta.getStringValue("Workshop","ID","");
-    const bool bundled=modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R";
+    const bool bundled=bundledMod(modName);
     if(bundled) id.clear(); // Derive from complete content, including optional asset packs.
     else if(id.empty()) id=newID();
     // Materialize the effective rules rather than depending on a mutable vanilla fallback.
@@ -95,6 +99,28 @@ Revision saveMod(const std::string& modName) {
     // integrity-checked installer payloads such as Tornie.
     if(!bundled) pointer(metadata,r);
     return r;
+}
+std::string bundledModHashAtGameVersion(const std::string& modName,const std::string& gameVersion) {
+    auto& manager=ModManager::instance();
+    if(gameVersion.empty()||gameVersion==VERSION||!bundledMod(modName)||!manager.modExists(modName)) return {};
+    const fs::path path=manager.getModPath(modName), metadataPath=path/"mod.ini";
+    if(!fs::is_regular_file(metadataPath)) return {};
+    // Only a stamp this release wrote (Vanilla, Dune City; Tornie and Dune2R ship their own) is
+    // one an earlier release wrote differently. Change it the way writeModInfo() does: the
+    // value in place, every other byte kept.
+    INIFile metadata(metadataPath.string());
+    if(metadata.getStringValue("Mod","Game Version")!=VERSION) return {};
+    metadata.setStringValue("Mod","Game Version",gameVersion);
+    std::string bytes(fs::file_size(metadataPath)+gameVersion.size()+2,'\0'); // +2: quotes
+    auto rw=SDL_RWFromMem(bytes.data(),static_cast<int>(bytes.size()));
+    if(rw==nullptr) return {};
+    const bool written=metadata.saveChangesTo(rw);
+    const auto size=SDL_RWtell(rw);SDL_RWclose(rw);
+    if(!written||size<0) return {};
+    bytes.resize(static_cast<size_t>(size));
+    const auto info=manager.getModInfo(modName);
+    return contentHash("mod","",info.displayName.empty()?modName:info.displayName,
+                       manager.getContentBase(modName),"",path,{{"mod.ini",bytes}});
 }
 Revision saveMapData(const std::string& name,const std::string& data,const std::string& modHash) {
     if(data.empty()||data.size()>1024*1024) throw std::runtime_error("Map content is empty or too large.");

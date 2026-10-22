@@ -86,10 +86,14 @@ mod revision as well as runtime configuration. A missing or mismatched revision
 cannot silently start.
 
 MOD4 game settings record exact map/mod hashes and numbers. Older MOD3 settings
-remain readable. Saves and replays resolve their original revision from the local
-store, then from installed mods with the same bytes, and finally by downloading
-the pinned mod revision. Legacy saves with a known mismatched checksum report a
-failure rather than loading unrelated current content.
+remain readable. A save of a shipped mod loads with the installed mod when its files
+are the pinned revision's. Vanilla and Dune City stamp the game version into their
+`mod.ini`, so a save from an earlier release is compared under that release's stamp
+(named by the save header); if only the stamp differs, the game runs the shipped mod
+and re-pins it as currently stamped. Otherwise saves and replays resolve their original
+revision from the local store, then from installed mods with the same bytes, and finally
+by downloading the pinned mod revision. Legacy saves with a known mismatched checksum
+report a failure rather than loading unrelated current content.
 
 ## Service and validation
 

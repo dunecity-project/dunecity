@@ -282,7 +282,7 @@ TEST_CASE("Campaign save lobby reads mod header and setup colors without consumi
     const auto setup = makeCoop(true, false).getHouseInfoList();
     for(const auto& house : setup) saved.addHouseInfo(house);
     OMemoryStream out; out.open();
-    out.writeUint32(SAVEMAGIC); out.writeUint32(version); out.writeString("test");
+    out.writeUint32(SAVEMAGIC); out.writeUint32(version); out.writeString("DuneCity1.0.850");
     out.writeString("vanilla"); out.writeString("checksum");
     saved.save(out);
     out.writeUint32(setup.size());
@@ -297,6 +297,8 @@ TEST_CASE("Campaign save lobby reads mod header and setup colors without consumi
     const auto parsed = GameInitSettings::readSaveSetup(in, houses);
     REQUIRE(parsed.getGameType() == GameType::Campaign);
     REQUIRE(parsed.getHouseID() == HOUSE_ATREIDES);
+    // The release that wrote the save, for its shipped mod's version stamp; never serialized.
+    REQUIRE(parsed.getSavedGameVersion() == "1.0.850");
     REQUIRE(houses.size() == 2);
     REQUIRE(houses.front().graphicsSkin == GameInitSettings::GraphicsSkin::Dune2);
     REQUIRE(houses.back().graphicsSkin == GameInitSettings::GraphicsSkin::SimCity);

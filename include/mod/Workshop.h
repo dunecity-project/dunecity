@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -38,9 +39,18 @@ std::string unhex(const std::string& text);
 std::string newID();
 void replaceFile(const std::filesystem::path& source, const std::filesystem::path& destination);
 std::string hashBytes(const std::string& bytes);
+// The hash Store::capture() would record for `source`, without storing anything.
+// `replaced` substitutes other bytes for some files (generic relative paths).
+std::string contentHash(const std::string& kind, const std::string& id, const std::string& name,
+                        const std::string& base, const std::string& modHash, const std::filesystem::path& source,
+                        const std::map<std::string, std::string>& replaced = {});
 Revision parseManifest(const std::string& manifest);
 Store& store();
 Revision saveMod(const std::string& modName);
+// The hash saveMod() gives a bundled mod whose mod.ini says `gameVersion`: Vanilla and Dune
+// City stamp the running game version there (ModManager::writeModInfo), so a save keeps the
+// hash of the release that wrote it although no other byte changed. Empty if not applicable.
+std::string bundledModHashAtGameVersion(const std::string& modName, const std::string& gameVersion);
 Revision saveMap(const std::string& filename, const std::string& modName);
 Revision saveMapData(const std::string& name, const std::string& data, const std::string& modHash);
 Revision receiveMap(const std::string& name, const std::string& data,

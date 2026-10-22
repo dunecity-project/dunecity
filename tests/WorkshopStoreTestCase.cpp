@@ -38,6 +38,17 @@ TEST_CASE("Workshop identity for bundled packages includes optional files","[wor
     Fixture f;auto a=f.save("");auto same=f.save("");REQUIRE(a.hash==same.hash);
     f.write("graphics/optional.png","pixels");auto b=f.save("");REQUIRE(a.id!=b.id);
 }
+TEST_CASE("Workshop content hash is the captured hash, with substituted bytes and nothing stored","[workshop]") {
+    // A save's shipped mod pins mod.ini with the release that wrote it; the same files under
+    // another stamp must be recognisable without capturing a revision of bytes nobody has.
+    Fixture f;const std::string restamped="[Mod]\nDisplay Name = Test\nGame Version = 1.0.850\n";
+    const auto hash=Workshop::contentHash("mod","","Test","vanilla","",f.source);
+    const auto other=Workshop::contentHash("mod","","Test","vanilla","",f.source,{{"mod.ini",restamped}});
+    REQUIRE(f.store.list().empty());REQUIRE(other!=hash);
+    REQUIRE(f.save("").hash==hash);
+    f.write("mod.ini",restamped);REQUIRE(f.save("").hash==other);
+    REQUIRE(Workshop::contentHash("mod",std::string(32,'a'),"Test","vanilla","",f.source)==f.save().hash);
+}
 TEST_CASE("Workshop downloaded bytes must match manifest and corrupt cache can be repaired","[workshop]") {
     Fixture f;auto r=f.save();Workshop::Store other(f.root/"download");
     f.write("ObjectData.ini","bad");REQUIRE_THROWS(other.importRevision(r.manifest,r.hash,1,f.source));REQUIRE(other.list().empty());

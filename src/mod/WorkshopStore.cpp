@@ -111,6 +111,27 @@ std::string serialize(const Revision& r) {
     for(const auto& f : r.files) s += "file=" + f.hash + "," + std::to_string(f.size) + "," + hex(f.path) + "\n";
     return s;
 }
+// The revision capture() records for `source`: every file's path, size and SHA-256, with a
+// bundled snapshot's ID derived from that content. `replaced` gives some files other bytes.
+Revision describe(const std::string& kind,const std::string& id,const std::string& name,const std::string& base,
+                  const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced) {
+    Revision r; r.kind=kind;r.id=id;r.name=name;r.base=base;r.modHash=modHash;
+    for(const auto& e:fs::recursive_directory_iterator(source)) {
+        auto path=e.path().lexically_relative(source);
+        require(!e.is_symlink(),"Workshop packages cannot contain symbolic links.");
+        if(e.is_directory() || excluded(path)) continue;
+        require(e.is_regular_file(),"Workshop packages must contain regular files.");
+        const auto relative=path.generic_string();
+        const auto other=replaced.find(relative);
+        if(other==replaced.end()) r.files.push_back({relative,Dune2RAssetManager::sha256File(e.path().string()),e.file_size()});
+        else r.files.push_back({relative,hashBytes(other->second),other->second.size()});
+    }
+    std::sort(r.files.begin(),r.files.end(),[](const File& a,const File& b){return a.path<b.path;});
+    // Unowned bundled snapshots derive identity from their complete immutable content.
+    // Optional asset packs must never compete for another publisher's item capability.
+    if(r.id.empty()) { r.id=std::string(32,'0');r.id=hashBytes(serialize(r)).substr(0,32); }
+    return r;
+}
 }
 void replaceFile(const fs::path& source,const fs::path& destination) {
 #ifdef _WIN32
@@ -249,19 +270,12 @@ Revision Store::importRevision(const std::string& manifest,const std::string& ex
 Revision Store::capture(const std::string& kind,const std::string& id,const std::string& name,
                         const std::string& base,const std::string& modHash,const fs::path& source) {
     std::lock_guard<std::recursive_mutex> lock(storeMutex);
-    Revision r; r.kind=kind;r.id=id;r.name=name;r.base=base;r.modHash=modHash;
-    for(const auto& e:fs::recursive_directory_iterator(source)) {
-        auto path=e.path().lexically_relative(source);
-        require(!e.is_symlink(),"Workshop packages cannot contain symbolic links.");
-        if(e.is_directory() || excluded(path)) continue;
-        require(e.is_regular_file(),"Workshop packages must contain regular files.");
-        r.files.push_back({path.generic_string(),Dune2RAssetManager::sha256File(e.path().string()),e.file_size()});
-    }
-    std::sort(r.files.begin(),r.files.end(),[](const File& a,const File& b){return a.path<b.path;});
-    // Unowned bundled snapshots derive identity from their complete immutable content.
-    // Optional asset packs must never compete for another publisher's item capability.
-    if(r.id.empty()) { r.id=std::string(32,'0');r.id=hashBytes(serialize(r)).substr(0,32); }
-    auto manifest=serialize(r); return importRevision(manifest,hashBytes(manifest),0,source);
+    auto manifest=serialize(describe(kind,id,name,base,modHash,source,{}));
+    return importRevision(manifest,hashBytes(manifest),0,source);
+}
+std::string contentHash(const std::string& kind,const std::string& id,const std::string& name,const std::string& base,
+                        const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced) {
+    return hashBytes(serialize(describe(kind,id,name,base,modHash,source,replaced)));
 }
 void Store::verifyDirectory(const Revision& revision,const fs::path& directory) const {
     std::lock_guard<std::recursive_mutex> lock(storeMutex);

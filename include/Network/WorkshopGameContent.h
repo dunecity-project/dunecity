@@ -20,12 +20,20 @@ inline void resolveMod(GameInitSettings& init, bool allowDownload = true) {
     if(!init.getModRevisionHash().empty()) {
         // Approved mods are already installed. Keep their shipped identity instead
         // of installing a second, hash-named copy just to join a game.
-        if(OnlineModPolicy::approved(init.getModName()) && mods.modExists(init.getModName())
-           && Workshop::saveMod(init.getModName()).hash == init.getModRevisionHash()) {
-            if(mods.getActiveModName() != init.getModName() && !mods.setActiveMod(init.getModName()))
-                throw std::runtime_error("Could not load the approved mod.");
-            init.setModIdentity(mods.getActiveModName(), mods.getEffectiveChecksums().combined);
-            return;
+        if(OnlineModPolicy::approved(init.getModName()) && mods.modExists(init.getModName())) {
+            const auto installed = Workshop::saveMod(init.getModName());
+            // A save from an earlier release pins these same files under that release's
+            // Game Version stamp. They run as the shipped mod, pinned as it is now stamped.
+            const bool restamped = installed.hash != init.getModRevisionHash()
+                && Workshop::bundledModHashAtGameVersion(init.getModName(), init.getSavedGameVersion())
+                       == init.getModRevisionHash();
+            if(installed.hash == init.getModRevisionHash() || restamped) {
+                if(mods.getActiveModName() != init.getModName() && !mods.setActiveMod(init.getModName()))
+                    throw std::runtime_error("Could not load the approved mod.");
+                if(restamped) init.setModRevision(installed.hash, installed.version);
+                init.setModIdentity(mods.getActiveModName(), mods.getEffectiveChecksums().combined);
+                return;
+            }
         }
         bool available = Workshop::activateModRevision(init.getModRevisionHash());
         if(!available) {
@@ -93,6 +101,7 @@ inline void pin(GameInitSettings& init, bool publish = false) {
         auto saved = GameInitSettings::readSaveSetup(stream, houses);
         init.setModIdentity(saved.getModName(), saved.getModChecksum());
         init.setModRevision(saved.getModRevisionHash(), saved.getModRevisionVersion());
+        init.setSavedGameVersion(saved.getSavedGameVersion());
         init.setMapRevision(saved.getMapRevisionHash(), saved.getMapRevisionVersion(), saved.getMapRevisionManifest());
         resolveMod(init);
     }

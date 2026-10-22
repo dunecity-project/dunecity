@@ -37,4 +37,10 @@ inline int determineLegacySavedItemCount(int savegameVersion, const std::string&
     return LEGACY_NUM_ITEM_ID_9810;  // 48 — default for dunecity 1.0.0–1.0.7
 }
 
+/// The game version a save header names: "1.0.850" for "DuneCity1.0.850" (VERSIONSTRING).
+inline std::string savedGameVersionOf(const std::string& duneVersion) {
+    const auto digit = duneVersion.find_first_of("0123456789");
+    return digit == std::string::npos ? std::string() : duneVersion.substr(digit);
+}
+
 #endif // SAVECOMPAT_H

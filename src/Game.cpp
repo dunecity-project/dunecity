@@ -5038,6 +5038,7 @@ bool Game::loadSaveGame(InputStream& stream) {
     // read gameInitSettings
     logLoadStage("game settings");
     gameInitSettings = GameInitSettings(stream);
+    gameInitSettings.setSavedGameVersion(savedGameVersionOf(duneVersion));
     if(lateJoinLoad && !expectedModRevision.empty() && gameInitSettings.getModRevisionHash() != expectedModRevision)
         THROW(std::runtime_error, "The checkpoint requires a different mod revision from the advertised game.");
     // MOD4 identifies the complete immutable package. Older saves retain their legacy
