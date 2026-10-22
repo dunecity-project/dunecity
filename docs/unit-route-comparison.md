@@ -61,6 +61,40 @@ by this ground-timing change; their earlier nominal-rate fixes remain in place.
 Pathfinding, combat AI and Dynasty's optional unquantized-speed setting are not
 ported by this change.
 
+## Chained steps and missed route ticks (protocol 92)
+
+Stefan's `skipping.dls` (1.0.850, 2 ms game speed): some units "jump from one
+tile to the next instead of showing the animations". Per-cycle and per-frame
+position traces of the save (`tests/performance/game-perf.py --motion-csv`,
+`docs/game-performance.md`, "Unit motion trace") showed two simulation faults,
+both in the Dynasty step scheduler, not in drawing:
+
+- **Chained steps kept `justStoppedMoving`.** A step that ends on the cycle a
+  route tick falls due is followed by the next step on the same cycle (the
+  arrival-and-next-step case above). Only `move()`'s idle branch cleared the
+  flag, so the new step kept it and `GroundUnit::checkPos` snapped `realX/realY`
+  to the tile centre on every cycle of that step: the unit stood still for half
+  a step, jumped a whole tile when its location changed, and stood still again.
+  It hits units whose step is a whole number of route periods and whose route
+  phase is a multiple of 3; in the save, Tanks driving diagonally over rock (25
+  movement ticks) did it on every tile. `UnitBase::moveDynastyStep` now clears
+  the flag while a step is under way (the stop was handled on the cycle it ended).
+- **Missed route ticks started steps in the past.** `GroundUnit::navigate` skips
+  a unit awaiting a carryall, so its route tick falls behind; when the wait ended
+  every step began at a past tick and finished at once, a tile per cycle until
+  the ticks caught up. `UnitBase::navigate` now moves a stale route tick to the
+  next tick of its 15-tick cadence.
+
+Step durations, arrival times and route ticks of units that were not affected
+are unchanged. Positions during affected steps, targeting distances and tracked
+units' crushing change, so this is protocol 92; no saved state changed (save
+9868). A 9868 save made mid-fault resumes the unit at its interpolated position
+on its first cycle.
+
+`unit_motion_probe` (`tests/units/run-unit-motion-probe.py`) shuttles ground
+units over open sand through the real main loop at 2 ms game speed with frame
+pacing (1-10 cycles per frame) and checks every cycle and every rendered frame.
+
 ## Verification
 
 The reference uses unmodified Dynasty 4469449c core movement, map, pathfinding

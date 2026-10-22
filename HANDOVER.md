@@ -1,3 +1,27 @@
+## 2026-10-22 — Unit jitter: chained Dynasty steps and missed route ticks (branch `fix/unit-jitter`, worktree `~/Documents/projects/dunecity-unit-jitter`, from 1.0.850 afb2315c; protocol 92, save 9868; not released)
+
+Agents UnitJitter (killed by the omp restart) and UnitJitter2. Stefan: "occasionally some units jump from one tile to
+the next instead of showing the animations" (`skipping.dls`, 1.0.850, 2 ms game speed). Write-up:
+`docs/unit-route-comparison.md`, "Chained steps and missed route ticks". Evidence
+`~/Documents/projects/dunecity-results/unit-jitter2/` (before/after save traces, `trace-summary.json`, probe runs);
+the save's mod revisions are in `../unit-jitter/save-profile`.
+
+- **Cause (simulation, not drawing):** a Dynasty step that started on the cycle the previous one ended kept
+  `justStoppedMoving` (only `move()`'s idle branch cleared it), so `GroundUnit::checkPos` snapped the unit to its tile
+  centre every cycle of the step: still for half a step, a whole-tile jump, still again. In the save: Tanks driving
+  diagonally over rock, every tile. Second fault: a unit that missed route ticks (`GroundUnit::navigate` skips one
+  awaiting a carryall) began its next steps at past ticks, a tile per cycle until caught up.
+- **Fix:** `UnitBase::moveDynastyStep` clears the flag while a step is under way; `UnitBase::navigate` moves a stale
+  route tick to its cadence's next tick. Protocol 92 (positions, targeting distances, crushing differ). No render change.
+- **Save traces** (`game-perf.py --save skipping.dls --motion-csv`, 3,750 cycles from 85,728; ground units, moves
+  under 200 world units): whole-tile moves per cycle 131 -> 7, per rendered frame (main loop, 8.3 cycles/frame) 127 ->
+  7; moving units with a stale flag 121 -> 0, Tanks 101 -> 0. The 7 left (both builds) are harvesters/a trike leaving
+  a structure.
+- **unit_motion_probe** (new ctest, `tests/units/run-unit-motion-probe.py`): 2 ms main loop with frame pacing
+  (1-10 cycles/frame), phase-aligned shuttles so steps chain, a cancelled carryall wait. 1.0.850 code: 136 cycle
+  violations, 227 mid-step stalls, 118 whole-tile frame jumps; only the flag fix: 23/0/6 (the carryall waiter);
+  both: 0/0/0, 113 chained steps, max 3.65 px per frame.
+
 ## 2026-10-22 — 1.0.850 published to production
 
 PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)

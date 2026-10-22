@@ -29,6 +29,13 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
 - `--source TREE --build-dir TREE/build` measures an older release: the script copies
   `game-perf.inc` into that (throwaway) worktree and patches its probe and runner.
 - `--summary R.jsonl` prints tables; `--check` is `perf_regression` (below).
+- **Unit motion trace**: `--motion-csv FILE` writes one row per unit whose position changed:
+  cycle, cycles since the previous row, frame, id, item, house, `realX/realY` (what the unit is
+  drawn at) and the change, location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick
+  and step start/end, formation, carryall wait, active, flying. Stepped: before every cycle;
+  `--mainloop`/`--rendered`: before each frame's first cycle, i.e. the positions the frame just
+  drew. Used for Stefan's `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps and
+  missed route ticks").
 
 ## Findings
 

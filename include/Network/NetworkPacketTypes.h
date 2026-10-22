@@ -290,7 +290,15 @@
 //     overwrote it with the spice budget), and a custom Brutal house keeps its opening worker floor
 //     and equal army capital per worker in vanilla games too (DuneCity only in 87). An 87 peer would
 //     build and attack differently and desync. No saved state change; save 9868.
-#define NETWORK_PROTOCOL_VERSION            88
+// 92: Dynasty ground steps no longer keep justStoppedMoving (fix/unit-jitter): a step that started
+//     on the cycle the previous one ended kept the flag, so GroundUnit::checkPos snapped the unit
+//     to its tile centre on every cycle of that step (it sat still, then jumped a whole tile at
+//     half-step; tracked units squashed their tile every cycle). UnitBase::moveDynastyStep clears
+//     it. And a unit that missed route ticks (GroundUnit::navigate skips one awaiting a carryall)
+//     resumes at its cadence's next tick instead of starting steps in the past (a tile per cycle
+//     until caught up). Positions, targeting distances and crushing differ from 88: an 88 peer
+//     would desync. No saved state change; save 9868. (89-91 are taken by parallel branches.)
+#define NETWORK_PROTOCOL_VERSION            92
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
