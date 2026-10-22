@@ -61,6 +61,48 @@ by this ground-timing change; their earlier nominal-rate fixes remain in place.
 Pathfinding, combat AI and Dynasty's optional unquantized-speed setting are not
 ported by this change.
 
+## Drawing chained steps
+
+Stefan's `skipping.dls` (1.0.850, 2 ms game speed): some units "jump from one
+tile to the next instead of showing the animations". Per-cycle and per-frame
+position traces of the save (`tests/performance/game-perf.py --motion-csv`,
+`docs/game-performance.md`, "Unit motion trace") showed the cause in the Dynasty
+step scheduler:
+
+- **Chained steps keep `justStoppedMoving`.** A step that ends on the cycle a
+  route tick falls due is followed by the next step on the same cycle (the
+  arrival-and-next-step case above). Only `move()`'s idle branch clears the
+  flag, so the new step keeps it and `GroundUnit::checkPos` holds `realX/realY`
+  on the tile centre on every cycle of that step: drawn as simulated, the unit
+  stands still for half a step, jumps a whole tile when its location changes,
+  and stands still again. It hits units whose step is a whole number of route
+  periods and whose route phase is a multiple of 3; in the save, Tanks driving
+  diagonally over rock (25 movement ticks) did it on every tile.
+- **Missed route ticks start steps in the past** (seen once in the save, a
+  harvester): `GroundUnit::navigate` skips a unit awaiting a carryall, so its
+  route tick falls behind; when the wait ends its steps begin at past ticks and
+  finish at once, a tile per cycle until the ticks catch up. Not changed here.
+
+**Fix (drawing only, protocol 88):** `Game::drawScreen` holds a
+`UnitBase::DrawnStepScope`. For every Dynasty ground unit on a step with the
+stale flag it sets `realX/realY` to the step's own interpolation for the last
+cycle run (`moveDynastyStep`'s value before `checkPos` snapped it, rock bumps
+included) and restores the simulated values when drawing ends. No cycle runs
+inside the scope, so the simulation, digests and every game outcome are those
+of 1.0.850.
+
+Fixing the flag in the simulation instead (branch `fix/dynasty-step-stale-stop`,
+protocol 92, also resyncing missed route ticks) changes positions, targeting
+distances and crushing during chained steps, and with them game trajectories:
+`quantbot_all_against_atreides` 4/6 (1.0.850: 6/6), `quantbot_ffa_army_deploys`
+and `quantbot_strategy` failed on it; the route-tick part alone also flips the
+same two All against Atreides seeds. Left for Stefan to decide.
+
+`unit_motion_probe` (`tests/units/run-unit-motion-probe.py`) shuttles ground
+units over open sand through the real main loop at 2 ms game speed with frame
+pacing (1-10 cycles per frame) and checks the drawn positions every cycle and
+every rendered frame.
+
 ## Verification
 
 The reference uses unmodified Dynasty 4469449c core movement, map, pathfinding

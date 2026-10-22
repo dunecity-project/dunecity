@@ -351,6 +351,8 @@ def run_one(args, scratch, index):
     env.setdefault('BALANCE_DIGEST_CYCLES', '750')
     if args.render_every: env['BALANCE_PERF_RENDER_EVERY'] = str(args.render_every)
     if args.csv: env['BALANCE_PERF_CSV'] = str(Path(args.csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
+    if args.motion_csv:
+        env['BALANCE_PERF_MOTION_CSV'] = str(Path(args.motion_csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
     if args.dump_map: env['BALANCE_PERF_DUMP_MAP'] = str(Path(args.dump_map).resolve())
     if args.mainloop or args.rendered: env['BALANCE_PERF_MAINLOOP'] = '1'
     if args.rendered and "'--real-video'" in (source / 'tests/ai/run-campaign-balance.py').read_text():
@@ -467,6 +469,8 @@ def main():
     parser.add_argument('--label', default='run')
     parser.add_argument('--results', type=Path)
     parser.add_argument('--csv', help='Per-cycle CSV output path')
+    parser.add_argument('--motion-csv', help='Unit motion trace: positions and movement state of every unit that moved, '
+                        'per cycle (stepped) or per rendered frame (--mainloop/--rendered); game-perf.inc MotionTrace')
     parser.add_argument('--dump-map', help='Write the map text the match was started from (e.g. a save\'s)')
     parser.add_argument('--wall-timeout', type=int, default=3600)
     parser.add_argument('--scratch')

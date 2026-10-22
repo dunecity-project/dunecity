@@ -14,6 +14,7 @@
 // Kept to APIs that exist since 1.0.833 so the same file measures older releases
 // (game-perf.py --source copies it into a throwaway tag worktree).
 #include <players/AIDecisionLog.h>
+#include <units/GroundUnit.h>
 
 #include <algorithm>
 #include <chrono>
@@ -23,6 +24,7 @@
 #include <ctime>
 #include <fstream>
 #include <functional>
+#include <type_traits>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -94,6 +96,54 @@ struct Cycle {
     int unitCount = 0;
 };
 
+/// Unit motion trace (game-perf.py --motion-csv, docs/game-performance.md "Unit motion trace"):
+/// one CSV row per unit whose position changed since its previous row, with its movement state.
+/// The stepped loop records before every cycle; the main loop records only before a frame's first
+/// cycle, i.e. the positions the frame just rendered drew (frames that run no cycle draw the same
+/// positions again), with the cycles run since the previous row in "cycles".
+struct MotionTrace {
+    std::ofstream out;
+    std::map<Uint32, std::pair<double, double>> last;
+    Uint32 lastCycle = 0;
+    void open() {
+        const char* path = std::getenv("BALANCE_PERF_MOTION_CSV");
+        if (path == nullptr || path[0] == '\0' || out.is_open()) return;
+        out.open(path);
+        out << "cycle,cycles,frame,id,item,house,x,y,dx,dy,lx,ly,nx,ny,moving,jsm,route_tick,step_start,step_end,now,"
+               "awaiting,active,flying\n";
+    }
+    void record(Game& g) {
+        if (!out.is_open()) return;
+        const Uint32 cycle = g.getGameCycleCount();
+        const Uint32 cycles = lastCycle == 0 ? 0 : cycle - lastCycle;
+        lastCycle = cycle;
+        const Uint64 now = static_cast<Uint64>(cycle) * (GAMESPEED_DEFAULT * 3);
+        for (UnitBase* u : unitList) {
+            const double x = u->realX.toDouble(), y = u->realY.toDouble();
+            auto [it, inserted] = last.try_emplace(u->getObjectID(), x, y);
+            const double dx = x - it->second.first, dy = y - it->second.second;
+            it->second = {x, y};
+            if (inserted || (dx == 0 && dy == 0)) continue;
+            const bool ground = u->isAGroundUnit();
+            out << cycle << ',' << cycles << ',' << g.frameTiming.frameCount << ',' << u->getObjectID() << ','
+                << u->getItemID() << ',' << u->getOwner()->getHouseID() << ',' << x << ',' << y << ',' << dx << ',' << dy << ','
+                << u->location.x << ',' << u->location.y << ',' << u->nextSpot.x << ',' << u->nextSpot.y << ','
+                << u->moving << ',' << u->justStoppedMoving << ',' << u->dynastyRouteTick << ',' << u->dynastyStepStart << ','
+                << u->dynastyStepEnd << ',' << now << ','
+                << (ground ? static_cast<GroundUnit*>(u)->awaitingPickup : false) << ',' << u->isActive() << ','
+                << u->isAFlyingUnit() << '\n';
+        }
+    }
+};
+inline MotionTrace motionTrace;
+
+/// While it exists, realX/realY are what Game::drawScreen draws: UnitBase::DrawnStepScope where the
+/// build has it, the simulated positions in older releases (which drew those).
+template <typename Unit, typename = void> struct DrawnPositions {};
+template <typename Unit> struct DrawnPositions<Unit, std::void_t<typename Unit::DrawnStepScope>> {
+    typename Unit::DrawnStepScope scope;
+};
+
 inline double percentile(std::vector<double> values, double p) {
     if (values.empty()) return 0.0;
     std::sort(values.begin(), values.end());
@@ -122,6 +172,7 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
     // Stefan plays at 2 ms, where the engine runs up to 10 cycles per displayed frame.
     settings.gameOptions.gameSpeed = std::getenv("BALANCE_PERF_GAME_SPEED") ? std::atoi(std::getenv("BALANCE_PERF_GAME_SPEED")) : 2;
     stopAt = game.getGameCycleCount() + cycles;
+    motionTrace.open();
     const Uint32 firstCycle = game.getGameCycleCount();
     // The engine has no cycle limit; a timer ends the loop (bQuitGame is only read by the loop).
     const SDL_TimerID timer = SDL_AddTimer(20, [](Uint32 interval, void*) -> Uint32 {
@@ -144,6 +195,8 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
                         startBudget, static_cast<size_t>(g.negotiatedBudget));
         }
         if (!budgetChanged && g.getGameCycleCount() < stopAt) ProbeDigest::periodic(g);
+        // A frame's first cycle: the positions renderFrame() just drew.
+        if (g.frameTiming.gameCyclesThisFrame == 0) { const DrawnPositions<UnitBase> drawn; motionTrace.record(g); }
     };
     const auto histogramBefore = game.frameTiming.frameMsHistogram;
     const uint64_t limitedBefore = game.frameTiming.catchUpLimitedFrames;
@@ -193,6 +246,7 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
 inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle) {
     if (std::getenv("BALANCE_PERF_MAINLOOP")) { runMainLoop(game, cycles); return; }
     const int renderEvery = std::getenv("BALANCE_PERF_RENDER_EVERY") ? std::atoi(std::getenv("BALANCE_PERF_RENDER_EVERY")) : 0;
+    motionTrace.open();
     // Cycles per displayed frame for the frame model: Stefan plays at game speed 2 ms, where the
     // engine's guardrail runs 10 cycles per frame (Game::runMainLoop kMaxCyclesPerFrame).
     const int frameCycles = std::max(1, std::getenv("BALANCE_PERF_FRAME_CYCLES") ? std::atoi(std::getenv("BALANCE_PERF_FRAME_CYCLES")) : 10);
@@ -209,6 +263,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     const auto loopStart = Clock::now();
     while (!game.finished && game.getGameCycleCount() - first < cycles) {
         if (perCycle) perCycle();
+        motionTrace.record(game);
         for (int h : houses) before[h] = telemetrySum("house.update", h);
         timing.aiMsThisFrame = timing.citySimMsThisFrame = timing.unitsMsThisFrame = 0.0;
         timing.structuresMsThisFrame = timing.pathfindingMsThisFrame = timing.renderingMsThisFrame = 0.0;

@@ -1027,6 +1027,34 @@ bool UnitBase::moveDynastyStep() {
     return true;
 }
 
+namespace {
+struct DrawnStepSwap { UnitBase* unit; FixPoint x, y; };
+std::vector<DrawnStepSwap> drawnStepSwaps;   // reused every frame
+}
+
+UnitBase::DrawnStepScope::DrawnStepScope() {
+    drawnStepSwaps.clear();
+    if(currentGame==nullptr || currentGame->getGameCycleCount()==0) return;
+    // realX/realY hold the last cycle run; this is moveDynastyStep's position for that cycle,
+    // before GroundUnit::checkPos snapped it (rock bumps included: they are in bumpyOffset).
+    const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount()-1)*(GAMESPEED_DEFAULT*3);
+    for(UnitBase* unit : unitList) {
+        if(!unit->moving || !unit->justStoppedMoving || unit->dynastyStepEnd<=unit->dynastyStepStart
+           || !unit->usesDynastyGroundTiming()) continue;
+        const auto elapsed=now>unit->dynastyStepStart ? now-unit->dynastyStepStart : 0;
+        const auto duration=unit->dynastyStepEnd-unit->dynastyStepStart;
+        const FixPoint progress=FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
+        drawnStepSwaps.push_back({unit, unit->realX, unit->realY});
+        unit->realX=unit->dynastyStartX+(unit->dynastyEndpoint.x-unit->dynastyStartX)*progress+unit->bumpyOffsetX;
+        unit->realY=unit->dynastyStartY+(unit->dynastyEndpoint.y-unit->dynastyStartY)*progress+unit->bumpyOffsetY;
+    }
+}
+
+UnitBase::DrawnStepScope::~DrawnStepScope() {
+    for(const DrawnStepSwap& swap : drawnStepSwaps) { swap.unit->realX=swap.x; swap.unit->realY=swap.y; }
+    drawnStepSwaps.clear();
+}
+
 void UnitBase::move() {
     if(moveDynastyStep()) return;
 

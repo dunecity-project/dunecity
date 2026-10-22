@@ -133,6 +133,32 @@ also when the plane gets shot down it should make the equivalent of a nuclear mi
   9105 25.8 min) and every quantbot_*. `import-micropolis-aircraft.py --check` reproduces the sheet.
 - `platform/web/package-lock.json` (git+ssh URL from a local npm run) is left uncommitted on purpose.
 
+## 2026-10-22 — Unit jitter: chained Dynasty steps drawn moving (branch `fix/unit-jitter`, worktree `~/Documents/projects/dunecity-unit-jitter`, from 1.0.850 afb2315c; protocol 88, save 9868, simulation unchanged; not released)
+
+Agents UnitJitter (killed by the omp restart) and UnitJitter2. Stefan: "occasionally some units jump from one tile to
+the next instead of showing the animations" (`skipping.dls`, 1.0.850, 2 ms game speed). Write-up:
+`docs/unit-route-comparison.md`, "Drawing chained steps". Evidence `~/Documents/projects/dunecity-results/unit-jitter2/`
+(save traces, `trace-summary.json`, probe runs); the save's mod revisions are in `../unit-jitter/save-profile`.
+
+- **Cause:** a Dynasty step that starts on the cycle the previous one ended keeps `justStoppedMoving`, so
+  `GroundUnit::checkPos` holds the unit on its tile centre every cycle of the step: drawn as simulated it stands still
+  for half a step, jumps a whole tile, stands still again. In the save: Tanks driving diagonally over rock, every tile.
+- **Fix (render only, Main's decision):** `Game::drawScreen` holds `UnitBase::DrawnStepScope`, which draws such units
+  at their step's interpolation and restores the simulated position afterwards. Stepped save trace and digests are
+  identical to 1.0.850 (digest cf73fa59e7d63c5b at 89477).
+- **Save traces** (3,750 cycles from 85,728; ground units, moves under 200 world units): drawn whole-tile moves per
+  rendered frame (main loop, 8.3 cycles/frame) 127 -> 9; held units 118 -> 0, Tanks 104 -> 0. The 9 left are
+  harvesters/a raider trike reappearing from a structure.
+- **unit_motion_probe** (new ctest): 2 ms main loop with frame pacing (5 cycles/frame, 1-10), phase-aligned shuttles
+  so steps chain; checks drawn positions per cycle and per frame. Render fix: 0 violations, 113 chained steps, 6,782
+  held cycles drawn moving, max 3.44 px per frame. Drawn as simulated (1.0.850, plus a carryall-wait case since
+  removed): 136 cycle violations, 227 mid-step stalls, 118 whole-tile frame jumps.
+- **Not fixed here:** a unit whose carryall wait ends (missed route ticks) moves a tile per cycle until caught up (once
+  in the save). Sim fix for both faults: branch `fix/dynasty-step-stale-stop` 036776cb (protocol 92) - shifts
+  trajectories (`quantbot_all_against_atreides` 4/6, `ffa_army_deploys`, `strategy` fail; the route part alone also
+  flips the same two seeds). Effective speed is the same with and without it (chained Launcher/Sonic/Deviator: 1,804
+  cycles per 29 sand tiles both ways); extra crushing not measured. For Stefan to decide.
+
 ## 2026-10-22 — 1.0.850 published to production
 
 PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)
