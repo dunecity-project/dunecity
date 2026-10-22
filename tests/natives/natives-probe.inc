@@ -323,6 +323,15 @@ void runCrime() {
     for(const StructureBase* s : structureList)
         if(s->getOwner() == victim && (!origin || s->getItemID() == Structure_ConstructionYard)) origin = s;
     nRequire(origin != nullptr, "The enemy house has no building");
+    // More Natives worms than the house's unit limit (Equilibrium has 135): worms are no army, so
+    // they must not use up the limit the crime troopers rise under.
+    House* nativesHouse = game->getOrCreateNativesHouse();
+    nativesHouse->maxUnits = 20;    // this skirmish has no unit limit; a map-size one, as on most maps
+    const Coord middle(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2);
+    std::vector<Uint32> wormIds;
+    while(static_cast<int>(wormIds.size()) < nativesHouse->getMaxUnits() + 5)
+        wormIds.push_back(placeNear(nativesHouse, Unit_Sandworm, middle)->getObjectID());
+    SDL_Log("NATIVES_PROBE: %zu Natives worms against a unit limit of %d", wormIds.size(), nativesHouse->getMaxUnits());
     bot->updateEnemySightings();
     const int64_t threatBefore = bot->enemyThreatEstimate();
     const int victimTroopers = victim->getNumItems(Unit_Trooper);
@@ -342,6 +351,7 @@ void runCrime() {
         nRequire(!game->getObjectManager().getObject(id) || !game->getObjectManager().getObject(id)->getOwner()->isNatives(),
                  "QuantBot remembers a crime trooper as enemy army");
     nRequire(bot->enemyThreatEstimate() == threatBefore, "Crime troopers changed QuantBot's enemy threat estimate");
+    for(Uint32 id : wormIds) if(ObjectBase* worm = game->getObjectManager().getObject(id)) worm->destroy();
     expectShownAsNatives(*game, troops.units.front(), "crime trooper");
     expectHidden(*game, "DuneCity crime");
     SDL_Log("NATIVES_PROBE: crime raised 3 Natives troopers at %s's %s; threat estimate %lld unchanged",

@@ -623,10 +623,12 @@ void QuantBot::update() {
     const Uint32 scheduleCycle = getGameCycleCount();
     bool phasedBuildDue = false;
     if (phased) {
+        // Player houses only: the Natives house has no AI, and the twelve-slot ring keeps every
+        // house's decision cycle where it was before the Natives slot existed.
         const bool unitDue = QuantBotSchedulePolicy::unitPhaseDue(
-            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_PLAYER_HOUSES);
         const bool buildDue = QuantBotSchedulePolicy::buildPhaseDue(
-            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_PLAYER_HOUSES);
         if (!unitDue && !buildDue) return;
         phasedBuildDue = buildDue;
     } else if (!QuantBotSchedulePolicy::legacyDue(scheduleCycle, scheduleHouse, AIUPDATEINTERVAL)) {

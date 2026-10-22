@@ -41,8 +41,10 @@ static std::string readSourceFile(const std::string& relativePath) {
 TEST_CASE("NeutralHouse: HOUSE_NEUTRAL exists in the house enum",
           "[neutral][enum]") {
     REQUIRE(HOUSE_NEUTRAL == 6);
-    // NUM_HOUSES must include Neutral + Rebels (0..7 → 8 total as of v1.0.228)
-    REQUIRE(NUM_HOUSES == 12);
+    // Twelve houses a player can hold, plus the hidden Natives house (worms, crime troopers).
+    REQUIRE(NUM_PLAYER_HOUSES == 12);
+    REQUIRE(HOUSE_NATIVES == NUM_PLAYER_HOUSES);
+    REQUIRE(NUM_HOUSES == 13);
 }
 
 TEST_CASE("NeutralHouse: HOUSE_NEUTRAL is after HOUSE_MERCENARY",
@@ -93,7 +95,8 @@ TEST_CASE("NeutralHouse: legacy house IDs remain stable with extended identity c
     REQUIRE(HOUSE_REBELS == 7);
     REQUIRE(NUM_LEGACY_HOUSES == 8);
     REQUIRE(HOUSE_CUSTOM == NUM_LEGACY_HOUSES);
-    REQUIRE(NUM_HOUSES == NUM_LEGACY_HOUSES + 4);
+    REQUIRE(NUM_PLAYER_HOUSES == NUM_LEGACY_HOUSES + 4);
+    REQUIRE(NUM_HOUSES == NUM_PLAYER_HOUSES + 1);
 }
 // =============================================================================
 // Voice file mapping (source scan)

@@ -171,12 +171,14 @@ public:
 
     /**
         This function checks if the limit for ground units is already reached. Infantry units are only counted as 1/3.
+        Sandworms (all the Natives') are no army: they never count, so a map full of worms does not
+        stop city crime from raising its troopers.
         \return true, if the limit is already reached, false if building further ground units is allowed
     */
     inline bool isGroundUnitLimitReached() const {
         const int limit = getMaxUnits();
         if (limit == 0) return false;  // 0 = unlimited units
-        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter];
+        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
         return (numGroundUnit + (numItem[Unit_Soldier]+2)/3 + (numItem[Unit_Trooper]+2)/3  >= limit);
     };
 
@@ -187,7 +189,7 @@ public:
     inline bool isInfantryUnitLimitReached() const {
         const int limit = getMaxUnits();
         if (limit == 0) return false;  // 0 = unlimited units
-        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter];
+        int numGroundUnit = numUnits - numItem[Unit_Soldier] - numItem[Unit_Trooper] - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Ornithopter] - numItem[Unit_Sandworm];
         return (numGroundUnit + numItem[Unit_Soldier]/3 + numItem[Unit_Trooper]/3  >= limit);
     };
 
