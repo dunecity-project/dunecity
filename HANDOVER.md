@@ -1,3 +1,13 @@
+## 2026-10-23 — local 1.0.851 verified (MBA install pending: Air unreachable)
+
+1.0.850 + `integrate/851-trial` 092fdc60 (feat/natives-house incl. fix/spectator-game-end, fix/city-airplane,
+fix/unit-jitter render-only squash) + version bump 4f96921e + `fix/natives-probe-851` 58a507ef (earlier releases'
+Vanilla/Dune City saves load as the shipped mod; the mod.ini version stamp changed their fingerprint). Protocol 94,
+save 9871. Cluster ctest at 58a507ef (job 20261022T234702-ctest-dbb27f): 108/108. Package from build-int at 78bc0061:
+executable SHA256 048778cc4e591f5ef20288dd8b34754a8db0dfa5fb84f40fe6a972d17372715a, no Homebrew/local links,
+signature and runtime check passed; zip `/tmp/dunecity-1.0.851-macos.zip`, installer `/tmp/push-dunecity-1.0.851.sh`.
+Not merged: fix/dynasty-step-stale-stop (sim fix, changes outcomes), fix/turret-air-range (Stefan kept the 3x). Not pushed.
+
 ## 2026-10-22 — 1.0.851 release blocker: natives_probe save9868 hung loading the 1.0.850 fixture (branch `fix/natives-probe-851`, worktree `~/Documents/projects/dunecity-natives-851`, from staging 4f96921e = 1.0.851; protocol 94, save 9871 unchanged)
 
 Agent NativesProbeFix. Evidence `~/Documents/projects/dunecity-results/natives-851/`.
