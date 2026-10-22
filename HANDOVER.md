@@ -1,3 +1,29 @@
+## 2026-10-22 — 1.0.851 release blocker: natives_probe save9868 hung loading the 1.0.850 fixture (branch `fix/natives-probe-851`, worktree `~/Documents/projects/dunecity-natives-851`, from staging 4f96921e = 1.0.851; protocol 94, save 9871 unchanged)
+
+Agent NativesProbeFix. Evidence `~/Documents/projects/dunecity-results/natives-851/`.
+
+- **Cause (game, not probe):** Vanilla and Dune City stamp the running game version into their `mod.ini`
+  (`ModManager::writeModInfo`, rewritten on every release by `vanillaNeedsReseed`/`dunecityNeedsReseed`), and that
+  file is part of the Workshop revision a save pins. After 1.0.850 -> 1.0.851 the fixture's pinned vanilla revision
+  `0eb2188e` no longer matched the installed one (`c670c2d2`; identical files except `Game Version`), so
+  `WorkshopGameContent::resolveMod` found no store copy in the fresh profile and called
+  `Workshop::downloadWithProgress`: a modal menu, failing because approved mods are never uploaded, waiting for
+  "Back". Backtrace at the hang: `MenuBase::showMenu <- Workshop::downloadWithProgress <- resolveMod <-
+  Game::loadSaveGame <- Game::initGame <- runNativesProbe`. 092fdc60's build (1.0.850) passes the same case in 5 s.
+- **Players:** every release did this to Vanilla/Dune City saves. With the old revision in their own store they
+  loaded under a duplicate `ws-<hash>` copy (Stefan's MBA: 14 copies); without it (save from another machine,
+  cleared cache) the load ended in a failed download dialog and "The exact mod version ... could not be loaded".
+- **Fix:** `GameInitSettings` records the saving release (save header; runtime only, never serialized or sent).
+  `Workshop::bundledModHashAtGameVersion` hashes the installed shipped mod with its `mod.ini` stamp changed back in
+  place (`Workshop::contentHash` = capture's hash without storing). `resolveMod` runs the shipped mod when that is
+  the pinned hash and re-pins the game to the current stamp; otherwise store, same-bytes mods, download as before.
+- **Real save:** MBA `skipping.dls` (released 1.0.850, Dune City, 425 units) in the 1.0.851 build headlessly with
+  the MBA's `mods/dunecity` and no Workshop store: loads as shipped `dunecity`, 600 cycles, re-saved 9871 reloads;
+  the unfixed build hangs in the download there, and with the store loads as `ws-827b6ce8...`. Not fixed: a fresh
+  profile writes `mod.ini` in another layout than the MBA's legacy one, so that save still needs its revision.
+- **Tests:** `dunecity-queue ctest` job 20261022T234702-ctest-dbb27f at 58a507ef: 108/108 passed (mini 61, pro 34,
+  pc 13), natives_probe 13.8 s. New `[workshop]` contentHash case; readSaveSetup records the saving release.
+
 ## 2026-10-22 — 1.0.851 integration trial: Natives house + city airplane + unit jitter (branch `integrate/851-trial`, worktree `~/Documents/projects/dunecity-int-851`, from staging afb2315c = 1.0.850; protocol 94, save 9871; no version bump yet)
 
 Agent Integrate851. Evidence `~/Documents/projects/dunecity-results/int-851/`.
