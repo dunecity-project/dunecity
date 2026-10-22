@@ -5,7 +5,9 @@ The artwork is the unmodified X11 pixel art shipped with the GPL Micropolis
 release: ``images/obj2-0.xpm`` .. ``obj2-7.xpm`` (32x32 traffic helicopter, the
 eight compass headings) and ``images/obj3-0.xpm`` .. ``obj3-10.xpm`` (48x48
 airplane, the same eight headings plus the three take-off frames).  Nothing is
-redrawn, recoloured or rescaled: every output pixel is a source pixel.
+redrawn, recoloured or rescaled: every output pixel is a source pixel.  The one
+addition is the airplane's eight in-between headings (below), which are the
+original frames rotated by 22.5 degrees, still made only of original pixels.
 
 Micropolis numbers sprite frames from 1 (frame 0 means "sprite inactive"), so
 ``objN-k.xpm`` holds sprite frame ``k+1``.  ``sprite.cpp``'s direction tables
@@ -20,13 +22,28 @@ the columns below are re-ordered into Dune Legacy's ANGLETYPE order
 Output (tracked, and copied into the app bundle by src/CMakeLists.txt):
 
     imported_sprites/micropolis/aircraft/city_helicopter.png   8 x 1 cells of 32px
-    imported_sprites/micropolis/aircraft/city_airplane.png     8 x 4 cells of 48px
+    imported_sprites/micropolis/aircraft/city_airplane.png     8 x 5 cells of 48px
     imported_sprites/micropolis/aircraft/manifest.json
 
-The airplane rows are: row 0 the eight cruise headings, rows 1..3 the take-off
-frames 9, 10 and 11.  Take-off art is heading-independent in the original, so
-each take-off row repeats its single frame across all eight columns; that keeps
-the renderer's angle indexing harmless without inventing any new artwork.
+The airplane rows are: row 0 the eight original cruise headings, row 1 the eight
+in-between headings, rows 2..4 the take-off frames 9, 10 and 11.  Take-off art is
+heading-independent in the original, so each take-off row repeats its single
+frame across all eight columns; that keeps the renderer's angle indexing
+harmless without inventing any new artwork.
+
+In-between headings.  The original flies eight headings only.  DuneCity's plane
+flies straight legs at any bearing (dunecity/CityAircraftPolicy.h,
+airplaneSteer) and is drawn on the nearest of sixteen headings, so it never looks
+more than 11.25 degrees off its track.  Row 1, column k is heading
+k * 45 + 22.5 degrees (counter-clockwise from east), rotated from the nearest
+axis-aligned original frame - east, north, west or south - because straight
+fuselage and wing edges keep their shape best: columns 0 and 4 rotate the east and
+west frames by +22.5 degrees, columns 1 and 5 the north and south frames by
+-22.5, and so on.  The rotation is RotSprite-style, so it adds no new colours
+and keeps the one-pixel outlines: Scale2x three times (8x), a nearest-neighbour
+rotation about the cell centre, then each output pixel takes the rotated 8x
+pixel at its centre.  It is integer/IEEE arithmetic in pure Python, so --check
+reproduces it byte for byte.
 
 Usage:
     python3 scripts/import-micropolis-aircraft.py                # regenerate
@@ -54,6 +71,63 @@ ANGLE_NAMES = ["RIGHT", "RIGHTUP", "UP", "LEFTUP", "LEFT", "LEFTDOWN", "DOWN", "
 
 # sprite.cpp doAirplaneSprite(): frames 11 -> 10 -> 9 -> 3 is the take-off run.
 AIRPLANE_TAKEOFF_FRAMES = [9, 10, 11]
+
+# In-between heading for column k (heading k*45 + 22.5 degrees): the axis-aligned
+# original column it is rotated from, and by how many degrees counter-clockwise.
+INBETWEEN_SOURCE = [(0, 22.5), (2, -22.5), (2, 22.5), (4, -22.5),
+                    (4, 22.5), (6, -22.5), (6, 22.5), (0, -22.5)]
+INBETWEEN_NAMES = ["RIGHT+22.5", "UP-22.5", "UP+22.5", "LEFT-22.5",
+                   "LEFT+22.5", "DOWN-22.5", "DOWN+22.5", "RIGHT-22.5"]
+ROTSPRITE_SCALE = 8
+
+
+def scale2x(pixels, width, height):
+    """Scale2x (EPX) on a list of RGBA tuples; returns (pixels, 2w, 2h)."""
+    out = [None] * (4 * width * height)
+    ow = 2 * width
+    for y in range(height):
+        for x in range(width):
+            p = pixels[y * width + x]
+            a = pixels[(y - 1) * width + x] if y > 0 else p
+            b = pixels[y * width + x + 1] if x < width - 1 else p
+            c = pixels[y * width + x - 1] if x > 0 else p
+            d = pixels[(y + 1) * width + x] if y < height - 1 else p
+            e0 = a if (c == a and c != d and a != b) else p
+            e1 = b if (a == b and a != c and b != d) else p
+            e2 = c if (d == c and d != b and c != a) else p
+            e3 = d if (b == d and b != a and d != c) else p
+            out[(2 * y) * ow + 2 * x] = e0
+            out[(2 * y) * ow + 2 * x + 1] = e1
+            out[(2 * y + 1) * ow + 2 * x] = e2
+            out[(2 * y + 1) * ow + 2 * x + 1] = e3
+    return out, 2 * width, 2 * height
+
+
+def rotsprite(rgba, cell, degrees):
+    """Rotate a cell counter-clockwise (as seen on screen) by `degrees`."""
+    import math
+
+    pixels = [tuple(rgba[i:i + 4]) for i in range(0, len(rgba), 4)]
+    big, size = pixels, cell
+    while size < cell * ROTSPRITE_SCALE:
+        big, size, _ = scale2x(big, size, size)
+    cos_t = math.cos(math.radians(degrees))
+    sin_t = math.sin(math.radians(degrees))
+    centre = size / 2.0
+    out = bytearray()
+    for y in range(cell):
+        for x in range(cell):
+            # Centre of the output pixel in 8x space, relative to the cell centre
+            # (screen axes, y down); the source is that point rotated back.
+            px = x * ROTSPRITE_SCALE + ROTSPRITE_SCALE / 2.0 - centre
+            py = y * ROTSPRITE_SCALE + ROTSPRITE_SCALE / 2.0 - centre
+            sx = math.floor(px * cos_t - py * sin_t + centre)
+            sy = math.floor(px * sin_t + py * cos_t + centre)
+            if 0 <= sx < size and 0 <= sy < size:
+                out += bytes(big[sy * size + sx])
+            else:
+                out += bytes((0, 0, 0, 0))
+    return bytes(out)
 
 
 def parse_xpm(path):
@@ -194,7 +268,7 @@ def main():
         "frames": copter_frames,
     }
 
-    # ---- airplane: 8 heading columns, cruise row + three take-off rows -----
+    # ---- airplane: 8 heading columns; cruise, in-between, three take-off rows
     plane_cells = {}
     plane_frames = []
     for angle, micro in enumerate(ANGLE_TO_MICROPOLIS_FRAME):
@@ -203,18 +277,28 @@ def main():
         plane_frames.append({"column": angle, "row": 0, "angle": ANGLE_NAMES[angle],
                              "micropolis_frame": micro, "source": path.name,
                              "sha256": frame_digest(rgba)})
-    for row, micro in enumerate(AIRPLANE_TAKEOFF_FRAMES, start=1):
+    for angle, (source_column, degrees) in enumerate(INBETWEEN_SOURCE):
+        micro = ANGLE_TO_MICROPOLIS_FRAME[source_column]
+        path, rgba = plane[micro]
+        rotated = rotsprite(rgba, 48, degrees)
+        plane_cells[(angle, 1)] = rotated
+        plane_frames.append({"column": angle, "row": 1, "angle": INBETWEEN_NAMES[angle],
+                             "micropolis_frame": micro, "source": path.name,
+                             "rotated_degrees_ccw": degrees,
+                             "rotation": "Scale2x x3, nearest rotation, centre sample",
+                             "sha256": frame_digest(rotated)})
+    for row, micro in enumerate(AIRPLANE_TAKEOFF_FRAMES, start=2):
         path, rgba = plane[micro]
         for angle in range(8):
             plane_cells[(angle, row)] = rgba
         plane_frames.append({"column": None, "row": row, "angle": "takeoff",
                              "micropolis_frame": micro, "source": path.name,
                              "sha256": frame_digest(rgba)})
-    outputs["city_airplane.png"] = sheet_bytes(build_sheet(plane_cells, 48, 8, 4))
+    outputs["city_airplane.png"] = sheet_bytes(build_sheet(plane_cells, 48, 8, 5))
     manifest["sheets"]["city_airplane.png"] = {
-        "cell": 48, "columns": 8, "rows": 4,
-        "rows_meaning": ["cruise headings", "take-off frame 9",
-                         "take-off frame 10", "take-off frame 11"],
+        "cell": 48, "columns": 8, "rows": 5,
+        "rows_meaning": ["cruise headings", "in-between cruise headings (+22.5 degrees)",
+                         "take-off frame 9", "take-off frame 10", "take-off frame 11"],
         "frames": plane_frames,
     }
 

@@ -152,7 +152,7 @@ typedef enum {
     ObjPic_Chemipost,               ///< Tornie: dedicated healing post atlas
     ObjPic_ChaosFactory,            ///< Tornie: animated 3x2 Chaos Factory atlas
     ObjPic_CityHelicopter, ///< DuneCity: original Micropolis traffic helicopter (8 headings, 32x32)
-    ObjPic_CityAirplane,   ///< DuneCity: original Micropolis airplane (8 headings + 3 take-off rows, 48x48)
+    ObjPic_CityAirplane,   ///< DuneCity: Micropolis airplane (16 headings in 2 rows + 3 take-off rows, 48x48)
     NUM_OBJPICS
 } ObjPic_enum;
 

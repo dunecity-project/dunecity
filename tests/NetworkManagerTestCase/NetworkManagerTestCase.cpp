@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 88;
+static constexpr int kWireProtocolVersion = 90;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -104,7 +104,10 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // credits alike; save 9868.
     // 88: only Custom Hard and Brutal play a production strategy; custom harvester fleets follow the
     // difficulty's configured limit; Brutal's opening worker floor in vanilla custom games too.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 88);
+    // 89 is reserved for fix/spectator-game-end.
+    // 90: the city airplane flies straight legs and crashes with a Death Hand blast when shot down;
+    // anti-air holds fire over its own side. No saved state change; save 9868.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 90);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

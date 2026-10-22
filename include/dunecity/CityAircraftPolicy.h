@@ -351,6 +351,86 @@ inline Coord departureWaypoint(int tileX, int tileY, int mapWidth, int mapHeight
     return Coord(tileX, mapHeight - 1 + kAirplaneDepartureMarginTiles);
 }
 
+// ---------------------------------------------------------------------------
+// DuneCity airplane steering (Stefan, 2026-10-22: "stop the plane from turning
+// eratically it should move in straight lines mostly").
+//
+// The airplane no longer steers with turnTo(getDir()).  getDir's table never
+// returns east or west - its `dispY * 2 < dispY` correction never holds - so
+// for any waypoint less than ~63 degrees off the horizontal it answers north-east
+// or south-east (north-west / south-west going west) depending on which side of
+// the plane's line the waypoint is. Every turn step crossed that line, so the
+// plane flew a zig-zag of 45-degree legs 2.5 tiles long: 0.18 heading changes per
+// tile on fixed legs and 0.37 over a whole flight (city_aircraft_probe, before).
+// The helicopter keeps the original steering; its legs are short city hops.
+//
+// The plane now holds a continuous heading (ANGLETYPE eighths of a turn, FixPoint),
+// turns on the original clock by at most the original 45-degree step, and stops
+// on the exact bearing to its waypoint, then flies that straight line until it
+// arrives: it holds its course while the course already passes close enough to
+// the waypoint to arrive. It is drawn from sixteen headings.
+// ---------------------------------------------------------------------------
+
+/// Largest turn per turn step, in eighths: the original turnTo step of 45 degrees,
+/// so the turning circle, and with it reaching every waypoint, is the original's.
+inline constexpr int kAirplaneMaxTurn = 1;
+
+/// Re-aim only when the waypoint is more than 1/16 of an eighth (2.8 degrees) off
+/// the nose, so fixed-point rounding along a straight leg never turns the plane.
+inline FixPoint airplaneAimTolerance() { return FixPoint(1) / 16; }
+
+/// Hold course while the waypoint is ahead and the straight course passes within
+/// this many Micropolis units of it - half the arrival distance, so holding on
+/// always arrives. Without it, the fixed-point drift of a long leg (a fraction of
+/// a tile) grows past the aim tolerance in the last few tiles and the plane makes
+/// one last small turn, as often the other way as its first.
+inline constexpr int kAirplaneHoldCrossTrack = kAirplaneArriveDistance / 2;
+
+/// One turn step from `heading` towards `bearing` (both ANGLETYPE eighths, [0, 8)),
+/// `distance` from the waypoint (world units), holding course while the course
+/// misses it by at most `holdCrossTrack` (world units). Within one step it turns
+/// straight onto the bearing; a waypoint exactly behind turns left
+/// (counter-clockwise), deterministically.
+inline FixPoint airplaneSteer(FixPoint heading, FixPoint bearing, FixPoint distance, FixPoint holdCrossTrack) {
+    FixPoint error = bearing - heading;
+    while (error > 4) error -= 8;
+    while (error <= -4) error += 8;
+    const FixPoint offCourse = FixPoint::abs(error);
+    if (offCourse <= airplaneAimTolerance()) return heading;
+    if (offCourse < 2 && distance * FixPoint::sin(offCourse * FixPt_PI / 4) <= holdCrossTrack) return heading;
+    FixPoint next = offCourse <= kAirplaneMaxTurn
+        ? bearing
+        : heading + (error > 0 ? FixPoint(kAirplaneMaxTurn) : FixPoint(-kAirplaneMaxTurn));
+    while (next < 0) next += 8;
+    while (next >= 8) next -= 8;
+    return next;
+}
+
+/// The airplane sheet: eight columns in ANGLETYPE order. Row 0 is the eight
+/// original cruise headings, row 1 the eight in-between headings (22.5 degrees
+/// counter-clockwise of the column's), rows 2..4 take-off frames 9, 10 and 11.
+inline constexpr int kAirplaneHeadingFrames = 16;
+inline constexpr int kAirplaneSheetRows = 5;
+
+/// Nearest of the sixteen drawn headings, 0 = east, counter-clockwise.
+inline int airplaneHeadingFrame(FixPoint heading) {
+    return (heading * 2).lround() % kAirplaneHeadingFrames;
+}
+inline int airplaneCruiseColumn(int headingFrame) { return headingFrame / 2; }
+inline int airplaneCruiseRow(int headingFrame) { return headingFrame & 1; }
+inline int airplaneTakeoffRow(int takeoffFrame) { return takeoffFrame - kAirplaneLastTakeoffFrame + 2; }
+
+/// Speed along a drawn heading: the original table vectors on the eight original
+/// headings (headingSpeed), the mean of the axis and diagonal magnitudes between them.
+inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
+    const FixPoint diagonal = headingSpeed(axisSpeed, RIGHTUP, kAirplaneStep, kAirplaneDiagonalStep);
+    switch (headingFrame % 4) {
+        case 0:  return axisSpeed;
+        case 2:  return diagonal;
+        default: return (axisSpeed + diagonal) / 2;
+    }
+}
+
 } // namespace DuneCity::CityAircraft
 
 #endif // DUNECITY_CITYAIRCRAFTPOLICY_H

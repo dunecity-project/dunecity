@@ -290,7 +290,15 @@
 //     overwrote it with the spice budget), and a custom Brutal house keeps its opening worker floor
 //     and equal army capital per worker in vanilla games too (DuneCity only in 87). An 87 peer would
 //     build and attack differently and desync. No saved state change; save 9868.
-#define NETWORK_PROTOCOL_VERSION            88
+// 89: reserved for fix/spectator-game-end.
+// 90: City airplane (fix/city-airplane): the plane flies straight legs on a continuous heading
+//     (CityAircraft::airplaneSteer replaces turnTo(getDir()), which zig-zagged) and moves at the
+//     sixteen-heading speeds; a plane shot down crashes with a Death Hand impact credited to its
+//     shooter (AmbientAirplane::crash -> Bullet::detonateDeathHand); RocketTurret, Launcher,
+//     EliteLauncher, Trooper and Scoutpost hold fire while that blast would land on their own team
+//     (AmbientAirplane::crashEndangers). An 88 peer flies, kills and targets differently and
+//     desyncs. No saved state change: the heading is the existing FixPoint angle; save 9868.
+#define NETWORK_PROTOCOL_VERSION            90
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

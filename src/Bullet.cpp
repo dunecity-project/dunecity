@@ -304,7 +304,8 @@ case Bullet_LargeRocket: {
     if(const auto p = DynastyProjectile::parameters(bulletID); p.step) {
         speed = FixPoint(p.step)*0.08_fix; // quarter-world units/step, 20Hz -> 62.5Hz
         detonationTimer = p.delay;
-        damageRadius = (bulletID == Bullet_DRocket || bulletID == Bullet_LargeRocket) ? 2*TILESIZE : TILESIZE;
+        damageRadius = bulletID == Bullet_LargeRocket ? deathHandBlastRadius
+                     : bulletID == Bullet_DRocket ? 2*TILESIZE : TILESIZE;
     }
 }
 
@@ -700,20 +701,7 @@ void Bullet::destroy(Uint32 interceptedAirUnit)
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Gas, position, houseID));
         } break;
 case Bullet_LargeRocket: {
-            soundPlayer->playSoundAt(Sound_ExplosionLarge, position);
-
-            // Dynasty's seventeen Death Hand blast centres (256 -> 64 coordinates).
-            static constexpr int dx[] = {0,0,50,64,50,0,-50,-64,-50,0,100,128,100,0,-100,-128,-100};
-            static constexpr int dy[] = {0,-64,-50,0,50,64,50,0,-50,-128,-100,0,100,128,100,0,-100};
-            for(int i=0; i<17; ++i) {
-                position = Coord(lround(realX)+dx[i], lround(realY)+dy[i]);
-                if(position.x < 0 || position.y < 0 || position.x >= currentGameMap->getSizeX()*TILESIZE
-                   || position.y >= currentGameMap->getSizeY()*TILESIZE) continue;
-                currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
-                const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
-                currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
-                screenborder->shakeScreen(22);
-            }
+            detonateDeathHand(shooterID, owner, position, damage, airAttack, provenance);
         } break;
 
         case Bullet_Rocket:
@@ -768,4 +756,23 @@ case Bullet_LargeRocket: {
 
     bulletList.remove(this);
     delete this;
+}
+
+void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
+                               const DeviationReward::Provenance& provenance)
+{
+    soundPlayer->playSoundAt(Sound_ExplosionLarge, impact);
+
+    const int houseID = owner->getHouseID();
+    for(int i = 0; i < DynastyProjectile::deathHandBlastCentres; ++i) {
+        const Coord position(impact.x + DynastyProjectile::deathHandBlastX[i],
+                             impact.y + DynastyProjectile::deathHandBlastY[i]);
+        if(position.x < 0 || position.y < 0 || position.x >= currentGameMap->getSizeX()*TILESIZE
+           || position.y >= currentGameMap->getSizeY()*TILESIZE) continue;
+        currentGameMap->damage(shooterID, owner, position, Bullet_LargeRocket, damage, deathHandBlastRadius,
+                               air, true, NONE_ID, provenance);
+        const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
+        currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
+        screenborder->shakeScreen(22);
+    }
 }

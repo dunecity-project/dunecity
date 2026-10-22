@@ -90,6 +90,8 @@ target_sources(dunelegacy_tests
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
         ../src/fixmath/fix32.c
+        ../src/fixmath/fix32_trig.c
+        ../src/fixmath/fix32_sqrt.c
         ValueModelTestCase/ValueModelTestCase.cpp
         PoliceStationTestCase/PoliceStationTestCase.cpp
         SaveCompatTestCase/SaveCompatTestCase.cpp
@@ -899,11 +901,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): four QuantBot Brutal
-        # houses in a generated 4P 160x160 DuneCity free-for-all (Fortress starts, 20,000-credit
-        # armies, 40,000 cities, Stefan's game options). Fails when no wave of 30+ units has left
-        # by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
-        # minutes in a row, or nobody is eliminated by minute 30 - 1.0.847 summed every enemy into
-        # "outnumbered" and never attacked. docs/formations.md, "Free-for-all: the army deploys".
+        # houses in generated 4P 160x160 DuneCity free-for-alls (Fortress starts, 20,000-credit
+        # armies, 40,000 cities, Stefan's game options), seeds 9101, 9103, 9105 three at a time.
+        # Fails when, on 9101, no wave of 30+ units has left by minute 8 or a house keeps its idle
+        # reserve 80%+ inside its own base for more than 6 minutes in a row, or when no seed has a
+        # house eliminated by minute 30 - 1.0.847 summed every enemy into "outnumbered" and never
+        # attacked. One seed's elimination time is chance (12-seed sweep, run-ffa-army-deploys.py).
+        # docs/formations.md, "Free-for-all: the army deploys".
         add_test(NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
