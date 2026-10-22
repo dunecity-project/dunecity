@@ -40,6 +40,9 @@ also when the plane gets shot down it should make the equivalent of a nuclear mi
   9105 (three games in parallel inside the test) has a house eliminated by minute 30. 1.0.847's stuck army still
   fails, because its waves never leave. Rationale is in the runner docstring, the CMake comment and docs/formations.md.
 - Crashes log `City airplane of house H shot down at x,y by house S (cycle C): Death Hand impact`.
+- **Tests** (c56ba0b0): `dunecity-queue ctest` job 20261022T215443-ctest-5f17fe, 105/105 passed (pro/pc/mini),
+  incl. dunelegacy_tests, city_aircraft_probe, perf_regression, quantbot_ffa_army_deploys (9101 none, 9103 21.3,
+  9105 25.8 min) and every quantbot_*. `import-micropolis-aircraft.py --check` reproduces the sheet.
 - `platform/web/package-lock.json` (git+ssh URL from a local npm run) is left uncommitted on purpose.
 
 ## 2026-10-22 — 1.0.850 published to production
