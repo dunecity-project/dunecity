@@ -78,10 +78,11 @@ inline bool isKnownGameType(GameType gameType) {
 
 /**
     \param  houseID the value decoded from the packet
-    \return true if it names a real house (or the "no house" marker the lobby uses)
+    \return true if it names a house a player can hold (or the "no house" marker the lobby
+            uses). The Natives house is never a lobby row.
 */
 inline bool isKnownHouse(HOUSETYPE houseID) {
-    return houseID == HOUSE_INVALID || (houseID >= HOUSE_HARKONNEN && houseID < NUM_HOUSES);
+    return houseID == HOUSE_INVALID || isPlayerHouseID(houseID);
 }
 
 /**
@@ -140,6 +141,11 @@ inline bool isAcceptableReceivedGameInitSettings(const GameInitSettings& setting
         if(houseInfo.houseID == HOUSE_UNUSED && houseInfo.playerInfoList.empty()) continue;
         if(!isKnownHouse(houseInfo.houseID)) {
             reason = "unknown house in house list";
+            return false;
+        }
+        // The Natives' brown is how worms and crime troopers read as nobody's; no lobby offers it.
+        if(houseInfo.colorOfHouse == HOUSECOLOR_NATIVES) {
+            reason = "reserved house colour";
             return false;
         }
         if(houseInfo.team < -1 || houseInfo.team > MAX_CUSTOM_GAME_PLAYERS) {

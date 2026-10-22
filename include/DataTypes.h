@@ -405,13 +405,24 @@ typedef enum : int
     HOUSE_WILDSPADE  = 9,
     HOUSE_KLESHMERSH = 10,
     HOUSE_THARPIQUE  = 11,
+    /// 'Natives': the non-player house that owns every sandworm and every trooper raised by
+    /// city crime. Never selectable or listed, has no players, no base and no city, and plays
+    /// on team 0 (the engine's non-participant team: hostile to every player, ignored by
+    /// win/lose). Created on first use by Game::getOrCreateNativesHouse().
+    HOUSE_NATIVES    = 12,
     NUM_HOUSES
 } HOUSETYPE;
 
 constexpr int NUM_LEGACY_HOUSES = 8;
 constexpr int NUM_CAMPAIGN_HOUSES = HOUSE_CUSTOM + 1;
+/// Houses a player can hold. Saves before SAVEGAMEVERSION 9871 stored exactly this many.
+constexpr int NUM_PLAYER_HOUSES = HOUSE_NATIVES;
 constexpr int MAX_CUSTOM_GAME_PLAYERS = 9;
 constexpr int NUM_BASE_HOUSE_COLOR_SLOTS = NUM_CAMPAIGN_HOUSES;
+
+constexpr bool isNativesHouse(int house) noexcept { return house == HOUSE_NATIVES; }
+/// A house id a player, a lobby row, a map section or a command may name.
+constexpr bool isPlayerHouseID(int house) noexcept { return house >= HOUSE_HARKONNEN && house < NUM_PLAYER_HOUSES; }
 
 constexpr int HOUSECOLOR_CUSTOM_DARK_VIOLET   = NUM_BASE_HOUSE_COLOR_SLOTS;
 constexpr int HOUSECOLOR_CUSTOM_FUCHSIA       = NUM_BASE_HOUSE_COLOR_SLOTS + 1;
@@ -423,6 +434,8 @@ constexpr int NUM_CUSTOM_HOUSE_COLORS         = 6;
 constexpr int HOUSECOLOR_GUEST_1               = NUM_BASE_HOUSE_COLOR_SLOTS + NUM_CUSTOM_HOUSE_COLORS;
 constexpr int HOUSECOLOR_GUEST_2               = HOUSECOLOR_GUEST_1 + 1;
 constexpr int HOUSECOLOR_GUEST_3               = HOUSECOLOR_GUEST_1 + 2;
+/// The Natives' own colour (a private leather-brown ramp). Never offered in a lobby.
+constexpr int HOUSECOLOR_NATIVES               = HOUSECOLOR_GUEST_3 + 1;
 
 constexpr int migrateLegacyHouseColorSlot(int colorSlot) noexcept {
     return (colorSlot >= NUM_LEGACY_HOUSES
@@ -430,7 +443,7 @@ constexpr int migrateLegacyHouseColorSlot(int colorSlot) noexcept {
         ? colorSlot + 1
         : colorSlot;
 }
-constexpr int NUM_HOUSE_COLOR_SLOTS           = HOUSECOLOR_GUEST_3 + 1;
+constexpr int NUM_HOUSE_COLOR_SLOTS           = HOUSECOLOR_NATIVES + 1;
 
 typedef enum {
     RIGHT,

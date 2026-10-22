@@ -127,7 +127,8 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     }
     survey.next("ai.rock_survey.enemies");
     auto enemy=[&](const ObjectBase* object) {
-        if(object->getOwner() && object->getOwner()->getTeamID()!=getHouse()->getTeamID()
+        // Worms and crime troopers (the Natives) hold no ground a colony must keep clear of.
+        if(object->getOwner() && !object->getOwner()->isNatives() && object->getOwner()->getTeamID()!=getHouse()->getTeamID()
             && object->isVisible(getHouse()->getTeamID())&&object->getLocation().isValid())
             enemies.push_back(object->getY()*w+object->getX());
     };

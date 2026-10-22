@@ -362,7 +362,8 @@ void AIPlayer::build() {
                         const House* pBestHouse = nullptr;
                         for(int i = 0; i < NUM_HOUSES; i++) {
                             const House* pHouse = getHouse(i);
-                            if(!pHouse || pHouse->getTeamID() == getHouse()->getTeamID()) {
+                            // The Natives (worms, crime troopers) have no base to strike.
+                            if(!pHouse || pHouse->isNatives() || pHouse->getTeamID() == getHouse()->getTeamID()) {
                                 continue;
                             }
 
@@ -791,7 +792,8 @@ bool AIPlayer::isAllowedToArm() const {
     int maxTeamScore = 0;
     for(int i = 0; i < NUM_HOUSES; i++) {
         const House* pHouse = getHouse(i);
-        if(pHouse != nullptr) {
+        // The Natives house is no team in this race: its worms and crime troopers are not built.
+        if(pHouse != nullptr && !pHouse->isNatives()) {
             teamScore[pHouse->getTeamID()] += pHouse->getUnitBuiltValue();
 
             if(pHouse->getTeamID() != getHouse()->getTeamID()) {

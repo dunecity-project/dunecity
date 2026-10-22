@@ -38,11 +38,12 @@
 */
 namespace ObservedHouse {
 
-/// Houses that actually exist in this match, in ascending id order.
+/// Houses that actually exist in this match, in ascending id order. The Natives house
+/// (worms, crime troopers) has no base, economy or city to show, so it is never offered.
 inline std::vector<int> browsable() {
     std::vector<int> houses;
     if(currentGame == nullptr) return houses;
-    for(int houseID = 0; houseID < NUM_HOUSES; ++houseID)
+    for(int houseID = 0; houseID < NUM_PLAYER_HOUSES; ++houseID)
         if(currentGame->getHouse(houseID) != nullptr) houses.push_back(houseID);
     return houses;
 }
@@ -76,7 +77,7 @@ inline int next(int current) {
 inline House* resolve(int houseID) {
     if(currentGame == nullptr) return nullptr;
     if(!mayBrowse()) return pLocalHouse;
-    if(houseID < 0 || houseID >= NUM_HOUSES) return nullptr;
+    if(!isPlayerHouseID(houseID)) return nullptr;
     return currentGame->getHouse(houseID);
 }
 

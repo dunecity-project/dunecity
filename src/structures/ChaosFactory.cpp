@@ -93,8 +93,9 @@ bool ChaosFactory::isOfferCandidate(Uint32 candidate) const {
     }
 
     // The Chaos Factory draws from the global unit catalogue, deliberately
-    // ignoring the owning house's normal production roster.
-    for(int house = 0; house < NUM_HOUSES; ++house) {
+    // ignoring the owning house's normal production roster. The catalogue is
+    // what player houses can field; the Natives column is not a roster.
+    for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
         const auto& unitData = currentGame->objectData.data[candidate][house];
         if(unitData.enabled && unitData.price > 0) {
             return true;
@@ -121,7 +122,7 @@ int ChaosFactory::getBasePrice(Uint32 candidate) const {
     if(ownerPrice > 0) {
         return ownerPrice;
     }
-    for(int house = 0; house < NUM_HOUSES; ++house) {
+    for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
         const auto& unitData = currentGame->objectData.data[candidate][house];
         if(unitData.enabled && unitData.price > 0) {
             return unitData.price;

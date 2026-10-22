@@ -57,6 +57,8 @@ public:
 
     inline int getHouseID() const { return houseID; }
     inline int getTeamID() const { return teamID; }
+    /// The non-player owner of sandworms and crime troopers (see HOUSE_NATIVES).
+    inline bool isNatives() const { return houseID == HOUSE_NATIVES; }
 
     inline bool isAI() const { return ai; }
     // The live value can differ from the controller-list load default after promotion.

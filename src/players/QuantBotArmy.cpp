@@ -1207,6 +1207,8 @@ void QuantBot::launchGroundHunt() {
                     if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
                 objective=observedFront ? observedFront : customWaveObjective(lead);
                 if (!objective) objective=lead->findClosestTarget();
+                // A worm or crime trooper (the Natives) is no wave objective: plain Hunt then.
+                if (objective && objective->getOwner() && objective->getOwner()->isNatives()) objective=nullptr;
             }
             if (objective) {
                 const Coord goal=objective->getClosestPoint(centre);
@@ -1408,7 +1410,8 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
         // A visible army is sufficient intelligence even when its base is
         // still hidden. Never require a building sighting to notice that force.
         for (const auto* unit : getUnitList()) {
-            if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam
+            // Crime troopers (the Natives) are no enemy army to face.
+            if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam || unit->getOwner()->isNatives()
                 || !unit->isActive() || unit->getHealth()<=0 || !unit->canAttack()
                 || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)) continue;
             const int d=base.isValid() ? blockDistance(base,unit->getLocation()).lround() : 0;
@@ -1478,11 +1481,14 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
             // never a neutral worm or ambient aircraft.
             if (!combat || !unit->isActive() || !unit->isVisible(myTeam)) continue;
             const Coord at = unit->getLocation();
-            if (survey.frontObserved && blockDistance(survey.frontAnchor, at).lround() <= kFrontRadius) {
+            // Crime troopers (the Natives) are no enemy front or army to weigh a wave against;
+            // only their raid on a core asset below still counts, as base defence.
+            const bool natives = unit->getOwner()->isNatives();
+            if (!natives && survey.frontObserved && blockDistance(survey.frontAnchor, at).lround() <= kFrontRadius) {
                 if (flying) survey.hostileFront.addAir(power, canHitAir);
                 else survey.hostileFront.addGround(power, canHitAir);
             }
-            if (squadCentre.isValid() && blockDistance(squadCentre, at).lround() <= kSquadRadius) {
+            if (!natives && squadCentre.isValid() && blockDistance(squadCentre, at).lround() <= kSquadRadius) {
                 if (flying) survey.squadHostile.addAir(power, canHitAir);
                 else survey.squadHostile.addGround(power, canHitAir);
             }
@@ -2813,7 +2819,8 @@ Coord QuantBot::findSquadRallyLocation() {
     int distance=std::numeric_limits<int>::max();
     for (const auto* unit:getUnitList()) {
         if (!unit->isActive() || !unit->canAttack() || unit->isAFlyingUnit()
-            || unit->getOwner()->getTeamID()==getHouse()->getTeamID()
+            // Worms and crime troopers (the Natives) are not the side the enemy comes from.
+            || unit->getOwner()->getTeamID()==getHouse()->getTeamID() || unit->getOwner()->isNatives()
             || !unit->isVisible(getHouse()->getTeamID())) continue;
         const int d=blockDistance(centre,unit->getLocation()).lround();
         if (d<distance) { distance=d; closest=unit; }
@@ -2859,7 +2866,7 @@ Coord QuantBot::openingForwardOffset(Coord anchor) const {
     int closest=std::numeric_limits<int>::max();
     auto consider=[&](const ObjectBase* object) {
         if (!object || !object->getOwner() || !object->isActive()
-            || object->getItemID()==Unit_Sandworm
+            || object->getItemID()==Unit_Sandworm || object->getOwner()->isNatives()
             || object->getOwner()->getTeamID()==getHouse()->getTeamID()
             || !object->isVisible(getHouse()->getTeamID()) || object->getLocation().isInvalid()) return;
         const int d=blockDistance(anchor,object->getLocation()).lround();

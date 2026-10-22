@@ -642,7 +642,8 @@ Game::~Game() {
     finishMatchAnalytics();
     if (AITelemetry::log().enabled()) {
         AITelemetry::Record roster;
-        for (int h = 0; h < NUM_HOUSES; ++h) if (house[h]) {
+        // The Natives house is no participant: match reports list the houses that play.
+        for (int h = 0; h < NUM_HOUSES; ++h) if (house[h] && !house[h]->isNatives()) {
             for (const auto& player : house[h]->getPlayerList()) player->finishTelemetry();
             AITelemetry::Record actual, built, lost;
             for (int item = ItemID_FirstID; item <= ItemID_LastID; ++item) {
@@ -913,6 +914,10 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
                     gameInitSettings.getMission(), e.what());
             }
 
+            // Sandworms belong to nobody who plays: the unit factory already hands every new
+            // worm to the Natives house; this catches any other path a map takes.
+            if(currentGameMap != nullptr) retagSandwormsToNatives();
+
             // Do not carry per-map city timing state into the next mission.
             if (citySimEnabled_ && currentGameMap != nullptr) {
                 citySimulation_.reset();
@@ -955,6 +960,37 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
         .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
+}
+
+House* Game::getOrCreateNativesHouse() {
+    if(house[HOUSE_NATIVES]) return house[HOUSE_NATIVES].get();
+    // The map-size unit limit every house of a map without its own MaxUnits gets
+    // (INIMapLoader::getOrCreateHouse); it bounds how many crime troopers may be out at once.
+    int maxUnits = gameInitSettings.getGameOptions().maximumNumberOfUnitsOverride;
+    if(maxUnits < 0) {
+        const int mapsize = currentGameMap ? currentGameMap->getSizeX() * currentGameMap->getSizeY() : 0;
+        maxUnits = mapsize <= 1024 ? objectData.unitLimitSmallMap
+                 : mapsize < 4096  ? objectData.unitLimitMediumMap
+                 : mapsize < 16384 ? objectData.unitLimitLargeMap
+                 : objectData.unitLimitHugeMap;
+    }
+    // Team 0 is the non-participant team: hostile to every player, always "alive", and never
+    // a survivor or a blocker in any win/lose check.
+    house[HOUSE_NATIVES] = std::make_unique<House>(HOUSE_NATIVES, 0, maxUnits, 0, 0, 0);
+    setHouseVisualHouse(HOUSE_NATIVES, HOUSECOLOR_NATIVES);
+    return house[HOUSE_NATIVES].get();
+}
+
+int Game::retagSandwormsToNatives() {
+    int retagged = 0;
+    for(UnitBase* unit : unitList) {
+        if(unit->getItemID() != Unit_Sandworm) continue;
+        if(unit->getOwner()->isNatives() && unit->getOriginalHouseID() == HOUSE_NATIVES) continue;
+        unit->transferOwnership(getOrCreateNativesHouse());
+        ++retagged;
+    }
+    if(retagged > 0) SDL_Log("Game: %d sandworm(s) re-tagged to the Natives house", retagged);
+    return retagged;
 }
 
 void Game::startMatchAnalytics() {
@@ -5101,8 +5137,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     //   "dunelegacy*"               → 41 items (original Dune Legacy 0.99.x)
     //   "dunecity1.0.0"–"1.0.7"    → 48 items
     //   "dunecity1.0.8"–"1.0.10"   → 52 items
-    const int savedHouseCount = savegameVersion >= 9823
-        ? NUM_HOUSES
+    const int savedHouseCount = savegameVersion >= SAVEGAMEVERSION_NATIVES ? NUM_HOUSES
+        : savegameVersion >= 9823 ? NUM_PLAYER_HOUSES
         : (savegameVersion >= 9821 ? NUM_CAMPAIGN_HOUSES : NUM_LEGACY_HOUSES);
     int savedItemCount = determineLegacySavedItemCount(savegameVersion, duneVersion);
     if(savedItemCount != 0) {
@@ -5110,6 +5146,19 @@ bool Game::loadSaveGame(InputStream& stream) {
                 savegameVersion, duneVersion.c_str(), savedItemCount, Num_ItemID);
     }
     objectData.load(stream, savedItemCount, savedHouseCount);
+    if(savedHouseCount <= HOUSE_NATIVES) {
+        // A save from before the Natives house has no stats for it. Natives takes the plain
+        // (unsuffixed) values of the active ObjectData.ini, exactly as a new game would; every
+        // peer of a loaded multiplayer game runs the same mod, so they all read the same file.
+        try {
+            auto fresh = std::make_unique<ObjectData>();
+            fresh->loadFromINIFile(ModManager::instance().getActiveObjectDataPath(), false);
+            for(int item = 0; item < Num_ItemID; ++item) objectData.data[item][HOUSE_NATIVES] = fresh->data[item][HOUSE_NATIVES];
+        } catch(const std::exception& e) {
+            SDL_Log("Game::loadSaveGame(): no ObjectData.ini for the Natives house (%s); using Harkonnen's saved stats", e.what());
+            for(int item = 0; item < Num_ItemID; ++item) objectData.data[item][HOUSE_NATIVES] = objectData.data[item][HOUSE_HARKONNEN];
+        }
+    }
 
     //load the house(s) info
     logLoadStage("houses and players");
@@ -5236,6 +5285,9 @@ bool Game::loadSaveGame(InputStream& stream) {
     //load the structures and units
     logLoadStage("objects");
     objectManager.load(stream);
+    // Sandworms of a save from before the Natives house still belong to the houses its map
+    // named; they become Natives' now. (Newer saves already store them as Natives'.)
+    if(savegameVersion < SAVEGAMEVERSION_NATIVES) retagSandwormsToNatives();
 
     // Reconstruct saved generation totals (including older constant-output windtraps)
     // from the loaded generators using current rules, without changing demand.

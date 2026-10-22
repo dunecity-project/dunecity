@@ -735,6 +735,18 @@ void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
     DeviationReward::recordCapture(*this, deviationEpisode, refresh);
 }
 
+void UnitBase::transferOwnership(House* newOwner) {
+    if(newOwner == nullptr || (owner == newOwner && originalHouseID == newOwner->getHouseID())) return;
+    leaveFormation();
+    removeFromSelectionLists();
+    // The counts follow the original house (registerUnit); move them without a loss or a build.
+    if(House* previous = currentGame->getHouse(originalHouseID)) previous->cancelCreatedUnit(itemID);
+    owner = newOwner;
+    originalHouseID = newOwner->getHouseID();
+    newOwner->incrementUnits(itemID, false);
+    graphic = pGFXManager->getObjPic(graphicID, newOwner->getHouseID());
+}
+
 void UnitBase::drawSelectionBox() {
 
     SDL_Texture* selectionBox = nullptr;
@@ -2976,8 +2988,11 @@ void UnitBase::updateVisibleUnits() {
             continue;
         }
 
-        // Check if this unit is currently VISIBLE to this house (fog of war, not just explored)
-        if(isVisible(pHouse->getTeamID()) && (pHouse->getTeamID() != getOwner()->getTeamID()) && (pHouse != getOwner())) {
+        // Check if this unit is currently VISIBLE to this house (fog of war, not just explored).
+        // Natives (worms, crime troopers) are no opponent: neither seeing one nor being seen by
+        // one activates a campaign AI.
+        if(isVisible(pHouse->getTeamID()) && (pHouse->getTeamID() != getOwner()->getTeamID()) && (pHouse != getOwner())
+           && !pHouse->isNatives() && !getOwner()->isNatives()) {
             pHouse->informDirectContactWithEnemy();
             getOwner()->informDirectContactWithEnemy();
             

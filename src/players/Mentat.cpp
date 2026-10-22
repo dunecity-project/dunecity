@@ -754,7 +754,8 @@ void Mentat::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) {
     // If the human has attacked us then its time to start fighting back... unless its an attack on a special unit
     // Don't trigger with fremen or saboteur
     bool bPossiblyOwnFremen = (pObject->getOwner()->getHouseID() == HOUSE_ATREIDES) && (pObject->getItemID() == Unit_Trooper) && (currentGame->techLevel > 7);
-    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
+    // A worm or a crime trooper (the Natives) is no player opening hostilities; it falls through to the defence below.
+    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !pDamager->getOwner()->isNatives() && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
         campaignAIAttackFlag = true;
     } else if (pObject->isAStructure()) {
         doRepair(pObject);
@@ -1995,7 +1996,8 @@ void Mentat::handleSpecialWeapon(const StructureBase* pStructure, MentatBuildCon
 
 		for (int i = 0; i < NUM_HOUSES; i++) {
 			if (getHouse(i) != nullptr) {
-				if (getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
+				// The Natives have no base to strike.
+				if (!getHouse(i)->isNatives() && getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
 					enemyHouseBuildingCount = getHouse(i)->getNumStructures();
 					enemyHouseID = i;
 				}
@@ -2969,7 +2971,8 @@ bool Mentat::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettings
         }
 
         const House* owner = candidate->getOwner();
-        if (!owner || owner->getTeamID() == myTeam) {
+        // Strikes go against opposing houses, never worms or crime troopers (the Natives).
+        if (!owner || owner->isNatives() || owner->getTeamID() == myTeam) {
             return;
         }
 

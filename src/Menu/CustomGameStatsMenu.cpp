@@ -80,11 +80,12 @@ CustomGameStatsMenu::CustomGameStatsMenu() : MenuBase()
             house->getHarvestedSpice().toDouble(),house->getCityTaxReceipts().toDouble()}};
     };
     std::array<double,4> maxima{};
-    for(int i=0;i<NUM_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
+    // Player houses only: the Natives (worms, crime troopers) are no contestant and get no row.
+    for(int i=0;i<NUM_PLAYER_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
         const auto totals=values(house);
         for(int column=0;column<columns;++column) maxima[column]=std::max(maxima[column],totals[column]);
     }
-    for(int i=0;i<NUM_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
+    for(int i=0;i<NUM_PLAYER_HOUSES;++i) if(const auto* house=currentGame->getHouse(i)) {
         auto& row=houseStat[i];
         const auto totals=values(house);
         const int visualColor=getHouseVisualHouse(i);

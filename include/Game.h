@@ -191,6 +191,21 @@ public:
     }
 
     /**
+        The Natives house (HOUSE_NATIVES), created the first time a sandworm or a crime trooper
+        needs an owner: team 0, no players, no credits, the map's default unit limit. Every
+        peer creates it at the same simulation point, so lockstep is unaffected.
+    */
+    House* getOrCreateNativesHouse();
+
+    /**
+        Gives every sandworm that is not yet owned by the Natives house to it (owner and
+        original house, with the unit counts moved and no loss booked). Run when a game starts
+        and after loading a save from before SAVEGAMEVERSION 9871.
+        \return the number of worms re-tagged
+    */
+    int retagSandwormsToNatives();
+
+    /**
         The current game is finished and the local house has won
     */
     void setGameWon();

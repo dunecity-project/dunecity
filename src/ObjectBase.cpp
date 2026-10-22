@@ -1053,7 +1053,9 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario) 
         case Unit_Ornithopter:              newObject = new Ornithopter(Owner); break;
         case Unit_Quad:                     newObject = new Quad(Owner); break;
         case Unit_Saboteur:                 newObject = new Saboteur(Owner); break;
-        case Unit_Sandworm:                 newObject = new Sandworm(Owner); break;
+        // Every sandworm belongs to the Natives house, whoever asked for it (a map, a
+        // reinforcement, a mod): worms must never show up as some player's unit.
+        case Unit_Sandworm:                 newObject = new Sandworm(currentGame->getOrCreateNativesHouse()); break;
         case Unit_SiegeTank:                newObject = new SiegeTank(Owner); break;
         case Unit_SonicTank:                newObject = new SonicTank(Owner); break;
         case Unit_Tank:                     newObject = new Tank(Owner); break;

@@ -83,7 +83,10 @@ inline Decision authorizeActor(const ActorContext& context) {
     if(!context.objectTypeMatches) {
         return Decision::WrongObjectType;
     }
-    if(!context.objectHasOwner || context.objectOwnerHouseID != context.issuerHouseID) {
+    // Natives objects (worms, crime troopers) belong to no controller: the Natives house never
+    // has players (Game::getOrCreateNativesHouse), and even one registered there may not act.
+    if(!context.objectHasOwner || context.objectOwnerHouseID != context.issuerHouseID
+       || !isPlayerHouseID(context.issuerHouseID)) {
         return Decision::NotOwner;
     }
     return Decision::Allow;

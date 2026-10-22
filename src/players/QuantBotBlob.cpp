@@ -147,14 +147,16 @@ Coord QuantBot::huntPartySlot(const UnitBase* unit, Coord centre, int radius, st
 const ObjectBase* QuantBot::huntPartyObjective(const BlobParty& party, const UnitBase* anchor) const {
     const int myTeam = getHouse()->getTeamID();
     if (const auto* current = getObject(party.objective)) {
+        // A worm or crime trooper (the Natives) is never a wave objective.
         if (current->getHealth() > 0 && current->getOwner() && current->getOwner()->getTeamID() != myTeam
-            && current->isVisible(myTeam)) return current;
+            && !current->getOwner()->isNatives() && current->isVisible(myTeam)) return current;
     }
     if (!anchor) return nullptr;
     // The wave's own objective choice (the observed enemy base the strength survey anchors
     // on), else the target engine Hunt itself would pick: the same as the formation waves.
     if (const auto* objective = customWaveObjective(anchor)) return objective;
-    return anchor->findClosestTarget();
+    const ObjectBase* target = anchor->findClosestTarget();
+    return target && target->getOwner() && target->getOwner()->isNatives() ? nullptr : target;
 }
 
 const ObjectBase* QuantBot::huntPartyContact(const BlobParty& party, const UnitBase* anchor) const {
@@ -176,7 +178,9 @@ const ObjectBase* QuantBot::huntPartyContact(const BlobParty& party, const UnitB
     // Contact: a visible enemy fighter or building within a member's huntTowardRange() (its
     // weapon or view range) - the distance at which engine Hunt itself stops for an enemy.
     auto consider = [&](const ObjectBase* enemy) {
-        if (!enemy->getOwner() || enemy->getOwner()->getTeamID() == myTeam || enemy->getHealth() <= 0
+        // Crime troopers (the Natives) do not break a march; a hit on a member still does.
+        if (!enemy->getOwner() || enemy->getOwner()->getTeamID() == myTeam || enemy->getOwner()->isNatives()
+            || enemy->getHealth() <= 0
             || !enemy->isVisible(myTeam)) return;
         const Coord near = enemy->getClosestPoint(at);
         if (tiles(at, near) > extent + maxRange) return;
@@ -440,7 +444,9 @@ bool QuantBot::huntPartySuperior(const BlobParty& party) const {
     };
     int64_t enemy = 0, own = 0;
     for (const auto* unit : getUnitList()) {
-        if (!unit->getOwner() || unit->getOwner()->getTeamID() == myTeam || unit->getHealth() <= 0 || !unit->isActive()
+        // Crime troopers (the Natives) are no enemy force to stage against.
+        if (!unit->getOwner() || unit->getOwner()->getTeamID() == myTeam || unit->getOwner()->isNatives()
+            || unit->getHealth() <= 0 || !unit->isActive()
             || !unit->canAttack() || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)
             || tiles(at, unit->getLocation()) > ForceConcentrationPolicy::kStageEnemyTiles) continue;
         enemy += power(unit);
@@ -465,7 +471,9 @@ bool QuantBot::huntPartyRealFight(const BlobParty& party, const ObjectBase* cont
     const Coord at = contact->getLocation();
     int64_t hostile = 0, own = 0;
     for (const auto* unit : getUnitList()) {
-        if (!unit->getOwner() || unit->getOwner()->getTeamID() == myTeam || unit->getHealth() <= 0 || !unit->isActive()
+        // Crime troopers (the Natives) are a skirmish, never the real fight.
+        if (!unit->getOwner() || unit->getOwner()->getTeamID() == myTeam || unit->getOwner()->isNatives()
+            || unit->getHealth() <= 0 || !unit->isActive()
             || !unit->canAttack() || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)
             || tiles(at, unit->getLocation()) > BlobWavePolicy::kLocalRadiusTiles) continue;
         hostile += CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,
@@ -654,7 +662,9 @@ void QuantBot::updateHuntParties() {
                     const Coord at = anchor->getLocation();
                     int64_t friendly = 0, hostile = 0;
                     for (const auto* unit : getUnitList()) {
-                        if (!unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive() || !unit->canAttack()
+                        // Crime troopers (the Natives) never make a party fall back.
+                        if (!unit->getOwner() || unit->getOwner()->isNatives() || unit->getHealth() <= 0
+                            || !unit->isActive() || !unit->canAttack()
                             || !mobileCombatItem(unit->getItemID())) continue;
                         if (tiles(at, unit->getLocation()) > BlobWavePolicy::kLocalRadiusTiles) continue;
                         const int64_t power = CombatPowerPolicy::unitPower(data[unit->getItemID()][unit->getOriginalHouseID()].price,

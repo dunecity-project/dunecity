@@ -182,11 +182,14 @@ void Tile::load(InputStream& stream) {
     explored[HOUSE_CUSTOM] = (currentGame && currentGame->getLoadedSavegameVersion() >= 9821)
         ? stream.readBool()
         : false;
+    const bool nativesSlot = currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_NATIVES;
     if(currentGame && currentGame->getLoadedSavegameVersion() >= 9823) {
         explored[HOUSE_WILDSPADE] = stream.readBool();
         explored[HOUSE_KLESHMERSH] = stream.readBool();
         explored[HOUSE_THARPIQUE] = stream.readBool();
     }
+    // An older save has no Natives slot: the tile keeps what the constructor gave it.
+    if(nativesSlot) explored[HOUSE_NATIVES] = stream.readBool();
 
     bool bLastAccess[NUM_HOUSES]{};
     stream.readBools(&bLastAccess[0], &bLastAccess[1], &bLastAccess[2], &bLastAccess[3], &bLastAccess[4], &bLastAccess[5], &bLastAccess[6], &bLastAccess[7]);
@@ -198,6 +201,7 @@ void Tile::load(InputStream& stream) {
         bLastAccess[HOUSE_KLESHMERSH] = stream.readBool();
         bLastAccess[HOUSE_THARPIQUE] = stream.readBool();
     }
+    if(nativesSlot) bLastAccess[HOUSE_NATIVES] = stream.readBool();
 
     for (int i = 0; i < NUM_HOUSES; i++) {
         if (bLastAccess[i] == true) {
@@ -290,12 +294,14 @@ void Tile::save(OutputStream& stream) const {
     stream.writeBool(explored[HOUSE_WILDSPADE]);
     stream.writeBool(explored[HOUSE_KLESHMERSH]);
     stream.writeBool(explored[HOUSE_THARPIQUE]);
+    stream.writeBool(explored[HOUSE_NATIVES]);
 
     stream.writeBools((lastAccess[0] != 0), (lastAccess[1] != 0), (lastAccess[2] != 0), (lastAccess[3] != 0), (lastAccess[4] != 0), (lastAccess[5] != 0), (lastAccess[6] != 0), (lastAccess[7] != 0));
     stream.writeBool(lastAccess[HOUSE_CUSTOM] != 0);
     stream.writeBool(lastAccess[HOUSE_WILDSPADE] != 0);
     stream.writeBool(lastAccess[HOUSE_KLESHMERSH] != 0);
     stream.writeBool(lastAccess[HOUSE_THARPIQUE] != 0);
+    stream.writeBool(lastAccess[HOUSE_NATIVES] != 0);
     for (int i = 0; i < NUM_HOUSES; ++i) {
         if (lastAccess[i] != 0) {
             stream.writeUint32(lastAccess[i]);
@@ -1168,6 +1174,9 @@ void Tile::triggerSpiceBloom(House* pTrigger) {
 
 void Tile::triggerSpecialBloom(House* pTrigger) {
     if (!isSpecialBloom()) return;
+    // A worm or crime trooper stopping here is not a finder: the Natives take no credits or
+    // units, so the bloom stays for a player house to set off.
+    if (pTrigger->isNatives()) return;
 
     setType(Terrain_Sand);
 
@@ -1188,8 +1197,9 @@ void Tile::triggerSpecialBloom(House* pTrigger) {
 
         case 2: {
             // One of the AI players on the map (one that has at least one unit) gets a Trike for free. It spawns beside the special bloom.
+            // Player houses only: the Natives own units but are never a beneficiary.
             int numCandidates = 0;
-            for (int i = 0; i < NUM_HOUSES; i++) {
+            for (int i = 0; i < NUM_PLAYER_HOUSES; i++) {
                 const auto pHouse = currentGame->getHouse(i);
                 if (pHouse != nullptr && pHouse->getTeamID() != pTrigger->getTeamID() && pHouse->getNumUnits() > 0) {
                     numCandidates++;
@@ -1203,7 +1213,7 @@ void Tile::triggerSpecialBloom(House* pTrigger) {
             int candidate = currentGame->randomGen.rand(0, numCandidates - 1);
 
             House* pEnemyHouse = nullptr;
-            for (int i = 0; i < NUM_HOUSES; i++) {
+            for (int i = 0; i < NUM_PLAYER_HOUSES; i++) {
                 const auto pHouse = currentGame->getHouse(i);
                 if (pHouse != nullptr && pHouse->getTeamID() != pTrigger->getTeamID() && pHouse->getNumUnits() > 0) {
                     if (candidate == 0) {
@@ -1227,8 +1237,9 @@ void Tile::triggerSpecialBloom(House* pTrigger) {
         case 3:
         default: {
             // One of the AI players on the map (one that has at least one unit) gets an Infantry unit (3 Soldiers) for free. The spawn beside the special bloom.
+            // Player houses only: the Natives own units but are never a beneficiary.
             int numCandidates = 0;
-            for (int i = 0; i < NUM_HOUSES; i++) {
+            for (int i = 0; i < NUM_PLAYER_HOUSES; i++) {
                 const auto pHouse = currentGame->getHouse(i);
                 if (pHouse != nullptr && pHouse->getTeamID() != pTrigger->getTeamID() && pHouse->getNumUnits() > 0) {
                     numCandidates++;
@@ -1242,7 +1253,7 @@ void Tile::triggerSpecialBloom(House* pTrigger) {
             int candidate = currentGame->randomGen.rand(0, numCandidates - 1);
 
             House* pEnemyHouse = nullptr;
-            for (int i = 0; i < NUM_HOUSES; i++) {
+            for (int i = 0; i < NUM_PLAYER_HOUSES; i++) {
                 const auto pHouse = currentGame->getHouse(i);
                 if (pHouse != nullptr && pHouse->getTeamID() != pTrigger->getTeamID() && pHouse->getNumUnits() > 0) {
                     if (candidate == 0) {

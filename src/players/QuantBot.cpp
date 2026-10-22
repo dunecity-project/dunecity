@@ -804,7 +804,9 @@ void QuantBot::onIncrementUnitKills(int itemID) {
 }
 
 void QuantBot::onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) {
-    if (!currentGame || originalHouseID >= NUM_HOUSES || !mobileCombatItem(itemID)) return;
+    // A worm or crime trooper (the Natives) is no trade with an opposing army.
+    if (!currentGame || originalHouseID >= NUM_HOUSES || isNativesHouse(int(originalHouseID))
+        || !mobileCombatItem(itemID)) return;
     attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
 }
 
@@ -827,7 +829,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     // If the human has attacked us then its time to start fighting back... unless its an attack on a special unit
     // Don't trigger with fremen or saboteur
     bool bPossiblyOwnFremen = (pObject->getOwner()->getHouseID() == HOUSE_ATREIDES) && (pObject->getItemID() == Unit_Trooper) && (currentGame->techLevel > 7);
-    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
+    // A worm or a crime trooper (the Natives) is no player opening hostilities.
+    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !pDamager->getOwner()->isNatives()
+        && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
         campaignAIAttackFlag = true;
     }
     // A confirmed hit on a building or worker we own makes the attacker a legal
