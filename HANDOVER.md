@@ -1,3 +1,57 @@
+## 2026-10-22 — The Natives house: every sandworm and every city-crime trooper belongs to a hidden non-player house (branch `feat/natives-house`, worktree `~/Documents/projects/dunecity-natives`, from staging afb2315c = 1.0.850 + merged `fix/spectator-game-end` 9d16268e; protocol 93, save 9871; not released)
+
+Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house - a new house that isn't
+selected. when the game is starting change the tagging of all sand worms to 'natives' - to stop worms showing up as being
+owned by players". Agents NativesHouse (killed by the omp restart, work uncommitted) and NativesHouse2.
+
+- **The house:** `HOUSE_NATIVES = 12` (`NUM_HOUSES` 13, `NUM_PLAYER_HOUSES` 12 = the houses a player can hold;
+  `isPlayerHouseID`, `House::isNatives`). Created on first need by `Game::getOrCreateNativesHouse()` (team 0 = the
+  engine's non-participant team: hostile to every lobby team 1-9, always "alive", ignored by every win/lose check; no
+  players, no AI, no credits, no base, the map-size unit limit). Name "Natives", own colour slot `HOUSECOLOR_NATIVES`
+  (leather-brown private ramp, radar `ff548cc4`), ObjectData suffix '?' (plain `[Unit]` values). Not selectable or
+  listed: `isHouseAvailable`/`isCustomGameHouseAvailable` false, `getHouseByName("Natives")` invalid (maps cannot name
+  it), `GameInitSettingsPolicy::isKnownHouse` and the reserved colour refuse it in lobby packets, `CommandAuthorization`
+  refuses every command on its objects, observed-house selector/Stats/City budget never browse to it, Custom Game and
+  campaign statistics, FeedbackWindow, analytics roster, skirmish generator starts, Chaos Factory catalogue and
+  special-bloom rewards skip it. The inspect panel of another house's object now names the owner ("Natives").
+- **Conversion points:** `ObjectBase::createObject(Unit_Sandworm)` always builds the worm for Natives (maps,
+  reinforcements, mods, any house); `INIMapLoader::loadUnits` places worms through Natives (no anonymous house is
+  created for the house a worm line names); `Game::initGame` runs `retagSandwormsToNatives()` after every map load
+  (campaign, skirmish, Random Skirmish, custom, multiplayer, map-editor test); `Game::loadSaveGame` runs it for saves
+  before 9871 (`UnitBase::transferOwnership`: owner + original house, counts moved without a loss or build);
+  `CitySimulation::raiseCrimeTroopers` (the crime effects scan) raises troopers for Natives only, still only while
+  the city has an opposing house with a base.
+- **Save 9871 / protocol 93:** object data, house table and each tile's explored/last-seen state carry the
+  thirteenth house; a 9868 save loads its twelve, Natives' stats come from the active ObjectData.ini, its worms convert.
+  City per-house state stays at twelve slots (`kMaxCityHouses = NUM_PLAYER_HOUSES`, layout unchanged).
+- **AI:** QuantBot/AIPlayer/CampaignAIPlayer/Mentat ignore Natives in enemy sightings and threat estimate (FFA strongest
+  team, outnumbered gate), weakest-house finish target, team army, survey/fronts/hunt-party contact and superiority,
+  base-strike/house choices, Brutal coalition count, spice competitors, campaign required army and "human attacked"
+  triggers; local targeting (Hunt, guard, turrets) still fights worms and troopers. The QuantBot update ring stays at
+  twelve slots (decision cycles unchanged). Worms no longer count toward any unit cap (`House::is*UnitLimitReached`),
+  so a worm-heavy map does not stop crime troopers.
+- **Win/lose:** the merged spectator end (`survivingTeams`) and the analytics winner skip Natives explicitly as well as
+  team 0; House::lose never runs for it.
+- **Tests:** new `natives_probe` (`tests/natives/`, fixture `data/worms-9868.dls.gz` written by the probe's `--baseline`
+  make-save case on afb2315c): worms Natives' on vanilla Equilibrium (135, written as a played house's), DuneCity
+  Habbanya-Penny (no Fremen house conjured), a Random Skirmish INI worm, a worm a player house spawns, campaign
+  Atreides mission 5, and the 9868 save (47, Harkonnen- and Mercenary-owned there) and its 9871 re-save; crime troopers
+  Natives', hunting the unrest building, absent from QuantBot's threat estimate, still rising above a worm-filled unit
+  limit, kept through save/reload, fought off within seconds; hidden from house lists/selector/statistics; a played
+  game won and a spectated game ended on the last real team with Natives units alive; inspect panel says "Natives",
+  radar draws its colour. Unit tests pinned to protocol 93 / save 9871 / 13 houses, Natives lobby colour and command
+  authorization cases; `stats-ui-probe.inc` no longer picks the unbrowsable Natives house.
+  Cluster ctest at a9ec4cc3 (`dunecity-queue` job 20261022T211117-ctest-0919c1): 104/107 passed including
+  perf_regression, all_against_atreides, ffa_army_deploys, scenario_matrix, menu_navigation_probe, both bundled
+  startups, spectator_game_end_probe, skirmish_generator_probe, campaign tests; the three stats_ui tests hung on the
+  Natives house (probe loop, fixed after) and pass at HEAD.
+- **Open risks:** troopers an older save's crime raised cannot be told from a house's own and keep their owner (only
+  worms convert); a mod or map that relied on owning worms (e.g. worm reinforcements for a house) now gets Natives
+  worms, which also eat that house's units; anonymous team-0 houses a custom map creates for unlisted unit owners share
+  team 0 with Natives (they and Natives do not fight); Tornie's houses (Rebels 7, guests 9-11) are unchanged and
+  Natives draws through its own private colour ramp, not a Custom_IBM.PAL slot (Rebels' 192-199 untouched); crime
+  troopers no longer trigger a campaign AI's full-scale attack.
+
 ## 2026-10-22 — Spectated games end when decided (branch `fix/spectator-game-end`, from staging afb2315c = 1.0.850; protocol 88, save 9868 unchanged; not released)
 
 Stefan: "when there is a winner and player is spectating the game should end." Agent SpectatorEnd, worktree

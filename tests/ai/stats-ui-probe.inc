@@ -47,8 +47,9 @@ void runStatsUiProbe(Game& game) {
     require(pLocalHouse!=nullptr,"Stats UI fixture has no local house");
     const int localHouseID=pLocalHouse->getHouseID();
     House* otherHouse=nullptr;
+    // The Natives house (worms) exists on this level but is never browsable.
     for(int h=0;h<NUM_HOUSES && otherHouse==nullptr;++h)
-        if(auto* candidate=game.getHouse(h); candidate && h!=localHouseID) otherHouse=candidate;
+        if(auto* candidate=game.getHouse(h); candidate && h!=localHouseID && !candidate->isNatives()) otherHouse=candidate;
     require(otherHouse!=nullptr,"Stats UI fixture needs a second house to browse to");
 
     // === A real, nonzero ledger on two different houses ===
@@ -495,7 +496,8 @@ void runStatsUiProbe(Game& game) {
         House* plainHouse=nullptr;
         for(int h=0;h<NUM_HOUSES && plainHouse==nullptr;++h) {
             auto* candidate=game.getHouse(h);
-            if(candidate==nullptr || candidate==botHouse) continue;
+            // The Natives house has no QuantBot either, but the window never browses to it.
+            if(candidate==nullptr || candidate==botHouse || candidate->isNatives()) continue;
             bool hasBot=false;
             for(const auto& player : candidate->getPlayerList())
                 if(dynamic_cast<const QuantBot*>(player.get())) hasBot=true;
