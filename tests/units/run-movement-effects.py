@@ -95,12 +95,17 @@ def summary(out):
             v = speed[key]
             lines.append(f'  {key[0]} {"diagonal" if key[1] == "1" else "straight"} {NAMES.get(key[2], key[2])}: '
                          f'{statistics.mean(v):.1f} ({min(v)}-{max(v)})')
-    crush = defaultdict(int)
+    crush, chained = defaultdict(int), []
     for r in rows(out / 'movement-crush.csv'):
+        if not r['crusher_item'].isdigit():
+            chained.append(f'  {r["terrain"]} {r["crusher_item"].replace("_", " ")}: {r["kills"]}')
+            continue
         crush[(r['terrain'], r['lane'], int(r['crusher_item']))] += int(r['kills'])
         crush[(r['terrain'], 'all', 0)] += int(r['kills'])
     if crush:
-        lines.append('crush: infantry crushed in 10 game minutes')
+        lines.append('crush: infantry crushed in 10 game minutes (vehicle steps chained on the cycle the previous '
+                     'one ended, and mid-step cycles a vehicle kept justStoppedMoving)')
+        lines += chained
         for key in sorted(crush):
             lines.append(f'  {key[0]} {key[1]} {NAMES.get(key[2], "all crushers")}: {crush[key]} ({crush[key] / 10:.1f}/min)')
     carry = defaultdict(list)

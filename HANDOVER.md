@@ -1,3 +1,40 @@
+## 2026-10-24 — Unit movement: chained steps fixed in the simulation (branch `fix/unit-movement`, worktree `~/Documents/projects/dunecity-unit-movement`, from staging 6fd861ae = 1.0.852; protocol 95, save 9871; IN PROGRESS, not merged)
+
+Agent UnitMovement. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`
+(`trace-summary.json`, `effects-*`, `crush-*`, `motion-probe-*`, `aaa-*`, `ffa-*`, `strategy-seeds*`, scripts beside them).
+
+- **Sim fix (9f4f492b):** `UnitBase::moveDynastyStep` clears `justStoppedMoving` (a step chained on the cycle the
+  previous one ended kept it: snapped to the tile centre every cycle, still then a whole-tile jump); `UnitBase::navigate`
+  resyncs a route tick more than one tick old (missed during a carryall wait) to its cadence. One step-start site
+  (`navigate`); every Dynasty ground step moves through `moveDynastyStep` (UnitBase/InfantryBase::move): plain steps,
+  formations, carryall drops, harvesters, infantry. `UnitBase::DrawnStepScope` removed (dead: the sim is what is drawn).
+- **skipping.dls** (3,750 cycles from 85,728, stepped, simulated positions): half-tile-or-more jumps per cycle 132 -> 8
+  (harvesters leaving refineries, a trike leaving its factory, the first traced cycle), mid-step holds 121 -> 0 (Tanks 101 -> 0).
+- **unit_motion_probe** now checks the simulation alone (plus `held_mid_step` and the restored carryall-wait tank): fix 0
+  violations; old sim 135 cycle violations, 226 stalls, 6,803 held cycles, 118 frame tile jumps.
+- **Speed:** 12-tile routes, 14 types x straight/diagonal x sand/rock x 16 legs: identical cycles in all 56 groups
+  (`tests/units/run-movement-effects.py`).
+- **Crushing:** controlled arena (tracked vehicles through enemy infantry, 10 game minutes, no weapon deaths): rock 63 -> 66,
+  sand 49 -> 49 kills (3,393 / 19,513 held cycles before, 0 after). Real games (new harness column `crush_kills`): All
+  against Atreides about 1 crush per game either way. Not a factor.
+- **Carryall-wait catch-up:** after a 400-cycle wait ending without a lift, before: Tank 24 tiles in 60 cycles (64 world
+  units per cycle); after: 1 tile, at most 2.3 units per cycle.
+- **All against Atreides** (scenario-matrix aaa, `--aaa-seeds 24`, cluster jobs um-aaa-before/after): 1.0.852 22/24 within
+  40 min (1 loss, 1 at 40.8), fixed six 6/6; fix 15/18 so far (2 time-outs with nobody eliminated, 1 at 40.4), fixed six
+  5/6 (906213928 times out), median win 35.6 -> 33.8 min. Locally each half of the fix alone flips a different fixed seed
+  (flag only: 906213928, 1756374161; route only: 1756374161). Seed 906213928 diverges at minute 11; by minute 20 the
+  enemies hold 70k army v 46k and Atreides defends its base (137 scrambles). No systematic weakening found (crush, speed
+  unchanged); 15/18 v 22/24 is not significant. OPEN: the ctest still fails on 906213928.
+- **quantbot_ffa_army_deploys:** passes on the fix (cluster ctest 20261024T101313-ctest-cb7501); 12-seed FFA sweeps
+  (`ffa-before`/`ffa-after`) were still running.
+- **quantbot_strategy:** at 486409243 the fix failed Specials' lead margin (-499) and its tech-4 game ended at 10.1 min.
+  Twelve seeds in both builds: a single-seed lead margin below 1 bps in 6/84 (1.0.852) and 4/84 (fix) checks; the tech-4
+  game was decided before minute 12 on 9/12 and 11/12 seeds; 1.0.852 itself failed the full probe on 8 of 12 seeds. The
+  test now requires the lead margins on the mean over 486409243, 11 and 22 (extra seeds margin-only; the mean failed in
+  5 and 8 of 220 seed triples) and lets the tech-4 game end once played. Passes on the fix locally (Specials mean +268).
+- **Not done:** the long-game ladder re-run (before = Regression852's sm-full-852 ladder cells), a full cluster ctest,
+  the AAA decision (more seeds, or an AI change for seed 906213928's base defence).
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and

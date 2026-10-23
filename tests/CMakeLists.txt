@@ -890,7 +890,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # two peers of the same four-house vanilla game pick the same seeded strategies and stay
         # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks
         # it, the checkpoint load continues to the host's digest); every mix strategy's production
-        # passes play its prior before combat evidence, favour its lead slots and still learn;
+        # passes play its prior before combat evidence and still learn, and its lead slots get a
+        # larger share of the built value than the Learned game's on the mean over three seeds
+        # (486409243 and --strategy-margin-seeds 11,22: one game per mix is one trajectory);
         # Learned/Base plays exactly the configured default's game.
         add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable

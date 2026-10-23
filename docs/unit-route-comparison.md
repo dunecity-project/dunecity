@@ -61,47 +61,51 @@ by this ground-timing change; their earlier nominal-rate fixes remain in place.
 Pathfinding, combat AI and Dynasty's optional unquantized-speed setting are not
 ported by this change.
 
-## Drawing chained steps
+## Chained steps
 
 Stefan's `skipping.dls` (1.0.850, 2 ms game speed): some units "jump from one
 tile to the next instead of showing the animations". Per-cycle and per-frame
 position traces of the save (`tests/performance/game-perf.py --motion-csv`,
-`docs/game-performance.md`, "Unit motion trace") showed the cause in the Dynasty
-step scheduler:
+`docs/game-performance.md`, "Unit motion trace") showed two faults in the
+Dynasty step scheduler (1.0.760-1.0.852):
 
-- **Chained steps keep `justStoppedMoving`.** A step that ends on the cycle a
+- **Chained steps kept `justStoppedMoving`.** A step that ends on the cycle a
   route tick falls due is followed by the next step on the same cycle (the
-  arrival-and-next-step case above). Only `move()`'s idle branch clears the
-  flag, so the new step keeps it and `GroundUnit::checkPos` holds `realX/realY`
-  on the tile centre on every cycle of that step: drawn as simulated, the unit
-  stands still for half a step, jumps a whole tile when its location changes,
-  and stands still again. It hits units whose step is a whole number of route
-  periods and whose route phase is a multiple of 3; in the save, Tanks driving
-  diagonally over rock (25 movement ticks) did it on every tile.
-- **Missed route ticks start steps in the past** (seen once in the save, a
-  harvester): `GroundUnit::navigate` skips a unit awaiting a carryall, so its
-  route tick falls behind; when the wait ends its steps begin at past ticks and
-  finish at once, a tile per cycle until the ticks catch up. Not changed here.
+  arrival-and-next-step case above). Only `move()`'s idle branch cleared the
+  flag, so the new step kept it and `GroundUnit::checkPos` held `realX/realY`
+  on the tile centre on every cycle of that step: the unit stood still for half
+  a step, jumped a whole tile when its location changed, and stood still again.
+  A tracked unit also squashed its tile every cycle instead of on arrival, a
+  tank's turret skipped facing its route, infantry did not animate. It hits
+  units whose step is a whole number of route periods and whose route phase is
+  a multiple of 3: Tanks driving diagonally over rock (25 movement ticks), and
+  Launcher, Deviator and Sonic Tank on sand (20).
+- **Missed route ticks started steps in the past**: `GroundUnit::navigate`
+  skips a unit awaiting a carryall, so its route tick fell behind; when the
+  wait ended without a lift its steps began at past ticks and finished at once,
+  a tile per cycle until the ticks caught up (24 tiles in 60 cycles after a
+  400-cycle wait).
 
-**Fix (drawing only, protocol 88):** `Game::drawScreen` holds a
-`UnitBase::DrawnStepScope`. For every Dynasty ground unit on a step with the
-stale flag it sets `realX/realY` to the step's own interpolation for the last
-cycle run (`moveDynastyStep`'s value before `checkPos` snapped it, rock bumps
-included) and restores the simulated values when drawing ends. No cycle runs
-inside the scope, so the simulation, digests and every game outcome are those
-of 1.0.850.
-
-Fixing the flag in the simulation instead (branch `fix/dynasty-step-stale-stop`,
-protocol 92, also resyncing missed route ticks) changes positions, targeting
-distances and crushing during chained steps, and with them game trajectories:
-`quantbot_all_against_atreides` 4/6 (1.0.850: 6/6), `quantbot_ffa_army_deploys`
-and `quantbot_strategy` failed on it; the route-tick part alone also flips the
-same two All against Atreides seeds. Left for Stefan to decide.
+**Fix (simulation, protocol 95):** `UnitBase::moveDynastyStep` clears the flag
+on every cycle of a step. The stop of the previous step was handled on the cycle
+it ended, exactly as for a step that does not chain (where `move()`'s idle
+branch clears it the next cycle), so nothing that reacts to an arrival (tile
+squash, spice bloom, refinery and repair-yard entry, infantry capture) loses
+its cycle. Every step starts in `UnitBase::navigate`, which every ground unit
+(formation members, carryall drops, harvesters, infantry) goes through, and
+every Dynasty ground step moves through `moveDynastyStep`
+(`UnitBase::move`, `InfantryBase::move`). `navigate` also resyncs a route tick
+that is more than one tick old to its cadence's next tick. Step timing is
+untouched: the 12-tile routes of 14 unit types, straight and diagonal, sand and
+rock, 16 legs each, take exactly the same cycles (`tests/units/run-movement-effects.py`,
+phase `speed`). 1.0.851-1.0.852's render-only `UnitBase::DrawnStepScope` is gone:
+the simulated positions are what is drawn.
 
 `unit_motion_probe` (`tests/units/run-unit-motion-probe.py`) shuttles ground
 units over open sand through the real main loop at 2 ms game speed with frame
-pacing (1-10 cycles per frame) and checks the drawn positions every cycle and
-every rendered frame.
+pacing (1-10 cycles per frame) and checks the simulated (drawn) positions every
+cycle and every rendered frame, that no moving unit keeps `justStoppedMoving`
+mid-step, and that a tank whose carryall never came drives on at its speed.
 
 ## Verification
 

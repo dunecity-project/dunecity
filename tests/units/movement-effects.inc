@@ -168,10 +168,22 @@ inline void crush(const std::string& out) {
         std::map<std::pair<int, int>, int> kills;   // (crusher item, diagonal lane) -> kills
         std::map<Uint32, Uint32> respawnAt;           // walk -> cycle
         std::unordered_map<Uint32, Coord> seen;
+        // Steps a vehicle began on the cycle its previous one ended (these kept justStoppedMoving
+        // before protocol 95), and the mid-step cycles a vehicle spent with the flag set.
+        std::unordered_map<Uint32, std::pair<bool, Uint64>> lastStep;
+        int chainedSteps = 0, heldCycles = 0;
         const Uint32 end = start + kMinutes * MILLI2CYCLES(60000);
         while (game->getGameCycleCount() < end) {
             game->updateGameState();
             drive(*game, vehicles);
+            for (const Shuttle& s : vehicles) {
+                const UnitBase* u = unitOf(*game, s.id);
+                auto& [wasMoving, stepStart] = lastStep[s.id];
+                if (u->moving && wasMoving && u->dynastyStepStart != stepStart) ++chainedSteps;
+                // Past the cycle the step began on (that cycle still shows the previous step's stop).
+                if (u->moving && u->justStoppedMoving && wasMoving && u->dynastyStepStart == stepStart) ++heldCycles;
+                wasMoving = u->moving; stepStart = u->dynastyStepStart;
+            }
             for (size_t i = 0; i < infantry.size(); ++i) {
                 Shuttle& s = infantry[i];
                 UnitBase* u = unitOf(*game, s.id);
@@ -213,8 +225,10 @@ inline void crush(const std::string& out) {
                 << ',' << n << '\n';
             total += n;
         }
-        SDL_Log("MOVEMENT_EFFECTS_CRUSH: terrain=%s minutes=%u kills=%d per_minute=%.2f", terrainName(terrain), kMinutes,
-                total, total / static_cast<double>(kMinutes));
+        SDL_Log("MOVEMENT_EFFECTS_CRUSH: terrain=%s minutes=%u kills=%d per_minute=%.2f chained_steps=%d held_cycles=%d",
+                terrainName(terrain), kMinutes, total, total / static_cast<double>(kMinutes), chainedSteps, heldCycles);
+        csv << terrainName(terrain) << ',' << kMinutes << ",chained_steps,," << chainedSteps << '\n'
+            << terrainName(terrain) << ',' << kMinutes << ",held_cycles,," << heldCycles << '\n';
         game.reset();
         currentGame = nullptr;
     }
