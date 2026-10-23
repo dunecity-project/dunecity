@@ -225,30 +225,21 @@ def main():
     compile_args = remove_compile_outputs(windows_args(compile_command))
     compile_args.extend(["/Y-", "/Fo" + str(private_obj), "/Fd" + str(out / "compile.pdb"), str(private_source)])
 
-    # Older Windows fnkdat ignores DUNECITY_USERDIR. Add a fail-closed override
-    # only to this private object: every FNKDAT_USER request requires the
-    # explicitly supplied profile, with no route back to real AppData.
+    # Current Windows fnkdat supports DUNECITY_USERDIR. Make the diagnostic
+    # fail closed if that variable is absent, rather than using real AppData.
     paths = user_paths_source.read_text()
     windows_start = paths.index("int fnkdat(const _TCHAR*")
     posix_start = paths.index("int fnkdat(const char*")
     windows_paths = paths[windows_start:posix_start]
-    folder_query = "if (dwFlags\n       && SHGetFolderPath"
-    if windows_paths.count(folder_query) != 1:
+    profile_override = 'const char* userOverride = rawflags == FNKDAT_USER ? getenv("DUNECITY_USERDIR") : NULL;'
+    if windows_paths.count(profile_override) != 1:
         raise RuntimeError("Windows profile-path fixture injection point changed")
-    override = '''const _TCHAR* probeUserDir = _tgetenv(_T("DUNECITY_USERDIR"));
-   if (rawflags == FNKDAT_USER) {
-      if (!probeUserDir || !probeUserDir[0]
-          || !((probeUserDir[0] && probeUserDir[1] == _T(':'))
-               || probeUserDir[0] == _T('\\\\') || probeUserDir[0] == _T('/'))
-          || _tcslen(probeUserDir) >= static_cast<size_t>(total)) {
-         errno = EINVAL;
-         return -1;
-      }
-      FNKDAT_S(_tcsncpy(buffer, probeUserDir, len));
-      FNKDAT_S(_tcsncat(buffer, _T("\\\\"), len));
-   } else if (dwFlags
-       && SHGetFolderPath'''
-    windows_paths = windows_paths.replace(folder_query, override)
+    guard = profile_override + '''
+   if (rawflags == FNKDAT_USER && (!userOverride || !userOverride[0])) {
+      errno = EINVAL;
+      return -1;
+   }'''
+    windows_paths = windows_paths.replace(profile_override, guard)
     paths = paths[:windows_start] + windows_paths + paths[posix_start:]
     paths = f'#include "{(ROOT / "IDE/VC/stdafx.h").as_posix()}"\n' + paths
     private_paths, private_paths_obj = out / "classic-skin-fnkdat.cpp", out / "classic-skin-fnkdat.obj"
