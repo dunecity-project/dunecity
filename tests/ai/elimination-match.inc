@@ -9,8 +9,10 @@
 #include <units/UnitBase.h>
 #include <structures/StructureBase.h>
 
+#include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 namespace EliminationMatch {
 
@@ -32,6 +34,38 @@ inline int survivingTeam(Game& game) {
     if (teams.empty()) return -1;
     return teams.size() == 1 ? *teams.begin() : 0;
 }
+
+/// Infantry crushed by tracked vehicles (TrackedUnit::checkPos -> Tile::squash), read from the live
+/// objects once per cycle so every build is measured alike: an infantry unit that is gone after a
+/// cycle while an enemy tracked unit stands on its tile was squashed (it cannot share a tile with
+/// a vehicle otherwise). Credited to the crusher's house and item. Diagnostic only.
+struct CrushCount {
+    struct Seen { Coord location; int team; };
+    std::unordered_map<Uint32, Seen> infantry, next;
+    std::map<int, int> byHouse;                 // crusher house -> infantry crushed
+    std::map<std::pair<int, int>, int> byItem;  // (crusher house, crusher item) -> infantry crushed
+    void observe() {
+        next.clear();
+        for (const auto* unit : unitList)
+            if (unit->isInfantry() && unit->isActive())
+                next.emplace(unit->getObjectID(), Seen{unit->getLocation(), unit->getOwner()->getTeamID()});
+        for (const auto& [id, seen] : infantry) {
+            if (next.count(id) || !currentGameMap->tileExists(seen.location)) continue;
+            const auto* crusher = dynamic_cast<const UnitBase*>(currentGameMap->getTile(seen.location)->getNonInfantryGroundObject());
+            if (crusher == nullptr || !crusher->isTracked() || crusher->getLocation() != seen.location
+                || crusher->getOwner()->getTeamID() == seen.team) continue;
+            ++byHouse[crusher->getOwner()->getHouseID()];
+            ++byItem[{crusher->getOwner()->getHouseID(), static_cast<int>(crusher->getItemID())}];
+        }
+        infantry.swap(next);
+    }
+    int of(int house) const { const auto it = byHouse.find(house); return it == byHouse.end() ? 0 : it->second; }
+    void report() const {
+        for (const auto& [key, kills] : byItem)
+            SDL_Log("CRUSH_COUNT: house=%d item=%d kills=%d", key.first, key.second, kills);
+    }
+};
+inline CrushCount crushCount;
 
 } // namespace EliminationMatch
 
@@ -96,14 +130,15 @@ inline void sample(Game& game, bool final = false) {
                 || item == Structure_WOR || item == Structure_HighTechFactory) ++factories;
         }
         SDL_Log("ELIMINATION_SAMPLE: minute=%d cycle=%u house=%d team=%d alive=%d credits=%d army_value=%d army_units=%d "
-                "harvesters=%d structures=%d factories=%d kill_value=%d loss_value=%d",
+                "harvesters=%d structures=%d factories=%d kill_value=%d loss_value=%d crush_kills=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), int(house->isAlive()),
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
-                house->getKillValue(), house->getLossValue());
+                house->getKillValue(), house->getLossValue(), crushCount.of(house->getHouseID()));
         // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
     FfaArmy::sample(game);
+    if (final) crushCount.report();
 }
 
 /// Plays to elimination or `end`. Returns "won"/"lost" for `house`'s team, or "time_limit".
@@ -123,6 +158,7 @@ inline std::string run(Game& game, Uint32 end, int house) {
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
         game.updateGameState();
+        crushCount.observe();
         if (game.getGameCycleCount() % minute == 0) sample(game);
         if ((winner = survivingTeam(game)) != 0) break;
     }

@@ -71,7 +71,7 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'city_pop', 'win_type', 'digest', 'wall_s', 'error')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn', 'start')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
 # Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
@@ -220,9 +220,14 @@ def campaign_missions(first_only):
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'aaa': 9517}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
+
+
+def aaa_seeds(count):
+    """All against Atreides: the six fixed seeds of the mandatory test, then generated ones."""
+    return list(AAA_SEEDS[:count]) + seeds_for('aaa', 'extra', max(0, count - len(AAA_SEEDS)))
 
 
 def schedule(args):
@@ -235,6 +240,8 @@ def schedule(args):
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
+        if cell['category'] == 'aaa' and getattr(args, 'aaa_seeds', None) and args.tier == 'full':
+            count = args.aaa_seeds
         if count <= 0:
             continue
         if cell['kind'] == 'campaign':
@@ -243,7 +250,7 @@ def schedule(args):
                     for seed in seeds_for('campaign', f'{house}{mission}', count):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
-        seeds = list(AAA_SEEDS[:count]) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
+        seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
         for index, seed in enumerate(seeds):
             games.append(match_game(cell, index, seed))
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
@@ -402,7 +409,8 @@ def play(args, scratch, binary, game):
                            'army_value': h['army_value'], 'army_units': h['army_units'], 'away_peak': h['away_peak'],
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
-                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', '')})
+                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
+                           'crush_kills': h.get('crush_kills', '')})
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
@@ -768,6 +776,8 @@ parser.add_argument('--cells', help='Only cells whose category/name/mod matches 
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
                          'pair; the short maps get half)')
+parser.add_argument('--aaa-seeds', type=int,
+                    help='Full tier: seeds per All against Atreides cell (the mandatory six, then generated ones)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')
