@@ -1,3 +1,26 @@
+## 2026-10-23 — Linux audio recovery candidate 1.0.852
+
+HAL9081 reported an AppImage 1.0.851 crash: dsp unavailable, followed by silent
+mixer failure. Reproduced with the published package in an isolated Linux profile;
+explicit SDL_AUDIODRIVER=dummy gets past audio startup. The shipped binary has
+OSS/disk/dummy backends, not ALSA/PulseAudio/PipeWire. The Linux vcpkg dependency
+did not enable ALSA, and the runner lacked the other modern backend headers.
+
+Candidate uses SDL_QuitSubSystem/SDL_InitSubSystem for fallback, with an override
+dummy hint so an invalid SDL_AUDIODRIVER cannot defeat recovery. Direct
+SDL_AudioInit did not set the initialization flag SDL_mixer checks, so the mixer
+retried the failing real backend. A new --check-audio-runtime command exercises
+the SAME initializer without assets, profiles, rendering or exception dialogs.
+Python checks require three cases: dummy, forced unavailable backend, normal
+selection, and verify compiled Linux backend names. Checks run on the raw binary,
+TGZ executable and AppImage; smoke tests also reject fatal exception dialogs.
+
+User explicitly selected the Linux runner to avoid local RAM pressure. A
+linux_audio_probe workflow-dispatch lane reuses the Linux release job and caches,
+skips other platforms and all publication jobs. Version 1.0.852 is a candidate,
+not a published replacement. Runner build/package verification is pending.
+No game-loop, simulation, sprite, map, skin or multiplayer rules were changed.
+
 ## 2026-10-23 — Desktop and browser 1.0.851 published
 
 Merged Classic Desert integration PR #102 at 8837540a after final candidate

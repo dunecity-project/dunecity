@@ -862,10 +862,57 @@ std::string getUserLanguage() {
 }
 
 
+namespace {
+constexpr int AUDIO_BUFFER_FRAMES = 1024;
+
+bool openStartupAudio(std::string& deviceError, std::string& fallbackError) {
+    if(Mix_OpenAudio(AUDIO_FREQUENCY, AUDIO_S16SYS, 2, AUDIO_BUFFER_FRAMES) == 0)
+        return true;
+
+    deviceError = Mix_GetError();
+    SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO, "Audio device unavailable: %s. Trying silent audio.", deviceError.c_str());
+    Mix_CloseAudio();
+    // Use SDL's subsystem API on BOTH sides. SDL_AudioInit("dummy") alone
+    // does not set SDL_WasInit(SDL_INIT_AUDIO). SDL_mixer then initializes the
+    // subsystem again and retries the original failing driver (e.g. Linux dsp).
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    if(SDL_SetHintWithPriority(SDL_HINT_AUDIODRIVER, "dummy", SDL_HINT_OVERRIDE) != SDL_TRUE) {
+        fallbackError = "Could not select the silent audio driver";
+        return false;
+    }
+    if(SDL_InitSubSystem(SDL_INIT_AUDIO) < 0
+       || Mix_OpenAudio(AUDIO_FREQUENCY, AUDIO_S16SYS, 2, AUDIO_BUFFER_FRAMES) < 0) {
+        fallbackError = SDL_GetError();
+        return false;
+    }
+    SDL_Log("Continuing with silent audio; restart to retry the device.");
+    return true;
+}
+}
+
 int main(int argc, char *argv[]) {
 #ifndef __EMSCRIPTEN__
     // Packaging checks run before opening a profile or game session.
     for(int index = 1; index < argc; ++index) {
+        if(std::strcmp(argv[index], "--check-audio-runtime") == 0) {
+            // Exercise the actual startup path without video, assets, profile
+            // writes or an exception dialog hiding a failure from package CI.
+            for(int driver = 0; driver < SDL_GetNumAudioDrivers(); ++driver)
+                std::printf("Audio backend available: %s\n", SDL_GetAudioDriver(driver));
+            std::string deviceError, fallbackError;
+            const bool ready = openStartupAudio(deviceError, fallbackError)
+                && SDL_WasInit(SDL_INIT_AUDIO) != 0;
+            if(ready) {
+                std::printf("Audio driver: %s\n", SDL_GetCurrentAudioDriver());
+                std::puts("Audio runtime initialization passed");
+            } else {
+                std::fprintf(stderr, "Audio runtime initialization failed: device=%s; fallback=%s\n",
+                             deviceError.c_str(), fallbackError.c_str());
+            }
+            Mix_CloseAudio();
+            SDL_Quit();
+            return ready ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
         if(std::strcmp(argv[index], "--check-desktop-runtime") == 0) {
             if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
                 std::fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError());
@@ -1428,14 +1475,10 @@ int main(int argc, char *argv[]) {
 
             if(bFirstInit == true) {
                 SDL_Log("Initializing audio...");
-                constexpr int AUDIO_BUFFER_FRAMES = 1024;
-                if( Mix_OpenAudio(AUDIO_FREQUENCY, AUDIO_S16SYS, 2, AUDIO_BUFFER_FRAMES) < 0 ) {
-                    const std::string audioError=Mix_GetError();
-                    SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO,"Audio device unavailable: %s. Continuing with silent audio; restart to retry the device.",audioError.c_str());
-                    SDL_AudioQuit();
-                    if(SDL_AudioInit("dummy")<0 || Mix_OpenAudio(AUDIO_FREQUENCY,AUDIO_S16SYS,2,AUDIO_BUFFER_FRAMES)<0)
-                        THROW(sdl_error,"Audio device failed (%s); silent mixer also failed: %s",audioError.c_str(),Mix_GetError());
-                }
+                std::string deviceError, fallbackError;
+                if(!openStartupAudio(deviceError, fallbackError))
+                    THROW(sdl_error, "Audio device failed (%s); silent mixer also failed: %s",
+                          deviceError.c_str(), fallbackError.c_str());
                 {
                     int actualFrequency = 0;
                     int actualChannels = 0;
