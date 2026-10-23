@@ -45,9 +45,9 @@ void checkActiveTheme(const MenuTheme::Theme& expected) {
 }
 }
 
-TEST_CASE("UI skin preference defaults to Modern and validates independently of colors", "[menu][ui-skin]") {
-    // Existing profiles keep Stefan's current appearance; explicit IDs select
-    // Lapis Enamel (1) or Classic Desert (2). Bad INI values cannot select a skin.
+TEST_CASE("UI skin preference defaults to Classic and validates independently of colors", "[menu][ui-skin]") {
+    // New/missing preferences choose Classic Desert. Explicit IDs are retained;
+    // malformed IDs still use the safe Modern validation fallback.
     constexpr auto modern = MenuTheme::themeForUISkin(0);
     static_assert(modern.background == COLOR_RGB(20,24,32));
     static_assert(menuPalette(0, 0).foreground == COLOR_RGB(250,248,240));
@@ -65,14 +65,14 @@ TEST_CASE("UI skin preference defaults to Modern and validates independently of 
     }
 
     INIFile config(true, "Independent UI skin preference");
-    CHECK(validatedUISkin(config.getIntValue("Video", "UI Skin", 0)) == 0);
+    CHECK(validatedUISkin(config.getIntValue("Video", "UI Skin", 2)) == 2);
     config.setIntValue("Video", "Menu Palette", 1);
     config.setIntValue("Video", "Interface Height", INTERFACE_HEIGHT_NATIVE);
     config.setIntValue("Video", "Start Menu Mode", 1);
     config.setStringValue("General", "Player Name", "Retained");
     for(int selected : {1, 2, 0}) {
         config.setIntValue("Video", "UI Skin", selected);
-        CHECK(validatedUISkin(config.getIntValue("Video", "UI Skin", 0)) == selected);
+        CHECK(validatedUISkin(config.getIntValue("Video", "UI Skin", 2)) == selected);
         CHECK(config.getIntValue("Video", "Menu Palette", 0) == 1);
         CHECK(config.getIntValue("Video", "Interface Height", 0) == INTERFACE_HEIGHT_NATIVE);
         CHECK(config.getIntValue("Video", "Start Menu Mode", 0) == 1);
