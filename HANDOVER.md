@@ -18,7 +18,19 @@ TGZ executable and AppImage; smoke tests also reject fatal exception dialogs.
 User explicitly selected the Linux runner to avoid local RAM pressure. A
 linux_audio_probe workflow-dispatch lane reuses the Linux release job and caches,
 skips other platforms and all publication jobs. Version 1.0.852 is a candidate,
-not a published replacement. Runner build/package verification is pending.
+not a published replacement.
+
+Verification: Linux-only run 40031124610 succeeded at source af605957. All
+three compiled backends (ALSA, PulseAudio, PipeWire) were present. All nine
+audio startup checks passed: dummy, unavailable-driver recovery and normal
+selection on the raw binary, TGZ executable and AppImage. The five checker
+unit tests passed locally and on the runner. Full portable-package startup
+smokes also passed, with fatal-dialog detection enabled. Artifact
+12535518040 (DuneCity-Linux-Packages) contains the 1.0.852 candidate packages.
+Other platform, signing and publication jobs were intentionally skipped; no
+stable release, website update or Android rebuild was done. Real sound-device
+playback still needs a user test; CI verifies backends and headless recovery.
+No local native compilation was performed for this candidate.
 No game-loop, simulation, sprite, map, skin or multiplayer rules were changed.
 
 ## 2026-10-23 — Desktop and browser 1.0.851 published
