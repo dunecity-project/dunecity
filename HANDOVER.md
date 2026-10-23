@@ -1,3 +1,18 @@
+## 2026-10-23 — Desktop and browser 1.0.851 published
+
+Merged Classic Desert integration PR #102 at 8837540a after final candidate
+push/PR CI 39918344319 / 39918351818 passed on all platforms. Stable tag
+v1.0.851 points to that merge. Release run 39923745699 passed every build,
+Linux sanitizer, Mac UI/AI/performance, signing and publication gate. Windows,
+macOS and Linux packages are public; Mac packages are signed/notarized.
+All three Ed25519 update feeds verified against the committed public key,
+published archive byte counts/SHA-256 and the legacy VR48 latest-feed redirect.
+SourceForge mirror 39928676886 and browser publication 39928676640 succeeded.
+Live browser build.json identifies 1.0.851 / 8837540a; every listed artifact
+passed a fresh HTTPS SHA-256 check. Website release copy and browser LF policy
+were pushed separately, with deployment 39978729305 successful. Android remains
+a separate candidate below; none of this claims an on-device Android test.
+
 ## 2026-10-23 — Android 0.2.30 candidate on engine 1.0.851
 
 User also authorized an Android update. Incremented the unpublished 0.2.29
