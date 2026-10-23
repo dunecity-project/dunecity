@@ -472,6 +472,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
         set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        # Every catalogue map in data/maps/community-maps.json is the recorded revision, has the
+        # slots and size its name advertises, a start for every slot, and loads and plays for a
+        # game minute in its mod with every lobby house still holding its start.
+        add_test(NAME community_maps_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/maps/check-community-maps.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-maps-startup)
+        set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.

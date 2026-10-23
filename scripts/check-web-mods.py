@@ -22,7 +22,7 @@ CITY_MAPS = (
     '2P - 128x128 Four Quadrants.ini', '4P - 192x192 - BigCityLife.ini',
     '4P - 192x192 - New Beginning.ini', '4P - 384x384 - new beginning.ini',
     '8P - 256x256 - Colonists.ini', '8P - 384x384 - Colonist.ini',
-    '3P - 192x192 - 3waysplit.ini',
+    '3P - 192x192 - 3waysplit.ini', '4P - 448x448 - No Mercy.ini',
 )
 CITY_MAP_METADATA = tuple(name + '.workshop.ini' for name in CITY_MAPS
                           if name != 'Alkozeltser 4 Cities.ini')
