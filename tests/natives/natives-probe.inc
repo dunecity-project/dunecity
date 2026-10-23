@@ -113,6 +113,14 @@ void makeSave() {
 
 House* natives(Game& game) { return game.getHouse(HOUSE_NATIVES); }
 
+/// The Natives' team: NATIVES_TEAM since save 9873, team 0 in a tree before the follow-up (1.0.852),
+/// against which only the follow-up case's observations are meaningful.
+#ifdef NATIVES_TEAM
+constexpr int kNativesTeam = NATIVES_TEAM;
+#else
+constexpr int kNativesTeam = 0;
+#endif
+
 /// Every worm is the Natives house's, the counts follow it, and no other house counts a worm.
 void expectWormsNative(Game& game, const std::string& label, size_t minimum) {
     const auto all = worms();
@@ -129,11 +137,11 @@ void expectWormsNative(Game& game, const std::string& label, size_t minimum) {
             nRequire(house->getNumItems(Unit_Sandworm) == 0, label + ": " + houseName(h) + " still counts a worm");
     if(owner) {
         nRequire(owner->getNumItems(Unit_Sandworm) == static_cast<int>(all.size()), label + ": the Natives' worm count is wrong");
-        nRequire(owner->getTeamID() == NATIVES_TEAM && owner->getPlayerList().empty() && owner->getNumStructures() == 0,
+        nRequire(owner->getTeamID() == kNativesTeam && owner->getPlayerList().empty() && owner->getNumStructures() == 0,
                  label + ": the Natives house is off its team, has a player or a base");
         nRequire(owner->isNatives() && houseName(HOUSE_NATIVES) == "Natives", label + ": the house is not named Natives");
     }
-    SDL_Log("NATIVES_PROBE: %s: %zu worms, all owned by Natives (team %d, no players)", label.c_str(), all.size(), NATIVES_TEAM);
+    SDL_Log("NATIVES_PROBE: %s: %zu worms, all owned by Natives (team %d, no players)", label.c_str(), all.size(), kNativesTeam);
 }
 
 /// Natives is no house anybody chooses, browses or ranks.
@@ -347,7 +355,7 @@ void runCrime() {
     }
     nRequire(victim->getNumItems(Unit_Trooper) == victimTroopers && troops.natives->getNumItems(Unit_Trooper) == 3,
              "The crime troopers are counted by the wrong house");
-    nRequire(troops.natives->getTeamID() == NATIVES_TEAM && troops.natives->getPlayerList().empty(), "The Natives house is off its team or has a player");
+    nRequire(troops.natives->getTeamID() == kNativesTeam && troops.natives->getPlayerList().empty(), "The Natives house is off its team or has a player");
     bot->updateEnemySightings();
     for(const auto& [id, sighting] : bot->enemySightings)
         nRequire(!game->getObjectManager().getObject(id) || !game->getObjectManager().getObject(id)->getOwner()->isNatives(),
