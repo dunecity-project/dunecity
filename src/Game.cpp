@@ -4192,6 +4192,8 @@ void Game::updateGameState() {
         pNetworkManager->publishObserverCycle(gameCycleCount,std::string(frame.getData(),frame.getDataLength()));
     }
     observerCyclePrepared=false;
+    // Defeats during this cycle are decided at its end (checkWatchedGameDecided).
+    inGameCycle = true;
     pInterface->getRadarView().update();
     cmdManager.executeCommands(gameCycleCount);
 
@@ -4280,6 +4282,12 @@ void Game::updateGameState() {
         if(++indicatorFrame > 2) {
             indicatorFrame = NONE_ID;
         }
+    }
+
+    inGameCycle = false;
+    if(watchedDecisionPending) {
+        watchedDecisionPending = false;
+        checkWatchedGameDecided();
     }
 
     gameCycleCount++;
@@ -5866,6 +5874,13 @@ bool Game::watchesWithoutSide() const {
 }
 
 void Game::checkWatchedGameDecided() {
+    // One blast (a Death Hand, a shot-down plane's crash) can take the last buildings of several
+    // houses in one cycle, each removed in its own update. Deciding at the first House::lose()
+    // would name a house as winner whose last building already fell in the same cycle.
+    if(inGameCycle) {
+        watchedDecisionPending = true;
+        return;
+    }
     if(finished || bQuitGame || gameState != GameState::Running) return;
     if((winFlags & (WINLOSEFLAGS_AI_NO_BUILDINGS | WINLOSEFLAGS_HUMAN_HAS_BUILDINGS)) == 0) return;
     if(!watchesWithoutSide()) return;

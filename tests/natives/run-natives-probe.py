@@ -17,6 +17,20 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/natives
   save9868   tests/natives/data/worms-9868.dls.gz (Gamma Sector, worms owned by a played house)
              loads with every worm the Natives'; re-saved as the current version it stays so
 
+Release 1.0.852 interactions with the spectated game end and the city airplane's Death Hand crash:
+
+  spectated-interactions  DuneCity Spectate: a crime trooper killing the last unit, and a crime
+             trooper bringing a plane down on the last building, end the game naming the last real
+             team; one crash taking both last teams' buildings in the same cycle names nobody;
+             the analytics payload has no Natives row and the same winner
+  played-interactions     a crime trooper killing the human's last unit loses, the enemy's wins
+  campaign-interactions   a DuneCity conquest mission: a Natives crash (and a chained second plane)
+             is credited to the Natives, decides nothing and does not provoke the campaign AI; a
+             crash on the last building wins or loses the mission as any other kill would
+  lockstep-interactions   host, guest and spectator of one DuneCity simulation with worms, crime
+             troopers and a plane the Natives shoot down agree at every 750-cycle checkpoint, and
+             the spectator's game ends at the guest's winning cycle
+
 --baseline links against a tree without the Natives house (e.g. a worktree at afb2315c) and runs
 the case that writes the 9868 fixture: make-save.
 """
@@ -33,7 +47,8 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--cases', default='maps,crime,winlose,save9868')
+parser.add_argument('--cases', default='maps,crime,winlose,save9868,spectated-interactions,played-interactions,'
+                    'campaign-interactions,lockstep-interactions')
 parser.add_argument('--baseline', action='store_true', help='Link against a tree without the Natives house; make-save only')
 parser.add_argument('--keep', action='store_true', help='Keep the profiles and the probe executable')
 args = parser.parse_args()

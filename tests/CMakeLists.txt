@@ -559,6 +559,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
         # no house list or statistics; win/lose ignores it; the inspect panel and radar show it.
+        # 1.0.852 interactions: Natives kills and a shot-down plane's crash deciding spectated,
+        # played and campaign games (a crash taking two last teams at once names nobody), the
+        # analytics roster, and host/guest/spectator lockstep digests with all of it in play.
         add_test(NAME natives_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/natives/run-natives-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/natives-probe)

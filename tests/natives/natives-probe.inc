@@ -24,6 +24,7 @@
 #include <GUI/ObjectInterfaces/DefaultObjectInterface.h>
 #include <Network/GameInitSettingsPolicy.h>
 #include <dunecity/CitySimulation.h>
+#include <units/AmbientAirplane.h>
 #endif
 
 #include <cstdlib>
@@ -498,6 +499,463 @@ void runSave9868() {
     nEnd(game);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Release 1.0.852 feature interactions: the Natives house against the spectated game end, the
+// city airplane's Death Hand crash, match analytics, campaign win/lose and lockstep peers.
+// ---------------------------------------------------------------------------------------------
+
+/// Destroys every object of @a house except @a keep, round after round (destroyed buildings can
+/// release a soldier), until only the kept objects are left. The house stays alive through them.
+void stripTo(Game& game, int houseID, const std::set<Uint32>& keep) {
+    House* house = game.getHouse(houseID);
+    nRequire(house != nullptr && house->isAlive(), "Cannot strip house " + houseName(houseID));
+    for(int round = 0; round < 64; ++round) {
+        std::vector<Uint32> doomed;
+        for(const StructureBase* s : structureList)
+            if(s->getOwner() == house && !keep.count(s->getObjectID())) doomed.push_back(s->getObjectID());
+        for(const UnitBase* u : unitList)
+            if((u->getOwner() == house || u->getOriginalHouseID() == houseID) && !keep.count(u->getObjectID()))
+                doomed.push_back(u->getObjectID());
+        if(doomed.empty()) break;
+        for(Uint32 id : doomed) if(ObjectBase* object = game.getObjectManager().getObject(id)) object->destroy();
+        game.updateGameState();
+    }
+    int left = 0;
+    for(const StructureBase* s : structureList) if(s->getOwner() == house) ++left;
+    for(const UnitBase* u : unitList) if(u->getOwner() == house) ++left;
+    nRequire(left == static_cast<int>(keep.size()) && house->isAlive() && !game.finished,
+             "House " + houseName(houseID) + " was not stripped to its kept objects");
+}
+
+/// A fresh unit or structure of @a house near @a centre; a structure releases no soldier when it
+/// falls. Callers drop it to 1 HP once the rest of the house is gone (one hit then decides it).
+ObjectBase* lastStand(Game& game, House* house, int itemID, Coord centre) {
+    ObjectBase* object = nullptr;
+    if(isStructure(itemID)) {
+        for(int ring = 0; ring < 30 && !object; ++ring)
+            for(int dy = -ring; dy <= ring && !object; ++dy)
+                for(int dx = -ring; dx <= ring && !object; ++dx) {
+                    if(std::max(std::abs(dx), std::abs(dy)) != ring) continue;
+                    const int x = centre.x + dx, y = centre.y + dy;
+                    if(!currentGameMap->tileExists(x, y) || !currentGameMap->tileExists(x + 1, y + 1)) continue;
+                    object = house->placeStructure(NONE_ID, itemID, x, y, true, true);
+                }
+        game.objectData.data[itemID][house->getHouseID()].infspawnprop = 0;
+    } else {
+        object = placeNear(house, itemID, centre);
+    }
+    nRequire(object != nullptr, "Could not place the last " + getItemNameByID(itemID) + " of " + houseName(house->getHouseID()));
+    object->setVisible(VIS_ALL, true);
+    return object;
+}
+
+/// A city airplane of @a owner hovering (speed 0) over @a at.
+AmbientAirplane* hoveringPlane(Game& game, House* owner, Coord at) {
+    game.objectData.data[Unit_AmbientAirplane][owner->getHouseID()].maxspeed = 0;
+    auto* plane = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+    nRequire(plane != nullptr, "Could not create a city airplane for " + houseName(owner->getHouseID()));
+    plane->deploy(at);
+    plane->currentMaxSpeed = 0;
+    plane->setVisible(VIS_ALL, true);
+    return plane;
+}
+
+/// Natives troopers beside @a target, all ordered to attack it.
+std::vector<Uint32> nativesAttack(Game& game, const ObjectBase* target, int count, Coord near) {
+    House* owner = game.getOrCreateNativesHouse();
+    std::vector<Uint32> ids;
+    for(int i = 0; i < count; ++i) {
+        UnitBase* trooper = placeNear(owner, Unit_Trooper, near);
+        trooper->setVisible(VIS_ALL, true);
+        nRequire(trooper->canAttack(target), "A Natives trooper may not attack the " + getItemNameByID(target->getItemID()));
+        trooper->doAttackObject(target, true);
+        ids.push_back(trooper->getObjectID());
+    }
+    return ids;
+}
+
+/// Steps until @a house is out; returns that cycle.
+Uint32 untilOut(Game& game, const House* house, Uint32 budget, const std::string& what) {
+    const Uint32 limit = game.getGameCycleCount() + budget;
+    while(house->isAlive() && game.getGameCycleCount() < limit) game.updateGameState();
+    nRequire(!house->isAlive(), what + ": " + houseName(house->getHouseID()) + " still alive after " + std::to_string(budget) + " cycles");
+    return game.getGameCycleCount();
+}
+
+/// Steps until the object is gone (or dead); returns that cycle.
+Uint32 untilGone(Game& game, Uint32 id, Uint32 budget, const std::string& what) {
+    const Uint32 limit = game.getGameCycleCount() + budget;
+    auto alive = [&]() { const ObjectBase* o = game.getObjectManager().getObject(id); return o && o->getHealth() > 0; };
+    while(alive() && game.getGameCycleCount() < limit) game.updateGameState();
+    if(alive()) {
+        const ObjectBase* o = game.getObjectManager().getObject(id);
+        SDL_Log("NATIVES_PROBE: %s: object %u item %d at %d,%d health %.1f", what.c_str(), id, o->getItemID(),
+                o->getLocation().x, o->getLocation().y, o->getHealth().toDouble());
+        for(const UnitBase* u : unitList)
+            if(u->getOwner()->isNatives() && u->getItemID() == Unit_Trooper)
+                SDL_Log("NATIVES_PROBE:   Natives trooper %u at %d,%d health %.1f target %u mode %d range %d", u->getObjectID(),
+                        u->getLocation().x, u->getLocation().y, u->getHealth().toDouble(), u->getTarget() ? u->getTarget()->getObjectID() : 0,
+                        static_cast<int>(u->getAttackMode()), u->getWeaponRange());
+    }
+    nRequire(!alive(), what + " did not happen within " + std::to_string(budget) + " cycles");
+    return game.getGameCycleCount();
+}
+
+/// The spectated game ended at @a decided naming @a winnerHouse's team (-1: nobody), never Natives.
+void expectWatchedEnd(Game& game, const std::string& label, Uint32 decided, int winnerHouse) {
+    nRequire(game.finished, label + ": the spectated game did not end when it was decided");
+    nRequire(game.finishedLevelCycle + 1 >= decided && game.finishedLevelCycle <= decided + 1,
+             label + ": ended at cycle " + std::to_string(game.finishedLevelCycle) + ", decided at " + std::to_string(decided));
+    const int team = winnerHouse < 0 ? 0 : game.getHouse(winnerHouse)->getTeamID();
+    nRequire(game.getWatchedWinnerTeam() == team, label + ": watched winner team " + std::to_string(game.getWatchedWinnerTeam())
+             + ", expected " + std::to_string(team));
+    const std::string text = game.watchedResultText();
+    nRequire(text.find("Natives") == std::string::npos, label + ": the end line names the Natives: " + text);
+    if(winnerHouse >= 0) nRequire(text.find(houseName(winnerHouse)) != std::string::npos, label + ": the end line '" + text + "' misses the winner");
+    else nRequire(text == "No house is left standing", label + ": the end line is '" + text + "'");
+    nRequire(natives(game) != nullptr && natives(game)->isAlive(), label + ": no Natives house is left to test against");
+    SDL_Log("NATIVES_PROBE: %s: ended at cycle %u (decided %u): '%s' with %d Natives units alive", label.c_str(),
+            game.finishedLevelCycle, decided, text.c_str(), natives(game)->getNumUnits());
+}
+
+/// The analytics end payload: one row per player, Natives nowhere, the right winner (-1: none).
+void expectAnalytics(Game& game, const std::string& label, int winnerHouse) {
+    const std::string payload = game.buildMatchAnalyticsPayload(true);
+    nRequire(payload.find("\"house_name\":\"Natives\"") == std::string::npos, label + ": the analytics payload names the Natives");
+    nRequire(payload.find("\"house_slot\":" + std::to_string(HOUSE_NATIVES) + ",") == std::string::npos,
+             label + ": the analytics payload has a Natives row");
+    nRequire(payload.find("\"winning_house\":" + std::to_string(winnerHouse) + ",") != std::string::npos,
+             label + ": the analytics winner is not house " + std::to_string(winnerHouse));
+    size_t rows = 0, players = 0;
+    for(size_t at = payload.find("\"house_slot\":"); at != std::string::npos; at = payload.find("\"house_slot\":", at + 1)) ++rows;
+    for(int h = 0; h < NUM_HOUSES; ++h) if(game.getHouse(h)) players += game.getHouse(h)->getPlayerList().size();
+    nRequire(rows == players, label + ": " + std::to_string(rows) + " analytics rows for " + std::to_string(players) + " players");
+    SDL_Log("NATIVES_PROBE: %s: analytics %zu player rows, winning_house=%d, no Natives", label.c_str(), rows, winnerHouse);
+}
+
+Coord mapCentre() { return Coord(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2); }
+
+/// Spectated DuneCity free-for-all (the view's house and three QuantBots): the deciding blow comes
+/// from the Natives - a crime trooper kills the last unit, a crime trooper brings down a city
+/// airplane whose Death Hand takes the last building, the same crash takes both last teams at once.
+void runSpectatedInteractions() {
+    const Params p = skirmishParams("dunecity", 3, true);
+    const Result result = generateFor(p);
+    std::vector<int> enemies;
+    for(const HouseSetup& h : result.houses) if(h.role == Role::Enemy) enemies.push_back(h.house);
+    nRequire(enemies.size() == 3, "The spectated free-for-all does not have three enemies");
+    const auto prepare = [&](std::unique_ptr<Game>& game) {
+        game = startSkirmish(p, result);
+        nRequire(game->isObserving() && game->isCitySimEnabled(), "Spectate or the city did not reach the match");
+        runCycles(*game, 150);
+        // Natives units well away from the fight, so the house has something left at the end.
+        placeNear(game->getOrCreateNativesHouse(), Unit_Sandworm, Coord(4, 4));
+        eliminate(*game, HOUSE_ORDOS);
+        eliminate(*game, enemies[0]);
+        nRequire(!game->finished, "The spectated game ended with two houses left");
+    };
+    {
+        // A crime trooper kills the last unit of the second-to-last house.
+        std::unique_ptr<Game> game;
+        prepare(game);
+        House* loser = game->getHouse(enemies[1]);
+        ObjectBase* last = lastStand(*game, loser, Unit_Quad, mapCentre());
+        stripTo(*game, enemies[1], {last->getObjectID()});
+        last->setHealth(1);
+        const int nativeKills = natives(*game)->getNumDestroyedUnits();
+        nativesAttack(*game, last, 3, last->getLocation());
+        const Uint32 decided = untilOut(*game, loser, MILLI2CYCLES(60 * 1000), "trooper kill");
+        nRequire(natives(*game)->getNumDestroyedUnits() == nativeKills + 1, "The last unit's kill is not the Natives'");
+        expectWatchedEnd(*game, "spectated trooper kill", decided, enemies[2]);
+        expectAnalytics(*game, "spectated trooper kill", enemies[2]);
+        while(!game->finishedLevel) game->updateGameState();
+        nRequire(game->whatNext() == GAME_CUSTOM_GAME_STATS, "The spectated game does not go on to its statistics");
+        expectHidden(*game, "spectated trooper kill");
+        nEnd(game);
+    }
+    {
+        // A crime trooper shoots down the winner's airplane over the loser's last building.
+        std::unique_ptr<Game> game;
+        prepare(game);
+        House* loser = game->getHouse(enemies[1]);
+        ObjectBase* last = lastStand(*game, loser, Structure_WindTrap, mapCentre());
+        stripTo(*game, enemies[1], {last->getObjectID()});
+        runCycles(*game, 60);      // the stripped buildings' explosions die down first
+        last->setHealth(20);       // the crash's Death Hand takes it; nothing else does meanwhile
+        AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(enemies[2]), last->getLocation() + Coord(1, 1));
+        plane->setHealth(10);      // two trooper rockets bring it down
+        const Uint32 planeID = plane->getObjectID();
+        const int unitKills = natives(*game)->getNumDestroyedUnits(), structureKills = natives(*game)->getNumDestroyedStructures();
+        nativesAttack(*game, plane, 2, plane->getLocation() + Coord(0, 4));
+        untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the plane");
+        const Uint32 decided = untilOut(*game, loser, 20, "plane crash");
+        nRequire(natives(*game)->getNumDestroyedStructures() == structureKills + 1 && natives(*game)->getNumDestroyedUnits() > unitKills,
+                 "The crash's kills are not credited to the Natives");
+        expectWatchedEnd(*game, "spectated plane crash", decided, enemies[2]);
+        expectAnalytics(*game, "spectated plane crash", enemies[2]);
+        nEnd(game);
+    }
+    {
+        // The crash takes the last building of both remaining houses: nobody has won, and the
+        // Natives' units on the map keep nothing running.
+        std::unique_ptr<Game> game;
+        prepare(game);
+        ObjectBase* lastA = lastStand(*game, game->getHouse(enemies[1]), Structure_WindTrap, mapCentre());
+        ObjectBase* lastB = lastStand(*game, game->getHouse(enemies[2]), Structure_WindTrap, lastA->getLocation() + Coord(2, 0));
+        stripTo(*game, enemies[1], {lastA->getObjectID()});
+        stripTo(*game, enemies[2], {lastB->getObjectID()});
+        runCycles(*game, 60);
+        lastA->setHealth(20);
+        lastB->setHealth(20);
+        nRequire(!game->finished, "The double-wipe game ended before the crash");
+        AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(enemies[2]), lastA->getLocation() + Coord(2, 1));
+        plane->setHealth(10);
+        const Uint32 planeID = plane->getObjectID();
+        const Coord atA = lastA->getLocation(), atB = lastB->getLocation();
+        nativesAttack(*game, plane, 2, plane->getLocation() + Coord(0, 4));
+        untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the plane");
+        // Both last buildings fall to the one crash, in the same cycle (each is removed in its own
+        // update, so one house's defeat comes before the other's within that cycle).
+        const House* houseA = game->getHouse(enemies[1]);
+        const House* houseB = game->getHouse(enemies[2]);
+        const Uint32 limit = game->getGameCycleCount() + 20;
+        while(houseA->isAlive() && houseB->isAlive() && game->getGameCycleCount() < limit) game->updateGameState();
+        nRequire(!houseA->isAlive() && !houseB->isAlive(), "The crash did not take both last buildings in one cycle");
+        const Uint32 decided = game->getGameCycleCount();
+        SDL_Log("NATIVES_PROBE: double wipe: plane over %s's windtrap at %d,%d and %s's at %d,%d; both out by cycle %u",
+                houseName(enemies[1]).c_str(), atA.x, atA.y, houseName(enemies[2]).c_str(), atB.x, atB.y, decided);
+        expectWatchedEnd(*game, "spectated double wipe", decided, -1);
+        expectAnalytics(*game, "spectated double wipe", -1);
+        while(!game->finishedLevel) game->updateGameState();
+        nRequire(game->whatNext() == GAME_CUSTOM_GAME_STATS, "The wiped-out game does not go on to its statistics");
+        nEnd(game);
+    }
+}
+
+/// Played DuneCity 1v1: a crime trooper killing the human's last unit loses the game, killing the
+/// enemy's last unit wins it - the original rules, whoever fired.
+void runPlayedInteractions() {
+    const Params p = skirmishParams("dunecity", 1, false);
+    const Result result = generateFor(p);
+    int enemy = -1;
+    for(const HouseSetup& h : result.houses) if(h.role == Role::Enemy) enemy = h.house;
+    for(const bool humanFalls : {true, false}) {
+        auto game = startSkirmish(p, result);
+        runCycles(*game, 150);
+        const int victim = humanFalls ? static_cast<int>(HOUSE_ORDOS) : enemy;
+        ObjectBase* last = lastStand(*game, game->getHouse(victim), Unit_Quad, mapCentre());
+        stripTo(*game, victim, {last->getObjectID()});
+        last->setHealth(1);
+        nativesAttack(*game, last, 3, last->getLocation());
+        const Uint32 decided = untilOut(*game, game->getHouse(victim), MILLI2CYCLES(60 * 1000), "played trooper kill");
+        SDL_Log("NATIVES_PROBE: played %s: decided %u finished=%d won=%d finished_at=%u", humanFalls ? "loss" : "win", decided,
+                game->finished ? 1 : 0, game->won ? 1 : 0, game->finishedLevelCycle);
+        nRequire(game->finished && game->won == !humanFalls && game->finishedLevelCycle + 1 >= decided && game->finishedLevelCycle <= decided,
+                 std::string("The played game did not end as a ") + (humanFalls ? "loss" : "win") + " on the Natives' kill");
+        expectAnalytics(*game, humanFalls ? "played loss" : "played win", humanFalls ? enemy : static_cast<int>(HOUSE_ORDOS));
+        SDL_Log("NATIVES_PROBE: played %s at cycle %u on a crime trooper's kill", humanFalls ? "loss" : "win", decided);
+        nEnd(game);
+    }
+}
+
+/// A DuneCity campaign mission won by conquest (WinFlags has "no enemy buildings"; the spice-quota
+/// missions are decided by the quota, not by any crash): Natives troopers bring down an enemy
+/// airplane over its base (no crash, the Natives credited, the mission goes on and the campaign AI
+/// is not provoked); a chained crash takes a second plane; then a crash decides the mission both ways.
+void runCampaignInteractions() {
+    int mission = 0;
+    const auto start = [&](int candidate) {
+        nRequire(RandomSkirmish::activateMod("dunecity"), "Mod dunecity did not activate");
+        GameInitSettings init(HOUSE_ATREIDES, effectiveGameOptions, missionNumberToLevelNumber(candidate));
+        init.mission = candidate;
+        init.filename = GameInitSettings::getScenarioFilename(HOUSE_ATREIDES, candidate);
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(isHouseAvailable(static_cast<HOUSETYPE>(h))) {
+                GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h), h == HOUSE_ATREIDES ? 1 : 2);
+                if(h == HOUSE_ATREIDES) info.addPlayerInfo({settings.general.playerName, HUMANPLAYERCLASS});
+                else info.addPlayerInfo({houseName(h), "qBotMedium"});
+                init.addHouseInfo(info);
+            }
+        init.randomSeed = 20261024;
+        auto game = nStart(init);
+        nRequire(game->gameType == GameType::Campaign && game->isCitySimEnabled(), "Not a DuneCity campaign mission");
+        runCycles(*game, 150);
+        return game;
+    };
+    for(int candidate : {4, 5, 6, 7, 8, 9, 10}) {
+        auto game = start(candidate);
+        SDL_Log("NATIVES_PROBE: campaign mission %d: win_flags=%d lose_flags=%d", candidate, game->winFlags, game->loseFlags);
+        const bool conquest = (game->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0;
+        nEnd(game);
+        if(conquest) { mission = candidate; break; }
+    }
+    nRequire(mission != 0, "No tried campaign mission is won by conquest");
+    const auto startMission = [&]() { return start(mission); };
+    std::vector<int> enemies;
+    {
+        auto game = startMission();
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(game->getHouse(h) && h != HOUSE_ATREIDES && !game->getHouse(h)->isNatives() && game->getHouse(h)->isAlive()
+               && game->getHouse(h)->getNumStructures() > 0) enemies.push_back(h);
+        nRequire(!enemies.empty(), "The campaign mission has no enemy base");
+        House* enemy = game->getHouse(enemies.front());
+        const StructureBase* target = nullptr;
+        for(const StructureBase* s : structureList) if(s->getOwner() == enemy && (!target || s->getItemID() == Structure_ConstructionYard)) target = s;
+        const std::string targetName = getItemNameByID(target->getItemID());
+        std::vector<QuantBot*> bots;
+        for(int h : enemies) for(const auto& player : game->getHouse(h)->getPlayerList())
+            if(auto* bot = dynamic_cast<QuantBot*>(player.get())) bots.push_back(bot);
+        nRequire(!bots.empty(), "The campaign enemies have no QuantBot");
+        for(QuantBot* bot : bots) nRequire(!bot->campaignAIAttackFlag, "The campaign AI was already provoked");
+        // Both planes are the enemy's own, so its anti-air leaves them alone and only the Natives
+        // shoot. The first has taken damage already (two trooper rockets bring it down), so the
+        // troopers need not outlast the base defence that turns on them.
+        AmbientAirplane* plane = hoveringPlane(*game, enemy, target->getLocation() + Coord(1, 1));
+        AmbientAirplane* second = hoveringPlane(*game, enemy, target->getLocation() + Coord(2, 1));
+        plane->setHealth(10);
+        const Uint32 planeID = plane->getObjectID(), secondID = second->getObjectID();
+        House* nativesHouse = game->getOrCreateNativesHouse();
+        const int nativeKills = nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures();
+        const int planeLosses = enemy->getNumLostItems(Unit_AmbientAirplane);
+        nativesAttack(*game, plane, 3, plane->getLocation() + Coord(0, 4));
+        untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the campaign plane");
+        untilGone(*game, secondID, 4, "the chained crash");
+        runCycles(*game, 300);
+        nRequire(!game->finished, "The campaign mission ended on a crash that decided nothing");
+        nRequire(nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() >= nativeKills + 2,
+                 "The crash and its chain are not credited to the Natives");
+        nRequire(enemy->getNumLostItems(Unit_AmbientAirplane) == planeLosses + 2, "The enemy did not lose both planes");
+        for(QuantBot* bot : bots) nRequire(!bot->campaignAIAttackFlag, "A Natives crash provoked the campaign AI's offensive");
+        SDL_Log("NATIVES_PROBE: campaign mission %d: Natives shot down %s's plane over its %s, chained crash, %d Natives kills, "
+                "mission running, campaign AI not provoked", mission, houseName(enemy->getHouseID()).c_str(),
+                targetName.c_str(), nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures());
+        nEnd(game);
+    }
+    for(const bool playerFalls : {false, true}) {
+        // The crash takes the last enemy building (the player's trooper shot down the enemy's
+        // plane): won. Or the Natives bring the player's plane down on the player's last building: lost.
+        auto game = startMission();
+        House* atreides = game->getHouse(HOUSE_ATREIDES);
+        const int last = playerFalls ? static_cast<int>(HOUSE_ATREIDES) : enemies.back();
+        if(!playerFalls)
+            for(int h = 0; h < NUM_HOUSES; ++h)
+                if(h != last && h != HOUSE_ATREIDES && game->getHouse(h) && !game->getHouse(h)->isNatives()
+                   && game->getHouse(h)->getTeamID() != 0 && game->getHouse(h)->isAlive()) eliminate(*game, h);
+        nRequire(!game->finished, "The mission ended before its deciding crash");
+        ObjectBase* building = lastStand(*game, game->getHouse(last), Structure_WindTrap, mapCentre());
+        stripTo(*game, last, {building->getObjectID()});
+        building->setHealth(20);   // the crash's Death Hand takes it; nothing else does meanwhile
+        AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(playerFalls ? static_cast<int>(HOUSE_ATREIDES) : enemies.back()),
+                                               building->getLocation() + Coord(1, 1));
+        plane->setHealth(10);      // two trooper rockets bring it down
+        const Uint32 planeID = plane->getObjectID();
+        if(playerFalls) {
+            nativesAttack(*game, plane, 2, plane->getLocation() + Coord(0, 4));
+        } else {
+            UnitBase* shooter = placeNear(atreides, Unit_Trooper, plane->getLocation() + Coord(0, 4));
+            shooter->setVisible(VIS_ALL, true);
+            nRequire(shooter->canAttack(plane), "The player's trooper may not shoot the enemy plane");
+            shooter->doAttackObject(plane, true);
+        }
+        untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "shooting down the deciding plane");
+        const Uint32 decided = untilOut(*game, game->getHouse(last), 20, "deciding crash");
+        runCycles(*game, 2);
+        SDL_Log("NATIVES_PROBE: campaign mission %d deciding crash: decided %u finished=%d won=%d finished_at=%u win_flags=%d lose_flags=%d",
+                mission, decided, game->finished ? 1 : 0, game->won ? 1 : 0, game->finishedLevelCycle, game->winFlags, game->loseFlags);
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(game->getHouse(h) && game->getHouse(h)->isAlive())
+                SDL_Log("NATIVES_PROBE:   alive house %s team %d units %d structures %d", houseName(h).c_str(),
+                        game->getHouse(h)->getTeamID(), game->getHouse(h)->getNumUnits(), game->getHouse(h)->getNumStructures());
+        nRequire(game->finished && game->won == !playerFalls,
+                 std::string("The campaign mission was not ") + (playerFalls ? "lost" : "won") + " on the deciding crash");
+        SDL_Log("NATIVES_PROBE: campaign mission %d %s at cycle %u (decided %u) by a crash", mission, playerFalls ? "lost" : "won",
+                game->finishedLevelCycle, decided);
+        nEnd(game);
+    }
+}
+
+/// Lockstep: a networked host and guest and a spectator run the same DuneCity simulation with worms,
+/// crime troopers and a plane the Natives bring down; their digests agree at every 750-cycle
+/// checkpoint and at the deciding cycle, and the spectator's game ends with the guest's win.
+void runLockstepInteractions() {
+    Params p = skirmishParams("dunecity", 3, false);
+    const Result result = generateFor(p);
+    GameInitSettings init(result.name, result.ini, "natives-probe", false, effectiveGameOptions);
+    std::vector<int> ai;
+    int guestHouse = -1;
+    for(const HouseSetup& h : result.houses) {
+        GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(h.house), h.team);
+        if(h.role == Role::Human) info.addPlayerInfo(GameInitSettings::PlayerInfo("Host", HUMANPLAYERCLASS));
+        else if(guestHouse < 0) { guestHouse = h.house; info.addPlayerInfo(GameInitSettings::PlayerInfo("Guest", HUMANPLAYERCLASS)); }
+        else { ai.push_back(h.house); info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName(h.house), "qBotMedium")); }
+        init.addHouseInfo(info);
+    }
+    init.randomSeed = p.seed;
+    struct Peer { std::string name; bool observer; std::vector<std::string> digests; Uint32 finishedAt = 0; bool won = false; int watched = -1; };
+    std::vector<Peer> peers{{"Host", false}, {"Guest", false}, {"Viewer", true}};
+    for(Peer& peer : peers) {
+        settings.general.playerName = peer.name;
+        auto game = std::make_unique<Game>();
+        currentGame = game.get();
+        game->localObserver = peer.observer;
+        game->bReplay = true;
+        game->initGame(init);
+        game->bReplay = false;
+        game->initializeGameLoop();
+        nRequire(game->isObserving() == peer.observer && game->isCitySimEnabled(), peer.name + " did not start as intended");
+        const auto step = [&](Uint32 cycles) {
+            for(Uint32 i = 0; i < cycles; ++i) {
+                if(game->getGameCycleCount() % 750 == 0)
+                    peer.digests.push_back(std::to_string(game->getGameCycleCount()) + ":" + GameStateDigest::describe(game->computeStateDigest()));
+                game->updateGameState();
+            }
+        };
+        step(150);
+        // The same injections at the same cycle on every peer: Natives worms, crime troopers at the
+        // first AI's base, the host's plane over the second AI's base brought down by a Natives trooper.
+        House* nativesHouse = game->getOrCreateNativesHouse();
+        placeNear(nativesHouse, Unit_Sandworm, mapCentre());
+        placeNear(nativesHouse, Unit_Sandworm, mapCentre() + Coord(6, 6));
+        const auto baseOf = [&](int h) {
+            const StructureBase* found = nullptr;
+            for(const StructureBase* s : structureList) if(s->getOwner()->getHouseID() == h && (!found || s->getItemID() == Structure_ConstructionYard)) found = s;
+            nRequire(found != nullptr, houseName(h) + " has no building");
+            return found;
+        };
+        const auto troops = game->getCitySimulation()->raiseCrimeTroopers(baseOf(ai[0]), 3);
+        nRequire(!troops.units.empty() && troops.natives == nativesHouse, peer.name + ": crime raised no Natives troopers");
+        AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(HOUSE_ORDOS), baseOf(ai[1])->getLocation() + Coord(1, 1));
+        const Uint32 planeID = plane->getObjectID();
+        nativesAttack(*game, plane, 2, baseOf(ai[1])->getLocation() + Coord(4, 2));
+        for(int i = 0; i < 6000 && game->getObjectManager().getObject(planeID); ++i) step(1);
+        nRequire(game->getObjectManager().getObject(planeID) == nullptr, peer.name + ": the plane was not shot down");
+        step(MILLI2CYCLES(120 * 1000));
+        eliminate(*game, ai[0]);
+        step(60);
+        eliminate(*game, HOUSE_ORDOS);
+        step(60);
+        const Uint32 decided = eliminate(*game, ai[1]);
+        peer.digests.push_back("decided " + std::to_string(decided) + ":" + GameStateDigest::describe(game->computeStateDigest()));
+        peer.finishedAt = game->finished ? game->finishedLevelCycle : 0;
+        peer.won = game->won;
+        peer.watched = game->getWatchedWinnerTeam();
+        SDL_Log("NATIVES_PROBE: lockstep peer=%s checkpoints=%zu decided=%u finished_at=%u won=%d watched_winner=%d natives_units=%d last=%s",
+                peer.name.c_str(), peer.digests.size(), decided, peer.finishedAt, peer.won ? 1 : 0, peer.watched,
+                nativesHouse->getNumUnits(), peer.digests.back().c_str());
+        if(peer.observer) expectWatchedEnd(*game, "lockstep spectator", decided, guestHouse);
+        nEnd(game);
+    }
+    settings.general.playerName = "Natives tester";
+    for(size_t i = 0; i < peers[0].digests.size() || i < peers[2].digests.size(); ++i) {
+        const auto at = [&](const Peer& peer) { return i < peer.digests.size() ? peer.digests[i] : std::string("missing"); };
+        nRequire(at(peers[0]) == at(peers[1]) && at(peers[1]) == at(peers[2]),
+                 "Peers diverge at checkpoint " + std::to_string(i) + ": " + at(peers[0]) + " / " + at(peers[1]) + " / " + at(peers[2]));
+    }
+    nRequire(peers[1].won && peers[1].finishedAt == peers[2].finishedAt, "The guest's win and the spectator's end are not the same cycle");
+    SDL_Log("NATIVES_PROBE: lockstep: %zu identical checkpoints on host, guest and spectator; guest won and spectator ended at %u",
+            peers[0].digests.size(), peers[2].finishedAt);
+}
+
 #endif
 
 }
@@ -513,6 +971,10 @@ int runNativesProbe() {
     else if(kind == "crime") runCrime();
     else if(kind == "winlose") runWinLose();
     else if(kind == "save9868") runSave9868();
+    else if(kind == "spectated-interactions") runSpectatedInteractions();
+    else if(kind == "played-interactions") runPlayedInteractions();
+    else if(kind == "campaign-interactions") runCampaignInteractions();
+    else if(kind == "lockstep-interactions") runLockstepInteractions();
 #endif
     else nRequire(false, "Unknown case " + kind);
     SDL_Log("NATIVES_PROBE_PASS: %s", kind.c_str());

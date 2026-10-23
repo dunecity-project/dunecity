@@ -220,8 +220,10 @@ public:
         Spectate or a network spectator), or a player whose whole team is out on a map that lets
         it keep watching - once the match is decided for everybody: one team is left (or none)
         under the map's elimination rules. Called after every house defeat. Campaign missions
-        and players who still have a side keep the original win/lose rules. Reads only state
-        every peer simulates identically, so all of them end at the same cycle.
+        and players who still have a side keep the original win/lose rules. A defeat during a game
+        cycle is decided at the end of that cycle, so every house whose last object fell in it
+        (one blast can take several) counts as out. Reads only state every peer simulates
+        identically, so all of them end at the same cycle.
     */
     void checkWatchedGameDecided();
 
@@ -1271,6 +1273,10 @@ private:
     /// Runtime only, never saved or sent: see setWatchedGameOver(). -1 while no watched game is over.
     int     watchedWinnerTeam = -1;
     bool    watchedTimeUp = false;
+    /// Runtime only: updateGameState() is running a cycle, and a house defeat during it asks for
+    /// checkWatchedGameDecided() at the cycle's end.
+    bool    inGameCycle = false;
+    bool    watchedDecisionPending = false;
 
     std::unique_ptr<GameInterface>          pInterface;                             ///< This is the whole interface (top bar and side bar)
     std::unique_ptr<Window>                 pInGameMenu;                            ///< This is the menu that is opened by the option button
