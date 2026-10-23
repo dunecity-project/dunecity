@@ -1,3 +1,16 @@
+## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
+
+main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and
+Modern selectable; no simulation/protocol/save change; Windows near-macro rename in QuantBotBlob/QuantBotForce;
+Mac release gated on UI/perf/AI tests) and Android 0.2.30; website: New-in 1.0.851 prose (0f54191), Android links
+(2aa0134), .gitattributes for browser hashes (13aeaa3). Our local 1.0.851 (protocol 94, save 9871) shares that
+version number but not its code, so staging merged origin/main (88125d5a, HANDOVER-only conflict: both histories kept)
+and bumped to 1.0.852 (1d87654c). Cluster ctest job 20261024T091821-ctest-4ddc77: 109/109 (mini 65, pro 30, pc 14).
+Package: executable SHA256 553c8a6701efe54d9a2a334dce0454126cdb3919812cd7cf088eff48b2b612db, no Homebrew/local links,
+Righteous font bundled, signature and runtime check passed. Installed on the MBA 2026-10-24 09:27 AEDT by
+`/tmp/push-dunecity-1.0.852.sh`; previous app copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.852-20261024-092710/`.
+Not pushed or published.
+
 ## 2026-10-23 — local 1.0.851 verified and installed on the MBA
 
 1.0.850 + `integrate/851-trial` 092fdc60 (feat/natives-house incl. fix/spectator-game-end, fix/city-airplane,
