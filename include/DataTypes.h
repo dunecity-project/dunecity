@@ -408,8 +408,8 @@ typedef enum : int
     HOUSE_THARPIQUE  = 11,
     /// 'Natives': the non-player house that owns every sandworm and every trooper raised by
     /// city crime. Never selectable or listed, has no players, no base and no city, and plays
-    /// on team 0 (the engine's non-participant team: hostile to every player, ignored by
-    /// win/lose). Created on first use by Game::getOrCreateNativesHouse().
+    /// on its own team NATIVES_TEAM (hostile to every other house, anonymous team-0 houses
+    /// included; ignored by win/lose). Created on first use by Game::getOrCreateNativesHouse().
     HOUSE_NATIVES    = 12,
     NUM_HOUSES
 } HOUSETYPE;

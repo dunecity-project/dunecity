@@ -65,7 +65,8 @@ public:
     void restoreObserverAI(bool enabled) { ai = enabled; }
     bool isAutoRepairEnabled() const { return autoRepairEnabled; }
     void setAutoRepairEnabled(bool enabled) { autoRepairEnabled = enabled; }
-    inline bool isAlive() const { return (teamID == 0) || !(((numStructures - numItem[Structure_Wall]) <= 0) && (((numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Harvester] - numItem[Unit_RebelHarvester] - numItem[Unit_Frigate] - numItem[Unit_Sandworm] - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter]) <= 0))); }
+    /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
+    inline bool isAlive() const { return (teamID == 0) || isNatives() || !(((numStructures - numItem[Structure_Wall]) <= 0) && (((numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Harvester] - numItem[Unit_RebelHarvester] - numItem[Unit_Frigate] - numItem[Unit_Sandworm] - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter]) <= 0))); }
 
     inline bool hasCarryalls() const { return (numItem[Unit_Carryall] + numItem[Unit_ChemicalCarryall] > 0); }
     inline bool hasBarracks() const { return (numItem[Structure_Barracks] > 0); }

@@ -32,6 +32,7 @@
 #include <units/UnitBase.h>
 #include <units/InfantryBase.h>
 #include <units/AirUnit.h>
+#include <units/SandWorm.h>
 #include <structures/StructureBase.h>
 
 #include <climits>
@@ -315,12 +316,15 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
     }
 
     if(bulletID == Bullet_Sandworm) {
+        // A reinforcement worm's bite takes the whole tile but its summoner's side.
+        const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(damagerID));
         for(auto objectID : affectedGroundAndUndergroundUnits) {
             auto pObject = currentGame->getObjectManager().getObject(objectID);
             if(pObject
                 && (pObject->getItemID() != Unit_Sandworm)
                 && (pObject->isAGroundUnit() || pObject->isInfantry())
-                && (pObject->getLocation() == location))
+                && (pObject->getLocation() == location)
+                && (worm == nullptr || !worm->spares(*pObject)))
             {
                 pObject->setVisible(VIS_ALL, false);
                 pObject->handleDamage(lround(damage), damagerID, damagerOwner, provenance);

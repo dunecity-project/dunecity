@@ -262,7 +262,7 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
         int strongest = 0;
         for (int h=0; h<NUM_HOUSES; ++h) {
             const House* house = getHouse(h);
-            // The Natives (team 0) are always "alive" but are no opposing house.
+            // The Natives are always "alive" but are no opposing house.
             if (!house || house->isNatives() || !house->isAlive() || house->getTeamID()==getHouse()->getTeamID()) continue;
             int value = 0;
             for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item)

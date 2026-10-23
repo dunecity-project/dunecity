@@ -57,8 +57,11 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9866 adds the starting ratios a Tuned/Bounded strategy resolved to.
     // 9868 gives every special its own unit-mix slot (ten slots instead of eight).
     // 9871 adds the Natives house slot (HOUSE_NATIVES; 9869/9870 are left to parallel branches).
-    REQUIRE(SAVEGAMEVERSION == 9871);
+    // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is left to
+    // parallel branches).
+    REQUIRE(SAVEGAMEVERSION == 9873);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
+    REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 
@@ -78,7 +81,8 @@ TEST_CASE("Save compat: extended houses preserve legacy IDs",
     REQUIRE(HOUSE_CUSTOM == 8);
     REQUIRE(NUM_PLAYER_HOUSES == 12);
     REQUIRE(NUM_HOUSES == 13);   // + the Natives house (9871)
-    REQUIRE(NUM_TEAM_SLOTS == 10);
+    REQUIRE(NUM_TEAM_SLOTS == 11);   // lobby teams 1-9, anonymous houses 0, NATIVES_TEAM 10 (9873)
+    REQUIRE(NATIVES_TEAM == 10);
 }
 
 TEST_CASE("Save compat: old visual color slots retain their meaning",

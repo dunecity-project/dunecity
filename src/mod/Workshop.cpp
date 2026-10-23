@@ -1,4 +1,5 @@
 #include <mod/Workshop.h>
+#include <mod/WorkshopDuplicates.h>
 #include <mod/ModManager.h>
 #include <mod/Dune2RAssetManager.h>
 #include <mod/ModTransferValidation.h>
@@ -106,21 +107,39 @@ std::string bundledModHashAtGameVersion(const std::string& modName,const std::st
     const fs::path path=manager.getModPath(modName), metadataPath=path/"mod.ini";
     if(!fs::is_regular_file(metadataPath)) return {};
     // Only a stamp this release wrote (Vanilla, Dune City; Tornie and Dune2R ship their own) is
-    // one an earlier release wrote differently. Change it the way writeModInfo() does: the
-    // value in place, every other byte kept.
-    INIFile metadata(metadataPath.string());
-    if(metadata.getStringValue("Mod","Game Version")!=VERSION) return {};
-    metadata.setStringValue("Mod","Game Version",gameVersion);
-    std::string bytes(fs::file_size(metadataPath)+gameVersion.size()+2,'\0'); // +2: quotes
-    auto rw=SDL_RWFromMem(bytes.data(),static_cast<int>(bytes.size()));
-    if(rw==nullptr) return {};
-    const bool written=metadata.saveChangesTo(rw);
-    const auto size=SDL_RWtell(rw);SDL_RWclose(rw);
-    if(!written||size<0) return {};
-    bytes.resize(static_cast<size_t>(size));
+    // one an earlier release wrote differently.
+    if(INIFile(metadataPath.string()).getStringValue("Mod","Game Version")!=VERSION) return {};
     const auto info=manager.getModInfo(modName);
-    return contentHash("mod","",info.displayName.empty()?modName:info.displayName,
-                       manager.getContentBase(modName),"",path,{{"mod.ini",bytes}});
+    return stampedModHash({modName,info.displayName,manager.getContentBase(modName),path},gameVersion);
+}
+void pruneShippedModCopiesOnce() {
+    auto& manager=ModManager::instance();
+    fs::path mods(manager.getModsBasePath());
+    if(!mods.has_filename()) mods=mods.parent_path();
+    const fs::path marker=mods/".shipped-copies-pruned";
+    std::error_code e;
+    if(fs::exists(marker,e)) return;
+    try {
+        // The mods resolveMod() runs as shipped: the approved ones, installed with their payload.
+        std::vector<ShippedMod> shipped;
+        for(const char* name:{"vanilla","dunecity","Tornie","Dune2R"}) {
+            if(!manager.modExists(name)||manager.installerContentHash(name).empty()) continue;
+            const auto info=manager.getModInfo(name);
+            shipped.push_back({name,info.displayName,manager.getContentBase(name),manager.getModPath(name)});
+        }
+        const fs::path profile=mods.parent_path();
+        const auto pins=readProfilePins({profile/"save",profile/"mpsave"},{profile/"replay"});
+        const auto report=pruneShippedModCopies(mods,shipped,pins,manager.getActiveModName(),VERSION);
+        SDL_Log("Workshop: duplicate shipped-mod copies: %zu removed, %zu kept (%zu saves and replays checked)",
+                report.removed.size(),report.kept.size(),pins.pins.size());
+        // One pass is enough unless something that may change later held a copy back.
+        if(report.complete) {
+            std::ofstream(marker)<<VERSION<<"\n";
+        }
+        WebRuntime::syncPersistentFiles();
+    } catch(const std::exception& error) {
+        SDL_Log("Workshop: duplicate shipped-mod copies not checked: %s",error.what());
+    }
 }
 Revision saveMapData(const std::string& name,const std::string& data,const std::string& modHash) {
     if(data.empty()||data.size()>1024*1024) throw std::runtime_error("Map content is empty or too large.");

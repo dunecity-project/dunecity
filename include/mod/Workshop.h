@@ -51,6 +51,10 @@ Revision saveMod(const std::string& modName);
 // City stamp the running game version there (ModManager::writeModInfo), so a save keeps the
 // hash of the release that wrote it although no other byte changed. Empty if not applicable.
 std::string bundledModHashAtGameVersion(const std::string& modName, const std::string& gameVersion);
+// Once per profile (marker `mods/.shipped-copies-pruned`): removes the `ws-<hash>` copies of a
+// shipped mod that differ from it only in mod.ini's Game Version and that no save, online save or
+// replay of the profile still loads through (see WorkshopDuplicates.h). Logs what it removed.
+void pruneShippedModCopiesOnce();
 Revision saveMap(const std::string& filename, const std::string& modName);
 Revision saveMapData(const std::string& name, const std::string& data, const std::string& modHash);
 Revision receiveMap(const std::string& name, const std::string& data,

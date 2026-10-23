@@ -180,6 +180,12 @@ ObjectBase::ObjectBase(InputStream& stream) {
     if(currentGame && currentGame->getLoadedSavegameVersion() >= 9821) {
         stream.readBools(&b[8], &b[9]);
     }
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_NATIVES_TEAM) {
+        b[NATIVES_TEAM] = stream.readBool();
+    } else {
+        // Before 9873 the Natives house saw with team 0; the slot it sees with now is that one.
+        b[NATIVES_TEAM] = b[0];
+    }
 
     for (decltype(visible.size()) i = 0; i < visible.size(); ++i)
         visible[i] = b[i];
@@ -248,6 +254,7 @@ void ObjectBase::save(OutputStream& stream) const {
 
     stream.writeBools(visible[0], visible[1], visible[2], visible[3], visible[4], visible[5], visible[6], visible[7]);
     stream.writeBools(visible[8], visible[9]);
+    stream.writeBool(visible[NATIVES_TEAM]);
 }
 
 

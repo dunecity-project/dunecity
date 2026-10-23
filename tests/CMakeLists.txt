@@ -17,6 +17,7 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
+        ${CMAKE_SOURCE_DIR}/src/mod/WorkshopDuplicates.cpp
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
         CoopGameSettingsTestCase.cpp

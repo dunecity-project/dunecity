@@ -192,7 +192,7 @@ public:
 
     /**
         The Natives house (HOUSE_NATIVES), created the first time a sandworm or a crime trooper
-        needs an owner: team 0, no players, no credits, the map's default unit limit. Every
+        needs an owner: NATIVES_TEAM, no players, no credits, the map's default unit limit. Every
         peer creates it at the same simulation point, so lockstep is unaffected.
     */
     House* getOrCreateNativesHouse();

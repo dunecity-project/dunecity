@@ -50,8 +50,7 @@ public:
         crash blast off over `attacker`'s own team - where the plane is now, or
         where it will be by the time a missile fired now reaches it. Natives
         objects (worms, crime troopers) are nobody's own team, not even the
-        Natives' own: they share team 0 with any anonymous house a custom map
-        creates, and a blast over them never holds anyone's fire.
+        Natives' own: a blast over them never holds anyone's fire.
     */
     static bool crashEndangers(const ObjectBase& attacker, const ObjectBase& target);
 
