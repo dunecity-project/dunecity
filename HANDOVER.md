@@ -28,7 +28,10 @@ expected application ID/version/code, apksigner verifies v1/v2 signatures, and
 16-KiB zip alignment passes. Certificate SHA-256 matches public Android 0.2.25
 and the previous local 0.2.29 APK. APK: 65,082,224 bytes; SHA-256
 68cbb57125c1d181d8fe31e64dfd07b5968003a548cc7dfefc23809384e9fcc7.
-Publication follows these checks; no on-device test is claimed.
+PR #103 merged at 56ab59cd; android-v0.2.30 tags that distribution source.
+The APK and SHA256SUMS.txt are published under that tag. GitHub asset size/hash
+match the verified local APK. Published with latest=false; desktop latest remains
+v1.0.851. Website Android links are updated separately. No on-device test is claimed.
 
 ## 2026-10-23 — 1.0.851 integration candidate
 
