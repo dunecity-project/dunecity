@@ -1,3 +1,36 @@
+## 2026-10-24 — Ladder, team play and campaign partner: diagnosis + team harness (branch `fix/ladder-campaign`, worktree `~/Documents/projects/dunecity-ladder-campaign`, from staging 6fd861ae = 1.0.852; protocol 94 and save 9871 unchanged; INCOMPLETE)
+
+Agent LadderCampaign, stopped at the request budget. Only the measurement harness is on this branch; the candidate AI
+changes are on `exp/ladder-campaign-variants` (env switch `LC_VARIANT`, test-only, must not be merged as is).
+
+- **Harness:** `scenario-matrix.py` category `team`: 2v2 Random Skirmish 128x128 (75 min) and 3v3 160x160 (90 min),
+  medium bases, small armies, vanilla and DuneCity, QH team v QM team, every seed also `#swap` (controllers exchange
+  starts and houses); `--team-seeds 12` = 48 games per format; report prints the Hard team's seed-resampled score.
+- **3v3 cause (decision logs, 3v3 vanilla 86197 both sides):** the house set decides more than difficulty (team
+  S/F/M won both games). Hard's teamReady rule (opening over once the TEAM army reaches ONE house threshold) plus the
+  Swarm tempo (35% readiness) makes each Hard ally send 4-6k waves at minute 6.5 that die alone, while the three
+  Medium houses (60% readiness, FinishWhenLeading) converge on the weakest Hard house at minute 15-17.
+- **Short-map cause (telemetry, 24 QH v QM + 24 QB v QH games):** Hard/Brutal reach the heavy factory ~1.5-2 min after
+  Medium (DuneCity: 7 refineries by minute 10 v 6, HF 9.2 v 7.6 min; CY vanilla 9.0 v 7.5), because the larger
+  configured harvester limit (40/100 v 15) drives the opening refinery/worker push; in losses Hard never launches a
+  wave before Medium's 10-14k wave at minute 16-18. Brutal additionally launches its 2,500 starting army at 6 min
+  (opening cap 6,250 x 35% < starting army, so no opening hold).
+- **Campaign (852):** m17 80762 and Harkonnen m22 95897 now win (sm-full-852); new loss Atreides m22 77735 (partner starts
+  with 800 credits, builds four refineries and no factory in 9 minutes, dies at 19.9). Atreides m20 both seeds: a
+  Mercenary/Ordos front of 14 rocket turrets + Palace (Death Hand destroys IX/HF/refinery every 10 min), the partner's
+  harvesters disperse from minute 12, its first wave (8-14k) dies in mid-field, later waves trickle 1-4k.
+- **Local A/B so far (24 games each, vanilla team cells, not significant):** base 2v2 8-4 / 3v3 7-5; v2 (team opening
+  needs team army >= houses x threshold, Hard/Brutal) 7-5 / 7-5; v4 (defend allies' buildings within 64 tiles) 8-4 /
+  7-5; **v8 (join an ally's wave launched in the last 30 s, same objective) 11-1 / 8-4** - the candidate to measure on 48
+  games/format. Campaign m20 with v64 (partner army limit 2x strongest enemy incl. turrets, readiness from the start),
+  v128 (no trickle), v256 (Palace priority) and combinations: still lost 0/2 each.
+- **Remaining:** measure v8 (and v12/v14 results in `/tmp/lc-local/team-v*`) on the cluster (48/format), measure v512
+  (HF-first opening: Medium's harvester ceiling and no Brutal economy step until the first heavy factory) on the short
+  ladder (local baseline `/tmp/lc-local/short-base`: QB v QH +0.22 [-0.03,+0.44], QH v QM +0.23 [-0.05,+0.49]); turn
+  accepted variants into real code with protocol 98; m20/m22-77735 still need a fix; scenario-matrix before/after.
+  Cluster baselines submitted: jobs 20261024T095456-lc-team-before-3a471a, 20261024T101417-lc-short-before-27c8f8
+  (results `~/Documents/projects/dunecity-results/ladder-campaign/`). No ctest run.
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and
