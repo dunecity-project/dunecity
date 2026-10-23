@@ -16,6 +16,22 @@ locals to closestPoint/nearbyFriends; no algorithm or decision changes. The Mac
 release job now enables CTest and gates packaging on Classic UI, performance,
 Atreides, scenario-matrix and free-for-all regression tests, with dependency audits.
 
+Local verification: Windows Release build passed; all 16 CTest suites passed
+(119.53 s). Native SDL skin round trips, HUD/pause fixtures and bitmap-font
+checks passed at 640x480, 854x480, 1280x720 and Native 1920x1080 (172 PNGs).
+Separate portable runtime initialization/rendering passed; installed executable,
+font, license and config-template hashes match their build/source inputs.
+The isolated Windows visual probe was adapted to upstream's new user-directory
+override, retaining its fail-closed guard against touching the player's profile.
+
+Mac CI 39917041475 passed Classic UI and all three mandatory AI regression
+suites. Its simulation performance ratios passed, but the separate menu-launch
+probe exited before timing because SDL2 dummy video needs an explicit software
+renderer. Both headless probe paths now request software; real-window performance
+runs retain their native renderer. No thresholds, seeds or required checks were
+removed. Final CI and publication remain pending; do not infer release success
+from this local evidence.
+
 ## 2026-10-17 — local 1.0.839: approved 2B sandy pixel Classic Desert
 
 The user selected B's brighter sand-blasted button material, then the arched
