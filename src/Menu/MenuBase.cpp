@@ -16,8 +16,6 @@
  */
 
 #include <Menu/MenuBase.h>
-#include <mod/WorkshopClient.h>
-
 #include <Network/NetworkManager.h>
 
 #include <FileClasses/LoadSavePNG.h>
@@ -59,7 +57,6 @@ int MenuBase::showMenu() {
 
     while(!quiting) {
         int frameStart = SDL_GetTicks();
-        Workshop::updatePublications();
 
 #ifdef __ANDROID__
         // Android may reset pointer visibility when SDL views or windows

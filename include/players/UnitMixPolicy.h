@@ -3,13 +3,30 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 namespace UnitMixPolicy {
-// Tank, siege, launcher, special, ornithopter, trike, raider trike, quad.
-using Weights = std::array<int64_t, 8>;
-using Mix = std::array<int, 8>;
+// The unit-mix slots: tank, siege tank, launcher, the three specials (Devastator, Sonic Tank,
+// Deviator, each its own slot since SAVEGAMEVERSION 9868), ornithopter, trike, raider trike, quad.
+constexpr size_t kSlots = 10;
+constexpr size_t kFirstSpecialSlot = 3, kSpecialSlots = 3, kOrnithopterSlot = 6, kFirstLightSlot = 7, kQuadSlot = 9;
+using Weights = std::array<int64_t, kSlots>;
+using Mix = std::array<int, kSlots>;
+using Slots = std::array<bool, kSlots>;
+// The group form (the 8-slot layout before 9868): tank, siege tank, launcher, special (one share
+// for all three specials), ornithopter, trike, raider trike, quad. The configured [Unit Ratios],
+// the presets, the counter prior and the test play-style mix are written in it; expandGroups()
+// splits the special share between the specials a house can build.
+constexpr size_t kGroupSlots = 8;
+using GroupWeights = std::array<int64_t, kGroupSlots>;
+/// The group-form slot of mix slot \a slot.
+constexpr size_t groupOf(size_t slot) {
+    return slot < kFirstSpecialSlot ? slot : slot < kOrnithopterSlot ? 3 : slot - (kSpecialSlots - 1);
+}
 // Full-match evidence is authoritative in House's saved combat counters.
 // Keep the former window's serialized layout so existing saves can be read;
 // update replaces even a loaded decayed window with the complete match totals.
+// The layout stays the eight group slots (the specials summed into one) after the
+// specials got their own slots (9868): what is loaded is replaced before it is read.
 struct PerformanceHistory {
     uint32_t sampled=0;
     bool initialized=false;
@@ -20,31 +37,61 @@ struct PerformanceHistory {
     }
     template<class Stream> void save(Stream& stream) const {
         stream.writeUint32(sampled); stream.writeBool(initialized);
-        for (const auto* values:{&previousReward,&previousLoss,&reward,&loss})
-            for (const auto value:*values) stream.writeSint64(value);
+        for (const auto* values:{&previousReward,&previousLoss,&reward,&loss}) {
+            GroupWeights group{};
+            for (size_t i=0; i<kSlots; ++i) group[groupOf(i)] += (*values)[i];
+            for (const auto value:group) stream.writeSint64(value);
+        }
     }
+    /// The special group's values go to the first special slot.
     template<class Stream> void load(Stream& stream) {
         sampled=stream.readUint32(); initialized=stream.readBool();
-        for (auto* values:{&previousReward,&previousLoss,&reward,&loss})
-            for (auto& value:*values) value=stream.readSint64();
+        for (auto* values:{&previousReward,&previousLoss,&reward,&loss}) {
+            *values = {};
+            for (size_t g=0; g<kGroupSlots; ++g) {
+                const int64_t value=stream.readSint64();
+                (*values)[g < kFirstSpecialSlot ? g : g == 3 ? kFirstSpecialSlot : g + kSpecialSlots - 1] = value;
+            }
+        }
     }
 };
 inline int64_t performanceScore(int64_t damage, int64_t lostValue, int priorPrice) {
     return std::max<int64_t>(0, damage) * 1000000
         / std::max<int64_t>(1, std::max<int64_t>(0, lostValue) + std::max(1, priorPrice));
 }
+// (score*evidence + prior*uncertainty) / (evidence+uncertainty), the evidence-weighted
+// blend of a measured score with the prior. Lifetime evidence in milli units can make the
+// products exceed 64 bits; both weights are then halved together until the sum fits, which
+// keeps their ratio. Whenever the sum already fits the result is exactly the plain formula.
+// evidence >= 0, uncertainty >= 1.
+inline int64_t blendWithPrior(int64_t score, int64_t evidence, int64_t prior, int64_t uncertainty) {
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+    const int64_t a = score < 0 ? -score : score;
+    const int64_t b = prior < 0 ? -prior : prior;
+    auto fits = [&] {
+        if (evidence > kMax - uncertainty) return false;
+        if (evidence != 0 && a > kMax / evidence) return false;
+        if (b > kMax / uncertainty) return false;
+        return a * evidence <= kMax - b * uncertainty;
+    };
+    while (!fits()) {
+        evidence >>= 1;
+        uncertainty = std::max<int64_t>(1, uncertainty >> 1);
+    }
+    return (score*evidence + prior*uncertainty)/(evidence+uncertainty);
+}
 // Keep a fading trial prior for each available type, rather than starving
 // an untested type when other types already have combat results.
 inline Weights exploredScores(const Weights& scores, const Weights& rewards,
-        const Weights& losses, const Weights& prices, const std::array<bool,8>& available) {
+        const Weights& losses, const Weights& prices, const Slots& available) {
     int64_t prior = 0, count = 0;
-    for (size_t i=0; i<8; ++i) if (available[i] && scores[i]>0) { prior+=scores[i]; ++count; }
+    for (size_t i=0; i<kSlots; ++i) if (available[i] && scores[i]>0) { prior+=scores[i]; ++count; }
     prior = count ? prior/count : 1000000;
     Weights result{};
-    for (size_t i=0; i<8; ++i) if (available[i]) {
+    for (size_t i=0; i<kSlots; ++i) if (available[i]) {
         const int64_t evidence = std::max<int64_t>(0,rewards[i]) + std::max<int64_t>(0,losses[i]);
         const int64_t uncertainty = std::max<int64_t>(1,prices[i])*4;
-        result[i] = (scores[i]*evidence + prior*uncertainty)/(evidence+uncertainty);
+        result[i] = blendWithPrior(scores[i], evidence, prior, uncertainty);
     }
     return result;
 }
@@ -84,15 +131,15 @@ inline Weights sharpenScores(const Weights& scores) {
 inline int openingLightShare(int tech) {
     return tech >= 7 ? 400 : tech >= 5 ? 800 : tech >= 4 ? 1500 : 3000;
 }
-inline Mix openingMix(int tech, const Weights& configured, const std::array<bool,8>& available) {
+inline Mix openingMix(int tech, const Weights& configured, const Slots& available) {
     Weights heavy{}, light{};
-    for (size_t i=0; i<8; ++i) if (available[i]) {
-        if (i < 5) heavy[i] = std::max<int64_t>(0, configured[i]);
-        else light[i] = i == 7 ? 2 : 1; // Prefer quads within the small support share.
+    for (size_t i=0; i<kSlots; ++i) if (available[i]) {
+        if (i < kFirstLightSlot) heavy[i] = std::max<int64_t>(0, configured[i]);
+        else light[i] = i == kQuadSlot ? 2 : 1; // Prefer quads within the small support share.
     }
     // A zero configured ratio must not stall the only available production type.
     if (*std::max_element(heavy.begin(), heavy.end()) == 0)
-        for (size_t i=0; i<5; ++i) if (available[i]) heavy[i] = 1;
+        for (size_t i=0; i<kFirstLightSlot; ++i) if (available[i]) heavy[i] = 1;
     const Mix heavyMix = normalize(heavy), lightMix = normalize(light);
     const bool hasHeavy = *std::max_element(heavyMix.begin(), heavyMix.end()) > 0;
     const bool hasLight = *std::max_element(lightMix.begin(), lightMix.end()) > 0;
@@ -101,7 +148,7 @@ inline Mix openingMix(int tech, const Weights& configured, const std::array<bool
     auto distribute = [&](const Mix& shares, int budget) {
         if (budget == 0 || *std::max_element(shares.begin(), shares.end()) == 0) return;
         int assigned = 0;
-        for (size_t i=0; i<8; ++i) {
+        for (size_t i=0; i<kSlots; ++i) {
             const int amount = shares[i]*budget/10000;
             result[i] += amount;
             assigned += amount;
@@ -155,7 +202,7 @@ inline Mix allocate(const Weights& scores, const Weights& defaults, bool learnin
         result[recipient] += 10000-assigned;
     };
     for (size_t i=0; i<result.size(); ++i) cap(i,8000);
-    if (vanilla) cap(4,2500);
+    if (vanilla) cap(kOrnithopterSlot,2500);
     return result;
 }
 /// Minimum mobile AA value share while visible hostile aircraft justify it.
@@ -198,6 +245,42 @@ inline Mix applyFloor(const Mix& mix, size_t index, int floorBps) {
 inline int64_t deficit(int targetBps, int armyValue, int currentCount, int price) {
     return int64_t(targetBps) * std::max(0, armyValue)
         - int64_t(std::max(0, currentCount)) * std::max(0, price) * 10000;
+}
+// The share of a group (the special slot: Devastator, Sonic Tank, Deviator) split between its
+// \a buildable members: equal parts, the rounding remainder to the lowest buildable members, 0 for
+// the others. A house that can build several specials divides the share; none gets all of it.
+template<class T, size_t N>
+std::array<T, N> splitShare(T bps, const std::array<bool, N>& buildable) {
+    std::array<T, N> result{};
+    T count = 0;
+    for (const bool b : buildable) count += b ? 1 : 0;
+    if (count == 0 || bps <= 0) return result;
+    T remainder = bps % count;
+    for (size_t i = 0; i < N; ++i) if (buildable[i]) {
+        result[i] = bps / count + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) --remainder;
+    }
+    return result;
+}
+/// The specials among the \a fieldable mix slots (Devastator, Sonic Tank, Deviator).
+inline std::array<bool, kSpecialSlots> specials(const Slots& fieldable) {
+    return {fieldable[kFirstSpecialSlot], fieldable[kFirstSpecialSlot + 1], fieldable[kFirstSpecialSlot + 2]};
+}
+/// \a group in the mix slots: the special share split between the \a fieldable specials
+/// (splitShare; none fieldable: dropped), every other slot as it is.
+inline Weights expandGroups(const GroupWeights& group, const Slots& fieldable) {
+    Weights result{};
+    for (size_t i = 0; i < kSlots; ++i)
+        if (i < kFirstSpecialSlot || i >= kOrnithopterSlot) result[i] = group[groupOf(i)];
+    const auto shares = splitShare<int64_t>(std::max<int64_t>(0, group[3]), specials(fieldable));
+    for (size_t s = 0; s < kSpecialSlots; ++s) result[kFirstSpecialSlot + s] = shares[s];
+    return result;
+}
+/// The group-form slots of \a slots (the special group: any special).
+inline std::array<bool, kGroupSlots> groupSlots(const Slots& slots) {
+    std::array<bool, kGroupSlots> result{};
+    for (size_t i = 0; i < kSlots; ++i) result[groupOf(i)] = result[groupOf(i)] || slots[i];
+    return result;
 }
 }
 #endif

@@ -112,11 +112,14 @@ jobs:
       - name: Configure CMake
         # The unit tests exercise the direct transport with fake data channels, so this job does
         # not need libdatachannel; the interoperability harness in tools/p2p-interop does, and is
-        # built where that dependency is provisioned.
+        # built where that dependency is provisioned. A Debug build turns on AddressSanitizer and
+        # UndefinedBehaviorSanitizer by default: any report aborts the test that hit it.
         run: cmake -B build -DDUNECITY_BUILD_TESTS=ON -DDUNECITY_DIRECT_P2P=OFF -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build tests
-        run: cmake --build build --target dunelegacy_tests
+        run: |
+          cmake --build build --parallel --target dunelegacy_tests network_wire_harness \
+            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests
 
       - name: Check native and browser framing still agree
         run: node tools/p2p-interop/framing-vectors.mjs
@@ -127,10 +130,10 @@ jobs:
         run: node tools/p2p-interop/signaling-fetch.test.mjs
 
       - name: Run tests
-        run: |
-          DUNE_CITY_SOURCE_DIR=${{ github.workspace }} \
-          DUNECITY_DATADIR=${{ github.workspace }}/data \
-          ./build/bin/dunelegacy_tests
+        env:
+          ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
 
   build-emscripten:
     runs-on: ubuntu-latest
@@ -927,6 +930,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All tags and history: the website's release history page is built from them.
+          fetch-depth: 0
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v8
@@ -998,6 +1004,7 @@ jobs:
       - name: Update dunelegacy.com website
         env:
           WEBSITE_DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           # Strip leading 'v' to get bare version number (e.g. v1.0.5 -> 1.0.5)
@@ -1060,8 +1067,15 @@ jobs:
             sed -i "s|[0-9]\+\.[0-9]\+\.[0-9]\+ is current|${VERSION} is current|g" "$FILE"
           done
 
+          # Release history page (website/changelog.html): every published release with its
+          # releases/desktop notes, or its commit summaries when it has none.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, published: .published_at}' \
+            > "$RUNNER_TEMP/releases.jsonl"
+          python3 scripts/build-changelog.py --game-repo "$GITHUB_WORKSPACE" --releases "$RUNNER_TEMP/releases.jsonl"
+
           git config user.email "ci@dunelegacy.com"
           git config user.name "DuneCity CI"
-          git add website/index.html website/dune-city.html
+          git add website/index.html website/dune-city.html website/changelog.html
           git diff --cached --quiet || git commit -m "release: bump website to Dune City ${VERSION}"
           git push

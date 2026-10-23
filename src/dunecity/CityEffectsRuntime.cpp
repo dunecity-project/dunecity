@@ -106,23 +106,27 @@ int cityLevelOf(const Tile* t, const StructureBase* pStruct) {
     return DuneCity::effectiveCityLevel(pStruct->getItemID(), std::max(1, occ));
 }
 
+/// Visits every structure whose own origin tile shows it as the tile's front
+/// ground object, in row-major order of that tile: exactly the visits of a
+/// walk over every map tile that skips non-origin and non-structure fronts.
+/// Every live structure is in structureList, so collecting from that list and
+/// sorting by origin tile reproduces the walk's set and order without touching
+/// all sizeX*sizeY tiles (147,456 on a 384x384 map, seven walks per scan).
 template<typename F>
 void forEachStructureOrigin(const Map& map, F&& visit) {
-    for (int y = 0; y < map.getSizeY(); ++y) {
-        for (int x = 0; x < map.getSizeX(); ++x) {
-            const Tile* pTile = map.getTile(x, y);
-            if (!pTile || !pTile->hasANonInfantryGroundObject()) continue;
-
-            const ObjectBase* pObj = pTile->getNonInfantryGroundObject();
-            if (!pObj || !pObj->isAStructure()) continue;
-
-            const StructureBase* pStruct = static_cast<const StructureBase*>(pObj);
-            if (pStruct->getLocation().x != x || pStruct->getLocation().y != y) {
-                continue;  // skip non-origin tiles of multi-tile structures
-            }
-            visit(x, y, pStruct);
-        }
+    std::vector<std::pair<long long, const StructureBase*>> origins;
+    origins.reserve(structureList.size());
+    for (const StructureBase* pStruct : structureList) {
+        const Coord location = pStruct->getLocation();
+        if (!map.tileExists(location.x, location.y)) continue;
+        const Tile* pTile = map.getTile(location.x, location.y);
+        if (!pTile->hasANonInfantryGroundObject() || pTile->getNonInfantryGroundObject() != pStruct) continue;
+        origins.emplace_back(static_cast<long long>(location.y) * map.getSizeX() + location.x, pStruct);
     }
+    std::sort(origins.begin(), origins.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& [key, pStruct] : origins)
+        visit(pStruct->getLocation().x, pStruct->getLocation().y, pStruct);
 }
 
 void stampFalloff(DuneCity::CityMapLayer<uint8_t>& dst,
@@ -148,6 +152,77 @@ void stampFalloff(DuneCity::CityMapLayer<uint8_t>& dst,
             dst.set(bx, by, static_cast<uint8_t>(updated));
         }
     }
+}
+
+/// stampFalloff(dst, x, y, radius, value, maxValue) for every tile with openSand
+/// set (row-major, width x height), summed in closed form.
+///
+/// Each stamp adds falloff(value, d, radius+1) at Chebyshev distance d <= radius
+/// to block (wx/bs, wy/bs) (truncating, so wx = -1 lands in block 0 and blocks
+/// off the layer are dropped), saturating at maxValue. With value > 0 every
+/// addition is non-negative, so for a block starting at v0 <= maxValue the
+/// saturating sequence ends at min(maxValue, v0 + sum), in any order. The kernel
+/// is a sum of nested squares: falloff(d) = sum over r >= d of ring[r], ring[r] =
+/// falloff(r) - falloff(r+1). So the sum reaching virtual tile w is
+/// sum over r of ring[r] * (open sand tiles within Chebyshev r of w), counted
+/// from a summed-area table, instead of 121 updates per sand tile (~12 million
+/// per scan on a 384x384 map). Any other input takes the per-tile stamps.
+void stampOpenSand(DuneCity::CityMapLayer<uint8_t>& dst, const std::vector<uint8_t>& openSand,
+                   int width, int height, int radius, int value, int maxValue) {
+    if (radius <= 0 || value == 0 || width <= 0 || height <= 0) return;
+    const int bs = dst.getBlockSize();
+    const int blocksW = (width + bs - 1) / bs, blocksH = (height + bs - 1) / bs;
+    bool closedForm = value > 0;
+    for (int by = 0; closedForm && by < blocksH; ++by)
+        for (int bx = 0; bx < blocksW; ++bx)
+            if (dst.get(bx, by) > maxValue) { closedForm = false; break; }
+    if (!closedForm) {
+        for (int wy = 0; wy < height; ++wy)
+            for (int wx = 0; wx < width; ++wx)
+                if (openSand[static_cast<size_t>(wy) * width + wx])
+                    stampFalloff(dst, wx, wy, radius, value, maxValue);
+        return;
+    }
+
+    std::vector<int> ring(radius + 1);
+    for (int r = 0; r <= radius; ++r)
+        ring[r] = DuneCity::falloff(value, r, radius + 1)
+            - (r < radius ? DuneCity::falloff(value, r + 1, radius + 1) : 0);
+
+    const size_t stride = static_cast<size_t>(width) + 1;
+    std::vector<int> sat(stride * (static_cast<size_t>(height) + 1), 0);
+    for (int y = 0; y < height; ++y) {
+        int row = 0;
+        for (int x = 0; x < width; ++x) {
+            row += openSand[static_cast<size_t>(y) * width + x];
+            sat[(y + 1) * stride + x + 1] = sat[y * stride + x + 1] + row;
+        }
+    }
+    auto count = [&](int x0, int y0, int x1, int y1) {
+        x0 = std::max(0, x0); y0 = std::max(0, y0);
+        x1 = std::min(width - 1, x1); y1 = std::min(height - 1, y1);
+        if (x0 > x1 || y0 > y1) return 0;
+        return sat[(y1 + 1) * stride + x1 + 1] - sat[y0 * stride + x1 + 1]
+            - sat[(y1 + 1) * stride + x0] + sat[y0 * stride + x0];
+    };
+
+    std::vector<int> added(static_cast<size_t>(blocksW) * blocksH, 0);
+    for (int wy = -(bs - 1); wy <= blocksH * bs - 1; ++wy) {
+        const int by = wy / bs;
+        for (int wx = -(bs - 1); wx <= blocksW * bs - 1; ++wx) {
+            if (count(wx - radius, wy - radius, wx + radius, wy + radius) == 0) continue;
+            int total = 0;
+            for (int r = 0; r <= radius; ++r)
+                if (ring[r] != 0) total += ring[r] * count(wx - r, wy - r, wx + r, wy + r);
+            added[static_cast<size_t>(by) * blocksW + wx / bs] += total;
+        }
+    }
+    for (int by = 0; by < blocksH; ++by)
+        for (int bx = 0; bx < blocksW; ++bx) {
+            const int sum = added[static_cast<size_t>(by) * blocksW + bx];
+            if (sum != 0)
+                dst.set(bx, by, static_cast<uint8_t>(std::min(maxValue, dst.get(bx, by) + sum)));
+        }
 }
 
 }  // namespace
@@ -255,10 +330,15 @@ void CitySimulation::runEffectsScans() {
 
     // Sub-phase timings inside terrain_value. Diagnostic only: they measure the
     // existing work, in the existing order, and feed no decision.
+    // Open sand per tile (row-major), reused by the sand-as-water stamp below:
+    // nothing between this scan and that stamp changes a tile.
+    std::vector<uint8_t> openSand(static_cast<size_t>(mapWidth_) * mapHeight_, 0);
     {
     AITelemetry::PerformanceScope tv("city.effects.tv_tilescan",currentGame->getGameCycleCount());
-    for (int wy = 0; wy < mapHeight_; ++wy) {
-        for (int wx = 0; wx < mapWidth_; ++wx) {
+    // Column by column: tiles are stored x-major, and the per-block sum and
+    // flag below do not depend on the visiting order.
+    for (int wx = 0; wx < mapWidth_; ++wx) {
+        for (int wy = 0; wy < mapHeight_; ++wy) {
             const Tile* t = map.getTile(wx, wy);
             if (!t) continue;
             const int bx = wx / bs;
@@ -272,6 +352,7 @@ void CitySimulation::runEffectsScans() {
                 // tier-3 land-value threshold (150) after the two smooth
                 // passes below.
                 terrainRaw[idx] += kSandTerrainRawBonus;
+                openSand[static_cast<size_t>(wy) * mapWidth_ + wx] = 1;
             }
             if (t->isRoad() || t->hasAGroundObject()) {
                 developed[idx] = 1;
@@ -420,17 +501,8 @@ void CitySimulation::runEffectsScans() {
     // matching SC's "shore property is premium" intent.
     {
     AITelemetry::PerformanceScope tv("city.effects.tv_sandstamp",currentGame->getGameCycleCount());
-    for (int wy = 0; wy < mapHeight_; ++wy) {
-        for (int wx = 0; wx < mapWidth_; ++wx) {
-            const Tile* t = map.getTile(wx, wy);
-            if (!t) continue;
-            if ((t->isSand() || t->isDunes()) && !t->hasAGroundObject()) {
-                stampFalloff(landValueMap_, wx, wy,
-                             kSandBonusRadius, kSandLandValueBonus,
-                             kMaxLandValue);
-            }
-        }
-    }
+    stampOpenSand(landValueMap_, openSand, mapWidth_, mapHeight_,
+                  kSandBonusRadius, kSandLandValueBonus, kMaxLandValue);
     }
 
     // Hostile combat nearby reduces the value of the affected owner's property.

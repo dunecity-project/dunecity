@@ -111,6 +111,8 @@ target_sources(dunecity
         CrashHandler.cpp
         CursorManager.cpp
         Explosion.cpp
+        FormationOrders.cpp
+        FormationPlanner.cpp
         Game.cpp
         GameInitSettings.cpp
         GameInterface.cpp
@@ -204,6 +206,7 @@ target_sources(dunecity
         Menu/DisplayMenu.cpp
         Menu/SinglePlayerMenu.cpp
         Menu/SinglePlayerSkirmishMenu.cpp
+        Menu/RandomSkirmishMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
         Menu/CustomGameStatsMenu.cpp
@@ -259,6 +262,10 @@ target_sources(dunecity
         players/QuantBotBuild.cpp
         players/QuantBotPlacement.cpp
         players/QuantBotArmy.cpp
+        players/QuantBotBlob.cpp
+        players/QuantBotForce.cpp
+        players/QuantBotStyle.cpp
+        players/QuantBotStrategy.cpp
         players/QuantBotAir.cpp
         players/QuantBotHarvesters.cpp
         players/QuantBotCampaign.cpp
@@ -272,7 +279,7 @@ target_sources(dunecity
         mod/WorkshopStore.cpp
         mod/Workshop.cpp
         mod/WorkshopClient.cpp
-        Menu/WorkshopCommunityMenu.cpp
+        Menu/WorkshopTransferMenu.cpp
         mod/ModManager.cpp
 
         # Structures
@@ -369,6 +376,8 @@ target_sources(dunecity
         MapEditor/MapSettingsWindow.cpp
         MapEditor/MapMirror.cpp
         MapEditor/NewMapWindow.cpp
+        MapEditor/SkirmishGenerator.cpp
+        MapEditor/SkirmishCatalogue.cpp
         MapEditor/LoadMapWindow.cpp
         MapEditor/PlayerSettingsWindow.cpp
         MapEditor/ReinforcementsWindow.cpp
@@ -438,9 +447,11 @@ if(APPLE)
     target_sources(dunecity
         PRIVATE
             ${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
     )
     # Enable Objective-C ARC (Automatic Reference Counting)
     set_source_files_properties(${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
+            ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
         PROPERTIES
             COMPILE_FLAGS "-fobjc-arc"
     )

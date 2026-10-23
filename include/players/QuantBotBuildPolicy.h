@@ -41,6 +41,23 @@ inline bool militaryItem(Uint32 item) {
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
 }
+// Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
+// ladder"): what lies above `reserve` raises the planning budget, by at most `maxPercent` of the
+// cap. Medium takes half the cap (kSurplusMilitaryMediumPercent), so a Medium never reaches Hard's
+// cap (Medium x 1.5 < Hard on every map class). A Custom Medium on Habbanya-Penny sat at its
+// 25,000 cap with 117,000-158,000 credits unspent while Easy's turret base held, and 15 of 18
+// games timed out; at +100% the reverse All against Atreides Medium (100,000+ banked) held off
+// four Hard houses for 60 minutes. The test-only Hard/Brutal SpendAtCap rule (M,
+// ForceConcentrationPolicy::kSurplusMaxPercent) takes the whole cap again.
+inline constexpr int kSurplusMilitaryReserve = 10000;
+inline constexpr int kSurplusMilitaryMediumPercent = 50;
+inline int surplusMilitaryBudget(int limit, int credits, int maxPercent = kSurplusMilitaryMediumPercent,
+                                 int reserve = kSurplusMilitaryReserve) {
+    const int64_t cap = std::max(0, limit);
+    const int64_t surplus = std::clamp<int64_t>(int64_t(credits) - std::max(0, reserve), 0,
+                                                cap * std::max(0, maxPercent) / 100);
+    return int(std::min<int64_t>(cap + surplus, std::numeric_limits<int>::max()));
+}
 // Only reached when the player asked for an explicit unit-count override on Brutal.
 // The configured value cap is replaced by rolling headroom above what is already
 // committed, so the planning target advances with the army instead of stopping at a
@@ -219,6 +236,11 @@ struct AirProductionState {
     int carryalls = 0, carryallTarget = 0;
     int armyValue = 0, armyLimit = 0, vehiclePlanValue = 0;
     int airCommittedValue = 0, airTargetBps = 0;
+    /// An Air mix strategy (docs/ai-play-styles.md, "Strategies"): unlock ornithopters by the
+    /// factory upgrade before anything else this factory would do, out of the house's credits
+    /// (the economy reserve would otherwise hold the upgrade back all game).
+    bool airStrategy = false;
+    int credits = 0;
 };
 enum class AirOrder { None, Ornithopter, Carryall, Upgrade };
 struct AirDecision { AirOrder order; const char* reason; };
@@ -226,6 +248,8 @@ inline AirDecision chooseAirProduction(const AirProductionState& s) {
     if (s.upgrading) return {AirOrder::None, "factory_upgrading"};
     if (s.busy) return {AirOrder::None, "factory_busy"};
     if (s.airLimit) return {AirOrder::None, "air_unit_limit"};
+    if (s.airStrategy && !s.ornithopterAvailable && s.canUpgrade && s.credits > 500)
+        return {AirOrder::Upgrade, "air_strategy_upgrade"};
     const bool carryallDue = s.carryallAvailable && s.carryalls < s.carryallTarget
         && s.carryallPrice > 0 && s.spendable >= s.carryallPrice;
     // Bootstrap transport, but a growing carryall target must not starve combat air.

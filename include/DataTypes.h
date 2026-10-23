@@ -136,6 +136,7 @@ typedef enum {
     CAPTURE = 7,    ///< Capture is only used for infantry units when ordered to capture a building
     CARRYALLREQUESTED = 8, ///< This allows a unit to keep requesting a carryall even if one isn't available right now
     RETREAT = 9,           ///< Ignore other units
+    HOLD = 10,             ///< Player order: never move on its own; fire at enemies within weapon range (docs/rts-controls.md)
     ATTACKMODE_MAX
 } ATTACKMODE;
 
@@ -187,12 +188,18 @@ public:
         bool            wasdCamera = false;
         bool            leftClickOrders = false;
         bool            showMovementPaths = true;
+        bool            formationMoves = true;    ///< Move groups of 2+ ground units in formation (Ctrl+F)
+        int             formationShape = 0;       ///< FormationPlanner::Shape id of player formation orders (Ctrl+Shift+F, unit panel); removed ids load as Box
 #ifdef __EMSCRIPTEN__
         static constexpr bool defaultDiagnosticLogs = false;
 #else
         static constexpr bool defaultDiagnosticLogs = true;
 #endif
         bool            diagnosticLogs = defaultDiagnosticLogs;
+        /// Per-game AI decision log (ai-decisions/<session>/events.jsonl, up to 256 MB a game).
+        /// Independent of diagnosticLogs; DUNECITY_AI_TELEMETRY=1/0 overrides it for tools.
+        static constexpr bool defaultAIDecisionLog = false;
+        bool            aiDecisionLog = defaultAIDecisionLog;
         bool            multiplePlayersPerHouse = false; ///< Custom game lobby: allow two players per house (remembered across games)
         bool            campaignOnline = true;     ///< Campaign setup: last Offline/Online co-op choice (remembered across games)
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)
@@ -208,7 +215,7 @@ public:
         int         height;
         int         interfaceHeight = 0; ///< 0=automatic; 480/600/768 with a persisted 4:3 or 16:9 logical width; -1=native 1:1 (INTERFACE_HEIGHT_NATIVE).
         int         menuPalette = 0; ///< 0=standard skin text; 1=high-contrast skin text.
-        int         uiSkin = 0; ///< 0=modern; 1=lapis enamel; 2=classic desert. Presentation-only; independent of mod graphics and scale.
+        int         uiSkin = 2; ///< 0=modern; 1=lapis enamel; 2=classic desert (default). Presentation-only; independent of mod graphics and scale.
         int         startMenuMode = 0; ///< 0=classic; 1=enlarged TV/tablet/accessibility layout.
         bool        frameLimit;
         int         preferredZoomLevel;
@@ -281,7 +288,7 @@ public:
            startWithExploredMap(false), instantBuild(false), onlyOnePalace(false), rocketTurretsNeedPower(false),
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
-           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false)  {
+           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true)  {
         }
 
 
@@ -301,7 +308,8 @@ public:
                     && (maximumNumberOfConstructionYardsOverride == goc.maximumNumberOfConstructionYardsOverride)
                     && (immortalHumanPlayer == goc.immortalHumanPlayer)
                     && (cityEffects == goc.cityEffects)
-                    && (originalUnitDamage == goc.originalUnitDamage);
+                    && (originalUnitDamage == goc.originalUnitDamage)
+                    && (planBuildingSites == goc.planBuildingSites);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -330,6 +338,7 @@ public:
             optStr += std::to_string(cityEffects);
             optStr += "/yards=" + std::to_string(maximumNumberOfConstructionYardsOverride);
             optStr += "/originalDamage=" + std::to_string(originalUnitDamage);
+            optStr += "/planSites=" + std::to_string(planBuildingSites);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -360,15 +369,28 @@ public:
         bool        killedSandwormsDropSpice;
         bool        manualCarryallDrops;
         int         maximumNumberOfUnitsOverride;
-        int         maximumNumberOfHarvestersOverride;
+        int         maximumNumberOfHarvestersOverride; // -1 (unchecked) or 0: unlimited; see harvesterCeiling()
         int         maximumNumberOfConstructionYardsOverride; // -1 or 0: unlimited
         bool        immortalHumanPlayer;
         bool        cityEffects;        ///< DuneCity: enable pollution/land-value/crime/zone-growth pipeline
         bool        originalUnitDamage; ///< Match-wide original damage and splash rules; off uses City balance.
+        /// Construction Yard pre-placement queue: ordering a building picks its plot first and the
+        /// yard places it there when finished. Off = build, then place. Match-wide (every peer
+        /// runs the same rule; the command executor refuses reservations when off).
+        bool        planBuildingSites;
+
+        /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
+        /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.
+        /// Every engine and AI reader goes through this, so no reader can take 0 as "zero harvesters".
+        int harvesterCeiling() const {
+            return maximumNumberOfHarvestersOverride > 0 ? maximumNumberOfHarvestersOverride : 0;
+        }
     } gameOptions;
 };
 
-typedef enum
+// Fixed underlying type: house ids are decoded from packets and files before they are
+// validated, and without one any value outside -16..15 is undefined behaviour to hold.
+typedef enum : int
 {
     HOUSE_UNUSED    = -2,
     HOUSE_INVALID   = -1,

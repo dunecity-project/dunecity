@@ -16,8 +16,11 @@
  */
 
 #include <Game.h>
+#include <FramePacing.h>
+#include <FormationOrders.h>
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
+#include <misc/GameActivity.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -73,7 +76,6 @@ std::mutex Game::performanceLogMutex;
 #include <PathWorkerPool.h>
 #include <mod/ModManager.h>
 #include <Network/WorkshopGameContent.h>
-#include <Network/MapCollection.h>
 
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/QstBox.h>
@@ -121,11 +123,6 @@ std::mutex Game::performanceLogMutex;
 namespace {
 
 constexpr Uint32 SAVE_SETUP_COLOR_MARKER = 0x53434F4C; // "SCOL"
-
-constexpr std::array<Uint32, 8> analyticsMixItems = {
-    Unit_Tank, Unit_SiegeTank, Unit_Launcher, 9999, // QBot's special-unit group
-    Unit_Ornithopter, Unit_Trike, Unit_RaiderTrike, Unit_Quad
-};
 
 std::string analyticsGameType(GameType type) {
     switch (type) {
@@ -956,28 +953,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             .set("immortal_human_player", gameInitSettings.getGameOptions().immortalHumanPlayer)
             .set("harvester_limit_override", gameInitSettings.getGameOptions().maximumNumberOfHarvestersOverride))
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
-        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.diagnosticLogs);
+        .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
-    collectCustomMap(loadedSave);
-}
-
-/**
-    A genuinely started offline custom match offers its scenario to the community
-    catalogue. This runs only once the scenario itself has loaded, so a map that
-    never produced a playable game is never collected. pin() already recorded the
-    original map bytes and the selected mod locally; collecting only writes that
-    revision to the Workshop outbox, which the menu and game loops drain later, so
-    an offline player never waits for, and never fails because of, the metaserver.
-*/
-void Game::collectCustomMap(bool loadedSave) {
-    if(currentGameMap == nullptr) return;
-    try {
-        if(MapCollection::collect(Workshop::store(), gameInitSettings.getGameType(), bReplay, loadedSave,
-                                  gameInitSettings.getMapRevisionHash(), Workshop::queueCollection))
-            SDL_Log("Metaserver: this custom map is queued for the community catalogue.");
-    } catch(const std::exception& error) {
-        SDL_Log("Metaserver map collection deferred: %s", error.what());
-    }
 }
 
 void Game::startMatchAnalytics() {
@@ -1136,36 +1113,19 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
             if (qbot && finishedMatch) {
                 std::vector<std::string> unitRows;
                 const auto& mix = qbot->getLastUnitMixBps();
-                for (size_t i = 0; i < analyticsMixItems.size(); ++i) {
-                    const int item = analyticsMixItems[i];
-                    int built = 0;
-                    int lost = 0;
-                    int destroyed = 0;
-                    int64_t rewardMilli = 0;
-                    int64_t damageValueMilli = 0;
-                    int64_t killBonusMilli = 0;
-                    int64_t lostValue = 0;
-                    const std::array<Uint32, 3> specialItems = {Unit_Devastator, Unit_SonicTank, Unit_Deviator};
-                    const bool specialGroup = item == 9999;
-                    const auto collect = [&](Uint32 unit) {
-                        built += currentHouse->getNumBuiltItems(unit);
-                        lost += currentHouse->getNumLostItems(unit);
-                        destroyed += currentHouse->getNumKilledItems(unit);
-                        const auto& reward = currentHouse->getCombatReward(unit);
-                        rewardMilli += reward.total();
-                        damageValueMilli += reward.damageMilli;
-                        killBonusMilli += reward.killBonusMilli;
-                        lostValue += int64_t(currentHouse->getNumLostItems(unit)) * objectData.data[unit][h].price;
-                    };
-                    if (specialGroup) {
-                        for (const auto unit : specialItems) collect(unit);
-                    } else {
-                        collect(item);
-                    }
+                for (size_t i = 0; i < QuantBot::kMixItems.size(); ++i) {
+                    const Uint32 item = QuantBot::kMixItems[i];
+                    const auto& reward = currentHouse->getCombatReward(item);
+                    const int built = currentHouse->getNumBuiltItems(item);
+                    const int lost = currentHouse->getNumLostItems(item);
+                    const int destroyed = currentHouse->getNumKilledItems(item);
+                    const int64_t rewardMilli = reward.total();
+                    const int64_t damageValueMilli = reward.damageMilli;
+                    const int64_t killBonusMilli = reward.killBonusMilli;
+                    const int64_t lostValue = int64_t(lost) * objectData.data[item][h].price;
                     std::ostringstream unit;
                     unit << "{\"item_id\":" << item
-                         << ",\"item_name\":" << AITelemetry::Record::quote(
-                                specialGroup ? "special" : getItemNameByID(item))
+                         << ",\"item_name\":" << AITelemetry::Record::quote(getItemNameByID(item))
                          << ",\"target_weight_bps\":" << mix[i]
                          << ",\"built\":" << built
                          << ",\"lost\":" << lost
@@ -1266,6 +1226,10 @@ void Game::processObjects()
     if ((currentCursorMode == CursorMode_Placing) && selectedList.empty()) {
         setCursorMode(CursorMode_Normal);
     }
+
+    // Formation upkeep before anything moves: membership ends and catch-up flags are decided
+    // from this cycle's starting state, identically on every peer and after a load.
+    FormationOrders::update();
 
     // Time unit updates
     Uint64 unitStart = SDL_GetPerformanceCounter();
@@ -2538,6 +2502,7 @@ void Game::drawScreen()
         });
 
     if(settings.general.showMovementPaths)drawMovementPaths();
+    drawQueuedOrders();
 
     // draw the gathering point line if a structure is selected
     if(selectedList.size() == 1) {
@@ -2618,7 +2583,9 @@ void Game::drawScreen()
         }
     }
 
-/////////////draw placement position
+    drawReservationGhosts();
+
+//////////////draw placement position
 
     if(currentCursorMode == CursorMode_Placing) {
         //if user has selected to place a structure
@@ -2629,11 +2596,25 @@ void Game::drawScreen()
             int xPos = screenborder->screen2MapX(drawnMouseX);
             int yPos = screenborder->screen2MapY(drawnMouseY);
 
-            if(selectedList.size() == 1) {
-                auto pBuilder = dynamic_cast<BuilderBase*>(objectManager.getObject(*selectedList.begin()));
+            // Planning (pre-placement) previews an item that is not ordered yet, for the yard
+            // it will be ordered from; ordinary placing previews the selected builder's item.
+            const bool planning = isPlanningPlacement();
+            BuilderBase* pPlacingBuilder = nullptr;
+            if(planning) {
+                pPlacingBuilder = dynamic_cast<ConstructionYard*>(objectManager.getObject(planningBuilderID));
+            } else if(selectedList.size() == 1) {
+                pPlacingBuilder = dynamic_cast<BuilderBase*>(objectManager.getObject(*selectedList.begin()));
+            }
+            {
+                auto pBuilder = pPlacingBuilder;
                 if(pBuilder) {
-                    int placeItem = pBuilder->getCurrentProducedItem();
+                    int placeItem = planning ? static_cast<int>(planningItemID) : pBuilder->getCurrentProducedItem();
                     Coord structuresize = getStructureSize(placeItem);
+                    PlacementReservation::Verdict planVerdict = PlacementReservation::Verdict::Valid;
+                    if(planning) {
+                        planVerdict = static_cast<ConstructionYard*>(pBuilder)->checkReservationPlot(
+                            placeItem, xPos, yPos, pendingReservationFootprints());
+                    }
                     const bool footprintInsideMap =
                         structuresize.x > 0 && structuresize.y > 0
                         && xPos >= 0 && yPos >= 0
@@ -2664,6 +2645,11 @@ void Game::drawScreen()
                                 }
                             }
                         }
+                    }
+                    if(planning) {
+                        // Earlier reservations extend the range; overlapping one is never valid.
+                        withinRange = planVerdict != PlacementReservation::Verdict::OutOfRange
+                                   && planVerdict != PlacementReservation::Verdict::Overlap;
                     }
 
                     SDL_Texture* validPlace = nullptr;
@@ -2709,13 +2695,15 @@ void Game::drawScreen()
                             bool tileValid = false;
                             if(footprintInsideMap && withinRange && currentGameMap->tileExists(i,j)) {
                                 Tile* pTile = currentGameMap->getTile(i,j);
+                                // Planning ignores units, which are asked to move when it is built.
+                                const bool occupied = planning ? pTile->hasAStructure() : pTile->hasAGroundObject();
                                 if(isZoneStructure(placeItem)) {
                                     tileValid = zoneFootprintAnchored
                                         && DuneCity::isCityZoneTerrain(pTile->getType())
                                         && !pTile->hasCityZone()
-                                        && !pTile->hasAGroundObject();
+                                        && !occupied;
                                 } else {
-                                    tileValid = pTile->isRock() && !pTile->isMountain() && !pTile->hasAGroundObject()
+                                    tileValid = pTile->isRock() && !pTile->isMountain() && !occupied
                                         && !(((placeItem == Structure_Slab1) || (placeItem == Structure_Slab4)) && pTile->isConcrete());
                                 }
                             }
@@ -2913,11 +2901,22 @@ void Game::drawScreen()
     }
 
     if(bShowFPS) {
-        std::string strFPS = fmt::sprintf("fps: %.1f ", 1000.0f/averageFrameTime);
-
-        sdl2::texture_ptr pFPSTexture = pFontManager->createTextureWithText(strFPS, COLOR_WHITE, 14);
-        SDL_Rect drawLocation = calcDrawingRect(pFPSTexture.get(),sideBarPos.x - strFPS.length()*8, 60);
-        SDL_RenderCopy(renderer, pFPSTexture.get(), nullptr, &drawLocation);
+        // F12: frame rate, achieved game speed and where each frame's time goes (smoothed).
+        // "speed" below the target means the simulation cannot keep up with the chosen game speed.
+        const float fps = 1000.0f/averageFrameTime;
+        const auto& o = frameOverlay;
+        const std::string lines[] = {
+            fmt::sprintf("fps: %.1f  cycles/frame: %.1f  speed: %.0f of %d cycles/s",
+                fps, o.cycles, fps*o.cycles, 1000/std::max(1, getGameSpeed())),
+            fmt::sprintf("ms/frame: AI %.1f  city %.1f  units %.1f  structures %.1f  path %.1f  render %.1f  other %.1f",
+                o.ai, o.city, o.units, o.structures, o.path, o.render, o.other)};
+        int y = 60;
+        for(const auto& line : lines) {
+            sdl2::texture_ptr pLineTexture = pFontManager->createTextureWithText(line, COLOR_WHITE, 14);
+            SDL_Rect drawLocation = calcDrawingRect(pLineTexture.get(), sideBarPos.x - 8, y, HAlign::Right, VAlign::Top);
+            SDL_RenderCopy(renderer, pLineTexture.get(), nullptr, &drawLocation);
+            y += drawLocation.h + 2;
+        }
     }
 
     if(bShowTime) {
@@ -3112,6 +3111,14 @@ case CursorMode_Heal: {
 
                                 } break;
 
+                                case CursorMode_Patrol: {
+
+                                    if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
+                                        handleSelectedObjectsPatrolClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y));
+                                    }
+
+                                } break;
+
                                 case CursorMode_CarryallDrop: {
 
                                     if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
@@ -3169,6 +3176,11 @@ case CursorMode_Heal: {
                             if(currentCursorMode != CursorMode_Normal) {
                                 //cancel special cursor mode
                                 setCursorMode(CursorMode_Normal);
+                            } else if(!isObserving() && !hasRespondableOwnUnitSelected()
+                                      && screenborder->isScreenCoordInsideMap(mouse->x, mouse->y)
+                                      && handleReservationGhostRightClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y))) {
+                                // Right-clicking a planned plot cancels it. Selected units keep
+                                // their ordinary right-click order, so a ghost never eats a move.
                             } else if(settings.general.leftClickOrders || isObserving()) {
                                 // An observer's right click only clears the inspection, never
                                 // orders the view house's units about.
@@ -3260,6 +3272,14 @@ case CursorMode_Heal: {
                                                         screenborder->screen2worldX(finalMouseX),
                                                         screenborder->screen2worldY(finalMouseY),
                                                         SDL_GetModState() & KMOD_SHIFT);
+
+                        // Double-click on an own unit: every own unit of that type on screen, or with
+                        // Ctrl on the whole map - the same selection as T / Ctrl+T.
+                        if(mouse->clicks >= 2 && !isObserving()
+                           && std::abs(mouse->x-screenborder->world2screenX(selectionRect.x))<=4
+                           && std::abs(mouse->y-screenborder->world2screenY(selectionRect.y))<=4) {
+                            selectSameUnitTypes((SDL_GetModState() & KMOD_CTRL) != 0);
+                        }
 
                         if(selectedList.size() == 1) {
                             ObjectBase* pObject = objectManager.getObject( *selectedList.begin());
@@ -3356,6 +3376,10 @@ void Game::updateCursor()
 
 void Game::setCursorMode(int mode)
 {
+    // Any mode change ends pre-placement planning; beginPlacementPlanning() sets it again.
+    planningBuilderID = NONE_ID;
+    planningItemID = ItemID_Invalid;
+
     // Every non-normal cursor mode exists to issue an order (place, attack, move, heal,
     // capture, carryall drop, city zone, city road). An observer keeps only the normal
     // cursor, so none of those click handlers can be reached at all.
@@ -3366,6 +3390,145 @@ void Game::setCursorMode(int mode)
         currentCursorMode = mode;
         cursorManager.setCursorMode(mode);
     }
+}
+
+void Game::beginPlacementPlanning(Uint32 builderID, Uint32 itemID)
+{
+    setCursorMode(CursorMode_Placing);
+    if(currentCursorMode == CursorMode_Placing) {
+        planningBuilderID = builderID;
+        planningItemID = itemID;
+    }
+}
+
+bool Game::isPlanningPlacement() const
+{
+    return currentCursorMode == CursorMode_Placing && planningBuilderID != NONE_ID && planningItemID != ItemID_Invalid;
+}
+
+std::vector<PlacementReservation::Footprint> Game::pendingReservationFootprints()
+{
+    // A reservation command executes networkCycleBuffer cycles after it was issued; from
+    // then on the yard's queue (or its refusal) is the truth.
+    const Uint32 executedBy = cmdManager.getNetworkCycleBuffer() + 1;
+    pendingReservations.erase(std::remove_if(pendingReservations.begin(), pendingReservations.end(),
+        [&](const PendingReservation& pending) { return gameCycleCount > pending.issuedCycle + executedBy; }),
+        pendingReservations.end());
+
+    std::vector<PlacementReservation::Footprint> footprints;
+    for(const PendingReservation& pending : pendingReservations) {
+        const Coord size = getStructureSize(pending.itemID);
+        footprints.push_back({pending.x, pending.y, size.x, size.y});
+    }
+    return footprints;
+}
+
+void Game::drawReservationGhosts()
+{
+    // Owner-only: pLocalHouse is the player's house, or the house an observer is viewing.
+    if(pLocalHouse == nullptr) {
+        return;
+    }
+
+    SDL_Texture* validPlace = pGFXManager->getUIGraphic(currentZoomlevel == 0 ? UI_ValidPlace_Zoomlevel0
+        : (currentZoomlevel == 1 ? UI_ValidPlace_Zoomlevel1 : UI_ValidPlace_Zoomlevel2));
+    SDL_Texture* invalidPlace = pGFXManager->getUIGraphic(currentZoomlevel == 0 ? UI_InvalidPlace_Zoomlevel0
+        : (currentZoomlevel == 1 ? UI_InvalidPlace_Zoomlevel1 : UI_InvalidPlace_Zoomlevel2));
+
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != pLocalHouse || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        const auto* yard = static_cast<const ConstructionYard*>(structure);
+        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
+            const Coord size = getStructureSize(ghost.itemID);
+            SDL_Rect area = { screenborder->world2screenX(ghost.x*TILESIZE), screenborder->world2screenY(ghost.y*TILESIZE), 0, 0 };
+            area.w = screenborder->world2screenX((ghost.x + size.x)*TILESIZE) - area.x;
+            area.h = screenborder->world2screenY((ghost.y + size.y)*TILESIZE) - area.y;
+            if(area.x + area.w < 0 || area.y + area.h < 0 || area.x > getRendererWidth() || area.y > getRendererHeight()) {
+                continue;
+            }
+
+            SDL_Texture* tileTexture = ghost.failed ? invalidPlace : validPlace;
+            Uint8 previousAlpha = SDL_ALPHA_OPAQUE;
+            SDL_GetTextureAlphaMod(tileTexture, &previousAlpha);
+            SDL_SetTextureAlphaMod(tileTexture, 110);
+            for(int dy = 0; dy < size.y; ++dy) {
+                for(int dx = 0; dx < size.x; ++dx) {
+                    SDL_Rect tile = calcDrawingRect(tileTexture, screenborder->world2screenX((ghost.x + dx)*TILESIZE),
+                                                    screenborder->world2screenY((ghost.y + dy)*TILESIZE));
+                    SDL_RenderCopy(renderer, tileTexture, nullptr, &tile);
+                }
+            }
+            SDL_SetTextureAlphaMod(tileTexture, previousAlpha);
+            // Finished but blocked by units: amber, "waiting" until the plot clears or the player
+            // places the building elsewhere.
+            const bool waiting = ghost.inProduction && !ghost.failed && yard->isReservedPlacementBlocked();
+            renderDrawRect(renderer, &area, ghost.failed ? COLOR_RGB(255,60,60) : (waiting ? COLOR_RGB(255,190,40) : COLOR_WHITE));
+
+            // Queue number on top; the plot under construction adds its progress below.
+            std::vector<std::string> lines = { std::to_string(ghost.number) + (ghost.failed ? " !" : "") };
+            if(waiting) {
+                lines.push_back(_("waiting"));
+            } else if(ghost.inProduction && !ghost.failed) {
+                const BuildItem* buildItem = nullptr;
+                for(const BuildItem& item : yard->getBuildList()) {
+                    if(item.itemID == ghost.itemID) buildItem = &item;
+                }
+                if(buildItem != nullptr && buildItem->price > 0) {
+                    const int percent = std::min(100, static_cast<int>(lround(yard->getProductionProgress() * 100 / static_cast<int>(buildItem->price))));
+                    lines.push_back(std::to_string(percent) + "%");
+                }
+            }
+            std::vector<sdl2::texture_ptr> textures;
+            int labelHeight = 0;
+            for(const std::string& line : lines) {
+                textures.push_back(pFontManager->createTextureWithText(line, COLOR_WHITE, 12));
+                labelHeight += getHeight(textures.back().get());
+            }
+            int lineY = area.y + (area.h - labelHeight)/2;
+            for(const sdl2::texture_ptr& texture : textures) {
+                SDL_Rect labelArea = calcDrawingRect(texture.get(), area.x + area.w/2, lineY, HAlign::Center, VAlign::Top);
+                SDL_Rect labelBack = { labelArea.x - 2, labelArea.y, labelArea.w + 4, labelArea.h };
+                renderFillRect(renderer, &labelBack, COLOR_HALF_TRANSPARENT);
+                SDL_RenderCopy(renderer, texture.get(), nullptr, &labelArea);
+                lineY += labelArea.h;
+            }
+        }
+    }
+}
+
+bool Game::hasRespondableOwnUnitSelected() const
+{
+    for(Uint32 objectID : selectedList) {
+        const ObjectBase* pObject = objectManager.getObject(objectID);
+        if(pObject != nullptr && pObject->isAUnit() && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Game::handleReservationGhostRightClick(int xPos, int yPos)
+{
+    if(pLocalHouse == nullptr || pLocalPlayer == nullptr || isObserving()) {
+        return false;
+    }
+    for(StructureBase* structure : structureList) {
+        if(structure->getOwner() != pLocalHouse || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        auto* yard = static_cast<ConstructionYard*>(structure);
+        for(const PlacementReservation::Ghost& ghost : PlacementReservation::ghostsInQueueOrder(yard->getProductionQueue())) {
+            const Coord size = getStructureSize(ghost.itemID);
+            if(xPos >= ghost.x && xPos < ghost.x + size.x && yPos >= ghost.y && yPos < ghost.y + size.y) {
+                yard->handleCancelReservationClick(ghost.reservationID);
+                soundPlayer->playSound(Sound_ButtonClick);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void Game::setupView()
@@ -3407,6 +3570,8 @@ void Game::setupView()
 
 void Game::runMainLoop() {
     SDL_Log("Starting game...");
+    // macOS: keep a covered/background game window at full speed for the whole match.
+    const GameActivity::Scope matchActivity;
     initializeGameLoop();
     
     // Update Discord Rich Presence for in-game status
@@ -3493,14 +3658,6 @@ void Game::runMainLoop() {
             lastDiscordUpdate = discordNow;
         }
 
-        // Keep draining the Workshop outbox while an offline match runs, so a player who
-        // starts a custom game and keeps playing still contributes that map. Networked
-        // games are pumped by NetworkManager and menus by MenuBase; this adds no second
-        // pump to either. The transfer is bounded and non-blocking.
-        if (!pNetworkManager) {
-            Workshop::updatePublications();
-        }
-
         renderFrame();
 
         const int frameEnd = SDL_GetTicks();
@@ -3539,9 +3696,20 @@ void Game::runMainLoop() {
         
         // PHASE 1.3: CYCLE GUARDRAIL - Prevent renderer starvation
         static constexpr int kMaxCyclesPerFrame = 10;
-        
-        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle))) 
-              && cyclesExecuted < kMaxCyclesPerFrame) {
+        // Frame pacing (include/FramePacing.h): a single-player frame also stops catching up
+        // once its cycles have used FramePacing::kCatchUpBudgetMs; the time still owed carries
+        // over to the next frame. Only the number of cycles per frame changes.
+        const Uint64 catchUpStart = SDL_GetPerformanceCounter();
+        const bool networkGame = pNetworkManager != nullptr;
+        bool catchUpBudgetSpent = false;
+        const auto mayRunAnotherCycle = [&] {
+            catchUpBudgetSpent = !FramePacing::mayRunAnotherCycle(cyclesExecuted,
+                getElapsedMs(catchUpStart, SDL_GetPerformanceCounter()), networkGame);
+            return !catchUpBudgetSpent;
+        };
+
+        while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle)))
+              && cyclesExecuted < kMaxCyclesPerFrame && mayRunAnotherCycle()) {
             loopIterations++;
             
             Uint64 networkWaitStart = SDL_GetPerformanceCounter();
@@ -3567,6 +3735,8 @@ void Game::runMainLoop() {
             commandsMsThisFrame+=getElapsedMs(commandsStart,SDL_GetPerformanceCounter());
 
             if(!bWaitForNetwork && !isGamePaused() && (!pNetworkManager || !pNetworkManager->lateJoinPaused())) {
+                // Test probes only (tests/performance/game-perf.inc): the cycle's digest, untimed.
+                if (beforeCycleHook != nullptr) beforeCycleHook(*this);
                 // Time the core simulation step for CPU load detection
                 const Uint64 simStart = SDL_GetPerformanceCounter();
                 try {
@@ -3701,6 +3871,24 @@ void Game::runMainLoop() {
         frameTiming.totalTurretScans += frameTiming.turretScansThisFrame;
         frameTiming.turretScanMs += frameTiming.turretScanMsThisFrame;
         frameTiming.frameCount++;
+        ++frameTiming.frameMsHistogram[std::min<size_t>(frameTiming.frameMsHistogram.size() - 1,
+                                                        static_cast<size_t>(thisFrameMs))];
+        if (catchUpBudgetSpent) ++frameTiming.catchUpLimitedFrames;
+
+        if(bShowFPS) {
+            const auto smooth = [](float& value, double sample) { value = 0.95f*value + 0.05f*static_cast<float>(sample); };
+            const double measured = frameTiming.aiMsThisFrame + frameTiming.citySimMsThisFrame
+                + frameTiming.unitsMsThisFrame + frameTiming.structuresMsThisFrame
+                + frameTiming.pathfindingMsThisFrame + frameTiming.renderingMsThisFrame;
+            smooth(frameOverlay.cycles, frameTiming.gameCyclesThisFrame);
+            smooth(frameOverlay.ai, frameTiming.aiMsThisFrame);
+            smooth(frameOverlay.city, frameTiming.citySimMsThisFrame);
+            smooth(frameOverlay.units, frameTiming.unitsMsThisFrame);
+            smooth(frameOverlay.structures, frameTiming.structuresMsThisFrame);
+            smooth(frameOverlay.path, frameTiming.pathfindingMsThisFrame);
+            smooth(frameOverlay.render, frameTiming.renderingMsThisFrame);
+            smooth(frameOverlay.other, std::max(0.0, thisFrameMs - measured));
+        }
 
         auto& perf = AITelemetry::log();
         if (perf.enabled()) {
@@ -3717,6 +3905,7 @@ void Game::runMainLoop() {
             record("frame.input",inputMsThisFrame);
             record("frame.commands",commandsMsThisFrame);
             perf.performance(gameCycleCount,-1,"frame.cycles",frameTiming.gameCyclesThisFrame,-1,false);
+            perf.performance(gameCycleCount,-1,"frame.catchup_limited",catchUpBudgetSpent,-1,false);
             perf.performance(gameCycleCount,-1,"frame.units_count",unitList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.structures_count",structureList.size(),-1,false);
             perf.performance(gameCycleCount,-1,"frame.tick_ms",getGameSpeed(),-1,false);
@@ -4026,13 +4215,6 @@ void Game::updateGameState() {
             currentGame->addToNewsTicker(fmt::sprintf(_("WARNING: Power shortage! %d zones unpowered"), unpowered));
         }
 
-        if ((winFlags & WINLOSEFLAGS_ECONOMIC) && !finished) {
-            int32_t threshold = citySimulation_->getEconomicVictoryThreshold();
-            if (threshold > 0 && citySimulation_->getTotalPop() >= threshold) {
-                setGameWon();
-            }
-        }
-
         // City aircraft are launched by the Airport itself, in
         // Airport::updateCityAircraft() — the direct counterpart of Micropolis
         // simulate.cpp::doAirport(). Keeping a second map-wide spawn loop here
@@ -4205,7 +4387,7 @@ void Game::resumeGame()
         }
         return;
     }
-    if(bPause && settings.general.diagnosticLogs) {
+    if(bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",false).set("source","resume"));
     }
@@ -4220,7 +4402,7 @@ void Game::pauseGame(const char* source) {
     if(pNetworkManager != nullptr) {
         return;
     }
-    if(!bPause && settings.general.diagnosticLogs) {
+    if(!bPause && AITelemetry::log().enabled()) {
         AITelemetry::log().write(gameCycleCount,-1,-1,"pause_changed",
             AITelemetry::Record().set("paused",true).set("source",source).set("menu_open",bMenu));
     }
@@ -5605,6 +5787,11 @@ case CursorMode_Heal: {
                     return false;
                 } break;
 
+                case CursorMode_Patrol: {
+                    handleSelectedObjectsPatrolClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
+                    return false;
+                } break;
+
                 case CursorMode_Capture: {
                     handleSelectedObjectsCaptureClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
                     return false;
@@ -5791,6 +5978,15 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             } else if(SDL_GetModState() & KMOD_CTRL) {
                 pLocalPlayer->setGroupList(selectListIndex, selectedList);
                 pInterface->updateObjectInterface();
+            } else if(SDL_GetModState() & KMOD_ALT) {
+                // Alt+number adds the selection to the group instead of replacing it.
+                std::set<Uint32> merged = pLocalPlayer->getGroupList(selectListIndex);
+                for(Uint32 objectID : selectedList) {
+                    const ObjectBase* pObject = objectManager.getObject(objectID);
+                    if(pObject != nullptr && pObject->getOwner() == pLocalHouse) merged.insert(objectID);
+                }
+                pLocalPlayer->setGroupList(selectListIndex, merged);
+                pInterface->updateObjectInterface();
             } else {
                 std::set<Uint32>& groupList = pLocalPlayer->getGroupList(selectListIndex);
 
@@ -5873,9 +6069,22 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_a: {
+            if(keyboardEvent.keysym.mod & (KMOD_ALT|KMOD_GUI)) break;
+            if(keyboardEvent.keysym.mod & KMOD_CTRL) {
+                // Ctrl+A (also Ctrl+Shift+A): every own combat unit on the map.
+                selectAllCombatUnits();
+                break;
+            }
             if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT))break;
-            //set object to attack
+            // Attack cursor: an enemy is attacked, ground is attack-moved to, Ctrl+ground fires at it
             setCursorMode(CursorMode_Attack);
+        } break;
+
+        case SDLK_q: {
+            // Cmd+Q stays the platform quit shortcut.
+            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
+            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT)) break;
+            setCursorMode(CursorMode_Patrol);
         } break;
 
         case SDLK_s: {
@@ -5897,29 +6106,11 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
                 bShowTime = !bShowTime;
                 break;
             }
-            std::set<Uint32> types;
-            for(Uint32 id:selectedList) {
-                const auto* unit=dynamic_cast<const UnitBase*>(objectManager.getObject(id));
-                if(unit && unit->getOwner()==pLocalHouse) types.insert(unit->getItemID());
-            }
-            if(types.empty()) break;
-            const bool wholeMap=(keyboardEvent.keysym.mod & KMOD_CTRL)!=0;
-            std::set<Uint32> matching;
-            for(const auto* unit:unitList) {
-                if(unit->getOwner()==pLocalHouse && unit->isRespondable() && unit->isActive()
-                    && types.count(unit->getItemID())
-                    && (wholeMap || screenborder->isTileInsideScreen(unit->getLocation())))
-                    matching.insert(unit->getObjectID());
-            }
-            unselectAll(selectedList);
-            selectedList=std::move(matching);
-            selectAll(selectedList);
-            selectionChanged();
-            currentCursorMode=CursorMode_Normal;
+            selectSameUnitTypes((keyboardEvent.keysym.mod & KMOD_CTRL)!=0);
         } break;
 
         case SDLK_ESCAPE: {
-            if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad) {
+            if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad || isPlanningPlacement()) {
                 setCursorMode(CursorMode_Normal);
             } else {
                 onOptions();
@@ -6020,6 +6211,13 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_f: {
+            // Ctrl+F switches formation moves, Ctrl+Shift+F picks the next shape; plain F keeps
+            // selecting the next factory.
+            if(SDL_GetModState() & KMOD_CTRL) {
+                if(SDL_GetModState() & KMOD_SHIFT) cycleFormationShape();
+                else toggleFormationMoves();
+                break;
+            }
             // select next factory
             std::set<Uint32> itemIDs;
             itemIDs.insert(Structure_Barracks);
@@ -6041,7 +6239,7 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
                     if(pConstructionYard != nullptr) {
                         if(currentCursorMode == CursorMode_Placing) {
                             setCursorMode(CursorMode_Normal);
-                        } else if(pConstructionYard->isWaitingToPlace()) {
+                        } else if(pConstructionYard->mayPlaceByHand()) {
                             setCursorMode(CursorMode_Placing);
                         }
                     }
@@ -6062,12 +6260,26 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
         } break;
 
         case SDLK_h: {
+            // Harvesters return (Shift queues the return); every other selected unit holds.
+            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
+            const bool queued = (keyboardEvent.keysym.mod & KMOD_SHIFT) != 0;
+            UnitBase* holder = nullptr;
             for(Uint32 objectID : selectedList) {
                 ObjectBase* pObject = objectManager.getObject(objectID);
                 if(isHarvesterLikeObject(pObject)) {
-                    harvesterHandleReturnClick(pObject);
+                    if(queued && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
+                        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                            static_cast<Uint32>(UnitOrderType::HarvesterReturn), 0, 0));
+                    } else {
+                        harvesterHandleReturnClick(pObject);
+                    }
+                } else if(auto* pUnit = dynamic_cast<UnitBase*>(pObject);
+                          pUnit != nullptr && pUnit->getOwner() == pLocalHouse && pUnit->isRespondable()) {
+                    pUnit->handleSetAttackModeClick(HOLD);
+                    holder = pUnit;
                 }
             }
+            if(holder != nullptr) holder->playConfirmSound();
         } break;
 
 
@@ -6135,6 +6347,32 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
 
 
 bool Game::handlePlacementClick(int xPos, int yPos) {
+    if(isPlanningPlacement()) {
+        auto* pYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(planningBuilderID));
+        const Uint32 planItem = planningItemID;
+        if(pYard == nullptr || pYard->getOwner() != pLocalHouse || !pYard->mayReserveItem(planItem)) {
+            setCursorMode(CursorMode_Normal);
+            soundPlayer->playSound(Sound_InvalidAction);
+            return false;
+        }
+        if(pYard->checkReservationPlot(planItem, xPos, yPos, pendingReservationFootprints())
+           != PlacementReservation::Verdict::Valid) {
+            currentGame->addToNewsTicker(fmt::sprintf(_("@DUNE.ENG|134#Cannot place %%s here."), resolveItemName(planItem)));
+            soundPlayer->playSound(Sound_InvalidAction);
+            return false;
+        }
+        // Build range and overlap are house-wide, so the plot is valid for every yard of the
+        // house; the order goes to the yard with the least work left, so several Construction
+        // Yards build in parallel.
+        ConstructionYard* pBuilderYard = chooseReservationYard(planItem, pYard);
+        pBuilderYard->handleReservePlacementClick(planItem, xPos, yPos);
+        pendingReservations.push_back({pBuilderYard->getObjectID(), planItem, xPos, yPos, gameCycleCount});
+        soundPlayer->playSound(Sound_PlaceStructure);
+        // The planning cursor stays on this building so further copies need one click each;
+        // Esc, right-click or clicking its sidebar icon again ends planning.
+        return true;
+    }
+
     BuilderBase* pBuilder = nullptr;
 
     if(selectedList.size() == 1) {
@@ -6146,7 +6384,7 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
     }
 
     int placeItem = pBuilder->getCurrentProducedItem();
-    if(!pBuilder->isWaitingToPlace() || placeItem == ItemID_Invalid || !isStructure(placeItem)) {
+    if(!pBuilder->mayPlaceByHand() || placeItem == ItemID_Invalid || !isStructure(placeItem)) {
         setCursorMode(CursorMode_Normal);
         soundPlayer->playSound(Sound_InvalidAction);
         return false;
@@ -6248,6 +6486,26 @@ bool Game::handlePlacementClick(int xPos, int yPos) {
     }
 }
 
+ConstructionYard* Game::chooseReservationYard(Uint32 itemID, ConstructionYard* pPreferred) {
+    std::vector<PlacementReservation::YardLoad> candidates;
+    for(StructureBase* pStructure : structureList) {
+        auto* pYard = dynamic_cast<ConstructionYard*>(pStructure);
+        if(pYard == nullptr || pYard->getOwner() != pLocalHouse || !pYard->mayReserveItem(itemID)) continue;
+        long long remaining = -pYard->getProductionProgress().lround();
+        for(const ProductionQueueItem& entry : pYard->getProductionQueue()) remaining += entry.price;
+        // Orders already sent but not yet executed count against their yard too.
+        for(const PendingReservation& pending : pendingReservations) {
+            if(pending.builderID != pYard->getObjectID()) continue;
+            for(const BuildItem& item : pYard->getBuildList())
+                if(item.itemID == pending.itemID) { remaining += item.price; break; }
+        }
+        candidates.push_back({pYard->getObjectID(), remaining});
+    }
+    const Uint32 chosenID = PlacementReservation::chooseYard(candidates, pPreferred->getObjectID());
+    auto* pChosen = dynamic_cast<ConstructionYard*>(objectManager.getObject(chosenID));
+    return pChosen != nullptr ? pChosen : pPreferred;
+}
+
 
 bool Game::handleSelectedObjectsHealClick(int xPos, int yPos) {
     UnitBase* pResponder = nullptr;
@@ -6269,13 +6527,37 @@ bool Game::handleSelectedObjectsHealClick(int xPos, int yPos) {
 }
 
 bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
+    // Attack cursor (docs/rts-controls.md): an object is attacked, the ground is attack-moved
+    // to, and Ctrl on the ground keeps the old forced fire at that position. Shift queues.
+    // A spice bloom the player has seen is a target, not ground: as in Dune Legacy the units
+    // fire at it from range to set it off. An attack-move would drive them onto it.
+    const SDL_Keymod mod = SDL_GetModState();
+    const bool queued = (mod & KMOD_SHIFT) != 0;
+    const Tile* pTile = currentGameMap->tileExists(xPos, yPos) ? currentGameMap->getTile(xPos, yPos) : nullptr;
+    const ObjectBase* pClicked = (pTile != nullptr && pTile->hasAnObject()) ? pTile->getObject() : nullptr;
+    const bool bloom = pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
+        && pTile->isExploredByTeam(pLocalHouse->getTeamID());
+    const bool fireAtGround = (mod & KMOD_CTRL) != 0 || bloom;
     UnitBase* pResponder = nullptr;
+    std::vector<UnitBase*> attackMovers;
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         House* pOwner = pObject->getOwner();
         if(pObject->isAUnit() && (pOwner == pLocalHouse) && pObject->isRespondable()) {
-            pResponder = static_cast<UnitBase*>(pObject);
-            pResponder->handleAttackClick(xPos,yPos);
+            auto* pUnit = static_cast<UnitBase*>(pObject);
+            if(bloom && !pUnit->fightsOnAttackMove()) {
+                // Workers, transports and Saboteurs cannot shoot it; they would only walk onto it.
+                continue;
+            } else if(pClicked != nullptr && queued) {
+                cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                    static_cast<Uint32>(UnitOrderType::AttackObject), pClicked->getObjectID(), 0));
+                pResponder = pUnit;
+            } else if(pClicked != nullptr || fireAtGround) {
+                pUnit->handleAttackClick(xPos,yPos);
+                pResponder = pUnit;
+            } else {
+                attackMovers.push_back(pUnit);
+            }
         } else if(pObject->getItemID() == Structure_Palace && pOwner == pLocalHouse) {
             Palace* pPalace = static_cast<Palace*>(pObject);
             if(pPalace->isSpecialWeaponReady() && pPalace->usesTargetedSpecialWeapon()) {
@@ -6283,8 +6565,12 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
             }
         }
     }
+    if(UnitBase* pMover = issuePositionOrder(PositionOrder::AttackMove, attackMovers, Coord(xPos, yPos), queued)) {
+        pResponder = pMover;
+    }
 
-    setCursorMode(CursorMode_Normal);
+    // Holding Shift keeps the cursor for the next queued point.
+    if(!queued) setCursorMode(CursorMode_Normal);
     if(pResponder) {
         pResponder->playConfirmSound();
         return true;
@@ -6294,13 +6580,22 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
 }
 
 bool Game::handleSelectedObjectsMoveClick(int xPos, int yPos) {
+    if(SDL_GetModState() & KMOD_SHIFT) {
+        // Shift: queue a waypoint and keep the Move cursor for the next one.
+        UnitBase* pQueued = issuePositionOrder(PositionOrder::Move, selectedOrderableUnits(), Coord(xPos, yPos), true);
+        if(pQueued != nullptr) pQueued->playConfirmSound();
+        return pQueued != nullptr;
+    }
+
     UnitBase* pResponder = nullptr;
 
+    // Two or more ground units move as one formation; the rest keep the plain move.
+    const std::set<Uint32> inFormation = issueSelectedFormationMove(xPos, yPos, false);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
             pResponder = static_cast<UnitBase*>(pObject);
-            pResponder->handleMoveClick(xPos,yPos);
+            if(!inFormation.count(objectID)) pResponder->handleMoveClick(xPos,yPos);
         }
     }
 
@@ -6357,16 +6652,22 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     StructureBase* pStructure = dynamic_cast<StructureBase*>(pTile->getGroundObject());
     if((pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
         InfantryBase* pResponder = nullptr;
+        const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
 
         for(Uint32 objectID : selectedList) {
             ObjectBase* pObject = objectManager.getObject(objectID);
             if (pObject->isInfantry() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
                 pResponder = static_cast<InfantryBase*>(pObject);
-                pResponder->handleCaptureClick(xPos,yPos);
+                if(queued && (pObject->getItemID() == Unit_Soldier || pObject->getItemID() == Unit_Trooper)) {
+                    cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                        static_cast<Uint32>(UnitOrderType::Capture), pStructure->getObjectID(), 0));
+                } else {
+                    pResponder->handleCaptureClick(xPos,yPos);
+                }
             }
         }
 
-        setCursorMode(CursorMode_Normal);
+        if(!queued) setCursorMode(CursorMode_Normal);
         if(pResponder) {
             pResponder->playConfirmSound();
             return true;
@@ -6461,17 +6762,37 @@ CursorAppearance::Action Game::getHoverCursorAction() const {
 
 bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
     //let unit handle right click on map or target
+    // With Shift the click is queued behind each unit's current orders (docs/rts-controls.md).
+    const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
+    std::vector<UnitBase*> queuedMovers;
     ObjectBase  *pResponder = nullptr;
+    // Ground units this click simply moves go as one formation; everything else (attack,
+    // follow, aircraft, structures) keeps its own action. A Shift click queues instead, and
+    // issuePositionOrder spreads the queued waypoints into formation slots.
+    const std::set<Uint32> inFormation = queued ? std::set<Uint32>() : issueSelectedFormationMove(xPos, yPos, true);
     for(Uint32 objectID : selectedList) {
         ObjectBase* pObject = objectManager.getObject(objectID);
         if(pObject && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
-            pObject->handleActionClick(xPos, yPos);
+            if(queued && pObject->isAUnit()) {
+                auto* pUnit = static_cast<UnitBase*>(pObject);
+                if(const ObjectBase* pTarget = pUnit->getActionClickTarget(xPos, yPos)) {
+                    const UnitOrderType type = pTarget->getOwner()->getTeamID() != pUnit->getOwner()->getTeamID()
+                        ? UnitOrderType::AttackObject : UnitOrderType::MoveToObject;
+                    cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                        static_cast<Uint32>(type), pTarget->getObjectID(), 0));
+                } else {
+                    queuedMovers.push_back(pUnit);
+                }
+            } else if(!inFormation.count(objectID)) {
+                pObject->handleActionClick(xPos, yPos);
+            }
 
             //if this object obey the command
             if((pResponder == nullptr) && pObject->isRespondable())
                 pResponder = pObject;
         }
     }
+    issuePositionOrder(PositionOrder::Move, queuedMovers, Coord(xPos, yPos), true);
 
     actionIndicatorObject=NONE_ID;
     if(pResponder) {
@@ -6486,6 +6807,351 @@ bool Game::handleSelectedObjectsActionClick(int xPos, int yPos) {
     } else {
         return false;
     }
+}
+
+std::vector<UnitBase*> Game::selectedOrderableUnits() const {
+    std::vector<UnitBase*> units;
+    for(Uint32 objectID : selectedList) {
+        ObjectBase* pObject = objectManager.getObject(objectID);
+        if(pObject != nullptr && pObject->isAUnit() && pObject->getOwner() == pLocalHouse && pObject->isRespondable()) {
+            units.push_back(static_cast<UnitBase*>(pObject));
+        }
+    }
+    return units;
+}
+
+bool Game::handleSelectedObjectsPatrolClick(int xPos, int yPos) {
+    const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
+    UnitBase* pResponder = issuePositionOrder(PositionOrder::Patrol, selectedOrderableUnits(), Coord(xPos, yPos), queued);
+    // Holding Shift keeps the cursor so further patrol points can be added.
+    if(!queued) setCursorMode(CursorMode_Normal);
+    if(pResponder != nullptr) pResponder->playConfirmSound();
+    return pResponder != nullptr;
+}
+
+UnitBase* Game::issuePositionOrder(PositionOrder kind, const std::vector<UnitBase*>& units, const Coord& target, bool queued) {
+    if(pLocalPlayer == nullptr || currentGameMap == nullptr || !currentGameMap->tileExists(target)) {
+        return nullptr;
+    }
+    // With "Move groups in formation" on, every eligible unit gets its own slot of a formation
+    // in the chosen shape around the target (docs/formations.md). An attack-move or patrol
+    // that replaces the orders hunts in formation: one CMD_UNIT_FORMATION_HUNT per slot with a
+    // shared token, so the group keeps its pace until a member meets the enemy. Queued
+    // waypoints keep their slots but carry no pace.
+    FormationPlanner::Plan plan;
+    if(settings.general.formationMoves && units.size() >= static_cast<size_t>(FormationOrders::kMinPlayerGroup)) {
+        std::vector<const UnitBase*> members;
+        for(const UnitBase* pUnit : units) {
+            if(pUnit != nullptr && pUnit->getOwner() == pLocalHouse && pUnit->isRespondable()) members.push_back(pUnit);
+        }
+        plan = FormationOrders::planGroup(members, target, FormationPlanner::shapeFromId(settings.general.formationShape));
+    }
+    const bool hunt = plan.formation && !queued && kind != PositionOrder::Move
+        && static_cast<int>(plan.slots.size()) >= FormationOrders::kMinPlayerGroup;
+    const Uint32 huntParameter = !hunt ? 0 : FormationOrders::packParameter(
+        kind == PositionOrder::AttackMove ? FormationOrders::OrderKind::AttackMove : FormationOrders::OrderKind::Patrol,
+        FormationPlanner::facingCode(plan.forward), nextFormationToken());
+    UnitBase* pResponder = nullptr;
+    for(UnitBase* pUnit : units) {
+        if(pUnit == nullptr || pUnit->getOwner() != pLocalHouse || !pUnit->isRespondable()) {
+            continue;
+        }
+        // Per-unit destination: its formation slot, or the clicked tile without one.
+        const Coord slot = plan.formation ? plan.slotFor(pUnit->getObjectID()) : Coord::Invalid();
+        const Coord destination = slot.isValid() ? slot : target;
+        const Uint32 objectID = pUnit->getObjectID();
+        const Uint32 x = static_cast<Uint32>(destination.x);
+        const Uint32 y = static_cast<Uint32>(destination.y);
+        if(hunt && slot.isValid()) {
+            cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_FORMATION_HUNT, objectID, x, y, huntParameter));
+            pResponder = pUnit;
+            continue;
+        }
+        switch(kind) {
+            case PositionOrder::Move: {
+                cmdManager.addCommand(queued
+                    ? Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID, static_cast<Uint32>(UnitOrderType::Move), x, y)
+                    : Command(pLocalPlayer->getPlayerID(), CMD_UNIT_MOVE2POS, objectID, x, y, static_cast<Uint32>(true)));
+            } break;
+            case PositionOrder::AttackMove: {
+                cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_ATTACKMOVE, objectID, x, y, static_cast<Uint32>(queued)));
+            } break;
+            case PositionOrder::Patrol: {
+                cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_PATROL, objectID, x, y, static_cast<Uint32>(queued)));
+            } break;
+        }
+        pResponder = pUnit;
+    }
+    return pResponder;
+}
+
+void Game::selectSameUnitTypes(bool wholeMap) {
+    std::set<Uint32> types;
+    for(Uint32 id:selectedList) {
+        const auto* unit=dynamic_cast<const UnitBase*>(objectManager.getObject(id));
+        if(unit && unit->getOwner()==pLocalHouse) types.insert(unit->getItemID());
+    }
+    if(types.empty()) return;
+    std::set<Uint32> matching;
+    for(const auto* unit:unitList) {
+        if(unit->getOwner()==pLocalHouse && unit->isRespondable() && unit->isActive()
+            && types.count(unit->getItemID())
+            && (wholeMap || screenborder->isTileInsideScreen(unit->getLocation())))
+            matching.insert(unit->getObjectID());
+    }
+    unselectAll(selectedList);
+    selectedList=std::move(matching);
+    selectAll(selectedList);
+    selectionChanged();
+    currentCursorMode=CursorMode_Normal;
+}
+
+void Game::selectAllCombatUnits() {
+    if(pLocalHouse == nullptr || isObserving()) return;
+    std::set<Uint32> combat;
+    for(const auto* unit:unitList) {
+        if(unit->getOwner()!=pLocalHouse || !unit->isRespondable() || !unit->isActive() || !unit->canAttack()
+           || isHarvesterLikeUnit(unit->getItemID())) continue;
+        switch(unit->getItemID()) {
+            case Unit_MCV: case Unit_Carryall: case Unit_ChemicalCarryall: case Unit_Frigate: case Unit_Sandworm:
+                continue;
+            default:
+                combat.insert(unit->getObjectID());
+        }
+    }
+    unselectAll(selectedList);
+    selectedList=std::move(combat);
+    selectAll(selectedList);
+    selectionChanged();
+    currentCursorMode=CursorMode_Normal;
+}
+
+void Game::drawQueuedOrders() {
+    if(pLocalHouse == nullptr || screenborder == nullptr || selectedList.empty()) return;
+    SDL_Rect previousClip{};
+    const bool clipped=SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer,&previousClip);
+    SDL_Rect field{0,topBarPos.h,sideBarPos.x,getRendererHeight()-topBarPos.h};
+    if(clipped)SDL_IntersectRect(&field,&previousClip,&field);
+    SDL_RenderSetClipRect(renderer,&field);
+    Uint8 r,g,b,a; SDL_GetRenderDrawColor(renderer,&r,&g,&b,&a);
+    // Move green, attack and attack-move red, patrol blue.
+    auto colorOf=[](UnitOrderType type) -> SDL_Color {
+        switch(type) {
+            case UnitOrderType::AttackObject: case UnitOrderType::AttackMove: case UnitOrderType::Capture:
+                return SDL_Color{235,70,60,255};
+            case UnitOrderType::Patrol:
+                return SDL_Color{90,150,255,255};
+            default:
+                return SDL_Color{90,220,90,255};
+        }
+    };
+    int count=0;
+    for(Uint32 id:selectedList) {
+        const auto* unit=dynamic_cast<const UnitBase*>(objectManager.getObject(id));
+        // Only the house this player controls or observes; never another house's orders.
+        if(!unit || !unit->isActive() || unit->getOwner()!=pLocalHouse) continue;
+        const UnitOrderQueue& queue=unit->getOrderQueue();
+        // A single classic order is already shown by the movement path.
+        if(queue.empty() || (queue.size()==1 && queue.front().type!=UnitOrderType::AttackMove
+                             && queue.front().type!=UnitOrderType::Patrol)) continue;
+        if(++count>64)break;
+        Coord previous(screenborder->world2screenX(unit->getRealX().lround()),screenborder->world2screenY(unit->getRealY().lround()));
+        Coord firstPatrol=Coord::Invalid(), lastPatrol=Coord::Invalid();
+        for(const UnitOrder& order:queue) {
+            Coord world=Coord::Invalid();
+            if(order.usesPosition()) {
+                world=order.pos*TILESIZE+Coord(TILESIZE/2,TILESIZE/2);
+            } else if(order.usesTarget()) {
+                const ObjectBase* pTarget=objectManager.getObject(order.targetID);
+                if(pTarget!=nullptr && pTarget->isVisible(pLocalHouse->getTeamID())) world=pTarget->getCenterPoint();
+            }
+            if(world.isInvalid()) continue;
+            const Coord next(screenborder->world2screenX(world.x),screenborder->world2screenY(world.y));
+            const SDL_Color color=colorOf(order.type);
+            SDL_SetRenderDrawColor(renderer,0,0,0,255);
+            SDL_RenderDrawLine(renderer,previous.x,previous.y+1,next.x,next.y+1);
+            SDL_SetRenderDrawColor(renderer,color.r,color.g,color.b,color.a);
+            SDL_RenderDrawLine(renderer,previous.x,previous.y,next.x,next.y);
+            const SDL_Rect marker{next.x-2,next.y-2,5,5};
+            SDL_RenderFillRect(renderer,&marker);
+            if(order.type==UnitOrderType::Patrol) {
+                if(firstPatrol.isInvalid()) firstPatrol=next;
+                lastPatrol=next;
+            }
+            previous=next;
+        }
+        if(firstPatrol.isValid() && lastPatrol!=firstPatrol) {
+            // Close the patrol loop.
+            SDL_SetRenderDrawColor(renderer,90,150,255,160);
+            SDL_RenderDrawLine(renderer,lastPatrol.x,lastPatrol.y,firstPatrol.x,firstPatrol.y);
+        }
+    }
+    SDL_SetRenderDrawColor(renderer,r,g,b,a);
+    SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
+}
+
+namespace {
+/// One CMD_UNIT_FORMATION_MOVE of order kind 'kind' per slot of 'plan', sharing 'token' and the plan's facing.
+std::set<Uint32> sendFormationMoves(CommandManager& commands, Uint8 playerID, const FormationPlanner::Plan& plan,
+                                    FormationOrders::OrderKind kind, Uint32 token) {
+    std::set<Uint32> ordered;
+    const Uint32 parameter = FormationOrders::packParameter(kind, FormationPlanner::facingCode(plan.forward), token);
+    for(const FormationPlanner::Slot& slot : plan.slots) {
+        commands.addCommand(Command(playerID, CMD_UNIT_FORMATION_MOVE, slot.objectID,
+                                    static_cast<Uint32>(slot.tile.x), static_cast<Uint32>(slot.tile.y), parameter));
+        ordered.insert(slot.objectID);
+    }
+    return ordered;
+}
+
+/// The unit step of a drawn angle (ANGLETYPE: RIGHT, RIGHTUP, UP, ... anticlockwise from east).
+Coord stepOfAngle(int angle) {
+    static const Coord steps[NUM_ANGLES] = {Coord(1, 0), Coord(1, -1), Coord(0, -1), Coord(-1, -1),
+                                            Coord(-1, 0), Coord(-1, 1), Coord(0, 1), Coord(1, 1)};
+    return steps[((angle % NUM_ANGLES) + NUM_ANGLES) % NUM_ANGLES];
+}
+} // namespace
+
+std::set<Uint32> Game::issueSelectedFormationMove(int xPos, int yPos, bool actionClick) {
+    std::set<Uint32> ordered;
+    if(!settings.general.formationMoves || pLocalHouse == nullptr || pLocalPlayer == nullptr
+       || currentGameMap == nullptr || !currentGameMap->tileExists(xPos, yPos)) {
+        return ordered;
+    }
+    std::vector<const UnitBase*> movers;
+    for(Uint32 objectID : selectedList) {
+        const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(objectID));
+        if(unit == nullptr || unit->getOwner() != pLocalHouse || !unit->isRespondable()
+           || !FormationOrders::eligible(unit)) continue;
+        // A right click on something visible attacks or follows it instead of moving.
+        if(actionClick && unit->getActionClickTarget(xPos, yPos) != nullptr) continue;
+        movers.push_back(unit);
+    }
+    const FormationPlanner::Plan plan = FormationOrders::planGroup(movers, Coord(xPos, yPos),
+        FormationPlanner::shapeFromId(settings.general.formationShape));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) {
+        return ordered;
+    }
+    return sendFormationMoves(cmdManager, pLocalPlayer->getPlayerID(), plan, FormationOrders::OrderKind::Move, nextFormationToken());
+}
+
+std::set<Uint32> Game::issueSelectedFormUp() {
+    if(pLocalHouse == nullptr || pLocalPlayer == nullptr || currentGameMap == nullptr || isObserving()) return {};
+    std::vector<const UnitBase*> members;
+    for(Uint32 objectID : selectedList) {
+        const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(objectID));
+        if(unit != nullptr && unit->getOwner() == pLocalHouse && unit->isRespondable() && FormationOrders::eligible(unit))
+            members.push_back(unit);
+    }
+    if(static_cast<int>(members.size()) < FormationOrders::kMinPlayerGroup) return {};
+    const FormationPlanner::Plan plan = FormationOrders::planInPlace(members, formUpFacing(members),
+        FormationPlanner::shapeFromId(settings.general.formationShape));
+    if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinPlayerGroup) return {};
+    // OrderKind::FormUp: the slots are the members' form-up tiles. A march would gridlock a
+    // group re-arranging itself on the spot (members wait for each other's lanes and for
+    // marching members that stand still); forming members route round each other instead.
+    return sendFormationMoves(cmdManager, pLocalPlayer->getPlayerID(), plan, FormationOrders::OrderKind::FormUp,
+                              nextFormationToken());
+}
+
+Coord Game::formUpFacing(const std::vector<const UnitBase*>& members) const {
+    const Coord none(0, 0);
+    // 1. The direction they were last ordered: the formation they march in, else this
+    //    player's latest move-type order for each of them.
+    Coord ordered = none;
+    for(const UnitBase* unit : members) {
+        Coord step = FormationPlanner::facingFromCode(unit->getFormationFacing());
+        if(step == none) {
+            const auto remembered = orderedHeadings.find(unit->getObjectID());
+            if(remembered != orderedHeadings.end()) step = remembered->second;
+        }
+        ordered += step;
+    }
+    if(FormationPlanner::facing(none, ordered) != none) return FormationPlanner::facing(none, ordered);
+
+    // 2. Towards the nearest enemy ground unit or structure this team can see.
+    std::vector<FormationPlanner::Member> planned;
+    for(const UnitBase* unit : members) planned.push_back(FormationOrders::memberOf(unit));
+    const Coord centroid = FormationPlanner::centroidOf(planned);
+    if(centroid.isValid() && pLocalHouse != nullptr) {
+        const int team = pLocalHouse->getTeamID();
+        const ObjectBase* nearest = nullptr;
+        long long nearestDistance = 0;
+        auto consider = [&](const ObjectBase* object) {
+            if(!object->isActive() || object->getOwner() == nullptr || object->getOwner()->getTeamID() == team
+               || !object->isVisible(team)) return;
+            const Coord offset = object->getLocation() - centroid;
+            const long long distance = static_cast<long long>(offset.x) * offset.x + static_cast<long long>(offset.y) * offset.y;
+            if(distance == 0) return;
+            if(nearest == nullptr || distance < nearestDistance
+               || (distance == nearestDistance && object->getObjectID() < nearest->getObjectID())) {
+                nearest = object;
+                nearestDistance = distance;
+            }
+        };
+        for(const UnitBase* unit : unitList)
+            if(unit->isAGroundUnit() && unit->getItemID() != Unit_Sandworm) consider(unit);
+        for(const StructureBase* structure : structureList) consider(structure);
+        if(nearest != nullptr) return FormationPlanner::facing(centroid, nearest->getLocation());
+    }
+
+    // 3. The way they face on average; 4. north.
+    Coord heading = none;
+    for(const UnitBase* unit : members) heading += stepOfAngle(unit->getAngle());
+    const Coord average = FormationPlanner::facing(none, heading);
+    return average != none ? average : Coord(0, -1);
+}
+
+void Game::rememberOrderHeading(const Command& command) {
+    if(pLocalPlayer == nullptr || pLocalHouse == nullptr || command.getPlayerID() != pLocalPlayer->getPlayerID()) return;
+    const std::vector<Uint32> parameter = command.getParameter();
+    if(parameter.empty()) return;
+    Coord heading(0, 0);
+    Coord target = Coord::Invalid();
+    switch(command.getCommandID()) {
+        case CMD_UNIT_MOVE2POS:
+        case CMD_UNIT_ATTACKPOS: {
+            if(parameter.size() >= 3) target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_ATTACKMOVE:
+        case CMD_UNIT_PATROL: {
+            // Shift-queued legs do not replace the order the unit is carrying out.
+            if(parameter.size() >= 4 && parameter[3] == 0) target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_FORMATION_MOVE:
+        case CMD_UNIT_FORMATION_HUNT: {
+            if(parameter.size() < 4) return;
+            // The formation's own facing; the unit's way to its slot for a facing-less one.
+            heading = FormationPlanner::facingFromCode(FormationOrders::facingOf(parameter[3]));
+            target = Coord(static_cast<int>(parameter[1]), static_cast<int>(parameter[2]));
+        } break;
+        case CMD_UNIT_MOVE2OBJECT:
+        case CMD_UNIT_ATTACKOBJECT: {
+            if(parameter.size() < 2) return;
+            if(const ObjectBase* pTarget = objectManager.getObject(parameter[1])) target = pTarget->getLocation();
+        } break;
+        default:
+            return;
+    }
+    const auto* unit = dynamic_cast<const UnitBase*>(objectManager.getObject(parameter[0]));
+    if(unit == nullptr || unit->getOwner() != pLocalHouse) return;
+    if(heading == Coord(0, 0) && target.isValid()) heading = FormationPlanner::facing(unit->getLocation(), target);
+    if(heading == Coord(0, 0)) return;
+    // Forget units that are gone once the memory grows: it lives for the whole match.
+    if(orderedHeadings.size() >= 1024) {
+        for(auto it = orderedHeadings.begin(); it != orderedHeadings.end();)
+            it = objectManager.getObject(it->first) == nullptr ? orderedHeadings.erase(it) : std::next(it);
+    }
+    orderedHeadings[unit->getObjectID()] = heading;
+}
+
+Uint32 Game::nextFormationToken() {
+    if(gameCycleCount != formationTokenCycle) {
+        formationTokenCycle = gameCycleCount;
+        formationTokensThisCycle = 0;
+    }
+    return FormationPlanner::makeToken(gameCycleCount, formationTokensThisCycle++);
 }
 
 
@@ -7347,6 +8013,37 @@ void Game::drawMovementPaths() {
     }
     SDL_SetRenderDrawColor(renderer,r,g,b,a);
     SDL_RenderSetClipRect(renderer,clipped ? &previousClip : nullptr);
+}
+
+void Game::toggleFormationMoves() {
+    chooseFormation(!settings.general.formationMoves, settings.general.formationShape);
+}
+
+void Game::cycleFormationShape() {
+    // Off counts as the shape before the first: the cycle starts at the chosen shape.
+    const int position = FormationPlanner::positionOf(FormationPlanner::shapeFromId(settings.general.formationShape));
+    const int next = settings.general.formationMoves
+        ? static_cast<int>(FormationPlanner::shapeAt((position + 1) % FormationPlanner::kShapeCount))
+        : settings.general.formationShape;
+    chooseFormation(true, next);
+}
+
+void Game::chooseFormation(bool on, int shapeId) {
+    settings.general.formationMoves = on;
+    settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(shapeId));
+    INIFile config(getConfigFilepath());
+    config.setBoolValue("General","Formation Moves",settings.general.formationMoves);
+    config.setIntValue("General","Formation Shape",settings.general.formationShape);
+    config.saveChangesTo(getConfigFilepath());
+    WebRuntime::syncPersistentFiles();
+    const std::string shape = _(FormationPlanner::shapeName(FormationPlanner::shapeFromId(settings.general.formationShape)));
+    addToNewsTicker(on ? fmt::sprintf(_("Groups move in formation: %s"), shape) : _("Formation moves off"));
+    if(!on) return;
+    // Choosing a shape forms the selected ground units up in it where they stand.
+    const std::set<Uint32> formed = issueSelectedFormUp();
+    if(!formed.empty()) {
+        if(auto* pUnit = dynamic_cast<UnitBase*>(objectManager.getObject(*formed.begin()))) pUnit->playConfirmSound();
+    }
 }
 
 void Game::toggleMovementPaths() {

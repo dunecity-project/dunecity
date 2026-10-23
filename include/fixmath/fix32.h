@@ -121,8 +121,71 @@ extern fix32_t fix32_ssub(fix32_t a, fix32_t b) FIXMATH_FUNC_ATTRS;
 #endif
 
 /*! Multiplies the two given fix32_t's and returns the result.
-*/
-extern fix32_t fix32_mul(fix32_t inArg0, fix32_t inArg1) FIXMATH_FUNC_ATTRS;
+ *
+ * Defined here rather than in fix32.c so every caller can inline it: the simulation
+ * multiplies fixed-point values in its hottest loops (pathfinding costs, distances) and
+ * an out-of-line call per multiply measurably slowed them. The arithmetic is unchanged.
+ *
+ * 64-bit implementation. Potentially fast on 32-bit processors, and this is a
+ * relatively good compromise for compilers that do not support uint128_t.
+ * Uses 32*32->64bit multiplications.
+ */
+static inline fix32_t fix32_mul(fix32_t inArg0, fix32_t inArg1)
+{
+	// Each argument is divided to 32-bit parts.
+	//					AB
+	//			*	 CD
+	// -----------
+	//					BD	32 * 32 -> 64 bit products
+	//				 CB
+	//				 AD
+	//				AC
+	//			 |----| 128 bit product
+	int64_t A = (inArg0 >> 32), C = (inArg1 >> 32);
+	uint64_t B = (inArg0 & 0xFFFFFFFF), D = (inArg1 & 0xFFFFFFFF);
+
+	int64_t AC = A*C;
+	int64_t AD_CB = A*D + C*B;
+	uint64_t BD = B*D;
+
+	int64_t product_hi = AC + (AD_CB >> 32);
+
+	// Handle carry from lower 64 bits to upper part of result.
+	// Shifts of the signed partial products are done on their two's complement bit
+	// patterns: a left shift that drops sign bits is undefined behaviour on a signed type.
+	uint64_t ad_cb_temp = (uint64_t)AD_CB << 32;
+	uint64_t product_lo = BD + ad_cb_temp;
+	if (product_lo < BD)
+		product_hi++;
+
+#ifndef FIXMATH_NO_OVERFLOW
+	// The upper 33 bits should all be the same (the sign).
+	if (product_hi >> 63 != product_hi >> 31)
+		return fix32_overflow;
+#endif
+
+#ifdef FIXMATH_NO_ROUNDING
+	return (fix32_t)(((uint64_t)product_hi << 32) | (product_lo >> 32));
+#else
+	// Subtracting 0x80000000 (= 0.5) and then using signed right shift
+	// achieves proper rounding to result-1, except in the corner
+	// case of negative numbers and lowest word = 0x80000000.
+	// To handle that, we also have to subtract 1 for negative numbers.
+	uint64_t product_lo_tmp = product_lo;
+	product_lo -= 0x80000000;
+	product_lo -= (uint64_t)product_hi >> 63;
+	if (product_lo > product_lo_tmp)
+		product_hi--;
+
+	// Discard the lowest 32 bits. Note that this is not exactly the same
+	// as dividing by 0x100000000. For example if product = -1, result will
+	// also be -1 and not 0. This is compensated by adding +1 to the result
+	// and compensating this in turn in the rounding above.
+	fix32_t result = (fix32_t)(((uint64_t)product_hi << 32) | (product_lo >> 32));
+	result += 1;
+	return result;
+#endif
+}
 
 /*! Divides the first given fix32_t by the second and returns the result.
 */

@@ -29,7 +29,6 @@
 #include <GUI/Checkbox.h>
 
 #include <mod/ModInfo.h>
-#include <mod/WorkshopClient.h>
 #include <INIMap/MapMetadata.h>
 #include <DataTypes.h>
 
@@ -54,12 +53,9 @@ public:
     void onChildWindowClose(Window* pChildWindow) override;
 
 private:
-    void update() override;
     void rebuildMapList();
     /// Collapse copies of the same map found in several map directories.
     void dropDuplicateMapCopies();
-    bool prepareSelectedMap();
-    void onPreviewMap();
     void onNext();
     void onCancel();
     void onLoad();
@@ -67,6 +63,10 @@ private:
     void onMultiplePlayersPerHouseChange();
     void onMapTypeChange(int buttonID);
     void onMapListSelectionChange(bool bInteractive);
+    /// Host: generate a Random Skirmish map with open starts, then continue with it as the chosen map.
+    void onRandomMap();
+    /// Show MP User Maps with every filter cleared and select the map at @a path; false if not listed.
+    bool selectUserMap(const std::string& path);
 
     /// Full path of the selected local or downloaded map; empty until downloaded.
     std::string getSelectedMapPath() const;
@@ -96,21 +96,17 @@ private:
     TextButton      multiplayerMapsButton;
     TextButton      multiplayerUserMapsButton;
     TextButton      dummyButton;
-    HBox            remoteMapsRow, filterRow;
-    TextButton      metaserverMapsButton, refreshMapsButton, previewMapButton;
+    HBox            filterRow;
     DropDownBox     mapModFilter, mapSizeFilter, mapPlayersFilter;
     Label           mapLibraryStatus, mapPropertyMod, mapPropertyVersion;
     struct MapEntry {
-        std::string path; MapMetadata metadata; Workshop::Revision revision;
+        std::string path; MapMetadata metadata;
         std::string contentKey;   ///< playable content of a local file; identifies equivalent copies
         bool hasSidecar = false;  ///< a .workshop.ini beside the file pins an exact revision
     };
     std::vector<MapEntry> mapEntries;
     std::vector<size_t> visibleMaps;
     std::vector<std::string> filterMods;
-    Workshop::Client mapClient;
-    bool loadingMaps=false;
-    int mapCategory=0;
     ListBox         mapList;
     HBox            optionsHBox;
     Checkbox        multiplePlayersPerHouseCheckbox;
@@ -138,6 +134,7 @@ private:
     HBox            buttonHBox;
     TextButton      nextButton;
     TextButton      loadButton;
+    TextButton      randomMapButton;
     TextButton      cancelButton;
 
 };

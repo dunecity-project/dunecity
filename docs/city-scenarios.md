@@ -53,12 +53,11 @@ alive at minute 12. These are engine checks, not complete human victory tests.
 
 ## Availability and checks
 
-Published on the metaserver on 2026-09-24. Use **Custom Game → Metaserver Maps**
-and filter to **DuneCity**. Sihaya Basin, Ash Quarter and Coriolis Gap are now
-**version 2**; the seven additional missions are **version 1**. SimCity remains
-at its separately published repaired version 2. All ten current catalogue entries,
-complete downloaded maps and manifest/file SHA-256 hashes were verified; the
-downloaded maps passed structural validation again.
+The missions ship in `data/maps/singleplayer`. Use **Custom Game → SP Maps** and
+filter to **DuneCity**. Sihaya Basin, Ash Quarter and Coriolis Gap are **version 2**;
+the seven additional missions are **version 1**. They were also published to the
+former in-game community catalogue on 2026-09-24; that catalogue and its upload
+path were removed from the game on 2026-10-18 (see `docs/workshop.md`).
 
 All ten load in the real engine without map warnings, pass placement/format
 validation and regenerate byte-for-byte. Opening simulations used an idle human

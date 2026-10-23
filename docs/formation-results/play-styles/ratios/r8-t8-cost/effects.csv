@@ -1,0 +1,7 @@
+arm,tech,house,effect,low,high,n,draws
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,atreides,-0.012,-0.538,0.500,120,0
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,harkonnen,0.383,-0.125,0.942,120,1
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,ordos,-0.096,-0.604,0.458,120,0
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,fremen,0.071,-0.479,0.654,120,0
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,sardaukar,0.008,-0.567,0.492,120,0
+default@t8-cost#Tuned-Swarm v default#Learned-Swarm,,mercenary,0.362,-0.183,0.879,120,0

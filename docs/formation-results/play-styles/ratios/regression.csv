@@ -1,0 +1,17 @@
+house,slot,reference,coef_per_unit_share,se,n
+atreides,siege,tank,1.096,0.584,1043
+atreides,launcher,tank,0.082,0.572,1043
+atreides,special,tank,-0.613,0.575,1043
+atreides,ornithopter,tank,0.041,0.579,1043
+atreides,trike,tank,-0.257,0.575,1043
+atreides,quad,tank,0.411,0.570,1043
+harkonnen,siege,tank,0.077,0.544,1031
+harkonnen,launcher,tank,-0.095,0.523,1031
+harkonnen,special,tank,0.261,0.527,1031
+harkonnen,quad,tank,0.668,0.523,1031
+ordos,siege,tank,-0.170,0.574,1020
+ordos,launcher,tank,-0.360,0.592,1020
+ordos,special,tank,0.363,0.603,1020
+ordos,ornithopter,tank,1.043,0.586,1020
+ordos,raider,tank,-0.380,0.589,1020
+ordos,quad,tank,0.655,0.591,1020

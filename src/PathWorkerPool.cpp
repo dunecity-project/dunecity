@@ -199,7 +199,8 @@ void PathWorkerPool::runBatch(const std::vector<std::function<void()>>& tasks) {
         return;
     }
     ensureStarted();
-    if(impl == nullptr || impl->threads.empty()) {
+    // One task gains nothing from a worker; waking one only adds a hand-off each way.
+    if(impl == nullptr || impl->threads.empty() || tasks.size() == 1) {
         runInline(tasks);
         return;
     }
@@ -212,6 +213,23 @@ void PathWorkerPool::runBatch(const std::vector<std::function<void()>>& tasks) {
         impl->outstanding = tasks.size();
         impl->firstError = nullptr;
         impl->workReady.notify_all();
+        // The calling thread takes tasks from the same queue instead of sleeping until the
+        // workers are done. Tasks are independent and their results are applied by the
+        // caller afterwards in dispatch order, so who runs which task changes nothing.
+        while(impl->nextIndex < tasks.size()) {
+            const size_t index = impl->nextIndex++;
+            lock.unlock();
+            applyTestDelay(index, impl->delayWindow);
+            std::exception_ptr taskFailure;
+            try {
+                tasks[index]();
+            } catch(...) {
+                taskFailure = std::current_exception();
+            }
+            lock.lock();
+            if(taskFailure && !impl->firstError) impl->firstError = taskFailure;
+            --impl->outstanding;
+        }
         impl->batchDone.wait(lock, [this] { return impl->outstanding == 0; });
         impl->batch = nullptr;
         failure = impl->firstError;

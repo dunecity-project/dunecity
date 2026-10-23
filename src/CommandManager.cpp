@@ -50,6 +50,9 @@ void CommandManager::addCommand(const Command& cmd) {
         CycleNumber += networkCycleBuffer;
     }
     addCommand(cmd, CycleNumber);
+    // This client's own orders only (remote batches arrive through addCommandList): the
+    // formation buttons form a group up facing the way it was last sent (docs/formations.md).
+    if(!bReadOnly) currentGame->rememberOrderHeading(cmd);
 }
 
 void CommandManager::save(OutputStream& stream) const {

@@ -39,8 +39,8 @@ Design rules, all read out of the engine rather than guessed:
     centroid, next to hostile structures (hostileLandValuePenalty) and with
     no police station in reach.  Other maps keep police where the fiction
     wants order.
-  * Economic victory (WINLOSEFLAGS_ECONOMIC = 16) wins instantly on a
-    prebuilt city and is never used here.
+  * WinFlags bit 16 has no meaning (there is no population victory) and is
+    never set here.
 
 Cities are laid out road-first: an organic street skeleton is painted, then
 2x2 lots are hung off the street frontage by district profile.  The result is
@@ -2502,10 +2502,9 @@ def check(sc: Scenario) -> Dict[str, int]:
         if len(parts) == 5:
             assert parts[4] == '+', f"{sc.filename}: bad repeat flag '{r}'"
 
-    # Objective sanity: never use WINLOSEFLAGS_ECONOMIC (16), and a quota
-    # mission must require achievable storage expansion, not begin solved.
+    # Objective sanity: a quota mission must require achievable storage
+    # expansion, not begin solved.
     win = int(sc.basic["WinFlags"])
-    assert not (win & 16), f"{sc.filename}: economic victory flag is unusable here"
     if win & 8:
         assert int(sc.basic["TimeOut"]) > 0, f"{sc.filename}: timeout win, no TimeOut"
     quota = 0

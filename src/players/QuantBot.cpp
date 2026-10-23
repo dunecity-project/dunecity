@@ -104,7 +104,7 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 	// This prevents desync issues in multiplayer games
 	buildTimer = (getHouse()->getHouseID() % 4) * 50;  // 0-150 cycles stagger
 
-    const QuantBotConfig& config = getQuantBotConfig();
+    const QuantBotConfig& config = botConfig();
 
     attackTimer = SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
         currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
@@ -193,10 +193,35 @@ bool QuantBot::overridesMilitaryValueCap() const {
     return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
 }
 
+int QuantBot::configuredCustomHarvesterLimit() const {
+    // Custom games the house plays itself only: campaigns keep their scripted fleets and a
+    // support controller follows its human partner.
+    if (supportMode || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
+        || isCampaignGameType(currentGame->gameType)) return 0;
+    // Maps above 64x64 (the Large and Huge classes: Easy 8/15, Medium 15/25, Hard 40/40, Brutal
+    // 100/50). The Small and Medium class values (2-10 workers) are campaign-era fleet sizes that
+    // would starve every custom economy on a 64x64 map; there the spice budget alone decides, as before.
+    const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
+    if (mapsize <= 4096) return 0;
+    const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
+    return mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+}
+
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
-    if (!overridesMilitaryValueCap()) return militaryValueLimit;
-    return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
-                                                      productionCash, largestUnitValue);
+    if (overridesMilitaryValueCap())
+        return QuantBotBuildPolicy::rollingMilitaryBudget(committedValue, militaryValueLimit,
+                                                          productionCash, largestUnitValue);
+    // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
+    // (docs/ai-scenario-matrix.md, "Difficulty ladder"); at most half the cap, below Hard's.
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
+    // M (SpendAtCap, test-only, Custom Hard/Brutal): banked credits above the reserve buy heavy
+    // units beyond the limit, up to the limit again (QuantBotBuild.cpp keeps the other producers
+    // at the limit).
+    if (forceVariant(kForceSpendAtCap))
+        return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash,
+                                                          ForceConcentrationPolicy::kSurplusMaxPercent);
+    return militaryValueLimit;
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
@@ -229,7 +254,7 @@ void QuantBot::update() {
     if (isAlliedWithHuman() && gameMode == GameMode::Campaign) {
         gameMode = GameMode::Custom;
         initialMilitaryValue = -1;
-        const auto& config = getQuantBotConfig();
+        const auto& config = botConfig();
         attackTimer = supportMode ? std::numeric_limits<Sint32>::max()
             : isCampaignGameType(currentGame->gameType) ? 0
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
@@ -242,6 +267,9 @@ void QuantBot::update() {
     if (!supportMode && difficulty != Difficulty::Defend && isAlliedWithHuman()
         && isCampaignGameType(currentGame->gameType) && attackTimer > MILLI2CYCLES(60000))
         attackTimer = 0;
+
+    // The strategy (docs/ai-play-styles.md, "Strategies"): once, from the seed, house and config.
+    pickStrategy();
 
     if (campaignCityEconomy() && !campaignBaselineCaptured && initialMilitaryValue>=0) noteCampaignOriginalState(true);
 
@@ -289,7 +317,7 @@ void QuantBot::update() {
 
 
 	// Get config for this difficulty
-	const QuantBotConfig& config = getQuantBotConfig();
+	const QuantBotConfig& config = botConfig();
 	const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
 	// Log which config this QuantBot is using
@@ -347,11 +375,11 @@ void QuantBot::update() {
 				initialItemCount[Structure_Refinery], diffSettings.refineryMinimum);
 		}
 
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -445,11 +473,11 @@ void QuantBot::update() {
 			diffSettings.harvesterLimitCustomMediumMap, diffSettings.militaryValueLimitCustomMediumMap,
 			diffSettings.harvesterLimitCustomLargeMap, diffSettings.militaryValueLimitCustomLargeMap);
 
-		// Apply game options harvester override if set and lower than calculated limit
-		int harvesterOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
-		if (harvesterOverride >= 0 && harvesterOverride < harvesterLimit) {
-			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterOverride);
-			harvesterLimit = harvesterOverride;
+		// Apply the game options harvester ceiling if one is set and lower than the calculated limit
+		const int harvesterCeiling = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
+		if (harvesterCeiling > 0 && harvesterCeiling < harvesterLimit) {
+			logDebug("  Game Options Override: Reducing harvester limit from %d to %d", harvesterLimit, harvesterCeiling);
+			harvesterLimit = harvesterCeiling;
 		}
 
 		logDebug("  FINAL: HarvesterLimit=%d, MilitaryValueLimit=%d", 
@@ -531,21 +559,18 @@ void QuantBot::update() {
 
 	// Continuously adjust harvester limit based on remaining spice (both Campaign and Custom modes)
 	// This runs every cycle to dynamically reduce harvester targets as spice depletes
-	const QuantBotConfig& config = getQuantBotConfig();
+	const QuantBotConfig& config = botConfig();
 	const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
 
-    // Default/zero means no engine ceiling. Start with the remaining resource
-    // budget, then let the house's economy/throughput planner choose its fleet.
-    const int harvesterOverride = getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride;
+    // No lobby ceiling (unchecked or 0) means no engine ceiling. Start with the remaining
+    // resource budget, then let the house's economy/throughput planner choose its fleet.
     int baseHarvesterLimit = std::max(1,lastCalculatedSpice / 2000);
-    if (harvesterOverride > 0) baseHarvesterLimit = std::min(baseHarvesterLimit,harvesterOverride);
 
     if (isCampaignEnemy() && difficulty!=Difficulty::Brutal) {
         // Game Options supplies an engine ceiling, not permission for an Easy
         // campaign opponent to expand to a skirmish-sized harvester fleet.
         baseHarvesterLimit=std::max(0,diffSettings.harvesterLimitPerRefineryMultiplier
             * initialItemCount[Structure_Refinery]);
-        if (harvesterOverride>0) baseHarvesterLimit=std::min(baseHarvesterLimit,harvesterOverride);
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;
@@ -556,6 +581,12 @@ void QuantBot::update() {
     // Only opposing Brutal houses receive the seven-worker difficulty ceiling.
     if (const int ceiling = harvesterCountCeiling(); ceiling > 0)
         baseHarvesterLimit = std::min(baseHarvesterLimit, ceiling);
+    // A custom game's difficulty harvester limit for the map size (QuantBot Config.ini
+    // HarvesterLimit*Map: on 96-128 maps Easy 8, Medium 15, Hard 40, Brutal 100) is a real ceiling:
+    // until 1.0.849 the spice budget above overwrote it and every difficulty planned the same fleet
+    // (docs/ai-scenario-matrix.md, "Difficulty separation").
+    if (const int configured = configuredCustomHarvesterLimit(); configured > 0)
+        baseHarvesterLimit = std::min(baseHarvesterLimit, configured);
 	// Apply spice-based reduction for all modes and difficulties
 	int maxHarvestersForSpice = lastCalculatedSpice / 2000;
 	int oldLimit = harvesterLimit;
@@ -568,6 +599,10 @@ void QuantBot::update() {
 			oldLimit, harvesterLimit, lastCalculatedSpice, baseHarvesterLimit, 
 			(gameMode == GameMode::Campaign) ? "Campaign" : "Custom", static_cast<int>(difficulty));
 	}
+
+    // A driving colonist's escort keeps its ring places every cycle, not only on the unit
+    // pass: the places move with each tile the MCV enters (docs/formations.md).
+    keepColonistEscortsInPlace();
 
     // Custom single-player splits the heavy pass into two stateless phases at the
     // same 50-cycle cadence: unit management on one cycle, base building half an
@@ -599,6 +634,11 @@ void QuantBot::update() {
 		return;
 	}
 
+    // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
+    // R and U and the late-game target choices H and Z read it), before anything this pass consults it.
+    if (forceVariant(kForceEstimate | kForceGarrison | kForceStrengthWaves | kForceReserve | kForceThreatTurrets
+                     | kForceFinishWeakest | kForceMassAssault | kForceFinishLeading) || style().counterBps > 0
+        || (strategyMix() && strategyMix()->counter)) updateEnemySightings();
     // Army posture is a house-level decision that both phases consult: the unit
     // phase recalls and holds troops with it, and the build phase sizes the front
     // battery with it. It is therefore evaluated on every pass this house
@@ -668,6 +708,8 @@ void QuantBot::update() {
 
     updateCampaignWave();
 	checkAllUnits();
+    // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
+    keepPlannedSitesClear();
 
 	// Phased custom single-player handled the whole timer block on its own build
 	// phase above and returned; reaching here means this is the unit phase (or a
@@ -707,6 +749,7 @@ uint64_t QuantBot::traceDecision(const std::string& event, AITelemetry::Record d
 }
 
 void QuantBot::onObjectWasBuilt(const ObjectBase* pObject) {
+    if (pObject && pObject->getItemID() == Structure_RocketTurret) ++forceStats.turretsBuilt;
     if (pObject) traceDecision("object_built", AITelemetry::Record().set("item", pObject->getItemID())
         .set("object", pObject->getObjectID()).set("x", pObject->getLocation().x).set("y", pObject->getLocation().y));
 }
@@ -716,6 +759,7 @@ void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
     if (currentGame
             && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall)
         recentStructureLosses.push_back({location, getStructureSize(itemID), getGameCycleCount(), static_cast<Uint32>(itemID)});
+    if (itemID == Structure_RocketTurret) ++forceStats.turretsLost;
     dangerUpdated = std::numeric_limits<Uint32>::max();
     traceDecision("structure_lost", AITelemetry::Record().set("item", itemID).set("x", location.x).set("y", location.y));
 }
@@ -764,6 +808,15 @@ void QuantBot::onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) {
     attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
 }
 
+/// A destroyed hostile building is what an assault on a base buys, so it is a kill in the
+/// posture machine's trade, at its purchase price. Counting only mobile kills made every
+/// attack on a turret-defended base read as a bad trade: the army withdrew from bases with
+/// no army left and grinding them out took forty minutes (quantbot_all_against_atreides).
+void QuantBot::onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) {
+    if (!currentGame || originalHouseID >= NUM_HOUSES || !isStructure(itemID)) return;
+    attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
+}
+
 void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) {
 	const ObjectBase* pDamager = getObject(damagerID);
 
@@ -802,6 +855,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		if (pGroundUnit->isAwaitingPickup()) {
 			return;
 		}
+        // A hit on a hunt party's member is contact (Blob waves): a gathering, marching or
+        // reforming party unblobs into the fight before the per-unit reactions below.
+        if (damage>0 && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID())
+            huntPartyMemberHit(pGroundUnit, pDamager);
 
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
@@ -836,7 +893,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			// Defend the harvester!
 			const Harvester* pHarvester = static_cast<const Harvester*>(pGroundUnit);
 			if (pHarvester->isActive()) {
-				scrambleUnitsAndDefend(pDamager,false,pObject);
+				// A Palace is a missile's launcher, not a contact: never scramble to it (vanilla
+				// m22: a Death Hand on a harvester sent the army into the Sardaukar base).
+				if (pDamager->getItemID() != Structure_Palace) scrambleUnitsAndDefend(pDamager,false,pObject);
                 auto& safety = harvesterSafety[pHarvester->getObjectID()];
                 safety.nextCheck = 0;
                 safety.retreatUntil = getGameCycleCount() + MILLI2CYCLES(30000);
@@ -911,12 +970,20 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 					// A deviated unit cannot be repaired, so send it to reposition instead of
 					// spending the pass on a repair order the engine will refuse.
 					&& pGroundUnit->isEligibleForRepair()
+					// Test-only Blob variant: a damaged member stays with a party that has not met
+					// a fight yet (its repair run would strip the blob mid-march).
+					&& !((blobVariantOverride & kBlobKeepDamaged) && huntPartyOf(pGroundUnit->getObjectID())
+						&& huntPartyOf(pGroundUnit->getObjectID())->phase != BlobWavePolicy::Phase::Fight)
 					) {
+					if (huntPartyOf(pGroundUnit->getObjectID())) ++blobStats.repairs;
 					doRepair(pGroundUnit);
 				}
 
-				// Rotate unit backwards if it is taking damage if it is softer
-				else if (!autonomousAttack && pGroundUnit->getItemID() != Unit_Devastator
+				// Rotate unit backwards if it is taking damage if it is softer. A hunt party's
+				// member stays where its party wants it.
+				else if (!autonomousAttack && !huntPartyOf(pGroundUnit->getObjectID())
+						&& !forceHeld(pGroundUnit->getObjectID())
+						&& pGroundUnit->getItemID() != Unit_Devastator
 						&& pGroundUnit->getItemID() != Unit_SiegeTank) {
 					doSetAttackMode(pGroundUnit, AREAGUARD);
 					moveToOptimalSquadPosition(pGroundUnit, 6);  // 6 tile radius
@@ -975,7 +1042,7 @@ void QuantBot::refreshTacticalDanger() {
     };
     for (const auto* unit : getUnitList()) if (unit->isActive()) observe(unit);
     for (const auto* structure : getStructureList()) observe(structure);
-    factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger,w,h);
+    factoryEnemyClearanceStale = true;
     for (const auto& loss : recentStructureLosses) {
         const Uint32 age = now - loss.cycle;
         const Uint32 lifetime=loss.item==Structure_HeavyFactory ? MILLI2CYCLES(900000) : MILLI2CYCLES(300000);
@@ -997,6 +1064,14 @@ void QuantBot::refreshTacticalDanger() {
         traceDecision("tactical_safety_snapshot", AITelemetry::Record().set("visible_threats",threats)
             .set("recent_structure_losses",recentStructureLosses.size()).set("unsafe_fields",unsafeFields.size()));
     }
+}
+
+const std::vector<int>& QuantBot::factoryClearance() const {
+    if (factoryEnemyClearanceStale) {
+        factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger, getMap().getSizeX(), getMap().getSizeY());
+        factoryEnemyClearanceStale = false;
+    }
+    return factoryEnemyClearance;
 }
 
 int QuantBot::dangerAt(Coord pos, Coord size, bool losses) const {

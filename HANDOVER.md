@@ -1,3 +1,15 @@
+## 2026-10-23 — 1.0.851 integration candidate
+
+User authorized integration with latest main, Classic Desert as default,
+publication and website update. Repository and website admin access confirmed.
+Integrated origin/main b5b83abf (published 1.0.850) with the local UI work.
+Preserved upstream protocol/save, AI, multiplayer and performance changes;
+resolved version/test-registration/history conflicts additively. Classic Desert
+is the default for new profiles and profiles missing UI Skin. Explicit saved
+Modern/Lapis/Classic preferences are preserved, not forcibly overwritten.
+All three source version declarations are 1.0.851. Verification/publication
+results must be recorded separately; this entry alone does not certify them.
+
 ## 2026-10-17 — local 1.0.839: approved 2B sandy pixel Classic Desert
 
 The user selected B's brighter sand-blasted button material, then the arched
@@ -260,6 +272,1521 @@ passes its runtime check (exit 0); its executable matches the rebuilt target.
 Native 1:1, mod-specific scale and all newer upstream gameplay/protocol/save
 code remain unchanged by the UI feature. The user requested local play-testing,
 so no push, PR, tag, device install or publication has been performed.
+## 2026-10-22 — local 1.0.850 verified and installed on the MBA
+
+1.0.849 + `fix/difficulty-separation` 31654a95 + `perf/fps-8house` ef34cf02 (HANDOVER conflict only) + version
+bump ed3e0b21. Protocol 88, save 9868. `agent-workspace stage verify` at ed3e0b21: CTest 105/105 (1204 s).
+Package: executable SHA256 acebbe73147cd6e8b831a8e52cca55f73e97beebf22ce0229779dc6a9d5a232f, no Homebrew/local
+links, signature and runtime check passed. Installed on the MBA 2026-10-22 09:06 AEDT by
+`/tmp/push-dunecity-1.0.850.sh` (same SHA256, signature and runtime check passed); 1.0.849 copied to
+`~/Library/Application Support/DuneCity App Backups/before-1.0.850-20261022-090647/`. Not pushed.
+
+## 2026-10-21 — Difficulty separation: Brutal > Hard > Medium > Easy on long games (branch `fix/difficulty-separation`, from 1.0.848 73404c33 + merged 1.0.849; protocol 88, save 9868; not released)
+
+Agent LadderFix. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty separation"; data
+`~/Documents/projects/dunecity-results/difficulty-sep/` (`before`, `after2`, `armA|armF|armAF`, `sfix-long`, `e1`,
+`mirror-qh`, `*-report.md`, `ctest-bea4449c.log`).
+
+- **Cause of the flattening:** 1.0.848's gate rename gave Custom Medium the Hard/Brutal `Fixed:Tuned,Swarm` strategy
+  (A/B, short maps: QB v QM +0.12 -> +0.33, QH v QM +0.12 -> +0.40); FinishWhenLeading has no effect in 1v1 and stays on.
+- **Changes:** `QuantBot::playsStrategy()` (Custom Hard/Brutal) gates the strategy. Stefan rejected the income bonus
+  (removed, with `House::addRefinedSpice`): instead the configured `HarvesterLimit*Map` is a real ceiling in custom
+  games above 64x64 (`QuantBot::configuredCustomHarvesterLimit`; it was overwritten by the spice budget, so every
+  difficulty planned the same 60-70-worker target), and Brutal's 8-12 worker opening floor and 1:1 army capital per
+  worker apply in vanilla custom games too, but not against a coalition or while outnumbered (All against Atreides
+  lost 6/6 without that gate). The military limit already binds in long games (Hard ends at its 50k/70k cap, Brutal
+  goes to 175-365k in DuneCity): unchanged. No resource bonus anywhere.
+- **Ladder** (scenario-matrix.py, now decided on long maps: Random Skirmish 128x128/160x160, both mods, medium bases,
+  75/90 min, 144 games per pair, both houses of every seed; short maps reported with 72): long before -> after
+  QB v QH +0.34 -> +0.64 [+0.50, +0.76] (paired +0.30), QH v QM +0.36 -> +0.46 [+0.34, +0.59], QM v QE +0.87 -> +0.93,
+  QB v QM +0.46 -> +0.83, QH v QE +0.94 -> +1.00. Short maps after: QB v QH +0.19 [-0.05, +0.42] (not shown), QH v QM
+  +0.25 [-0.01, +0.50], QM v QE +0.85, QB v QM +0.51. Long time-outs after: 13/17/5 of 144 (QB v QH / QH v QM / QM v QE).
+- **House bias:** Hard mirror Harkonnen 65 / Atreides 74 / 5 draws; the seed's start decides more than the house;
+  only Habbanya-Penny favours Atreides (25-10).
+- **Tests** (Release `build`, bea4449c): `ctest -j3 -E perf_regression` 104/104 passed (whole mandatory set incl.
+  all_against_atreides, ffa_army_deploys, scenario_matrix smoke, strategy, opening-economy probes, custom_attack);
+  perf_regression passed alone (53 s, mini load ~6 from cluster games).
+
+## 2026-10-21 — 8-house FPS, second pass: harvester-safety spike, frame pacing, 8-house perf_regression (branch `perf/fps-8house`, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
+
+Agent FpsFix2. Details and tables: `docs/game-performance.md`, "Second pass". Evidence
+`~/Documents/projects/dunecity-results/fps-8house` (results.jsonl, digest15k.jsonl, regression8.jsonl, air-results.jsonl).
+
+- **57 ms spike:** `manageHarvesterSafety` route-tested ~11,000 failing corridors per threatened harvester
+  (all of a house's harvesters are checked on the same pass). Now `TacticalSafetyPolicy::lowestSafeCandidate`
+  (same pick, unit-tested against the old loop) + plain-tile flag: worst `checkAllUnits` 56 -> 11 ms.
+  21 digests over 15,000 cycles equal 1.0.849.
+- **Frame pacing** (`include/FramePacing.h`): single-player frames stop catching up after 16 ms of cycles;
+  network games unchanged. Headless main loop on the save: mini 32 -> 58 fps (p99 97 -> 35 ms), Air on battery
+  in Low Power Mode 18.6 -> 42.3 fps (p99 172 -> 48 ms); 10 main-loop digests equal the stepped run.
+- **perf_regression** also runs the save (fixture `tests/performance/data/eight-house-384`, 484 KB): cpu p99,
+  frame-CPU p99 and paced main-loop frame p99 budgets; 1.0.849 fails all three.
+- **Not done:** rendered 1440x900 window runs (mini or Air), Air on AC; remaining build-pass (20-29 ms) and
+  city-growth (16-18 ms) spikes.
+
+## 2026-10-21 — 8-house 384x384 FPS: map-area work removed from AI, city sim and object removal (branch `perf/fps-8house` from 4018fe36 / 1.0.849, worktree `~/Documents/projects/dunecity-fps-8house`; protocol 87 and save 9868 unchanged; not released)
+
+Agent FpsFix. Stefan's `fpsstillfucked.dls` (4P - 384x384 - new beginning, eight QuantBot Hard, ~810
+units, 2 ms): 37-90 ms frames. Cause: per-call work proportional to the 147,456-tile map (placement
+distance fields, whole-map object removal, city sand stamp and origin walks, rock survey, anchor field,
+harvester and air-coverage scans). All changes exact; details, numbers and what is not done in
+`docs/game-performance.md`, "Eight houses on a 384x384 map". Evidence `~/Documents/projects/dunecity-results/fps-8house`.
+
+- **Stepped probe, his save, mini:** sim 2.78 -> 1.42 ms/cycle, p99 32.7 -> 12.4, max 98.6 -> 57.4; city
+  p99 18.1 -> 2.8 ms; 10-cycle frames over 33 ms 206 -> 9 of 750. 11 `PROBE_DIGEST`s (every 750 cycles,
+  7,500 cycles) identical to 1.0.849.
+- **Not done:** frame pacing (sim time budget per frame), rendered/Air AC and Low Power Mode runs (his
+  game stayed open), 1.0.833/847 comparison, an 8-house `perf_regression` case, the remaining ~57 ms
+  `checkAllUnits` spike after the per-unit loop.
+- **Tests** (Release `build`, ctest -j3): 45/45 passed (568 s): dunelegacy_tests (new: chamfer-field
+  equivalence, rock survey vs per-enemy scan incl. off-map enemies, air coverage spans/escape),
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and every quantbot_* (incl. all_against_atreides, ffa_army_deploys, scenario_matrix).
+
+## 2026-10-19 — local 1.0.849 verified and installed on the MBA
+
+1.0.848 + `fix/attack-moves-into-target` 9398cf8d (Attack button / A key on a spice bloom fires at it from
+range instead of attack-moving onto it; bug since 1.0.834, commit 962f84b8). UI-only: protocol 87, save 9868,
+compatible with 1.0.848. `agent-workspace stage verify` at 7cdb093e: CTest 105/105 (1360 s). Executable SHA256
+16a6b5fd06c4e25ea04d63c87b622f669c0aabd60e859debb6666eb4238de3bf, no Homebrew/local links, signature and
+runtime check passed. Installed on the MBA 2026-10-19 21:52 AEDT by `/tmp/push-dunecity-1.0.849.sh`; 1.0.848
+copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.849-20261019-215230/`. Not pushed.
+
+## 2026-10-19 — Attack cursor on a spice bloom fires at it again (branch `fix/attack-moves-into-target` from 73404c33 / 1.0.848, worktree `~/Documents/projects/dunecity-attack-fix`; protocol 87 and save 9868 unchanged; not released)
+
+Agent AttackFix. Stefan (1.0.848, MBA): "attack is broken, it moves the unit into what it is attacking";
+narrowed by him to the Attack button / A key on a **spice bloom**.
+
+- **Cause:** `Game::handleSelectedObjectsAttackClick` (962f84b8, "Add modern RTS controls", first in
+  1.0.834, so 1.0.834-1.0.848) turns an Attack-cursor click on ground without an object into an
+  attack-move; only Ctrl kept the old fire at the position. A bloom is terrain, not an object, so the
+  units walked onto it (Dune Legacy sends `CMD_UNIT_ATTACKPOS`, which fires from weapon range and sets the
+  bloom off). Every unit type, alone or grouped, formations on or off (the click code is mod-independent;
+  the probe runs vanilla); right-click on a bloom is a move in both (unchanged). Clicks on enemy units and
+  structures already went to `handleAttackClick` (by code; not re-measured).
+- **Fix:** an explored spice bloom clicked with the Attack cursor is fired at (`handleAttackClick` ->
+  `CMD_UNIT_ATTACKPOS`, forced), like Ctrl+click; units that cannot shoot it (`!fightsOnAttackMove()`:
+  harvesters, MCVs, carryalls, Saboteurs) get no order. UI only: the same commands as before, so no
+  protocol bump. Tooltip and `docs/rts-controls.md` say so.
+- **Engine as in Dune Legacy (unchanged):** the first shot at a bloom ends the order
+  (`UnitBase::attack`). Launcher and Deviator rockets scatter (Bullet.cpp), so that one rocket can miss the
+  tile and the bloom stays; sonic waves never set a bloom off (Map::damage). Keeping the order until the
+  bloom goes off would need new saved unit state (`forced` is cleared when a unit stops, so it cannot mark
+  it); not done.
+- **Test:** `rts_controls_probe` section 8 (`RTS_CONTROLS_BLOOM_PASS`): Tank, Siege Tank, Launcher, Sonic
+  Tank, Devastator, Deviator, Soldier, Trooper, Trike, Raider, Quad and Ornithopter, each alone via the
+  panel's Attack button and the A key, then one ground group of all of them plus a Harvester and an MCV
+  (formation moves off and on, both routes): no attack-move, every unit takes the attack-position order,
+  fires only within weapon range, no ground unit enters the bloom tile, the bloom goes off (precise
+  weapons), the Harvester/MCV get no order. Fails on 73404c33 (`single 41 button: the Attack click on the
+  bloom became an attack-move`; with that check off: `unit 41 drove onto the bloom`).
+- **Tests** (Release `build`, ctest -j3): 46/46 passed (631 s): dunelegacy_tests, rts_controls_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and every quantbot_* (incl. all_against_atreides, ffa_army_deploys, scenario_matrix).
+
+## 2026-10-19 — local 1.0.848 verified and installed on the MBA
+
+Staging = `integrate/848-trial` b93b06ec fast-forwarded (merges fix/ai-army-stuck-in-base, chore/remove-map-sharing,
+fix/remove-economic-victory, feat/ai-ratio-tuning 563517f9, fix/ai-late-game-2 c5ac60c0 incl. fix/ai-difficulty-ladder,
+fix/848-ffa-stalemate e806e6ca) + version bump 47456781. Protocol 87, save 9868. `agent-workspace stage verify`
+at 47456781: build, check-build-deps and CTest 105/105 passed (1185 s). Package (`cmake --install build-int`):
+executable SHA256 fe6dcb18a45e90f7122beba7af6fcfd7c9d2920e7146fc38ba0d80df052c59e8, no Homebrew/local links,
+signature and `--check-desktop-runtime` passed. Installed on the MBA 2026-10-19 20:45 AEDT by
+`/tmp/push-dunecity-1.0.848.sh` (same SHA256, signature and runtime check passed); 1.0.847 copied to
+`~/Library/Application Support/DuneCity App Backups/before-1.0.848-20261019-204506/`. Not pushed or published.
+Open after 1.0.848: 4P DuneCity FFA self-play still times out ~13/24; 6P DuneCity FFA undecided; Brutal ranks
+just below Hard in mixed skirmish; 3v3 Hard v Medium 1/4; FinishWhenLeading is on as a release fix but level
+head-to-head; Custom Medium now plays Fixed:Tuned,Swarm (tuned on Hard/Brutal only).
+
+## 2026-10-19 — 1.0.848 blocker: FinishWhenLeading on by default (branch `fix/848-ffa-stalemate` from integrate/848-trial 3e67a4cb, protocol 87, save 9868; not released)
+
+Agent LateGame2 (diagnosis help: RatioTuning4). Write-up: `docs/formations.md`, "Free-for-all:
+finishing the game, 1.0.848"; data `~/Documents/projects/dunecity-results/late-game-2/trial-*` and
+`~/Documents/projects/dunecity-results/ratio-tuning/ab848/`.
+
+- **Failures on 3e67a4cb:** `quantbot_ffa_army_deploys` (9101: first elimination 33.1 min) and the
+  matrix smoke 90866 (time-out). Not caused by the tuned mixes (A/B: fails/ends the same way with old
+  mixes); 9101 passing before was chance (8-9 of 24 seeds eliminate anyone by minute 30).
+- **Fix:** `[Force Concentration] FinishWhenLeading` (hashed, default on, Medium/Hard/Brutal): the
+  house whose team army leads the strongest enemy team's sends its waves at the weakest known house.
+  Self-play 4P DuneCity time-outs 16 -> 13/24, first elimination 37.6 -> 31.3 min; level in the 4P
+  head-to-head (-0.013), Fortress, `/weak`, CY and the 72-game ladder pairs. Does not meet the strict
+  "interval above 0" rule; accepted as the release fix (see the write-up). 9101: eliminations 28.5/29.5;
+  90866 decided at 32.7.
+- **Tests** (Release `build`, ctest -j3, this commit's tree): 105/105 passed, incl. quantbot_ffa_army_deploys,
+  quantbot_scenario_matrix, quantbot_force_concentration, all_against_atreides, strategy, perf_regression,
+  dunelegacy_tests and the rest of the mandatory set. Ablation style `@nofinishlead`.
+
+## 2026-10-19 — 1.0.848 integration (branch `integrate/848-trial`, worktree `~/Documents/projects/dunecity-int-848`, protocol 87, save 9868; not released, no version bump)
+
+Agent Integrate848. From `integrate/feature-batch` b683286f (1.0.847), merged in order:
+`fix/ai-army-stuck-in-base` 8a8e4833 (with perf/game-fps, test/match-scoring, test/ai-scenario-matrix,
+exp/ai-late-game), `chore/remove-map-sharing` 0a9ff138, `fix/remove-economic-victory` f44564ee,
+`feat/ai-ratio-tuning` (4c3ee80b, 873030df, e276196e, 99b63340, final 563517f9: Fremen tuned top mix and
+tech-band mixes), then `fix/ai-late-game-2` c5ac60c0 (quantbot_strategy check 49394f73, perimeter hold V
+removed, `fix/ai-difficulty-ladder` c766c262 with one spend-past-cap helper).
+- **Conflicts:** HANDOVER (all entries kept, one duplicate scenario-matrix entry dropped); protocol
+  history and `NetworkManagerTestCase` (one new 87); `tests/ai/elimination-match.inc` (FfaArmy include +
+  ten-slot `sampleMix`); `tests/ai/vanilla-match.py` (late-rule and M/O/Z counters + `start_mix`;
+  `army.csv` and `mix.csv`; `--tech` copies on the bundled-map path); `QuantBotBuild.cpp` heavy allocation
+  (ratio's ten-slot `mixItems`/`unitMix` kept, M's tank stop past the limit added); `QuantBotStyle.cpp`
+  `strategyMix` (ratio's `strategyProfile`, ladder's `autonomousCustomArmy` gate - so Custom Medium now
+  plays the default Fixed:Tuned,Swarm mix too); `strategy-probe.inc` (lead share larger than Learned);
+  `docs/ai-scenario-matrix.md`. Checked: the QuantBot source delta of the result against c5ac60c0 is
+  exactly ratio's own patch (plus M's tank stop).
+- **Integration-only fixes:** the scenario matrix's economic-victory references (threshold, win type)
+  dropped; an older `games.csv` is rewritten with the current columns on append.
+- **Spice quota and tax credits** (Stefan: "anything with a spice quota can be achieved with tax credits
+  also"): the ladder's `House::checkQuotaWin` counts the whole earned store in every game mode (the engine
+  checks the local house). New: the credit-storage probe makes every house the local house and checks a
+  quota met by taxes alone / spice + taxes / spice alone (taxes only with the city simulation, starting cash
+  never); new ctests `house_credit_storage_custom_{vanilla,dunecity}` run it in a custom game.
+- **Versions:** protocol 87 (history covers 83-86, the ladder and the quota); save 9868 (ratio's ten-slot
+  mix state; 9866/9867 load and split; econ kept the 9865 layout; army/late-game/ladder change no saved
+  state).
+- **On 3e67a4cb** full `ctest -j3` was 103/105: `quantbot_ffa_army_deploys` (9101, nobody eliminated by
+  minute 30) and the matrix smoke 90866 (time-out) failed - not the tuned mixes (RatioTuning4's A/B), the
+  FFA finish; fixed by LateGame2's `fix/848-ffa-stalemate` e806e6ca (FinishWhenLeading on, protocol 87
+  comment extended, config hash changes), merged as e0d3a958 (HANDOVER conflict only).
+- **Verified on e0d3a958** (Release `build`, `check-build-deps` clean before/after): full `ctest -j3`
+  **105/105 passed** (incl. quantbot_ffa_army_deploys 107 s, quantbot_scenario_matrix smoke 58 s,
+  quantbot_strategy, all_against_atreides, perf_regression, menu_navigation_probe, the four
+  house_credit_storage tests). Menu probe `--size 1024x768 --size 640x480`: both MENU_PROBE_PASS; no
+  "Metaserver Maps" or online editor buttons.
+- **Open for Main/Stefan:** Custom Medium plays the default Fixed:Tuned,Swarm mix (tuned on Hard only)
+  through the ladder's gate rename - not intended by RatioTuning4.
+
+## 2026-10-19 — QuantBot designed tech-band mixes; F/S/M top band measured, Fremen accepted (branch `feat/ai-ratio-tuning`, protocol 84 after merging `fix/ai-army-stuck-in-base`, save 9868, not released)
+
+Write-up `docs/ai-play-styles.md` 8.9 (bands) and 8.10 (top band). Stefan cut tech-level testing: the lower bands are set by design.
+
+- **Bands (e276196e):** `QuantBotConfig.cpp` `tunedRatios[house][2..6]` for all six houses, 24 band mixes. Light only at 3, 50%
+  tanks at 4, tanks 40/launchers 25 at 5, siege added at 6 (30/25/20); the light remainder follows the house's top mix.
+  Unit test `the shipped tech-band ratios are valid for their band` checks buildable slots, 2-50% and sum 100.
+  `quantbot_strategy` section 5 runs a tech-4 Fortress 1v1: band mix 50/20/30, every prior pass plays it, tanks 54%/52% of the early value.
+- **F/S/M top band:** round 1 `t8-cost` / `t8-winners-end` (720 games each), then confirmation `t8-best` (1,260 fresh games),
+  then a Fremen-only confirmation `f8-fremen` (840 games, 420 pairs: +0.21, -0.005..+0.42).
+  **Fremen accepted:** winners' end 11,10,13,5,8,0,18,11,13,11, both fresh runs combined +0.24 (+0.05..+0.42), n=630; code default.
+  Not accepted: Sardaukar -0.46 (worse), Mercenary -0.13. They keep the configured opening.
+- **H/A/O re-confirmed** in the same games after the specials change: per-house effect Harkonnen +0.52 (beats),
+  Atreides +0.15, Ordos +0.11 (n=210 each). Their tuned top mixes stay.
+- **Merges:** `test/ai-scenario-matrix` acdada9b (economic-victory references dropped) and `fix/ai-army-stuck-in-base` 8a8e4833.
+  On the merged branch `quantbot_strategy` fails TrikeSwarm's lead margin (+381 < +400: the 50% cap plus the army fix).
+  Main's decision: the check becomes "lead larger than Learned" (LateGame2's commit). `quantbot_scenario_matrix`
+  4p-ffa-medium-smallarmy/vanilla/90866 times out (60 min, nobody eliminated): FFA finishing, not ratios.
+- Not run (scope cut): Brutal/Fortress/`/weak` with the band defaults; exploration at tech 3-6 (cancelled).
+
+## 2026-10-19 — FFA late game round 2: perimeter hold V removed, late-game candidates M/O/Z/H measured (none accepted), difficulty-ladder merged (branch `fix/ai-late-game-2`, protocol 84, save 9865; not released)
+
+Agent LateGame2. Write-up: `docs/formations.md`, "Free-for-all: finishing the game, round 2"; data
+`~/Documents/projects/dunecity-results/late-game-2/` (`v-*`, `v-probes`, `self-*`, `h2h-*`, `m-*` on the
+merged code, `bisect-6p-*`, `diag-spend-*`, `ctest-*.log`, `matrix-{before,after}-report.md`) and
+`~/Documents/projects/dunecity-results/scenario-matrix/late-game-2-after`.
+
+- **Commits:** 49394f73 (`fix/strategy-lead-check`, only `quantbot_strategy`: lead share larger than
+  Learned instead of +500 bps; 6 seeds x 6 mixes: margins +88..+2974, +500 failed 3/36 with V, 5/36
+  without); e99b35e1 V removed + no-spice low-cash tax check on surviving houses (a razed house banked
+  12-6,056 credits either way); 0938a4c4 candidates M `SpendAtCap`, O `SiegeStandoff`, Z `MassAssault`
+  (off, hashed, styles `@spend @standoff @assault @late2`); 05e8c11f `@spendfinish @spendfs`; a402ee37
+  merge of `fix/ai-difficulty-ladder` c766c262 with one spend-past-cap helper
+  (`QuantBotBuildPolicy::surplusMilitaryBudget(limit, credits, maxPercent=50)`; M passes 100;
+  `ForceConcentrationPolicy::surplusBudget` removed; M's heavy-only split is M's alone).
+- **V re-measured (no V - V):** 4P FFA +0.019 (-0.21..+0.23), Fortress -0.083 (-0.46..+0.29), `/weak`
+  +0.109 (-0.03..+0.26), CY -0.040 (-0.60..+0.52); 48-50 games each, all level. Nothing of V kept.
+- **Draws (4P self-play rs160, 24 seeds):** vanilla 0/24 in every arm. DuneCity merged default 11/24;
+  M 11/24; H 8/24; M+H 9/24; before the merge M 12/24, O 19/24, Z 15/24. Head-to-head: M +0.025
+  (-0.17..+0.24), H -0.167 (-0.38..+0.05), M+H -0.114, O -0.012, Z -0.226 (-0.45..+0.00). M and H
+  level on Fortress, `/weak` and CY. **None accepted** (each either ends no more games or scores below
+  the default); all stay off.
+- **6P DuneCity FFA (matrix cell, 4 seeds):** 3/4 decided before `fix/ai-difficulty-ladder`, 0/4 after;
+  maps unchanged. Bisection: Medium surplus off 0/4, old Medium waves 1/4, reachable readiness and
+  opening cap off 0/4 - no single part. Hard sits at its 63-70k cap beside a 7-47k Medium. M on: 2/4
+  (Hard 109-140k), H on: 3/4 but QM ranks above QH (H runs for Medium too). Open; see "What to try
+  next" in the write-up (H only for the leader; force rules Hard/Brutal only; M as the Hard/Brutal
+  answer to Medium's surplus).
+- **Scenario matrix full tier skirmish/cy/mp/aaa, undecided games:** before (`army-stuck-before-c`,
+  8a8e4833) skirmish 10/52, cy 5/28, mp 8/54, aaa 0/18; after (a402ee37) 6/52, 1/28, 8/54, 0/18. After's
+  flags: 6P DuneCity FFA 0/4, 2v2 DuneCity QH mirror 0/4 (nobody eliminated), 3v3 medium Hard team 1/4,
+  QH > QB > QM > QE; before's QM idle (7P FFA) gone.
+- **Cluster:** the PC lost every DuneCity unit to MAX_PATH until ClusterQueue moved its scratch to
+  `C:\s\` and re-queued them (22:30-23:00).
+- **Tests** (Release `build`, ctest -j3, a402ee37 + docs): 100/100 passed, incl. dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and all 35 quantbot_* (all_against_atreides, strategy, ffa_army_deploys,
+  scenario_matrix, no_spice_income_*).
+
+## 2026-10-19 — QuantBot difficulty ladder, team play, late campaign missions (branch `fix/ai-difficulty-ladder`, protocol 84 + merged `fix/ai-late-game-2` e99b35e1 (V removed), save 9865; not released)
+
+Agent DifficultyLadder. Write-up: `docs/ai-scenario-matrix.md`, "Difficulty ladder, team games and late
+campaign missions"; data `~/Documents/projects/dunecity-results/difficulty-ladder/` (`before`, `c9`,
+`c5-campaign`, reports `*-report.md`, diagnoses `diag-CampaignLate|CampaignStall|TeamPlay3v3`).
+
+- **Ladder holds over 72 games each (after):** QB v QM +0.30 [+0.08, +0.50] (before +0.25), QH v QE +0.78
+  [+0.64, +0.92], QM v QE +0.64 [+0.46, +0.80] (before +0.20, 30/72 time-outs, Habbanya-Penny 0-0-18;
+  after 3/72, 17-0-1). Ladder now has a CY 96x96 map; `--ladder-seeds`, `--cells` in the matrix.
+- **Changes:** Custom Medium on the whole-army path (`autonomousCustomArmy`, renamed from
+  `autonomousCustomHardBrutal`); held opening capped at the own threshold share of Medium's limit;
+  reachable readiness (no credits+spice to reach it: attack with what you have); Medium spends banked
+  credits up to +50% past its cap; team-aware outnumbered/perimeter turrets/opening; campaign partner
+  harvester target counts competitors, ignores Palace missiles as contacts, measures waves against the
+  strongest enemy after 15 min; DuneCity: structures off reserved factory plots, silos below heavy-factory
+  tech, quota counts tax credits in the shared store (also for humans); Medium opening walks to the heavy
+  factory; generator regenerates asymmetric maps with a spiceless start (pinned digests unchanged).
+- **Campaign Hard partner:** vanilla 84/96 -> 92/96, DuneCity 90/96 -> 96/96; m20-22 Atreides/Harkonnen
+  4/12 -> 9/12; DuneCity Ordos m17, Harkonnen m3, Ordos m1 all won. Still lost: Atreides m20 x2, Harkonnen
+  m22 95897, Atreides m17 80762 (new).
+- **Open:** 3v3 Hard v Medium only 1/4 (Hard allies now sortie; Medium has the same tactics now, Hard only
+  its economy); 6P DuneCity FFA 0/4 decided (before 3/4); skirmish order QH > QB > QM > QE (QB 20 houses,
+  wide interval). Tried and reverted: strength-relative readiness (QB v QM 12-24, broke the FFA test), the
+  Medium-limit cap on every wave (c10: no better). `tests/ai/campaign-helper-economy-probe.inc` (not in
+  ctest) fails at its own fixture ("above-market harvesters") before any QuantBot logic.
+- **Protocol:** AI decisions changed in every custom game; the integrator must bump the protocol.
+- **Tests (Release `build`, HEAD game code 30338ce0):** ctest -j3 44/44 passed (all quantbot_*,
+  dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions,
+  rts_controls_probe, preplace_queue_probe, skirmish_generator_tests, save_scenario_export,
+  network_wire_harness) and perf_regression passed; the smoke 4P FFA 90866 is decided.
+
+## 2026-10-18 — FFA army fix: ablation decided, late-game candidates rejected, scenario matrix merged (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Agent LateGame. Write-up: `docs/formations.md`, "Free-for-all: finishing the game"; data
+`~/Documents/projects/dunecity-results/army-stuck/` (`*-ablation*`, `late-*`, `cy-tel`) and
+`~/Documents/projects/dunecity-results/scenario-matrix/army-stuck-{before-c,after}`.
+
+- **Merged** `exp/ai-late-game` (scenario matrix acdada9b, late-game candidates T/P/H/K, `--baseline-tag`)
+  into the fix branch; `exp/ai-late-game` fast-forwarded to it. Ablation style files renamed in the
+  index (case-only renames had never been committed).
+- **UVX ablation (placement score):** X helps (`/weak` without X -0.222, -0.45..-0.02); U neutral; V not
+  helpful anywhere (`/weak` +0.111 and FFA +0.115 without it, both level). V's removal (0fcfc612) made
+  `quantbot_strategy` and `quantbot_no_spice_income_low-cash` fail deterministically (both pass with V),
+  so it was reverted (1c2bedf6). **Open:** re-examine those two tests against a V-less opening, then remove V.
+- **CY 1v1 -0.10 v 1.0.847:** level; only the bundle walk-out can differ in a 1v1 (moves the point
+  25% -> 22-34% in 10 of 38 recomputations); 100/120 games diverged chaotically. No change.
+- **Late-game candidates all rejected (stay off):** head-to-head T +0.057, P +0.125, H -0.044 (32 games),
+  K +0.031, T+P +0.179, all four -0.130 (48), S +-0.006 (48): all level; self-play DuneCity time-outs
+  default 5/12, all four 8/12, T+P 7/12, P 7/12 - every candidate ends fewer games. New candidate S
+  (`SonicClearLane`, `@sonic`): sonic tanks pick targets whose wave misses own units; active (675
+  retargets per Atreides house) but level. Military cap use not changed (not measured).
+- **Windows probe build:** `tests/performance/game-perf.inc` uses GetThreadTimes on Windows (436e6d3e).
+- **Harness:** late-rule counters in `houses.csv` (old files rewritten with the new columns on append).
+- The cluster's finish step failed for late-selfTPP/late-sonic2 (`import match_score`, runpy path); rows
+  are complete, reports run by hand.
+- **Scenario matrix, full tier skirmish/cy/mp/aaa (152 games, cluster):** final code (= `before-c`, ff0474c7
+  behaviour) 150 games played, time-outs skirmish 10/52, cy 5/28, mp 6/52, aaa 0/18, no crash; flags: QM
+  idle once (7P FFA), 3v3 medium small-army Hard team 0/4, ladder order inverted (as on 1.0.847). V
+  removed (`after`, 0fcfc612, not landed): 151 games, time-outs 11/6/4/0, same flags.
+- **Tests** (Release `build`, ctest -j3, after the revert, 1c2bedf6 tree): 45/45 passed - dunelegacy_tests,
+  formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, save_scenario_export, network_wire_harness,
+  perf_regression and all quantbot_* (incl. all_against_atreides, strategy, ffa_army_deploys,
+  scenario_matrix smoke).
+
+## 2026-10-18 — FFA army fix, continued: scoring merged, fix v 1.0.847, ablation and late-game draws IN PROGRESS (branches `fix/ai-army-stuck-in-base` b8965267, `exp/ai-late-game`; not released)
+
+Agent ArmyStuck2 stopped at its budget; nothing here is a final decision. Results:
+`~/Documents/projects/dunecity-results/army-stuck/` (new placement score, `tests/ai/match_score.py`).
+
+- **Merged:** `test/match-scoring` into the fix branch (ea6a0e23; vanilla-match keeps both the scorer and
+  the FFA army reports); `test/ai-scenario-matrix` acdada9b into `exp/ai-late-game` (69c5826d).
+  Ablation styles renamed lower case (`@nov @nou @nox @nouvx`): the label parser rejects upper case,
+  so ArmyStuck's queued `@noV...` FFA ablation had failed in every game.
+- **Reports:** `--baseline-tag T --baseline-results DIR` (formation-duel, vanilla-match 1v1 and one-label
+  FFA) pairs the same setup played by another code version (fix v 1.0.847).
+- **Fix v 1.0.847 (new score):** 4P FFA rs160 dunecity+vanilla, 8 seeds: mean house score -0.037 v
+  -0.179, Δ +0.142 (+0.09..+0.19) beats; time-outs 4/16 v 13/15; first elimination dunecity 32.3 v
+  58.4 min (7/8 v 4/7 games), vanilla 7.1 v >60. Fortress default v none 0.771 v 0.806 Δ -0.035
+  (-0.10..+0.00) level; `/weak` Δ +0.14 (-0.08..+0.36) level (64 games); CY 1v1 (120) 0.312 v 0.417
+  Δ -0.10 (-0.26..+0.05) level. `quantbot_scenario_matrix` (fails on 1.0.847) passed on the fix (170 s).
+- **Ablation (partial when stopped, all level):** Fortress h2h 14-16 games/arm, CY h2h 30-32/arm, FFA
+  6 games. Still queued/running on the mini: `ffa-abl`, `ffa-abl-u`, `weak-abl` (results dirs
+  `ffa-ablation`, `ffa-ablation-u`, `weak-ablation`), `duel-abl`, `cy-abl`. No UVX decision yet.
+- **Late-game diagnosis** (`diag-dunecity-9101`, decision log): the last two cities hold 206 and 265
+  turrets at minute 60; the stronger house (Atreides) sat at its military limit with 139k credits
+  unspent, waves of 100-190 units every ~2.5 min; its losses after minute 20: enemy units ~2,000
+  (siege tanks, quads, launchers, ornithopters), rocket turrets 451, its OWN sonic tanks 596 (friendly
+  fire, ~20%); only ~40 of the defender's turrets died in 40 minutes. Waves never target turrets (engine
+  Hunt = nearest visible; focus fire prefers units), go to GUARD when nothing is visible, and walk back
+  to the bundle.
+- **Late-game candidates** (`exp/ai-late-game` f016c104, `[Force Concentration]` keys, code default OFF,
+  hashed; styles `@turretsfirst @presson @finish @fortified @lateall`): T TurretPriority (a wave hunter in
+  a turret's reach that is not shooting an armed unit attacks the turret), P PressOn (idle wave members
+  hunt on to the nearest seen enemy structure), H FinishWeakest (waves hunt towards the weakest known
+  house's yard/factories/refinery), K FortifiedWaves (8+ seen turrets near the objective: wait for 60% of
+  the military limit, at most 4 min after the last wave). Unit tests in ForceConcentrationPolicyTestCase
+  and the config hash test. One smoke game, seed 9101 dunecity, all four on: ended at 54 min (fix: time-out).
+  Running: Air `late-h2h1` (default v T v P v H, 32 FFA games; `dunecity-air pull late-h2h1 DIR`).
+  Not run: `late-self` (`--ffa default@lateall`, 16 games), K/lateall head-to-head, 1v1/Fortress/CY checks,
+  scenario-matrix skirmish/cy/mp full tier (134 games) after the fix, regression test tightening, ctest set.
+- **Do not rebuild/edit headers in `~/Documents/projects/dunecity-army-stuck`** until its queued jobs have
+  started (the probe compiles main.cpp against the tree's headers at job start).
+
+## 2026-10-18 — QuantBot FFA: armies stuck in base fixed (branch `fix/ai-army-stuck-in-base`, protocol 84, save 9865; not released)
+
+Stefan (4P DuneCity FFA, four QuantBot Brutal, save `/tmp/mba-wtf-20261018/wtf.dls`): "all the units are
+stuck in the middle of the base". Write-up: `docs/formations.md`, "Free-for-all: the army deploys";
+evidence `~/Documents/projects/dunecity-results/army-stuck/` (`wtf/`, `wtf-fix1/` overlays, rendered
+screenshots, decision logs).
+
+- **Cause:** "outnumbered" (V perimeter hold) summed every enemy's remembered army: 3 equal enemies =
+  300%, so every house was garrisoned all game (0 waves in 19.8 min of his game, 276/276 attack checks
+  deferred); the garrison's perimeter point and the bundle lay inside the house's own city (1-7 tiles
+  from own buildings), 89-95% of each army inside its base.
+- **Fix:** `enemyThreatEstimate()` = strongest single enemy team (1v1 / one alliance unchanged);
+  bundle and perimeter points walk out of own buildings/roads towards the enemy. Protocol 84 (83 is
+  feat/ai-ratio-tuning's), no saved state change. Merged `perf/game-fps` e54a58bc and 5ff98662 first.
+- **Tests added:** `quantbot_ffa_army_deploys` (mandatory, AGENTS.md/CLAUDE.md); force probe section 7
+  FFA threat + city-streets perimeter checks; harness `rs<size>-dunecity|vanilla` FFA maps,
+  `FFA_ARMY_SAMPLE`/`army.csv`, `ffa-map.py`, `--ffa-screenshot`. Verified so far: build,
+  `quantbot_force_concentration` passed; the new regression runner passed on the fix (first wave 1.3 min,
+  eliminations 22.3/27.4 min).
+- **Running when handed over** (results dirs under `dunecity-results/army-stuck/`): mini queue
+  `ffa-base` (1.0.847 + harness, worktree `~/Documents/projects/dunecity-army-stuck-base`, branch
+  `test/ffa-baseline-847`), `ffa-fix`, `duel-fix` (Fortress + `/weak` default:none, 72), `cy-fix` (CY 1v1
+  default:none, 120); Air `duel-base` (same duels on 1.0.847; pull with `dunecity-air pull duel-base`).
+  Report: `vanilla-match.py --results <dir> --tags base|fix --ffa default --difficulty brutal --report`.
+  Not yet done: CY baseline arm, the full ctest set, MatchScoring's scoring (test/match-scoring), and
+  the open late-game stalemate (two cities trading waves into turrets until the 60-minute limit).
+
+## 2026-10-18 — Game FPS round 2: real app on his Air, AI decision log setting, match activity, F12 breakdown, perf_regression menu launch (branch `perf/game-fps`, not released)
+
+Stefan: "your changes have broken the performance" (13 fps at 2 ms) and "make turning ai logging a
+configuration setting in the game". Details: `docs/game-performance.md`, "The real app on his Air".
+
+- **Real app, his Air:** copy of installed 1.0.847 via LaunchServices + real menus (scratch profile,
+  his INI): window in front 100-117 fps at full 500 cycles/s; covered by another app's full-screen
+  window 30-40 fps, per-cycle costs ~2x (main thread priority unchanged). His slow session began on
+  battery with Low Power Mode (Battery profile lowpowermode 1), then 3-4 cores of system load after
+  AC. Cause not proven; no code regression. Opt-out effect not measured (Stefan closed the test game;
+  he uses the Air, so sessions only when he is idle >2 min and after warning Main).
+- **Code:** `[General] AI Decision Log` (default off, "AI decision log" checkbox next to "Diagnostic logs",
+  `DUNECITY_AI_TELEMETRY=0/1` override, prune to newest 20 sessions / 2 GB at game start);
+  `GameActivity::Scope` (macOS NSProcessInfo UserInitiatedAllowingIdleSystemSleep|LatencyCritical)
+  in `Game::runMainLoop`; F12 overlay with cycles/frame, achieved speed and per-component ms.
+  Harnesses enable the log explicitly. perf_regression adds `--menu-launch 30`
+  (`tests/performance/menu-launch.inc`).
+- **Air:** test copies `~/dunecity-runner/gamefps2/{dc847,fix}.app` unregistered from
+  LaunchServices; runner PAUSE removed. Test tools in `~/dunecity-runner/gamefps2/bin`.
+
+## 2026-10-18 — Game FPS at 2 ms game speed: no release regression found; placement cuts; perf_regression (branch `perf/game-fps`, not released)
+
+Stefan (1.0.847, MBA M5): 13 fps spectating a 4P 160x160 DuneCity Brutal Random Skirmish at Game
+Speed 2 ms. Write-up: `docs/game-performance.md`; raw data `~/Documents/projects/dunecity-results/game-fps`.
+
+- **Tooling:** `tests/performance/game-perf.py` (+ `game-perf.inc`): stepped per-cycle/per-house
+  costs, interactive main loop headless or rendered (`--rendered`, real window, 2 ms), older releases
+  via `--source`; scenario `stefan-map` = his slow game's map from its pinned Workshop revision.
+  `run-campaign-balance.py --real-video`.
+- **Bisect (quiet mini, rendered, 2 ms, 8 game min):** 1.0.833-1.0.847 all 59.4-60 fps vsync-capped
+  at full 500 cycles/s, worst house update 25-31 ms in every release.
+- **His Air, his slow.dls, same 1.0.847 code, scratch profile (Air runner paused):** full speed,
+  ~100 fps; also with a copy of his `Dune City.ini`, decision log on or off. His 13 fps session had
+  every sim component 3-7x slower per cycle: machine state during the session, not a code regression.
+  Not compared: the /Applications app through the menus vs the probe. 33 GB of old decision logs in
+  his profile (not deleted).
+- **Changes (51 PROBE_DIGESTs identical over 10 game min):** reactor blast-spacing sites collected
+  once per placement search instead of a whole-map structure walk per candidate; the per-candidate
+  JSON telemetry record replaced by plain numbers (record written once). QuantBot build time -25..-32%.
+- **perf_regression** ctest (mandatory, AGENTS.md/CLAUDE.md): passed (42 s). Required ctest list:
+  see the final report of this branch.
+
+## 2026-10-18 — AI scenario matrix: many kinds of game, smoke ctest, full tier on 1.0.847 (branch `test/ai-scenario-matrix`, test-only, protocol/save unchanged)
+
+Stefan: test construction yard, prebuilt bases, DuneCity vs vanilla, All against Atreides vanilla,
+campaign levels 1-9, a difficulty ladder (Brutal beats Medium, Hard/Medium beat Easy), random games with
+different players and armies, and the popular MP maps 1v1/2v2/3v3. Write-up and table:
+`docs/ai-scenario-matrix.md`, `docs/ai-scenario-matrix-results/847/report.md`; raw CSVs
+~/Documents/projects/dunecity-results/scenario-matrix/full-847. Merges `test/match-scoring` (17af09d2).
+
+- **Code (test-only).** `tests/ai/scenario-match.inc` (probe mode `run-campaign-balance.py --scenario`:
+  per-house team + controller class `--scenario-sides`, Random Skirmish multiplayer map `--skirmish`
+  incl. `base=cy` = MCV deployed before cycle 1, campaign `--mission`, `--enemy-ai campaign`; logs
+  sorties, eliminations, triggers fired, win/lose flags, quota, city pop) and `tests/ai/scenario-matrix.py`
+  (6 categories, 635-game full tier, `--shard K/N`, `--report DIR...` with match_score placement scores,
+  Wilson checks, ladder intervals, flags). `run-campaign-balance.py` reads bundled maps with binary junk
+  (Full Wormage). Runners: `run-batch.sh` on the Pro and the Air accepts `scenario-matrix`.
+- **Mandatory smoke:** ctest `quantbot_scenario_matrix` (AGENTS.md/CLAUDE.md, next to
+  quantbot_all_against_atreides): 10 games, ~2 min at 3 jobs. **Fails on 1.0.847**: the 4P FFA (seed
+  90866) ends with nobody eliminated after 60 min (ArmyStuck's FFA bug; told ArmyStuck). Other 9 pass;
+  `ctest -j3 -R 'quantbot_|dunelegacy_tests|skirmish_generator'` 36/37 (only this test fails).
+- **Full tier on 1.0.847:** 25 min on Pro + Air + PC; no crash, no idle army, all-against-Atreides
+  vanilla 6/6 and reverse 6/6, Hard v Easy 23-1, Brutal v Medium 17-5-2, QH teams beat AH teams 24/24,
+  Hard campaign partner 174/192. Problems: FFAs (4-8 houses) mostly time out; Medium v Easy 7-3-14 (order
+  not shown, 8/8 draws on Habbanya-Penny); 3v3 QH team lost 0/4 to QM on the 160 medium-base map; Hard
+  partner loses vanilla levels 8-9 (8/12 Atreides/Harkonnen); DuneCity campaigns won economically (74/90);
+  DuneCity All against Atreides 5/6.
+- **Parity:** smoke digests identical on mini, Pro, Air and PC.
+- **Incident:** `agent-workspace run --git -- git merge` ran in the staging checkout and fast-forwarded
+  `integrate/feature-batch` to 17af09d2 for ~1 min; reset with `git reset --keep b683286f` (told Main).
+
+## 2026-10-18 (night) — QuantBot specials fix, one mix slot per special, tech bands (branch `feat/ai-ratio-tuning`, protocol 83, save 9868, not released)
+
+Write-up `docs/ai-play-styles.md` 8.8-8.10.
+
+- **Fixed (4c3ee80b):** the capital/Starport path gave each buildable special the whole special share;
+  now split (`UnitMixPolicy::splitShare`, unit test `[specials]`).
+- **Layout (32adfb8a):** ten slots (Devastator, Sonic Tank, Deviator each own share, learning, heavy
+  candidate; `SpecialUnitPolicy` removed). Group-form inputs (`[Unit Ratios]` Special, presets, counter,
+  style `Mix=`) split the special share between the house's specials. One-special houses unchanged
+  (`quantbot_strategy` values identical). Save 9868 (ten resolved ratios; 9866/9867 load and split).
+- **Tech bands:** `fieldableMixSlots(tech)` follows builder/prerequisites; `techBand()`;
+  `[Unit Ratios Tuned] <House>_Tech<N> = ...|Opening`; `tests/ai/tech-bands.py`; `vanilla-match.py --tech`;
+  `ratio-analysis.py` ten slots, six houses, `--tech`, per-house effect (the per-house decision).
+- **Not done:** tuning per house x band. Exploration x3/x4/x5/x6/x8 (1,080 games each, all 15 pairs) is
+  queued on the cluster (results `~/Documents/projects/dunecity-results/ratio-tuning/x<N>`); then
+  candidates, round 1, refinement, confirmation, defaults, checks and the full ctest (section 8.10).
+  Verified so far: `dunelegacy_tests`, `quantbot_strategy`, `quantbot_force_concentration`,
+  `quantbot_army_recovery`, `save_scenario_export` (ctest, 32adfb8a).
+
+## 2026-10-18 — QuantBot ratio tuning: placement re-score, tuned rounds; default now Tuned/Swarm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Merged `test/match-scoring` (ratio write-up is now `docs/ai-play-styles.md` section 8; `ratio-analysis.py
+--arms` reports the paired placement Δ and draw rates). Raw results ~/Documents/projects/dunecity-results/ratio-tuning,
+compact CSVs `docs/formation-results/play-styles/ratios/{r1,r2,f1,fB,fF,pB,g,gB,gF,gL,h1,h2}`.
+
+- **Re-scored randomised arm:** Δ +0.087 (+0.02..+0.16) v control, n=3,094, 0.6% time-outs.
+- **Tuned rounds (CY, Hard, Swarm, v `#Learned-Swarm`):** r1 four candidates +0.08..+0.26 (n=144 each); r2
+  best +0.27 (-0.01..+0.53), r2 siege +0.24 (n=216 each); the per-house pick (code defaults) +0.19
+  (-0.07..+0.45) on 216 fresh games, +0.34 on 252 more (`h1`, cluster): **+0.27 (+0.09..+0.45), n=468, beats**.
+  Base +0.30 level, Brutal **+0.48** beats, Fortress and `/weak` level; all-against-Atreides 6/6 with Tuned as
+  the default (the r2-best Atreides mix failed 5/6, so Atreides uses the siege/Sonic mix).
+- **Code:** `[Unit Ratios Tuned]` defaults Harkonnen 14,16,15,22,0,0,0,33; Atreides 9,20,13,22,13,10,0,13;
+  Ordos 9,17,7,13,27,0,7,20 (Fremen/Sardaukar/Mercenary none = configured opening); unit test pins them within
+  the bounds. **Default `Fixed:Tuned,Swarm`** (all starting mixes bounded 2%-50%). Variety option `Mode=Random`,
+  `MixWeights=Bounded:1` (+0.19 level, n=108).
+- **Learning on v off:** level everywhere (Tuned +0.00, n=216; r2 best +0.03, n=216; random start +0.07, n=108)
+  - kept per Stefan; its measured value remains section 6.3(d).
+- **Tests:** ctest -j3 from the shell (never via the queue) on the required list; `perf_regression` is not on this
+  branch (it is on `perf/game-fps`). See the final report for the HEAD it ran on.
+- **Not done (section 8.8):** Fremen/Sardaukar/Mercenary tuning (six-house randomised arm `rR6`, 540 games, submitted
+  to the cluster; `vanilla-match.py --houses`), separate shares per special (one slot today; each buildable
+  special targets the whole share), tuned ratios per tech band.
+
+## 2026-10-18 — QuantBot starting-ratio bounds, Bounded/Tuned mixes, randomised arm (branch `feat/ai-ratio-tuning`, protocol 83, save 9866, not released)
+
+Stefan: randomised runs, control runs and tuned mixes; no unit type over 50% or under 2% at start; keep
+the learning. Worktree ~/Documents/projects/dunecity-ratio-tuning. Write-up `docs/ai-play-styles.md`
+section 8; data `docs/formation-results/play-styles/ratios/`; raw ~/Documents/projects/dunecity-results/ratio-tuning.
+
+- **Code.** `QuantBotStrategy::bound` (each producible mix slot 2%-50%, others 0, one scale t, integer
+  bps) applied to every starting mix in `QuantBot::startingPrior` (configured opening, presets, Counter,
+  Tuned, Bounded); presets = 1.0.847 presets bounded (QuadMass 70% → 50%). New mixes `Tuned`
+  (`[Unit Ratios Tuned] <House>=t,s,l,sp,o,tr,r,q`, optional, hashed, no code defaults yet) and `Bounded`
+  (`randomMix`: uniform over the bounded mixes from seed + house, SplitMix64). Resolved ratios saved in
+  9866; protocol 83. Test-only `[Play Style] Learning=0` / `StartBounds=0`; harness `start_mix`, `mix.csv`,
+  `--seed-per-map`; `tests/ai/ratio-analysis.py`.
+- **Measured (CY, Hard, Swarm).** Randomised v control 0.520 (0.50-0.54), n=3,094; per-house effect
+  0.51/0.54/0.52 (Atreides/Harkonnen/Ordos). Bounded v unbounded control 0.500, n=108. Within-house
+  starting-share effects are small (coefficients ~1-2 SE); winners' and losers' end compositions are
+  the same (the learning converges); siege tanks are the most cost-effective unit for every house.
+- **Bounds per game, not per pass.** Bounding again over each pass's producible slots failed
+  `quantbot_all_against_atreides` (seed 41562270, 5/6); bounds over the game's producible slots, then
+  masked per pass, pass it 6/6. The 3,094 randomised and 108 bounds-control games used the per-pass version.
+- **Default unchanged** (`Fixed:Learned,Swarm`, configured ratios bounded). Round-1 candidates
+  (`tests/ai/play-styles/r1-*.ini`) and `pB-win` (Mode=Random, Bounded only) were stopped (old binary).
+  To do on the final rule (re-sync runners first): round 1/2, Base tempo, Fortress, Brutal, `/weak`,
+  all-against-Atreides and learning on/off for the best tuned mix, the production-option arm; rescore with
+  `test/match-scoring` when it lands.
+- **Infra.** Stopping a Pro batch via its run-batch (SIGTERM) left 8 orphaned balance-probes in the batch's
+  process group (ppid 1); killed by group. Windows parity: digests/houses identical, only the known ±0.1 s
+  timing fields.
+
+## 2026-10-18 — AI test scoring: placement score, negative draws, paired default rule (branch `test/match-scoring`)
+
+Stefan: the AIs have to attack, not raid forever into draws, so draws must be negative (better than a loss).
+Multiplayer wins must count for more: 1st a big score, 2nd smaller, and in 8 players the top 4 positive,
+the bottom 4 negative. Python harness/report code and docs only: no game, AI, protocol or save change.
+Write-up: `docs/ai-play-styles.md` section 7.
+
+- **Score** (`tests/ai/match_score.py`, used by `formation-duel.py --report`, `vanilla-match.py --report`
+  incl. `--ffa`, `play-style-matrix.py`):
+  - Place p of N scores 1 - 2(p-1)/(N-1). Eliminated entrants are ranked by elimination time; ties share
+    the mean place.
+  - At a time-out the k survivors share places 1..k minus D = 0.25, clamped between the best eliminated
+    score and +1. A 1v1 draw is -0.25 (`--draw-score`).
+  - Teams are ranked as teams. Kill-value adjudication is gone; the value margin is still printed.
+  - `--scores FILE` writes per game and side: eliminated, place, score, drawn, `end_s`, decisive.
+- **Rule:** a candidate beats the control when the 95% bootstrap interval of the paired score difference
+  is above 0. Pairing is per game, or by setup against a common opponent with `--baseline`. Each arm's
+  time-out rate is reported. `--scoring legacy` restores the old rule and reproduces old reports.
+  - New report options: `play-style-matrix.py --same A=B` (label aliases) and `--by-strategy`;
+    `vanilla-match.py --control` for FFA.
+  - Recorded CSV formats are unchanged; `houses.csv` `place` now averages tied eliminations.
+- **Re-scored:**
+  - **1.0.847 Learned/Swarm stands.** CY v BASE Δ +0.29 (+0.08..+0.50), n=356, 2% time-outs. Fortress
+    is level, Δ +0.11 (-0.17..+0.41), with 33% time-outs on both sides; the draw penalty is symmetric
+    head to head. Brutal is level.
+  - **Round 5's UVX default would fail the new rule.** The `/weak` paired gain over BWFCQ was +0.120
+    (+0.03..+0.21) and is now +0.06 (-0.09..+0.20); it came from adjudicated time-outs. UVX is still in
+    the game: a decision for Stefan.
+  - Round 4 BWFCQ stands.
+  - Fortress round-robin: boom and timing now lose to most styles (adjudication had rescued them).
+  - FFA BWFCQ v none: Δ +0.16 (-0.01..+0.33), level.
+- **Tests:** `python3 -m unittest tests.test_match_score` 8/8. No smoke batch was run: the harnesses'
+  game-running path only changed the `place` column computation, and no build was configured.
+
+## 2026-10-18 — Workshop map sharing and community catalogue removed (branch `chore/remove-map-sharing`, not released)
+
+Stefan: "get rid of the workshop map shit". Removed: the per-frame `Workshop::updatePublications()`
+pump (MenuBase, Game loop, NetworkManager — it did a TLS handshake on the main thread and retried 43
+stuck outbox entries every 60 s), the `workshop/outbox` queue (`queuePublish`/`queueCollection`),
+offline custom-map collection (`Game::collectCustomMap`, `include/Network/MapCollection.h`, "queued for
+the community catalogue"), the `lookup`/`collect=1` protocol and Store `collected` receipts, host-time
+map uploads in `WorkshopGameContent::pin` (maps travel in the game setup), and — Stefan's decision
+"remove 1+2" — the catalogue browser (`WorkshopCommunityMenu` MetaserverMenu, Custom Game "Metaserver
+Maps", Map Editor "Save/Load online", Mods "Load from metaserver") and the manual "Save to metaserver"
+buttons (Map/Mod/Dune2R editors), plus `scripts/seed-metaserver-maps.py`. Kept: the revision store,
+`resolveMod`, saves pinning revisions, and the online host's blocking upload of an authored mod before
+advertising + joiners' download of pinned revisions (`src/Menu/WorkshopTransferMenu.cpp`). Opening the
+store deletes an old `workshop/outbox` once (logged). The game no longer calls `/v1/content/list` or
+`/lookup`; server (tools/p2p-signaling, dunelegacy.com p2p-service) unchanged. Docs: `docs/workshop.md`.
+New ctests `workshop_store_tests`, `save_pinned_workshop_revision` (save on an authored mod loads from
+workshop/revisions after the mod folders are deleted; seeded outbox removed, nothing published).
+`tests/menu/run-menu-probe.py --size WxH` replaces `--metaserver-maps`.
+
+## 2026-10-18 — No population/economic victory (branch `fix/remove-economic-victory`, protocol 85, save 9865, not released)
+
+Stefan: "there is no pop victory". The initial fork commit (92785605) added `WINLOSEFLAGS_ECONOMIC`
+0x10 and a check in `Game::updateGameState` winning the game once the local city reached
+`CitySimulation::economicVictoryThreshold_` (500). Original Dune II scenarios carry WinFlags=19/23
+(SCENA008-010, SCENF002-008, SCENARIO.PAK, RWRK_SCENA008-010/SCENH003) where bit 0x10 means nothing,
+so DuneCity campaign missions were silently won at 500 population (scenario matrix: 74 of 90 DuneCity
+campaign wins). Removed: the check, `WINLOSEFLAGS_ECONOMIC`, the threshold getter/field, the
+validator/generator rules and doc lines (FEATURES.md, README, TORNIE-MOD.md). Bit 0x10 is now ignored
+as upstream. **Saves:** no version bump — the 9865 layout keeps the int32 slot; save() writes 0,
+load() reads and discards it (also for 9809-9817), so old saves load and a game being won
+economically simply continues. **Protocol 85** (game end differs from an 82 peer).
+Test: `campaign_no_population_victory_{vanilla,dunecity}` (`--no-population-victory-probe`, Atreides
+level 4 = WinFlags 19; forces local city population to 800 for 480 cycles and requires the mission
+to keep running). The scenario matrix branch (`test/ai-scenario-matrix`) still reads
+`getEconomicVictoryThreshold()` and classifies win type `economic`; it must drop those when merged.
+Campaign matrix (acdada9b merged uncommitted, DuneCity Hard partner vs QuantBot Easy, levels 1-9,
+96 games; results ~/Documents/projects/dunecity-results/econ-victory/campaign): before (847 report)
+90 won / 2 lost / 4 not finished, wins conquest/economic/quota 12/74/4, mean 16.1 min; after 89 / 2 / 5,
+wins 85/0/4, mean 17.4 min. Not finished: harkonnen m3 x2, ordos m1, ordos m17 x2 (80 min limit);
+losses atreides m22, harkonnen m22 (same seeds as before).
+
+## 2026-10-18 — MBA: old app backups moved out of /Applications; install procedure rule
+
+Stefan launched 1.0.842 from `/Applications/.dunecity-backup-before-1.0.843-…/dunecity.app` (17 Oct
+17:36 and 18 Oct 12:38): each install `mv`'d the old bundle into a backup folder, and the Dock's pinned
+item (a bookmark) followed the moved bundle, so the Dock kept opening an old version and 1.0.847 was
+"not in the Dock". On 18 Oct 12:40 all 77 `/Applications/.dunecity-*` backup/staging folders (6.7 GB)
+were moved to `~/Library/Application Support/DuneCity App Backups/from-Applications-20261018-124043/`
+and unregistered from LaunchServices (also the runner build `~/dunecity-runner/src/build/bin/dunecity.app`);
+`/Applications/dunecity.app` (1.0.847) re-registered. Rule for future MBA installs: back up the old app
+by COPY (`ditto`) to `~/Library/Application Support/DuneCity App Backups/`, never `mv` it and never keep
+backups under /Applications; then remove the old bundle and move the new one in.
+
+## 2026-10-18 — local 1.0.847 verified and installed on the MBA
+
+Staging = 1.0.846 + `feat/skirmish-spectator` (ed441987: Spectate + "Your house AI" on the
+single-player Random Skirmish screen, client-only) + `feat/ai-strategy-mix` (2861cf30, includes
+`feat/ai-play-styles` c8fcaaa8: test-only per-player play styles; production `[Strategy]
+Mode/MixWeights/TempoWeights`, deterministic per-house pick from game seed + house + config, saved and
+hashed; default Fixed:Learned,Swarm = learned mix with Swarm tempo (35% readiness, waves from 4 units /
+2,000 credits) for Custom Hard/Brutal QuantBots). Protocol 82, save 9865. `agent-workspace stage
+verify` at fd26fe55: build, check-build-deps and CTest 97/97 serial passed (`quantbot_strategy` 30 s,
+`quantbot_all_against_atreides` 80 s). Package: executable SHA256
+ef05d1a3c3fe82746a67449ccfff5d64f9fec77ef115bff340404efca30ef792, no Homebrew/local links, signature
+and runtime check passed. Installed on the MBA 2026-10-18 11:32 AEDT by `/tmp/push-dunecity-1.0.847.sh`
+(same SHA256, signature and runtime check passed); 1.0.846 at
+/Applications/.dunecity-backup-before-1.0.847-20261018-113252/. Not pushed or published.
+Note: around 10:04 on 2026-10-18 mini queue jobs hit `getcwd: Operation not permitted` in
+~/Documents (transient; a test job at 10:58 read ~/Documents fine).
+
+## 2026-10-18 — QuantBot strategies: unit mix x tempo, deterministic random pick; default Learned/Swarm (branch `feat/ai-strategy-mix`, protocol 82, save 9865, not released)
+
+Stefan asked for different unit-ratio strategies, separate controls for mix and tempo, and the learning kept.
+Write-up: `docs/ai-play-styles.md` section 6; data `docs/formation-results/play-styles/strategy/<tag>/`;
+raw results in ~/Documents/projects/dunecity-results/strategy-mix.
+
+- **Code.** `QuantBotStrategy` (mixes Learned/QuadMass/TrikeSwarm/TankMass/Artillery/Specials/Air/
+  Infantry/Counter; tempos Base/Swarm/Timing/Rush/Flood).
+  - **Config:** `[Strategy] Mode=Random|Fixed:<Mix>,<Tempo>`, `MixWeights=Name:w,...`,
+    `TempoWeights=...`. Optional, hashed, not written by save().
+  - **Pick:** a pure SplitMix64 of game seed + house + salt at the first update, saved in 9865; a 9864
+    save picks afresh by the same function.
+  - **Mix = prior:** it replaces the opening mix that `UnitMixPolicy::allocate` blends evidence into, so
+    the learning is unchanged.
+  - **Air** upgrades the Hi-Tech Factory first, from reserve-held credits.
+  - **Infantry** founds a barracks and a WOR in Custom vanilla.
+  - **Harness:** `#<Mix>-<Tempo>[-fixed]` and `#random` labels; houses.csv has a `strategy` column.
+  - **Default:** `Fixed:Learned,Swarm`. Random weights: Learned 50 / QuadMass 15 / Counter 10 /
+    Artillery 10 / Air 10 / TrikeSwarm 5; Swarm 80 / Flood 20.
+- **Measured (CY Hard v BASE = 1.0.846).**
+  - **Tempos:** Swarm 0.57 (0.52-0.62, n=352) is the only one above BASE.
+  - **Mixes** (prior + learning, Base tempo): all level, 0.42-0.54. Fixed heavy compositions lost
+    (armor 0.28, heavy 0.34), so the learning matters.
+  - **Mix x Swarm:** none beats Learned x Swarm; QuadMass x Swarm 0.54, and 0.61 on Brutal.
+  - **Random bot:** 0.55 (0.49-0.61, n=252), so it misses the default rule.
+  - **Learned/Swarm:** passes the rule. Fortress 0.55 (n=108), Brutal 0.53 (n=60), /weak 0.43 v
+    BASE's 0.42, all-against-Atreides passes.
+- **Tests.** `ctest -j3` with the required regex: 43/43 at 283e33f8 (incl. the new `quantbot_strategy`
+  probe, `quantbot_all_against_atreides`, dunelegacy_tests with `[strategy]`).
+- **Not done:**
+  - the strategy round-robin;
+  - a mid-game switch;
+  - the Air's `mC3-air` (Air offline; pull it with `dunecity-air pull mC3-air`);
+  - the FFA, if it is not in the doc.
+- **Infra:**
+  - The mini queue daemon lost ~/Documents access at ~10:04: jobs hung with `getcwd: Operation not
+    permitted`. Those jobs were cancelled, the work moved to the Pro, and ctest was run directly.
+  - The PC rebooted at 09:05 and its batch was resumed.
+  - `dunecity-pro/air sync` were fixed: the bundle carries the branch ref and the fetch names it.
+
+## 2026-10-18 — QuantBot play styles: research, 11 test-only styles, screen + round-robin (branch `feat/ai-play-styles`, protocol 81 / save 9864 unchanged, not released)
+
+Stefan: "do another round of ai work, testing additional play styles against each other then summarise the
+updates and recommendations for ai play". Full write-up: `docs/ai-play-styles.md`; data
+`docs/formation-results/play-styles/<tag>/` (raw samples/waves in ~/Documents/projects/dunecity-results/play-styles).
+
+- **Mechanism (test-only, inert in real games; 1.0.846 reference games replayed bit-identical):**
+  `QuantBot::configOverride` + `botConfig()` (every QuantBot config read; `QuantBotConfig::applyOverrides`),
+  `QuantBot::PlayStyle` (`src/players/QuantBotStyle.cpp`: style mix, counter-composition, light-first rush,
+  wave minimum, baseline turrets, greedy harvest/extra refineries/yard floor, harvester raiders). Labels
+  `default` (configured rules) and `@style` (`tests/ai/play-styles/*.ini`); `--house-offset`, 4-label
+  `--ffa`, `tests/ai/play-style-matrix.py`.
+- **Results (Hard, 2,406 games: mini 1,197, Pro 712, PC 497; Air on battery):** no fixed composition or
+  build-order style beats BASE (armor 0.28 and heavy 0.34 lose on CY; turtle 0.19, raid 0.14, boom 0.33 lose
+  Fortress). **swarm** (full opening, then 35% waves) v BASE: CY 0.59 (0.51-0.67, ~145 games), Fortress
+  0.52 (0.38-0.67); it tops the round-robin (68-76 games per cell so far). No rock-paper-scissors cycle, so
+  no style-selection rule.
+- **Decision: default unchanged** (swarm lacks Brutal, all-against-Atreides and `/weak`). Still running when
+  this was written: round-robin `r1c-m`/`r1c-m2`/`r1f` (mini queue), `r1c-pro` (Pro), Brutal `b1c-w` (PC),
+  swarm confirmation `c1c-air` (Air); pull with `~/Documents/projects/dunecity-results/play-styles/pull.sh`
+  (+ `b1c-w`, `dunecity-air pull c1c-air`). Not built/tested with ctest this round (no production change).
+- `dunecity-pro/air sync` failed ("couldn't find remote ref HEAD": the bundle has no HEAD ref); synced with
+  an explicit refspec instead (`/private/tmp/dunecity-work/omp_PlayStyles/sync-mac.sh`).
+## 2026-10-18 — Random Skirmish Spectate (branch `feat/skirmish-spectator`, from staging 688fd077 = 1.0.846; not released)
+
+Stefan: "add spectator mode to skirmish". Worktree ~/Documents/projects/dunecity-skirmish-spectator.
+Details: `docs/skirmish-generator.md`, "Spectate".
+
+- Single-player Random Skirmish has a **Spectate** checkbox and a **Your house AI** box (Players
+  column; the AI row is shown only while Spectate is ticked, default QuantBot Medium, same list as the
+  Allies/Enemies AI). It reuses Custom Game's offline Spectate: `RandomSkirmish::makeInit(result,
+  rules, params)` calls `setLocalSpectator(true)` and seats that AI where the human sat, so every
+  house is AI and the game observes (whole map, inspect, no orders). The player's rows stay live:
+  "Your house" is the watched house and "Your house starts with" (renamed while watching) still
+  gives it its partner, Base, Army and City. Map INI unchanged by Spectate.
+- `[Random Skirmish]` `Spectate` / `Spectate AI`, single player only; the multiplayer Random Map
+  screen has neither control, never reads/writes the keys, and `Params::clamp` forces it off there.
+  No protocol, save or map-format change. Start's pre-game step is now
+  `RandomSkirmishMenu::prepareStart`, which the probe drives.
+- Tests (worktree Release `build`, check-build-deps before/after, ctest -j3): skirmish_generator_tests
+  (new Spectate persistence/map-identity case), dunelegacy_tests, bundled_city_eight_slot_startup,
+  bundled_three_way_startup, menu_navigation_probe, skirmish_generator_probe (new `spectate` case:
+  no human, local-spectator init, observed 4-house all-AI match runs 3,750 cycles, Spectate off
+  seats the human again; mp-lobby checks the hosted screen has no Spectate),
+  retina_resolution_probe: 7/7 passed. Screenshots: /tmp/dunecity-skirmish-spectator/
+  `random-skirmish-spectate-1024x768.png`, `ingame-spectator.png`.
+
+## 2026-10-17 — local 1.0.846 installed on the MBA
+
+Staging = 1.0.845 + `chore/windows-runner` (348ee7e0: Random Skirmish and ambient-helicopter RNG draw
+order, LF GameOptions.ini, DUNECITY_USERDIR on Windows, MSVC probe harness; Mac maps byte-identical) +
+`test/formation-scenarios` (c4a31da7: formation march without jams, `[Force Concentration]
+OpeningReadiness` on by default (bit 4194304, duel letter I), vanilla-match and formation-bench
+harnesses, scenario results). Protocol 81, save 9864 (1.0.845 saves load). `agent-workspace stage
+verify` at 0247442f: build, check-build-deps and CTest 96/96 serial passed
+(`quantbot_all_against_atreides` 89 s). Package: executable SHA256
+69d100e854c97d7643ffcd0a3f7c21625bc78e5203831e3d3e4f4d3d27555908, no Homebrew/local links, signature
+and runtime check passed. Installed on the MBA 2026-10-17 20:11 AEDT; 1.0.845 at
+/Applications/.dunecity-backup-before-1.0.846-20261017-201151/. Not pushed or published.
+Runners: Mac mini `dunecity-queue` (launchd); MacBook Pro `dunecity-pro`, MacBook Air `dunecity-air`,
+Windows PC `ssh dunecity-win` (C:\dunecity) — all at older commits; re-sync and parity-check before use.
+
+## 2026-10-17 — 1.0.846 integration: formation scenarios merged with 1.0.845 staging (branch `test/formation-scenarios`, protocol 81, save 9864, not released)
+
+FormationMerge merged `integrate/feature-batch` into `test/formation-scenarios` in
+~/Documents/projects/dunecity-formation-tests: d497b083 (1.0.845 = UVX defence, footprint rule, save 9864,
+housekeeping) and 1846f69c (f3d4ca04, Windows crossplay fixes; clean). Both sides kept; details and table:
+`docs/formations.md` "C. The 1.0.846 merge"; data `docs/formation-results/scenarios/merge-846/`.
+
+- **Protocol 81** (one past 1.0.845's 80; comment chain lists 80 = UVX/footprint, 81 = march fix + opening
+  readiness), **save 9864** unchanged. Config: `[Force Concentration]` PerimeterHold, PerimeterTurrets,
+  SizedDefence, OpeningReadiness all hashed and default on; `forceBits()` = F C B W U V X I.
+- **Flag clash resolved**: both branches used bit 16384 / duel letter E. Released 1.0.845 keeps
+  `kForceEstimate` = 16384 = `E`; opening readiness is now `kForceOpeningReadiness` = 4194304, duel label flag
+  **`I`** (scenario data before the merge records it as `E`). `launchReadinessPercent()` combines both: full
+  readiness under I's opening hold or under D while outnumbered (E: by the estimate).
+- Harness: `vanilla-match.py` and `run-formation-bench.py` use the leased scratch helper (scratch optional,
+  per-run cleanup, disk guard; bench `--trace-s` logs are copied to results); `vanilla-match.py` also has the
+  Windows probe-path port (`probe_binary`, `sys.executable`) like `formation-duel.py`.
+- FormationFinish's batches that ran from this worktree during the merge (prebuilt probes): `fe1` (Fortress
+  Brutal, BWFCQE v BWFCQ, 36) 0.500, identical by size - E inert at Brutal; `ac1-brutal-mini` last 60 CY Brutal
+  games added (all 360: Staggered 0.428 (0.36-0.49), Column 0.472 (0.40-0.54)). Columns checked, no failed or
+  malformed rows, none dropped.
+- **Tests** (worktree Release `build`, check-build-deps before/after, ctest -j3), at d497b083 and again at
+  1846f69c: dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions,
+  rts_controls_probe, rts_controls_tests, skirmish_generator_tests, menu_navigation_probe,
+  preplace_queue_probe, save_scenario_export, save_scenario_input_preservation and all 32 quantbot_*:
+  43/43 passed both times. `quantbot_force_concentration` ran every section (opening hold in the waves
+  section, memory save/load incl. the 9863 load, footprint). `quantbot_all_against_atreides` 6/6: 30.4 31.3
+  32.9 29.1 33.0 33.9 min (identical both runs).
+- **Behaviour checks (mini queue, Hard)**: Fortress BWFCQUVXI v none 108 0.889 (0.82-0.94; 1.0.845 0.926),
+  I inert (`full_readiness` 0); `/weak` v none 108 0.417 (0.33-0.51; 1.0.845 0.426; I off on merged code
+  0.343); CY BWFCQUVXI v BWFCQUVX 216 0.519 (0.45-0.59; pre-merge E v BWFCQ on the same games 0.583);
+  control BWFCQI v BWFCQ 72 0.597 (0.49-0.71). Nothing clearly off; I's CY edge over a UVX opponent may be
+  smaller (UVX already stops outnumbered waves). CY, the control and the first 36 games of `m846h`/`m846w`
+  ran at d497b083, the rest at 1846f69c (Mac simulation unchanged by the Windows fixes).
+
+## 2026-10-17 — Scenario tests, formation march fix, QuantBot opening readiness (branch `test/formation-scenarios`, protocol 81, save 9863 unchanged)
+
+Stefan: "think of some more tests we can do on troop formations and run them. also make sure you are playing
+some vanilla games from a construction yard start". Tables: `docs/formations.md`, "Scenario tests"; compact
+data `docs/formation-results/scenarios/` (raw samples/waves stay out of git). Commits on e9885232 (1.0.844):
+947e4aab harness + data + test-only flag E; 37f195b2 march fix; fac6d0d6 E default; then docs/data.
+
+- **CY start (vanilla bundled maps)**: BWFCQ v previous rules Hard 360 0.562, Brutal 180 0.600; FFA 4P place
+  2.38 v 2.62; v AI Player 0.983. Sihaya-Lauper 0.306: 60% readiness sends a small first wave into a base
+  building its defence.
+- **E = opening readiness, now the default** (`[Force Concentration] OpeningReadiness`, code default on,
+  hashed): a house whose starting army cannot launch a wave holds its first wave for full readiness. CY
+  BWFCQE v BWFCQ Hard 180 0.561, Brutal 180 0.572, pooled 0.567 (0.52-0.61); Fortress duels 36 identical
+  (`full_readiness` 0). Brutal Fortress identity check (36) queued on the mini (`fe1-brutal`).
+- **March fix (protocol 81)**: two jams, not a slow pace - a laggard queued behind a pace-keeping mate in its
+  file (order inversion), and holders blocking a chokepoint. Recover members route round Pace mates; holders
+  with a next step are mates and give way (`FormationOrders::update()`). Bench big/hold contact -25 s
+  (-33..-17), march +10% of pace; canyon Pincer 0/12 -> 11/12; 10-unit armies unchanged. Still slow: big
+  form-up 30-65 s, re-forming behind obstacles (38-73% of pace) - design, not jams.
+- **Approach shapes (fixed march)**: Staggered v BWFCQ Fortress Hard 0.861, Brutal 0.861, CY Hard 0.511, but
+  CY Brutal 0.413 (0.33-0.49, 150 games) -> **no approach default**, WaveFormation stays None. Rejected
+  QuantBot-only `ApproachFormation` patch not committed. Remaining CY Brutal games queued (`ac1-brutal-mini`
+  into /private/tmp/dunecity-work/local_16397/formation-finish-bench-*/ap-cy-brutal-mini).
+- Tests at fac6d0d6 (ctest, <=3 jobs): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, all 32 quantbot_* incl. quantbot_all_against_atreides: all passed.
+- Protocol: DefenceFinish owns 80 (save 9864); this branch uses 81 - the integrator reconciles.
+
+## 2026-10-17 — local 1.0.845 installed on the MBA
+
+Staging = 1.0.844 + `feat/ai-blob-waves` (85b423d4: perimeter hold, perimeter rocket turrets, sized
+defence; AI units step off planned building sites; save 9864 split so 1.0.844 saves load) +
+`chore/housekeeping` (6d4c7428: leased probe scratch, per-game cleanup, disk guard,
+prune-merged-worktrees). Protocol 80, save 9864. `agent-workspace stage verify` at 149bbea5: build,
+check-build-deps and CTest 96/96 serial passed (`quantbot_all_against_atreides` 154 s). Package:
+executable SHA256 c96bcfa9f8524fb7371f7bd2fae4d8eb804fc4c2b97d54230a497acdde516d37, no Homebrew/local
+links, signature and runtime check passed. Installed on the MBA 2026-10-17 ~17:48 AEDT. Incident:
+`/Applications/dunecity.app` (1.0.844) was already missing when the install ran (the `mv` to the
+backup folder failed, nothing was lost by the install); a 1.0.842 game had been started at 17:36
+from `/Applications/.dunecity-backup-before-1.0.843-20261017-011302/`. AirRunner (MBA runner setup)
+states it touched only ~/dunecity-runner; the cause is unknown. Remaining backups: 1.0.843, 1.0.842.
+Not pushed or published.
+
+## 2026-10-17 — QuantBot footprint rule: AI units move off planned building sites; perimeter hold now also in the city simulation (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
+
+Stefan: "fix the dune mod issue - when the ai places buildings in the queue to be built then the ai units
+need to move off those tiles". Details, trace and table: `docs/formations.md` ("Planned sites and the army").
+
+- **Rule (every QuantBot, every mode)**: own ground units are traffic to the site search
+  (`QuantBot::placeableAmongOwnUnits`: engine check with units ignored; mountains, structures, other houses'
+  units and own units that were ordered off but cannot leave still block) - findPlaceLocation(+Simple),
+  turret/perimeter-turret/city service/city turret searches, foundation planner paving, planned site and slab
+  checks; a prepared *substitute* footprint must be free now. Every unit pass `keepPlannedSitesClear()` asks
+  idle/holding units on any yard's reserved site off it via `ConstructionYard::moveOwnUnitsOffPlot(idleOnly)`
+  (the pre-placement queue's path, now public; `Player::doMoveOwnUnitsOffPlot`). A finished building whose
+  site has own units waits (site + reservation kept) and is placed on plan once they leave. Perimeter, bundle,
+  muster/hunt-party, recall, guard, assembly and regroup slots skip planned sites (`onPlannedSite`).
+- **City-mode exclusion of the perimeter hold removed.** Cause of the `quantbot_no_spice_income_low-cash`
+  failure: holding troops on base rock made `Map::okayToPlaceStructure` (counts units) reject sites - the
+  production-room survey reported no factory site from cycle 25, so at cycle 4,925
+  `city_vehicle_production_bootstrap` spent 400 of 423 credits on a Radar and house 0 sat on 16-113 credits
+  for 3.3 min with no Industrial zone; with the search alone fixed another house stalled 2,500 cycles on
+  `foundation_incomplete` (planner treated unit tiles as unpaveable), also fixed. A/B on 8 seeds per map
+  (same code, hold v city gate): low-cash 8/8 v 7/8 runs pass, city net 210,261 v 212,625, zones 253 v 316,
+  houses alive 25 v 29 (zones per surviving house 8.8 v 9.9); 192x192 DuneCity 8/8 v 8/8, net 192,522 v
+  192,453. No gate kept.
+- **Probe** `quantbot_force_concentration` section 8: own tank on a wind trap site does not make it
+  unplaceable, an enemy trooper does; slots skip the site; an idle tank is sent off (173 cycles); a wind trap
+  finished while a tank stands on its site waits, the tank is asked off, and it is placed on the planned site.
+  Section 7 now expects the perimeter anchor in the city simulation too.
+- Protocol 80 comment notes the rule (unreleased 80 = this branch). No save change.
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, preplace_queue_tests, preplace_queue_probe,
+  game_command_regressions, save_scenario_export, save_scenario_input_preservation, formation_planner_tests,
+  formation_movement_probe and all 32 quantbot_* incl. force_concentration, no_spice_income_low-cash and
+  all_against_atreides: 40/40 (an intermediate run failed opening-economy vanilla/Dune2R until the prepared
+  substitute footprint was required to be free now). all-against-Atreides 6/6: 38.6 33.9 34.9 30.2 31.8
+  31.1 min (round 5: 29.3 33.0 33.9 33.5 30.7 30.3). Seed 1756374161 went 29.3 -> 38.6 (re-measured on the
+  previous commit e6b2910d: 29.28), so 8 more seeds (11..88) on both: this commit 30.3 31.7 33.7 30.7 29.5
+  31.0 32.2 30.7 (mean 31.2, 8/8), e6b2910d 31.5 29.2 33.1 30.6 40.6 31.1 29.3 36.2 (mean 32.7, 7/8):
+  no systematic slowdown, seed-level chaos; the first default seed now has 1.4 min of margin.
+
+## 2026-10-17 — QuantBot defence while outnumbered: perimeter hold + perimeter turrets + sized defence (UVX) on by default (branch `feat/ai-blob-waves`, protocol 80, save 9864, not released)
+
+Stefan: optimise how QuantBot concentrates force on defence; "you can build up rocket turrets"; "defend at
+the base perimeter". Merged `integrate/feature-batch` (1.0.844) first. Tables, causes and decision:
+`docs/formations.md` ("Round 5"); data `docs/formation-results/force/round5/` (1,620 duels).
+
+- **D confirmed not useful**: `/weak` v old rules 108 games 0.310 v BWFCQ 0.306 (paired +0.005); v BWFCQ both
+  0.037; Hard 0.870. Traced cause of weak-side losses: the army fights out of turret cover (forward bundle,
+  harvest-field defence answered piecemeal at 1.25x of what is visible).
+- **New default UVX** (`[Force Concentration]` `PerimeterHold`, `PerimeterTurrets`, `SizedDefence`, code
+  default true, hashed): a remembered enemy army (seen fighters, dead dropped, unseen forgotten after 5 min);
+  while it is worth 125% of ours no wave leaves and the reserve holds the enemy-facing base perimeter (not in
+  the city simulation); perimeter rocket turrets (one per 1,000 credits of the enemy's lead, max 8, above the
+  economy reserve + 750); defences count the enemy within 12 tiles and send 1.5x, bundle first, distant
+  building defenders muster, unanswerable worker raids get nobody.
+- **Measured**: `/weak` v old rules 108: 0.426 (0.33-0.52) v BWFCQ 0.306, paired +0.120 (+0.03..+0.21), 21
+  better / 8 worse, structures lost 53 v 61; Hard v old rules 0.926 (BWFCQ 0.870), Brutal 0.944 (0.931), Hard
+  head-to-head v BWFCQ 0.528 (0.44-0.62); all-against-Atreides 6/6 (29.3 33.0 33.9 33.5 30.7 30.3 min).
+  Rejected (test-only): E, G, A (k80/100/120), R, Y, D.
+- **Saved under SAVEGAMEVERSION 9864** (1.0.844 writes 9863, so the new state has its own gate): the
+  remembered enemy army and the musters, after the 9863 bundle; a 9863 (1.0.844) save loads with neither
+  (probe: the 1.0.844 layout loads and re-saves as 9864). Protocol 80; both pinned in tests.
+- City simulation: the perimeter hold made `quantbot_no_spice_income_low-cash` fail; the traced game shows
+  no blocked placements (so not "army on the lots") but a diverged opening, 127 v 51 base scrambles and a
+  cash stall; the hold is off in the city simulation.
+- **Harness**: army value at minutes 10/20/30 per side; new counters; flat run directories (slash labels
+  had deleted each other's runs).
+- Open: against a full BWFCQ attacker the half-army side still loses its base in ~8 min (0.046); perimeter
+  turrets are rarely affordable for the weak house (0.9 a game).
+- Tests (Release `build`, ctest -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe,
+  game_command_regressions, rts_controls_probe, rts_controls_tests, skirmish_generator_tests,
+  menu_navigation_probe, save_scenario_export, save_scenario_input_preservation and all 32 quantbot_*: 41/42 then
+  `quantbot_force_concentration` failed on the new city-simulation exclusion (probe expectation); probe fixed,
+  rebuilt, then force_concentration, dunelegacy_tests, launcher_kiting, no_spice_income_low-cash 4/4 passed.
+## 2026-10-17 — disk housekeeping: leased game scratch, probe profile bulk, merged-worktree pruning (branch `chore/housekeeping`, test harness only, no protocol/save change)
+
+claw.local fell to 33 GB free (agents' `/private/tmp` game scratch, CTest `--repeatable` runs,
+probe profiles in build trees, merged worktrees' builds); ~68 GB reclaimed by hand, incl. 38
+generated probe run directories (5.3 GB) in staging `build-int` (Stefan approved; log
+`~/.local/state/agent-workspace/reports/manual-reclaim-2026-10-17-build-int-probes.json`).
+
+- One helper, `tests/performance/probe_profile.py`: `scratch_dir` (leased run under
+  `/private/tmp/dunecity-work/<owner>/` via the installed agent-workspace `scratch.py`; private temp
+  dir elsewhere; deleted on success, kept 72 h as failed), `finish_game` (delete a game's directory
+  once its rows are written; failures keep logs/saves/replay only, max 5 per batch),
+  `require_free_space` (`agent-scratch guard`, 25 GB), `discard_profile_assets`, `prune_runs`,
+  `copy_revisions` (only the revisions a save or `ws-*` mod pins, never the whole store or the
+  owner token).
+- Users: formation-duel, formation-wave-matrix, headless-bench (no fixed `/tmp` default; `--results`
+  required), run-all-against-atreides, run-campaign-balance (profile bulk dropped when any run ends;
+  `--repeatable` keeps 3 runs), run-no-spice-city-progress, run-active-tile-probe, the pathfinding/AI
+  cache/simulation probes and `tools/scenarios/export-save-scenario.py` (`--keep-profile-assets`).
+- `scripts/prune-merged-worktrees.sh`: dry run lists worktrees merged into `integrate/feature-batch`
+  or `origin/main` that are clean and idle, with build sizes; `--apply` deletes their `build*/`,
+  `--remove-worktree` also the worktree. AGENTS.md/CLAUDE.md: delete your `build*/` once merged.
+- Proof: 4 Hard duels (64/128, seed 7101, none:blob, 6 min, `--jobs 4`) ran in
+  `/private/tmp/dunecity-work/omp_..._HousekeepingFinish/formation-duel-*`, gone after; 2 forced
+  failures (`--wall-timeout 3`) kept a 14 MB failed batch with two small game dirs. Probe dirs after
+  ctest are 12-21 MB (were 90-350 MB). Tests (worktree Release `build`, ctest -j2):
+  save_scenario_export, save_scenario_input_preservation, active_tile_probe, quantbot_no_spice_city,
+  quantbot_force_concentration, quantbot_launcher_kiting, quantbot_all_against_atreides: 7/7
+  passed; `tests/test_probe_profile_lifecycle.py` 11/11.
+
+## 2026-10-17 — local 1.0.844 installed on the MBA
+
+Staging = 1.0.843 + `feat/ai-blob-waves` (5c65342d): QuantBot default BWFCQ (bundled forward reserve,
+waves launch from the bundle, focus fire, converge, 60% wave readiness), Blob waves opt-in, five
+formation research rounds. Protocol 79, save 9863 (1.0.843 cannot load its saves or join its games).
+`agent-workspace stage verify` at 7b8860bf: build, check-build-deps and CTest 96/96 serial passed
+(`quantbot_all_against_atreides` 84 s, `quantbot_force_concentration`). Package: executable SHA256
+8941dfbb100fb0f17fa2faabd771aeb981a4e83c520ece4814ec8a18940ea2ea, no Homebrew/local links,
+signature and runtime check passed; installed on the MBA 2026-10-17 07:50 AEDT, 1.0.843 at
+/Applications/.dunecity-backup-before-1.0.844-20261017-075022/. Not pushed or published.
+Open: defence while outnumbered (test-only D rule, needs a 72–108 game `/weak` run).
+
+## 2026-10-17 — QuantBot default now BWFCQ (bundled reserve + launch from the bundle), launcher kiting fixed with force rules on, defence traced (branch `feat/ai-blob-waves`, protocol 79, save 9863, not released)
+
+Stefan: optimise how QuantBot concentrates force on attack and defence. Tables and causes:
+`docs/formations.md` ("Round 4"); data `docs/formation-results/force/round4/` (720 duels, tags r4h r4b
+r4d r4hd r4f r4fb).
+
+- **Default BWFCQ**: new optional `[Force Concentration]` keys `Bundle`, `LaunchFromBundle` (code default
+  true, hashed); `forceBits()` adds B|W. Final code: Hard 108 v previous rules 0.870 (0.81-0.93), v FCQ
+  0.676 (0.58-0.76), Brutal 36 0.931 (0.85-1.00); `quantbot_all_against_atreides` 6/6 (30.8 31.7 33.4
+  30.3 34.4 31.7 min).
+- **Saved state (9863, gated; 9862 loads with no bundle)**: `bundlePoint`, `bundleCentre`, `bundleCycle`,
+  `bundleGateSince` appended after the hunt parties (`saveForceState`/`loadForceState`). Protocol 79.
+- **Bundling rules**: at most 12 orders per pass after the unit pass, farthest first then lowest id
+  (order-independent); never wave members/defenders/guards/escorts; stands aside while recovery holds
+  reinforcements home; only once the house could attack (`bundleArmyReady()`, fixes the no-spice
+  low-cash opening); the gate waits only with a bundle and resets when the wave stops being ready.
+- **Launcher kiting**: `concentrateForces()` skips a hunting launcher whose escape applies
+  (`closeThreatWhileHunting()` split out of the escape). `quantbot_launcher_kiting` now runs with the
+  production rules and checks no focus order during the escape and the focus target hit after it.
+- **Defence**: FCQ's `/weak` losses come from 60% waves sent while outnumbered (lost in the field, army
+  collapses, base falls after minute 34), not an empty base. Test-only D (full readiness while the visible
+  enemy army is >=125% of ours): /weak 0.389 v 0.333 (36 games, not separable), Hard 0.889; not kept.
+  Next: 72-108 `/weak` games BWFCQD v BWFCQ.
+- Probes: `quantbot_force_concentration` section 6 (bundle orders, order independence, gather, gate hold
+  and 60 s timeout, defence pulls from the bundle, launch from it, save/load mid-gather and while the gate
+  waits); dispatch/recovery/blob probes pin F|C|Q.
+- Tests (one ctest -j3 run, Release `build`, final code): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl. all_against_atreides,
+  force_concentration and launcher_kiting: 40/40 passed (503 s).
+
+## 2026-10-17 — QuantBot default now focus fire + converge + 60% waves (FCQ); bundling + launch gate (BWFCQ) measured better, test-only (branch `feat/ai-blob-waves`, protocol 78, save 9862, not released)
+
+Stefan: "optimise how the ai concentrates forces on attack and defense"; bring back squad-centre bundling,
+explain why big waves lose, try splitting forces and attacking from two angles. Tables, causes and
+decision: `docs/formations.md` ("Round 3"). Data and reports: `docs/formation-results/force/round3/`
+(1,692 duels: tags p3 p4 p5 h1 b1 b2 d1).
+
+- **Default changed** (`QuantBotConfig::force`, new optional INI section `[Force Concentration]`:
+  `FocusFire=true`, `Converge=true`, `WaveReadinessPercent=60`; hashed; Custom Hard/Brutal only):
+  FCQ v previous rules 0.750 (95% CI 0.67-0.83) in 108 Hard games, 0.833 (0.69-0.94) in 36 Brutal;
+  all-against-Atreides 6/6 (31.9 27.8 31.4 31.4 33.9 27.9 min). `QuantBot::forceVariantOverride`
+  now defaults to `kNoForceOverride` (config); the duel harness always sets it, so label `none` = the
+  previous rules. `waveReadinessPercent()` replaces the L/Q branches. Protocol 78 (pinned in
+  `NetworkManagerTestCase`); no saved state.
+- **New test-only flags**: B (idle reserve bundled at a forward rally 25% towards the observed enemy
+  base), O (pre-1.0.602 rule: closer of that rally and the army's centre of mass), W (wave waits for
+  70% in the bundle, max 60 s), S (two halves from 90 degrees apart, release together), T (70/30 main
+  + flank). Pure rules + tests in `ForceConcentrationPolicy.h` / `ForceConcentrationPolicyTestCase.cpp`.
+- **Results**: BWFCQ 0.852 (0.78-0.92, 108 Hard), 0.944 Brutal (36), beats FCQ head-to-head 0.750
+  (0.67-0.82, 108). O 0.750, BW 0.722, B 0.611 (36 each). Splits do not help (S 0.556, T 0.444, SFCQ
+  0.639). L 0.431: cause is tempo - the 150% house threshold (30,000 on 128 maps against a ~21,000
+  starting army) skips the opening strike and is not reached while defending; 3.4 waves/game v 7.5,
+  first at 19.9 v 10.7 min, 55 v 28 structures lost. Defence (`/weak`): no rule separates from None
+  (0.333); FCQ is lowest (0.250, 61 structures lost) - watch it.
+- **Next step**: make BWFCQ the default - save `bundlePoint`/`bundleCycle`/`bundleGateSince`
+  (save 9863, gated), add bundling/gate checks to `quantbot_force_concentration`, re-run
+  all-against-Atreides, add `BundleReserve`/`BundleLaunchGate` keys.
+- New probe `quantbot_force_concentration` (`--force-probe`, `tests/ai/force-concentration-probe.inc`).
+  `quantbot_launcher_kiting` sets override 0 (focus fire gives a hunting launcher its own attack order).
+  Harness: flags B O W S T, counters bundle_orders/gate_holds/gate_timeouts/splits/split_releases/
+  split_timeouts; `append` rewrites a CSV whose header is older.
+- Tests (one ctest -j3 run, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 32 quantbot_* incl.
+  `quantbot_all_against_atreides` and the new `quantbot_force_concentration`: 40/40 passed (1017 s).
+
+## 2026-10-17 — QuantBot force concentration: 13 candidates screened, default unchanged (branch `feat/ai-blob-waves`, protocol 77, save 9862, not released)
+
+Stefan: "keep working on formations. we need to optimise how the ai concentrates forces on attack and
+defense". Research (Lanchester, UAlbertaBot/Steamhammer/PurpleWave, sharpy-sc2, OpenRA, AoE II, Red
+Alert, CircuitAI, FM 3-90), candidates, tables and decision: `docs/formations.md` ("Concentrating force").
+Raw data: `docs/formation-results/force/` (tags `p2` = decisive, `p1` = pre-regression-fix screen).
+
+- Merged `perf/headless-sim` (0510079e) and `fix/ai-regression-all-vs-atreides` (a70f8666); protocol
+  reconciled to 77 (76 = Blob waves, 77 = the regression fix), save stays 9862.
+- Built test-only candidates (`QuantBot::forceVariantOverride`, duel flags F/N/C/P/H/M/L/Q; Blob bits
+  s/e; `src/players/QuantBotForce.cpp`, pure rules `include/players/ForceConcentrationPolicy.h` with
+  `ForceConcentrationPolicyTestCase.cpp`): focus fire, NOK-AV focus fire, converge after contact, pool
+  defenders 2x, recall raiders, muster defenders, wave size 150%/60%, staged Blob (+superiority). Duel
+  harness: `/weak` label (half starting army, defence scenario), home trade and force counters per house.
+- Measured (Hard, 36 games each, p2): best FC 0.611 (0.44-0.78), F 0.583 (0.42-0.75), Q 0.556; all
+  others 0.47-0.53; none separates from None. p1: L (big waves) 0.000 in 8 games. Default unchanged.
+- Not done (request budget): 108-game + Brutal confirmation of FC/F, the `/weak` defence run, Stefan's
+  bundling / big-wave cause / two-angle split ideas.
+- Tests (one ctest -j3 run on a3c40b99, Release `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* incl. `quantbot_all_against_atreides`
+  (213.7 s): 39/39 passed.
+## 2026-10-17 — local 1.0.843 verified and installed on the MBA
+
+Staging `integrate/feature-batch` = released 1.0.842 + `fix/ai-regression-all-vs-atreides`
+(010a16fc, includes `perf/headless-sim` 0510079e). Version 1.0.843, protocol 77, save 9861.
+`agent-workspace stage verify`: build, check-build-deps and CTest 94/94 serial passed (incl.
+`quantbot_all_against_atreides`, `save_scenario_export`). Package: executable SHA256
+f57fa25e1d3b46f249bb174b38db8f62a2e7e7739be3afc222eb2036c6f1b164, no Homebrew/local links,
+signature and runtime check passed. Installed on the MBA 2026-10-17 01:13 AEDT by
+`/tmp/push-dunecity-1.0.843.sh` (same SHA256, signature and runtime check passed); 1.0.842 at
+/Applications/.dunecity-backup-before-1.0.843-20261017-011302/. Not pushed or published.
+`feat/ai-blob-waves` (ForceConcentration2) is still in progress and not merged.
+
+## 2026-10-16 — All-against-Atreides AI regression fixed: mandatory test passes 6/6 (branch `fix/ai-regression-all-vs-atreides`, not released)
+
+Stefan: on 1.0.842, QuantBot Brutal Atreides "can't do mass attacks, barely defends" in the vanilla
+"All against Atreides" game against four AI Player (hard) houses. His saved game at 47 minutes
+(`quantsucks.dls`), continued headless, wins at 88.3 minutes. New mandatory ctest
+`quantbot_all_against_atreides` replays his exact setup on six seeds, and Atreides must eliminate
+every house within 40 game minutes on all of them. Details and tables:
+`docs/quantbot-all-against-atreides.md`; rule in AGENTS.md/CLAUDE.md.
+
+- Cause: army recovery (`d774f387`, 1.0.812). Not an 833→842 regression: 1.0.833 and 1.0.842
+  play bit-identical games. (1) The front-battery goal grew with base size, not with the threat:
+  Atreides' 100,000-credit base ordered 91 rocket turrets (goal 45→107). (2) The wall rule wanted
+  2 walls per turret (95 walls). Together about 30,000 credits left the army in minutes 10-20,
+  when the AI Player houses grow from 13k to 117k. (3) The posture trade counted only mobile
+  kills, so assaulting turret-defended bases read as a bad trade, and the house-level withdrawals
+  pulled home a Brutal army that was ahead (seed 1430976924 lost after a `severe_local_defeat`
+  recall of the first wave at 10.2 minutes).
+- Game minutes to eliminate all four (L = Atreides lost), seeds 1756374161 / 906213928 /
+  41562270 / 1841712204 / 1430976924 / 1804669015:
+
+  | build | per seed |
+  |---|---|
+  | 1.0.796 (human seat) | 35.1 36.9 36.7 32.8 32.1 35.6 |
+  | 1.0.820 | 31.4 66.7 35.8 69.5 37.7 37.0 |
+  | 1.0.833 | 42.4 32.4 43.0 (first three seeds only) |
+  | 1.0.842 | 42.4 32.4 43.0 32.6 L29.9 41.6 |
+  | 1.0.842, recovery off | 28.7 31.1 32.3 31.5 30.2 33.9 |
+  | branch, withdrawals on | 36.5 35.3 34.4 31.7 L39.0 32.8 |
+  | branch | 34.0 31.9 32.2 31.7 32.8 32.8 |
+
+- Fixed: the battery stays in its 8-12 band (`FrontBatteryPolicy::batteryGoal`); walls follow only
+  the fixed-count defence turrets; destroyed hostile buildings are credited to the attrition
+  ledger (`Player::onHostileStructureDestroyed`); house-level withdrawals off by default.
+- Withdrawal ablation (from "branch, withdrawals on", one trigger disabled, all six seeds): severe
+  local defeat 36.5 35.3 34.4 31.7 L35.1 32.8; local squad pull-back 36.5 35.3 34.4 31.7 L39.0
+  32.8; sustained attrition 34.0 31.9 32.2 31.7 L45.4 32.8; core under attack 36.5 35.3 34.4 31.7
+  L36.0 32.8; outnumbered dispatch gate never fired; all four 34.0 31.9 32.2 31.7 32.8 32.8. Only
+  all four together win every seed.
+- Settings: new `[Army Recovery] WithdrawalsEnabled` (QuantBot Config, code default false; the
+  shipped `.ini.default` does not list it, so the code default applies). Off ignores severe local
+  defeat, sustained attrition, core under attack and the local squad pull-back. Rally,
+  batteries, recall machinery and whole-army base defence unchanged; `quantbot_army_recovery`
+  verifies the withdrawal machine with it on. Harvester override: -1 and 0 both mean no ceiling
+  (`GameOptionsClass::harvesterCeiling()` for every reader; QuantBot initial limit, Mentat and the
+  campaign ally limit used to disagree). Stefan's vanilla profile files match the bundled ones.
+- `quantbot_no_spice_income_low-cash` failed after withdrawals went off: Atreides (house 1)
+  built 3 R/I lots, not 4. Not a withdrawal effect: with and without withdrawals the first two
+  minutes are identical, Atreides loses its starting army to its Harkonnen neighbour's starting
+  units and its yard at 2.9 (off) / 3.7 (on) minutes, and is dead at the end of both games; the
+  extra 0.8 minutes fitted the 4th lot. The 1.0.817 design (`docs/no-spice-economy-817.md`)
+  requires four lots of surviving cities only and already recorded this defeated house; the
+  probe asserted it of every house. It now asserts lots for houses alive at the end, keeps the
+  >100 banked-tax check for every house with a starting yard, reports `defeated`, and fails if
+  no surviving city was checked.
+- Robustness: harvester override -1 on the six seeds gives identical times; extra seeds 271828182
+  31.7, 3141592653 32.4, 1618033988 31.1 minutes.
+- Merged `perf/headless-sim` (0510079e). The all-against-Atreides runner uses one path thread per
+  match and keeps the AI log (its attack/defence lines need it; `--no-ai-telemetry` drops them);
+  elimination matches log PROBE_DIGEST/PROBE_TIMING. Same six times after the merge. The test
+  takes 191-205 s (75-95 s per match, three at once, load ~8-13).
+- ctest -j3 at the final commit: dunelegacy_tests, game_command_regressions, network_wire_harness,
+  formation_planner_tests, formation_movement_probe, rts_controls_probe, preplace_queue_probe,
+  skirmish_generator_tests and all 30 quantbot_* tests: 38/38 passed, 431 s.
+- `save_scenario_export` failed in staging (1.0.843 merge, `build-int`) with "Workshop file is
+  missing or too large." Not caused by this branch (no diff to `src/mod`, `src/MapEditor` or
+  `tools/scenarios` since 1.0.842): the test reuses its work dir, and the output map's revision
+  sidecar (`fixture-world-current.ini.workshop.ini`, written by the passing 1.0.842 run on
+  2026-10-15) named revision `7404876f…`, which was no longer in the work-dir profile's
+  `workshop/revisions` (the registered disposable-asset cleanup removes those after a success).
+  `MapEditor::saveMap` → `Workshop::saveMap` called `store().get(hash)` on that sidecar hash and
+  threw, so the map could not be saved. Reproduced in this tree by moving the named revision
+  away. A real game bug too: any map whose cached revision is gone (cleared Workshop cache,
+  copied map folder) could not be saved. Fix: `Workshop::saveMap` treats the sidecar only as a
+  reuse hint; a missing or damaged revision means "save as a new revision". The selftest now
+  starts every export from a sidecar naming an absent revision and checks the exported map is
+  pinned to a revision in the store (fails on the old binary, passes on the fix). Full ctest -j3
+  at 93d1a5bc: 94/94 passed, 1347 s.
+- Protocol 77 (76 is reserved by `feat/ai-blob-waves`; reconcile at merge). AI decisions differ
+  from a 75 peer. Save 9861 unchanged. No version bump.
+
+## 2026-10-16 — QuantBot Blob waves: measured, default stays None (branch `feat/ai-blob-waves`, save 9862 / protocol 76, not released)
+
+Stefan: gather the hunt party, march as one blob so trikes cannot run ahead, unblob on contact, reform,
+and make the damage retreat a short tactical fall-back to reform. Research (OpenRA squad leader/regroup,
+UAlbertaBot regroup position, sharpy-sc2, AoE II attack groups, BAR), design, tests and all tables:
+`docs/formations.md` ("Blob waves"). Raw data: `docs/formation-results/blob/` (tags `hard1`, `brutal1`).
+
+- Built: `WaveFormation = Blob` (optional key; code default stays None) makes a Custom Hard/Brutal
+  wave a hunt party (`src/players/QuantBotBlob.cpp`, `include/players/BlobWavePolicy.h`): gather at a
+  rally point towards the objective (90% quorum, blocked-stall rule, travel-time limit), march leg by leg
+  at the slowest member's pace (fast members wait at each leg end), release into engine Hunt on contact
+  (visible enemy within a member's huntTowardRange, or a hit), reform after 6 s quiet, tactical fall-back
+  8 tiles away from the threat when locally outmatched (1.3x for 4 s or 2x), replacing the local recall
+  home. Party state saved (9862); protocol 76. Test-only ablation switch `tacticalRetreatOverride`;
+  duel labels `blob`, `blob/noretreat`, `none/retreat`; new wave metrics `together_at_contact`, `engaged10`.
+- Measured (Hard, 108 games per pairing, sizes 128/160/192, seeds 7101-7606, all house pairs, both sides):
+  Blob v None **0.306 (0.22-0.39)**, loses; Blob without retreat 0.343 (0.26-0.44), loses; retreat without
+  Blob 0.486 (0.39-0.58), neutral. Brutal sample (36 games) Blob v None 0.444 (0.28-0.61). Blob keeps
+  waves together (50% v 22% of members at contact, arrival spread 71 v 100 s, survival 71% v 65%) but
+  reaches contact 21 s later and trades worse in the first minute (2.89 v 3.67 killed/lost).
+- Decision: `WaveFormation` default stays None; Blob remains selectable. Not done: a second iteration on
+  the release/engagement and a full Brutal run (request budget).
+- Second round (commit `57d2b973`, test-only `blobVariantOverride`, labels `blob+v|r|k`): 36-game Hard
+  screen of vehicle pace, release-only-on-a-real-fight and keep-damaged-members variants: best blob+v
+  0.417 (0.25-0.58), none beats None. Table and open ideas in `docs/formations.md` (second round).
+  The same acceptance list re-run on `57d2b973` (ctest -j2): 38/38 passed.
+- Tests (one ctest run, -j2, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all quantbot_* tests incl. the new
+  `quantbot_blob_waves`: 38/38 passed. Probe/duel scratch deleted; results kept.
+
+## 2026-10-16 — Faster headless simulation batches (branch `perf/headless-sim`, not released)
+
+Stefan: "improve the performance of the headless simulation runs. e.g. run multiple in parallel
+optimise the game engine etc". Details, profiles and tables: `docs/headless-performance.md`.
+Save 9861 / protocol 75 unchanged; no version bump.
+
+- Profile (192 duel, origin/main): main thread 37% waiting for the 4 path workers, 25% the duel
+  harness's own `FormationWaveMeasure` (17% `inTargetArea`), 5.5% per-unit clock reads; with those
+  gone A* is ~50% of a game. Start-up ~1.5-1.9 s/game (graphics, mod reload, voices).
+- Engine, bit-identical: A* heap slots carry f, hoisted neighbour-loop invariants, inline
+  `fix32_mul`, `PathWorkerPool` caller joins the batch (one-task batches inline), per-unit phase
+  timing halved and switchable (`FrameTiming::unitPhases`, off in probes).
+- Harness: `formation-duel.py` defaults to `--path-workers 1` and no AI log (`run-campaign-balance.py
+  --no-ai-telemetry`), biggest maps first; probe binary cached in `build/balance-probe-cache`;
+  `tests/ai/probe-digest.inc` (PROBE_DIGEST/PROBE_TIMING); `tests/performance/headless-bench.py`.
+- Result under load 30-36: 6 parallel duels 194 -> 487 games/h, CPU per game -40%; `--jobs 8` idle,
+  `--jobs 6` when shared. Determinism: 47 benchmark runs plus a 40-minute 192 duel give identical
+  digests and measurements before/after (and for 1 vs 4 path workers, AI log on/off).
+- ctest -j3: dunelegacy_tests, game_command_regressions, network_wire_harness, formation_planner_tests,
+  formation_movement_probe, skirmish_generator_tests, active_tile_probe, all 29 quantbot_*: 36/36 passed.
+
+## 2026-10-15 — 1.0.842 production release
+
+PR #99 (`release-prep/1.0.842`, head bff751dd, notes `releases/desktop/1.0.842.md`) passed CI run
+38720020748 and was merged as 1ff74cf2; tag `v1.0.842` on 1ff74cf2. Build Dune Legacy 38724420748
+succeeded (all platforms, signed update feeds, release); GitHub release v1.0.842 is published
+and Latest with exe, Windows zip, dmg, macOS zip, AppImage, deb, rpm, tar.gz, three update
+feeds and two appcasts. Main build 38724395611 succeeded (latest-dev = v1.0.842). Sync
+SourceForge release 38727478482 succeeded; SourceForge latest download redirects to
+`dunecity/1.0.842/`. Website bump deploy 38727474359 succeeded (dunelegacy.com shows 1.0.842).
+Publish browser build 38727478558 and Deploy to Droplet 38728697757 succeeded; live
+`play/build.json` is 1.0.842 / 1ff74cf2. Browser gameplay was not tested by hand.
+
+## 2026-10-15 — local 1.0.842 installed on the MBA
+
+Integration `cbcac37a` = Codex staging cleanup `5c4057a0` + `feat/formation-research` (`fe6f8957`,
+includes `feat/formation-form-up`): formation buttons / Ctrl+Shift+F form the selection up in
+place; five shapes Box, Pincer, Column, Staggered, Echelon (+ Off); QuantBot `WaveFormation`
+default None; fight-in-formation modes measured and not kept. Save 9861 / protocol 75 (1.0.841
+cannot load its saves or join its games). `agent-workspace stage verify` at cbcac37a: build,
+check-build-deps and CTest 93/93 serial passed (exit 0, no source change). Package: executable
+SHA256 63ea31c7dec02abd2ff1babca1f7271ecb688bc6232f69f9f0afda1ed3cb6374, no Homebrew/local
+links, signature and runtime check passed; installed on the MBA 2026-10-15 21:05 AEDT, 1.0.841 at
+/Applications/.dunecity-backup-before-1.0.842-20261015-210538/. Not pushed or published.
+
+## 2026-10-15 — Fighting in formation through first contact: measured, not kept (branch `feat/formation-research`)
+
+Stefan approved making formations fight in formation through first contact so they can beat None. Details and
+tables: `docs/formations.md` ("Fighting in formation through first contact"). Raw data:
+`docs/formation-results/engagement/` (tags `pilot`, `pilot2`).
+
+- Built and measured five engagement modes against None and against today's scatter (Hard duels, sizes
+  128/160/192, seeds 7101-7606, Column and Box, 36 games per pairing, 576 games): Hold (leash 0 and 2),
+  Advance, Deploy (close in up to 6 tiles past weapon range) and Arc (spread into one battle line across the
+  threat). Shared rules: fire only in reach, re-march after 3 s quiet, break on an enemy within 2 tiles / a
+  third lost / outranged / 8 s outranged / 30 s.
+- No mode's 95% interval clears 0.5 against None (best box/arc 0.417, 0.25-0.58) or against scatter (best
+  column/arc 0.514, 0.35-0.67); Box Hold, Advance and Deploy and Column hold2 and Advance lose to None outright.
+  The formation survives the fight (about half the members in formation 10 s after contact vs 20-26% with
+  scatter), but the first-minute trade is no better than scatter's (2.0-3.2 vs 3.0-3.6 killed/lost) and below
+  None's (5-6.6).
+- Decision: scatter stays, QuantBot `WaveFormation` stays None. The engagement code, its saved state, the
+  test-only switch and the WIP's save 9862 / protocol 76 were removed (WIP history: commit `d09813f1`, Hold/
+  Advance/Deploy; Arc was measured from an uncommitted build). Save 9861 / protocol 75 unchanged. Kept: duel
+  harness `--pairs` (with a per-pairing report) and `--all-houses`, and the wave metric `in_formation_10s`.
+  The full 108-game run and the Brutal sample were not run: no mode qualified in the pilot.
+- Tests (one ctest run, -j3, Release tree `build`): dunelegacy_tests, formation_planner_tests,
+  formation_movement_probe, game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 29 quantbot_* tests: 37/37 passed. Probe output
+  deleted afterwards.
+
+## 2026-10-15 — Formation research (branch `feat/formation-research`, not released)
+
+Stefan: "test different styles of formations ... keep the best 5"; then None as a control. Details and all tables:
+`docs/formations.md` ("Formation research"). Merged `feat/formation-form-up` (save 9861 / protocol 75, unchanged).
+
+- 1,980 Hard duels (Random Skirmish 1v1, mirrored, Fortress + 20,000-credit armies, `tests/ai/formation-duel.py`):
+  None 0.562 (0.51-0.61) ranks first; the shapes score 0.438 (0.39-0.49) against None; no shape beats it.
+- Applied: QuantBot `WaveFormation` default None; `kAIShape` removed - AIPlayer, CampaignAIPlayer and QuantBot recall
+  follow `WaveFormation` (None: pre-formation orders). Kept shapes Box, Pincer, Column, Staggered, Echelon (+ Off);
+  removed Combined arms (scouts), Line, Wedge, Vee, Diamond. Stable ids; removed ids load as Box (settings only -
+  commands and saves carry slots, not shapes). Generator fix: no unit starts on a spice bloom.
+- Tests (one ctest run, -j3): dunelegacy_tests, formation_planner_tests, formation_movement_probe (after the probe's
+  marker/screenshot list was updated), game_command_regressions, rts_controls_probe, rts_controls_tests,
+  skirmish_generator_tests, menu_navigation_probe and all 23 quantbot_* probes passed.
+- Open: Brutal None-vs-kept-shapes sample (tag `brutal`, results in /tmp/dunecity-formation-research/results) was
+  running at hand-over; the approved "fight in formation through first contact" engagement mode is not started.
+## 2026-10-15 — formation buttons form the selection up where it stands (branch `feat/formation-form-up`, save 9861, protocol 75, not released)
+
+Stefan: "when selecting men and then setting a formation, the troops should move into that formation".
+A shape button (Box/Combined/Line/Column), `Ctrl+Shift+F` or `Ctrl+F` switching on now re-forms the
+selected ground units in that shape around their centroid (`FormationPlanner::planInPlace`,
+`Game::issueSelectedFormUp`), facing the way they were last sent, else the nearest visible enemy, else
+their average heading, else north (`Game::formUpFacing`). Off moves nobody. Commands are
+`CMD_UNIT_FORMATION_MOVE` with the new order kind FormUp (the slot is the form-up tile); forming members
+in a ring on each other's tiles step aside (`FormationOrders::stepAsideForFormUp`). Details, measurements
+and deviations in `docs/formations.md` ("Form up where they stand"). Version numbers 9861/75 need
+reconciling with the other formation branch at integration.
+
+## 2026-10-15 — local 1.0.841: QuantBot formation waves + multiplayer random maps
+
+Integration of `3f4f9af9` (QuantBot waves in formation, default Combined arms) and
+`feat/skirmish-multiplayer` (hosted Random map, equal Random army/city). Full CTest 93: 92 passed
+one at a time; `preplace_queue_probe` failed because `QuantBot Config.ini.default` had gained a
+`WaveFormation` line: that file is in every mod's effective checksum, so saves from earlier builds
+refused to load ("This game needs an older mod version"). The line was removed (the key stays an
+optional setting, code default Combined); `preplace_queue_probe` and `quantbot_wave_formation`
+then passed. Note: POST_BUILD config copies only refresh when the app relinks; copy by hand or
+relink after changing `config/*.default`. Package: executable SHA256
+6da6974738ad83d577dbfd9f7ee9dfd7ab40e8b3cd56e439ed9174a63029af55, signature and runtime check
+passed. The MBA was offline overnight and the background retry script exited without
+installing; installed directly on the MBA at 09:22 AEDT 2026-10-15 (same SHA256, signature and
+runtime check passed); 1.0.840 at /Applications/.dunecity-backup-before-1.0.841-20261015-092239/.
+
+## 2026-10-15 — Random map for multiplayer hosts; equal Random army/city (branch `feat/skirmish-multiplayer`, not released)
+
+Stefan: "make random skermish available for multiplayer … players can join and replace ai so no
+enemies and allies, you set that in the next screen" and "random settings on army and city must
+apply equally to each player". Details: `docs/skirmish-generator.md` ("Multiplayer Random map").
+
+- Equal randoms (single player and hosted): Army/City "Random" is drawn once per map from the
+  seed; every house set to Random gets that budget/target (`SkirmishGenerator::generate`).
+- Hosting: the host's map chooser (`CustomGameMenu`, LAN/Internet and the Custom Game
+  Offline/Online setup) has **Random map...** → `RandomSkirmishMenu(hostMod)`: map settings,
+  credits, tech, Start positions 2–8, one Base/Army/City for every start, Mirrored starts on by
+  default; host mod and Game Rules stay in the chooser. Next saves the map to MP User Maps, the
+  chooser selects it (`selectUserMap`) and continues into the normal lobby.
+- Map: open `[Player1]..[PlayerN]` starts (`Params::multiplayer`, `Role::Open`), planned with
+  `startCatalogue()` (only what every custom-game house can field), identical buildings, units,
+  army value and city per start. Lobby, map transfer, checksums, saves and replays unchanged:
+  no protocol or save change (protocol 74, save 9860).
+- Tests: `skirmish_generator_tests` (+4 cases: equal randoms, multiplayer starts 2–8, start
+  catalogue, hosted persistence); `skirmish_generator_probe` new case `mp-lobby` (screen, chooser,
+  online setup, lobby with host + guest + 2 AI and teams, guest's wire-format copy, both peers'
+  first minute with equal state digests). No socket-level two-peer run: the late-join harness
+  needs local PHP signalling + WebRTC and is not in ctest.
+- Run one at a time on a fresh Release tree, probe output deleted after each: dunelegacy_tests
+  (1074 passed, 3 skipped), skirmish_generator_tests (22 cases), skirmish_generator_probe (all 10
+  cases incl. mp-lobby), menu_navigation_probe, retina_resolution_probe, game_command_regressions,
+  network_wire_harness, lobby_authorization_tests (5 cases): all passed.
+## 2026-10-15 — QuantBot attack waves in formation (not released, no version bump)
+
+Stefan: "get quant bot to launch its attacks using formation - e.g. combined arms, but get it to test box and
+line as well", then "do some test games ... and make any necessary modifications". Details, measurement and the
+before/after of each change: `docs/formations.md` ("QuantBot waves in formation").
+
+- `QuantBot::launchGroundHunt`: ground members of every wave hunt in formation to the wave's objective (custom: the
+  tracked front, else engine Hunt's pick for the lead; campaign: the wave's objective; Hard/Brutal flank detour as one
+  forced formation leg). Who/when/what unchanged; <3 eligible units and `WaveFormation=None` keep the old orders.
+- `QuantBot Config.ini` `[General Behavior] WaveFormation` (None/Combined/Box/Line/Column), default Combined, hashed.
+- Engine fixes for AI hunting formations (also `CampaignAIPlayer`): Hunt kept after the break, form-up in Hunt, 15 s
+  form-up deadline from the group token, out-of-place sonic members exempt from lane waits, no stall-carryall for
+  formation members, lone forming hunter hunts on. No save/protocol change (9860 / 74).
+- Measured Hard vs Hard, 3 maps x 3 seeds x None/Combined/Box/Line (`tests/ai/formation-wave-matrix.py`): Combined
+  arrival spread 114 -> 76 s, killed/lost 4.27 -> 3.64 (noise overlaps); Box best trade 4.30. Default stays Combined.
+  Brutal not measured. New probe `quantbot_wave_formation`.
+
+## 2026-10-14 — local 1.0.840 installed on the MBA
+
+1.0.840 = the formation fixes below plus the colonist escort (86% of march cycles with escort on
+3+ sides). Full CTest 92/92 passed, run one test at a time with probe output deleted between
+(the Mac mini disk is nearly full). Installed on the MBA at 23:05 AEDT: executable SHA256
+6e833e4167d9d54f8f8b0cc828969f9195758abe9c24658910ad283b53a719fd, runtime check passed; 1.0.839
+at /Applications/.dunecity-backup-before-1.0.840-20261014-230505/dunecity.app.
+
+## 2026-10-14 — formation fixes after 1.0.839 play-test (save 9860, protocol 74, not released)
+
+Stefan's 1.0.839 feedback (siege tanks in front, harvesters out, MCVs escorted, one speed, sonic lanes).
+Details and measurements: `docs/formations.md` ("Formation fixes, save 9860 / protocol 74").
+
+- Siege tanks are front-line armour (Box role Armour, Combined/Line/Column class Heavy, first among heavy armour).
+- Harvesters (`isHarvesterLikeUnit` items) never get a slot or membership; selected with a group they keep their ordinary order.
+- MCVs take the centre slot (the target itself, middle row, escort around).
+- One speed: form-up first (`FormationPlanner::formUpTiles`), then every member keeps the pace unit's
+  step time (`UnitBase::formationPaceStepLength`), recovers a lost place at full speed or waits for a member >2 tiles behind;
+  marching members route through and wait behind each other (`UnitBase::canPathThrough`).
+- Sonic: only a same-type sonic unit may stand in a sonic lane. Damage code: sonic tanks ignore damage from sonic tanks
+  and sonic trikes from sonic trikes only; cross-type and every other unit are hurt; a wave whose shooter has died hurts sonic units too.
+- Block march probe: speed spread 25.6% -> 10-14%, shape error 10.0 -> 1.2-1.4 tiles, stretch 7.0 -> 2.2 tiles.
+- Colonist escort: a ring round the MCV as a moving anchor (`QuantBot::colonistEscortPlace`): the MCV keeps its own
+  order and deploys as before; escorts take places relative to its tile and heading (front corners 3 tiles ahead, then
+  behind, flanks; sonic escorts front row only), guard point on the place. Upkeep every cycle while a colonist drives
+  (`QuantBot::keepColonistEscortsInPlace`); no re-order while walking to within 2 tiles of the place (a re-order resets
+  the path); new orders aim one MCV tile ahead; an unpassable or occupied place moves to the nearest passable tile at
+  least 2 tiles to the same side; escorts leave any formation (no pace cap). `quantbot_mcv_deployment` (requires 80%):
+  colonist deploys, escort on 3+ sides on 3229/3713 march cycles (86%, was 54%), 4 sides on 480 (12%). The march is
+  longer than before (3713 vs 3008 cycles): on the fixture's structure-striped rock the right-hand escort crosses the
+  MCV's lane and the MCV waits for it. No saved state or command change (save 9860 / protocol 74 unchanged).
+
+## 2026-10-14 — local 1.0.839: plan-sites game rule + formation shapes merged (save 9859, protocol 73)
+
+`feat/formation-shapes` (Box, Combined arms with scouts, Line, Column; sonic-lane rule for all
+shapes and the AI; hunt in formation via `CMD_UNIT_FORMATION_HUNT`, breaking on first contact;
+formation buttons in the unit panel, Ctrl+Shift+F cycles shapes; see `docs/formations.md`) merged
+on top of the plan-building-sites rule below. Versions combined: save 9859 (9858 MOD8 rule, 9859
+hunting-formation flag and facing), protocol 73. Full CTest 92: 84 passed in the parallel run and
+the other 8 failed only with "No space left on device" (Mac mini disk full); each of those 8 then
+passed alone after clearing probe output. Installed on the MBA at 20:50 AEDT: 1.0.839, executable
+SHA256 480d2253ce1f1739f1e793f461c5f3402ad1377af6d4fe8fc24464c95bfee1ab, runtime check passed;
+1.0.838 at /Applications/.dunecity-backup-before-1.0.839-20261014-205042/dunecity.app.
+
+## 2026-10-14 — plan building sites is a game rule (MOD8, save 9858, protocol 72)
+
+- The Construction Yard pre-placement queue is now a per-match rule, not a client setting:
+  `GameOptionsClass::planBuildingSites` (default on), checkbox "Plan building sites when ordering"
+  in the Game Rules window (Custom Game, Random Skirmish). Part of `operator==` and `getHash()`.
+- Defaults persist as `[Game Options] Plan Building Sites` (globals, main, OptionsMenu, mod
+  `GameOptions.ini`). Removed outright: `settings.general.chooseBuildingLocation`, its Options →
+  General checkbox and `[General] Choose Building Location`.
+- `GameInitSettings` writes marker MOD8: everything MOD7 carries plus the rule byte appended
+  after the spice income block. MOD7 and older read the rule as on and consume nothing more;
+  a MOD8 stream missing the byte throws (truncated). `SAVEGAMEVERSION` 9857 → 9858,
+  `NETWORK_PROTOCOL_VERSION` 71 → 72.
+- `BuilderList` reads the match rule; the `CMD_BUILDER_RESERVE_PLACEMENT` executor refuses
+  reservations when it is off (same on every peer).
+- Tests: `CoopGameSettingsTestCase` (MOD8 offsets, new `[preplace]` case: save/load, network
+  snapshot, hash, MOD4–MOD7 default on without consuming bytes, truncation), protocol/save pins,
+  `command-execution-probe` MOD8 offsets, `preplace-queue-probe` drives the match rule and checks
+  a reservation is refused when off, `menu-probe` checks the checkbox default, save, reopen, INI
+  round trip and that the window fits at 640x480, 854x480 and 1280x720.
+- Verified (build-int, Release): targeted 9 tests passed (dunelegacy_tests, preplace_queue_tests,
+  preplace_queue_probe, game_command_regressions, network_wire_harness, lobby_authorization_tests,
+  skirmish_generator_probe, menu_navigation_probe, retina_resolution_probe); full
+  `ctest -j 2` 92/92 passed. No version bump.
+
+## 2026-10-14 — local 1.0.838: Random Skirmish rules, rock to 100%, house counts, Trooper squads
+
+- "Game rules..." button opens Custom Game's `GameOptionsWindow`; once confirmed, `matchRules()`
+  replaces the mod's effective rules for matches started from the screen.
+- Allies 0-6, enemies 1-7, at most 7 together (`kMaxOtherHouses`, `maxOtherHouses()`); the slider
+  the player did not move gives way. `Params::clamp` enforces the same.
+- Rock steps 15/25/35/50/65/80/90/100% (`Rock` enum extended, first four indices unchanged);
+  `growRock` spreads rock from its edges past what the editor's fields reach; 100% = no sand/spice.
+- Armies never buy light infantry (`kUnitTypes` without `Unit_Soldier`); Troopers are placed up to
+  five per tile (`NUM_INFANTRY_PER_TILE`); Army rows read "Army (credits)".
+- Verified: `dunelegacy_tests`, `skirmish_generator_tests` (rock to 100% incl. mirrored crowded
+  all-rock map, caps, army bundling), `skirmish_generator_probe` (slider coupling, rules window,
+  real matches load with full army value), `menu_navigation_probe`, `retina_resolution_probe`.
+- Installed on the MBA at 18:45 AEDT: 1.0.838, executable SHA256
+  6931350116161da4929c3241c31b1f2c36c37d94f4724a615c8cb62122d4cc84, runtime check passed; 1.0.837
+  at /Applications/.dunecity-backup-before-1.0.838-20261014-184540/dunecity.app.
+
+## 2026-10-14 — local 1.0.837: Random Skirmish sliders
+
+Ordered settings (Size, Rock, Spice, Credits, Tech level, Allies, Enemies, each side's Base, Army,
+City) are new header-only `Slider` widgets (`include/GUI/Slider.h`, DropDownBox-compatible entry
+API): low on the left, high on the right, value text beside the track, click/drag/wheel/arrow keys.
+Mod, house, AI and partner stay drop-downs; "Random" is the rightmost Army/City step. The skirmish
+probe drives a real click, drag and wheel on the size slider. `dunelegacy_tests`,
+`skirmish_generator_tests`, `skirmish_generator_probe`, `menu_navigation_probe` and
+`retina_resolution_probe` passed. Installed on the MBA at 18:12 AEDT: version 1.0.837, executable
+SHA256 230c6ad79727b64550a92ad17550b4fcda055329d0e56db00d95a5aa350eddac, runtime check passed;
+1.0.836 kept at /Applications/.dunecity-backup-before-1.0.837-20261014-181207/dunecity.app.
+
+## 2026-10-14 — local 1.0.836: Random Skirmish tech 9 default, rocket turrets
+
+`Params::techLevel` defaults to 9. Base templates add Rocket Turrets from Small up (Small 1,
+Medium 2 + 2 Gun, Large 4 + 2 Gun, Fortress 8 + 4 Gun), falling back to Gun Turrets where the
+house or tech level cannot build them; a unit test checks templates for every house and that a
+default-tech Medium map places 2 Rocket Turrets per house. `skirmish_generator_tests`,
+`skirmish_generator_probe`, `menu_navigation_probe` and `dunelegacy_tests` passed.
+Installed on the MBA at 17:53 AEDT by a waiter script once the running game was quit: version
+1.0.836, executable SHA256 3826018aee50b20fb03677c6ece32f4bce6fca3d6f7c37336cb1ccdf76049515,
+desktop runtime check passed. Local 1.0.835 is at
+/Applications/.dunecity-backup-before-1.0.836-20261014-175333/dunecity.app.
+
+## 2026-10-14 — local 1.0.835: Random Skirmish player start, AI partner, natural terrain
+
+From Stefan's play-test of 1.0.834 (save `testskirmish.dls`, DuneCity 128x128, 2 allies, 2
+enemies, tech 9, 40,000-people cities): the player started with only a Construction Yard, had no
+way to add an AI to their own house, terrain and bases were blocky, Industrial zones were mixed
+into Residential/Commercial, and power was dozens of wind traps.
+
+- "You start with": AI partner (None, AI Support Easy-Brutal, QuantBot Easy-Brutal/Defend: the
+  Custom Game co-op list; it joins the player's house, `multiplePlayersPerHouse`), Base, Army and
+  City like the other sides. Persisted as `Player AI/Base/Army/City`. Menu rows shrink to fit 480p.
+- Generator (`feat/skirmish-terrain`): terrain starts from the editor's `generateRandomMap`, start
+  plateaus get irregular rims, rock islands, ridges, outcrops and editor-style spice fields; bases
+  grow around the Construction Yard (refineries toward spice, factories toward the enemy,
+  turrets and walls on the approach); cities are zoned Industrial (beside the base), then
+  Commercial, then Residential, with road reach checked per lot; nuclear plants power DuneCity
+  bases from tech 6 with at most 4 wind traps. Measurements in `docs/skirmish-generator.md`.
+
+Save 9857 and protocol 71 unchanged; only the app version moved. Full CTest 92/92 passed on the
+merged tree (before the version bump); after the bump `dunelegacy_tests`,
+`skirmish_generator_tests` and `skirmish_generator_probe` passed again. The probe now covers
+Stefan's configuration (`stefan-128`) and AI partners (`partner-support`, `partner-quantbot`).
+
+Installed on the MBA at 00:17 AEDT 2026-10-14 from 3c72cea4 (same procedure as 1.0.834; no
+Homebrew/workstation library references, signature and desktop runtime check passed on both
+machines): version 1.0.835, executable SHA256
+45e3cace3b400e75738607479a8ead309f8b7a7761e2d8cecc1caf790bcf1261. Game not running; saves
+untouched. Local 1.0.834 is at
+/Applications/.dunecity-backup-before-1.0.835-20261014-001736/dunecity.app.
+
+## 2026-10-13 — local 1.0.834: RTS controls, pre-placement, formations, Random Skirmish, build grid
+
+Branch `integrate/feature-batch` (worktree `~/Documents/projects/dunecity-feature-batch`,
+build tree `build-int`) merges five branches: `feat/rts-controls`, `feat/preplace-queue`,
+`feat/formations`, `feat/skirmish-generator` (cut from 40f4e7a8, built in parallel) and
+`feat/sidebar-grid` (cut from the integration). Version 1.0.834 (`bump-version.sh --check` OK).
+Each feature's behaviour, deviations and evidence are in `docs/rts-controls.md`,
+`docs/preplace-queue.md`, `docs/formations.md`, `docs/skirmish-generator.md` and
+`docs/sidebar-grid.md` (force-added; `docs/*` is gitignored).
+
+- RTS controls: attack-move (A on ground; Ctrl keeps forced fire), Hold (H, attack mode
+  HOLD = 10), Shift-queued orders up to 16 with waypoint lines, Patrol (Q), Alt+click repeat
+  production, Alt+number adds to a group, double-click / Ctrl+A selection, hotkeys in tooltips.
+- Pre-placement: with "Choose building location when ordering" (General, default on) a
+  Construction Yard item is placed first and built after; the simulation places it on its plot.
+  Units never cancel a plan: own idle units are moved off planned plots once a second; a finished
+  building blocked by units waits (amber "waiting" ghost, BLOCKED in the sidebar, ticker for
+  enemy units) until the plot clears or the player places it elsewhere by hand. Only a structure
+  on the plot or lost build range falls back to ready-to-place. The planning cursor stays on the
+  building after each plot (Esc / right-click ends it), and each planned building goes to the
+  house's Construction Yard with the least work left, so several yards build in parallel.
+- Formations: right-click/M moves of 2+ ground units use `FormationPlanner` slots (armour front,
+  ranged behind) at the slowest vehicle's pace; Ctrl+F / Options toggle. Integration also gives
+  attack-move, patrol and Shift-queued waypoints formation slots (`Game::issuePositionOrder`,
+  no pace). AI: `AIPlayer` waves, campaign attack teams and QuantBot army recall are formed up;
+  defence (1.0.832 scramble, district defence) and pure Hunt waves (QuantBot `launchGroundHunt`,
+  SmartBot) are unchanged, because pacing Hunt waves widened measured arrival spread.
+- Random Skirmish (main menu): seeded map size/rock/spice/symmetry, 0-3 allies, 1-5 enemies,
+  enemies-allied toggle, tech level, vanilla base tiers and credit armies, DuneCity cities by
+  population. Mod dropdown lists every installed mod; City rows show only for a city-sim mod.
+  Zone entries in map INI may end in `,Level` (0-3); old maps load unchanged.
+- Build list: two-column grid of 51x31 icons; a DuneCity yard's 25 items all fit at 1024x768
+  (was 7 visible). Limit overlays now read "UNIT / LIMIT" and "HARVESTER / LIMIT" (new strings,
+  untranslated).
+
+Command ids appended after CMD_MATCH_PAUSE in this order: UNIT_ATTACKMOVE, UNIT_PATROL,
+UNIT_QUEUEORDER, BUILDER_SETREPEAT, BUILDER_RESERVE_PLACEMENT, BUILDER_CANCEL_RESERVATION,
+UNIT_FORMATION_MOVE. Network protocol 71. Save 9857 with separate gates: 9855 unit order queue
+and builder repeat set, 9856 placement reservations, 9857 unit formation membership; a 9854
+save loads with none of them. Not pushed, no PR, no release.
+
+Full CTest 92/92 passed on build-int at 5ba711a6. Installed on the MBA at 22:14 AEDT
+2026-10-13 from 5ba711a6 (built on the mini, `cmake --install` staging, no Homebrew/workstation
+library references, deep/strict signature verified before and after the swap, desktop runtime
+check passed on both machines): version 1.0.834, executable SHA256
+9bf3b1ece5cd06830ba7778d34be6a6357d673ebe744305a08b41b4dc2123b15. The game was not running;
+saves untouched. Local 1.0.833 is at
+/Applications/.dunecity-backup-before-1.0.834-20261013-221411/dunecity.app.
+
+## 2026-10-13 — 1.0.833: sanitizers on by default for Debug, and what they found
+
+`-DDUNECITY_SANITIZE` (CMakeLists.txt) defaults to `address,undefined` for native
+GCC/Clang Debug builds and is empty for Release, MSVC, MinGW, Android and
+Emscripten; `OFF` disables it. Reports are fatal (-fno-sanitize-recover). CI
+`test-linux` (Debug) is therefore sanitized and now builds and runs, through
+ctest, dunelegacy_tests plus network_wire_harness, relay_wire_harness,
+relay_session_tests, relay_http_transport_tests and desktop_updater_tests. On
+macOS tests/CMakeLists.txt sets ASAN_OPTIONS=detect_container_overflow=0 for
+every test (Homebrew Catch2 is uninstrumented; libc++ annotations then report
+false overflows in Catch2's argument parsing).
+
+Fixed from the sanitized unit tests and 16 game probes: misaligned typed
+loads/stores in IMemoryStream, OMemoryStream, ENetPacketOStream, Decode
+(format80/40), Shpfile, Wsafile, MentatTextFile (new include/misc/unaligned.h)
+and enet_address_set_host (macOS returns misaligned hostent data); signed left
+shifts in fix32_mul/fix32_div (now on uint64_t; a differential run over 2e8
+random and edge operand pairs matched the old code bit for bit) and MapSeed
+(now multiplications, same bits); HOUSETYPE got `: int` so a decoded -99 is
+representable and rejected; UnitMixPolicy::blendWithPrior replaces the
+(score*evidence + prior*uncertainty)/(evidence+uncertainty) blend in
+UnitMixPolicy and SpecialUnitPolicy, halving both weights until the sum fits
+int64 (exact whenever it already fitted; the special-unit test's 6e10 evidence
+overflowed); triggerStructureTutorialHint shifted 1 by item ids up to 36;
+Palfile double->char and woodyopl negative double->unsigned conversions now go
+through int / Bits (x86 behaviour on every platform).
+
+Version 1.0.833, network protocol 70 (score blend), save unchanged at 9854,
+policy overflow-safe-score-blend-v99. -fno-sanitize=vptr is added whenever
+`undefined` is on: with GCC the vptr check made dunelegacy_tests fail to link
+(typeinfo for Player/House referenced from CitySimulation.cpp). Docker on the
+Mac mini was unresponsive, so the first Linux/GCC sanitized run was PR98's CI:
+test-linux 10/10 under ASan (with LeakSanitizer) and UBSan. macOS: Release ctest
+81/81; sanitized Debug unit tests, harnesses and six game probes passed.
+
+Published 2026-10-13. PR98 merged; tag v1.0.833 -> ef8bfff7. Stable CI
+38336523345 passed every job; all 13 assets match GitHub SHA256; DMG app is
+Notarized Developer ID, stapled, version 1.0.833. SourceForge 38338055015 and
+Publish browser build 38338055046 succeeded: play/build.json 1.0.833 at
+ef8bfff7, all 8 artifacts hash-match live. Website 98cbb78 (links) plus prose
+1f20257 deployed (Deploy to Droplet 38338770370); both pages show 1.0.833
+downloads and protocol 70. No local app was installed.
 
 ## 2026-10-12 — local 1.0.832: base defence sends the nearest troops in Hunt
 

@@ -119,6 +119,7 @@
 #include <windows.h>
 #include <direct.h>
 #include <cctype>
+#include <cstdlib>
 
 /*
  * Constants passed to the silly-ass MS function
@@ -233,10 +234,25 @@ int fnkdat(const _TCHAR* target, _TCHAR* buffer, int len, int flags) {
       dwFlags = CSIDL_COMMON_APPDATA;
 
 
+   /* Isolated profiles (DUNECITY_USERDIR, as in the UNIX implementation below) allow local
+      multiplayer testing and parallel probe games without touching the player's own profile.
+      Only an absolute drive or UNC path is accepted.
+    */
+   const char* userOverride = rawflags == FNKDAT_USER ? getenv("DUNECITY_USERDIR") : NULL;
+   if (userOverride && userOverride[0]) {
+      const bool absolute =
+         (isalpha((unsigned char) userOverride[0]) && userOverride[1] == ':'
+          && (userOverride[2] == '\\' || userOverride[2] == '/'))
+         || (userOverride[0] == '\\' && userOverride[1] == '\\');
+      if (!absolute || strlen(userOverride) >= (size_t) len)
+         return -1;
+      FNKDAT_S(_tcsncpy(buffer, userOverride, len));
+      FNKDAT_S(_tcsncat(buffer, _T("\\"), len));
+
    /* Get the user conf directory using the silly-ass function if it
       is available.
     */
-   if (dwFlags
+   } else if (dwFlags
        && SHGetFolderPath
        && SUCCEEDED(hresult = SHGetFolderPath(
          NULL,

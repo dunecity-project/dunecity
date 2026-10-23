@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <globals.h>
+#include <FormationPlanner.h>
 
 #include <config.h>
 
@@ -127,7 +128,8 @@ EM_JS(int, dunecityReadRelayDevelopmentParameter, (), {
 #define HAS_ASYNC
 #endif
 
-#if defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ )
+// clang-cl defines __clang__ but uses the MSVC ABI and library, which have no <cxxabi.h>.
+#if !defined(_MSC_VER) && (defined( __clang__ ) || defined(__GNUG__) || defined( __GLIBCXX__ ) || defined( __GLIBCPP__ ))
 #include <cxxabi.h>
 inline std::string demangleSymbol(const char* symbolname) {
     int status = 0;
@@ -700,7 +702,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Interface Height = 0       # 0 = automatic; 480/600/768 = fixed UI size; -1 = native 1:1; Width keeps 4:3 or 16:9\n"
                                 "Start Menu Mode = 0        # 0 = classic; 1 = enlarged TV/tablet/accessibility layout\n"
                                 "Menu Palette = 0           # 0 = standard skin text; 1 = high contrast\n"
-                                "UI Skin = 0                # 0 = modern; 1 = lapis enamel; 2 = classic desert (presentation only)\n"
+                                "UI Skin = 2                # 0 = modern; 1 = lapis enamel; 2 = classic desert (default; presentation only)\n"
                                 "Fullscreen = true\n"
                                 "FrameLimit = true           # Enable VSync for smooth, tear-free rendering.\n"
                                 "Preferred Zoom Level = 1    # 0 = no zooming, 1 = 2x, 2 = 3x\n"
@@ -741,7 +743,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Killed Sandworms Drop Spice = false     # If true, killed sandworms drop some spice\n"
                                 "Manual Carryall Drops = false           # If true, player can request carryall to transport units\n"
                                 "Maximum Number of Units Override = 0    # Override the maximum number of units each house is allowed to build (-1 = use map default, 0 = unlimited, >0 = specific limit)\n"
-                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 = use map size defaults from ObjectData.ini, >=0 = specific limit)\n";
+                                "Maximum Number of Harvesters Override = -1  # Override the maximum number of harvesters each house is allowed to build (-1 or 0 = unlimited, each AI picks its own target; >0 = specific limit)\n";
 
     // replace player name, language, server port and metaserver
     std::string playername = getDefaultPlayerName();
@@ -1146,10 +1148,15 @@ int main(int argc, char *argv[]) {
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
             settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
+            settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
+            settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(
+                myINIFile.getIntValue("General","Formation Shape",0)));
             settings.general.diagnosticLogs = myINIFile.getBoolValue("General","Diagnostic Logs",
                 SettingsClass::GeneralClass::defaultDiagnosticLogs);
             SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, settings.general.diagnosticLogs
                 ? SDL_LOG_PRIORITY_VERBOSE : SDL_LOG_PRIORITY_WARN);
+            settings.general.aiDecisionLog = myINIFile.getBoolValue("General","AI Decision Log",
+                SettingsClass::GeneralClass::defaultAIDecisionLog);
             settings.general.showTutorialHints = myINIFile.getBoolValue("General","Show Tutorial Hints",true);
             settings.general.duneCityCampaignSkin = std::clamp(
                 myINIFile.getIntValue("General", "DuneCity Campaign Skin", 0), 0, 1);
@@ -1181,7 +1188,7 @@ int main(int argc, char *argv[]) {
             settings.video.showWatermark = myINIFile.getBoolValue("Video","Show Watermark",true);
             settings.video.cursorVisibility = myINIFile.getIntValue("Video","Cursor Visibility",0);
             settings.video.menuPalette = validatedMenuPalette(myINIFile.getIntValue("Video", "Menu Palette", 0));
-            settings.video.uiSkin = validatedUISkin(myINIFile.getIntValue("Video", "UI Skin", 0));
+            settings.video.uiSkin = validatedUISkin(myINIFile.getIntValue("Video", "UI Skin", 2));
             // Set appearance before asynchronous GFX loading caches any UI.
             MenuTheme::setUISkin(settings.video.uiSkin);
             settings.video.startMenuMode = validatedStartMenuMode(myINIFile.getIntValue("Video", "Start Menu Mode", 0));
@@ -1265,6 +1272,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.maximumNumberOfHarvestersOverride = myINIFile.getIntValue("Game Options","Maximum Number of Harvesters Override",-1);
             settings.gameOptions.maximumNumberOfConstructionYardsOverride = myINIFile.getIntValue("Game Options","Maximum Number of Construction Yards Override",-1);
             settings.gameOptions.originalUnitDamage = myINIFile.getBoolValue("Game Options", "Original Unit Damage", false);
+            settings.gameOptions.planBuildingSites = myINIFile.getBoolValue("Game Options", "Plan Building Sites", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

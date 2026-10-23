@@ -10,6 +10,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <SDL.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -179,7 +180,19 @@ Revision parseManifest(const std::string& manifest) {
     require(serialize(r)==manifest,"Workshop manifest is not canonical.");
     r.manifest=manifest; r.hash=hashBytes(manifest); return r;
 }
-Store::Store(fs::path root):root_(std::move(root)) { fs::create_directories(root_/"revisions"); }
+Store::Store(fs::path root):root_(std::move(root)) {
+    fs::create_directories(root_/"revisions");
+    // Earlier releases queued automatic map/mod uploads here and retried them every
+    // minute. Nothing reads that queue any more; remove only that folder, once. It
+    // held hash-named markers, never revisions, saves or drafts.
+    std::error_code error;
+    const auto outbox=root_/"outbox";
+    if(fs::is_directory(outbox,error)) {
+        const auto removed=fs::remove_all(outbox,error);
+        if(error) SDL_Log("Workshop: could not remove the retired sharing queue %s: %s",outbox.string().c_str(),error.message().c_str());
+        else SDL_Log("Workshop: removed the retired automatic sharing queue (%ju items).",static_cast<uintmax_t>(removed));
+    }
+}
 Revision Store::get(const std::string& hash) const {
     std::lock_guard<std::recursive_mutex> lock(storeMutex);
     require(token(hash,64),"Invalid Workshop checksum.");
@@ -261,23 +274,6 @@ void Store::verifyDirectory(const Revision& revision,const fs::path& directory) 
         if(e.is_directory()||excluded(relative))continue;
         require(e.is_regular_file()&&expected.count(relative.generic_string())!=0,"The saved revision contains unexpected files.");
     }
-}
-
-bool Store::shared(const std::string& hash) const {
-    std::lock_guard<std::recursive_mutex> lock(storeMutex);
-    require(token(hash,64),"Invalid Workshop checksum.");
-    return fs::exists(root_/"revisions"/hash/"shared-version");
-}
-void Store::setCollected(const std::string& hash,const std::string& serverRevision) {
-    std::lock_guard<std::recursive_mutex> lock(storeMutex);
-    require(token(hash,64)&&token(serverRevision,64),"Invalid Workshop checksum.");
-    require(fs::is_directory(root_/"revisions"/hash),"Unknown Workshop revision.");
-    write(root_/"revisions"/hash/"collected",serverRevision);
-}
-bool Store::collected(const std::string& hash) const {
-    std::lock_guard<std::recursive_mutex> lock(storeMutex);
-    require(token(hash,64),"Invalid Workshop checksum.");
-    return fs::exists(root_/"revisions"/hash/"collected");
 }
 std::string Store::owner() {
     std::lock_guard<std::recursive_mutex> lock(storeMutex); auto path=root_/"owner";

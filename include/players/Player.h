@@ -20,10 +20,13 @@
 
 #include <data.h>
 #include <DataTypes.h>
+#include <FormationOrders.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 #include <misc/RobustList.h>
 #include <misc/string_util.h>
+
+#include <vector>
 
 namespace CombatReward { struct Totals; }
 class GameInitSettings;
@@ -99,6 +102,8 @@ public:
     // Simulation hook, independent of telemetry and legacy kill statistics.
     // Called once for a confirmed hostile unit death, using shot provenance.
     virtual void onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) { }
+    // Called once for a hostile structure this player's house destroyed, using shot provenance.
+    virtual void onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID) { }
     /**
         An object was hit by something or damaged somehow else.
         \param  pObject     the object that was damaged
@@ -234,6 +239,16 @@ protected:
     bool doPlaceStructure(const ConstructionYard* pConstYard, int x, int y) const;
 
     /**
+        Asks this player's idle units standing on a planned site off it, as the pre-placement
+        queue does for its plots (ConstructionYard::moveOwnUnitsOffPlot with idleOnly).
+        \param  pConstYard  the construction yard the site is planned for
+        \param  itemID      the structure planned there (its footprint)
+        \param  x           the x coordinate of the site (in tile coordinates)
+        \param  y           the y coordinate of the site (in tile coordinates)
+    */
+    void doMoveOwnUnitsOffPlot(const ConstructionYard* pConstYard, Uint32 itemID, int x, int y) const;
+
+    /**
         Activate the special palace weapon Fremen or Saboteur. For the Deathhand see doLaunchDeathhand.
         \param  pPalace the palace to activate the special weapon of
     */
@@ -270,6 +285,41 @@ protected:
         the way and hunts normally once there (UnitBase::doHuntToward).
     */
     void doHuntToward(const UnitBase* pUnit, int x, int y) const;
+
+    /**
+        The formation shape the AI players use (docs/formations.md): QuantBot Config.ini
+        [General Behavior] WaveFormation - a FormationPlanner::Shape id, or
+        QuantBotConfig::kWaveFormationNone (the default) for plain per-unit orders. Blob is
+        QuantBot's own hunt-party behaviour, not a shape, so it reads as None here.
+    */
+    static int aiFormationShape();
+
+    /**
+        Moves a chosen group as one formation (docs/formations.md): FormationOrders plans a
+        slot per unit in 'shape' (a FormationPlanner::Shape id, default aiFormationShape()),
+        each unit is sent to its slot with doMove2Pos, and the group keeps the slowest member's
+        pace. With shape kWaveFormationNone, or fewer than FormationOrders::kMinAIGroup eligible
+        ground units, every unit gets the plain doMove2Pos to x,y, as before. Aircraft in the
+        list always do.
+    */
+    void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
+                         int shape = aiFormationShape()) const;
+
+    /**
+        Hunting in formation: each unit hunts its way (doHuntToward) to its own slot in
+        'shape' around x,y at the group's pace, and the first contact any member makes breaks
+        the whole group into a fight (FormationOrders::breakHunt). Same fallback as
+        doFormationMove(), with doHuntToward to x,y.
+    */
+    void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
+                               int shape = aiFormationShape()) const;
+
+    /**
+        Units that already have their orders (a Hunt wave, a forced attack on one objective)
+        travel at the slowest one's pace without being given destinations. Does nothing for
+        fewer than FormationOrders::kMinAIGroup eligible ground units.
+    */
+    void doFormUp(const std::vector<const UnitBase*>& units) const;
 
     /**
         Moves the unit pUnit to x,y.
@@ -336,6 +386,9 @@ protected:
 
     bool doRequestCarryallDrop(const GroundUnit* pGroundUnit) const;
 
+    /// A fresh formation group id for this controller (FormationPlanner::makeGroupID).
+    Uint32 allocateFormationGroup() const;
+
 
 private:
     friend class House;
@@ -346,6 +399,10 @@ private:
 
     House* pHouse;
     Uint8 playerID;
+    // Several groups formed in one cycle get distinct tokens. Only ever compared within the
+    // current cycle, so not saved: a save never falls between two orders of one cycle.
+    mutable Uint32 formationTokenCycle = 0;
+    mutable Uint32 formationTokensThisCycle = 0;
     std::string playername;
     std::string playerclass;
 };

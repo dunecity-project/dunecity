@@ -413,7 +413,12 @@ public:
         }
     }
 
-    void setOwner(int newOwner) noexcept { owner = newOwner; }
+    /// Changes the owner; a real change bumps the old and the new owner's ownerRevision().
+    void setOwner(int newOwner) noexcept;
+    /// Changes whenever any tile's ownership by `houseID` may have changed: a setOwner()
+    /// to or from that house, or any tile constructed or loaded. A cache of a pure function
+    /// of {tile owner == houseID} is current while this value is unchanged. Never serialised.
+    static Uint64 ownerRevision(int houseID) noexcept;
     void setSandRegion(Uint32 newSandRegion) noexcept { sandRegion = newSandRegion; }
     void setDestroyedStructureTile(int newDestroyedStructureTile) noexcept { destroyedStructureTile = newDestroyedStructureTile; };
 

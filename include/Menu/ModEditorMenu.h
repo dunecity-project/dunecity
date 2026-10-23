@@ -29,7 +29,7 @@ private:
     void loadKeys();
     void loadValue();
     bool applyValue();
-    void save(bool share);
+    void save();
     std::string modName, modPath;
     std::array<std::unique_ptr<INIFile>, 3> documents;
     std::array<bool, 3> changed{{false,false,false}};
@@ -42,6 +42,6 @@ private:
     Label titleLabel, nameLabel, authorLabel, descriptionLabel, fileLabel, sectionLabel, keyLabel, valueLabel, hintLabel, statusLabel;
     TextBox nameText, authorText, descriptionText, valueText;
     DropDownBox fileChoice, sectionChoice, keyChoice;
-    TextButton saveButton, shareButton, backButton;
+    TextButton saveButton, backButton;
 };
 #endif

@@ -21,16 +21,8 @@
 #include <GUI/StaticContainer.h>
 #include <GUI/PictureButton.h>
 #include <GUI/TextButton.h>
+#include <GUI/dune/BuilderListLayout.h>
 #include <misc/SDL2pp.h>
-
-#define ARROWBTN_WIDTH 48
-#define ARROWBTN_HEIGHT 16
-#define BUILDERBTN_HEIGHT 55
-#define BUILDERBTN_WIDTH 91
-#define BUILDERBTN_SPACING 5
-#define ORDERBTN_HEIGHT 16
-
-#define WIDGET_WIDTH (BUILDERBTN_SPACING + BUILDERBTN_WIDTH + BUILDERBTN_SPACING)
 
 class BuilderList : public StaticContainer {
 public:
@@ -118,8 +110,7 @@ public:
     */
     Point getMinimumSize() const override
     {
-        return Point(   WIDGET_WIDTH,
-                        BUILDERBTN_HEIGHT*3 + (ARROWBTN_HEIGHT+BUILDERBTN_SPACING)*2 + BUILDERBTN_SPACING*4 + ORDERBTN_HEIGHT + BUILDERBTN_SPACING);
+        return Point(BuilderListLayout::WidgetWidth, BuilderListLayout::MinimumHeight);
     };
 
 
@@ -137,9 +128,11 @@ private:
     explicit BuilderList(Uint32 builderObjectID);
     virtual ~BuilderList();
 
-    int getRealHeight(int height);
+    /// Number of visible grid slots (rows * columns) at this widget height.
     int getNumButtons(int height);
+    /// Top left corner of visible slot BtnNumber, relative to the widget.
     Point getButtonPosition(int BtnNumber);
+    /// Build-list index of the item under (x,y), or -1 for gaps, margins and empty slots.
     int getButton(int x, int y);
     int getItemIDFromIndex(int i) const;
 
@@ -161,6 +154,7 @@ private:
     sdl2::texture_ptr    pSoldOutTextTexture;
     sdl2::texture_ptr    pAlreadyBuiltTextTexture;
     sdl2::texture_ptr    pPlaceItTextTexture;
+    sdl2::texture_ptr    pBlockedTextTexture;   ///< planned plot blocked by units
     sdl2::texture_ptr    pOnHoldTextTexture;
     sdl2::texture_ptr    pUnitLimitReachedTextTexture;
     sdl2::texture_ptr    pHarvesterLimitReachedTextTexture;

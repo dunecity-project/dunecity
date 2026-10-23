@@ -23,6 +23,7 @@
 #include <Definitions.h>
 
 #include <misc/SDL2pp.h>
+#include <misc/unaligned.h>
 #include <cstdlib>
 #include <cstdio>
 
@@ -83,7 +84,7 @@ sdl2::surface_ptr Shpfile::getPicture(Uint32 indexOfFile)
     std::vector<unsigned char> DecodeDestination;
 
     /* size and also checksum */
-    Uint16 size = SDL_SwapLE16(*reinterpret_cast<const Uint16 *>(Fileheader + 8));
+    Uint16 size = loadLE16(Fileheader + 8);
 
     auto ImageOut = std::make_unique<unsigned char[]>(sizeX * sizeY);
 
@@ -227,7 +228,7 @@ sdl2::surface_ptr Shpfile::getPictureArray(unsigned int tilesX, unsigned int til
             unsigned char type = Fileheader[0];
 
             /* size and also checksum */
-            Uint16 size = SDL_SwapLE16(*(reinterpret_cast<const Uint16 *>(Fileheader + 8)));
+            Uint16 size = loadLE16(Fileheader + 8);
 
             memset(ImageOut.get(), 0, sizeX * sizeY);
 
@@ -420,7 +421,7 @@ void Shpfile::readIndex()
             // now fill Index with start and end-offsets
             for(auto i = 0; i < NumFiles; i++) {
                 ShpfileEntry newShpfileEntry;
-                newShpfileEntry.startOffset = SDL_SwapLE32( (reinterpret_cast<const Uint32*>(pFiledata.get() + 2))[i]) + 2;
+                newShpfileEntry.startOffset = loadLE32(pFiledata.get() + 2 + i * sizeof(Uint32)) + 2;
 
                 if (shpfileEntries.empty() == false) {
                     shpfileEntries.back().endOffset = newShpfileEntry.startOffset - 1;

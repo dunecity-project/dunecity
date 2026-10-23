@@ -19,6 +19,7 @@
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/Dune2RReadinessMenu.h>
 #include <Menu/PlaySetup.h>
+#include <Menu/RandomSkirmishMenu.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -138,18 +139,6 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
     multiplayerUserMapsButton.setToggleButton(true);
     multiplayerUserMapsButton.setOnClick(std::bind(&CustomGameMenu::onMapTypeChange, this, 3));
     mapTypeButtonsHBox.addWidget(&multiplayerUserMapsButton);
-
-    metaserverMapsButton.setText(_("Metaserver Maps"));
-    metaserverMapsButton.setToggleButton(true);
-    metaserverMapsButton.setOnClick([this](){onMapTypeChange(5);});
-    remoteMapsRow.addWidget(&metaserverMapsButton);
-    refreshMapsButton.setText(_("Refresh"));
-    refreshMapsButton.setOnClick([this](){onMapTypeChange(mapCategory);});
-    remoteMapsRow.addWidget(&refreshMapsButton);
-    previewMapButton.setText(_("Preview"));
-    previewMapButton.setOnClick([this](){onPreviewMap();});
-
-    leftVBox.addWidget(&remoteMapsRow,24);
     // The category is derived from the map's own buildings, so exactly three exist.
     filterMods={"",MapMetadata::ModVanilla,MapMetadata::ModTornie,MapMetadata::ModDuneCity};
     mapModFilter.addEntry(_("Any type"));
@@ -194,7 +183,6 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
     mainHBox.addWidget(Spacer::create(), 0.05);
     minimap.setSurface( GUIStyle::getInstance().createButtonSurface(130,130,_("Choose map"), true, false) );
     rightVBox.addWidget(&minimap);
-    rightVBox.addWidget(&previewMapButton,24);
 
     rightVBox.addWidget(VSpacer::create(10));
     rightVBox.addWidget(&mapPropertiesHBox, 0.01);
@@ -282,7 +270,15 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
     loadButton.setEnabled(bMultiplayer && !setup);
     loadButton.setOnClick(std::bind(&CustomGameMenu::onLoad, this));
     buttonHBox.addWidget(&loadButton, 0.175);
-    buttonHBox.addWidget(Spacer::create(), 0.25);
+    // A host can generate the map instead: Random Skirmish settings with open starts, saved to
+    // MP User Maps and chosen here, then players, houses and teams are set in the lobby.
+    buttonHBox.addWidget(Spacer::create(), 0.05);
+    randomMapButton.setText(_("Random map..."));
+    randomMapButton.setVisible(bMultiplayer || setup);
+    randomMapButton.setEnabled(bMultiplayer || setup);
+    randomMapButton.setOnClick([this]() { onRandomMap(); });
+    buttonHBox.addWidget(&randomMapButton, 0.175);
+    buttonHBox.addWidget(Spacer::create(), 0.2);
 
     buttonHBox.addWidget(Spacer::create(), 0.0625);
 
@@ -359,8 +355,6 @@ void CustomGameMenu::onNext()
     if(mapList.getSelectedIndex() < 0) {
         return;
     }
-
-    if(!prepareSelectedMap()) return;
 
     // The canonical Dune2R artwork has to be complete and verified before this game
     // captures a mod version, including when the mod was restored from the profile
@@ -454,6 +448,44 @@ void CustomGameMenu::onLoad()
     openWindow(LoadSaveWindow::create(false, _("Load Game"), savepath, "dls"));
 }
 
+void CustomGameMenu::onRandomMap()
+{
+    // The hosted game's mod is the one chosen here; the generator plans with its buildings.
+    const int modChoice = modDropDown.getSelectedIndex();
+    const std::string mod = modChoice >= 0 && modChoice < static_cast<int>(availableMods.size())
+        ? availableMods[modChoice].name : ModManager::instance().getActiveModName();
+    std::string path;
+    {
+        RandomSkirmishMenu generator(mod);
+        generator.showMenu();
+        path = generator.getCreatedMap();
+    }
+    if(path.empty()) return;
+    if(!selectUserMap(path)) {
+        openWindow(MsgBox::create(_("The generated map could not be found in MP User Maps.")));
+        return;
+    }
+    // Exactly as if the host had picked the map: on to the players.
+    onNext();
+}
+
+bool CustomGameMenu::selectUserMap(const std::string& path)
+{
+    // The offline/online setup offers a fixed list of maps; a new file joins it.
+    if(setup && std::none_of(setup->maps.begin(), setup->maps.end(),
+                             [&](const std::string& known) { return strToLower(known) == strToLower(path); }))
+        setup->maps.push_back(path);
+    for(auto* filter : {&mapModFilter, &mapSizeFilter, &mapPlayersFilter}) filter->setSelectedItem(0);
+    onMapTypeChange(3);
+    for(int i = 0; i < mapList.getNumEntries() && i < static_cast<int>(visibleMaps.size()); ++i) {
+        if(strToLower(mapEntries[visibleMaps[i]].path) == strToLower(path)) {
+            mapList.setSelectedItem(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 void CustomGameMenu::onGameOptions()
 {
     openWindow(GameOptionsWindow::create(currentGameOptions));
@@ -465,19 +497,13 @@ std::string CustomGameMenu::getSelectedMapPath() const {
 }
 
 void CustomGameMenu::onMapTypeChange(int buttonID) {
-    mapCategory=buttonID;
     if(setup) setup->mapCategory=buttonID;
-    mapClient.cancel();loadingMaps=false;mapEntries.clear();visibleMaps.clear();
+    mapEntries.clear();visibleMaps.clear();
     allMapsButton.setToggleState(buttonID==4);
     singleplayerMapsButton.setToggleState(buttonID==0);
     singleplayerUserMapsButton.setToggleState(buttonID==1);
     multiplayerMapsButton.setToggleState(buttonID==2);
     multiplayerUserMapsButton.setToggleState(buttonID==3);
-    metaserverMapsButton.setToggleState(buttonID==5);
-    previewMapButton.setVisible(buttonID==5);
-    if(buttonID==5) {
-        loadingMaps=true;mapClient.browseMaps();rebuildMapList();return;
-    }
     std::array<std::string,4> dirs;
     dirs[0]=getDuneLegacyDataDir()+"/maps/singleplayer/";
     dirs[2]=getDuneLegacyDataDir()+"/maps/multiplayer/";
@@ -553,57 +579,13 @@ void CustomGameMenu::rebuildMapList() {
         mapList.addEntry(label);
         if(!previous.empty()&&entry.path==previous)selected=static_cast<int>(i);
     }
-    nextButton.setEnabled(!visibleMaps.empty());previewMapButton.setEnabled(!visibleMaps.empty());
-    mapLibraryStatus.setText(loadingMaps?_("Loading metaserver maps..."):std::to_string(visibleMaps.size())+_(" maps"));
+    nextButton.setEnabled(!visibleMaps.empty());
+    mapLibraryStatus.setText(std::to_string(visibleMaps.size())+_(" maps"));
     if(!visibleMaps.empty())mapList.setSelectedItem(selected);
     else {
         minimap.setSurface(GUIStyle::getInstance().createButtonSurface(130,130,_("No matching maps"),true,false));
         for(auto* label:{&mapPropertySize,&mapPropertyPlayers,&mapPropertyAuthors,&mapPropertyLicense,&mapPropertyMod,&mapPropertyVersion})label->setText("");
     }
-}
-
-void CustomGameMenu::update() {
-    if(!loadingMaps)return;
-    mapClient.update();
-    if(mapClient.status()==Workshop::Client::Status::Failed) {
-        loadingMaps=false;mapLibraryStatus.setText(mapClient.message());return;
-    }
-    if(mapClient.status()!=Workshop::Client::Status::Succeeded)return;
-    for(const auto& r:mapClient.items()) {
-        // The metaserver derives the category the same way the engine does; the
-        // exact mod dependency is obtained from its downloaded manifest.
-        MapEntry e;e.revision=r;e.metadata.name=r.name;e.metadata.dependency="";
-        e.metadata.mod=MapMetadata::canonicalCategory(r.mapMod);
-        e.metadata.width=r.mapWidth;e.metadata.height=r.mapHeight;e.metadata.players=r.mapPlayers;e.metadata.version=r.version;
-        mapEntries.push_back(std::move(e));
-    }
-    const unsigned next=mapClient.nextPage();
-    loadingMaps=next!=0&&mapEntries.size()<10000;
-    if(loadingMaps)mapClient.browseMaps(next);
-    rebuildMapList();
-}
-
-bool CustomGameMenu::prepareSelectedMap() {
-    const int i=mapList.getSelectedIndex();
-    if(i<0||i>=static_cast<int>(visibleMaps.size()))return false;
-    auto& entry=mapEntries[visibleMaps[i]];
-    try {
-        if(entry.path.empty()) {
-            if(!Workshop::downloadWithProgress(entry.revision.hash))return false;
-            entry.path=Workshop::installMap(Workshop::store().get(entry.revision.hash));
-            if(setup && std::find(setup->maps.begin(),setup->maps.end(),entry.path)==setup->maps.end())setup->maps.push_back(entry.path);
-        }
-        // The mod a map was authored with is recorded for information only. Picking a map
-        // never changes the mod the player chose for this game; a new game keeps playing
-        // the selected mod and captures its own map revision when the two differ.
-        if(!entry.revision.modHash.empty())
-            entry.metadata.dependency=MapMetadata::canonicalMod(Workshop::store().get(entry.revision.modHash).base);
-        return true;
-    } catch(const std::exception& e){openWindow(MsgBox::create(e.what()));return false;}
-}
-
-void CustomGameMenu::onPreviewMap() {
-    if(prepareSelectedMap())onMapListSelectionChange(true);
 }
 
 void CustomGameMenu::onMapListSelectionChange(bool bInteractive)
@@ -619,13 +601,6 @@ void CustomGameMenu::onMapListSelectionChange(bool bInteractive)
     const auto& entry=mapEntries[visibleMaps[selected]];
     mapPropertyMod.setText(MapMetadata::modLabel(entry.metadata.mod));
     mapPropertyVersion.setText(entry.metadata.version?std::to_string(entry.metadata.version):"-");
-    if(entry.path.empty()) {
-        mapPropertySize.setText(std::to_string(entry.metadata.width)+" x "+std::to_string(entry.metadata.height));
-        mapPropertyPlayers.setText(std::to_string(entry.metadata.players));
-        mapPropertyAuthors.setText("");mapPropertyLicense.setText("");
-        minimap.setSurface(GUIStyle::getInstance().createButtonSurface(130,130,_("Download to preview"),true,false));
-        return;
-    }
     std::string mapFilename = getSelectedMapPath();
     getCaseInsensitiveFilename(mapFilename);
     INIFile inimap(mapFilename);

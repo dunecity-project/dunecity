@@ -454,6 +454,14 @@ void House::setSpiceIncomeMultiplier(Uint32 multiplier) {
     spiceIncomeMultiplier = multiplier;
 }
 
+// The spice quota is measured on the house's physical store. In DuneCity refined spice and city
+// taxes share that store (getEarnedCreditRoom) and taxes fill it first, so a quota counted on
+// spice alone could never be met (Harkonnen m3, Ordos m1: 80 minutes, docs/ai-scenario-matrix.md).
+static void checkQuotaWin(House& house) {
+    if(&house != pLocalHouse || (currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
+    const FixPoint banked = currentGame->isCitySimEnabled() ? house.getEarnedCredits() : house.getStoredCredits();
+    if(banked >= house.getQuota()) house.win();
+}
 
 void House::addCredits(FixPoint newCredits, bool wasRefined) {
     if(newCredits > 0) {
@@ -466,14 +474,7 @@ void House::addCredits(FixPoint newCredits, bool wasRefined) {
 
         const FixPoint accepted = acceptEarnedCredits(newCredits);
         storedCredits += accepted;
-
-        if(this == pLocalHouse) {
-            if(((currentGame->winFlags & WINLOSEFLAGS_QUOTA) != 0) && (quota != 0)) {
-                if(storedCredits >= quota) {
-                    win();
-                }
-            }
-        }
+        checkQuotaWin(*this);
     }
 }
 
@@ -487,6 +488,7 @@ void House::addCityCredits(FixPoint amount) {
     if(amount > 0) {
         // Tax income is earned income: it needs storage like spice does.
         cityCredits += acceptEarnedCredits(amount);
+        checkQuotaWin(*this);
     } else {
         // Police funding can exceed the tax take; the city never goes negative.
         cityCredits += amount;
@@ -680,8 +682,7 @@ int House::getMaxHarvesters() const {
     // Saved houses may contain the former map-size default. The saved game
     // options distinguish that default from a limit deliberately selected by
     // the player. AI economy targets are decisions, not engine restrictions.
-    return currentGame ? std::max(0, currentGame->getGameInitSettings().getGameOptions()
-        .maximumNumberOfHarvestersOverride) : maxHarvesters;
+    return currentGame ? currentGame->getGameInitSettings().getGameOptions().harvesterCeiling() : maxHarvesters;
 }
 
 bool House::isUnitLimitReached(int itemID) const {
@@ -1148,7 +1149,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
     BuilderBase* pBuilder = (builderID == NONE_ID) ? nullptr : dynamic_cast<BuilderBase*>(currentGame->getObjectManager().getObject(builderID));
 
     if(currentGame->getGameInitSettings().getGameOptions().onlyOnePalace && pBuilder != nullptr && itemID == Structure_Palace && getNumItems(Structure_Palace) > 0) {
-        if(this == pLocalHouse && pBuilder->isSelected()) {
+        if(this == pLocalHouse && pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
             currentGame->setCursorMode(Game::CursorMode_Normal);
         }
         return nullptr;
@@ -1167,7 +1168,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1195,7 +1196,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1225,7 +1226,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 pBuilder->unSetWaitingToPlace();
 
                 if(this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
 
@@ -1346,7 +1347,9 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 }
 
                 if (this == pLocalHouse) {
-                    if(pBuilder->isSelected()) {
+                    // A reserved building placed by the simulation must not end the
+                    // player's planning cursor for the next one.
+                    if(pBuilder->isSelected() && !currentGame->isPlanningPlacement()) {
                         currentGame->setCursorMode(Game::CursorMode_Normal);
                     }
                     pLocalPlayer->onPlaceStructure(newStructure);

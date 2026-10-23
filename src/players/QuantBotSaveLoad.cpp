@@ -168,6 +168,57 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
             if(id!=NONE_ID) customWave.members.insert(id);
         }
     }
+    // SAVEGAMEVERSION 9862: hunt parties (Blob waves). An older save has none; its waves are
+    // plain engine hunters and carry on as such.
+    if (currentGame->getLoadedSavegameVersion() >= 9862) loadHuntParties(stream);
+    // SAVEGAMEVERSION 9863: the reserve bundle (point, centre, 30 s clock) and the launch gate's
+    // wait. An older save has none: the bundle is chosen afresh at the first unit pass and a
+    // ready wave starts a new wait, as at the start of a game.
+    if (currentGame->getLoadedSavegameVersion() >= 9863) loadForceState(stream);
+    // SAVEGAMEVERSION 9864: the remembered enemy army and the defence musters. A 9863 save (1.0.844)
+    // has neither: the enemy army is learned again from what is seen and no defender is mustering.
+    if (currentGame->getLoadedSavegameVersion() >= 9864) loadDefenceMemory(stream);
+    else { enemySightings.clear(); musters.clear(); }
+    // SAVEGAMEVERSION 9865: the strategy (docs/ai-play-styles.md, "Strategies"). A 9864 save has
+    // none: the first update picks it by the same pure function of seed, house and config.
+    if (currentGame->getLoadedSavegameVersion() >= 9865) {
+        strategyPicked = stream.readBool();
+        const Uint8 mix = stream.readUint8();
+        const Uint8 tempo = stream.readUint8();
+        if (mix >= QuantBotStrategy::kMixCount || tempo >= QuantBotStrategy::kTempoCount)
+            throw std::runtime_error("Invalid QuantBot strategy");
+        strategy.mix = static_cast<QuantBotStrategy::Mix>(mix);
+        strategy.tempo = static_cast<QuantBotStrategy::Tempo>(tempo);
+    } else {
+        strategyPicked = false;
+        strategy = QuantBotStrategy::Choice{};
+    }
+    // SAVEGAMEVERSION 9866: the starting ratios a Tuned/Bounded strategy resolved to. A 9865 save
+    // holds none of those mixes (its mixes take their ratios from QuantBotStrategy::profile).
+    // 9868: ten slots, one per special; a 9866/9867 save has the eight group slots, its special
+    // share is split between the specials this house can build (UnitMixPolicy::expandGroups).
+    strategyPrior = {};
+    if (currentGame->getLoadedSavegameVersion() >= 9866) {
+        int total = 0;
+        if (currentGame->getLoadedSavegameVersion() >= 9868) {
+            for (auto& share : strategyPrior) {
+                share = stream.readUint16();
+                total += share;
+            }
+        } else {
+            UnitMixPolicy::GroupWeights group{};
+            for (auto& share : group) {
+                share = stream.readUint16();
+                total += int(share);
+            }
+            const auto expanded = UnitMixPolicy::expandGroups(group, fieldableMixSlots());
+            for (size_t i = 0; i < strategyPrior.size(); ++i) strategyPrior[i] = int(expanded[i]);
+        }
+        const bool resolves = strategy.mix == QuantBotStrategy::Mix::Tuned || strategy.mix == QuantBotStrategy::Mix::Bounded;
+        if ((total != 0 && total != 10000) || (total != 0 && !resolves))
+            throw std::runtime_error("Invalid QuantBot strategy starting mix");
+    }
+    resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
     // ring from live state, which simply means the attrition window is not
@@ -293,6 +344,23 @@ void QuantBot::save(OutputStream& stream) const {
     stream.writeUint32(customWave.front);
     stream.writeUint32(static_cast<Uint32>(customWave.members.size()));
     for (const auto id : customWave.members) stream.writeUint32(id);
+    // SAVEGAMEVERSION 9862. A party's phase, its points and clocks decide every member's next
+    // order and cannot be recomputed from the world; members are ordered sets, so the bytes
+    // are identical on every client.
+    saveHuntParties(stream);
+    // SAVEGAMEVERSION 9863. The bundle point is re-chosen only every 30 s and the launch gate
+    // waits at most 60 s from its first hold; both clocks decide orders, so a reload carries them.
+    saveForceState(stream);
+    // SAVEGAMEVERSION 9864. The remembered enemy army (the perimeter hold and turrets read it)
+    // and the musters (who engages when) cannot be recomputed from the world.
+    saveDefenceMemory(stream);
+    // SAVEGAMEVERSION 9865. The strategy was picked under the config the game started with; a
+    // reload keeps playing it whatever config is loaded then.
+    stream.writeBool(strategyPicked);
+    stream.writeUint8(static_cast<Uint8>(strategy.mix));
+    stream.writeUint8(static_cast<Uint8>(strategy.tempo));
+    // SAVEGAMEVERSION 9866: the resolved Tuned/Bounded starting ratios (all zero otherwise).
+    for (const int share : strategyPrior) stream.writeUint16(static_cast<Uint16>(share));
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.
@@ -323,7 +391,7 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
     s.writeUint32(tacticalDanger.size()); for(auto v : tacticalDanger) s.writeUint32(v);
     s.writeUint32(harvesterDanger.size()); for(auto v : harvesterDanger) s.writeUint32(v);
     s.writeUint32(lossDanger.size()); for(auto v : lossDanger) s.writeUint32(v);
-    s.writeUint32(factoryEnemyClearance.size()); for(auto v : factoryEnemyClearance) s.writeUint32(v);
+    s.writeUint32(factoryClearance().size()); for(auto v : factoryClearance()) s.writeUint32(v);
     s.writeUint32(visibleHarvestLaunchers.size()); for(auto v : visibleHarvestLaunchers) s.writeUint32(v);
     s.writeUint32(visibleEnemyBases.size()); for(auto v : visibleEnemyBases) coord(v);
     s.writeUint32(builderPlaceLocations.size()); for(const auto& e : builderPlaceLocations) { s.writeUint32(e.first); s.writeUint32(e.second.size()); for(auto v : e.second) coord(v); }
@@ -381,7 +449,7 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
     tacticalDanger.clear(); for(Uint32 n=count(); n; --n) tacticalDanger.push_back(s.readUint32());
     harvesterDanger.clear(); for(Uint32 n=count(); n; --n) harvesterDanger.push_back(s.readUint32());
     lossDanger.clear(); for(Uint32 n=count(); n; --n) lossDanger.push_back(s.readUint32());
-    factoryEnemyClearance.clear(); for(Uint32 n=count(); n; --n) factoryEnemyClearance.push_back(s.readUint32());
+    factoryEnemyClearance.clear(); factoryEnemyClearanceStale=false; for(Uint32 n=count(); n; --n) factoryEnemyClearance.push_back(s.readUint32());
     visibleHarvestLaunchers.clear(); for(Uint32 n=count(); n; --n) visibleHarvestLaunchers.push_back(s.readUint32());
     visibleEnemyBases.clear(); for(Uint32 n=count(); n; --n) visibleEnemyBases.push_back(coord());
     builderPlaceLocations.clear(); for(Uint32 n=count(); n; --n) { auto id=s.readUint32(); auto& list=builderPlaceLocations[id]; for(Uint32 m=count(); m; --m) list.push_back(coord()); }

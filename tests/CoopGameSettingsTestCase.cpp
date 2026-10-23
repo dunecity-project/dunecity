@@ -56,17 +56,64 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("7DOM");
+        const auto marker = bytes.rfind("8DOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
-        // Everything MOD5 does not know about: the MOD6 rule byte and MOD7's count plus one
-        // factor per house. Removed so what follows is unmistakably not part of the block.
-        bytes.resize(bytes.size() - (1 + 4 + 4 * original.getHouseInfoList().size()));
+        // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
+        // factor per house and MOD8's plan-sites byte. Removed so what follows is
+        // unmistakably not part of the block.
+        bytes.resize(bytes.size() - (1 + 4 + 4 * original.getHouseInfoList().size() + 1));
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
         REQUIRE_FALSE(old.getGameOptions().originalUnitDamage);
         REQUIRE(oldInput.readUint8() == static_cast<Uint8>('t'));
+    }
+}
+
+TEST_CASE("Plan building sites is a shared rule preserved by setup, saves and snapshots",
+          "[preplace][network][save]") {
+    SettingsClass::GameOptionsClass planned;
+    REQUIRE(planned.planBuildingSites);
+    auto buildFirst = planned;
+    buildFirst.planBuildingSites = false;
+    REQUIRE(buildFirst != planned);
+    REQUIRE(buildFirst.getHash() != planned.getHash());
+
+    auto original = makeCoop(true, false);
+    original.setGameOptions(buildFirst);
+    OMemoryStream out; out.open(); original.save(out);
+    IMemoryStream input(out.getData(), out.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE_FALSE(restored.getGameOptions().planBuildingSites);
+    REQUIRE(restored.getGameOptions().getHash() == buildFirst.getHash());
+    REQUIRE_FALSE(restored.networkSnapshot("saved simulation").getGameOptions().planBuildingSites);
+    GameInitSettings next(restored, 11, 0, 0);
+    REQUIRE_FALSE(next.getGameOptions().planBuildingSites);
+
+    SECTION("MOD7 and older default the rule on without consuming following bytes") {
+        const char older = GENERATE('4', '5', '6', '7');
+        std::string bytes(out.getData(), out.getDataLength());
+        const auto marker = bytes.rfind("8DOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = older;
+        std::size_t trailing = 1;                                            // MOD8 rule byte
+        if(older < '7') trailing += 4 + 4 * original.getHouseInfoList().size(); // MOD7
+        if(older < '6') trailing += 1;                                       // MOD6 rule byte
+        if(older < '5') trailing += 4;                                       // MOD5 yard limit
+        bytes.resize(bytes.size() - trailing);
+        bytes.append("tail");
+        IMemoryStream oldInput(bytes.data(), bytes.size());
+        GameInitSettings old(oldInput);
+        REQUIRE(old.getGameOptions().planBuildingSites);
+        REQUIRE(oldInput.readUint8() == static_cast<Uint8>('t'));
+    }
+
+    SECTION("an announced MOD8 rule byte that is not there is a truncated stream") {
+        std::string bytes(out.getData(), out.getDataLength());
+        bytes.pop_back();
+        IMemoryStream truncated(bytes.data(), bytes.size());
+        REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
 }
 
@@ -120,11 +167,11 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("7DOM");
+        const auto marker = bytes.rfind("8DOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
-        std::size_t trailing = 4 + 4 * host.getHouseInfoList().size();   // MOD7
+        std::size_t trailing = 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD8 + MOD7
         if(older < '6') trailing += 1;                                   // MOD6 rule byte
         if(older < '5') trailing += 4;                                   // MOD5 yard limit
         bytes.resize(bytes.size() - trailing);
@@ -149,7 +196,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("an announced MOD7 block that is not there is a truncated stream, not an old one") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 4);   // lose the last factor
+        bytes.resize(bytes.size() - 1 - 4);   // lose the MOD8 byte and the last factor
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -157,10 +204,10 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("an explicitly encoded factor outside the range is refused, never clamped") {
         const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
         std::string bytes(out.getData(), out.getDataLength());
-        REQUIRE(bytes.size() > 4);
-        // The last four bytes are the final row's factor.
+        REQUIRE(bytes.size() > 5);
+        // The four bytes before the trailing MOD8 rule byte are the final row's factor.
         for(int shift = 0; shift < 4; ++shift) {
-            bytes[bytes.size() - 4 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
+            bytes[bytes.size() - 5 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
         }
         IMemoryStream hostile(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(hostile); }());
@@ -168,7 +215,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("a factor count beyond the lobby's rows is refused before anything is read") {
         std::string bytes(out.getData(), out.getDataLength());
-        const std::size_t countAt = bytes.size() - (4 + 4 * host.getHouseInfoList().size());
+        const std::size_t countAt = bytes.size() - (1 + 4 + 4 * host.getHouseInfoList().size());
         // Shortened lists must not silently default the omitted rows; extra entries must not
         // be consumed as if they belonged to nonexistent rows either.
         const Uint32 absurd = GENERATE(0u, 1u, 3u, 9u, 0x7FFFFFFFu);
@@ -443,17 +490,17 @@ TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[wo
     REQUIRE(next.getModRevisionHash() == original.getModRevisionHash());
 }
 
-TEST_CASE("Legacy MOD3 remains readable and truncated MOD6 fails closed", "[workshop][save]") {
+TEST_CASE("Legacy MOD3 remains readable and truncated MOD8 fails closed", "[workshop][save]") {
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("7DOM");
+    const auto marker = bytes.find("8DOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
         // three strings, two revision integers, yard limit, original damage,
-        // then MOD7's factor count and one factor per house
-        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()));
+        // then MOD7's factor count and one factor per house, then MOD8's rule byte
+        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1);
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
         REQUIRE(restored.getModRevisionHash().empty());

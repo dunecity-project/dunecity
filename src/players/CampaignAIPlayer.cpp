@@ -16,6 +16,7 @@
  */
 
 #include <players/CampaignAIPlayer.h>
+#include <players/QuantBotConfig.h>
 #include <House.h>
 #include <sand.h>
 #include <Map.h>
@@ -26,6 +27,7 @@
 #include <structures/Palace.h>
 #include <structures/BuilderBase.h>
 #include <units/UnitBase.h>
+#include <FormationOrders.h>
 #include <algorithm>
 #include <array>
 
@@ -551,13 +553,15 @@ void CampaignAIPlayer::updateUnits() {
     // Clear and rebuild the attack team each update (avoids O(N²) deduplication)
     attackTeam.memberIds.clear();
     
-    // Collect idle combat units for attack team staging
+    // Collect idle combat units for attack team staging; a wave still marching on its target
+    // in formation is not idle.
     for(const UnitBase* pUnit : getUnitList()) {
         if(pUnit->getOwner() != getHouse() || 
            pUnit->wasForced() || 
            !pUnit->isRespondable() || 
            pUnit->isByScenario() || 
-           pUnit->hasATarget()) {
+           pUnit->hasATarget() ||
+           pUnit->isInFormation() || pUnit->isHuntingToward()) {
             continue;
         }
         
@@ -611,12 +615,34 @@ void CampaignAIPlayer::updateUnits() {
         return;
     }
     
-    // Launch the wave: set to HUNT and attack the selected target
+    // Launch the wave. In a configured shape (WaveFormation, docs/formations.md) the ground
+    // units march on the target together at the slowest one's pace and break into a fight at
+    // the first contact; they arrive in Hunt. Aircraft, a wave too small to form up, and every
+    // unit with WaveFormation=None (the default) set HUNT and attack the target as before.
+    std::vector<const UnitBase*> wave, ground;
+    Sint64 sumX = 0, sumY = 0;
     for(Uint32 id : attackTeam.memberIds) {
         const UnitBase* pUnit = static_cast<const UnitBase*>(getObject(id));
         if(!pUnit) continue;
+        wave.push_back(pUnit);
+        if(FormationOrders::eligible(pUnit)) {
+            ground.push_back(pUnit);
+            sumX += pUnit->getLocation().x;
+            sumY += pUnit->getLocation().y;
+        }
+    }
+    const bool formed = aiFormationShape() != QuantBotConfig::kWaveFormationNone
+        && static_cast<int>(ground.size()) >= FormationOrders::kMinAIGroup;
+    for(const UnitBase* pUnit : wave) {
+        if(formed && FormationOrders::eligible(pUnit)) continue;
         doSetAttackMode(pUnit, HUNT);
         doAttackObject(pUnit, pBestCandidate, true);
+    }
+    if(formed) {
+        const Coord centre(static_cast<int>(sumX / static_cast<Sint64>(ground.size())),
+                           static_cast<int>(sumY / static_cast<Sint64>(ground.size())));
+        const Coord goal = pBestCandidate->getClosestPoint(centre);
+        doFormationHuntToward(ground, goal.x, goal.y);
     }
     
     // Team will be cleared and rebuilt on next update

@@ -1,0 +1,9 @@
+tag,difficulty,map,seed,sides,players,winner,winner_label,end_s,waves,wall_s,error
+rX,hard,four-chambers,11501,harkonnen:default#Learned-Base|atreides:default#Learned-Swarm|ordos:none|sardaukar:default#random,4,0,default#Learned-Base,2848.4,9,27,
+rX,hard,four-chambers,11501,harkonnen:default#Learned-Swarm|atreides:none|ordos:default#random|sardaukar:default#Learned-Base,4,4,default#Learned-Base,2858.4,13,28,
+rX,hard,four-chambers,11501,harkonnen:none|atreides:default#random|ordos:default#Learned-Base|sardaukar:default#Learned-Swarm,4,1,default#random,2832.4,7,28,
+rX,hard,four-chambers,11501,harkonnen:default#random|atreides:default#Learned-Base|ordos:default#Learned-Swarm|sardaukar:none,4,-1,,4800.0,12,35,
+rX,hard,four-chambers,11602,harkonnen:default#Learned-Swarm|atreides:none|ordos:default#random|sardaukar:default#Learned-Base,4,4,default#Learned-Base,3050.8,7,26,
+rX,hard,four-chambers,11602,harkonnen:default#Learned-Base|atreides:default#Learned-Swarm|ordos:none|sardaukar:default#random,4,4,default#random,2875.6,7,28,
+rX,hard,four-chambers,11602,harkonnen:default#random|atreides:default#Learned-Base|ordos:default#Learned-Swarm|sardaukar:none,4,2,default#Learned-Swarm,2755.8,6,31,
+rX,hard,four-chambers,11602,harkonnen:none|atreides:default#random|ordos:default#Learned-Base|sardaukar:default#Learned-Swarm,4,-1,,4800.0,8,35,

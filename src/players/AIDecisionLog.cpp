@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 namespace AITelemetry {
 std::string Record::quote(const std::string& value) {
@@ -75,12 +76,12 @@ uint64_t DecisionLog::write(uint32_t cycle, int house, int player,
         return 0;
     }
     const uint64_t id = ++sequence;
-    const auto row = Record().set("schema_version", 1).set("telemetry_version", 18).set("policy_version", "nearest-hunt-base-scramble-v98")
+    const auto row = Record().set("schema_version", 1).set("telemetry_version", 18).set("policy_version", "overflow-safe-score-blend-v99")
         .set("session", session).set("seq", id).set("cycle", cycle)
         .set("house", house).set("player", player).set("event", event).set("data", details).json() + '\n';
     if (bytes + row.size() > limit) {
         // Explicit terminal marker; a few hundred bytes beyond the configured cap.
-        stream << Record().set("schema_version", 1).set("telemetry_version", 18).set("policy_version", "nearest-hunt-base-scramble-v98").set("session", session).set("seq", id)
+        stream << Record().set("schema_version", 1).set("telemetry_version", 18).set("policy_version", "overflow-safe-score-blend-v99").set("session", session).set("seq", id)
             .set("cycle", cycle).set("house", -1).set("player", -1)
             .set("event", "capture_limit").set("data", Record().set("byte_limit", limit)).json() << '\n';
         stream.close();
@@ -190,14 +191,70 @@ Record DecisionLog::economyTotals(int house) const {
     return result;
 }
 DecisionLog& log() { static DecisionLog instance; return instance; }
-void startGame(const Record& metadata, bool diagnosticsEnabled) {
+size_t pruneSessions(const std::string& directory, size_t keepSessions, uint64_t maxBytes) {
+    namespace fs = std::filesystem;
+    struct Session { uint64_t stamp, suffix, bytes; fs::path path; };
+    std::vector<Session> sessions;
+    std::error_code ec;
+    const auto number = [](const std::string& text, uint64_t& value) {
+        if (text.empty() || text.size() > 19) return false;
+        value = 0;
+        for (const char c : text) {
+            if (c < '0' || c > '9') return false;
+            value = value * 10 + static_cast<uint64_t>(c - '0');
+        }
+        return true;
+    };
+    for (fs::directory_iterator it(directory, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code entryError;
+        if (it->is_symlink(entryError) || !it->is_directory(entryError)) continue;
+        const std::string name = it->path().filename().string();
+        const auto dash = name.find('-');
+        Session session{0, 0, 0, it->path()};
+        if (dash == std::string::npos || !number(name.substr(0, dash), session.stamp)
+            || !number(name.substr(dash + 1), session.suffix)) continue;
+        for (fs::recursive_directory_iterator file(it->path(), entryError), fileEnd;
+             !entryError && file != fileEnd; file.increment(entryError)) {
+            std::error_code sizeError;
+            if (file->is_regular_file(sizeError)) {
+                const auto size = file->file_size(sizeError);
+                if (!sizeError) session.bytes += size;
+            }
+        }
+        sessions.push_back(std::move(session));
+    }
+    std::sort(sessions.begin(), sessions.end(), [](const Session& a, const Session& b) {
+        return a.stamp != b.stamp ? a.stamp > b.stamp : a.suffix > b.suffix;
+    });
+    // Newest first: keep the longest run of recent sessions that fits both limits.
+    uint64_t total = 0;
+    size_t removed = 0;
+    for (size_t index = 0; index < sessions.size(); ++index) {
+        total += sessions[index].bytes;
+        if (index < keepSessions && total <= maxBytes) continue;
+        std::error_code removeError;
+        fs::remove_all(sessions[index].path, removeError);
+        if (!removeError) ++removed;
+    }
+    return removed;
+}
+void startGame(const Record& metadata, bool decisionLogSetting) {
     log().stop();
-    if (!diagnosticsEnabled) return;
-    const char* enabled = std::getenv("DUNECITY_AI_TELEMETRY");
-    if (enabled && std::string(enabled) == "0") return;
+    bool enabled = decisionLogSetting;
+    if (const char* forced = std::getenv("DUNECITY_AI_TELEMETRY"); forced && *forced)
+        enabled = std::string(forced) != "0";
     char root[FILENAME_MAX];
-    if (fnkdat("ai-decisions/", root, sizeof(root), FNKDAT_USER | FNKDAT_CREAT) < 0
-        || !log().start(root, metadata)) {
+    if (fnkdat("ai-decisions/", root, sizeof(root), FNKDAT_USER | (enabled ? FNKDAT_CREAT : 0)) < 0) {
+        if (enabled) SDL_Log("AI telemetry unavailable; game continues without structured capture");
+        return;
+    }
+    // Leave room for this game's session so the folder stays within both limits with it.
+    const size_t removed = enabled
+        ? pruneSessions(root, kKeptSessions - 1, kKeptBytes - kSessionByteLimit)
+        : pruneSessions(root, kKeptSessions, kKeptBytes);
+    if (removed) SDL_Log("AI telemetry: removed %zu old decision log session(s) from %s", removed, root);
+    if (!enabled) return;
+    if (!log().start(root, metadata)) {
         SDL_Log("AI telemetry unavailable; game continues without structured capture");
     } else SDL_Log("AI telemetry: %s", log().path().c_str());
 }

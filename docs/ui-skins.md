@@ -7,8 +7,9 @@ Open **Settings → Graphics → UI Skin** in the main menu. Choose **Modern**,
 the existing menu reinitialization path; reopening Settings shows the saved
 choice. Back discards a preview without changing the active style.
 
-Modern remains the default for existing and new profiles. A missing or invalid
-`[Video] UI Skin` value also selects Modern (`0`); Lapis Enamel is `1` and
+Classic Desert is the default for new profiles and profiles without a saved
+`[Video] UI Skin` value. Explicit existing selections are preserved. Invalid
+values safely select Modern (`0`); Lapis Enamel is `1` and
 Classic Desert is `2`.
 ID `1` was labelled Classic Desert in the earlier local candidates, so existing
 preferences keep the approved appearance without migration. **Classic Desert**

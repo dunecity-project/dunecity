@@ -11,6 +11,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/IMemoryStream.h>
 #include <structures/BuilderBase.h>
+#include <structures/ConstructionYard.h>
 #include <structures/RepairYard.h>
 #include <GUI/ObjectInterfaces/RepairYardInterface.h>
 #include <Map.h>
@@ -19,11 +20,14 @@
 #include <Menu/MenuBase.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Network/NetworkManager.h>
+#include <FormationOrders.h>
+#include <structures/StructureBase.h>
 #include <memory>
 #include <stdexcept>
 #include <fstream>
 #include <iterator>
 #include "../units/sandworm-target-probe.inc"
+#include "rts-command-probe.inc"
 int runOwnershipProbe() {
     settings.general.playerName = "Host";
     settings.network.metaServer = "http://127.0.0.1:1/";
@@ -88,12 +92,12 @@ int runOwnershipProbe() {
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
         std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("7DOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD7 fixture missing");
-        // Everything after MOD4's payload: the yard limit, the original-damage byte, and
-        // MOD7's factor count plus one factor per house.
+        const auto marker = legacy.rfind("8DOM");
+        if(marker == std::string::npos) throw std::runtime_error("MOD8 fixture missing");
+        // Everything after MOD4's payload: the yard limit, the original-damage byte,
+        // MOD7's factor count plus one factor per house, and MOD8's plan-sites byte.
         const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size();
+            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1;
         legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);
@@ -106,7 +110,7 @@ int runOwnershipProbe() {
             throw std::runtime_error("Yard cap roundtrip lost a house row");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD7 roundtrip and MOD4 defaults pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD8 roundtrip and MOD4 defaults pass");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);
@@ -123,6 +127,194 @@ int runOwnershipProbe() {
     if(unit->getAttackMode()!=STOP) throw std::runtime_error("unknown issuer changed unit");
     Command(hostPlayer->getPlayerID(), CMD_UNIT_SETMODE, 0xfffffff0u, GUARD).executeCommand();
     SDL_Log("OWNERSHIP_PROBE_PASS: actual game objects reject enemy, unknown and invalid commands; owner and co-op commands work");
+    {
+        // CMD_UNIT_FORMATION_MOVE on real units (docs/formations.md).
+        auto require = [](bool ok, const char* why) {
+            if(!ok) { SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "FORMATION_COMMAND_PROBE_FAIL: %s", why); throw std::runtime_error(why); }
+        };
+        auto freeTileNear = [&](Coord from) {
+            for(int r = 0; r < 24; ++r)
+                for(int dy = -r; dy <= r; ++dy)
+                    for(int dx = -r; dx <= r; ++dx) {
+                        if(std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                        const Coord at = from + Coord(dx, dy);
+                        if(!currentGameMap->tileExists(at)) continue;
+                        const auto* tile = currentGameMap->getTile(at);
+                        if(tile->hasAnObject() || tile->isMountain()) continue;
+                        return at;
+                    }
+            throw std::runtime_error("formation fixture has no free tile");
+        };
+        const Coord centre(currentGameMap->getSizeX() / 2, currentGameMap->getSizeY() / 2);
+        std::vector<UnitBase*> group;
+        for(const Uint32 item : {Unit_Tank, Unit_Launcher, Unit_SiegeTank}) {
+            UnitBase* member = owner->createUnit(item, true);
+            member->deploy(freeTileNear(centre));
+            group.push_back(member);
+        }
+        const Uint8 host = hostPlayer->getPlayerID();
+        const Uint32 token = FormationPlanner::makeToken(game->getGameCycleCount(), 0);
+        auto formationMove = [&](Uint8 player, UnitBase* member, Coord slot, Uint32 tok) {
+            Command(player, CMD_UNIT_FORMATION_MOVE, member->getObjectID(),
+                    static_cast<Uint32>(slot.x), static_cast<Uint32>(slot.y), tok).executeCommand();
+        };
+        formationMove(enemyPlayer->getPlayerID(), group[0], centre, token);
+        require(!group[0]->isInFormation(), "An enemy put our unit into a formation");
+        formationMove(host, group[0], centre, 0);
+        require(!group[0]->isInFormation(), "A zero group token was accepted");
+        formationMove(host, group[0], centre, FormationPlanner::kTokenMask + 1);
+        require(!group[0]->isInFormation(), "An oversized group token was accepted");
+        formationMove(host, group[0], Coord(currentGameMap->getSizeX() + 5, 1), token);
+        require(!group[0]->isInFormation(), "A slot off the map was accepted");
+
+        // The owner's plan: every member joins one group at the slowest member's pace.
+        const std::vector<const UnitBase*> members(group.begin(), group.end());
+        const auto plan = FormationOrders::planGroup(members, freeTileNear(centre + Coord(8, 0)), FormationPlanner::Shape::Box);
+        require(plan.formation && plan.slots.size() == 3, "Three real units did not get a formation plan");
+        for(UnitBase* member : group) formationMove(host, member, plan.slotFor(member->getObjectID()), token);
+        const Uint32 groupID = FormationPlanner::makeGroupID(host, token);
+        FixPoint slowest = group[0]->getFormationReferenceSpeed();
+        for(const UnitBase* member : group) slowest = std::min(slowest, member->getFormationReferenceSpeed());
+        for(const UnitBase* member : group) {
+            require(member->getFormationGroup() == groupID, "A member is not in the issuing player's group");
+            require(member->getFormationSpeedCap() == slowest, "The group pace is not the slowest member's");
+            require(member->getDestination() == plan.slotFor(member->getObjectID()) && member->wasForced(),
+                    "A member was not given a forced move to its slot");
+        }
+        require(FormationPlanner::makeGroupID(coopPlayer->getPlayerID(), token) != groupID,
+                "A co-op partner's identical token would merge with the host's group");
+
+        // A slot that became a building: every peer moves it to the same nearest usable tile.
+        Coord built = Coord::Invalid();
+        for(const StructureBase* structure : structureList)
+            if(structure->getOwner() == owner) { built = structure->getLocation(); break; }
+        require(built.isValid() && currentGameMap->getTile(built)->hasAStructure(), "No building for the slot fixture");
+        formationMove(host, group[1], built, token);
+        const Coord moved = group[1]->getFormationSlot();
+        require(group[1]->isInFormation() && moved.isValid() && !currentGameMap->getTile(moved)->hasAStructure()
+                && FormationOrders::canStand(group[1], moved) && group[1]->getDestination() == moved,
+                "A slot on a building was not moved to a usable tile");
+        require(moved == FormationOrders::revalidatedSlot(group[1], built), "The slot fallback is not deterministic");
+
+        // Any other order ends the membership.
+        Command(host, CMD_UNIT_MOVE2POS, group[2]->getObjectID(), centre.x, centre.y, 1).executeCommand();
+        require(!group[2]->isInFormation(), "A plain move kept the unit in its formation");
+        // An aircraft keeps the plain forced move.
+        UnitBase* orni = owner->createUnit(Unit_Ornithopter, true);
+        orni->deploy(freeTileNear(centre));
+        const Coord airGoal = freeTileNear(centre + Coord(3, 0));
+        formationMove(host, orni, airGoal, token);
+        require(!orni->isInFormation() && orni->getDestination() == airGoal, "An aircraft joined a formation");
+        // Per-cycle upkeep: the last member left in a group leaves it.
+        group[1]->leaveFormation();
+        FormationOrders::update();
+        require(!group[0]->isInFormation(), "A lone member kept its formation");
+        // Order kind FormUp (protocol 75): the slot is also the form-up tile, so the members walk
+        // straight into their shape; the per-cycle update keeps it. Unknown kinds are refused.
+        const Uint32 formUpToken = FormationPlanner::makeToken(game->getGameCycleCount(), 1);
+        const Coord formUpSlots[2] = {freeTileNear(centre + Coord(-3, 0)), freeTileNear(centre + Coord(-3, 2))};
+        for(int i = 0; i < 2; ++i)
+            formationMove(host, group[i], formUpSlots[i],
+                          FormationOrders::packParameter(FormationOrders::OrderKind::FormUp, 3, formUpToken));
+        FormationOrders::update();
+        for(int i = 0; i < 2; ++i)
+            require(group[i]->getFormationGroup() == FormationPlanner::makeGroupID(host, formUpToken)
+                    && group[i]->getFormationSlot() == formUpSlots[i] && group[i]->getFormationFormUp() == formUpSlots[i]
+                    && group[i]->isFormationForming() && group[i]->getFormationFacing() == 3
+                    && group[i]->getDestination() == formUpSlots[i] && group[i]->wasForced(),
+                    "A FormUp member is not forming up straight into its slot");
+        group[0]->leaveFormation();
+        formationMove(host, group[0], formUpSlots[0], FormationOrders::packParameter(static_cast<FormationOrders::OrderKind>(4), 3, formUpToken));
+        require(!group[0]->isInFormation(), "A formation move of an unknown kind was accepted");
+        group[1]->leaveFormation();
+        for(UnitBase* member : group) member->cancelDeployment();
+        orni->cancelDeployment();
+        SDL_Log("FORMATION_COMMAND_PROBE_PASS: owner-only, token and slot validation, shared group pace, "
+                "building fallback, order cancellation, aircraft and lone-member rules, form-up in place, unknown kinds");
+
+        // CMD_UNIT_FORMATION_HUNT: attack-move and patrol in a hunting formation.
+        std::vector<UnitBase*> hunters;
+        for(const Uint32 item : {Unit_Tank, Unit_Launcher, Unit_Quad, Unit_SonicTank}) {
+            UnitBase* member = owner->createUnit(item, true);
+            member->deploy(freeTileNear(centre));
+            hunters.push_back(member);
+        }
+        const Uint32 huntToken = FormationPlanner::makeToken(game->getGameCycleCount(), 1);
+        const Uint32 attackMove = FormationOrders::packParameter(FormationOrders::OrderKind::AttackMove, 3, huntToken);
+        const Uint32 patrol = FormationOrders::packParameter(FormationOrders::OrderKind::Patrol, 3, huntToken);
+        auto formationHunt = [&](Uint8 player, UnitBase* member, Coord slot, Uint32 parameter) {
+            Command(player, CMD_UNIT_FORMATION_HUNT, member->getObjectID(),
+                    static_cast<Uint32>(slot.x), static_cast<Uint32>(slot.y), parameter).executeCommand();
+        };
+        const std::vector<const UnitBase*> hunting(hunters.begin(), hunters.end());
+        const Coord huntGoal = freeTileNear(centre + Coord(10, 0));
+        const auto huntPlan = FormationOrders::planGroup(hunting, huntGoal, FormationPlanner::Shape::Pincer);
+        require(huntPlan.formation && huntPlan.slots.size() == hunters.size(), "Four real units did not get a combined-arms plan");
+        const Coord firstSlot = huntPlan.slotFor(hunters[0]->getObjectID());
+        formationHunt(enemyPlayer->getPlayerID(), hunters[0], firstSlot, attackMove);
+        require(!hunters[0]->isInFormation(), "An enemy started our unit's formation hunt");
+        formationHunt(host, hunters[0], firstSlot, FormationOrders::packParameter(FormationOrders::OrderKind::AttackMove, 3, 0));
+        require(!hunters[0]->isInFormation(), "A formation hunt with a zero token was accepted");
+        formationHunt(host, hunters[0], firstSlot, huntToken);   // kind 0 is the plain move, not a hunt
+        require(!hunters[0]->isInFormation(), "A formation hunt of kind Move was accepted");
+        formationHunt(host, hunters[0], firstSlot, (3u << 24) | huntToken);
+        require(!hunters[0]->isInFormation(), "A formation hunt of an unknown kind was accepted");
+        formationHunt(host, hunters[0], firstSlot, (9u << 28) | (1u << 24) | huntToken);
+        require(!hunters[0]->isInFormation(), "A formation hunt with an unknown facing was accepted");
+        formationHunt(host, hunters[0], Coord(-1, 2), attackMove);
+        require(!hunters[0]->isInFormation(), "A formation hunt slot off the map was accepted");
+        // The owner's attack-move: one hunting group, the slowest vehicle's pace, unforced
+        // attack-move walks to the slots at the front of each order queue.
+        for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), attackMove);
+        const Uint32 huntGroup = FormationPlanner::makeGroupID(host, huntToken);
+        FixPoint huntPace = hunters[0]->getFormationReferenceSpeed();
+        for(const UnitBase* member : hunters) huntPace = std::min(huntPace, member->getFormationReferenceSpeed());
+        for(const UnitBase* member : hunters) {
+            require(member->getFormationGroup() == huntGroup && member->isFormationHunt() && member->getFormationFacing() == 3,
+                    "A member is not in the hunting group with the sent facing");
+            require(member->getFormationSpeedCap() == huntPace, "The hunting group's pace is not the slowest member's");
+            require(!member->getOrderQueue().empty() && member->getOrderQueue().front().type == UnitOrderType::AttackMove
+                    && member->getOrderQueue().front().pos == huntPlan.slotFor(member->getObjectID()),
+                    "A member's attack-move does not lead to its slot");
+            require(!member->wasForced(), "An attack-move in formation was forced");
+        }
+        // A hit on one member breaks the whole group: everyone leaves the formation and every
+        // fighter that had no target goes for the attacker.
+        UnitBase* raider = enemy->createUnit(Unit_Tank, true);
+        raider->deploy(freeTileNear(centre + Coord(5, 0)));
+        raider->setVisible(VIS_ALL, true);   // seen by the hunters, as it would be after a cycle
+        hunters[2]->handleDamage(1, raider->getObjectID(), enemy);
+        for(const UnitBase* member : hunters) {
+            require(!member->isInFormation() && !member->isFormationHunt() && member->getFormationSpeedCap() == 0,
+                    "A hit on one member did not break the hunting formation");
+            require(member->hasATarget(), "A member did not turn to the attacker when the formation broke");
+        }
+        // Patrol kind, then contact found by the per-cycle update: a member targeting an enemy
+        // within its reach breaks the group.
+        for(UnitBase* member : hunters) formationHunt(host, member, huntPlan.slotFor(member->getObjectID()), patrol);
+        for(const UnitBase* member : hunters)
+            require(member->isFormationHunt() && member->getOrderQueue().front().type == UnitOrderType::Patrol,
+                    "A patrol in formation did not join the hunting group");
+        hunters[1]->doAttackObject(raider, false);
+        FormationOrders::update();
+        for(const UnitBase* member : hunters)
+            require(!member->isInFormation() && member->hasATarget(), "Contact did not break the hunting formation into a fight");
+        // A plain formation move never breaks on contact: only its own contacted member leaves.
+        // It carries the facing above the token (protocol 73) and joins without a hunt.
+        for(UnitBase* member : hunters)
+            formationMove(host, member, huntPlan.slotFor(member->getObjectID()),
+                          FormationOrders::packParameter(FormationOrders::OrderKind::Move, 3, huntToken));
+        require(hunters[0]->getFormationFacing() == 3 && !hunters[0]->isFormationHunt(), "A formation move lost its facing");
+        hunters[1]->doAttackObject(raider, false);
+        FormationOrders::update();
+        require(!hunters[1]->isInFormation() && hunters[0]->isInFormation() && !hunters[0]->isFormationHunt(),
+                "A plain formation move broke apart on one member's contact");
+        for(UnitBase* member : hunters) member->cancelDeployment();
+        raider->cancelDeployment();
+        SDL_Log("FORMATION_HUNT_COMMAND_PROBE_PASS: owner-only, token, kind and slot validation; attack-move and "
+                "patrol join one hunting group at the slowest pace; a hit or a contact breaks every member into a fight; "
+                "a plain formation move does not break");
+    }
     CommandManager batches;
     static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle = 0;
     unit->doSetAttackMode(GUARD);
@@ -152,6 +344,57 @@ int runOwnershipProbe() {
     batches.addCommandList("Host", complete);
     if(static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle != 3) throw std::runtime_error("duplicate changed watermark");
     SDL_Log("COMMAND_BATCH_PROBE_PASS: mixed batch atomic, gap held, contiguous retransmission recovered, duplicate ignored");
+    {
+        // Pre-placement commands on a real yard: the wire format, ownership, shared-house
+        // control and the multiplayer batch path all carry a reservation intact.
+        ConstructionYard* cy = nullptr;
+        for(StructureBase* structure : structureList)
+            if(structure->getOwner() == owner && structure->getItemID() == Structure_ConstructionYard) { cy = static_cast<ConstructionYard*>(structure); break; }
+        if(!cy) throw std::runtime_error("reservation fixture has no yard");
+        if(!cy->getBuildItem(Structure_WindTrap))
+            cy->buildList.emplace_back(Structure_WindTrap, game->objectData.data[Structure_WindTrap][owner->getHouseID()].price);
+        Coord plot = Coord::Invalid();
+        for(int y=0; y+2<=currentGameMap->getSizeY() && plot.isInvalid(); ++y)
+            for(int x=0; x+2<=currentGameMap->getSizeX() && plot.isInvalid(); ++x)
+                if(cy->checkReservationPlot(Structure_WindTrap, x, y) == PlacementReservation::Verdict::Valid) plot = Coord(x,y);
+        if(plot.isInvalid()) throw std::runtime_error("reservation fixture has no plot");
+        const auto wire = [](const Command& command) {
+            OMemoryStream out; out.open(); command.save(out);
+            IMemoryStream in(out.getData(), out.getDataLength());
+            return Command(in);
+        };
+        const auto reserveFrom = [&](Uint8 player) {
+            return Command(player, CMD_BUILDER_RESERVE_PLACEMENT, cy->getObjectID(), Structure_WindTrap,
+                           static_cast<Uint32>(plot.x), static_cast<Uint32>(plot.y));
+        };
+        const int before = cy->getProductionQueueSize();
+        wire(reserveFrom(enemyPlayer->getPlayerID())).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("enemy reserved a plot on our yard");
+        wire(reserveFrom(hostPlayer->getPlayerID())).executeCommand();
+        const ProductionQueueItem& order = cy->getProductionQueue().back();
+        if(cy->getProductionQueueSize() != before + 1 || order.reservationID == 0 || order.plotX != plot.x || order.plotY != plot.y)
+            throw std::runtime_error("owner reservation did not survive the wire");
+        const Uint32 id = order.reservationID;
+        wire(reserveFrom(hostPlayer->getPlayerID())).executeCommand();
+        if(cy->getProductionQueueSize() != before + 1) throw std::runtime_error("overlapping reservation accepted");
+        wire(Command(enemyPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(), id)).executeCommand();
+        if(cy->getProductionQueueSize() != before + 1) throw std::runtime_error("enemy cancelled our reservation");
+        wire(Command(coopPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(), id)).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("shared-house cancel failed");
+        // A peer's batch executes the reservation in its cycle, like any other order.
+        CommandList reservationBatch;
+        reservationBatch.commandList.emplace_back(3, std::vector<Command>{reserveFrom(hostPlayer->getPlayerID())});
+        batches.addCommandList("Host", reservationBatch);
+        batches.executeCommands(3);
+        if(cy->getProductionQueueSize() != before + 1 || cy->getProductionQueue().back().plotX != plot.x)
+            throw std::runtime_error("batched reservation did not execute");
+        Command(hostPlayer->getPlayerID(), CMD_BUILDER_CANCEL_RESERVATION, cy->getObjectID(),
+                cy->getProductionQueue().back().reservationID).executeCommand();
+        if(cy->getProductionQueueSize() != before) throw std::runtime_error("owner cancel failed");
+        SDL_Log("PREPLACE_COMMAND_PROBE_PASS: reservation commands survive the wire and batches; enemy refused, owner and co-op allowed");
+    }
+    runRtsCommandProbe(*owner, *hostPlayer, *coopPlayer, *enemyPlayer, batches,
+                       static_cast<HumanPlayer*>(hostPlayer)->nextExpectedCommandsCycle);
     Command(hostPlayer->getPlayerID(), CMD_CAMPAIGN_SKIP).executeCommand();
     if(game->isGameFinished()) throw std::runtime_error("skip finished a non-campaign game");
     // Exercise the real Game entry points used by Options and Mentat, not a duplicate policy.

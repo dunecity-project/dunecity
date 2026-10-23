@@ -18,6 +18,8 @@
 
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <structures/ZoneStructure.h>
+#include <INIMap/ZoneStartLevel.h>
 #include <units/TankBase.h>
 
 #include <Trigger/ReinforcementTrigger.h>
@@ -604,8 +606,7 @@ void INIMapLoader::loadHouses()
         }
 
         // Only an explicit lobby setting imposes a harvester ceiling.
-        const int maxHarvesters = std::max(0,
-            currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride);
+        const int maxHarvesters = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
 
         int quota = inifile->getIntValue(houseName,"Quota",0);
 
@@ -885,6 +886,13 @@ void INIMapLoader::loadStructures()
                     continue;
                 } else {
                     newStructure->setHealth(newStructure->getMaxHealth() * percentHealth);
+                    // Optional fifth field: a pre-developed zone (INIMap/ZoneStartLevel.h).
+                    // Entries without it keep the empty lot every older map relies on.
+                    const int startLevel = ZoneStartLevel::parse(tmp);
+                    if(startLevel >= 0) {
+                        if(auto* zone = dynamic_cast<ZoneStructure*>(newStructure)) zone->setStartingLevel(startLevel);
+                        else logWarning(key.getLineNumber(), "Zone level given for non-zone '" + BuildingStr + "' ignored");
+                    }
                 }
             }
         } else {
@@ -1105,8 +1113,7 @@ House* INIMapLoader::getOrCreateHouse(int houseID) {
             }
         }
 
-        const int maxHarvesters = std::max(0,
-            currentGame->getGameInitSettings().getGameOptions().maximumNumberOfHarvestersOverride);
+        const int maxHarvesters = currentGame->getGameInitSettings().getGameOptions().harvesterCeiling();
         auto pNewHouse = std::make_unique<House>(houseID, 0, maxUnits, maxHarvesters, team, 0);
 
         const GameInitSettings::HouseInfoList& houseInfoList = pGame->getGameInitSettings().getHouseInfoList();

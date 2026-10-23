@@ -1,12 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <DataTypes.h>
+#include <FormationPlanner.h>
+#include <players/AirStrikePolicy.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
 #include <players/QuantBotConfig.h>
-#include <players/SpecialUnitPolicy.h>
 
 #include <cstdint>
+#include <limits>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -518,23 +522,39 @@ TEST_CASE("Front battery: demand-scaled goal, economy gate and geometry",
         REQUIRE_FALSE(FrontBatteryPolicy::economyReady(2, 0, 1));
         REQUIRE_FALSE(FrontBatteryPolicy::economyReady(2, 1, 0));
         REQUIRE(FrontBatteryPolicy::economyReady(2, 1, 1));
-        REQUIRE(FrontBatteryPolicy::batteryGoal(30, false, 0) == 0);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(30, true, 0, false) == 0);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(30, false) == 0);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(30, true, false) == 0);
     }
-    SECTION("a small base lands in the opening band") {
+    SECTION("a small base gets its own demand inside the band") {
         // coverageTurretCap of a twelve-building base is around nine.
-        const int goal = FrontBatteryPolicy::batteryGoal(9, true, 0);
-        REQUIRE(goal >= FrontBatteryPolicy::kOpeningBandMin);
-        REQUIRE(goal <= FrontBatteryPolicy::kOpeningBandMax);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(9, true) == 9);
     }
-    SECTION("a tiny demand still gets a usable opening battery") {
-        REQUIRE(FrontBatteryPolicy::batteryGoal(2, true, 0) == FrontBatteryPolicy::kOpeningBandMin);
+    SECTION("a tiny demand still gets a usable battery") {
+        REQUIRE(FrontBatteryPolicy::batteryGoal(2, true) == FrontBatteryPolicy::kOpeningBandMin);
     }
-    SECTION("a mature base scales past twenty-four") {
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 0) == 27);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 10000) > 27);
-        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true, 10000) <= 27 + 27 / 2 + 1);
+    SECTION("a big base never buys more than the band") {
+        // Coverage demand grows with every building: the open-ended goal bought a rich
+        // base a hundred turrets (quantbot_all_against_atreides, 1.0.812-1.0.842).
+        REQUIRE(FrontBatteryPolicy::batteryGoal(27, true) == FrontBatteryPolicy::kOpeningBandMax);
+        REQUIRE(FrontBatteryPolicy::batteryGoal(70, true) == FrontBatteryPolicy::kOpeningBandMax);
     }
+}
+
+TEST_CASE("Harvester override: unchecked and zero both mean no ceiling", "[ai][options]") {
+    SettingsClass::GameOptionsClass options;
+    REQUIRE(options.maximumNumberOfHarvestersOverride == -1);
+    REQUIRE(options.harvesterCeiling() == 0);     // unchecked
+    options.maximumNumberOfHarvestersOverride = 0;
+    REQUIRE(options.harvesterCeiling() == 0);     // "0 means unlimited" (Game Options tooltip)
+    options.maximumNumberOfHarvestersOverride = 1;
+    REQUIRE(options.harvesterCeiling() == 1);
+    options.maximumNumberOfHarvestersOverride = 40;
+    REQUIRE(options.harvesterCeiling() == 40);
+    options.maximumNumberOfHarvestersOverride = -7;
+    REQUIRE(options.harvesterCeiling() == 0);
+}
+
+TEST_CASE("Front battery: geometry", "[ai][battery]") {
     SECTION("front share leaves cover for the flank and the rear") {
         REQUIRE(FrontBatteryPolicy::frontAllowance(24) == 16);
         REQUIRE(FrontBatteryPolicy::frontAllowance(24) < 24);
@@ -616,73 +636,178 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
         REQUIRE(differs([](QuantBotConfig& c){ c.hard.attackForceMilitaryValueRatio += 0.05f; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.medium.refineryMinimum += 1; }));
     }
+    SECTION("the attack-wave formation shape is hashed and parsed") {
+        // The formation research (docs/formations.md): None, plain engine-Hunt waves, won.
+        REQUIRE(baseline.waveFormation == QuantBotConfig::kWaveFormationNone);
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Pincer); }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.waveFormation = static_cast<int>(FormationPlanner::Shape::Box); }));
+        REQUIRE(QuantBotConfig::parseWaveFormation("none", 7) == QuantBotConfig::kWaveFormationNone);
+        REQUIRE(QuantBotConfig::parseWaveFormation("BOX", 7) == static_cast<int>(FormationPlanner::Shape::Box));
+        REQUIRE(QuantBotConfig::parseWaveFormation("pincer", 7) == static_cast<int>(FormationPlanner::Shape::Pincer));
+        REQUIRE(QuantBotConfig::parseWaveFormation("Column", 7) == static_cast<int>(FormationPlanner::Shape::Column));
+        REQUIRE(QuantBotConfig::parseWaveFormation("staggered", 7) == static_cast<int>(FormationPlanner::Shape::Staggered));
+        REQUIRE(QuantBotConfig::parseWaveFormation("Echelon", 7) == static_cast<int>(FormationPlanner::Shape::Echelon));
+        // Removed shapes are unknown names: the loader keeps the default and logs the name.
+        for (const char* removed : {"Combined", "Combined arms", "Line", "Wedge", "Vee", "Diamond", "phalanx"})
+            REQUIRE(QuantBotConfig::parseWaveFormation(removed, 7) == 7);
+        REQUIRE(std::string(QuantBotConfig::waveFormationName(QuantBotConfig::kWaveFormationNone)) == "None");
+        for (const FormationPlanner::Shape shape : FormationPlanner::kShapes)
+            REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(static_cast<int>(shape)), 7)
+                    == static_cast<int>(shape));
+    }
+    SECTION("the force concentration settings are hashed, bundling, the perimeter defence and opening readiness on by default") {
+        REQUIRE(baseline.force.focusFire);
+        REQUIRE(baseline.force.converge);
+        REQUIRE(baseline.force.waveReadinessPercent == 60);
+        REQUIRE(baseline.force.bundle);
+        REQUIRE(baseline.force.launchFromBundle);
+        REQUIRE(baseline.force.perimeterTurrets);
+        REQUIRE(baseline.force.sizedDefence);
+        REQUIRE(baseline.force.openingReadiness);
+        REQUIRE(baseline.force.finishWhenLeading);
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.bundle = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.launchFromBundle = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = false; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.turretPriority = !c.force.turretPriority; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.pressOn = !c.force.pressOn; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWeakest = !c.force.finishWeakest; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.fortifiedWaves = !c.force.fortifiedWaves; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.sonicClearLane = !c.force.sonicClearLane; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.spendAtCap = !c.force.spendAtCap; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.siegeStandoff = !c.force.siegeStandoff; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.massAssault = !c.force.massAssault; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWhenLeading = !c.force.finishWhenLeading; }));
+    }
 }
 
-TEST_CASE("Special units: the within-group choice is measured, not array order",
-          "[ai][special]") {
-    auto candidate = [](uint32_t item, int price) {
-        SpecialUnitPolicy::Candidate c;
-        c.item = item; c.price = price; c.available = true; c.affordable = true;
-        return c;
-    };
-    SECTION("no affordable special") {
-        SpecialUnitPolicy::Candidates specials{};
-        REQUIRE(SpecialUnitPolicy::select(specials) == -1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, -1))
-            == "no_affordable_special");
+namespace {
+
+// The coverage layers as the per-tile blockDistance scan built them before the
+// span fill, kept verbatim so the fill is checked tile for tile.
+class RasterCoverageReference {
+public:
+    RasterCoverageReference(int width, int height)
+        : width_(width), height_(height), blocked_(width*height,false),
+          launchers_(static_cast<size_t>(width)*height,0),
+          strict_(static_cast<size_t>(width)*height,false) {}
+    void add(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range) blocked_[y*width_+x]=true;
     }
-    SECTION("with no evidence the least-owned type is tried") {
-        // This is the condition the reviewed match logged: identical deficits,
-        // both available and affordable. The old pooled comparison always kept
-        // the Devastator because it came first in the array.
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        specials[0].committedValue = 4000;   // Plenty of Devastators already.
-        specials[1].committedValue = 0;
-        specials[2].committedValue = 1200;
-        const int chosen = SpecialUnitPolicy::select(specials);
-        REQUIRE(chosen == 1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, chosen))
-            == "exploration_least_owned");
+    void addMobileLauncher(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range) {
+                    auto& count=launchers_[static_cast<size_t>(y)*width_+x];
+                    if (count<std::numeric_limits<int>::max()) ++count;
+                }
     }
-    SECTION("exploration rotates across the group rather than fixing on one type") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        std::vector<int> picks;
-        for (int round = 0; round < 3; ++round) {
-            const int chosen = SpecialUnitPolicy::select(specials);
-            REQUIRE(chosen >= 0);
-            picks.push_back(chosen);
-            specials[size_t(chosen)].committedValue += specials[size_t(chosen)].price;
+    void addStrict(Coord centre, int range) {
+        for (int y=std::max(0,centre.y-range);y<=std::min(height_-1,centre.y+range);++y)
+            for (int x=std::max(0,centre.x-range);x<=std::min(width_-1,centre.x+range);++x)
+                if (blockDistance(centre,Coord(x,y))<=range)
+                    strict_[static_cast<size_t>(y)*width_+x]=true;
+    }
+    bool blocked(int x, int y) const { return blocked_[static_cast<size_t>(y)*width_+x]; }
+    int launchers(int x, int y) const { return launchers_[static_cast<size_t>(y)*width_+x]; }
+    bool strict(int x, int y) const { return strict_[static_cast<size_t>(y)*width_+x]; }
+private:
+    int width_,height_;
+    std::vector<bool> blocked_;
+    std::vector<int> launchers_;
+    std::vector<bool> strict_;
+};
+
+// The full raster escape the ring search replaced, verbatim over the same
+// safe()/clearWithdrawal() predicates.
+Coord rasterEscape(const AirStrikePolicy::Coverage& coverage, int width, int height, Coord from) {
+    Coord best; best.invalidate();
+    int distance=width+height;
+    for(int y=0;y<height;++y) for(int x=0;x<width;++x) {
+        const Coord point(x,y);
+        const int d=std::abs(x-from.x)+std::abs(y-from.y);
+        if(d<distance && coverage.safe(point) && coverage.clearWithdrawal(from,point)) {
+            best=point; distance=d;
         }
-        REQUIRE(picks[0] != picks[1]);
-        REQUIRE(picks[1] != picks[2]);
     }
-    SECTION("a measurably better type wins once there is evidence") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        // The Devastator has traded badly and the Sonic Tank has traded well,
-        // with enough evidence on both sides to overcome the prior.
-        specials[0].rewardMilli = 2'000'000'000;  specials[0].lossMilli = 40'000'000'000;
-        specials[1].rewardMilli = 60'000'000'000; specials[1].lossMilli = 4'000'000'000;
-        specials[2].available = false;
-        const int chosen = SpecialUnitPolicy::select(specials);
-        REQUIRE(chosen == 1);
-        REQUIRE(std::string(SpecialUnitPolicy::selectionReason(specials, chosen))
-            == "measured_return_per_loss");
-        REQUIRE(SpecialUnitPolicy::rawScore(specials[1]) > SpecialUnitPolicy::rawScore(specials[0]));
-        // And the reverse evidence picks the other way, so nothing is globally
-        // preferred: the measurement decides.
-        std::swap(specials[0].rewardMilli, specials[1].rewardMilli);
-        std::swap(specials[0].lossMilli, specials[1].lossMilli);
-        REQUIRE(SpecialUnitPolicy::select(specials) == 0);
+    return best;
+}
+
+} // namespace
+
+TEST_CASE("Air coverage spans equal the blockDistance disc", "[quantbot][air]") {
+    REQUIRE(AirStrikePolicy::coverageSpans(-1).empty());
+    for (int range=0;range<=64;++range) {
+        const std::vector<int> spans=AirStrikePolicy::coverageSpans(range);
+        REQUIRE(spans.size()==static_cast<size_t>(range)+1);
+        int mismatches=0;
+        for (int dy=-range-2;dy<=range+2;++dy)
+            for (int dx=-range-2;dx<=range+2;++dx) {
+                const bool inDisc=blockDistance(Coord(0,0),Coord(dx,dy))<=range;
+                const bool inSpan=std::abs(dy)<=range && std::abs(dx)<=spans[std::abs(dy)];
+                if (inDisc!=inSpan) ++mismatches;
+            }
+        INFO("range " << range);
+        REQUIRE(mismatches==0);
     }
-    SECTION("an unavailable or unaffordable type is never chosen") {
-        SpecialUnitPolicy::Candidates specials{
-            candidate(28, 800), candidate(35, 600), candidate(41, 600)};
-        specials[1].rewardMilli = 60'000'000'000; specials[1].lossMilli = 1'000'000;
-        specials[1].affordable = false;          // Best, but cannot be paid for.
-        specials[2].available = false;
-        REQUIRE(SpecialUnitPolicy::select(specials) == 0);
+}
+
+TEST_CASE("Air coverage fill and ring escape match the raster scans", "[quantbot][air]") {
+    std::mt19937 rng(0xA1C0FE);
+    auto pick=[&](int lo, int hi) { return lo+static_cast<int>(rng()%static_cast<unsigned>(hi-lo+1)); };
+    int escapes=0, trappedEscapes=0;
+    for (int trial=0;trial<240;++trial) {
+        // Every tenth map is degenerate: empty, a single tile or a single line.
+        const int width=trial%10==0 ? pick(0,2) : pick(1,28);
+        const int height=trial%10==0 ? pick(0,2) : pick(1,28);
+        AirStrikePolicy::Coverage coverage(width,height);
+        RasterCoverageReference reference(width,height);
+        const bool strict=trial%2==0;
+        if (strict) coverage.enableStrict();
+        const int defenders=pick(0,10);
+        for (int i=0;i<defenders;++i) {
+            // Centres beyond every edge and empty (negative) ranges included.
+            const Coord centre(pick(-10,width+10),pick(-10,height+10));
+            const int range=pick(-1,14);
+            switch (pick(0,2)) {
+            case 0: coverage.add(centre,range); reference.add(centre,range); break;
+            case 1: coverage.addMobileLauncher(centre,range); reference.addMobileLauncher(centre,range); break;
+            default:
+                coverage.addStrict(centre,range);
+                if (strict) reference.addStrict(centre,range);
+                break;
+            }
+        }
+        INFO("trial " << trial << " map " << width << "x" << height);
+        int layerMismatches=0;
+        for (int y=0;y<height;++y) for (int x=0;x<width;++x) {
+            const Coord point(x,y);
+            if (coverage.safe(point,std::numeric_limits<int>::max())==reference.blocked(x,y)) ++layerMismatches;
+            if (coverage.mobileLaunchersAt(point)!=reference.launchers(x,y)) ++layerMismatches;
+            if (strict && coverage.strictSafe(point)==reference.strict(x,y)) ++layerMismatches;
+        }
+        REQUIRE(layerMismatches==0);
+        for (int probe=0;probe<10;++probe) {
+            // Origins on the map, just off it, and far enough off that no tile
+            // is nearer than width+height (the raster's own cut-off).
+            const int spread=width+height+4;
+            const Coord from(pick(-spread,width+spread),pick(-spread,height+spread));
+            const Coord expected=rasterEscape(coverage,width,height,from);
+            const Coord actual=coverage.escape(from);
+            INFO("from " << from.x << "," << from.y);
+            REQUIRE(actual.x==expected.x);
+            REQUIRE(actual.y==expected.y);
+            ++escapes;
+            if (expected.isInvalid()) ++trappedEscapes;
+        }
     }
+    // The draw must exercise both outcomes, or the comparison proves little.
+    CHECK(trappedEscapes>0);
+    CHECK(trappedEscapes<escapes);
 }

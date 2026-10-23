@@ -43,7 +43,20 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // patrol count, report cooldown, scan cooldown, report tally and
     // return-home flag, and the airplane's take-off frame and flight budget.
     // 9854 adds the unit hunt-toward flag (UnitBase::doHuntToward).
-    REQUIRE(SAVEGAMEVERSION == 9854);
+    // 9855 adds the unit order queue and builder repeat production (RTS controls).
+    // 9856 adds Construction Yard placement reservations to the production queue.
+    // 9857 adds unit formation membership (group, slot, speed cap; docs/formations.md).
+    // 9858 adds the plan-building-sites match rule (GameInitSettings MOD8).
+    // 9859 adds the hunting-formation flag (formation shapes, hunt in formation).
+    // 9860 adds the form-up tile, resume kind and pace unit type (one-speed formation march).
+    // 9861 gates saves and replays that may hold form-up-in-place commands (no layout change).
+    // 9862 adds the QuantBot hunt parties (Blob waves).
+    // 9863 adds the QuantBot reserve bundle and the launch gate's wait (force concentration).
+    // 9864 adds the QuantBot remembered enemy army and defence musters (defence while outnumbered).
+    // 9865 adds the QuantBot strategy (unit-mix strategy and tempo).
+    // 9866 adds the starting ratios a Tuned/Bounded strategy resolved to.
+    // 9868 gives every special its own unit-mix slot (ten slots instead of eight).
+    REQUIRE(SAVEGAMEVERSION == 9868);
     REQUIRE(SAVEGAMEVERSION >= 9818);
 }
 

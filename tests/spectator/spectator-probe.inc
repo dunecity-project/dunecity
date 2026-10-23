@@ -445,7 +445,8 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
                 "The scrolling fixture has no offscreen production entries");
         const auto creditsBeforeScroll = first->getCredits();
         const auto explorationBeforeScroll = explorationFingerprint();
-        require(panel->handleMouseWheel(0, 0, false) && list->currentListPos == 1,
+        // One wheel step scrolls one grid row (docs/sidebar-grid.md).
+        require(panel->handleMouseWheel(0, 0, false) && list->currentListPos == BuilderListLayout::Columns,
                 "An observer could not scroll to offscreen production details");
         require(builder->getProductionQueueSize() == queueBefore
                 && first->getCredits() == creditsBeforeScroll

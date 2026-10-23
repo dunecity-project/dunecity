@@ -463,45 +463,45 @@ TEST_CASE("Parallel MCV orders account for earlier factories and subsequent depl
 
 TEST_CASE("Light vehicle combat returns compete with heavy units by replacement cost", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     Weights scores{performanceScore(3000,600,300),performanceScore(3000,1200,600),
-        performanceScore(3000,900,450),performanceScore(3000,1400,700),0,
+        performanceScore(3000,900,450),performanceScore(3000,1400,700),0,0,0,
         performanceScore(3000,300,150),0,performanceScore(3000,400,200)};
     // Provide combat evidence: without losses the opening mix is intentionally
     // retained, so performance must not steer production yet.
     const auto successful = allocate(scores,baseline,true,true,10000,10000);
-    REQUIRE(successful[5] > successful[0]);
-    REQUIRE(successful[5] > successful[7]);
-    REQUIRE(successful[5]+successful[7] > 1200);
-    scores[5] = performanceScore(3000,3000,150);
+    REQUIRE(successful[7] > successful[0]);
+    REQUIRE(successful[7] > successful[9]);
+    REQUIRE(successful[7]+successful[9] > 1200);
+    scores[7] = performanceScore(3000,3000,150);
     const auto costly = allocate(scores,baseline,true,true,10000,10000);
-    REQUIRE(costly[5] < successful[5]);
-    REQUIRE(costly[7] > costly[5]);
-    REQUIRE(costly[6] == 0);
+    REQUIRE(costly[7] < successful[7]);
+    REQUIRE(costly[9] > costly[7]);
+    REQUIRE(costly[8] == 0);
 }
-TEST_CASE("Eight-type mix keeps defaults before combat and handles zero damage safely", "[quantbot][unitmix]") {
+TEST_CASE("Ten-type mix keeps defaults before combat and handles zero damage safely", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     const auto expected = normalize(baseline);
     REQUIRE(allocate({},baseline,true,true) == expected);
-    REQUIRE(allocate({0,0,0,0,0,100,0,0},baseline,false,true) == expected);
+    REQUIRE(allocate({0,0,0,0,0,0,0,100,0,0},baseline,false,true) == expected);
     REQUIRE(performanceScore(-100,0,0) == 0);
     REQUIRE(performanceScore(500,0,0) == 500000000);
     REQUIRE(performanceScore(2000000000,2000000000,150) > 0);
 }
-TEST_CASE("Adaptive eight-type mix preserves limits and deterministic peer results", "[quantbot][unitmix][multiplayer]") {
+TEST_CASE("Adaptive ten-type mix preserves limits and deterministic peer results", "[quantbot][unitmix][multiplayer]") {
     using namespace UnitMixPolicy;
-    const Weights baseline{440,880,3080,3080,1320,600,0,600};
+    const Weights baseline{440,880,3080,3080,0,0,1320,600,0,600};
     for (bool vanilla : {false,true}) {
-        for (size_t strongest=0; strongest<8; ++strongest) {
+        for (size_t strongest=0; strongest<kSlots; ++strongest) {
             Weights scores{}; scores[strongest]=10000000;
             const auto first=allocate(scores,baseline,true,vanilla);
-            allocate({4,3,2,1,0,4,3,2},baseline,true,vanilla);
+            allocate({4,3,2,1,1,1,0,4,3,2},baseline,true,vanilla);
             REQUIRE(allocate(scores,baseline,true,vanilla) == first);
             int total=0;
             for (int share : first) { REQUIRE(share>=0); REQUIRE(share<=8000); total+=share; }
             REQUIRE(total == 10000);
-            if (vanilla) REQUIRE(first[4]<=2500);
+            if (vanilla) REQUIRE(first[kOrnithopterSlot]<=2500);
         }
     }
 }
@@ -528,36 +528,37 @@ TEST_CASE("Light vehicle selection fills value deficits and counts queued units"
 
 TEST_CASE("Opening light shares shrink with tech and unavailable units receive no allocation", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights configured{500,1000,3500,3500,1500,0,0,0};
-    const std::array<bool,8> full{true,true,true,true,true,true,false,true};
+    // Tank, siege, launcher, Devastator, Sonic Tank, Deviator, ornithopter, trike, raider, quad.
+    const Weights configured{500,1000,3500,3500,0,0,1500,0,0,0};
+    const Slots full{true,true,true,true,false,false,true,true,false,true};
     for (int tech=4; tech<=8; ++tech) {
         const auto mix = openingMix(tech,configured,full);
-        REQUIRE(mix[5]+mix[6]+mix[7] == (tech>=7 ? 400 : tech>=5 ? 800 : 1500));
-        REQUIRE(mix[6] == 0);
-        REQUIRE(mix[7] > mix[5]);
+        REQUIRE(mix[7]+mix[8]+mix[9] == (tech>=7 ? 400 : tech>=5 ? 800 : 1500));
+        REQUIRE(mix[8] == 0);
+        REQUIRE(mix[9] > mix[7]);
         int total=0; for (int value : mix) total+=value;
         REQUIRE(total == 10000);
     }
-    const auto tankOnly = openingMix(4,configured,{true,false,false,false,false,true,false,true});
+    const auto tankOnly = openingMix(4,configured,{true,false,false,false,false,false,false,true,false,true});
     REQUIRE(tankOnly[0] == 8500);
     REQUIRE(tankOnly[3] == 0);
-    REQUIRE(tankOnly[4] == 0);
-    const auto lightsOnly = openingMix(3,configured,{false,false,false,false,false,true,false,true});
-    REQUIRE(lightsOnly[5]+lightsOnly[7] == 10000);
+    REQUIRE(tankOnly[6] == 0);
+    const auto lightsOnly = openingMix(3,configured,{false,false,false,false,false,false,false,true,false,true});
+    REQUIRE(lightsOnly[7]+lightsOnly[9] == 10000);
     const auto noFactory = openingMix(8,configured,{});
     REQUIRE(noFactory == Mix{});
 }
 TEST_CASE("Opening allocation follows upgrades and missing producer recovery", "[quantbot][unitmix]") {
     using namespace UnitMixPolicy;
-    const Weights configured{500,1000,3500,3500,1500,0,0,0};
-    const auto before = openingMix(8,configured,{true,false,false,false,false,true,false,true});
-    const auto after = openingMix(8,configured,{true,true,true,true,true,true,false,true});
+    const Weights configured{500,1000,3500,3500,0,0,1500,0,0,0};
+    const auto before = openingMix(8,configured,{true,false,false,false,false,false,false,true,false,true});
+    const auto after = openingMix(8,configured,{true,true,true,true,false,false,true,true,false,true});
     REQUIRE(before[0] == 9600);
     REQUIRE(after[0] < before[0]);
     REQUIRE(after[3] > 0);
-    REQUIRE(after[4] > 0);
-    REQUIRE(after[5]+after[7] == 400);
-    REQUIRE(openingMix(8,{}, {true,false,false,false,false,false,false,false})[0] == 10000);
+    REQUIRE(after[6] > 0);
+    REQUIRE(after[7]+after[9] == 400);
+    REQUIRE(openingMix(8,{}, {true,false,false,false,false,false,false,false,false,false})[0] == 10000);
 }
 
 TEST_CASE("Damage reward values actual HP removed and gives the killer twenty percent", "[quantbot][reward]") {
@@ -792,14 +793,14 @@ TEST_CASE("An explicit unit-count override replaces the value cap with rolling h
 TEST_CASE("Exploration fades independently for each unit's evidence", "[quantbot][allocation]") {
     using namespace UnitMixPolicy;
     Weights scores{},rewards{},losses{},prices{};
-    std::array<bool,8> available{}; available[0]=available[1]=available[3]=true;
+    Slots available{}; available[0]=available[1]=available[3]=true;
     scores[0]=2000000; rewards[0]=100000000; losses[0]=50000000;
     scores[1]=100000; rewards[1]=100000000; losses[1]=1000000000;
     prices.fill(700000);
     const auto first=exploredScores(scores,rewards,losses,prices,available);
     REQUIRE(first[3]>0); // never tried: eligible for a real combat sample
     REQUIRE(first[1]<first[3]); // many losses: no named-unit floor rescuing poor performance
-    REQUIRE(first[4]==0); // unavailable aircraft get no speculative allocation
+    REQUIRE(first[kOrnithopterSlot]==0); // unavailable aircraft get no speculative allocation
     scores[3]=100000; rewards[3]=10000000; losses[3]=100000000;
     const auto tested=exploredScores(scores,rewards,losses,prices,available);
     REQUIRE(tested[3]<first[3]);
@@ -819,12 +820,12 @@ TEST_CASE("Unit mix remembers full-match evidence across idle time and saves", "
     using namespace UnitMixPolicy;
     PerformanceHistory original;
     Weights reward{},loss{},prices{}; prices.fill(600000);
-    const std::array<bool,8> available{true,false,false,false,true,false,false,false};
+    const Slots available{true,false,false,false,false,false,true,false,false,false};
     reward[0]=4000000; loss[0]=2000000;
-    reward[4]=800000; loss[4]=1600000;
+    reward[6]=800000; loss[6]=1600000;
     auto score = [&]() {
         Weights scores{};
-        for (size_t i=0;i<8;++i) scores[i]=performanceScore(original.reward[i],original.loss[i],prices[i]);
+        for (size_t i=0;i<kSlots;++i) scores[i]=performanceScore(original.reward[i],original.loss[i],prices[i]);
         return normalize(exploredScores(scores,original.reward,original.loss,prices,available));
     };
     original.update(100,reward,loss);
@@ -836,13 +837,31 @@ TEST_CASE("Unit mix remembers full-match evidence across idle time and saves", "
     OMemoryStream output; original.save(output);
     IMemoryStream input(output.getData(),output.getDataLength());
     PerformanceHistory restored; restored.load(input);
-    reward[4]+=500000; loss[4]+=100000;
+    reward[6]+=500000; loss[6]+=100000;
     original.update(1000001,reward,loss); restored.update(1000001,reward,loss);
     REQUIRE(restored.reward==original.reward);
     REQUIRE(restored.loss==original.loss);
     REQUIRE(restored.sampled==original.sampled);
-    REQUIRE(original.reward[4]==1300000);
-    REQUIRE(original.loss[4]==1700000);
+    REQUIRE(original.reward[6]==1300000);
+    REQUIRE(original.loss[6]==1700000);
+    // The serialized window keeps the eight group slots (every save version): ornithopter evidence
+    // (group slot 4) loads into the ornithopter's slot, the special group into the first special
+    // slot, and a save writes the three specials summed.
+    OMemoryStream legacy;
+    legacy.writeUint32(7); legacy.writeBool(true);
+    for (int block = 0; block < 4; ++block)
+        for (int64_t g = 0; g < 8; ++g) legacy.writeSint64(block * 100 + g + 1);
+    IMemoryStream legacyInput(legacy.getData(),legacy.getDataLength());
+    PerformanceHistory old; old.load(legacyInput);
+    REQUIRE(old.sampled==7);
+    REQUIRE(old.loss==Weights{301,302,303,304,0,0,305,306,307,308});
+    REQUIRE(old.reward==Weights{201,202,203,204,0,0,205,206,207,208});
+    old.reward[4]=10; old.reward[5]=20;
+    OMemoryStream resaved; old.save(resaved);
+    REQUIRE(resaved.getDataLength()==legacy.getDataLength());
+    IMemoryStream resavedInput(resaved.getData(),resaved.getDataLength());
+    PerformanceHistory again; again.load(resavedInput);
+    REQUIRE(again.reward[3]==204+10+20);
 }
 TEST_CASE("Loaded legacy evidence is replaced with the house's complete combat totals", "[quantbot][allocation][save-compat]") {
     using namespace UnitMixPolicy;
@@ -850,8 +869,8 @@ TEST_CASE("Loaded legacy evidence is replaced with the house's complete combat t
     OMemoryStream output;
     output.writeUint32(100); output.writeBool(true);
     Weights totalReward{},totalLoss{},decayedReward{},decayedLoss{};
-    totalReward[4]=800000; totalLoss[4]=1600000;
-    decayedReward[4]=100000; decayedLoss[4]=200000;
+    totalReward[6]=800000; totalLoss[6]=1600000;
+    decayedReward[6]=100000; decayedLoss[6]=200000;
     for (const auto& values:{totalReward,totalLoss,decayedReward,decayedLoss})
         for (auto value:values) output.writeSint64(value);
     IMemoryStream input(output.getData(),output.getDataLength());
@@ -977,6 +996,32 @@ TEST_CASE("Campaign attack sizes scale with difficulty and retain a reserve", "[
     REQUIRE(SimpleArmyPolicy::limitedAttack(2000,400,25,army).size()==1);
     REQUIRE(SimpleArmyPolicy::limitedAttack(2000,500,25,army).empty());
     REQUIRE(SimpleArmyPolicy::limitedAttack(2000,800,25,army).empty());
+}
+TEST_CASE("A house that cannot grow its army to its attack threshold attacks with what it has", "[quantbot][combat]") {
+    using SimpleArmyPolicy::reachableReadiness;
+    // Enough credits or map spice to buy the difference: the threshold stands.
+    REQUIRE(reachableReadiness(20000,3000,2000,15000)==20000);
+    REQUIRE(reachableReadiness(20000,3000,17000,0)==20000);
+    REQUIRE(reachableReadiness(20000,25000,0,0)==20000);
+    // A spice-exhausted map (bqm33541: Brutal at 3,550 of 20,000, no credits, no spice): 0.
+    REQUIRE(reachableReadiness(20000,3550,4,0)==0);
+    REQUIRE(reachableReadiness(20000,3000,2000,14999)==0);
+    // Negative inputs never inflate what is reachable; no overflow at the extremes.
+    REQUIRE(reachableReadiness(20000,-5,-100,-100)==0);
+    REQUIRE(reachableReadiness(INT32_MAX,0,INT32_MAX,INT32_MAX)==INT32_MAX);
+}
+TEST_CASE("Banked credits above the reserve buy army past the cap, at most half the cap again", "[quantbot][production]") {
+    using QuantBotBuildPolicy::surplusMilitaryBudget;
+    REQUIRE(surplusMilitaryBudget(25000,0)==25000);
+    REQUIRE(surplusMilitaryBudget(25000,10000)==25000);
+    REQUIRE(surplusMilitaryBudget(25000,22000)==37000);
+    REQUIRE(surplusMilitaryBudget(25000,158000)==37500);
+    // Medium's largest budget stays below Hard's cap on every map class (config defaults).
+    REQUIRE(surplusMilitaryBudget(5000,999999)<8000);
+    REQUIRE(surplusMilitaryBudget(12000,999999)<20000);
+    REQUIRE(surplusMilitaryBudget(40000,999999)<70000);
+    REQUIRE(surplusMilitaryBudget(0,158000)==0);
+    REQUIRE(surplusMilitaryBudget(INT32_MAX,INT32_MAX)==INT32_MAX);
 }
 TEST_CASE("Campaign waves handle mixed costs and small armies without stacking", "[quantbot][combat]") {
     using namespace SimpleArmyPolicy;
@@ -1756,6 +1801,124 @@ TEST_CASE("An MCV boxed in on four sides still reaches new rock through a diagon
     // Every diagonal closed as well: genuinely walled in, so no trip is offered.
     for(int i:{start-w-1,start-w+1,start+w-1,start+w+1}){tiles[i].walkable=false;tiles[i].free=false;}
     CHECK_FALSE(choose(w,h,tiles,{start},{},{}).valid());
+}
+
+// The survey before the precomputed enemy-distance field and reserved
+// formation flags, kept verbatim as the reference for the faster survey.
+static RockExpansionPolicy::Site legacyRockChoose(int w,int h,const std::vector<RockExpansionPolicy::Tile>& tiles,
+                   const std::vector<int>& starts,const std::vector<int>& enemies,
+                   const std::vector<int>& reserved, int mainBase=-1) {
+    using namespace RockExpansionPolicy;
+    const int n=w*h;
+    std::vector<int> component(n,-1),distance(n,-1),freeCount;
+    std::vector<bool> occupied;
+    std::vector<int> queue; queue.reserve(n);
+    auto neighbours=[&](int i,auto visit) {
+        if(i%w) visit(i-1); if(i%w+1<w) visit(i+1);
+        if(i>=w) visit(i-w); if(i+w<n) visit(i+w);
+    };
+    auto driveNeighbours=[&](int i,auto visit) {
+        const int x=i%w,y=i/w;
+        for(int dy=-1;dy<=1;++dy) for(int dx=-1;dx<=1;++dx)
+            if((dx||dy)&&x+dx>=0&&x+dx<w&&y+dy>=0&&y+dy<h) visit(i+dy*w+dx);
+    };
+    for(int i=0;i<n;++i) if(tiles[i].rock && component[i]<0) {
+        const int id=int(freeCount.size()); freeCount.push_back(0);occupied.push_back(false);
+        queue.clear();queue.push_back(i);component[i]=id;
+        for(size_t j=0;j<queue.size();++j) {
+            const int at=queue[j];freeCount[id]+=tiles[at].free;
+            occupied[id]=occupied[id]||tiles[at].owned;
+            neighbours(at,[&](int next) {if(tiles[next].rock&&component[next]<0){component[next]=id;queue.push_back(next);}});
+        }
+    }
+    queue.clear();
+    for(int i:starts) if(i>=0&&i<n&&tiles[i].walkable&&!tiles[i].unsafe&&distance[i]<0){distance[i]=0;queue.push_back(i);}
+    for(size_t j=0;j<queue.size();++j) {
+        const int at=queue[j];
+        driveNeighbours(at,[&](int next){if(tiles[next].walkable&&!tiles[next].unsafe&&distance[next]<0){distance[next]=distance[at]+1;queue.push_back(next);}});
+    }
+    std::vector<int> sum((w+1)*(h+1));
+    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+        const int i=y*w+x;
+        sum[(y+1)*(w+1)+x+1]=sum[y*(w+1)+x+1]+sum[(y+1)*(w+1)+x]-sum[y*(w+1)+x]
+            +int(tiles[i].rock&&tiles[i].free&&!tiles[i].unsafe);
+    }
+    Site best;
+    for(int y=0;y<h-1;++y) for(int x=0;x<w-1;++x) {
+        const int i=y*w+x,c=component[i];
+        if(c<0||occupied[c]||freeCount[c]<48||distance[i]<0)continue;
+        bool valid=true;
+        for(int d:{0,1,w,w+1}) if(!tiles[i+d].rock||!tiles[i+d].free||tiles[i+d].unsafe)valid=false;
+        for(int r:reserved) if(component[r]==c)valid=false;
+        if(!valid)continue;
+        const int x0=std::max(0,x-6),x1=std::min(w,x+8),y0=std::max(0,y-6),y1=std::min(h,y+8);
+        const int room=sum[y1*(w+1)+x1]-sum[y0*(w+1)+x1]-sum[y1*(w+1)+x0]+sum[y0*(w+1)+x0];
+        if(room<48)continue;
+        int clearance=w+h;
+        for(int e:enemies) clearance=std::min(clearance,std::max(std::abs(x-e%w),std::abs(y-e/w)));
+        if(clearance<12)continue;
+        const int baseDistance=mainBase>=0 ? std::abs(x-mainBase%w)+std::abs(y-mainBase/w) : distance[i];
+        const Site candidate{x,y,room,clearance,distance[i],baseDistance};
+        if(betterSite(candidate,best))best=candidate;
+    }
+    return best;
+}
+
+TEST_CASE("Expansion survey matches the per-enemy scan on random maps and enemy sets", "[quantbot][expansion][performance]") {
+    using namespace RockExpansionPolicy;
+    uint32_t state=0x5eed1234u;
+    auto next=[&](uint32_t bound) { state=state*1664525u+1013904223u; return bound ? (state>>8)%bound : 0u; };
+    int validSites=0,enemyLimited=0,reservedRejections=0;
+    for(int round=0;round<600;++round) {
+        const int w=1+int(next(round%5==0 ? 8 : 72)),h=1+int(next(round%7==0 ? 8 : 72)),n=w*h;
+        std::vector<Tile> tiles(n);
+        for(auto& tile:tiles) {
+            tile.walkable=next(10)!=0; tile.free=next(12)!=0;
+            tile.unsafe=next(40)==0; tile.owned=next(3000)==0;
+        }
+        // Rectangular formations, so sites pass the 48-tile room checks.
+        const int formations=int(next(6));
+        for(int f=0;f<formations;++f) {
+            const int x0=int(next(w)),y0=int(next(h)),x1=std::min(w,x0+4+int(next(20))),y1=std::min(h,y0+4+int(next(20)));
+            for(int y=y0;y<y1;++y) for(int x=x0;x<x1;++x) tiles[y*w+x].rock=true;
+        }
+        std::vector<int> starts,enemies,reserved;
+        for(int s=int(next(4));s>0;--s) starts.push_back(int(next(n)));
+        // Empty, few, many, duplicated, map-edge and off-map enemies (an aircraft past
+        // an edge: indices beyond the map, below it, or wrapping into the next row).
+        const int enemyCount=round%4==0 ? 0 : round%4==1 ? int(next(4)) : int(next(round%4==2 ? 40 : 900));
+        for(int e=0;e<enemyCount;++e) {
+            switch(next(5)) {
+            case 0: enemies.push_back(int(next(h))*w+(next(2) ? 0 : w-1)); break;
+            case 1: enemies.push_back((next(2) ? 0 : h-1)*w+int(next(w))); break;
+            case 2: if(!enemies.empty()) { enemies.push_back(enemies[next(uint32_t(enemies.size()))]); break; } [[fallthrough]];
+            case 3: if(next(8)==0) {
+                const int x=int(next(w+6))-3,y=int(next(h+6))-3;
+                enemies.push_back(y*w+x); break;
+            } [[fallthrough]];
+            default: enemies.push_back(int(next(n)));
+            }
+        }
+        for(int r=int(next(round%3==0 ? 0 : 6));r>0;--r) reserved.push_back(int(next(n)));
+        const int mainBase=next(2) ? int(next(n)) : -1;
+        const auto expected=legacyRockChoose(w,h,tiles,starts,enemies,reserved,mainBase);
+        const auto actual=choose(w,h,tiles,starts,enemies,reserved,mainBase);
+        CAPTURE(round,w,h,enemies.size(),reserved.size(),mainBase);
+        REQUIRE(actual.x==expected.x); REQUIRE(actual.y==expected.y);
+        REQUIRE(actual.room==expected.room); REQUIRE(actual.clearance==expected.clearance);
+        REQUIRE(actual.distance==expected.distance); REQUIRE(actual.baseDistance==expected.baseDistance);
+        validSites+=expected.valid();
+        enemyLimited+=expected.valid()&&expected.clearance<w+h;
+        if(!reserved.empty()) {
+            const auto unreserved=legacyRockChoose(w,h,tiles,starts,enemies,{},mainBase);
+            reservedRejections+=unreserved.x!=expected.x||unreserved.y!=expected.y;
+        }
+    }
+    // The random maps must exercise real sites, enemy-limited clearance and
+    // formations closed by a reservation, not just agree on "no site".
+    CHECK(validSites>50);
+    CHECK(enemyLimited>10);
+    CHECK(reservedRejections>0);
 }
 
 TEST_CASE("Campaign opening follows authored trigger with independent bounded delays", "[quantbot][campaign]") {

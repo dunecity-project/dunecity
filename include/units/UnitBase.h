@@ -19,6 +19,8 @@
 #define UNITBASE_H
 
 #include <ObjectBase.h>
+#include <units/UnitOrderQueue.h>
+#include <FormationOrders.h>
 
 #include <House.h>
 
@@ -146,6 +148,111 @@ public:
     static constexpr int kHuntTowardRetries = 3;
 
     /**
+        Player orders (docs/rts-controls.md). Executed only from Command::executeCommand, so
+        every peer applies them on the same cycle. Without \a queued the order replaces the
+        unit's queue and starts now; with \a queued (Shift) it is appended and starts when the
+        orders before it are complete. A queued order on an empty queue starts at once.
+        Move, MoveToObject, AttackObject, AttackMove, Capture and HarvesterReturn only;
+        patrol goes through doIssuePatrol.
+    */
+    void doIssueOrder(const UnitOrder& order, bool queued);
+
+    /// Patrol between where the unit stands and \a point; with \a queued the point extends the route.
+    void doIssuePatrol(const Coord& point, bool queued);
+
+    /**
+        A classic order (right-click move, attack, capture, harvester return) was just executed
+        through its own command: it becomes the front of the queue, so a following Shift order
+        runs after it instead of replacing it.
+    */
+    void recordPlayerOrder(const UnitOrder& order);
+
+    /// Any order that is not queueable (Stop, Hold, a mode change, repair, forced fire...) ends the queue.
+    void clearOrderQueue();
+
+    const UnitOrderQueue& getOrderQueue() const { return orderQueue; }
+
+    /// Walking an attack-move or patrol leg, engaging enemies met on the way?
+    bool isAttackMoving() const;
+
+    /// Does this unit fight on an attack-move? Workers, transports and Saboteurs just walk.
+    bool fightsOnAttackMove() const;
+
+    /// An explicit player order ends HOLD; the unit returns to its default, Area Guard.
+    void leaveHoldForOrder();
+
+    /**
+        Formation membership (docs/formations.md). A member travels to its formation slot -
+        or, without a slot, keeps its own order - at the group's pace, recovering its place at
+        full speed or waiting for a member that fell behind as FormationOrders::update()
+        decides each cycle. Set only through FormationOrders::join(). Any new order
+        from a player or an AI, a carryall pickup, deviation, arrival, contact with an enemy or
+        being the last member left ends it. Saved from SAVEGAMEVERSION 9857; the hunt flag
+        and the facing from 9859. In a hunting formation the first contact of any member, or a hit on one,
+        breaks the whole group into a fight (FormationOrders::breakHunt).
+    */
+    bool isInFormation() const { return formationGroup != 0; }
+    Uint32 getFormationGroup() const { return formationGroup; }
+    const Coord& getFormationSlot() const { return formationSlot; }
+    FixPoint getFormationSpeedCap() const { return formationSpeedCap; }
+    FormationPlanner::March getFormationMarch() const { return formationMarch; }
+    bool isFormationHunt() const { return formationGroup != 0 && formationHunt; }
+    /// The formation's facing (FormationPlanner::facingCode; 0 = none), saved from 9859.
+    Uint8 getFormationFacing() const { return formationGroup != 0 ? formationFacing : 0; }
+    /// The tile this unit moves to while isMoving().
+    const Coord& getNextSpot() const { return nextSpot; }
+    /// Has this unit picked the next tile of its path (and not started the step yet unless isMoving())?
+    bool hasNextSpot() const { return nextSpotFound; }
+    /// Joins formation groupID heading for slot (invalid: keep the current order), capped
+    /// at this unit's own reference speed until FormationOrders::join sets the group's.
+    /// 'resume' is how the order towards the slot is given again after a form-up.
+    void joinFormation(Uint32 groupID, const Coord& slot, bool hunt = false, Uint8 facing = 0,
+                       FormationOrders::Resume resume = FormationOrders::Resume::Move);
+    /// Joined this cycle; FormationOrders::update() plans the group's form-up next.
+    bool isFormationPending() const { return formationGroup != 0 && formationPending; }
+    void clearFormationPending() { formationPending = false; }
+    /// Forming up: walking to (or waiting on) the form-up tile before the march (saved from 9860).
+    bool isFormationForming() const { return formationGroup != 0 && formationFormUp.isValid(); }
+    const Coord& getFormationFormUp() const { return formationFormUp; }
+    /// Starts the form-up: a walk to 'tile' (forced like the order it stands in for).
+    void startFormUp(const Coord& tile);
+    /// Done forming up: on its form-up tile, or its walk there is over (no path, or an
+    /// attack-move already walking on), or nothing left to move for.
+    bool formUpReady() const;
+    /// The group has formed up: the order towards the slot is given again and the march begins.
+    void endFormUp();
+    /// The group's pace: the slowest member's reference speed and its unit type, whose step
+    /// time on each tile every capped member keeps (UnitBase::formationPaceStepLength).
+    void setFormationPace(FixPoint cap, Uint32 paceItem) { formationSpeedCap = cap; formationPaceItem = paceItem; }
+    Uint32 getFormationPaceItem() const { return formationPaceItem; }
+    /// This cycle's march (FormationPlanner::marchState), decided before units move.
+    void setFormationMarch(FormationPlanner::March march) { formationMarch = march; }
+    void leaveFormation();
+    /// The pace this unit sets in a formation: its speed on open sand, undamaged, unloaded, off-road.
+    FixPoint getFormationReferenceSpeed() const;
+    /// Contact: the enemy this unit is targeting within huntTowardRange(), or nullptr.
+    const ObjectBase* formationContact() const;
+    /**
+        A hunting formation broke on contact with 'enemy' (FormationOrders::breakHunt): a
+        fighter without a target attacks it if its attack mode keeps a target that far away,
+        and otherwise closes in on it, engaging whatever it meets on the way; an attack-move
+        or patrol resumes its own walk from there. A 'hunter' (a member of an AI hunting
+        formation, Resume::HuntToward) does the same in Hunt mode and stays in Hunt.
+    */
+    void engageFormationContact(const ObjectBase* enemy, bool hunter = false);
+    /// Is this unit marching in an AI hunting formation (Resume::HuntToward)?
+    bool isFormationHuntToward() const {
+        return formationGroup != 0 && formationResume == static_cast<Uint8>(FormationOrders::Resume::HuntToward);
+    }
+    /// How this member's order towards its slot is given (FormationOrders::Resume).
+    FormationOrders::Resume getFormationResume() const { return static_cast<FormationOrders::Resume>(formationResume); }
+    /// Has this member's march ended: arrived or idle, in contact with an enemy, or unable to
+    /// move? A hunting member has also arrived once it stands on its slot.
+    bool formationMarchEnded() const;
+    /// Tiles still to go to the formation slot, or to the current destination without a slot.
+    int formationRemainingTiles() const;
+
+    /**
         This method is called when an unit should move to another unit/structure
         \param  TargetObjectID  the ID of the other unit/structure
     */
@@ -248,6 +355,13 @@ public:
     bool update() override;
 
     virtual bool canPass(int xPos, int yPos) const;
+    /// Route planning: canPass, or the tile holds a marching member of this unit's marching
+    /// formation (marchesWith), which moves on at the same pace.
+    bool canPathThrough(int xPos, int yPos) const;
+    /// Are this unit and 'other' marching in the same formation, 'other' moving on (keeping the
+    /// pace, recovering, or holding with a next step to give way on)? Then this unit waits behind
+    /// it rather than routing round it - unless this unit fell behind and 'other' keeps the pace.
+    bool marchesWith(const UnitBase* other) const;
 
     virtual bool hasBumpyMovementOnRock() const { return false; }
 
@@ -496,6 +610,9 @@ protected:
     bool usesDynastyGroundTiming() const;
     bool turnDynastyBody(int wantedAngle);
     bool beginDynastyStep(Uint64 routeTick);
+    /// The time the formation's pace unit takes for this step (now-units), or 0 without one or
+    /// while this member recovers its place: the floor of a capped member's step time.
+    Uint64 formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, bool road, bool diagonal) const;
     bool moveDynastyStep();
     virtual Coord movementEndpoint() const;
     // Clock units are 1/3000 second: a legacy cycle is48, a Dynasty tick50.
@@ -512,6 +629,8 @@ protected:
     virtual void idleAction();
 
     virtual void setSpeeds();
+    /// A realized movement speed, limited to the formation's speed cap while that applies.
+    FixPoint applyFormationSpeedCap(FixPoint speed) const;
     FixPoint getTerrainAdjustedSpeed(int cargoPercent = 0) const;
 
     virtual void targeting();
@@ -571,6 +690,35 @@ protected:
     bool     bFollow;                ///< Do we currently follow some other unit (specified by target)?
     Coord    huntTowardGoal;         ///< Where a doHuntToward() walk goes; invalid when none (SAVEGAMEVERSION 9854)
     Uint8    huntTowardRetries;      ///< Times that walk was resumed after the engine dropped it
+
+    // Player order queue (SAVEGAMEVERSION 9855, docs/rts-controls.md). The front entry is the
+    // order being executed. Kept together and saved as one block after huntToward.
+    UnitOrderQueue orderQueue;                             ///< Shift-queued, attack-move and patrol orders
+    bool     orderDispatched = false;                      ///< The front order has been handed to the engine
+    Uint8    orderWalkRetries = 0;                         ///< Times a dropped attack-move walk was resumed
+    Coord    attackMoveBreakOff = Coord::Invalid();        ///< Where an attack-move left its walk to fight
+
+    /// Runs the order queue once per update: completes the front order and starts the next one.
+    void updateOrderQueue();
+    /// Hands the front order to the engine, skipping orders whose target is gone.
+    void dispatchFrontOrder();
+    /// Can the front order still be carried out (target alive, unit able)?
+    bool isOrderExecutable(const UnitOrder& order) const;
+    /// Has the engine run out of movement and targets for this unit?
+    bool isIdleForOrders() const;
+    /// The front order has finished: start the next one.
+    void finishFrontOrder();
+    // Formation membership, contiguous and saved together (SAVEGAMEVERSION 9857).
+    Uint32   formationGroup = 0;                 ///< FormationPlanner::makeGroupID(); 0 = none
+    Coord    formationSlot = Coord::Invalid();   ///< Destination in the formation; invalid = own order
+    FixPoint formationSpeedCap = 0;              ///< The group's pace: slowest member's reference speed
+    bool     formationHunt = false;              ///< A hunting formation: contact breaks the group (SAVEGAMEVERSION 9859)
+    Uint8    formationFacing = 0;                ///< FormationPlanner::facingCode of the formation (SAVEGAMEVERSION 9859)
+    Coord    formationFormUp = Coord::Invalid(); ///< Form-up tile while forming up; invalid = marching (SAVEGAMEVERSION 9860)
+    Uint8    formationResume = 0;                ///< FormationOrders::Resume: the order towards the slot (SAVEGAMEVERSION 9860)
+    Uint32   formationPaceItem = ItemID_Invalid; ///< The pace unit's type: the slowest member (SAVEGAMEVERSION 9860)
+    FormationPlanner::March formationMarch = FormationPlanner::March::Pace;  ///< Transient: this cycle's march, recomputed every cycle
+    bool     formationPending = false;           ///< Transient: joined this cycle, form-up not planned yet (never across a save)
 
 
     bool     moving;                 ///< Are we currently moving?

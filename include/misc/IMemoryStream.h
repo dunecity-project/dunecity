@@ -78,7 +78,8 @@ public:
             THROW(InputStream::eof, "IMemoryStream::readUint16(): End-of-File reached!");
         }
 
-        Uint16 tmp = *((const Uint16*) (pBuffer + currentPos));
+        Uint16 tmp;
+        memcpy(&tmp, pBuffer + currentPos, sizeof(tmp));
         currentPos += sizeof(Uint16);
         return SDL_SwapLE16(tmp);
     }
@@ -89,7 +90,8 @@ public:
             THROW(InputStream::eof, "IMemoryStream::readUint32(): End-of-File reached!");
         }
 
-        Uint32 tmp = *((const Uint32*) (pBuffer + currentPos));
+        Uint32 tmp;
+        memcpy(&tmp, pBuffer + currentPos, sizeof(tmp));
         currentPos += sizeof(Uint32);
         return SDL_SwapLE32(tmp);
     }
@@ -100,7 +102,8 @@ public:
             THROW(InputStream::eof, "IMemoryStream::readUint64(): End-of-File reached!");
         }
 
-        Uint64 tmp = *((const Uint64*) (pBuffer + currentPos));
+        Uint64 tmp;
+        memcpy(&tmp, pBuffer + currentPos, sizeof(tmp));
         currentPos += sizeof(Uint64);
         return SDL_SwapLE64(tmp);
     }

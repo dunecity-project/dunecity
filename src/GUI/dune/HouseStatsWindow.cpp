@@ -404,8 +404,7 @@ void HouseStatsWindow::refreshAllocation(const House* house) {
         label->setVisible(true);
     for(size_t slot = 0; slot < snapshot.slots.size(); ++slot) {
         const auto& entry = snapshot.slots[slot];
-        std::string name = slot == QuantBot::AllocationSnapshot::kSpecialGroupSlot
-            ? std::string(_("Special heavies")) : getItemNameByID(entry.itemID);
+        const std::string name = getItemNameByID(entry.itemID);
         auto& row = allocationRows[slot];
         row.name.setText(fitText(name, kAllocationNameWidth - 4, 11));
         if(!entry.allocated) {
