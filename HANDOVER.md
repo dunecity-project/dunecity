@@ -1,3 +1,11 @@
+## 2026-10-23 — Android 0.2.30 candidate on engine 1.0.851
+
+User also authorized an Android update. Incremented the unpublished 0.2.29
+metadata to 0.2.30 / 1000550, keeping the native game source at merged 1.0.851
+(8837540a). No gameplay or desktop version changes. The previous local APK is
+preserved in the ignored verification output. ADB reported no connected device.
+Native build, APK integrity/signature checks and publication are still pending.
+
 ## 2026-10-23 — 1.0.851 integration candidate
 
 User authorized integration with latest main, Classic Desert as default,
