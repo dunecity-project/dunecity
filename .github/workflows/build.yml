@@ -554,9 +554,18 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
           -DVCPKG_TARGET_TRIPLET=arm64-osx
+          -DDUNECITY_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      # Rendering changes must pass the calibrated native performance gate,
+      # not just compile. This probe requires the macOS Ninja build objects.
+      - name: Verify Classic interface and native performance
+        run: |
+          python3 scripts/check-build-deps.py build
+          ctest --test-dir build --output-on-failure -R '^(classic_desert_ui_tests|perf_regression)$' --no-tests=error
+          python3 scripts/check-build-deps.py build
 
       - name: Verify secure relay support
         run: build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support

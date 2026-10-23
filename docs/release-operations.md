@@ -230,6 +230,11 @@ connectivity fail visibly; there is no hidden relay fallback.
 
 ## Windows compile caching
 
+The macOS release job also enables tests and runs `classic_desert_ui_tests`
+and `perf_regression` through CTest before packaging. Dependency audits bracket
+that verification. A successful package compile alone is not evidence that
+the native rendering/performance gate passed.
+
 Windows CI uses Ninja with four concurrent MSVC compiler processes and sccache
 for game object files. Precompiled headers are disabled in this CI configuration
 so compilation is cacheable. Local Visual Studio builds retain their defaults.
