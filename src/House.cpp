@@ -648,6 +648,18 @@ void House::update() {
 
     choam.update();
 
+    // A defeated house's city is abandoned: its zones keep no house alive (isAlive), so they
+    // are cleared rather than left standing as targets for every army. Collected first, since
+    // each demolition removes the zone from the structure list.
+    if (!isAlive() && (numItem[Structure_ZoneResidential] + numItem[Structure_ZoneCommercial]
+                       + numItem[Structure_ZoneIndustrial]) > 0) {
+        std::vector<ZoneStructure*> abandoned;
+        for (StructureBase* structure : structureList)
+            if (structure->getOwner() == this && isZoneStructure(structure->getItemID()))
+                if (auto* zone = dynamic_cast<ZoneStructure*>(structure)) abandoned.push_back(zone);
+        for (ZoneStructure* zone : abandoned) zone->demolish();
+    }
+
     for(auto& pPlayer : players) {
         pPlayer->update();
     }
@@ -711,6 +723,8 @@ bool House::isUnitLimitReached(int itemID) const {
 
 
 void House::decrementUnits(int itemID) {
+    // Defeat is reported once, when the last unit or structure that kept the house alive goes.
+    const bool wasAlive = isAlive();
     numUnits--;
     numItemLosses[itemID]++;
 
@@ -735,8 +749,7 @@ void House::decrementUnits(int itemID) {
 
             lossValue += currentGame->objectData.data[itemID][houseID].price;
     }
-
-    if (!isAlive())
+    if (wasAlive && !isAlive())
         lose();
 
 
@@ -792,6 +805,7 @@ void House::incrementStructures(int itemID) {
 
 
 void House::decrementStructures(int itemID, const Coord& location, bool recordLoss) {
+    const bool wasAlive = isAlive();
     numStructures--;
     numItem[itemID]--;
     if (recordLoss) numItemLosses[itemID]++;
@@ -811,7 +825,7 @@ void House::decrementStructures(int itemID, const Coord& location, bool recordLo
         updateBuildLists();
     }
 
-    if (!isAlive())
+    if (wasAlive && !isAlive())
         lose();
 
     if (recordLoss) for(auto& pPlayer : players) {

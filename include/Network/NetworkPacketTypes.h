@@ -306,7 +306,12 @@
 // 94: Release 1.0.851 combines 90 and 93 (and the render-only unit-jitter fix, which changes no
 //     simulation): a crashing plane's Death Hand also hits Natives worms and troopers, and anti-air
 //     never treats Natives as its own team. An 88, 90 or 93 peer would desync. Save 9871.
-#define NETWORK_PROTOCOL_VERSION            94
+// 95, 96: taken by fix/unit-movement and test/vuk-classic-ui (1.0.853 batch).
+// 97: Free-for-all finish (fix/ffa-finish): city zones no longer keep a house alive
+//     (House::isAlive counts them like walls); a defeated house's remaining zones are demolished
+//     on its next update; defeat is reported once, on the transition. A 94-96 peer would keep a
+//     zones-only house alive and desync. No saved state change; save 9871.
+#define NETWORK_PROTOCOL_VERSION            97
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

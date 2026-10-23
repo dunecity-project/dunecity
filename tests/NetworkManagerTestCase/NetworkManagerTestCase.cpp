@@ -109,7 +109,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // anti-air holds fire over its own side. No saved state change.
     // 93: the Natives house owns every sandworm and crime trooper (new house slot); save 9871.
     // 94 is 1.0.851: 90 + 93 (+ the render-only unit-jitter fix); save 9871.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 94);
+    // 97: city zones keep no house alive; a defeated house's zones are demolished (fix/ffa-finish).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 97);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

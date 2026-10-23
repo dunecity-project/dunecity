@@ -65,7 +65,12 @@ public:
     void restoreObserverAI(bool enabled) { ai = enabled; }
     bool isAutoRepairEnabled() const { return autoRepairEnabled; }
     void setAutoRepairEnabled(bool enabled) { autoRepairEnabled = enabled; }
-    inline bool isAlive() const { return (teamID == 0) || !(((numStructures - numItem[Structure_Wall]) <= 0) && (((numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Harvester] - numItem[Unit_RebelHarvester] - numItem[Unit_Frigate] - numItem[Unit_Sandworm] - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter]) <= 0))); }
+    /// The engine's defeat rule: a house lives while it has a structure other than walls and city
+    /// zones, or a fighting unit (not a carryall, harvester, frigate, worm or ambient aircraft).
+    /// City zones (DuneCity residential/commercial/industrial lots) are civilian like walls: they
+    /// build and fight nothing, so a house reduced to them is defeated (docs/formations.md,
+    /// "Free-for-all: finishing the game, 1.0.853").
+    inline bool isAlive() const { return (teamID == 0) || !(((numStructures - numItem[Structure_Wall] - numItem[Structure_ZoneResidential] - numItem[Structure_ZoneCommercial] - numItem[Structure_ZoneIndustrial]) <= 0) && (((numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall] - numItem[Unit_Harvester] - numItem[Unit_RebelHarvester] - numItem[Unit_Frigate] - numItem[Unit_Sandworm] - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter]) <= 0))); }
 
     inline bool hasCarryalls() const { return (numItem[Unit_Carryall] + numItem[Unit_ChemicalCarryall] > 0); }
     inline bool hasBarracks() const { return (numItem[Structure_Barracks] > 0); }
