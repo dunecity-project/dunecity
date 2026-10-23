@@ -561,10 +561,10 @@ jobs:
 
       # Rendering changes must pass the calibrated native performance gate,
       # not just compile. This probe requires the macOS Ninja build objects.
-      - name: Verify Classic interface and native performance
+      - name: Verify Classic interface, native performance and AI regressions
         run: |
           python3 scripts/check-build-deps.py build
-          ctest --test-dir build --output-on-failure -R '^(classic_desert_ui_tests|perf_regression)$' --no-tests=error
+          ctest --test-dir build --output-on-failure -R '^(classic_desert_ui_tests|perf_regression|quantbot_all_against_atreides|quantbot_scenario_matrix|quantbot_ffa_army_deploys)$' --no-tests=error
           python3 scripts/check-build-deps.py build
 
       - name: Verify secure relay support

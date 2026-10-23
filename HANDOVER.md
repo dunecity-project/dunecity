@@ -10,6 +10,12 @@ Modern/Lapis/Classic preferences are preserved, not forcibly overwritten.
 All three source version declarations are 1.0.851. Verification/publication
 results must be recorded separately; this entry alone does not certify them.
 
+Local MSVC/PCH compilation exposed upstream `near` identifiers colliding with
+the Windows header macro in QuantBotBlob/QuantBotForce. Renamed only those
+locals to closestPoint/nearbyFriends; no algorithm or decision changes. The Mac
+release job now enables CTest and gates packaging on Classic UI, performance,
+Atreides, scenario-matrix and free-for-all regression tests, with dependency audits.
+
 ## 2026-10-17 — local 1.0.839: approved 2B sandy pixel Classic Desert
 
 The user selected B's brighter sand-blasted button material, then the arched
