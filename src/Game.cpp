@@ -21,6 +21,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <misc/GameActivity.h>
+#include <misc/WatchedResultLayout.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -2981,7 +2982,10 @@ void Game::drawScreen()
             message = _("You Have Failed Your Mission.");
         }
 
-        sdl2::texture_ptr pFinishMessageTexture = pFontManager->createTextureWithText(message.c_str(), COLOR_WHITE, 28);
+        // A long team line ("Team 3 has won: Kleshmersh, Wildspade and Tharpique") is wider than
+        // the map beside a 640/854-pixel sidebar at 28 pt: step down until it and its plate fit.
+        const int finishFontSize = watchedResultFontSize(message, sideBarPos.x);
+        sdl2::texture_ptr pFinishMessageTexture = pFontManager->createTextureWithText(message.c_str(), COLOR_WHITE, finishFontSize);
         SDL_Rect drawLocation = calcDrawingRect(pFinishMessageTexture.get(), sideBarPos.x/2, topBarPos.h + (getRendererHeight()-topBarPos.h)/2, HAlign::Center, VAlign::Center);
         if(watchedWinnerTeam > 0) {
             // On a plate framed in the winner's colour: some house colours (Rebels' greys)

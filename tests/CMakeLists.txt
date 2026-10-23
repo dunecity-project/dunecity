@@ -489,6 +489,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
+        # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
+        # spectated end plate fits the map in every house colour, chat clears the city readouts,
+        # a skin round trip leaves the in-game sidebar pixel-identical, new and 1.0.850 profiles
+        # get Classic. The full 3 skins x 7 sizes gallery: run-ui-gallery-probe.py without --skins/--cases.
+        add_test(NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/menu/run-ui-gallery-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ui-gallery-probe
+            --skins 0 2 --cases 640x480 1440x900-hd)
+        set_tests_properties(ui_gallery_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Random Skirmish on the real engine: the screen (house cap, persistence, Save map,
         # screenshots), the hosted Random map (Custom Game's button, open Player starts saved and
         # chosen, lobby with host, guest, AI and teams, the guest's wire-format copy, both peers'

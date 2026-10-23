@@ -292,8 +292,10 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         Point(getRendererWidth() - sideBar.getSize().x + 24, nextSidebarRow()),
         Point(ornithopterButtonWidth, kSidebarRowHeight));
 
-    // add chat manager
-    windowWidget.addWidget(&chatManager, Point(20, 60), Point(getRendererWidth() - sideBar.getSize().x, 360));
+    // add chat manager; in city mode below the population and RCI readouts (added next, at
+    // topBar - 4 .. topBar - 4 + 22 + 18), which the first chat lines otherwise overwrite.
+    const int chatTop = currentGame->isCitySimEnabled() ? std::max(60, topBar.getSize().y - 4 + 22 + 18 + 4) : 60;
+    windowWidget.addWidget(&chatManager, Point(20, chatTop), Point(getRendererWidth() - sideBar.getSize().x, 360));
 
     // Always-visible population pill (city sim mode only). Sits just below
     // the top bar, left-aligned, so the player sees their city growing
