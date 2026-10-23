@@ -103,6 +103,7 @@ target_sources(dunelegacy_tests
         Dune2RPresentationTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/ScreenBorder.cpp
         MenuLayoutTestCase/MenuLayoutTestCase.cpp
+        MenuPaletteTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/mmath.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/EnhancedAtlasCache.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/lodepng.cpp
@@ -203,6 +204,7 @@ add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
 add_test(NAME dune2r_presentation_tests COMMAND dunelegacy_tests "[dune2r][presentation],[dune2r][infantry],[Dune2RAssets]")
+add_test(NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 add_test(NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 add_test(NAME skirmish_generator_tests COMMAND dunelegacy_tests "[skirmish]")
@@ -408,7 +410,7 @@ endif()
 # map_chooser_tests reads the bundled map files too: without DUNE_CITY_SOURCE_DIR
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
-set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests PROPERTIES
+set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
     ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 

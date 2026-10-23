@@ -37,6 +37,9 @@ public:
     */
     virtual int getTextWidth(const std::string& text) const = 0;
 
+    /// Whether this font can render every codepoint in a valid UTF-8 string.
+    virtual bool canRenderText(const std::string& text) const = 0;
+
     /// Returns the number of pixels this font needs in y-direction.
     /**
         This methods returns the height of this font.

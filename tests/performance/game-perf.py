@@ -283,6 +283,8 @@ def run_menu_launch(args, scratch):
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_AUDIODRIVER='dummy', DUNECITY_AI_TELEMETRY='1',
                MENU_LAUNCH_SECONDS=str(args.menu_launch),
                SDL_VIDEODRIVER='cocoa' if args.rendered else 'dummy')
+    if not args.rendered:
+        env['SDL_RENDER_DRIVER'] = 'software'
     if args.path_workers:
         env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
     started = time.time()

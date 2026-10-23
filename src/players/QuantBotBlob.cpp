@@ -182,13 +182,13 @@ const ObjectBase* QuantBot::huntPartyContact(const BlobParty& party, const UnitB
         if (!enemy->getOwner() || enemy->getOwner()->getTeamID() == myTeam || enemy->getOwner()->isNatives()
             || enemy->getHealth() <= 0
             || !enemy->isVisible(myTeam)) return;
-        const Coord near = enemy->getClosestPoint(at);
-        if (tiles(at, near) > extent + maxRange) return;
+        const Coord closestPoint = enemy->getClosestPoint(at);
+        if (tiles(at, closestPoint) > extent + maxRange) return;
         bool inReach = false;
         for (const auto& member : reach)
             if (tiles(member.at, enemy->getClosestPoint(member.at)) <= member.range) { inReach = true; break; }
         if (!inReach) return;
-        const int64_t distance = distanceSquared(at, near);
+        const int64_t distance = distanceSquared(at, closestPoint);
         // Nearest, then lowest object id: the same answer in any list order.
         if (!best || distance < bestDistance || (distance == bestDistance && enemy->getObjectID() < best->getObjectID())) {
             best = enemy; bestDistance = distance;

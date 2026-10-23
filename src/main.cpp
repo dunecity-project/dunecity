@@ -701,7 +701,8 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Physical Height = 480\n"
                                 "Interface Height = 0       # 0 = automatic; 480/600/768 = fixed UI size; -1 = native 1:1; Width keeps 4:3 or 16:9\n"
                                 "Start Menu Mode = 0        # 0 = classic; 1 = enlarged TV/tablet/accessibility layout\n"
-                                "Menu Palette = 0           # 0 = desert gold; 1 = high contrast\n"
+                                "Menu Palette = 0           # 0 = standard skin text; 1 = high contrast\n"
+                                "UI Skin = 2                # 0 = modern; 1 = lapis enamel; 2 = classic desert (default; presentation only)\n"
                                 "Fullscreen = true\n"
                                 "FrameLimit = true           # Enable VSync for smooth, tear-free rendering.\n"
                                 "Preferred Zoom Level = 1    # 0 = no zooming, 1 = 2x, 2 = 3x\n"
@@ -1187,6 +1188,9 @@ int main(int argc, char *argv[]) {
             settings.video.showWatermark = myINIFile.getBoolValue("Video","Show Watermark",true);
             settings.video.cursorVisibility = myINIFile.getIntValue("Video","Cursor Visibility",0);
             settings.video.menuPalette = validatedMenuPalette(myINIFile.getIntValue("Video", "Menu Palette", 0));
+            settings.video.uiSkin = validatedUISkin(myINIFile.getIntValue("Video", "UI Skin", 2));
+            // Set appearance before asynchronous GFX loading caches any UI.
+            MenuTheme::setUISkin(settings.video.uiSkin);
             settings.video.startMenuMode = validatedStartMenuMode(myINIFile.getIntValue("Video", "Start Menu Mode", 0));
             settings.video.cursorScale = myINIFile.getIntValue("Video","Cursor Scale",0);
             settings.audio.musicType = myINIFile.getStringValue("Audio","Music Type","adl");
@@ -1573,7 +1577,7 @@ int main(int argc, char *argv[]) {
                 pSFXManager = std::make_unique<SFXManager>();
 #endif
 
-                GUIStyle::setGUIStyle(std::make_unique<DuneStyle>(settings.video.menuPalette));
+                GUIStyle::setGUIStyle(std::make_unique<DuneStyle>(settings.video.menuPalette, settings.video.uiSkin));
 
                 if(bFirstInit == true) {
                     SDL_Log("Starting sound player...");

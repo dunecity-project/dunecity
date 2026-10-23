@@ -25,9 +25,185 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <vector>
 
-sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontsize) {
+void DuneStyle::drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
+                                 const SDL_Rect& labelRect) const {
+    if(MenuTheme::isClassicDesert(uiSkin)) {
+        // Sand-blasted ochre: keep the authentic FAME grain at a deliberately
+        // small, discrete amplitude. This is not a smooth brass gradient or a
+        // reduced-resolution version of the whole interface.
+        auto* artwork = classicTexture;
+        if(!artwork && pGFXManager) artwork = pGFXManager->getBackgroundSurface();
+        const bool hasArtwork = artwork && artwork->w > 0 && artwork->h > 0;
+        fillClassicBackground(surface);
+        const auto base = RGBA2SDL(pressed ? theme.pressed : theme.control);
+        {
+            sdl2::surface_lock lock(surface);
+            constexpr int dither[2][2]{{-2, 1}, {2, -1}};
+            for(int y = 0; y < surface->h; ++y) {
+                for(int x = 0; x < surface->w; ++x) {
+                    const auto sand = RGBA2SDL(getPixel(surface, x, y));
+                    const int grain = hasArtwork
+                        ? (299*sand.r + 587*sand.g + 114*sand.b)/1000 - 155
+                        : ((x*17 + y*23 + (x*y)%19)%31) - 15;
+                    const bool underLabel = x >= labelRect.x-4
+                        && x < labelRect.x+labelRect.w+4
+                        && y >= labelRect.y-2 && y < labelRect.y+labelRect.h+2;
+                    const int variation = std::clamp(grain/4 + dither[y%2][x%2],
+                        underLabel ? (pressed ? -4 : -5) : -12,
+                        underLabel ? 6 : 12);
+                    putPixel(surface, x, y, COLOR_RGB(
+                        std::clamp(static_cast<int>(base.r)+variation, 0, 255),
+                        std::clamp(static_cast<int>(base.g)+variation, 0, 255),
+                        std::clamp(static_cast<int>(base.b)+variation, 0, 255)));
+                }
+            }
+        }
+        drawRect(surface, 0, 0, surface->w-1, surface->h-1,
+                 activated ? theme.accent : theme.border);
+        if(surface->w < 4 || surface->h < 4) return;
+        const auto upper = pressed ? theme.edgeDark : theme.edgeLight;
+        const auto lower = pressed ? theme.edgeLight : theme.edgeDark;
+        drawHLine(surface, 1, 1, surface->w-2, upper);
+        drawVLine(surface, 1, 1, surface->h-2, upper);
+        drawHLine(surface, 1, surface->h-2, surface->w-2, lower);
+        drawVLine(surface, surface->w-2, 1, surface->h-2, lower);
+        return;
+    }
+    // Reuse the original FAME sand pattern, dyed into a carved brass control.
+    // Only this owned RGB surface changes, never the shared artwork seed.
+    auto* artwork = classicTexture;
+    if(!artwork && pGFXManager) artwork = pGFXManager->getBackgroundSurface();
+    const bool hasArtwork = artwork && artwork->w > 0 && artwork->h > 0;
+    fillClassicBackground(surface);
+    {
+        sdl2::surface_lock lock(surface);
+        for(int y = 0; y < surface->h; ++y) {
+            const int relief = surface->h > 1 ? 8 - (16*y)/(surface->h-1) : 0;
+            for(int x = 0; x < surface->w; ++x) {
+                const auto sand = RGBA2SDL(getPixel(surface, x, y));
+                const int grain = hasArtwork
+                    ? (299*sand.r + 587*sand.g + 114*sand.b)/1000 - 155
+                    : ((x*17 + y*23 + (x*y)%19)%31) - 15;
+                // Softer grain under the label protects its contrast without
+                // introducing a flat rectangle in the textured button face.
+                const bool underLabel = x >= labelRect.x-6
+                    && x < labelRect.x+labelRect.w+6;
+                const int variation = underLabel ? std::clamp(grain/6, -8, 8)
+                                                 : std::clamp(grain/2, -22, 22);
+                const int red = (pressed ? 211 : 230) + relief + variation;
+                const int green = (pressed ? 161 : 182) + relief + variation;
+                const int blue = (pressed ? 51 : 68) + relief/2 + variation/2;
+                putPixel(surface, x, y, COLOR_RGB(std::clamp(red, 0, 255),
+                    std::clamp(green, 0, 255), std::clamp(blue, 0, 255)));
+            }
+        }
+    }
+    drawRect(surface, 0, 0, surface->w-1, surface->h-1, activated ? theme.accent : theme.border);
+    if(surface->w < 4 || surface->h < 4) return;
+    const auto upper = pressed ? theme.edgeDark : theme.edgeLight;
+    const auto lower = pressed ? theme.edgeLight : theme.edgeDark;
+    drawHLine(surface, 1, 1, surface->w-2, upper);
+    drawVLine(surface, 1, 1, surface->h-2, upper);
+    drawHLine(surface, 1, surface->h-2, surface->w-2, lower);
+    drawVLine(surface, surface->w-2, 1, surface->h-2, lower);
+    if(surface->w < 8 || surface->h < 8) return;
+    // Three carved bands stay within the existing control and hit-test bounds.
+    drawHLine(surface, 2, 2, surface->w-3, upper);
+    drawVLine(surface, 2, 2, surface->h-3, upper);
+    drawHLine(surface, 2, surface->h-3, surface->w-3, lower);
+    drawVLine(surface, surface->w-3, 2, surface->h-3, lower);
+    drawRect(surface, 3, 3, surface->w-4, surface->h-4,
+             pressed ? theme.edgeDark : COLOR_RGB(189,126,28));
+
+    // End fittings belong only on roomy buttons, never on long translated
+    // labels or small controls. The font size and text position do not change.
+    if(surface->w >= 120 && surface->h >= 28
+       && labelRect.x >= 30 && labelRect.x+labelRect.w <= surface->w-30) {
+        const int centerY = surface->h/2 + (pressed ? 1 : 0);
+        const Uint32 cut = pressed ? theme.border : COLOR_RGB(138,81,15);
+        const Uint32 glint = pressed ? theme.control : theme.edgeLight;
+        sdl2::surface_lock lock(surface);
+        for(const int centerX : {13, surface->w-14}) {
+            for(int dy = -3; dy <= 3; ++dy) {
+                const int reach = 3-std::abs(dy);
+                drawHLineNoLock(surface, centerX-reach, centerY+dy,
+                                centerX+reach, dy < 0 ? glint : cut);
+            }
+            putPixel(surface, centerX, centerY, activated ? theme.accent : theme.edgeDark);
+            drawVLineNoLock(surface, centerX-6, centerY-5, centerY+5, cut);
+            drawVLineNoLock(surface, centerX+6, centerY-5, centerY+5, cut);
+            drawVLineNoLock(surface, centerX-5, centerY-4, centerY+4, glint);
+            drawVLineNoLock(surface, centerX+7, centerY-4, centerY+4, glint);
+        }
+    }
+}
+
+void DuneStyle::fillClassicBackground(SDL_Surface* surface) const {
+    SDL_FillRect(surface, nullptr, theme.background);
+    // During GFXManager construction its global pointer is not yet assigned.
+    // The local style receives an authentic FAME.CPS seed explicitly instead.
+    auto* texture = classicTexture;
+    if(!texture && pGFXManager) texture = pGFXManager->getBackgroundSurface();
+    if(!texture || texture->w <= 0 || texture->h <= 0) return;
+    for(int y = 0; y < surface->h; y += texture->h) {
+        for(int x = 0; x < surface->w; x += texture->w) {
+            SDL_Rect destination{x, y, texture->w, texture->h};
+            SDL_BlitSurface(texture, nullptr, surface, &destination);
+        }
+    }
+}
+
+void DuneStyle::textureRetroLettering(SDL_Surface* surface, const std::string& text,
+                                      Uint32 color, unsigned int fontsize) const {
+    // Keep thin strokes and every glyph edge exact. Only sparse pixels fully
+    // surrounded by the original ink mask receive darker sand-grain flecks.
+    // The transparency key/alpha and the font's measured dimensions never move.
+    if(!surface || !MenuTheme::isClassicDesert(uiSkin) || fontsize < 16
+       || color == COLOR_RGB(20,12,0)
+       || (color != buttonTextPalette.foreground
+           && color != pressedButtonTextPalette.foreground
+           && color != textPalette.foreground)) return;
+    // Unsupported labels use an exact whole-label Philosopher fallback, not
+    // a partially textured/default-face mixture.
+    if(std::any_of(text.begin(), text.end(), [](unsigned char character) {
+        return character < 32 || character > 126;
+    })) return;
+    sdl2::surface_lock lock(surface);
+    const auto ink = RGBA2SDL(color);
+    const Uint32 foreground = SDL_MapRGBA(surface->format, ink.r, ink.g, ink.b, ink.a);
+    std::vector<Uint8> mask(static_cast<size_t>(surface->w)*surface->h, 0);
+    for(int y = 0; y < surface->h; ++y)
+        for(int x = 0; x < surface->w; ++x)
+            mask[static_cast<size_t>(y)*surface->w+x] = getPixel(surface, x, y) == foreground;
+    for(int y = 1; y < surface->h-1; ++y) {
+        for(int x = 1; x < surface->w-1; ++x) {
+            if((x*17 + y*23 + x*y)%11 != 0) continue;
+            bool interior = true;
+            for(int dy = -1; dy <= 1; ++dy)
+                for(int dx = -1; dx <= 1; ++dx)
+                    interior = interior && mask[static_cast<size_t>(y+dy)*surface->w+x+dx] != 0;
+            if(!interior) continue;
+            const int darkening = (x+y)%2 == 0 ? 3 : 6;
+            putPixel(surface, x, y, SDL_MapRGBA(surface->format,
+                static_cast<Uint8>(std::max(static_cast<int>(ink.r)-darkening, 0)),
+                static_cast<Uint8>(std::max(static_cast<int>(ink.g)-darkening, 0)),
+                static_cast<Uint8>(std::max(static_cast<int>(ink.b)-darkening, 0)), ink.a));
+        }
+    }
+}
+
+sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint32 color,
+                                                 unsigned int fontsize, bool allowDisplay) {
     if(pFontManager) {
+        if(allowDisplay && MenuTheme::isLapisEnamel(uiSkin) && fontsize >= 22)
+            return pFontManager->createDisplaySurfaceWithText(text, color, fontsize);
+        if(allowDisplay && MenuTheme::isClassicDesert(uiSkin) && fontsize >= 22) {
+            auto surface = pFontManager->createRetroSurfaceWithText(text, color, fontsize);
+            textureRetroLettering(surface.get(), text, color, fontsize);
+            return surface;
+        }
         return pFontManager->createSurfaceWithText(text, color, fontsize);
     } else {
         // create dummy surface
@@ -44,6 +220,12 @@ sdl2::surface_ptr DuneStyle::createSurfaceWithText(const std::string& text, Uint
 
 unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
     if(pFontManager) {
+        if(MenuTheme::isLapisEnamel(uiSkin) && FontNum >= 22)
+            return std::max(pFontManager->getTextHeight(FontNum),
+                            pFontManager->getDisplayTextHeight("", FontNum));
+        if(MenuTheme::isClassicDesert(uiSkin) && FontNum >= 22)
+            return std::max(pFontManager->getTextHeight(FontNum),
+                            pFontManager->getRetroTextHeight("", FontNum));
         return pFontManager->getTextHeight(FontNum);
     } else {
         return 12;
@@ -52,6 +234,10 @@ unsigned int DuneStyle::getTextHeight(unsigned int FontNum) {
 
 unsigned int DuneStyle::getTextWidth(const std::string& text, unsigned int FontNum)  {
     if(pFontManager) {
+        if(MenuTheme::isLapisEnamel(uiSkin) && FontNum >= 22)
+            return pFontManager->getDisplayTextWidth(text, FontNum);
+        if(MenuTheme::isClassicDesert(uiSkin) && FontNum >= 22)
+            return pFontManager->getRetroTextWidth(text, FontNum);
         return pFontManager->getTextWidth(text,FontNum);
     } else {
         return text.length()*10;
@@ -60,7 +246,12 @@ unsigned int DuneStyle::getTextWidth(const std::string& text, unsigned int FontN
 
 
 Point DuneStyle::getMinimumLabelSize(const std::string& text, int fontSize) {
-    return Point(getTextWidth(text,fontSize) + 12,getTextHeight(fontSize) + 4);
+    auto width = getTextWidth(text, fontSize);
+    // Explicitly outlined labels over world/Mentat artwork retain Philosopher.
+    // Reserve enough room for either face when callers request auto sizing.
+    if(MenuTheme::isDesertUISkin(uiSkin) && fontSize >= 22 && pFontManager)
+        width = std::max(width, static_cast<unsigned int>(pFontManager->getTextWidth(text, fontSize)));
+    return Point(width + 12, getTextHeight(fontSize) + 4);
 }
 
 sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, const std::vector<std::string>& textLines, int fontSize, Alignment_Enum alignment, Uint32 textcolor, Uint32 textshadowcolor, Uint32 backgroundcolor) {
@@ -74,10 +265,18 @@ sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, con
     SDL_FillRect(surface.get(), nullptr, backgroundcolor);
 
     if(textcolor == COLOR_DEFAULT) textcolor = textPalette.foreground;
-    else if(backgroundcolor == COLOR_TRANSPARENT) textcolor = MenuTheme::readableText(textcolor);
+    // Explicit black outlines identify labels intentionally drawn over terrain
+    // or original dark artwork, not a gold menu surface. Preserve those colors
+    // so population, demand, watermark and Mentat text retain their contrast.
+    else if(backgroundcolor == COLOR_TRANSPARENT
+            && !(MenuTheme::isDesertUISkin(uiSkin) && textshadowcolor == COLOR_BLACK))
+        textcolor = MenuTheme::readableText(textcolor, uiSkin);
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
 
-    int fontheight = getTextHeight(fontSize);
+    const bool allowDisplay = !(MenuTheme::isDesertUISkin(uiSkin) && backgroundcolor == COLOR_TRANSPARENT
+                                && textshadowcolor == COLOR_BLACK);
+    int fontheight = !allowDisplay && pFontManager ? pFontManager->getTextHeight(fontSize)
+                                                  : getTextHeight(fontSize);
     int spacing = 2;
 
     int textpos_y;
@@ -94,8 +293,8 @@ sdl2::surface_ptr DuneStyle::createLabelSurface(Uint32 width, Uint32 height, con
     }
 
     for (const std::string& textLine : textLines) {
-        sdl2::surface_ptr textSurface1 = createSurfaceWithText(textLine, textshadowcolor, fontSize);
-        sdl2::surface_ptr textSurface2 = createSurfaceWithText(textLine, textcolor, fontSize);
+        sdl2::surface_ptr textSurface1 = createSurfaceWithText(textLine, textshadowcolor, fontSize, allowDisplay);
+        sdl2::surface_ptr textSurface2 = createSurfaceWithText(textLine, textcolor, fontSize, allowDisplay);
 
         SDL_Rect textRect1 = calcDrawingRect(textSurface1.get(), 0, textpos_y + 4);
         SDL_Rect textRect2 = calcDrawingRect(textSurface2.get(), 0, textpos_y + 3);
@@ -138,7 +337,7 @@ sdl2::surface_ptr DuneStyle::createCheckboxSurface(Uint32 width, Uint32 height, 
     SDL_FillRect(surface.get(), nullptr, backgroundcolor);
 
     if(textcolor == COLOR_DEFAULT) textcolor = textPalette.foreground;
-    else if(backgroundcolor == COLOR_TRANSPARENT) textcolor = MenuTheme::readableText(textcolor);
+    else if(backgroundcolor == COLOR_TRANSPARENT) textcolor = MenuTheme::readableText(textcolor, uiSkin);
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
 
     if(activated) {
@@ -194,7 +393,7 @@ sdl2::surface_ptr DuneStyle::createRadioButtonSurface(Uint32 width, Uint32 heigh
     SDL_FillRect(surface.get(), nullptr, backgroundcolor);
 
     if(textcolor == COLOR_DEFAULT) textcolor = textPalette.foreground;
-    else if(backgroundcolor == COLOR_TRANSPARENT) textcolor = MenuTheme::readableText(textcolor);
+    else if(backgroundcolor == COLOR_TRANSPARENT) textcolor = MenuTheme::readableText(textcolor, uiSkin);
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
 
     if(activated) {
@@ -258,17 +457,17 @@ sdl2::surface_ptr DuneStyle::createDropDownBoxButton(Uint32 size, bool pressed, 
     // create button background
     if(pressed == false) {
         // normal mode
-        SDL_FillRect(surface.get(), nullptr, buttonBackgroundColor);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, buttonBorderColor);
-        drawHLine(surface.get(), 1, 1, surface->w-2, buttonEdgeTopLeftColor);
-        drawVLine(surface.get(), 1, 1, surface->h-2, buttonEdgeTopLeftColor);
-        drawHLine(surface.get(), 1, surface->h-2, surface->w-2, buttonEdgeBottomRightColor);
-        drawVLine(surface.get(), surface->w-2, 1, surface->h-2, buttonEdgeBottomRightColor);
+        SDL_FillRect(surface.get(), nullptr, theme.control);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && MenuTheme::isDesertUISkin(uiSkin) ? theme.accent : theme.border);
+        drawHLine(surface.get(), 1, 1, surface->w-2, theme.edgeLight);
+        drawVLine(surface.get(), 1, 1, surface->h-2, theme.edgeLight);
+        drawHLine(surface.get(), 1, surface->h-2, surface->w-2, theme.edgeDark);
+        drawVLine(surface.get(), surface->w-2, 1, surface->h-2, theme.edgeDark);
     } else {
         // pressed button mode
-        SDL_FillRect(surface.get(), nullptr, pressedButtonBackgroundColor);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, buttonBorderColor);
-        drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, buttonEdgeBottomRightColor);
+        SDL_FillRect(surface.get(), nullptr, theme.pressed);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.border);
+        drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, theme.edgeDark);
     }
 
     int col = (pressed | activated) ? brightenUp(color) : color;
@@ -293,18 +492,68 @@ sdl2::surface_ptr DuneStyle::createDropDownBoxButton(Uint32 size, bool pressed, 
 
 
 Point DuneStyle::getMinimumButtonSize(const std::string& text) {
+    if(MenuTheme::isClassicDesert(uiSkin) && pFontManager) {
+        auto label = text;
+        for(char& character : label)
+            if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
+        return Point(pFontManager->getRetroTextWidth(label, 12)+12,
+                     pFontManager->getRetroTextHeight(label, 12));
+    }
     return Point(getTextWidth(text.c_str(),12)+12,getTextHeight(12));
 }
 
 sdl2::surface_ptr DuneStyle::createButtonSurface(Uint32 width, Uint32 height, const std::string& text, bool pressed, bool activated, Uint32, Uint32) {
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
-    SDL_FillRect(surface.get(),nullptr,pressed ? MenuTheme::pressed : MenuTheme::control);
-    drawRect(surface.get(),0,0,width-1,height-1,activated ? MenuTheme::accent : MenuTheme::border);
+    std::string labelText = text;
+    if(MenuTheme::isDesertUISkin(uiSkin)) {
+        // ASCII casing only: never feed individual UTF-8 bytes to std::toupper.
+        for(char& character : labelText)
+            if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
+    }
+    const bool display = MenuTheme::isLapisEnamel(uiSkin) && height >= 28 && pFontManager;
+    const bool retro = MenuTheme::isClassicDesert(uiSkin) && pFontManager;
     int fontsize = height >= 48 ? 22 : height >= 38 ? 20 : height >= 30 ? 18 : height >= 24 ? 16 : 14;
-    while(fontsize>8 && (width < getTextWidth(text,fontsize)+12 || height < getTextHeight(fontsize)+4)) --fontsize;
-    auto label=createSurfaceWithText(text,textPalette.foreground,fontsize);
+    if(display) fontsize += 4;
+    const auto textWidth = [&](int size) {
+        if(retro) return pFontManager->getRetroTextWidth(labelText, size);
+        return display ? pFontManager->getDisplayTextWidth(labelText, size)
+                       : static_cast<int>(getTextWidth(labelText, size));
+    };
+    const auto textHeight = [&](int size) {
+        if(retro) return pFontManager->getRetroTextHeight(labelText, size);
+        return display ? pFontManager->getDisplayTextHeight(labelText, size)
+                       : static_cast<int>(getTextHeight(size));
+    };
+    while(fontsize>8 && (width < static_cast<Uint32>(textWidth(fontsize)+12)
+                         || height < static_cast<Uint32>(textHeight(fontsize)+4))) --fontsize;
+    const auto lettering = MenuTheme::isDesertUISkin(uiSkin)
+        ? (pressed ? pressedButtonTextPalette : buttonTextPalette) : textPalette;
+    const auto textSurface = [&](Uint32 color) {
+        if(retro) {
+            auto letteringSurface = pFontManager->createRetroSurfaceWithText(labelText, color, fontsize);
+            textureRetroLettering(letteringSurface.get(), labelText, color, fontsize);
+            return letteringSurface;
+        }
+        return display ? pFontManager->createDisplaySurfaceWithText(labelText, color, fontsize)
+                       : createSurfaceWithText(labelText, color, fontsize);
+    };
+    auto label = textSurface(lettering.foreground);
+    if(!label) return nullptr;
     SDL_Rect rect=calcDrawingRect(label.get(),width/2+(pressed ? 1 : 0),height/2+(pressed ? 1 : 0),HAlign::Center,VAlign::Center);
+    if(MenuTheme::isDesertUISkin(uiSkin)) {
+        drawControlFrame(surface.get(), pressed, activated, rect);
+        auto shadow = textSurface(lettering.shadow);
+        if(!shadow) return nullptr;
+        SDL_Rect shadowRect = rect;
+        ++shadowRect.x;
+        ++shadowRect.y;
+        SDL_BlitSurface(shadow.get(), nullptr, surface.get(), &shadowRect);
+    } else {
+        // Modern remains byte-for-byte visually equivalent to its prior style.
+        SDL_FillRect(surface.get(),nullptr,pressed ? theme.pressed : theme.control);
+        drawRect(surface.get(),0,0,width-1,height-1,activated ? theme.accent : theme.border);
+    }
     SDL_BlitSurface(label.get(),nullptr,surface.get(),&rect);
     return surface;
 }
@@ -323,15 +572,15 @@ sdl2::surface_ptr DuneStyle::createTextBoxSurface(Uint32 width, Uint32 height, c
         return nullptr;
     }
 
-    SDL_FillRect(surface.get(), nullptr, buttonBackgroundColor);
-    drawRect(surface.get(),0,0,surface->w-1,surface->h-1,buttonBorderColor);
+    SDL_FillRect(surface.get(), nullptr, theme.control);
+    drawRect(surface.get(),0,0,surface->w-1,surface->h-1,theme.border);
 
-    drawHLine(surface.get(),1,1,surface->w-2,buttonEdgeBottomRightColor);
-    drawHLine(surface.get(),1,2,surface->w-2,buttonEdgeBottomRightColor);
-    drawVLine(surface.get(),1,1,surface->h-2,buttonEdgeBottomRightColor);
-    drawVLine(surface.get(),2,1,surface->h-2,buttonEdgeBottomRightColor);
-    drawHLine(surface.get(),1,surface->h-2,surface->w-2,buttonEdgeTopLeftColor);
-    drawVLine(surface.get(),surface->w-2,1,surface->h-2,buttonEdgeTopLeftColor);
+    drawHLine(surface.get(),1,1,surface->w-2,theme.edgeDark);
+    drawHLine(surface.get(),1,2,surface->w-2,theme.edgeDark);
+    drawVLine(surface.get(),1,1,surface->h-2,theme.edgeDark);
+    drawVLine(surface.get(),2,1,surface->h-2,theme.edgeDark);
+    drawHLine(surface.get(),1,surface->h-2,surface->w-2,theme.edgeLight);
+    drawVLine(surface.get(),surface->w-2,1,surface->h-2,theme.edgeLight);
 
     textcolor = textPalette.foreground;
     if(textshadowcolor == COLOR_DEFAULT) textshadowcolor = textPalette.shadow;
@@ -411,17 +660,17 @@ sdl2::surface_ptr DuneStyle::createScrollBarArrowButton(bool down, bool pressed,
     // create button background
     if(pressed == false) {
         // normal mode
-        SDL_FillRect(surface.get(), nullptr, buttonBackgroundColor);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, buttonBorderColor);
-        drawHLine(surface.get(), 1, 1, surface->w-2, buttonEdgeTopLeftColor);
-        drawVLine(surface.get(), 1, 1, surface->h-2, buttonEdgeTopLeftColor);
-        drawHLine(surface.get(), 1, surface->h-2, surface->w-2, buttonEdgeBottomRightColor);
-        drawVLine(surface.get(), surface->w-2, 1, surface->h-2, buttonEdgeBottomRightColor);
+        SDL_FillRect(surface.get(), nullptr, theme.control);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, activated && MenuTheme::isDesertUISkin(uiSkin) ? theme.accent : theme.border);
+        drawHLine(surface.get(), 1, 1, surface->w-2, theme.edgeLight);
+        drawVLine(surface.get(), 1, 1, surface->h-2, theme.edgeLight);
+        drawHLine(surface.get(), 1, surface->h-2, surface->w-2, theme.edgeDark);
+        drawVLine(surface.get(), surface->w-2, 1, surface->h-2, theme.edgeDark);
     } else {
         // pressed button mode
-        SDL_FillRect(surface.get(), nullptr, pressedButtonBackgroundColor);
-        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, buttonBorderColor);
-        drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, buttonEdgeBottomRightColor);
+        SDL_FillRect(surface.get(), nullptr, theme.pressed);
+        drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.border);
+        drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, theme.edgeDark);
     }
 
     int col = (pressed | activated) ? brightenUp(color) : color;
@@ -465,7 +714,8 @@ sdl2::surface_ptr DuneStyle::createListBoxEntry(Uint32 width, const std::string&
     }
 
     if(selected == true) {
-        SDL_FillRect(surface.get(), nullptr, buttonBackgroundColor);
+        SDL_FillRect(surface.get(), nullptr, theme.control);
+        if(MenuTheme::isDesertUISkin(uiSkin)) drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.accent);
     } else {
         SDL_FillRect(surface.get(), nullptr, COLOR_TRANSPARENT);
     }
@@ -521,9 +771,9 @@ sdl2::surface_ptr DuneStyle::createToolTip(const std::string& text) {
         return nullptr;
     }
 
-    SDL_FillRect(surface.get(), nullptr, MenuTheme::background);
+    SDL_FillRect(surface.get(), nullptr, theme.background);
 
-    drawRect(surface.get(), 0, 0, helpTextSurface->w + 5 - 1, helpTextSurface->h + 2 - 1, MenuTheme::accent);
+    drawRect(surface.get(), 0, 0, helpTextSurface->w + 5 - 1, helpTextSurface->h + 2 - 1, theme.accent);
 
     SDL_Rect textRect = calcDrawingRect(helpTextSurface.get(), 3, 3);
     SDL_BlitSurface(helpTextSurface.get(), nullptr, surface.get(), &textRect);
@@ -536,8 +786,15 @@ sdl2::surface_ptr DuneStyle::createToolTip(const std::string& text) {
 sdl2::surface_ptr DuneStyle::createBackground(Uint32 width, Uint32 height) {
     sdl2::surface_ptr surface{SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SCREEN_FORMAT)};
     if(!surface) return nullptr;
-    SDL_FillRect(surface.get(),nullptr,MenuTheme::background);
-    drawRect(surface.get(),0,0,width-1,height-1,MenuTheme::border);
+    if(MenuTheme::isDesertUISkin(uiSkin)) fillClassicBackground(surface.get());
+    else SDL_FillRect(surface.get(),nullptr,theme.background);
+    drawRect(surface.get(),0,0,width-1,height-1,theme.border);
+    if(MenuTheme::isDesertUISkin(uiSkin) && width >= 6 && height >= 6) {
+        drawHLine(surface.get(), 1, 1, width-2, theme.edgeLight);
+        drawVLine(surface.get(), 1, 1, height-2, theme.edgeLight);
+        drawHLine(surface.get(), 1, height-2, width-2, theme.edgeDark);
+        drawVLine(surface.get(), width-2, 1, height-2, theme.edgeDark);
+    }
     return surface;
 }
 
@@ -549,9 +806,9 @@ sdl2::surface_ptr DuneStyle::createWidgetBackground(Uint32 width, Uint32 height)
         return nullptr;
     }
 
-    SDL_FillRect(surface.get(), nullptr, pressedButtonBackgroundColor);
-    drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, buttonBorderColor);
-    drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, buttonEdgeBottomRightColor);
+    SDL_FillRect(surface.get(), nullptr, theme.pressed);
+    drawRect(surface.get(), 0, 0, surface->w-1, surface->h-1, theme.border);
+    drawRect(surface.get(), 1, 1, surface->w-2, surface->h-2, theme.edgeDark);
 
     return surface;
 }

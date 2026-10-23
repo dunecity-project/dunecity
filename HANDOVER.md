@@ -230,6 +230,337 @@ succeeded; live pages show "New in 1.0.850", v1.0.850 DMG links and `#v1.0.850` 
 release** 39694353449 succeeded. **Publish browser build** 39694353427 pushed 133735b; live `play/build.json` is
 1.0.850 (sourceCommit b5b83abf), dunecity.wasm 200.
 
+## 2026-10-23 — Desktop and browser 1.0.851 published
+
+Merged Classic Desert integration PR #102 at 8837540a after final candidate
+push/PR CI 39918344319 / 39918351818 passed on all platforms. Stable tag
+v1.0.851 points to that merge. Release run 39923745699 passed every build,
+Linux sanitizer, Mac UI/AI/performance, signing and publication gate. Windows,
+macOS and Linux packages are public; Mac packages are signed/notarized.
+All three Ed25519 update feeds verified against the committed public key,
+published archive byte counts/SHA-256 and the legacy VR48 latest-feed redirect.
+SourceForge mirror 39928676886 and browser publication 39928676640 succeeded.
+Live browser build.json identifies 1.0.851 / 8837540a; every listed artifact
+passed a fresh HTTPS SHA-256 check. Website release copy and browser LF policy
+were pushed separately, with deployment 39978729305 successful. Android remains
+a separate candidate below; none of this claims an on-device Android test.
+
+## 2026-10-23 — Android 0.2.30 candidate on engine 1.0.851
+
+User also authorized an Android update. Incremented the unpublished 0.2.29
+metadata to 0.2.30 / 1000550, keeping the native game source at merged 1.0.851
+(8837540a). No gameplay or desktop version changes. The previous local APK is
+preserved in the ignored verification output. ADB reported no connected device.
+Fresh ARM64 native build and Gradle assembleDebug succeeded. Ninja header-dependency
+audit passed during and after compilation. All 3,521 packaged payload files
+matched staging and current source; only .gitignore/.gitkeep housekeeping was
+excluded by Android packaging. Verified ZIP CRCs, ARM64 library hashes, Classic
+default, Lapis font/license and optional HD-unit exclusion. aapt reports the
+expected application ID/version/code, apksigner verifies v1/v2 signatures, and
+16-KiB zip alignment passes. Certificate SHA-256 matches public Android 0.2.25
+and the previous local 0.2.29 APK. APK: 65,082,224 bytes; SHA-256
+68cbb57125c1d181d8fe31e64dfd07b5968003a548cc7dfefc23809384e9fcc7.
+PR #103 merged at 56ab59cd; android-v0.2.30 tags that distribution source.
+The APK and SHA256SUMS.txt are published under that tag. GitHub asset size/hash
+match the verified local APK. Published with latest=false; desktop latest remains
+v1.0.851. Website Android links are updated separately. No on-device test is claimed.
+
+## 2026-10-23 — 1.0.851 integration candidate
+
+User authorized integration with latest main, Classic Desert as default,
+publication and website update. Repository and website admin access confirmed.
+Integrated origin/main b5b83abf (published 1.0.850) with the local UI work.
+Preserved upstream protocol/save, AI, multiplayer and performance changes;
+resolved version/test-registration/history conflicts additively. Classic Desert
+is the default for new profiles and profiles missing UI Skin. Explicit saved
+Modern/Lapis/Classic preferences are preserved, not forcibly overwritten.
+All three source version declarations are 1.0.851. Verification/publication
+results must be recorded separately; this entry alone does not certify them.
+
+Local MSVC/PCH compilation exposed upstream `near` identifiers colliding with
+the Windows header macro in QuantBotBlob/QuantBotForce. Renamed only those
+locals to closestPoint/nearbyFriends; no algorithm or decision changes. The Mac
+release job now enables CTest and gates packaging on Classic UI, performance,
+Atreides, scenario-matrix and free-for-all regression tests, with dependency audits.
+
+Local verification: Windows Release build passed; all 16 CTest suites passed
+(119.53 s). Native SDL skin round trips, HUD/pause fixtures and bitmap-font
+checks passed at 640x480, 854x480, 1280x720 and Native 1920x1080 (172 PNGs).
+Separate portable runtime initialization/rendering passed; installed executable,
+font, license and config-template hashes match their build/source inputs.
+The isolated Windows visual probe was adapted to upstream's new user-directory
+override, retaining its fail-closed guard against touching the player's profile.
+
+Mac CI 39917041475 passed Classic UI and all three mandatory AI regression
+suites. Its simulation performance ratios passed, but the separate menu-launch
+probe exited before timing because SDL2 dummy video needs an explicit software
+renderer. Both headless probe paths now request software; real-window performance
+runs retain their native renderer. No thresholds, seeds or required checks were
+removed. Final CI and publication remain pending; do not infer release success
+from this local evidence.
+
+## 2026-10-17 — local 1.0.839: approved 2B sandy pixel Classic Desert
+
+The user selected B's brighter sand-blasted button material, then the arched
+Deco font concept, and finally its 2B / Chunky Classic pixel interpretation
+(the top of the two generated retro previews). Classic Desert stays skin ID
+`2`; Modern `0` and Lapis Enamel `1` retain their prior rendering. This is a
+native implementation of that direction, not text baked into generated button
+images or a claim to reproduce the original Dune II bitmap font exactly.
+
+Classic controls now use brighter normal RGB(230,183,68) / pressed
+RGB(220,169,44) faces, original FAME grain and a fixed small dither pattern.
+There is no Lapis gradient, carved bands or decorative end fitting. Grain under
+labels has a contrast-safe lower bound; normal copper lettering is
+RGB(116,48,6), pressed RGB(100,37,0), with a crisp pale-gold one-pixel engraved
+highlight. Sparse darker grain touches only thick glyph interiors, preserving
+every thin stroke, edge and transparency pixel. Compact text and High Contrast
+skip glyph grain. Body text stays darker for the unchanged original backdrop.
+
+The new hand-authored bitmap font and its cache are separate from Philosopher
+and Righteous. Classic buttons uppercase ASCII and large headings use the new
+pixel face. Unsupported text falls back as a whole label with matching original
+font metrics/pixels; small body and explicitly outlined world/Mentat labels
+retain the original face. The interface itself is not downsampled: menu layout,
+Native 1:1, gameplay/world zoom, mod graphics and Dune2R scaling are unchanged.
+
+Started clean at 2cc7222 on the local production 1.0.832-based UI branch. The
+official helper sets all three version declarations to 1.0.839. This remains
+a local play-test candidate, not a current-main integration. No push, PR, tag,
+publication, Android build/device installation or real-player profile changes
+are authorized for this iteration. Verification evidence follows on completion.
+
+## 2026-10-16 — local 1.0.838: separate original-style Classic Desert
+
+The user approved the genuine older DuneLegacy UI references and requested
+that appearance as Classic Desert, with dark-orange rather than red lettering.
+Settings → Graphics → UI Skin now offers Modern (`0`), Lapis Enamel (`1`) and
+Classic Desert (`2`). Existing ID `1` preferences retain the approved blue/gold
+Lapis theme; defaults and invalid values still select Modern. Both desert
+styles reuse the original FAME/SCREEN artwork, gold framing and sidebar/pause
+background handling. Classic has plain ochre button faces, small raised/recessed
+bevels, current label case and the original Philosopher font. Standard normal
+ink is RGB(100,37,0), pressed ink RGB(84,29,0), with a fine pale-gold relief;
+High Contrast remains independently selectable. Lapis's carved brass textures,
+end fittings, Righteous font, uppercasing and palettes are unchanged.
+
+The separate helpers distinguish common desert rendering from Lapis-only
+typography/ornaments. Explicit white/black-outlined world, chat and Mentat
+labels keep their original pixels rather than being darkened for gold panels.
+The three-skin diagnostics cover stable names/IDs, saved selection, independent
+previews/Back, Apply/reinitialization, original backgrounds, flat versus
+textured button faces, real typefaces/casing/relief and Modern/Lapis pixel
+isolation. UI features, tabs, campaign/co-op and editor navigation remain;
+there are no gameplay, world graphics/zoom, Dune2R scaling, save or protocol
+changes. Native 1:1 remains a separate setting.
+
+The source started clean at fac97fb on the existing local branch. The official
+version helper sets all three version declarations to 1.0.838. This remains a
+local design candidate on production 1.0.832, not an integration of newer main.
+The full Windows Release build and all 11 CTest suites pass (core: 1005 passed,
+four opt-in cases skipped, 10,239,338 assertions; skin subset: eight cases,
+851 assertions). The actual SDL Modern → Lapis → Classic → Modern round trip
+passes at 640×480, 854×480, 1280×720 and Native 1920×1080. The 148 PNGs are in
+the ignored `build-windows-candidate/classic-desert-ui-probe-838/captures`
+tree. Static selected-construction-yard HUD/pause and original Mentat artwork
+checks pass at every size; these are component/software-renderer checks, not
+live gameplay certification. Modern and Lapis main-menu captures also match
+local 1.0.837 pixel-for-pixel at all four sizes outside the version-label region.
+
+The separate `build-windows-portable-838` installation passes its desktop
+runtime initialization/rendering check (exit 0). Its executable matches the
+final linked game target: SHA256
+`425160006CEE905CAE7CE58E61A1D953194DD17CE53FFAE4C3B65DBD55311531`.
+The font, full OFL notice and configuration template match source/development
+output. The prior 1.0.837 portable retains its recorded executable hash.
+No push, PR, tag, publication, device installation or real-player profile
+changes were performed. Prior portable candidates are preserved.
+
+## 2026-10-16 — local 1.0.837: name the approved skin Lapis Enamel
+
+The user approved the blue/gold 1.0.836 appearance, asked to name its selector
+entry Lapis Enamel instead of Classic Desert, and requested genuine original
+DuneLegacy UI references before developing a separate Classic Desert skin.
+The dropdown is now Modern (`0`) / Lapis Enamel (`1`). Existing ID `1` settings
+retain exactly the same theme; no new setting, placeholder option or migration
+is needed. The optional-font warning and template comment use the new name.
+Internal historic Classic helper/test identifiers remain for compatibility.
+
+No rendering, font metrics, controls/navigation, world graphics, gameplay,
+zoom, Dune2R scaling, save or network logic changes. The official version helper
+sets all three version declarations to 1.0.837. This is another local candidate
+on the existing production 1.0.832 base, not a current-upstream integration.
+The source tree started clean at e2ed24e. The full Windows Release build passes;
+a final incremental game build also includes the generated-profile template's
+renamed description. All 11 CTest suites pass (core: 1004 passed, four opt-in
+cases skipped, 10,238,839 assertions; theme subset: seven cases, 352 assertions).
+The actual SDL Modern → Lapis → Modern matrix passes at 640×480, 854×480,
+1280×720 and Native 1920×1080, including selector labels/IDs, no unfinished
+Classic option, preview/Back, Apply/reinitialization/persistence and static
+construction-yard HUD/pause rendering. This is component/software-renderer
+evidence, not live gameplay certification. The 84 PNGs are in the ignored
+`build-windows-candidate/lapis-ui-probe-837/captures` tree.
+
+The separate `build-windows-portable-837` install passes its desktop runtime
+check (exit 0). Its executable matches the final rebuilt target: SHA256
+`0B264B0AAE8639CF7426B9C03629023E04888CD6CFFE14267184BB939BC98D05`.
+Font, full OFL notice and template copies match source/development output.
+The previous 1.0.836 portable retains its recorded executable hash. No push,
+PR, tag, publication or device installation has been performed.
+
+Authentic reference material was located in the archived original website:
+the 0.98.6.3 release's `extra-menu-option.png` shows red lettering, ochre fills,
+small bevels and the original FAME desert frame; the gallery also contains
+genuine older HUD/statistics captures. A 2019 hands-on review identifies and
+shows the original 0.96.3 main menu/options on AmigaOS; its public source is
+linked in `docs/ui-skins.md`. These are historical captures, not generated
+mockups. A future Classic Desert should mimic their appearance while retaining
+all current UI features. No separate Classic Desert rendering is implemented
+in this naming-only iteration.
+
+## 2026-10-13 — local 1.0.836: return to Lapis Enamel
+
+The user play-tested 1.0.835 and rejected its copper/dark-shadow lettering as
+muddy ("mutno"), asking to return to the original Lapis Enamel direction.
+Classic Desert now uses deep blue faces with a fine pale-gold one-pixel relief;
+pressed buttons use deeper blue. The Classic main-menu mod title uses the same
+blue (or High Contrast ink). Brass texture, desert background, Righteous font,
+font metrics/antialiasing, control geometry and small body text are unchanged.
+This restores the mockup's color direction, not an exact generated-font copy.
+
+The blue foreground exceeds 4.5:1 against nominal and minimum central brass
+colors for normal/pressed controls. High Contrast keeps dark foreground ink.
+Modern colors/fonts, world labels, gameplay, zoom, Dune2R scaling, saves and
+networking are unchanged. The official helper synchronizes all version files
+to 1.0.836. This remains on the same production 1.0.832 base, not a new upstream
+integration.
+
+The full Windows Visual Studio Release build and all 11 CTest suites pass
+(core: 1004 passed, four opt-in cases skipped, 10,238,839 assertions; Classic
+theme: seven cases, 352 assertions). The actual SDL Modern → Classic → Modern
+matrix passes at 640×480, 854×480, 1280×720 and Native 1920×1080, including
+preview/Back, Apply/reinitialization/persistence, real font/relief pixels in
+normal/pressed/focused states, and static construction-yard HUD/pause rendering.
+This is software-renderer/component evidence, not live gameplay certification.
+The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-836/captures` tree.
+
+The separate `build-windows-portable-836` install passes its desktop runtime
+check (exit 0). Its executable matches the rebuilt target: SHA256
+`D96E654F8E8414769C5A233BC235554C9EAF0C4D4A1081E9D06C25711B72043B`.
+Font, complete OFL notice and configuration template match source/development
+copies. Previous portable candidates are preserved. No push, PR, tag, device
+installation or publication has been performed for this local play-test iteration.
+
+## 2026-10-13 — local 1.0.835: copper Lapis-inspired display lettering
+
+The user selected the Lapis Enamel mockup's arched Art Deco letterforms and
+approved the final solid copper treatment with a subtle shadow, rejecting the
+earlier outlined/hollow color samples. Classic Desert now uses solid copper
+button faces with a tight one-pixel dark shadow. The approved sand/brass button
+decoration and desert background remain unchanged. High Contrast retains dark
+foreground lettering; the decorative copper face alone is not a 4.5:1 contrast
+palette.
+
+The real display face is unmodified Righteous Regular, bundled with its complete
+SIL OFL copyright/license in data. Its arched A/double-arched M approximate the
+approved mockup; it is Lapis-inspired, not an exact generated-font reproduction.
+Runtime rendering narrows it to 80% width, with matching metrics and antialiased
+edges copied through a transparent intermediate without colored fringes. Roomy Classic
+buttons use measured fitting and ASCII uppercase; large headings use the same
+face. Small body/control text and black-outlined world/Mentat labels keep
+Philosopher. Separate caches preserve Modern/default rendering. Unsupported
+glyphs fall back as a whole label; an absent/corrupt optional face warns once
+and falls back. Older accepted SDL_ttf SDKs use the BMP glyph query rather than
+requiring a newer library for this optional skin.
+
+This candidate remains on the same production 1.0.832 base. No gameplay, world
+sprites, zoom, Dune2R scale, save/protocol or network code changed. The official
+helper synchronizes all three version files to 1.0.835. The complete Windows
+Visual Studio Release build passes. All 11 CTest suites pass (core: 1004 passed,
+four opt-in cases skipped, 10,238,833 assertions; Classic theme: seven cases,
+346 assertions). The actual SDL Modern → Classic → Modern matrix passes at
+640×480, 854×480, 1280×720 and Native 1920×1080, including preview/Back,
+Apply/reinitialization/persistence and static construction-yard HUD/pause checks.
+The font checks exercise the real bundled face, accented Latin, invalid UTF-8,
+whole-label Cyrillic fallback, cache separation, measured button fitting and
+unchanged Modern/world-label pixels. Both palettes and normal/pressed/focused
+states pass at 280×34 and 70×22. The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-835/captures` tree. This remains static
+software-renderer/component evidence, not live gameplay certification.
+
+The first portable installation omitted the optional loose font because Windows
+uses an explicit data-file install list. The install rules now ship the font and
+complete OFL notice; source, development output and portable copies match.
+The separate `build-windows-portable-835` install passes its desktop runtime
+check (exit 0), and its executable matches the rebuilt target: SHA256
+`FCFE785C24E5F1ADC19198CC02397055136527E29BF28410E7A07199D3492B09`.
+Configuration templates also match. Previous portable candidates remain intact.
+The user authorized a local test build only: no push, PR, tag, device installation
+or publication has been performed.
+
+## 2026-10-12 — local 1.0.834: textured Classic Desert buttons
+
+The user approved the desert background but found the flat controls and lettering
+bland. Classic buttons now reuse the original FAME grain tinted into brass-gold
+faces, with raised/recessed carved borders and small end fittings on roomy
+controls. The grain is quieter beneath each label. Standard lettering restores
+the original dark red with a pale-gold one-pixel relief; pressed controls use
+deeper red to preserve contrast. High Contrast keeps dark ink. Small controls
+and long translated labels omit end fittings when space is insufficient.
+
+The original background, Modern rendering, fonts, button geometry/hitboxes,
+world artwork, zoom, interface resolution and Dune2R scaling remain unchanged.
+This is another local play-test candidate on the same production 1.0.832 base,
+not a published release. The official version helper sets all three version
+files to 1.0.834. The full Visual Studio Release build passes. All 11 Windows
+CTests pass (core: 1004 passed, four opt-in cases skipped, 10,238,824 assertions;
+Classic theme: seven cases and 337 assertions). Actual SDL Modern → Classic →
+Modern rendering, preview/Back, Apply/reinitialization/persistence and static
+construction-yard build sidebar/HUD/pause checks pass at 640×480, 854×480,
+1280×720 and Native 1920×1080. Both text palettes pass the normal/pressed/focused
+button checks at 280×34 and 70×22: opaque textured Classic interiors, bounded
+real ink/emboss pixels, distinct pressed/focused states and unchanged flat
+Modern interiors. The 84 PNGs are in the ignored
+`build-windows-candidate/classic-ui-probe-834/captures` tree. This is static
+software-renderer/component evidence, not a live gameplay certification.
+
+The first full-build asset-copy step met a Windows PAK sharing violation while
+the renderer probe was open. After that diagnostic exited, an incremental
+full-build retry and all CTests passed. Run the diagnostic after all asset-copy
+targets have finished, not concurrently with them. No production workaround or
+gameplay change was needed.
+
+The separate `build-windows-portable-834` install passes its desktop runtime
+check (exit 0). Its executable matches the rebuilt target: SHA256
+`1805A2A1FD6822EBE46A35F7C69780D49FF2EC95CF913A25CFBEA56885D24C66`.
+The source/build/portable configuration templates match. Previous local portable
+builds are preserved. The user requested local play-testing, so no push, PR,
+tag, device installation or publication has been performed.
+
+## 2026-10-11 — Classic Desert carried onto production 1.0.832 as local 1.0.833
+
+Fetched main at 1496ff4 after the first UI candidate was finished. The published
+release is now 1.0.832; our earlier local 1.0.830 number must not be released.
+The 1.0.830 UI branch and portable directory remain intact as local evidence.
+Only the Classic Desert feature is carried onto the newer production source;
+all upstream gameplay, protocol/save and QuantBot updates are retained.
+No upstream changes overlapped the production UI files. Shared test registrations
+were combined; history entries were retained; the official version helper sets
+all three version files to 1.0.833.
+
+Integration verification is complete: the full Visual Studio Release build
+passes, including refreshed standalone harnesses; all 11 Windows CTests pass
+(core: 1003 passed, four opt-in cases skipped; Classic theme: six cases and 245
+assertions). The actual SDL four-size Modern → Classic → Modern matrix passes
+again, including static construction-yard build sidebar/HUD and pause rendering
+at each size. This remains software-renderer/component evidence, not live
+gameplay or general building-properties-panel certification. There are 76 PNG
+captures under the ignored build tree. The separate 1.0.833 portable install
+passes its runtime check (exit 0); its executable matches the rebuilt target.
+Native 1:1, mod-specific scale and all newer upstream gameplay/protocol/save
+code remain unchanged by the UI feature. The user requested local play-testing,
+so no push, PR, tag, device install or publication has been performed.
 ## 2026-10-22 — local 1.0.850 verified and installed on the MBA
 
 1.0.849 + `fix/difficulty-separation` 31654a95 + `perf/fps-8house` ef34cf02 (HANDOVER conflict only) + version
@@ -1963,6 +2294,31 @@ the staged bundle. The game was not running and was not launched; no profile or
 save was touched. Signed 1.0.829 backup:
 /Applications/.dunecity-backup-before-830-20261011-162922/dunecity.app.
 Evidence: ../outputs/quantbot-spread-colonies-830/.
+
+## 2026-10-11 — 1.0.830 local candidate: selectable Classic Desert UI
+
+Based on current main (1.0.829), preserving its Native 1:1 and Retina resolution
+fixes. Settings → Graphics now has an independent UI Skin choice: Modern
+(unchanged default) or Classic Desert. Classic Desert uses the original desert
+texture, gold beveled controls and dark lettering. Pause/sidebar styling follows
+the selected theme; radar/portrait regions and all world artwork remain separate.
+The preview is isolated; Back discards it and Apply saves the preference and
+reinitializes graphics. No simulation, network, mod-scale or zoom code changed.
+
+Documentation: docs/ui-skins.md. The complete Visual Studio Release build and
+all 11 Windows CTests pass (core: 1001 cases passed, four opt-in cases skipped;
+Classic theme: six cases and 245 assertions). A separate local 1.0.830 Windows
+portable directory has been installed successfully; its runtime check exits 0.
+The isolated SDL menu-rendering matrix passes at 640×480, 854×480, 1280×720 and
+1920×1080 (Native 1:1), round-tripping both skins with saved selection, preview/
+Back isolation, layout bounds, unchanged display/world/mod settings and actual
+font-pixel/Mentat-artwork checks. Static selected-construction-yard build sidebar
+and pause-overlay rendering also pass in both skins at 640×480 and 1920×1080.
+The fixture uses real game components without entering the simulation loop;
+this is software-renderer evidence, not an interactive GPU/gameplay capture or
+a general building-properties-panel certification. This candidate has not been
+pushed, published or installed on a device; the older Windows candidate remains
+available unchanged.
 
 ## 2026-10-10 — 1.0.829 published and signed production installed on MBA
 

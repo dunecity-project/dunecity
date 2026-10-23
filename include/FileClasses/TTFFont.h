@@ -34,12 +34,13 @@ typedef sdl2::implementation::unique_ptr_deleter<TTF_Font, TTF_CloseFont> font_p
 class TTFFont : public Font
 {
 public:
-    TTFFont(sdl2::RWops_ptr pRWOP, int fontsize);
+    TTFFont(sdl2::RWops_ptr pRWOP, int fontsize, int widthPercentage = 100);
     virtual ~TTFFont();
 
     void drawTextOnSurface(SDL_Surface* pSurface, const std::string& text, Uint32 baseColor = 0xFFFFFFFF) override;
 
     int getTextWidth(const std::string& text) const override;
+    bool canRenderText(const std::string& text) const override;
 
     /// Returns the number of pixels this font needs in y-direction.
     /**
@@ -51,6 +52,7 @@ public:
 private:
     font_ptr pTTFFont;
     int characterHeight;
+    int widthPercentage;
 };
 
 #endif //TTFFONT_H
