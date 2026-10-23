@@ -1,3 +1,35 @@
+## 2026-10-23 — Desktop and browser 1.0.851 published
+
+Merged Classic Desert integration PR #102 at 8837540a after final candidate
+push/PR CI 39918344319 / 39918351818 passed on all platforms. Stable tag
+v1.0.851 points to that merge. Release run 39923745699 passed every build,
+Linux sanitizer, Mac UI/AI/performance, signing and publication gate. Windows,
+macOS and Linux packages are public; Mac packages are signed/notarized.
+All three Ed25519 update feeds verified against the committed public key,
+published archive byte counts/SHA-256 and the legacy VR48 latest-feed redirect.
+SourceForge mirror 39928676886 and browser publication 39928676640 succeeded.
+Live browser build.json identifies 1.0.851 / 8837540a; every listed artifact
+passed a fresh HTTPS SHA-256 check. Website release copy and browser LF policy
+were pushed separately, with deployment 39978729305 successful. Android remains
+a separate candidate below; none of this claims an on-device Android test.
+
+## 2026-10-23 — Android 0.2.30 candidate on engine 1.0.851
+
+User also authorized an Android update. Incremented the unpublished 0.2.29
+metadata to 0.2.30 / 1000550, keeping the native game source at merged 1.0.851
+(8837540a). No gameplay or desktop version changes. The previous local APK is
+preserved in the ignored verification output. ADB reported no connected device.
+Fresh ARM64 native build and Gradle assembleDebug succeeded. Ninja header-dependency
+audit passed during and after compilation. All 3,521 packaged payload files
+matched staging and current source; only .gitignore/.gitkeep housekeeping was
+excluded by Android packaging. Verified ZIP CRCs, ARM64 library hashes, Classic
+default, Lapis font/license and optional HD-unit exclusion. aapt reports the
+expected application ID/version/code, apksigner verifies v1/v2 signatures, and
+16-KiB zip alignment passes. Certificate SHA-256 matches public Android 0.2.25
+and the previous local 0.2.29 APK. APK: 65,082,224 bytes; SHA-256
+68cbb57125c1d181d8fe31e64dfd07b5968003a548cc7dfefc23809384e9fcc7.
+Publication follows these checks; no on-device test is claimed.
+
 ## 2026-10-23 — 1.0.851 integration candidate
 
 User authorized integration with latest main, Classic Desert as default,
