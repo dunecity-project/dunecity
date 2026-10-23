@@ -80,6 +80,9 @@ inline void sample(Game& game, bool final = false) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : playingHouses(game)) {
         int armyValue = 0, armyUnits = 0, harvesters = 0, structures = 0, factories = 0;
+        // Structure kinds (docs/formations.md, "Free-for-all: finishing the game"): city zones,
+        // turrets, walls, the city's civic buildings, and the base (everything else).
+        int zones = 0, turrets = 0, walls = 0, civic = 0, base = 0;
         for (const auto* unit : unitList) {
             if (unit->getOwner() != house || unit->getHealth() <= 0) continue;
             const Uint32 item = unit->getItemID();
@@ -94,12 +97,19 @@ inline void sample(Game& game, bool final = false) {
             const Uint32 item = structure->getItemID();
             if (item == Structure_HeavyFactory || item == Structure_LightFactory || item == Structure_Barracks
                 || item == Structure_WOR || item == Structure_HighTechFactory) ++factories;
+            if (isZoneStructure(item)) ++zones;
+            else if (item == Structure_GunTurret || item == Structure_RocketTurret) ++turrets;
+            else if (item == Structure_Wall) ++walls;
+            else if (item == Structure_PoliceStation || item == Structure_NuclearPlant || item == Structure_Stadium
+                     || item == Structure_Airport) ++civic;
+            else ++base;
         }
         SDL_Log("ELIMINATION_SAMPLE: minute=%d cycle=%u house=%d team=%d alive=%d credits=%d army_value=%d army_units=%d "
-                "harvesters=%d structures=%d factories=%d kill_value=%d loss_value=%d",
+                "harvesters=%d structures=%d factories=%d kill_value=%d loss_value=%d zones=%d turrets=%d walls=%d "
+                "civic=%d base=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), int(house->isAlive()),
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
-                house->getKillValue(), house->getLossValue());
+                house->getKillValue(), house->getLossValue(), zones, turrets, walls, civic, base);
         // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }

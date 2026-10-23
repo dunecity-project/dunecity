@@ -235,6 +235,8 @@ def schedule(args):
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
+        if getattr(args, 'cell_seeds', None) and args.tier == 'full':
+            count = args.cell_seeds
         if count <= 0:
             continue
         if cell['kind'] == 'campaign':
@@ -764,6 +766,8 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--cell-seeds', type=int, help='Full tier: exactly this many seeds per selected cell '
+                    '(more than the matrix plays, e.g. 24 for a draw-rate arm of one cell)')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
