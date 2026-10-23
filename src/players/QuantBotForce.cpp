@@ -550,12 +550,12 @@ bool QuantBot::sonicClearTarget(const UnitBase* unit, const std::vector<const Ob
                                 const std::vector<const UnitBase*>& friends) {
     const Coord at = unit->getLocation();
     // Our units the wave could reach at all (list order).
-    std::vector<Coord> near;
+    std::vector<Coord> nearbyFriends;
     for (const auto* other : friends)
-        if (other != unit && tiles(at, other->getLocation()) <= Force::kSonicReachTiles + 1) near.push_back(other->getLocation());
+        if (other != unit && tiles(at, other->getLocation()) <= Force::kSonicReachTiles + 1) nearbyFriends.push_back(other->getLocation());
     auto clear = [&](const ObjectBase* target) {
         const Coord aim = target->getClosestPoint(at);
-        for (const Coord& other : near)
+        for (const Coord& other : nearbyFriends)
             if (Force::inSonicPath(aim.x - at.x, aim.y - at.y, other.x - at.x, other.y - at.y)) return false;
         return true;
     };

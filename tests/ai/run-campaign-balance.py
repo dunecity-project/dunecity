@@ -589,9 +589,11 @@ env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy
 if not args.real_video:
     env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
-if WINDOWS:
+if not args.real_video:
     # The game asks for an accelerated renderer (Direct3D 11 on Windows), which the dummy video
-    # driver cannot provide in SDL2; macOS's sdl2-compat (SDL3) falls back to software by itself.
+    # driver cannot provide in SDL2. Pin it on the SDL2 Mac release runner too;
+    # SDL3 compatibility falling back implicitly is not portable. Real windows
+    # retain their native renderer for meaningful rendered performance checks.
     # The environment outranks the game's SDL_SetHint, and a hinted driver is used whatever the flags.
     env['SDL_RENDER_DRIVER'] = 'software'
 if args.rocket_turrets_need_power is not None:

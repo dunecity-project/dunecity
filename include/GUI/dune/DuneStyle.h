@@ -24,7 +24,12 @@
 class DuneStyle : public GUIStyle {
 public:
     /// default constructor
-    explicit DuneStyle(int palette = 0) : GUIStyle(), textPalette(menuPalette(palette)) {
+    explicit DuneStyle(int palette = 0, int skin = MenuTheme::uiSkin,
+                       SDL_Surface* classicTexture = nullptr)
+        : GUIStyle(), uiSkin(validatedUISkin(skin)), theme(MenuTheme::themeForUISkin(skin)),
+          textPalette(menuPalette(palette, skin)),
+          buttonTextPalette(buttonPalette(palette, skin)),
+          pressedButtonTextPalette(buttonPalette(palette, skin, true)), classicTexture(classicTexture) {
     }
 
     /// destructor
@@ -256,14 +261,28 @@ public:
     static const Uint32 defaultForegroundColor = COLOR_RGB(125,0,0);
     static const Uint32 defaultShadowColor = COLOR_LIGHTYELLOW;
 
-    static const Uint32 buttonBackgroundColor = MenuTheme::control;
-    static const Uint32 pressedButtonBackgroundColor = MenuTheme::pressed;
-    static const Uint32 buttonBorderColor = MenuTheme::border;
-    static const Uint32 buttonEdgeBottomRightColor = MenuTheme::border;
-    static const Uint32 buttonEdgeTopLeftColor = MenuTheme::border;
+    // Existing external frame/minimap callers follow the active UI appearance.
+    static inline const Uint32& buttonBackgroundColor = MenuTheme::control;
+    static inline const Uint32& pressedButtonBackgroundColor = MenuTheme::pressed;
+    static inline const Uint32& buttonBorderColor = MenuTheme::border;
+    static inline const Uint32& buttonEdgeBottomRightColor = MenuTheme::edgeDark;
+    static inline const Uint32& buttonEdgeTopLeftColor = MenuTheme::edgeLight;
 
 private:
+    const int uiSkin;
+    const MenuTheme::Theme theme;
     const MenuPalette textPalette;
+    const MenuPalette buttonTextPalette;
+    const MenuPalette pressedButtonTextPalette;
+    // Optional constructor-time artwork; the local graphics-loading style is
+    // destroyed before its PictureFactory seed. Persistent styles use GFXManager.
+    SDL_Surface* const classicTexture;
+
+    void drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
+                          const SDL_Rect& labelRect) const;
+    void fillClassicBackground(SDL_Surface* surface) const;
+    void textureRetroLettering(SDL_Surface* surface, const std::string& text,
+                               Uint32 color, unsigned int fontsize) const;
 
     /**
         Creates a surface with text on it
@@ -272,13 +291,18 @@ private:
         \param  fontsize    the size of the text
         \return the new created surface (the caller of this method is responsible of freeing it)
     */
-    sdl2::surface_ptr createSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontsize);
+    sdl2::surface_ptr createSurfaceWithText(const std::string& text, Uint32 color,
+                                           unsigned int fontsize, bool allowDisplay = true);
 
     Uint32 brightenUp(Uint32 color) {
         Uint32 r = (color & RMASK) >> RSHIFT;
         Uint32 g = (color & GMASK) >> GSHIFT;
         Uint32 b = (color & BMASK) >> BSHIFT;
         Uint32 a = (color & AMASK) >> ASHIFT;
+
+        if(MenuTheme::isDesertUISkin(uiSkin)) {
+            return COLOR_RGBA((r*3)/4, (g*3)/4, (b*3)/4, a);
+        }
 
         r = std::min(255U, (r*3)/2);
         g = std::min(255U, (g*3)/2);
