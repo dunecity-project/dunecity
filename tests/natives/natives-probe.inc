@@ -560,24 +560,27 @@ void runFollowup() {
     const Coord middle(size / 2, size / 2);
     auto* worm = dynamic_cast<Sandworm*>(placeNear(nativesHouse, Unit_Sandworm, middle));
     nRequire(worm != nullptr && worm->getOwner() == nativesHouse, "The worm is not the Natives'");
-    Coord bite = Coord::Invalid();
-    for(int ring = 1; ring < 20 && bite.isInvalid(); ++ring)
-        for(int dx = -ring; dx <= ring && bite.isInvalid(); ++dx) {
+    // Two free sand tiles beside the worm (infantry of different houses never share a tile).
+    std::vector<Coord> sand;
+    for(int ring = 1; ring < 20 && sand.size() < 2; ++ring)
+        for(int dx = -ring; dx <= ring && sand.size() < 2; ++dx) {
             const Coord c = worm->getLocation() + Coord(dx, ring);
-            if(currentGameMap->tileExists(c) && currentGameMap->getTile(c)->isSand() && !currentGameMap->getTile(c)->hasAnObject()) bite = c;
+            if(currentGameMap->tileExists(c) && currentGameMap->getTile(c)->isSand() && !currentGameMap->getTile(c)->hasAnObject()) sand.push_back(c);
         }
-    nRequire(bite.isValid(), "No free sand beside the worm");
-    UnitBase* own = ordos->placeUnit(Unit_Trooper, bite.x, bite.y, true);
-    UnitBase* foe = game->getHouse(enemy)->placeUnit(Unit_Trooper, bite.x, bite.y, true);
-    nRequire(own && foe, "Could not put both troopers on one tile");
+    nRequire(sand.size() == 2, "No free sand beside the worm");
+    UnitBase* own = ordos->placeUnit(Unit_Trooper, sand[0].x, sand[0].y, true);
+    UnitBase* foe = game->getHouse(enemy)->placeUnit(Unit_Trooper, sand[1].x, sand[1].y, true);
+    nRequire(own && foe, "Could not place the two troopers");
     own->setVisible(VIS_ALL, true); foe->setVisible(VIS_ALL, true);
 #ifdef NATIVES_TEAM
     worm->setSummoner(HOUSE_ORDOS);
 #endif
     const bool eatsOwn = worm->canAttack(own), eatsFoe = worm->canAttack(foe);
     const Uint32 ownId = own->getObjectID(), foeId = foe->getObjectID();
-    currentGameMap->damage(worm->getObjectID(), nativesHouse, Coord(bite.x * TILESIZE + TILESIZE / 2, bite.y * TILESIZE + TILESIZE / 2),
-                           Bullet_Sandworm, 5000, NONE_ID, false);
+    // The bite a worm deals with its mouth over each tile (Sandworm::update -> Map::damage).
+    for(const Coord& bite : sand)
+        currentGameMap->damage(worm->getObjectID(), nativesHouse, Coord(bite.x * TILESIZE + TILESIZE / 2, bite.y * TILESIZE + TILESIZE / 2),
+                               Bullet_Sandworm, 5000, NONE_ID, false);
     const bool ownSurvives = health(ownId) > 0, foeSurvives = health(foeId) > 0;
     SDL_Log("NATIVES_PROBE_OBS: summoned worm targets_own=%d targets_enemy=%d; bite: own_survives=%d enemy_survives=%d",
             eatsOwn, eatsFoe, ownSurvives, foeSurvives);
