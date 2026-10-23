@@ -597,23 +597,6 @@ public:
     /// implementation does nothing; GroundUnit cancels its booking.
     virtual void cancelCarryallPickup() {}
 
-    /**
-        Render only (Game::drawScreen; docs/unit-route-comparison.md, "Drawing chained steps"):
-        while it exists, every Dynasty ground unit on a step that kept a stale justStoppedMoving
-        has realX/realY set to where its step puts it; the destructor puts the simulation's values
-        back. Such a step was chained onto the previous one on the cycle that ended it, and
-        GroundUnit::checkPos holds the unit on its tile centre for the whole step, so drawn as
-        simulated it stands still for half a step and then jumps a whole tile. The simulation is
-        unchanged (protocol 88): nothing runs a cycle while the scope exists.
-    */
-    class DrawnStepScope {
-    public:
-        DrawnStepScope();
-        ~DrawnStepScope();
-        DrawnStepScope(const DrawnStepScope&) = delete;
-        DrawnStepScope& operator=(const DrawnStepScope&) = delete;
-    };
-
 protected:
     // Counts belong to the original house even while a unit is deviated.
     void registerUnit();

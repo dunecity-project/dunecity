@@ -306,7 +306,16 @@
 // 94: Release 1.0.851 combines 90 and 93 (and the render-only unit-jitter fix, which changes no
 //     simulation): a crashing plane's Death Hand also hits Natives worms and troopers, and anti-air
 //     never treats Natives as its own team. An 88, 90 or 93 peer would desync. Save 9871.
-#define NETWORK_PROTOCOL_VERSION            94
+// 95: Unit movement (fix/unit-movement): a Dynasty ground step chained onto the previous one on the
+//     cycle that ended it no longer keeps justStoppedMoving (UnitBase::moveDynastyStep clears it).
+//     The stale flag made GroundUnit::checkPos snap the unit to its tile centre on every cycle of
+//     that step (still for half a step, then a whole-tile jump), a tracked unit squash its tile
+//     every cycle and a tank's turret skip facing its route. And a unit that missed route ticks
+//     (GroundUnit::navigate skips one awaiting a carryall) resumes at its cadence's next tick
+//     instead of starting steps in the past (a tile per cycle until caught up). Positions,
+//     targeting distances, crushing and carryall-wait catch-up differ from 94: a 94 peer would
+//     desync. Replaces 94's render-only UnitBase::DrawnStepScope. No saved state change; save 9871.
+#define NETWORK_PROTOCOL_VERSION            95
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

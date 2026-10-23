@@ -137,8 +137,8 @@ struct MotionTrace {
 };
 inline MotionTrace motionTrace;
 
-/// While it exists, realX/realY are what Game::drawScreen draws: UnitBase::DrawnStepScope where the
-/// build has it, the simulated positions in older releases (which drew those).
+/// While it exists, realX/realY are what Game::drawScreen draws. 1.0.851-1.0.852 (--source) drew
+/// chained steps through UnitBase::DrawnStepScope; every other release draws the simulated positions.
 template <typename Unit, typename = void> struct DrawnPositions {};
 template <typename Unit> struct DrawnPositions<Unit, std::void_t<typename Unit::DrawnStepScope>> {
     typename Unit::DrawnStepScope scope;

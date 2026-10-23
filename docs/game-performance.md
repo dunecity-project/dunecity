@@ -33,9 +33,9 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
   cycle, cycles since the previous row, frame, id, item, house, `realX/realY` and the change,
   location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick and step start/end, carryall
   wait, active, flying. Stepped: the simulated positions, before every cycle; `--mainloop`/
-  `--rendered`: the drawn positions (inside `UnitBase::DrawnStepScope`, where the build has it)
-  before each frame's first cycle, i.e. what that frame drew. Used for Stefan's `skipping.dls`
-  (`docs/unit-route-comparison.md`, "Drawing chained steps").
+  `--rendered`: the drawn positions (1.0.851-1.0.852 through `UnitBase::DrawnStepScope`, otherwise
+  the simulated ones) before each frame's first cycle, i.e. what that frame drew. Used for Stefan's
+  `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps").
 
 ## Findings
 

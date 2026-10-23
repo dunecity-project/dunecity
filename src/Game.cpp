@@ -2453,8 +2453,6 @@ void Game::applyPendingBudgetChanges() {
 
 void Game::drawScreen()
 {
-    // Chained Dynasty steps are drawn where the step puts them, not where checkPos holds them.
-    UnitBase::DrawnStepScope drawnSteps;
     const int presentationScale = ModManager::instance().usesDune2RRemasterPresentation()
         && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
     screenborder->setPresentationScale(presentationScale);
