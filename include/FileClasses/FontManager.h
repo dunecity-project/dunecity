@@ -48,6 +48,12 @@ public:
     int getDisplayTextWidth(const std::string& text, unsigned int fontSize);
     int getDisplayTextHeight(const std::string& text, unsigned int fontSize);
     sdl2::surface_ptr createDisplaySurfaceWithText(const std::string& text, Uint32 color, unsigned int fontSize);
+
+    // Classic Desert's original bitmap lettering. All three methods choose the
+    // same whole-label fallback for localized/unsupported text.
+    int getRetroTextWidth(const std::string& text, unsigned int fontSize);
+    int getRetroTextHeight(const std::string& text, unsigned int fontSize);
+    sdl2::surface_ptr createRetroSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontSize);
 private:
     inline Font* getFont(unsigned int fontSize) {
         auto iter = fonts.find(fontSize);
@@ -61,9 +67,11 @@ private:
 
     std::unique_ptr<Font> loadFont(unsigned int fontSize);
     Font* getDisplayFont(const std::string& text, unsigned int fontSize);
+    Font* getRetroFont(const std::string& text, unsigned int fontSize);
 
     std::map<unsigned int, std::unique_ptr<Font>> fonts;
     std::map<unsigned int, std::unique_ptr<Font>> displayFonts;
+    std::map<unsigned int, std::unique_ptr<Font>> retroFonts;
     bool displayFontUnavailable = false;
 
 };

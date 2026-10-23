@@ -1,3 +1,34 @@
+## 2026-10-17 — local 1.0.839: approved 2B sandy pixel Classic Desert
+
+The user selected B's brighter sand-blasted button material, then the arched
+Deco font concept, and finally its 2B / Chunky Classic pixel interpretation
+(the top of the two generated retro previews). Classic Desert stays skin ID
+`2`; Modern `0` and Lapis Enamel `1` retain their prior rendering. This is a
+native implementation of that direction, not text baked into generated button
+images or a claim to reproduce the original Dune II bitmap font exactly.
+
+Classic controls now use brighter normal RGB(230,183,68) / pressed
+RGB(220,169,44) faces, original FAME grain and a fixed small dither pattern.
+There is no Lapis gradient, carved bands or decorative end fitting. Grain under
+labels has a contrast-safe lower bound; normal copper lettering is
+RGB(116,48,6), pressed RGB(100,37,0), with a crisp pale-gold one-pixel engraved
+highlight. Sparse darker grain touches only thick glyph interiors, preserving
+every thin stroke, edge and transparency pixel. Compact text and High Contrast
+skip glyph grain. Body text stays darker for the unchanged original backdrop.
+
+The new hand-authored bitmap font and its cache are separate from Philosopher
+and Righteous. Classic buttons uppercase ASCII and large headings use the new
+pixel face. Unsupported text falls back as a whole label with matching original
+font metrics/pixels; small body and explicitly outlined world/Mentat labels
+retain the original face. The interface itself is not downsampled: menu layout,
+Native 1:1, gameplay/world zoom, mod graphics and Dune2R scaling are unchanged.
+
+Started clean at 2cc7222 on the local production 1.0.832-based UI branch. The
+official helper sets all three version declarations to 1.0.839. This remains
+a local play-test candidate, not a current-main integration. No push, PR, tag,
+publication, Android build/device installation or real-player profile changes
+are authorized for this iteration. Verification evidence follows on completion.
+
 ## 2026-10-16 — local 1.0.838: separate original-style Classic Desert
 
 The user approved the genuine older DuneLegacy UI references and requested

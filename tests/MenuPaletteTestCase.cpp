@@ -255,22 +255,22 @@ TEST_CASE("Classic button typography pairs readable Lapis Enamel with pale-gold 
     }
 }
 
-TEST_CASE("Classic Desert restores ochre controls with readable dark-orange lettering",
+TEST_CASE("Classic Desert pairs bright textured controls with readable dark-orange lettering",
           "[menu][ui-skin][buttons][accessibility]") {
     constexpr auto classic = MenuTheme::themeForUISkin(2);
     constexpr auto standard = buttonPalette(0, 2);
     constexpr auto pressed = buttonPalette(0, 2, true);
     static_assert(classic.background == COLOR_RGB(207,157,47));
-    static_assert(classic.control == COLOR_RGB(214,161,26));
-    static_assert(classic.pressed == COLOR_RGB(210,154,24));
+    static_assert(classic.control == COLOR_RGB(230,183,68));
+    static_assert(classic.pressed == COLOR_RGB(220,169,44));
     static_assert(classic.border == COLOR_RGB(112,70,13));
     static_assert(classic.accent == COLOR_RGB(100,37,0));
     static_assert(classic.text == COLOR_RGB(100,37,0));
     static_assert(classic.muted == COLOR_RGB(105,69,21));
     static_assert(classic.edgeLight == COLOR_RGB(255,220,128));
     static_assert(classic.edgeDark == COLOR_RGB(133,85,18));
-    static_assert(standard.foreground == COLOR_RGB(100,37,0));
-    static_assert(pressed.foreground == COLOR_RGB(84,29,0));
+    static_assert(standard.foreground == COLOR_RGB(116,48,6));
+    static_assert(pressed.foreground == COLOR_RGB(100,37,0));
     static_assert(standard.shadow == COLOR_RGB(255,225,144));
     static_assert(pressed.shadow == standard.shadow);
 
@@ -284,10 +284,12 @@ TEST_CASE("Classic Desert restores ochre controls with readable dark-orange lett
         CHECK(c.r > c.g);
         CHECK(c.g > c.b);
         CHECK(c.a == 255);
-        for(const Uint32 background : {classic.background, classic.control, classic.pressed})
-            CHECK(contrastRatio(ink, background) >= 4.5);
         CHECK(contrastRatio(ink, standard.shadow) >= 4.5);
     }
+    // Button ink sits on its corresponding brighter text-safe control face,
+    // not on the busier FAME backdrop. Body labels keep their darker ink.
+    for(const Uint32 background : {classic.background, classic.control, classic.pressed})
+        CHECK(contrastRatio(classic.text, background) >= 4.5);
     for(int palette : {0, 1}) {
         CHECK(menuPalette(palette, 2).foreground
               == (palette == 1 ? COLOR_RGB(20,12,0) : classic.text));
@@ -298,6 +300,8 @@ TEST_CASE("Classic Desert restores ochre controls with readable dark-orange lett
                                        : down ? pressed.foreground : standard.foreground));
             CHECK(colors.shadow == standard.shadow);
             CHECK(contrastRatio(colors.foreground, down ? classic.pressed : classic.control) >= 4.5);
+            CHECK(contrastRatio(colors.foreground,
+                  down ? COLOR_RGB(216,165,40) : COLOR_RGB(225,178,63)) >= 4.5);
         }
     }
     for(int invalidPalette : {-1, 2, 100}) {

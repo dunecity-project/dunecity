@@ -24,10 +24,12 @@
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/TTFFont.h>
+#include <FileClasses/RetroPixelFont.h>
 #include <FileClasses/LoadSavePNG.h>
 
 #include <list>
 #include <exception>
+#include <algorithm>
 
 FontManager::FontManager() = default;
 
@@ -168,4 +170,38 @@ sdl2::surface_ptr FontManager::createDisplaySurfaceWithText(const std::string& t
     SDL_SetSurfaceBlendMode(pic.get(), SDL_BLENDMODE_BLEND);
     pFont->drawTextOnSurface(pic.get(), text, color);
     return pic;
+}
+
+Font* FontManager::getRetroFont(const std::string& text, unsigned int fontSize) {
+    auto iter = retroFonts.find(fontSize);
+    if(iter == retroFonts.end()) {
+        iter = retroFonts.emplace(fontSize, std::make_unique<RetroPixelFont>(fontSize)).first;
+    }
+    return iter->second->canRenderText(text) ? iter->second.get() : getFont(fontSize);
+}
+
+int FontManager::getRetroTextWidth(const std::string& text, unsigned int fontSize) {
+    return getRetroFont(text, fontSize)->getTextWidth(text);
+}
+
+int FontManager::getRetroTextHeight(const std::string& text, unsigned int fontSize) {
+    return getRetroFont(text, fontSize)->getTextHeight();
+}
+
+sdl2::surface_ptr FontManager::createRetroSurfaceWithText(const std::string& text, Uint32 color, unsigned int fontSize) {
+    Font* font = getRetroFont(text, fontSize);
+    const auto regularFont = fonts.find(fontSize);
+    if(regularFont != fonts.end() && font == regularFont->second.get()) {
+        // Preserve the existing font's pixels, metrics and key/blend behavior,
+        // including its handling of invalid UTF-8. Never substitute '?' masks.
+        return createSurfaceWithText(text, color, fontSize);
+    }
+    const int width = std::max(1, font->getTextWidth(text));
+    const int height = font->getTextHeight();
+    sdl2::surface_ptr surface { SDL_CreateRGBSurface(0, width, height, SCREEN_BPP, RMASK, GMASK, BMASK, AMASK) };
+    if(!surface) return nullptr;
+    SDL_FillRect(surface.get(), nullptr, 0);
+    SDL_SetSurfaceBlendMode(surface.get(), SDL_BLENDMODE_BLEND);
+    font->drawTextOnSurface(surface.get(), text, color);
+    return surface;
 }

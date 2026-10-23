@@ -340,6 +340,11 @@ def main():
             results = [line for line in text.splitlines() if "CLASSIC_UI_SKIN_PROBE_PASS:" in line]
             if len(results) != 1:
                 raise RuntimeError("Missing unique renderer fixture pass marker; see " + str(logpath))
+            # Every stage must actually exercise the shipping bitmap font and
+            # nearest evidence, not just reach the existing settings round trip.
+            for marker_name in ("CLASSIC_UI_RETRO_FONT_PASS:", "CLASSIC_UI_RETRO_EVIDENCE_PASS:"):
+                if sum(marker_name in line for line in text.splitlines()) != 3:
+                    raise RuntimeError("Missing complete three-stage bitmap checks; see " + str(logpath))
             print(f"skin={skin} {size}: " + results[0])
 
 

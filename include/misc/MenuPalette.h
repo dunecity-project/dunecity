@@ -28,7 +28,7 @@ struct Theme {
 
 inline constexpr Theme themeForUISkin(int value) {
     if(validatedUISkin(value) == 2)
-        return Theme{COLOR_RGB(207,157,47), COLOR_RGB(214,161,26), COLOR_RGB(210,154,24),
+        return Theme{COLOR_RGB(207,157,47), COLOR_RGB(230,183,68), COLOR_RGB(220,169,44),
                      COLOR_RGB(112,70,13), COLOR_RGB(100,37,0), COLOR_RGB(100,37,0),
                      COLOR_RGB(105,69,21), COLOR_RGB(255,220,128), COLOR_RGB(133,85,18)};
     return validatedUISkin(value) == 1
@@ -138,11 +138,12 @@ inline constexpr MenuPalette menuPalette(int value, int skin = MenuTheme::uiSkin
 // against both normal and recessed central brass surfaces.
 inline constexpr MenuPalette buttonPalette(int value, int skin = MenuTheme::uiSkin,
                                            bool pressed = false) {
-    // Classic Desert keeps the original serif face and flat ochre controls.
-    // Burnt-orange ink is dark enough to stand on its own against the gold.
+    // Classic Desert's brighter sandy alloy supports lighter copper lettering.
+    // Body text stays darker for the original FAME backdrop; this palette is
+    // only used on textured controls, whose grain has a contrast-safe floor.
     if(MenuTheme::isClassicDesert(skin))
         return MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)
-                           : pressed ? COLOR_RGB(84,29,0) : COLOR_RGB(100,37,0),
+                           : pressed ? COLOR_RGB(100,37,0) : COLOR_RGB(116,48,6),
                            COLOR_RGB(255,225,144)};
     return validatedUISkin(skin) == 1
         ? MenuPalette{validatedMenuPalette(value) == 1 ? COLOR_RGB(20,12,0)

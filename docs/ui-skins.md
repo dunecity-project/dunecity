@@ -30,14 +30,23 @@ the choice. Black radar and portrait regions remain intentional;
 building images and world sprites are not recolored. This is an interface style,
 not a flattened mockup or a replacement pack of generated world assets.
 
-Classic Desert shares the authentic desert backdrop but uses plain ochre
-control faces, small raised/recessed bevels and the original Philosopher font.
-Labels retain their existing case rather than Lapis's uppercase display style.
-Standard lettering is dark burnt orange instead of the historical red, with a
-fine pale-gold one-pixel relief. The normal and pressed ink exceeds 4.5:1 against
-the nominal control/background colors; this does not describe every textured
-background or antialiased edge pixel. High Contrast uses dark ink instead.
-Classic has no Lapis brass grain, carved bands or decorative end fittings.
+Classic Desert shares the authentic desert backdrop. Since local 1.0.839,
+its selected **2B / Chunky Classic** treatment has brighter sand-blasted ochre
+button faces, fine limited-color sandy grain and small raised/recessed bevels.
+Buttons use an original hand-authored bitmap interpretation of the approved
+arched Deco lettering, not a downsampled TTF or text baked into button images.
+Button labels uppercase ASCII; large menu headings also use the pixel face.
+Small body labels and explicitly outlined world/Mentat text keep Philosopher.
+
+Standard button ink is a slightly lighter copper-orange, with a crisp pale-gold
+one-pixel engraving highlight. Sparse darker grain is confined to thick glyph
+interiors; edges and thin strokes remain intact. Compact labels and High Contrast
+skip glyph grain. The lighter ink is used only on the brighter control face;
+body text stays dark for the original gold backdrop. Button face colors and the
+minimum grain values under lettering exceed 4.5:1 against the corresponding
+ink. This does not describe every decorative border or background pixel.
+Classic has no Lapis carved bands or decorative end fittings. Modern and Lapis
+are unchanged; there is no whole-window downscaling or gameplay zoom change.
 
 ## Independent settings
 
@@ -69,8 +78,8 @@ the default font's existing rendering path stays unchanged. Lapis buttons
 uppercase ASCII while leaving UTF-8 byte sequences intact. Buttons at least
 28 pixels high use the display face with measured fitting; labels at least 22 pixels use it for large
 headings. Small body text and black-outlined labels over world/Mentat artwork
-keep Philosopher. Classic Desert and Modern keep their existing/default font
-rendering and metrics; Modern's colors are unchanged.
+keep Philosopher. Modern keeps its existing/default font rendering, metrics
+and colors. Classic Desert uses its separate bitmap font path as described below.
 
 Display/default faces have separate caches. If Righteous lacks any character,
 the entire label uses Philosopher, with matching fallback metrics. Missing or
@@ -89,11 +98,26 @@ The complete copyright and SIL Open Font License 1.1 accompany it in
 `data/Righteous-OFL.txt`; the font binary/name are unchanged. Windows install
 rules explicitly include both loose files, since neither is a LEGACY.PAK entry.
 
+## Classic pixel lettering
+
+The new bitmap face has its own character masks and font cache. It provides
+printable ASCII, with lowercase mapped to the corresponding capital forms.
+Measured advances and rendering use the same nearest-neighbor glyph sizing;
+there is no filtering or subpixel antialiasing. Unsupported text uses the
+complete original Philosopher label, including matching fallback metrics and
+pixels. The default and Lapis font paths are not changed.
+
+This is an original interpretation of the chosen concept, not a claim to ship
+the image generator's exact letterforms or the original Dune II typeface.
+The original Dune II bitmap font resources are present in the legacy PAKs as
+historical references, but they are not replaced or repackaged by this change.
+
 ## Original DuneLegacy references for Classic Desert
 
 Lapis Enamel is the approved new blue/gold treatment, not a reproduction of
-the historical interface. Classic Desert follows those original controls,
-using dark-orange rather than red lettering at the user's request. A genuine
+the historical interface. Classic Desert started from those original controls,
+using dark-orange rather than red lettering at the user's request, and now adds
+the approved sandy 2B pixel-font interpretation. A genuine
 main-menu/options pair appears in this
 [2019 hands-on review of the DuneLegacy 0.96.3 AmigaOS port](https://oldschoolgameblog.com/2019/12/02/gaming-on-amigaos-4-1-dune-legacy-dune-legacy-team-zettmaster-and-big-h/).
 The archived official 0.98.6.3 release also includes `extra-menu-option.png`,
@@ -117,9 +141,9 @@ The historically named `classic_desert_ui_tests` CTest covers theme defaults,
 invalid values, Modern/Lapis palette preservation, Classic contrast, preview isolation,
 preference storage and independence from interface/world scaling. Button palette checks
 also cover lapis-blue/pale-gold colors, the deeper pressed-state ink, High Contrast and
-unchanged Modern colors and the Classic dark-orange palette. The renderer fixture checks opaque textured Lapis
+unchanged Modern colors and the Classic copper palette. The renderer fixture checks opaque textured Lapis/Classic
 button faces, real glyph/shadow bounds and normal/pressed/focused states at
-280×34 and 70×22 in both text palettes; Modern and Classic interiors remain flat. Font checks
+280×34 and 70×22 in both text palettes; Modern interiors remain flat. Font checks
 verify the bundled typeface actually loads, display/default measurement and
 rendering agree, their caches stay separate, and Cyrillic uses a whole-label
 fallback with the original pixels.

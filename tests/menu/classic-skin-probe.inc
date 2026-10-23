@@ -7,6 +7,7 @@
 #include <FileClasses/FileManager.h>
 #include <FileClasses/FontManager.h>
 #include <FileClasses/TTFFont.h>
+#include <FileClasses/RetroPixelFont.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/dune/DuneStyle.h>
 #include <GUI/dune/InGameMenu.h>
@@ -201,6 +202,125 @@ struct ClassicUISkinProbe {
                 " independent default/display caches; complete Cyrillic fallback; unchanged Modern");
     }
 
+    static void checkBinaryGlyphSurface(SDL_Surface* surface, Uint32 foreground) {
+        require(surface != nullptr, "The real bitmap face did not render a surface");
+        sdl2::surface_lock lock{surface};
+        int visible = 0;
+        for(int y = 0; y < surface->h; ++y) {
+            for(int x = 0; x < surface->w; ++x) {
+                const auto color = rgbaPixel(surface, x, y);
+                const auto alpha = RGBA2SDL(color).a;
+                require(alpha == 0 || alpha == 255,
+                        "Classic bitmap lettering acquired antialiased alpha edges");
+                if(alpha) {
+                    require(color == foreground, "The raw bitmap font changed its requested ink color");
+                    ++visible;
+                }
+            }
+        }
+        require(visible > 0, "The bitmap glyph contains no visible foreground pixels");
+    }
+
+    static void checkClosedCounter(SDL_Surface* glyph) {
+        require(glyph && glyph->w > 2 && glyph->h > 2, "The counter glyph has no useful area");
+        sdl2::surface_lock lock{glyph};
+        const int width = glyph->w;
+        const int height = glyph->h;
+        std::vector<bool> reached(static_cast<size_t>(width) * height, false);
+        std::vector<Point> queue;
+        const auto append = [&](int x, int y) {
+            if(x < 0 || y < 0 || x >= width || y >= height) return;
+            const auto index = static_cast<size_t>(y) * width + x;
+            if(reached[index] || RGBA2SDL(rgbaPixel(glyph, x, y)).a != 0) return;
+            reached[index] = true;
+            queue.emplace_back(x, y);
+        };
+        for(int x = 0; x < width; ++x) { append(x, 0); append(x, height - 1); }
+        for(int y = 0; y < height; ++y) { append(0, y); append(width - 1, y); }
+        for(size_t index = 0; index < queue.size(); ++index) {
+            const auto pixel = queue[index];
+            append(pixel.x - 1, pixel.y); append(pixel.x + 1, pixel.y);
+            append(pixel.x, pixel.y - 1); append(pixel.x, pixel.y + 1);
+        }
+        bool counter = false;
+        for(int y = 1; y < height - 1; ++y)
+            for(int x = 1; x < width - 1; ++x)
+                if(!reached[static_cast<size_t>(y) * width + x]
+                   && RGBA2SDL(rgbaPixel(glyph, x, y)).a == 0) counter = true;
+        require(counter, "The bitmap O counter filled in or opened at this scale");
+    }
+
+    static void checkRetroTypography() {
+        require(pFontManager != nullptr, "Classic bitmap checks require the actual runtime FontManager");
+        const int activeSkin = MenuTheme::uiSkin;
+        const auto activeBackground = MenuTheme::background;
+        std::string allASCII;
+        for(int value = 32; value <= 126; ++value) allASCII += static_cast<char>(value);
+        RetroPixelFont coverage(18);
+        require(coverage.canRenderText(allASCII) && coverage.canRenderText(""),
+                "Classic bitmap coverage lost printable ASCII or the empty label");
+        for(const auto& unsupported : std::vector<std::string>{
+            u8"ÉDITEURS", u8"\u041a\u0410\u041c\u041f\u0410\u041d\u0418\u042f",
+            "\n", "\xC0\xAF", "\xED\xA0\x80", "\xF4\x90\x80\x80", "\x80", "\xC2", std::string("A\0B", 3)})
+            require(!coverage.canRenderText(unsupported),
+                    "Classic bitmap coverage accepted unsupported/control/malformed text");
+
+        const std::string sample = "CAMPAIGN WWW";
+        for(unsigned int size : {14u, 18u, 24u, 32u}) {
+            auto originalBefore = pFontManager->createSurfaceWithText(sample, COLOR_WHITE, size);
+            auto displayBefore = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
+            auto retroBefore = pFontManager->createRetroSurfaceWithText(sample, COLOR_WHITE, size);
+            require(retroBefore && originalBefore && displayBefore,
+                    "Rendering the three independent runtime faces failed");
+            require(retroBefore->w == pFontManager->getRetroTextWidth(sample, size)
+                    && retroBefore->h == pFontManager->getRetroTextHeight(sample, size),
+                    "Classic bitmap measurement and rendering disagree");
+            checkBinaryGlyphSurface(retroBefore.get(), COLOR_WHITE);
+            require(!sameSurfacePixels(retroBefore.get(), originalBefore.get())
+                    && !sameSurfacePixels(retroBefore.get(), displayBefore.get()),
+                    "Classic bitmap glyphs silently use Philosopher or Righteous");
+            auto lower = pFontManager->createRetroSurfaceWithText("campaign www", COLOR_WHITE, size);
+            require(sameSurfacePixels(retroBefore.get(), lower.get()),
+                    "Lowercase Classic bitmap glyphs no longer map to their uppercase forms");
+            auto counter = pFontManager->createRetroSurfaceWithText("O", COLOR_WHITE, size);
+            checkClosedCounter(counter.get());
+
+            // Unsupported translations preserve the exact whole original label,
+            // not a mix of bitmap characters and fallback Unicode glyphs.
+            for(const std::string unsupported : {std::string(u8"ÉDITEURS"),
+                    std::string(u8"\u041a\u0410\u041c\u041f\u0410\u041d\u0418\u042f")}) {
+                auto fallback = pFontManager->createRetroSurfaceWithText(unsupported, COLOR_WHITE, size);
+                auto original = pFontManager->createSurfaceWithText(unsupported, COLOR_WHITE, size);
+                require(pFontManager->getRetroTextWidth(unsupported, size)
+                            == pFontManager->getTextWidth(unsupported, size)
+                        && pFontManager->getRetroTextHeight(unsupported, size)
+                            == pFontManager->getTextHeight(size)
+                        && sameSurfacePixels(fallback.get(), original.get()),
+                        "Classic unsupported-script fallback changed original metrics or pixels");
+            }
+            auto originalAfter = pFontManager->createSurfaceWithText(sample, COLOR_WHITE, size);
+            auto displayAfter = pFontManager->createDisplaySurfaceWithText(sample, COLOR_WHITE, size);
+            auto retroAfter = pFontManager->createRetroSurfaceWithText(sample, COLOR_WHITE, size);
+            require(sameSurfacePixels(originalBefore.get(), originalAfter.get())
+                    && sameSurfacePixels(displayBefore.get(), displayAfter.get())
+                    && sameSurfacePixels(retroBefore.get(), retroAfter.get()),
+                    "Classic, Modern or Lapis font caches contaminated one another");
+        }
+        for(int value = 33; value <= 126; ++value) {
+            auto glyph = pFontManager->createRetroSurfaceWithText(std::string(1, static_cast<char>(value)), COLOR_WHITE, 18);
+            checkBinaryGlyphSurface(glyph.get(), COLOR_WHITE);
+        }
+        auto empty = pFontManager->createRetroSurfaceWithText("", COLOR_WHITE, 18);
+        require(empty && pFontManager->getRetroTextWidth("", 18) == 0
+                && empty->w == 1 && solidTextPixels(empty.get(), COLOR_WHITE) == 0,
+                "The Classic empty-label surface lost its safe transparent one-pixel allocation");
+        require(MenuTheme::uiSkin == activeSkin && MenuTheme::background == activeBackground,
+                "Resolving Classic bitmap fonts mutated the selected theme");
+        SDL_Log("CLASSIC_UI_RETRO_FONT_PASS: original bitmap Deco face; all printable ASCII; binary alpha,"
+                " open O counters and uppercase equivalence; exact whole-label Unicode fallback;"
+                " independent Modern/Lapis/Classic caches and aligned real metrics");
+    }
+
     static void checkButtonInterior(SDL_Surface* surface, int skin, bool pressed) {
         require(surface != nullptr, "A diagnostic button surface is missing");
         sdl2::surface_lock lock{surface};
@@ -212,14 +332,14 @@ struct ClassicUISkinProbe {
                 require(RGBA2SDL(color).a == 255, "Button decoration leaves a transparent pixel");
                 if(x >= 6 && y >= 6 && x < surface->w - 6 && y < surface->h - 6) {
                     interior.insert(color);
-                    if(skin != 1)
+                    if(skin == 0)
                         require(color == (pressed ? theme.pressed : theme.control),
-                                "Modern or Classic Desert lost its exact flat button interior");
+                                "Modern lost its exact flat button interior");
                 }
             }
         }
-        require(skin == 1 ? interior.size() >= 8 : interior.size() == 1,
-                "Lapis button texture is missing, or Modern/Classic Desert acquired grain");
+        require(skin != 0 ? interior.size() >= 8 : interior.size() == 1,
+                "A desert button texture is missing, or Modern acquired grain");
     }
 
     static void checkButtonLabel(SDL_Surface* blank, SDL_Surface* labeled,
@@ -253,32 +373,39 @@ struct ClassicUISkinProbe {
             require(shadowPixels > 0, "Desert typography lost its pale-gold offset relief");
     }
 
-    static void checkButtonTypeface(SDL_Surface* button, const std::string& text,
-                                    bool lapis, bool pressed, Uint32 foreground) {
+    static int checkButtonTypeface(SDL_Surface* button, const std::string& text,
+                                    int skin, bool pressed, Uint32 foreground) {
         std::string label = text;
-        if(lapis)
+        if(skin != 0)
             for(char& character : label)
                 if(character >= 'a' && character <= 'z') character -= 'a' - 'A';
-        const bool display = lapis && button->h >= 28;
+        const bool display = skin == 1 && button->h >= 28;
+        const bool retro = skin == 2;
         int size = button->h >= 48 ? 22 : button->h >= 38 ? 20
             : button->h >= 30 ? 18 : button->h >= 24 ? 16 : 14;
         if(display) size += 4;
         const auto width = [&](int value) {
             return display ? pFontManager->getDisplayTextWidth(label, value)
+                           : retro ? pFontManager->getRetroTextWidth(label, value)
                            : pFontManager->getTextWidth(label, value);
         };
         const auto height = [&](int value) {
             return display ? pFontManager->getDisplayTextHeight(label, value)
+                           : retro ? pFontManager->getRetroTextHeight(label, value)
                            : pFontManager->getTextHeight(value);
         };
         while(size > 8 && (button->w < width(size) + 12 || button->h < height(size) + 4)) --size;
         auto expected = display
             ? pFontManager->createDisplaySurfaceWithText(label, foreground, size)
+            : retro ? pFontManager->createRetroSurfaceWithText(label, foreground, size)
             : pFontManager->createSurfaceWithText(label, foreground, size);
         require(expected != nullptr, "Rendering the independently measured button glyphs failed");
         const auto position = calcDrawingRect(expected.get(), button->w / 2 + (pressed ? 1 : 0),
             button->h / 2 + (pressed ? 1 : 0), HAlign::Center, VAlign::Center);
         int matchingPixels = 0;
+        int grainPixels = 0;
+        const auto ink = RGBA2SDL(foreground);
+        const bool allowGrain = retro && size >= 16 && foreground != COLOR_RGB(20,12,0);
         sdl2::surface_lock expectedLock{expected.get()};
         sdl2::surface_lock buttonLock{button};
         for(int y = 0; y < expected->h; ++y) {
@@ -287,12 +414,148 @@ struct ClassicUISkinProbe {
                 require(position.x + x >= 0 && position.y + y >= 0
                         && position.x + x < button->w && position.y + y < button->h,
                         "Measured button glyphs extend outside the actual control");
-                require(rgbaPixel(button, position.x + x, position.y + y) == foreground,
-                        "Actual button uses the wrong typeface, casing, metrics or foreground");
+                const auto actual = rgbaPixel(button, position.x + x, position.y + y);
+                if(actual != foreground) {
+                    const auto changed = RGBA2SDL(actual);
+                    require(allowGrain && changed.a == 255
+                            && changed.r <= ink.r && changed.g <= ink.g && changed.b <= ink.b
+                            && ink.r - changed.r <= 6 && ink.g - changed.g <= 6 && ink.b - changed.b <= 6,
+                            "Actual glyph has wrong ink/typeface or non-bounded dark interior grain");
+                    // Fully enclosed pixels only. Every contour and narrow stem
+                    // stays exact ink, with no antialias or grain outside a glyph.
+                    for(int dy = -1; dy <= 1; ++dy)
+                        for(int dx = -1; dx <= 1; ++dx)
+                            require(x + dx >= 0 && y + dy >= 0 && x + dx < expected->w && y + dy < expected->h
+                                    && rgbaPixel(expected.get(), x + dx, y + dy) == foreground,
+                                    "Classic glyph grain damaged an edge, counter or narrow stem");
+                    ++grainPixels;
+                }
                 ++matchingPixels;
             }
         }
         require(matchingPixels > 0, "The measured button typeface contains no solid foreground pixels");
+        if(retro) {
+            for(int y = 3; y < button->h - 3; ++y) {
+                for(int x = 3; x < button->w - 3; ++x) {
+                    const auto actual = RGBA2SDL(rgbaPixel(button, x, y));
+                    if(actual.r > ink.r || actual.g > ink.g || actual.b > ink.b) continue;
+                    const int glyphX = x - position.x;
+                    const int glyphY = y - position.y;
+                    require(glyphX >= 0 && glyphY >= 0 && glyphX < expected->w && glyphY < expected->h
+                            && rgbaPixel(expected.get(), glyphX, glyphY) == foreground,
+                            "A Classic button contains dark glyph pixels outside its original bitmap mask");
+                }
+            }
+            if(!allowGrain)
+                require(grainPixels == 0, "Compact or High Contrast Classic glyphs acquired grain");
+        }
+        return grainPixels;
+    }
+
+    static sdl2::surface_ptr nearestEvidence(SDL_Surface* source, int factor) {
+        require(source && factor >= 1 && factor <= 4, "Nearest evidence requires a bounded source and scale");
+        auto result = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0,
+            source->w * factor, source->h * factor, 32, SCREEN_FORMAT)};
+        require(result != nullptr, "Allocating nearest-neighbor evidence failed");
+        sdl2::surface_lock sourceLock{source};
+        sdl2::surface_lock resultLock{result.get()};
+        // Exact pixel replication is deliberate: this evidence must expose
+        // the real bitmap steps and texture, never introduce scaled smoothing.
+        for(int y = 0; y < source->h; ++y)
+            for(int x = 0; x < source->w; ++x)
+                for(int dy = 0; dy < factor; ++dy)
+                    for(int dx = 0; dx < factor; ++dx)
+                        putPixel(result.get(), x * factor + dx, y * factor + dy,
+                                 rgbaPixel(source, x, y));
+        for(int y = 0; y < result->h; ++y)
+            for(int x = 0; x < result->w; ++x)
+                require(rgbaPixel(result.get(), x, y) == rgbaPixel(source, x / factor, y / factor),
+                        "Nearest-neighbor evidence contains an interpolated pixel");
+        return result;
+    }
+
+    static void checkRetroEvidence() {
+        require(pFontManager && pGFXManager, "Retro evidence requires real fonts and original artwork");
+        DuneStyle classic(0, 2);
+        DuneStyle modern(0, 0);
+        const auto alignment = static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter);
+        const auto theme = MenuTheme::themeForUISkin(2);
+        const auto heading = classic.createLabelSurface(420, 48, {"CAMPAIGN WWW"}, 24,
+            alignment, COLOR_WHITE, COLOR_TRANSPARENT, theme.control);
+        auto expectedHeading = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0, 420, 48, 32, SCREEN_FORMAT)};
+        auto retroText = pFontManager->createRetroSurfaceWithText("CAMPAIGN WWW", COLOR_WHITE, 24);
+        require(heading && expectedHeading && retroText, "Rendering the actual Classic heading failed");
+        SDL_FillRect(expectedHeading.get(), nullptr, theme.control);
+        const int headingHeight = std::max(pFontManager->getTextHeight(24),
+                                           pFontManager->getRetroTextHeight("", 24));
+        SDL_Rect headingPosition{3, (48 - headingHeight) / 2 + 3, retroText->w, retroText->h};
+        require(SDL_BlitSurface(retroText.get(), nullptr, expectedHeading.get(), &headingPosition) == 0
+                && sameSurfacePixels(heading.get(), expectedHeading.get()),
+                "Classic headings do not use measured retro glyphs with the original label positioning");
+        auto smallClassic = classic.createLabelSurface(340, 32, {"Small body text remains original"}, 14,
+            alignment, theme.text, COLOR_TRANSPARENT, theme.control);
+        auto smallModern = modern.createLabelSurface(340, 32, {"Small body text remains original"}, 14,
+            alignment, theme.text, COLOR_TRANSPARENT, theme.control);
+        require(sameSurfacePixels(smallClassic.get(), smallModern.get()),
+                "Classic small body text no longer preserves the original Philosopher pixels");
+
+        auto characters = classic.createBackground(1000, 250);
+        require(characters != nullptr, "Allocating the Classic character-sheet background failed");
+        const std::array<const char*, 5> rows{{"ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz",
+            "0123456789", "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", "MW WIDE / ILL NARROW / 0O8B / CAMPAIGN"}};
+        for(size_t index = 0; index < rows.size(); ++index) {
+            const unsigned int size = index == 4 ? 18 : 24;
+            auto glyphs = pFontManager->createRetroSurfaceWithText(rows[index], theme.text, size);
+            require(glyphs && glyphs->w + 24 < characters->w && glyphs->h < 42,
+                    "The real bitmap character-sheet label is clipped");
+            checkBinaryGlyphSurface(glyphs.get(), theme.text);
+            SDL_Rect destination{12, 8 + static_cast<int>(index) * 48, glyphs->w, glyphs->h};
+            require(SDL_BlitSurface(glyphs.get(), nullptr, characters.get(), &destination) == 0,
+                    "Placing a real bitmap character sample failed");
+        }
+        const auto characterPath = capturePath("classic-retro-character-sheet").string();
+        require(SavePNG(characters.get(), characterPath.c_str()) == 0,
+                "Saving the real bitmap character-sheet evidence failed");
+
+        // Long, narrow, compact and punctuation-rich labels use the same
+        // independently measured clipping/mask checks as actual menu controls.
+        for(const auto& label : std::array<std::string, 5>{{"Rocket-Turrets Need Power",
+                "Harkonnen Devastator", "Campaign (Co-op)", "WWW / ILL", "0123456789"}}) {
+            auto button = classic.createButtonSurface(280, 34, label, false, false);
+            require(button != nullptr, "Rendering a difficult Classic menu label failed");
+            checkButtonTypeface(button.get(), label, 2, false, buttonPalette(0, 2).foreground);
+        }
+        auto large = classic.createButtonSurface(280, 48, "MMMM WWW", false, false);
+        require(large && checkButtonTypeface(large.get(), "MMMM WWW", 2, false,
+                    buttonPalette(0, 2).foreground) > 0,
+                "Large Standard Classic glyph interiors have no subtle texture");
+
+        auto zoomSheet = classic.createBackground(1144, 444);
+        require(zoomSheet != nullptr, "Allocating the Classic nearest evidence sheet failed");
+        auto native = classic.createButtonSurface(280, 34, "Play Online", false, false);
+        require(native != nullptr, "Rendering the native Classic zoom sample failed");
+        int row = 8;
+        for(int factor : {1, 2, 4}) {
+            auto legend = modern.createLabelSurface(400, 24,
+                {factor == 1 ? "Native 1x pixels" : factor == 2 ? "Nearest 2x pixels" : "Nearest 4x pixels"},
+                14, alignment, theme.text, COLOR_TRANSPARENT, theme.background);
+            SDL_Rect legendPosition{8, row, 400, 24};
+            require(legend && SDL_BlitSurface(legend.get(), nullptr, zoomSheet.get(), &legendPosition) == 0,
+                    "Placing a nearest evidence legend failed");
+            row += 26;
+            auto enlarged = nearestEvidence(native.get(), factor);
+            SDL_Rect destination{8, row, enlarged->w, enlarged->h};
+            require(row + enlarged->h < zoomSheet->h
+                    && SDL_BlitSurface(enlarged.get(), nullptr, zoomSheet.get(), &destination) == 0,
+                    "Placing a nearest evidence control failed or clipped");
+            row += enlarged->h + 12;
+        }
+        const auto zoomPath = capturePath("classic-retro-native-nearest-2x-4x").string();
+        require(SavePNG(zoomSheet.get(), zoomPath.c_str()) == 0,
+                "Saving native/nearest Classic pixel evidence failed");
+        SDL_Log("CLASSIC_UI_RETRO_EVIDENCE_PASS: actual retro headings and original small body labels;"
+                " complete character sheet, difficult-label bounds, large-only glyph texture;"
+                " native/2x/4x exact nearest pixel replication (no runtime zoom changes)");
     }
 
     static void checkButtonDecoration() {
@@ -346,7 +609,7 @@ struct ClassicUISkinProbe {
                         checkButtonInterior(blank.get(), skin, pressed);
                         checkButtonLabel(blank.get(), labeled.get(), typography.foreground,
                                          typography.shadow, skin != 0);
-                        checkButtonTypeface(labeled.get(), text, skin == 1, pressed,
+                        checkButtonTypeface(labeled.get(), text, skin, pressed,
                                             typography.foreground);
                         if(palette == 0) {
                             destination = {skin * 320 + (compact ? 125 : 20),
@@ -370,8 +633,8 @@ struct ClassicUISkinProbe {
                 "Button previews mutated the active menu/HUD theme");
         const auto path = capturePath("buttons-modern-classic-states").string();
         require(SavePNG(sheet.get(), path.c_str()) == 0, "Saving button-state pixel evidence failed");
-        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Lapis, flat ochre Classic Desert and flat Modern interiors;"
-                " Lapis uppercase/display face, original Classic/Modern casing/font, desert pale-gold relief;"
+        SDL_Log("CLASSIC_UI_BUTTON_PIXELS_PASS: opaque textured Lapis/bright Classic Desert and flat Modern interiors;"
+                " uppercase Lapis display/Classic bitmap faces, unchanged Modern font; bounded glyph-interior grain; desert pale-gold relief;"
                 " normal/pressed/focused at 280x34 and 70x22; original shared FAME backdrop;"
                 " bounds, both text palettes and preview isolation");
     }
@@ -647,8 +910,10 @@ struct ClassicUISkinProbe {
         checkThemeIsolation();
         if(stage < 3) {
             checkDisplayTypography();
+            checkRetroTypography();
             checkArtworkLabelContrast();
             checkButtonDecoration();
+            checkRetroEvidence();
             MainMenu mainMenu;
             capture(mainMenu, "main");
             OptionsMenu options;

@@ -145,6 +145,7 @@ target_sources(dunecity
         FileClasses/Decode.cpp
         FileClasses/FileManager.cpp
         FileClasses/FontManager.cpp
+        FileClasses/RetroPixelFont.cpp
         FileClasses/GFXManager.cpp
         FileClasses/EnhancedAtlasCache.cpp
         FileClasses/Icnfile.cpp

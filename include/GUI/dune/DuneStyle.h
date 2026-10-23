@@ -281,6 +281,8 @@ private:
     void drawControlFrame(SDL_Surface* surface, bool pressed, bool activated,
                           const SDL_Rect& labelRect) const;
     void fillClassicBackground(SDL_Surface* surface) const;
+    void textureRetroLettering(SDL_Surface* surface, const std::string& text,
+                               Uint32 color, unsigned int fontsize) const;
 
     /**
         Creates a surface with text on it
