@@ -19,7 +19,16 @@ User also authorized an Android update. Incremented the unpublished 0.2.29
 metadata to 0.2.30 / 1000550, keeping the native game source at merged 1.0.851
 (8837540a). No gameplay or desktop version changes. The previous local APK is
 preserved in the ignored verification output. ADB reported no connected device.
-Native build, APK integrity/signature checks and publication are still pending.
+Fresh ARM64 native build and Gradle assembleDebug succeeded. Ninja header-dependency
+audit passed during and after compilation. All 3,521 packaged payload files
+matched staging and current source; only .gitignore/.gitkeep housekeeping was
+excluded by Android packaging. Verified ZIP CRCs, ARM64 library hashes, Classic
+default, Lapis font/license and optional HD-unit exclusion. aapt reports the
+expected application ID/version/code, apksigner verifies v1/v2 signatures, and
+16-KiB zip alignment passes. Certificate SHA-256 matches public Android 0.2.25
+and the previous local 0.2.29 APK. APK: 65,082,224 bytes; SHA-256
+68cbb57125c1d181d8fe31e64dfd07b5968003a548cc7dfefc23809384e9fcc7.
+Publication follows these checks; no on-device test is claimed.
 
 ## 2026-10-23 — 1.0.851 integration candidate
 

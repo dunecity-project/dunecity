@@ -21,6 +21,10 @@ Android ARM64 update using the DuneCity 1.0.851 engine and bundled assets.
 Install over the previous version rather than uninstalling: saves and settings
 should be retained. This sideload package uses the existing Android debug
 signing identity, not a new production/Play Store signing identity.
+Its certificate matches public Android 0.2.25, and its application ID is unchanged.
+
+The native build, APK signature/alignment checks and bundled-file integrity
+checks passed. All 3,521 packaged payload files match the release source.
 
 No connected phone was available for an on-device test of this release.
 Desktop and browser engine verification does not replace Android play-testing.
