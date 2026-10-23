@@ -45,6 +45,7 @@ negative, verdict on the paired difference; --scoring legacy for the old rule).
 import argparse
 import csv
 import itertools
+import hashlib
 import re
 import shutil
 import statistics
@@ -75,7 +76,7 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 FFA_HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar')
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
-GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
+GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error', 'digest', 'digest_trail', 'digest_lines')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
@@ -283,7 +284,12 @@ def play(args, scratch, binary, key):
     winner = result.get('winner', '')
     row.update(players=len(sides), winner=winner, winner_label=label_of.get(int(winner), '') if winner not in ('', '-1') else '',
                end_s=result.get('end_s', ''), wall_s=wall, waves=sum('FORMATION_WAVE:' in l for l in lines),
-               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}')
+               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
+               digest=next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines
+                            if 'PROBE_DIGEST:' in l and 'final=1' in l), ''),
+               digest_trail=hashlib.sha1('\n'.join(l[l.index('PROBE_DIGEST:'):] for l in lines
+                                                   if 'PROBE_DIGEST:' in l).encode()).hexdigest()[:16],
+               digest_lines=sum('PROBE_DIGEST:' in l for l in lines))
     results = Path(args.results)
     if row['error']:
         (results / f'failed-{out.name}.txt').write_text(

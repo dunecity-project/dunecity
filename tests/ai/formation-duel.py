@@ -19,6 +19,7 @@ succeeds, and refuses to start below the free-space floor (DUNECITY_MIN_FREE_GB,
 """
 import argparse
 import csv
+import hashlib
 import itertools
 import shutil
 import statistics
@@ -63,7 +64,7 @@ HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'un
 # FORMATION_HOUSE samples; after the game ended, the value at the end).
 CURVE_MINUTES = (10, 20, 30)
 CURVE_FIELDS = tuple(f'army{minute}' for minute in CURVE_MINUTES)
-GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error') + tuple(
+GAME_FIELDS = KEY + ('winner', 'end_s', 'waves', 'wall_s', 'map_skipped', 'error', 'digest', 'digest_trail', 'digest_lines') + tuple(
     f'{field}_{side}' for side in ('a', 'b') for field in HOUSE_FIELDS + CURVE_FIELDS)
 WAVE_FIELDS = ('house', 'launched', 'members', 'engaged', 'arrived', 'lost', 'contact_s', 'engage_spread_s',
                'arrival_spread_s', 'shots30', 'loss60', 'kill60', 'survivors', 'lost_before_contact', 'formed',
@@ -172,7 +173,12 @@ def play(args, scratch, binary, key):
                waves=sum('FORMATION_WAVE:' in l for l in lines),
                map_skipped=next((parse(l, 'FORMATION_DUEL_MAP:').get('skipped', '') for l in lines
                                  if 'FORMATION_DUEL_MAP:' in l), ''),
-               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}')
+               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
+               digest=next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines
+                            if 'PROBE_DIGEST:' in l and 'final=1' in l), ''),
+               digest_trail=hashlib.sha1('\n'.join(l[l.index('PROBE_DIGEST:'):] for l in lines
+                                                   if 'PROBE_DIGEST:' in l).encode()).hexdigest()[:16],
+               digest_lines=sum('PROBE_DIGEST:' in l for l in lines))
     samples = {(s.get('house'), s.get('minute')): s.get('army_value', '')
                for s in (parse(l, 'FORMATION_HOUSE:') for l in lines if 'FORMATION_HOUSE:' in l)}
     for side, house in (('a', house_a), ('b', house_b)):
