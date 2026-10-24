@@ -5271,13 +5271,17 @@ void QuantBot::build(int militaryValue) {
 						&& findPlaceLocation(Structure_StarPort).isValid();
 				};
 				// 11. House IX (after essential production buildings)
+				//     Neither IX rule may choose an IX that has no site: the overdue rule replaces the
+				//     choice of every rule above it, and an unplaceable IX was then rejected each pass
+				//     (no_site) and nothing at all was built. The Palace below likewise.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
 					&& itemCount[Structure_IX] == 0
 					&& itemCount[Structure_HeavyFactory] > 0
 					&& itemCount[Structure_HighTechFactory] > 0
 					&& itemCount[Structure_RepairYard] > 0
 					&& campaignAvailableToBuild(pBuilder,Structure_IX)
-					&& money > 1000) {
+					&& money > 1000
+					&& findPlaceLocation(Structure_IX).isValid()) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 					logDebug("Build IX... money: %d", money);
 				}
@@ -5288,7 +5292,8 @@ void QuantBot::build(int militaryValue) {
 					&& campaignAvailableToBuild(pBuilder,Structure_IX)
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
-					&& itemID != Structure_NuclearPlant) {
+					&& itemID != Structure_NuclearPlant
+					&& findPlaceLocation(Structure_IX).isValid()) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 				}
                 // Missing prerequisites never start the IX overdue timer.
@@ -5380,7 +5385,8 @@ void QuantBot::build(int militaryValue) {
 									&& campaignAvailableToBuild(pBuilder,Structure_Palace)
 									&& palaceAllowed
 									&& itemCount[Structure_HeavyFactory] > 0
-									&& itemCount[Structure_LightFactory] > 0) {
+									&& itemCount[Structure_LightFactory] > 0
+									&& findPlaceLocation(Structure_Palace).isValid()) {
 								itemID = Structure_Palace; structureRule = "palace_strategy";
 							}
 				if (palaceOverdue && !skipRemainingStructureLogic
@@ -5393,7 +5399,8 @@ void QuantBot::build(int militaryValue) {
 					&& itemID != Structure_Palace
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
-					&& itemID != Structure_NuclearPlant) {
+					&& itemID != Structure_NuclearPlant
+					&& findPlaceLocation(Structure_Palace).isValid()) {
 					itemID = Structure_Palace; structureRule = "palace_strategy";
 				}
 				// Same demand as the palace rules above, for a map whose Palace
