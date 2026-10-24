@@ -10,6 +10,7 @@
       "name": "sdl2",
       "default-features": false,
       "features": [
+        "alsa",
         "x11",
         "wayland",
         "ibus"

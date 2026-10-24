@@ -63,10 +63,11 @@ fi
 }
 
 pushd "${EMSDK_DIR}" >/dev/null
-if ! ./emsdk list --installed 2>/dev/null | grep -qw "${EMSDK_VERSION}"; then
-    echo "==> Installing Emscripten ${EMSDK_VERSION}"
-    ./emsdk install "${EMSDK_VERSION}"
-fi
+# The pinned installer lists available releases even with --installed; finding
+# the version there does not prove its Node/compiler dependencies exist. install
+# is idempotent and checks the full pinned dependency set before activation.
+echo "==> Ensuring Emscripten ${EMSDK_VERSION} and its dependencies are installed"
+./emsdk install "${EMSDK_VERSION}"
 ./emsdk activate "${EMSDK_VERSION}"
 # shellcheck disable=SC1091
 source ./emsdk_env.sh

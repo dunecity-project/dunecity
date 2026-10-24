@@ -662,6 +662,63 @@ links, changelog.html with the 1.0.850 notes), New-in prose 54dba60 on index.htm
 succeeded; live pages show "New in 1.0.850", v1.0.850 DMG links and `#v1.0.850` on changelog.html. **Sync SourceForge
 release** 39694353449 succeeded. **Publish browser build** 39694353427 pushed 133735b; live `play/build.json` is
 1.0.850 (sourceCommit b5b83abf), dunecity.wasm 200.
+## 2026-10-24 — 1.0.852 publication authorized
+
+User authorized publishing the verified Linux audio fix, updating repository,
+releases and website. origin/main remains 6b269b55; latest stable is 1.0.851,
+with no intervening upstream game changes. Added user-facing 1.0.852 notes.
+Proceed through PR checks and the signed stable-tag pipeline; Linux-only run
+40031124610 is prior evidence, not proof of full release publication. Existing
+Android 0.2.30 stays separately versioned on engine 1.0.851. No new APK or
+local compiler build is part of this audio-hotfix publication.
+
+PR #104 initial browser job failed before game compilation: a clean emsdk
+checkout advertised 4.0.14 in list output, so the old installed-version grep
+skipped installation and activation could not find Node 24.19.0. The pinned
+emsdk revision does not implement the assumed --installed listing filter.
+Bootstrap now always runs the installer's idempotent install for the SAME pinned
+4.0.14 SDK before activation. No SDK/compiler pin changed. Added a fake-installer
+regression proving advertised versions cannot skip dependency installation.
+
+The first two PR sanitizer jobs received runner shutdown signals during the
+unbounded parallel compile (exit 143, no C++ error). Capped that compile at two
+jobs, matching the memory-bounded Linux package build. No test targets,
+sanitizer flags, seeds or assertions were removed; full rerun is required.
+
+## 2026-10-23 — Linux audio recovery candidate 1.0.852
+
+HAL9081 reported an AppImage 1.0.851 crash: dsp unavailable, followed by silent
+mixer failure. Reproduced with the published package in an isolated Linux profile;
+explicit SDL_AUDIODRIVER=dummy gets past audio startup. The shipped binary has
+OSS/disk/dummy backends, not ALSA/PulseAudio/PipeWire. The Linux vcpkg dependency
+did not enable ALSA, and the runner lacked the other modern backend headers.
+
+Candidate uses SDL_QuitSubSystem/SDL_InitSubSystem for fallback, with an override
+dummy hint so an invalid SDL_AUDIODRIVER cannot defeat recovery. Direct
+SDL_AudioInit did not set the initialization flag SDL_mixer checks, so the mixer
+retried the failing real backend. A new --check-audio-runtime command exercises
+the SAME initializer without assets, profiles, rendering or exception dialogs.
+Python checks require three cases: dummy, forced unavailable backend, normal
+selection, and verify compiled Linux backend names. Checks run on the raw binary,
+TGZ executable and AppImage; smoke tests also reject fatal exception dialogs.
+
+User explicitly selected the Linux runner to avoid local RAM pressure. A
+linux_audio_probe workflow-dispatch lane reuses the Linux release job and caches,
+skips other platforms and all publication jobs. Version 1.0.852 is a candidate,
+not a published replacement.
+
+Verification: Linux-only run 40031124610 succeeded at source af605957. All
+three compiled backends (ALSA, PulseAudio, PipeWire) were present. All nine
+audio startup checks passed: dummy, unavailable-driver recovery and normal
+selection on the raw binary, TGZ executable and AppImage. The five checker
+unit tests passed locally and on the runner. Full portable-package startup
+smokes also passed, with fatal-dialog detection enabled. Artifact
+12535518040 (DuneCity-Linux-Packages) contains the 1.0.852 candidate packages.
+Other platform, signing and publication jobs were intentionally skipped; no
+stable release, website update or Android rebuild was done. Real sound-device
+playback still needs a user test; CI verifies backends and headless recovery.
+No local native compilation was performed for this candidate.
+No game-loop, simulation, sprite, map, skin or multiplayer rules were changed.
 
 ## 2026-10-23 — Desktop and browser 1.0.851 published
 
