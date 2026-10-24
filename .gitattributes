@@ -1,3 +1,4 @@
+* text=auto eol=lf
 *.pbxproj -crlf -diff
 mods/Tornie/**/*.ini text eol=lf
 mods/Tornie/**/*.json text eol=lf
