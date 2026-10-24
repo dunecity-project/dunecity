@@ -1,3 +1,31 @@
+## 2026-10-24 — FFA finish, in progress (branch `fix/ffa-finish`, worktree `~/Documents/projects/dunecity-ffa-finish`, from staging 6fd861ae; protocol 97, save 9871 unchanged; NOT accepted yet)
+
+Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`base-*` = 1.0.852, `c1-*`, `c3-*`,
+`pal-*`, decision logs `diag-c1-9101`, `diag-c2-9101`, save `fixture/ffa-9101-c1-m35.dls`).
+
+- **Diagnosis (4P DuneCity Brutal, seed 9101 decision log, samples of 21 baseline games):** the draws are not
+  zone remnants. At the 60-minute limit the surviving houses still hold 70-256 turrets, 25-66 base buildings and
+  9-96k armies; a house whose army is gone falls within ~2-6 minutes. Units die mostly to units (turrets ~30%);
+  the defender's tax-funded factories refill its army. The leader's waves are ~40% new units on top of the
+  previous wave's survivors (effectively the whole army hunting), finish target persists (Sard -> Hark -> Ordos).
+  **Bug found:** from minute ~32 the leader's Construction Yard built nothing for 28 minutes: the Palace became
+  "overdue", `palaceOverdue` replaced every earlier choice (heavy factories for a funded backlog, zones, turrets)
+  with an unsiteable Palace, rejected each pass (no site); credits sat at the 48k storage cap. Baseline leaders
+  bank 36-63k at the limit.
+- **Commits:** 21f73a28 city zones keep no house alive (walls-like), a defeated house's zones are demolished,
+  defeat reported once; 0b3bd9cf automatic targeting ranks zones with walls, finishing objective ignores zones;
+  3b8fefec IX/Palace rules (and their overdue overrides) only choose a placeable site; harness: structure kinds,
+  capacity and completed structures per sample, `BALANCE_SAVE_AT_MINUTE`/`BALANCE_SAVE_PATH`,
+  `scenario-matrix.py --cell-seeds`. `exp/ffa-palace-only` f9b11643 = staging + the site gate alone (arm only).
+- **Measured so far:** baseline 4P self-play 13/21 time-outs, 6P cell 16/24; zones rule alone level (12 paired
+  4P seeds 9 v 9; 6P 17/24). Seed 9101 with the zone targeting: eliminations 37.0/41.3 min (baseline 46.7/52.7).
+- **Running (cluster):** `pal-self4`/`pal-6p` (site gate alone), `c3-self4`/`c3-6p` (branch), `c3-self4-nofl` and
+  `c3-h2h` (FinishWhenLeading decision), `c1-self4-120` (end times at 120 min), ctest 20261024T122735-ctest-c4ed92.
+- **Open:** decide the zones rule/targeting and FinishWhenLeading on those arms; Fortress, `/weak`, CY (vanilla:
+  unaffected by the zone changes) and DuneCity ladder checks; a discriminating regression probe for the site
+  stall (WIP in `stall-probe-wip/`: continuing the minute-35 save passes with and without the fix - the overdue
+  timers are not saved, so the stall does not recur within 6 minutes after a load); docs/formations.md section.
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and
