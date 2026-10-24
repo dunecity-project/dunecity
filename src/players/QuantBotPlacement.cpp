@@ -753,7 +753,25 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         const bool relaxRoading = searchPass==2;
         searchPassUsed=searchPass;
 	for (int placeLocationX = startX; placeLocationX <= endX; placeLocationX++) {
+        // Origins are tested in blocks of kGateBlock along the column before the per-origin
+        // gate below: when no anchor lies near the union of a block's footprints, every
+        // origin of the block fails that gate, so the block is passed over with the same
+        // skip count (only the origins this pass admits were ever counted).
+        constexpr int kGateBlock = 32;
+        int gateBlockEnd = startY - 1;
 		for (int placeLocationY = startY; placeLocationY <= endY; placeLocationY++) {
+            if (gateByBuildRange && placeLocationY > gateBlockEnd) {
+                const int blockEnd = std::min(endY, placeLocationY + kGateBlock - 1);
+                if (!buildRangeField->anyNearFootprint(placeLocationX, placeLocationY, newSizeX,
+                        blockEnd - placeLocationY + newSizeY, BUILDRANGE)) {
+                    buildRangeSkipped += relaxRoading ? blockEnd - placeLocationY + 1
+                        : CityPlacementPolicy::placementSearchPassCount(placeLocationX, placeLocationY, blockEnd,
+                            baseCenter.x, baseCenter.y, searchRadius, searchPass);
+                    placeLocationY = blockEnd;
+                    continue;
+                }
+                gateBlockEnd = blockEnd;
+            }
 			if (!relaxRoading && !CityPlacementPolicy::inPlacementSearchPass(placeLocationX,placeLocationY,
                 baseCenter.x,baseCenter.y,searchRadius,searchPass)) continue;
             // Both okayToPlaceStructure() overloads finish with
@@ -1940,18 +1958,30 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
         Value itemBest;
         Coord itemSite = Coord::Invalid();
         const Coord size = getStructureSize(item);
-        std::vector<bool> candidates(w*h, false);
+        // Candidate origins: the union of a 47x47 window around each qualifying property,
+        // marked as a 2D difference array and summed once (the same cells the per-window
+        // stamps marked).
+        std::vector<int> candidates(static_cast<size_t>(w+1)*(h+1), 0);
         for (const auto& p : properties) {
             if (p.crime < 60 && (item != Structure_RocketTurret || (p.value >= 250 && p.threat == 0))) continue;
-            for (int y=std::max(scan.begin/w,p.p.y-23); y<=std::min({h-size.y,p.p.y+23,(scan.end-1)/w}); ++y)
-                for (int x=std::max(0,p.p.x-23); x<=std::min(w-size.x,p.p.x+23); ++x) candidates[y*w+x]=true;
+            const int y0=std::max(scan.begin/w,p.p.y-23), y1=std::min({h-size.y,p.p.y+23,(scan.end-1)/w});
+            const int x0=std::max(0,p.p.x-23), x1=std::min(w-size.x,p.p.x+23);
+            if (y0>y1 || x0>x1) continue;
+            ++candidates[y0*(w+1)+x0]; --candidates[y0*(w+1)+x1+1];
+            --candidates[(y1+1)*(w+1)+x0]; ++candidates[(y1+1)*(w+1)+x1+1];
         }
+        for (int y=0; y<h; ++y)
+            for (int x=0; x<w; ++x)
+                candidates[y*(w+1)+x] += (x>0 ? candidates[y*(w+1)+x-1] : 0) + (y>0 ? candidates[(y-1)*(w+1)+x] : 0)
+                    - (x>0 && y>0 ? candidates[(y-1)*(w+1)+x-1] : 0);
         AITelemetry::PerformanceScope itemScope("ai.service_site_search",getGameCycleCount(),house,item);
         int scoredSites = 0;
-        for (int cell=scan.begin;cell<scan.end;++cell) {
-            const int x=cell%w, y=cell/w;
-            if (x>w-size.x || y>h-size.y) continue;
-            if (!candidates[y*w+x] || overlapsReservedStructure(x,y,size.x,size.y)
+        // The whole map (scan), row by row: the cell order of the original scan.
+        for (int y=scan.begin/w; y<=h-size.y; ++y)
+          for (int x=0; x<=w-size.x; ++x) {
+            const int cell=y*w+x;
+            if (cell<scan.begin || cell>=scan.end) continue;
+            if (candidates[y*(w+1)+x]<=0 || overlapsReservedStructure(x,y,size.x,size.y)
                 || !placeableAmongOwnUnits(x,y,size.x,size.y,item)
                 || !preservesGroundAccess(item,Coord(x,y))) continue;
             const auto road = cityRoadImpact(getMap(),x,y,size.x,size.y,item);

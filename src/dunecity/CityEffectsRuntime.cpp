@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <limits>
 #include <vector>
@@ -935,33 +936,29 @@ void CitySimulation::runZoneGrowth() {
     };
     std::vector<CityNode> nodes;
 
-    for (int y = 0; y < map.getSizeY(); ++y) {
-        for (int x = 0; x < map.getSizeX(); ++x) {
-            const Tile* t = map.getTile(x, y);
-            if (!t || !t->hasANonInfantryGroundObject()) continue;
-            ObjectBase* pObj = const_cast<Tile*>(t)->getNonInfantryGroundObject();
-            if (!pObj || !pObj->isAStructure()) continue;
-            StructureBase* pStruct = static_cast<StructureBase*>(pObj);
-            if (pStruct->getLocation().x != x || pStruct->getLocation().y != y) continue;
+    // The structures whose origin tile shows them, in row-major tile order: the walk
+    // over every map tile this replaces visited exactly these (forEachStructureOrigin).
+    forEachStructureOrigin(map, [&](int x, int y, const StructureBase* pVisited) {
+        StructureBase* pStruct = const_cast<StructureBase*>(pVisited);
+        const Tile* t = map.getTile(x, y);
 
-            const int itemID = pStruct->getItemID();
-            const CityRole role = getStructureCityRole(itemID);
-            if (role == CityRole::None) continue;
+        const int itemID = pStruct->getItemID();
+        const CityRole role = getStructureCityRole(itemID);
+        if (role == CityRole::None) return;
 
-            ZoneStructure* pZone = dynamic_cast<ZoneStructure*>(pStruct);
-            const int level = pZone ? t->getCityZoneDensity()
-                                    : effectiveCityLevel(itemID, std::max<int>(1, pStruct->getCityOccupancy()));
-            const int maxLevel = getStructureMaxLevel(itemID);
+        ZoneStructure* pZone = dynamic_cast<ZoneStructure*>(pStruct);
+        const int level = pZone ? t->getCityZoneDensity()
+                                : effectiveCityLevel(itemID, std::max<int>(1, pStruct->getCityOccupancy()));
+        const int maxLevel = getStructureMaxLevel(itemID);
 
-            nodes.push_back({
-                x, y, pStruct, pZone, role, level, maxLevel,
-                getStructureResidentialSupply(pStruct, level),
-                getCommercialSupply (itemID, level),
-                getIndustrialSupply (itemID, level),
-                pZone == nullptr,
-            });
-        }
-    }
+        nodes.push_back({
+            x, y, pStruct, pZone, role, level, maxLevel,
+            getStructureResidentialSupply(pStruct, level),
+            getCommercialSupply (itemID, level),
+            getIndustrialSupply (itemID, level),
+            pZone == nullptr,
+        });
+    });
 
     // One shared budget per house, updated after each node. Multiple growing
     // lots in the same scan must not each spend the same remaining population.
@@ -1452,28 +1449,44 @@ void CitySimulation::runZoneGrowth() {
     }
 
     if (AITelemetry::log().enabled() && lastProcessedDay_ % 96u == 0) {
+        // Digits appended in place (the text std::to_string produced, without a string per value).
+        auto appendInt = [](std::string& out, int value) {
+            char digits[16];
+            const auto end = std::to_chars(digits, digits + sizeof(digits), value).ptr;
+            out.append(digits, end);
+        };
         auto layerRecord = [&](const auto& layer) {
             AITelemetry::Record rows;
             const int bs = layer.getBlockSize();
+            std::string row;
             for (int y = 0; y < (mapHeight_+bs-1)/bs; ++y) {
-                std::string row;
+                row.clear();
                 for (int x = 0; x < (mapWidth_+bs-1)/bs; ++x) {
                     if (x) row += ',';
-                    row += std::to_string(static_cast<int>(layer.get(x,y)));
+                    appendInt(row, static_cast<int>(layer.get(x,y)));
                 }
                 rows.set(std::to_string(y),row);
             }
             return AITelemetry::Record().set("block_size",bs).set("rows_csv",rows);
         };
-        AITelemetry::Record terrain, roads;
-        for (int y = 0; y < mapHeight_; ++y) {
-            std::string tr, rr;
-            for (int x = 0; x < mapWidth_; ++x) {
+        // Tiles are stored column by column: read them in that order, then write rows.
+        std::vector<int> types(static_cast<size_t>(mapWidth_) * mapHeight_);
+        std::vector<char> roadBits(types.size());
+        for (int x = 0; x < mapWidth_; ++x)
+            for (int y = 0; y < mapHeight_; ++y) {
                 const auto* tile = currentGameMap->getTile(x,y);
-                if (x) tr += ',';
-                tr += std::to_string(tile ? tile->getType() : -1);
-                rr += tile && tile->isRoad() ? '1' : '0';
+                types[static_cast<size_t>(y) * mapWidth_ + x] = tile ? tile->getType() : -1;
+                roadBits[static_cast<size_t>(y) * mapWidth_ + x] = tile && tile->isRoad() ? '1' : '0';
             }
+        AITelemetry::Record terrain, roads;
+        std::string tr, rr;
+        for (int y = 0; y < mapHeight_; ++y) {
+            tr.clear();
+            for (int x = 0; x < mapWidth_; ++x) {
+                if (x) tr += ',';
+                appendInt(tr, types[static_cast<size_t>(y) * mapWidth_ + x]);
+            }
+            rr.assign(roadBits.data() + static_cast<size_t>(y) * mapWidth_, static_cast<size_t>(mapWidth_));
             terrain.set(std::to_string(y),tr); roads.set(std::to_string(y),rr);
         }
         AITelemetry::log().write(currentGame->getGameCycleCount(),-1,-1,"city_map_snapshot",

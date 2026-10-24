@@ -1074,7 +1074,7 @@ void QuantBot::refreshTacticalDanger() {
 
 const std::vector<int>& QuantBot::factoryClearance() const {
     if (factoryEnemyClearanceStale) {
-        factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger, getMap().getSizeX(), getMap().getSizeY());
+        TacticalSafetyPolicy::enemyClearanceInto(tacticalDanger, getMap().getSizeX(), getMap().getSizeY(), factoryEnemyClearance);
         factoryEnemyClearanceStale = false;
     }
     return factoryEnemyClearance;
