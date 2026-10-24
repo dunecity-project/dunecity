@@ -322,6 +322,7 @@ QuantBotConfig::QuantBotConfig() {
     // fresh wave; the opening reaches the heavy factory before the Hard/Brutal economy push.
     force.joinAllyWaves = false;
     force.heavyFactoryFirst = false;
+    force.campaignFactoryFirst = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -607,6 +608,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
         iniFile.setBoolValue("Force Concentration", "HeavyFactoryFirst", force.heavyFactoryFirst);
+        iniFile.setBoolValue("Force Concentration", "CampaignFactoryFirst", force.campaignFactoryFirst);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -707,6 +709,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
     force.heavyFactoryFirst = iniFile.getBoolValue("Force Concentration", "HeavyFactoryFirst", force.heavyFactoryFirst);
+    force.campaignFactoryFirst = iniFile.getBoolValue("Force Concentration", "CampaignFactoryFirst", force.campaignFactoryFirst);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1179,6 +1182,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("finishWhenLeading", force.finishWhenLeading);
     addNamed("joinAllyWaves", force.joinAllyWaves);
     addNamed("heavyFactoryFirst", force.heavyFactoryFirst);
+    addNamed("campaignFactoryFirst", force.campaignFactoryFirst);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

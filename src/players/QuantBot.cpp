@@ -612,6 +612,12 @@ void QuantBot::update() {
 	int oldLimit = harvesterLimit;
 	harvesterLimit = std::min(baseHarvesterLimit, std::max(1, maxHarvestersForSpice));
     if (campaignCityEconomy()) harvesterLimit=std::min(harvesterLimit,campaignHarvesterTarget());
+    // CampaignFactoryFirst: the Hard/Brutal partner of a human holds a small fleet until its first
+    // heavy factory stands, so the opening funds production before refineries and a starport.
+    if (config.force.campaignFactoryFirst && currentGame && isCampaignGameType(currentGame->gameType)
+        && isAlliedWithHuman() && !isCampaignEnemy() && !supportMode && difficulty >= Difficulty::Hard
+        && !firstHeavyFactoryBuilt())
+        harvesterLimit = std::min(harvesterLimit, kCampaignFactoryFirstHarvesters);
 
 	// Log when the limit changes
 	if (oldLimit != harvesterLimit) {

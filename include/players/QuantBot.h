@@ -170,6 +170,8 @@ public:
     bool firstHeavyFactoryBuilt() const;
     /// HeavyFactoryFirst holds this Custom Hard/Brutal house's opening economy push now.
     bool heavyFactoryFirstHold() const;
+    /// CampaignFactoryFirst: the partner's harvester ceiling until its first heavy factory.
+    static constexpr int kCampaignFactoryFirstHarvesters = 4;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;

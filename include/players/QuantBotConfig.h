@@ -138,7 +138,7 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, HeavyFactoryFirst;
+    /// FinishWhenLeading, JoinAllyWaves, HeavyFactoryFirst, CampaignFactoryFirst;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -210,6 +210,10 @@ struct QuantBotConfig {
         /// harvester fleet and hold the Brutal economy step, so the opening reaches the heavy
         /// factory as early as Medium's (docs/ai-scenario-matrix.md, "Difficulty ladder").
         bool heavyFactoryFirst;
+        /// The Hard/Brutal campaign partner (the human's ally): at most four harvesters until it
+        /// has owned its first heavy factory (it built four refineries and a starport first and
+        /// lost its yard with no factory, vanilla Atreides m22; docs/ai-scenario-matrix.md).
+        bool campaignFactoryFirst;
     };
     ForceSettings force;
 
