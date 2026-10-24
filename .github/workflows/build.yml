@@ -114,6 +114,7 @@ jobs:
       - name: Verify signed update feeds and AppImage replacement
         run: |
           python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
+          python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
           python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
           python3 tests/desktop-updater/run-appimage-flow.py --output "$RUNNER_TEMP/appimage-update-test"
 

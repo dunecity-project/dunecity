@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -28,6 +29,10 @@ class AndroidPayloadTests(unittest.TestCase):
             "config/Dune City.ini": b"[Video]\nUI Skin = 2\n",
             "mods/dunecity/mod.ini": b"[Mod]\nVersion = 1\n",
         }
+        self.canonical = b"".join(
+            b"100644 blob " + hashlib.sha1(b"blob " + str(len(data)).encode()
+            + b"\0" + data).hexdigest().encode() + b"\t" + name.encode() + b"\0"
+            for name, data in self.files.items())
         for name, content in self.files.items():
             self.write(name, content)
             self.write("build-android-payload/" + name, content)
@@ -56,11 +61,20 @@ class AndroidPayloadTests(unittest.TestCase):
             if extra:
                 archive.writestr("assets/dune2r_payload/unexpected.bin", b"extra")
         with patch.object(sys, "argv", [str(script),"--root",str(self.root)]), \
+             patch.object(checker.subprocess, "check_output", return_value=self.canonical), \
              contextlib.redirect_stdout(io.StringIO()):
             checker.main()
 
     def test_matching_payload_passes(self):
         self.invoke()
+
+    def test_checkout_conversion_fails_even_when_staging_matches(self):
+        name = "mods/dunecity/mod.ini"
+        self.files[name] = self.files[name].replace(b"\n", b"\r\n")
+        self.write(name, self.files[name])
+        self.write("build-android-payload/" + name, self.files[name])
+        with self.assertRaisesRegex(RuntimeError, "Canonical Git mismatch"):
+            self.invoke()
 
     def test_wrong_application_id_fails(self):
         self.metadata["applicationId"] = "wrong.application"

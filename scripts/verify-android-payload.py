@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import zipfile
 
 
@@ -18,6 +19,13 @@ def main():
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     root = args.root.resolve()
+    tracked = {}
+    for entry in subprocess.check_output(
+            ["git", "-C", str(root), "ls-tree", "-rz", "HEAD", "data", "config", "mods"]).split(b"\0"):
+        if entry:
+            meta, name = entry.split(b"\t", 1)
+            tracked[name.decode("utf-8")] = meta.split()[2].decode("ascii")
+    require(tracked, "No canonical Git payload entries")
     output = root / "build-android-apk/app/build/outputs/apk/debug"
     apk = output / "DuneLegacy.apk"
     payload = root / "build-android-payload"
@@ -47,6 +55,11 @@ def main():
             source = root / relative
             require(source.is_file() and digest(packaged) == digest(source.read_bytes()),
                     f"Source mismatch: {relative}")
+            canonical = tracked.get(relative)
+            require(canonical is not None, f"Untracked payload: {relative}")
+            blob = b"blob " + str(len(packaged)).encode("ascii") + b"\0" + packaged
+            require(hashlib.sha1(blob).hexdigest() == canonical,
+                    f"Canonical Git mismatch (checkout conversion?): {relative}")
             count += 1
         require(count > 0, "Empty Android payload")
         require(sum(name.startswith(prefix) for name in names) == count, "Unexpected APK payload entries")
@@ -62,7 +75,7 @@ def main():
             require(digest(binary) == digest(staged.read_bytes()), f"Native staging mismatch: {name}")
         require(not any(name.startswith(prefix + "mods/Dune2R/graphics_hd/units/") for name in names),
                 "Optional HD unit downloads were embedded")
-    print(f"APK {version['versionName']} / {version['versionCode']}: {count} payload files match staging and source")
+    print(f"APK {version['versionName']} / {version['versionCode']}: {count} payload files match staging, source and canonical Git blobs")
     print("ZIP CRC, application ID, ARM64 libraries, Classic default, font/license and optional-asset exclusion passed")
     print(f"APK bytes: {apk.stat().st_size}; SHA-256: {digest(apk.read_bytes())}")
 
