@@ -7402,6 +7402,15 @@ void GFXManager::loadDuneCityBuildingManifests() {
         if(name == "Airport") return static_cast<int>(Structure_Airport);
         return -1;
     };
+    const auto pictureForName = [](const std::string& name) {
+        if(name == "NuclearPlant") return static_cast<int>(ObjPic_NuclearPlant);
+        if(name == "PoliceStation") return static_cast<int>(ObjPic_PoliceStation);
+        if(name == "Stadium") return static_cast<int>(ObjPic_Stadium);
+        if(name == "Airport") return static_cast<int>(ObjPic_Airport);
+        if(name == "Hospital") return static_cast<int>(ObjPic_Hospital);
+        if(name == "Church") return static_cast<int>(ObjPic_Church);
+        return -1;
+    };
 
     for(const auto& entry : std::filesystem::directory_iterator(buildingsRoot)) {
         const auto manifestPath = entry.path() / "building.ini";
@@ -7411,14 +7420,15 @@ void GFXManager::loadDuneCityBuildingManifests() {
         try {
             INIFile manifest(manifestPath.string());
             DuneCityBuildingDefinition definition;
-            definition.itemID = itemForObjPic(
-                manifest.getStringValue("Building", "ObjPic", ""));
+            const std::string pictureName = manifest.getStringValue("Building", "ObjPic", "");
+            definition.itemID = itemForObjPic(pictureName);
+            definition.pictureID = pictureForName(pictureName);
             definition.houseID = manifest.getIntValue("Building", "HouseID", -1);
             definition.sourceUnit = manifest.getStringValue(
                 "Building", "SourceUnit", entry.path().filename().string());
             const int frameCount = std::clamp(
                 manifest.getIntValue("Building", "Frames", 0), 0, 64);
-            if(definition.itemID < 0 || definition.houseID < 0
+            if(definition.pictureID < 0 || definition.houseID < 0
                || definition.houseID >= static_cast<int>(NUM_HOUSES)
                || frameCount <= 0) {
                 continue;
@@ -7961,7 +7971,7 @@ bool GFXManager::drawDuneCityZone(int itemID, int house, unsigned int z,
 }
 
 bool GFXManager::drawDuneCityBuilding(int itemID, int house, int frame,
-                                      const SDL_Rect& destination) {
+                                      const SDL_Rect& destination, int pictureID) {
     if(destination.w <= 0 || destination.h <= 0
        || !isDuneCityHouseUsingDune2(house)) {
         return false;
@@ -7969,7 +7979,13 @@ bool GFXManager::drawDuneCityBuilding(int itemID, int house, int frame,
     loadDuneCityBuildingManifests();
     DuneCityBuildingDefinition* selected = nullptr;
     for(auto& definition : duneCityBuildingDefinitions) {
-        if(definition.itemID == itemID && definition.houseID == house) {
+        // Hospitals/Churches are overlays on a Residential zone, not separate
+        // structure item IDs. Select their authored picture rather than the
+        // underlying zone, retaining the already-computed native destination.
+        const bool civic = pictureID == ObjPic_Hospital || pictureID == ObjPic_Church;
+        const bool matches = civic ? definition.pictureID == pictureID
+            : definition.itemID >= 0 && definition.itemID == itemID;
+        if(matches && definition.houseID == house) {
             selected = &definition;
             break;
         }

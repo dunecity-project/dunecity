@@ -691,7 +691,7 @@ public:
                                       Uint32 elapsedMs, int anchorX, int anchorY,
                                       const SDL_Rect* previewBounds = nullptr);
     bool             drawDuneCityBuilding(int itemID, int house, int frame,
-                                          const SDL_Rect& destination);
+                                          const SDL_Rect& destination, int pictureID = -1);
     Uint8            getDune2RVisualBlend();
     bool             isDune2RVisualsEnabled();
     void             setDune2RVisualsEnabled(bool enabled);
@@ -893,6 +893,7 @@ private:
 
     struct DuneCityBuildingDefinition {
         int itemID = -1;
+        int pictureID = -1;
         int houseID = -1;
         std::string sourceUnit;
         std::vector<DuneCityBuildingFrame> frames;

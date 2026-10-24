@@ -1,3 +1,21 @@
+## 2026-10-24 — Special-building Compacts / 1.0.854 candidate
+
+User authorized the next skin improvement pass after the current asset audit.
+Recompacted 31 native-resolution special-building stills from existing HQ sources
+at 4× native canvas / balanced. Exact scope and dimensions are recorded in
+docs/dunecity-special-compacts-854.md. No other skin PNG/manifest changed; original
+Compacts and authoring records were snapshotted before promotion, and versioned
+new source Compacts are now selected so future exports retain this pass.
+
+Found/fixed a necessary renderer gap: Hospital/Church civic overlays were omitted
+from direct high-detail registration/selection. Pass the active picture ID while
+retaining native destinations and per-house/SimCity/fog/fallback behavior. Added
+civic selection/isolation/fallback assertions to the existing real SDL skin probe
+and wired it into Mac candidate validation. Local packaging/browser audit suites
+pass (8 + 9 tests). Hosted validation is pending; use runners, not local native
+compilation on this low-RAM PC. Current public release remains 1.0.853 with
+Android 0.2.31 / engine 1.0.853. Do not tag/publish this candidate automatically.
+
 ## 2026-10-24 — Matching Android 0.2.31 authorized
 
 User opted into an Android update so multiplayer engine versions match desktop

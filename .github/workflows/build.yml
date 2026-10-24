@@ -583,6 +583,21 @@ jobs:
       - name: Verify secure relay support
         run: build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
 
+      - name: Verify DuneCity portraits, high-detail civic overlays and cache recovery
+        run: |
+          python3 tests/skins/run-skin-probe.py --build-dir build --output-dir "$RUNNER_TEMP/dunecity-skin-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          python3 scripts/check-build-deps.py build
+
+      - name: Retain skin probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Skin-Probe
+          path: |
+            ${{ runner.temp }}/dunecity-skin-probe-${{ github.run_id }}-${{ github.run_attempt }}/*.png
+            ${{ runner.temp }}/dunecity-skin-probe-${{ github.run_id }}-${{ github.run_attempt }}/*.log
+          if-no-files-found: ignore
+
       - name: Create development DMG
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
