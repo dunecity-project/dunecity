@@ -280,3 +280,73 @@ battery in Low Power Mode; its power settings were not touched). Remaining spike
 build pass (`ai.build.evaluate`, worst 20-29 ms: heavy-factory `findPlaceLocation` falling back to
 whole-map passes, `factoryClearance`'s O(map) clearance per danger refresh) and the city growth
 phase (worst 16-18 ms).
+
+### Third pass (2026-10-24, agent FpsFix3, branch `perf/fps-round3`): build pass and city growth
+
+Profiled per build pass in thread CPU (temporary scope breakdown, not committed) on the stepped
+probe, 15,000 cycles from cycle 73,528. 1.0.852's worst passes (18-22 ms) were 6-8
+`findPlaceLocation` calls of ~2 ms each, nearly all of it the whole-map pass 1/2 origin loop
+(147,456 origins through the build-range gate) for items with no site near the base centre
+(zones, Palace, factories), plus `factoryClearance` (1.3 ms), the rock survey (5 ms), the anchor
+field (1.2 ms) and the city service search. City growth's worst 16-18 ms was the AI decision
+log's `city_map_snapshot` every 96 city days (14 ms, telemetry only); without it growth was
+1.5 ms row-major tile walk + 3 ms traffic BFS. Changes (all exact; 21 `PROBE_DIGEST`s over
+15,000 cycles identical to 1.0.852; protocol 94, save 9871 unchanged):
+
+- Placement search: origins are tested in blocks of 32 along a column; a block whose union of
+  footprints has no anchor within BUILDRANGE is skipped at once (same skip count).
+- `DuneCity::chessboardPasses` (SpatialFields.h): the two raster passes with each row taking its
+  neighbour row first (vectorised); used by `enemyClearanceInto` (buffer reused) and the rock
+  survey's enemy field. `RockExpansionPolicy::choose` labels formations and runs the drive BFS
+  without per-visit div/mod lambdas (existing random equivalence test against the legacy survey).
+- City service search: candidate windows as a 2D difference array instead of 47x47 stamps into
+  a `vector<bool>`; row-major scan without per-cell div/mod.
+- `ObjectManager::getObject`: a dense id-indexed table beside the ordered map (ids below 2^22;
+  the map still serves iteration, save order and larger ids).
+- City growth: origins from `structureList` sorted by tile (`forEachStructureOrigin`, as the
+  effects scan); `TrafficSimulation` memoises road and neighbour-role tests per instance (one
+  growth pass or one AI road plan, no map change in between).
+- Telemetry only: `Record::quote` copies plain runs, `Record::add` builds no temporaries, the
+  map snapshot writes digits in place and reads tiles column by column.
+
+Stepped probe, mini (other agents' load), thread CPU per cycle:
+
+| | cpu mean / p99 / max ms | 10-cycle frame p50 / p95 / p99 ms | frames > 33 ms (of 1,500) | build pass total / worst | growth worst |
+|---|---|---|---|---|---|
+| 1.0.852 (load 6.9, cal 6.6 ms) | 1.30 / 14.3 / 24.9 | 11.9 / 27.0 / 35.6 | 29 | 7.3 s / 27 ms | 16 ms |
+| perf/fps-round3 (load 10.5, cal 8.0 ms) | 1.17 / 8.4 / 21.6 | 11.9 / 22.5 / 29.3 | 8 | 3.5 s / 22 ms | 9 ms |
+
+Worst single build pass in thread CPU: 18-22 ms before, 10-13 ms after (rock survey, service
+search, anchor field and the heavy factory's pass 0 remain). Frames with two or three houses'
+passes stay the p99: the passes are 4-8 cycles apart by the fixed AI schedule, which is not moved
+(that would change results).
+
+Rendered 1440x900 window with Stefan's `[Video]` (ScaleHD, Interface Height 600, FrameLimit off,
+zoom 0), 2 game minutes at 2 ms, decision log on, alternating pairs on the mini (load 7-14, so
+pairs are noisy; `rendered-mini.jsonl`):
+
+| pair | 1.0.852 fps, p50/p95/p99 ms, > 33 ms | perf/fps-round3 |
+|---|---|---|
+| 1 | 46.5, 22/35/47, 7.2 % | 42.4, 23/32/41, 3.3 % |
+| 2 | 107.8, 9/20/25, 0.2 % | 151.7, 6/15/22, 0.1 % |
+| 3 | 34.2, 27/46/59, 20.5 % | 38.7, 26/37/45, 8.8 % |
+| 4 | 37.4, 25/40/50, 11.1 % | 67.9, 14/25/28, 0.4 % |
+| 5 | 70.6, 14/25/31, 0.8 % | 61.6, 18/27/34, 1.1 % |
+
+Stefan's Air (M5), same runs, on battery with Low Power Mode on (its state at 12:05, not
+changed; cluster paused by `~/dunecity-runner/PAUSE` during the runs, scratch profile only;
+`rendered-air.jsonl`):
+
+| pair | 1.0.852 fps, p50/p95/p99 ms, > 33 ms, cycles/s | perf/fps-round3 |
+|---|---|---|
+| 1 | 40.7, 22/41/66, 11.9 %, 316 | 48.9, 22/36/50, 6.6 %, 350 |
+| 2 | 42.7, 22/38/52, 7.8 %, 346 | 46.4, 22/31/45, 3.4 %, 368 |
+| 3 | 42.4, 22/37/49, 7.3 %, 349 | 47.1, 21/30/37, 2.5 %, 395 |
+
+The Air on AC was not measured: it went onto battery before the approved window.
+
+perf_regression: 8-house `cpu_p99` budget 3.0 -> 1.6 and `frame_cpu_p99` 9.0 -> 5.5 (x calibration).
+1.0.852 measured 2.2-2.9 / 5.3-7.9 on the loaded mini and 1.807 / 4.575 on the Pro (cluster job
+20261024T111917-ctest-718d52; main loop 4.04, p50/p95/p99 20/31/36 ms), so the cpu_p99 budget
+fails 1.0.852 on both; this branch measured 1.1-1.5 / 3.3-4.7 on the mini. The main-loop budget
+(8.0) is unchanged.
