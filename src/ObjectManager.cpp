@@ -45,7 +45,9 @@ void ObjectManager::load(InputStream& stream) {
             SDL_Log("ObjectManager::load(): The loaded object has a different ID than expected (%d!=%d)!",objectID,pObject->getObjectID());
         }
 
-        objectMap.insert( std::pair<Uint32,ObjectBase*>(objectID, pObject) );
+        if(objectMap.insert( std::pair<Uint32,ObjectBase*>(objectID, pObject) ).second) {
+            setDense(objectID, pObject);
+        }
 
         if(auto* spatialGrid = currentGame->getSpatialGrid()) {
             const Coord loc = pObject->getLocation();
@@ -67,6 +69,7 @@ Uint32 ObjectManager::addObject(ObjectBase* pObject) {
         // there is already such an object in the list
         return NONE_ID;
     } else {
+        setDense(nextFreeObjectID, pObject);
         return nextFreeObjectID++;  // Caution: Old value is returned but value is incremented afterwards
     }
 }

@@ -91,6 +91,34 @@ private:
     std::vector<int32_t> cells_;
 };
 
+/// The two raster passes of a chessboard distance transform, in place over the row-major
+/// `w*h` values in `d`. The forward pass lowers each cell to its left, up-left, up and
+/// up-right neighbours' results + 1, the backward pass to the mirrored four, exactly as a
+/// tile-by-tile raster loop does (the same minimum over the same neighbours). Each row
+/// first takes the neighbouring row (a loop the compiler vectorises), then the serial run
+/// along the row. Sources hold 0 and every other cell its cap, e.g. min(cap, distance).
+inline void chessboardPasses(std::vector<int>& d, int w, int h) {
+    if (w <= 0 || h <= 0 || d.size() < static_cast<size_t>(w) * static_cast<size_t>(h)) return;
+    std::vector<int> fromRow(static_cast<size_t>(w));
+    // fromRow[x] = min(n[x-1], n[x], n[x+1]) + 1 over the in-map neighbours of row n.
+    auto relax = [&](const int* n, int* row) {
+        fromRow[0] = std::min(n[0], w > 1 ? n[1] : n[0]) + 1;
+        for (int x = 1; x < w - 1; ++x) fromRow[x] = std::min(std::min(n[x-1], n[x]), n[x+1]) + 1;
+        if (w > 1) fromRow[w-1] = std::min(n[w-2], n[w-1]) + 1;
+        for (int x = 0; x < w; ++x) row[x] = std::min(row[x], fromRow[x]);
+    };
+    for (int y = 0; y < h; ++y) {
+        int* row = d.data() + static_cast<size_t>(y) * w;
+        if (y > 0) relax(row - w, row);
+        for (int x = 1; x < w; ++x) row[x] = std::min(row[x], row[x-1] + 1);
+    }
+    for (int y = h - 1; y >= 0; --y) {
+        int* row = d.data() + static_cast<size_t>(y) * w;
+        if (y + 1 < h) relax(row + w, row);
+        for (int x = w - 2; x >= 0; --x) row[x] = std::min(row[x], row[x+1] + 1);
+    }
+}
+
 /// "Is any marked tile inside this box?" over a boolean tile indicator.
 ///
 /// Replaces a pointwise `(2R+1)^2` probe such as Map::isWithinBuildRange(),

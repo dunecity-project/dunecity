@@ -90,6 +90,28 @@ Agent NativesFollowup. Evidence `~/Documents/projects/dunecity-results/natives-f
   Fixed: teams 10/0, both fire, hit at cycle 7; summoned worm targets enemy only, bite spares Ordos and kills the enemy
   trooper; summoner survives save/reload (9873); played win on the last enemy with anonymous and Natives units alive.
   New `[workshop][duplicates]` unit cases; protocol/save pins 101/9873, `NUM_TEAM_SLOTS` 11.
+## 2026-10-24 — 8-house FPS round 3: build-pass and city-growth spikes, exact (branch `perf/fps-round3`, worktree `~/Documents/projects/dunecity-fps-round3`, from staging 6fd861ae = 1.0.852; protocol 94, save 9871 unchanged)
+
+Agent FpsFix3. Details/tables: `docs/game-performance.md`, "Third pass". Evidence
+`~/Documents/projects/dunecity-results/fps-round3` (results.jsonl, scratch.jsonl, trace-*.log, sample-*.txt,
+rendered-mini.jsonl, rendered-air.jsonl).
+
+- **Cause:** 1.0.852's worst QuantBot build passes (18-22 ms thread CPU) were 6-8 `findPlaceLocation` calls
+  of ~2 ms, each mostly the whole-map pass 1/2 origin loop, plus enemy clearance, rock survey, anchor field
+  and city service search. City growth's 16-18 ms was the decision log's 96-day `city_map_snapshot`
+  (telemetry only); otherwise a row-major tile walk and the traffic BFS.
+- **Fix (exact):** block-skipped build-range gate in placement; vectorised `DuneCity::chessboardPasses` for
+  enemy clearance and the rock survey; leaner `RockExpansionPolicy::choose`; service candidates by 2D
+  difference array; dense id table in `ObjectManager::getObject`; growth origins from `structureList`;
+  memoised traffic road/role tests; cheaper telemetry quoting and snapshot. New unit tests: clearance vs the
+  old raster loop (400 random maps), placement pass counts.
+- **Numbers:** 21 PROBE_DIGESTs over 15,000 cycles identical to 1.0.852. Stepped (mini): cpu p99 14.3 -> 8.4 ms,
+  frame p99 35.6 -> 29.3 ms, frames > 33 ms 29 -> 8 of 1,500, build total 7.3 -> 3.5 s, worst pass 18-22 ->
+  10-13 ms CPU, growth worst 16 -> 9 ms. Rendered 1440x900 (his [Video]): Air battery + LPM fps 41-43 -> 46-49,
+  p99 49-66 -> 37-50 ms, > 33 ms 7.3-11.9 % -> 2.5-6.6 %; mini pairs noisy (load 7-14), 4 of 5 pairs better.
+- **perf_regression:** 8-house budgets cpu_p99 3.0 -> 1.6 (1.0.852 Pro 1.807 fails), frame_cpu_p99 9.0 -> 5.5.
+- Measurement-only: the vuk-perf tree's `--video` game-perf option was applied temporarily (not committed);
+  probe builds wrote `balance-probe-cache/` entries into staging's build-int. Air copies removed, PAUSE removed.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 

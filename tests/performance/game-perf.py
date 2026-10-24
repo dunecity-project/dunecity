@@ -58,8 +58,10 @@ EIGHT_HOUSE = DATA / 'eight-house-384'
 # Where the 8-house mod revision's other files live in this tree (found by their SHA-256).
 EIGHT_HOUSE_SOURCES = ('mods/dunecity/graphics_skins', 'config')
 # perf_regression budgets of the 8-house case, as multiples of the calibration loop (see
-# docs/game-performance.md "perf_regression: eight houses on 384x384").
-EIGHT_BUDGETS = {'cpu_p99': 3.0, 'frame_cpu_p99': 9.0, 'mainloop_frame_p99': 8.0}
+# docs/game-performance.md "perf_regression: eight houses on 384x384"). The p99 cycle of this
+# save is a QuantBot build pass (8 houses x one per 100 cycles = 8% of cycles): 1.0.852 measured
+# 2.2-2.9 (mini) and 1.86 (Pro) there, perf/fps-round3 1.1-1.5 (mini), so 1.6 fails 1.0.852.
+EIGHT_BUDGETS = {'cpu_p99': 1.6, 'frame_cpu_p99': 5.5, 'mainloop_frame_p99': 8.0}
 
 
 def build_eight_house_fixture(scratch):

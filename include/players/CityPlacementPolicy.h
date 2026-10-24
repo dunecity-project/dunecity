@@ -12,6 +12,13 @@ inline bool inPlacementSearchPass(int x, int y, int cx, int cy, int radius, int 
     const bool central = x >= cx-radius && x <= cx+radius && y >= cy-radius && y <= cy+radius;
     return pass == 0 ? central : !central;
 }
+// How many origins (x, y0..y1) inPlacementSearchPass() admits, without visiting them.
+inline int placementSearchPassCount(int x, int y0, int y1, int cx, int cy, int radius, int pass) {
+    if (y1 < y0) return 0;
+    const bool centralColumn = x >= cx-radius && x <= cx+radius;
+    const int central = centralColumn ? std::max(0, std::min(y1, cy+radius) - std::max(y0, cy-radius) + 1) : 0;
+    return pass == 0 ? central : (y1 - y0 + 1) - central;
+}
 
 // Match ground-unit movement: neighbouring road tiles may connect diagonally.
 constexpr int dx[8] = {0, 1, 0, -1, 1, 1, -1, -1};

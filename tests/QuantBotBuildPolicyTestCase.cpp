@@ -899,6 +899,50 @@ TEST_CASE("Factory threat clearance matches nearest danger including diagonals a
     REQUIRE(footprintClearance(clearance,20,10,17,7,3,3)==12);
     REQUIRE(footprintClearance(clearance,20,10,18,7,3,3)==0);
 }
+TEST_CASE("Factory threat clearance equals the tile-by-tile raster passes it replaced", "[quantbot][placement]") {
+    using namespace TacticalSafetyPolicy;
+    // The two raster passes as they were before enemyClearanceInto(), kept as the reference.
+    auto reference = [](const std::vector<int>& danger, int w, int h) {
+        std::vector<int> result(w*h, 12);
+        for (int y=0; y<h; ++y) for (int x=0; x<w; ++x) {
+            auto& distance=result[y*w+x];
+            if (danger[y*w+x]>0) { distance=0; continue; }
+            if (x>0) distance=std::min(distance,result[y*w+x-1]+1);
+            if (y>0) for (int dx=-1; dx<=1; ++dx)
+                if (x+dx>=0 && x+dx<w) distance=std::min(distance,result[(y-1)*w+x+dx]+1);
+        }
+        for (int y=h-1; y>=0; --y) for (int x=w-1; x>=0; --x) {
+            auto& distance=result[y*w+x];
+            if (x+1<w) distance=std::min(distance,result[y*w+x+1]+1);
+            if (y+1<h) for (int dx=-1; dx<=1; ++dx)
+                if (x+dx>=0 && x+dx<w) distance=std::min(distance,result[(y+1)*w+x+dx]+1);
+        }
+        return result;
+    };
+    uint32_t state = 12345;
+    auto next = [&](uint32_t range) { state = state*1664525u + 1013904223u; return (state >> 8) % range; };
+    std::vector<int> reused;
+    for (int round=0; round<400; ++round) {
+        const int w = 1 + int(next(48)), h = 1 + int(next(48));
+        const uint32_t density = 1 + next(round % 4 == 0 ? 400 : 40);
+        std::vector<int> danger(w*h);
+        for (auto& value : danger) value = next(density) == 0 ? int(next(3)) * 100 : 0;
+        const auto expected = reference(danger, w, h);
+        REQUIRE(enemyClearance(danger, w, h) == expected);
+        enemyClearanceInto(danger, w, h, reused);   // a buffer left over from another size
+        REQUIRE(reused == expected);
+    }
+}
+TEST_CASE("Placement pass origin counts match the per-origin test", "[quantbot][placement]") {
+    for (int pass=0; pass<2; ++pass)
+        for (int x=-2; x<14; ++x)
+            for (int y0=-3; y0<16; ++y0)
+                for (int y1=y0-1; y1<18; ++y1) {
+                    int expected=0;
+                    for (int y=y0; y<=y1; ++y) expected += CityPlacementPolicy::inPlacementSearchPass(x,y,6,7,3,pass);
+                    REQUIRE(CityPlacementPolicy::placementSearchPassCount(x,y0,y1,6,7,3,pass)==expected);
+                }
+}
 TEST_CASE("Factory safety outranks frontage preferences without banning constrained sites", "[quantbot][placement]") {
     using namespace TacticalSafetyPolicy;
     REQUIRE(factorySiteRank(0,8,0,-100)>factorySiteRank(0,2,10,1000));
