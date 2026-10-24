@@ -138,7 +138,7 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, HeavyFactoryFirst;
+    /// FinishWhenLeading, JoinAllyWaves, ArmyBeforeFleet;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -206,10 +206,13 @@ struct QuantBotConfig {
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
         bool joinAllyWaves;
-        /// Custom Hard/Brutal: until the house has owned its first heavy factory, plan Medium's
-        /// harvester fleet and hold the Brutal economy step, so the opening reaches the heavy
-        /// factory as early as Medium's (docs/ai-scenario-matrix.md, "Difficulty ladder").
-        bool heavyFactoryFirst;
+        /// Custom Hard/Brutal that started without a heavy factory (small, outpost, Construction
+        /// Yard or MCV starts; inert from a medium base up): plan Medium's harvester fleet and hold
+        /// Brutal's economy step until the first heavy factory stands and afterwards while the
+        /// team's ground army does not lead the strongest known enemy army; while it does not lead,
+        /// no wave below WaveReadinessPercent (a smaller tempo readiness waits) (docs/ai-scenario-
+        /// matrix.md, "Difficulty ladder").
+        bool armyBeforeFleet;
     };
     ForceSettings force;
 

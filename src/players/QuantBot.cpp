@@ -205,9 +205,10 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     if (mapsize <= 4096) return 0;
     const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
     const int own = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
-    // HeavyFactoryFirst: Medium's fleet until the first heavy factory stands (Hard/Brutal's larger
-    // fleet drove four to seven refineries first and the heavy factory 1.5-2 minutes after Medium's).
-    if (heavyFactoryFirstHold()) {
+    // ArmyBeforeFleet: Medium's fleet for a small start until its army can hold (Hard/Brutal's
+    // larger fleet outgrew Medium's 15 workers to 18-27 while the house's army fell behind, and the
+    // army lost the first big fight at minute 14-18 on the short maps).
+    if (armyBeforeFleetHold()) {
         const auto& medium = botConfig().getSettings(static_cast<int>(Difficulty::Medium));
         return std::min(own, mapsize <= 16384 ? medium.harvesterLimitCustomLargeMap : medium.harvesterLimitCustomHugeMap);
     }
@@ -221,10 +222,13 @@ bool QuantBot::firstHeavyFactoryBuilt() const {
     return getHouse()->getNumItems(Structure_HeavyFactory) + getHouse()->getNumLostItems(Structure_HeavyFactory) > 0;
 }
 
-bool QuantBot::heavyFactoryFirstHold() const {
-    return botConfig().force.heavyFactoryFirst && difficulty >= Difficulty::Hard && !supportMode
-        && gameMode == GameMode::Custom && currentGame && !isCampaignGameType(currentGame->gameType)
-        && !firstHeavyFactoryBuilt();
+bool QuantBot::armyBeforeFleetHold(bool fleet) const {
+    // A house that started with a heavy factory (a medium base or larger: the long ladder) is not
+    // held; the start is the counts captured on the first update (saved).
+    if (!botConfig().force.armyBeforeFleet || difficulty < Difficulty::Hard || supportMode
+        || gameMode != GameMode::Custom || !currentGame || isCampaignGameType(currentGame->gameType)
+        || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0) return false;
+    return (fleet && !firstHeavyFactoryBuilt()) || !finishLeading();
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {

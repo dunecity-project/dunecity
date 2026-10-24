@@ -168,8 +168,9 @@ public:
     int configuredCustomHarvesterLimit() const;
     /// The house has owned a heavy factory (or its tech has none to build).
     bool firstHeavyFactoryBuilt() const;
-    /// HeavyFactoryFirst holds this Custom Hard/Brutal house's opening economy push now.
-    bool heavyFactoryFirstHold() const;
+    /// ArmyBeforeFleet holds this Custom Hard/Brutal small start now: its team army does not lead the
+    /// strongest known enemy's, or (fleet) it has no heavy factory yet.
+    bool armyBeforeFleetHold(bool fleet = true) const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
