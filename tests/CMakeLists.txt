@@ -579,10 +579,20 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
         # no house list or statistics; win/lose ignores it; the inspect panel and radar show it.
+        # 1.0.852 interactions: Natives kills and a shot-down plane's crash deciding spectated,
+        # played and campaign games (a crash taking two last teams at once names nobody), the
+        # analytics roster, and host/guest/spectator lockstep digests with all of it in play.
         add_test(NAME natives_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/natives/run-natives-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/natives-probe)
         set_tests_properties(natives_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Saves 1.0.842, 1.0.847, 1.0.850 and the public 1.0.851 wrote (vanilla FFA, DuneCity 1v1,
+        # mid-game with worms) load in a fresh profile, run 600 cycles, re-save as the current
+        # savegame version and load again, every worm the Natives'.
+        add_test(NAME save_roundtrip_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/saves/run-save-roundtrip-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/save-roundtrip-probe)
+        set_tests_properties(save_roundtrip_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
