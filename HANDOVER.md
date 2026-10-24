@@ -1,3 +1,25 @@
+## 2026-10-24 — Matching Android 0.2.31 authorized
+
+User opted into an Android update so multiplayer engine versions match desktop
+and browser 1.0.852. Incremented Android metadata to 0.2.31 / 1000551. Added
+android_package_probe to the existing build workflow: a hosted Windows runner
+builds native ARM64/APK with two compiler jobs, pinned NDK 28.2/JDK 17 and binary
+dependency caching, then verifies packaged payload bytes against source.
+Other build/publication jobs are skipped in this manual candidate lane.
+
+No private signing key is uploaded. The hosted debug signer is temporary: the
+downloaded candidate must be re-signed locally with the existing upgrade identity,
+then verified before release. Local signing can use a bounded JVM; no local
+native compilation is needed. Keep Android publication latest=false so the
+desktop updater's latest release remains the desktop stable tag. Build,
+upgrade-signature verification, metadata merge and publication are pending.
+Hosted Android run: 40078874839, source 7908e9a5. Six payload-checker unit cases
+passed locally after dispatch; the running job uses the same verifier/native
+source, while its later unit-test invocation/docs are verification-only changes.
+
+Final desktop PR #104 run: 40077059573 at 1f722fdc. Windows, Linux and browser
+builds plus relay/signaling checks passed; the capped sanitizer build succeeded
+and its CTest suite is still running. Await full checks before merging/tagging.
 ## 2026-10-24 — Hold unpublished 1.0.852; normalize cross-platform payloads
 
 Final Android audit found 65 DuneCity manifests whose packaged bytes differed
@@ -14834,3 +14856,18 @@ permanent obstruction, disconnected nearby rock and first-yard cases pass.
 The focused unit/opening-economy tests also pass in all three modes. No full
 match win/loss claim is made by these regression fixtures.
 No push, release or installation over the running Air game.
+## 2026-10-24 — Android 0.2.31 / engine 1.0.853 candidate verified
+
+Hosted run 40081778884 at 6c54ff0b passed ARM64 compilation, dependency checks,
+seven payload-checker unit cases and canonical Git verification of 3,521 files.
+Public candidate uses the existing Android upgrade certificate, SHA-256
+a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60.
+APK SHA-256: 391a44d646f9b91bcaefc5c077fa619ac7b16a1966c6d1b8abfe25a0c35f5a28;
+size: 65,066,127 bytes. v1/v2/v3 signature verification and 16 KiB ZIP alignment
+passed. Re-signing preserved every non-signature payload entry. Native library
+contains engine 1.0.853. All 849 DuneCity files match Windows ZIP, Linux TGZ
+and browser data byte-for-byte. On-device gameplay remains unverified.
+Publish only after matching desktop 1.0.853 is public; Android must not become
+the repository's latest desktop release. Metadata/workflow-only integration can
+reuse this hosted verification; no native game code is changed by that PR.
+
