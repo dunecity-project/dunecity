@@ -1,3 +1,19 @@
+## 2026-10-24 — Special portraits and seven missing building variants
+
+Continued the approved DuneCity skin pass with 39 new 182×110 balanced portraits
+and seven missing map-building variants (four Hospitals, three Nuclear Plants).
+The resulting coverage is 48/48 special-building variants and 72/72 dedicated
+portraits across the 72 R/C/I/special packages. See
+docs/dunecity-special-portraits-854.md for scope, dimensions and validation.
+All 849 files from the preceding Compact candidate remain byte-identical.
+Only 46 PNGs and seven building INIs are added to the production skin payload;
+private sources/authoring metadata are excluded. No engine or Dune2R changes.
+Reviewed results were also posted to the authorized asset processor channel.
+The local portable test copy is refreshed with verified artwork, using the
+existing validated 1.0.854 executable; this is not a new native CI build.
+Keep this on assets/dunecity-special-compacts for play-testing. Do not publish,
+tag, merge main, or update the website automatically. Public remains 1.0.853.
+
 ## 2026-10-24 — Special-building Compacts / 1.0.854 candidate
 
 User authorized the next skin improvement pass after the current asset audit.

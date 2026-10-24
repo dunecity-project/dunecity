@@ -57,6 +57,8 @@ Hosted validation is complete for this candidate:
 PNG storage increases by 4.14 MiB. Source packages and authoring records are
 updated; no 1.0.854 release, website change or main-branch merge is published.
 
-This batch does not author the seven missing special buildings or the 32
-missing dedicated special-building portraits, and does not add new activity
-sequences. Those remain the following artwork passes. Dune2R is separate.
+This 31-frame batch did not author missing buildings or portraits. The subsequent
+artwork pass adds the seven missing buildings and 39 portraits (32 for existing
+buildings, seven for the new buildings); see
+[the portrait follow-up](dunecity-special-portraits-854.md). No new activity
+sequences are introduced. Dune2R remains separate.
