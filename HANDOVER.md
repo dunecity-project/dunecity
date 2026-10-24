@@ -1,3 +1,38 @@
+## 2026-10-24 — Ladder, team play and campaign partner: measured candidates (branch `fix/ladder-campaign`, worktree `~/Documents/projects/dunecity-ladder-campaign`; protocol 98, save 9871; no default changed; INCOMPLETE)
+
+Agent LadderCampaign2 (continues LadderCampaign, below). Results `~/Documents/projects/dunecity-results/ladder-campaign/`.
+Every candidate is a hashed `[Force Concentration]` switch; `scenario-matrix.py --style <play-style>` runs the on arm
+(every QuantBot plays `tests/ai/play-styles/<style>.ini`), `--compare CONTROL CANDIDATE` prints the paired A/B by game id.
+
+- **Controls are 852:** the switch-off build gives the same final digest as 1.0.852 on every common game (16 ladder/FFA/
+  team games, 96 campaign games v `regression-852/sm-full-852`), so the 852 runs `team-before` and `short-before` are the controls.
+- **Team (JoinAllyWaves, = variant 8; default off):** the "1/4" premise does not reproduce at 852: the Hard team already
+  wins 2v2 38-9-1 (+0.60 [+0.35,+0.81]) and 3v3 35-13 (+0.46 [+0.21,+0.71]) of 48 each. Paired A/B, 48 games/format:
+  2v2 +0.14 [-0.01,+0.33] (41-5-2), 3v3 +0.04 [-0.17,+0.25] (36-12): not above 0, so not a default. 2v2 extended to 96
+  games/arm (jobs 20261024T124128-lc-team2-off-b5a2a8 / -lc-team2-allyjoin-abbee4, same dirs): re-run `--compare
+  team-before team-allyjoin`; accept only if the 2v2 interval is above 0 (3v3 is not). Not worse elsewhere by construction:
+  inert without allies; 1v1 ladder and FFA games are digest-identical on/off (ident-off/ident-allyjoin, 26 games).
+  mp category on/off (54 each) running: 20261024T124350-lc-mp-off-9d7643 / -lc-mp-allyjoin-54282b.
+- **Variants 12 (4+8) and 14 (2+4+8)** (local, 12 games/cell): 2v2 9-3 / 8-4, 3v3 8-4 / 6-6 - no better than 8; not ported.
+- **Short ladder (not fixed):** HeavyFactoryFirst (Medium's fleet until the first heavy factory; was variant 512) was inert
+  (QB v QH 72 games -0.02 [-0.14,+0.11]; QH v QM 32 games +0.02); ArmyBeforeFleet (small starts keep Medium's fleet and the
+  configured 60% readiness instead of Swarm's 35% while not leading; inert from medium bases, so the long ladder is unchanged)
+  144 games: QB v QH +0.04 [-0.17,+0.26], QH v QM +0.03 [-0.19,+0.27]. Both removed. Control at 852: QB v QH +0.22, QH v QM
+  +0.23 (72 each); worst cell QH v QM rs-dunecity -0.18: Hard buys MCVs for a third yard (city_yard_target 3 v 2) and has
+  half Medium's army at minute 16; Hard always plays Fixed:Tuned,Swarm, Medium the 60% Base readiness. Next candidate: hold
+  the extra city yard / Swarm tempo on small starts.
+- **Campaign (not fixed):** Hard-partner campaign at 852, 192 games: 5 losses - vanilla Atreides m20 74708/75717, vanilla
+  Atreides m22 77735, DuneCity Atreides m22 76726, DuneCity Harkonnen m22 95897 (the task's "Harkonnen m22 95897" is the
+  DuneCity game; vanilla m17 80762 and vanilla Harkonnen m22 95897 win). m20 vanilla: the partner starts with a yard and
+  2,000 credits against two fortified Easy houses (16 rocket turrets, launchers, devastators); its 17 harvesters strip the
+  near spice by minute 18 (map 109k -> 43k), after which every safe field's route crosses enemy reach and the harvesters
+  disperse with no income; Medium and Brutal partners lose it too (DuneCity m20 wins both seeds). m22: two Death Hands
+  destroy the yard/refineries at minute 10-20. Measured: CampaignFactoryFirst (<= 4 harvesters until the first heavy factory)
+  -0.02 [-0.06,+0.03] (won m22 77735 and DuneCity Atreides m22, lost vanilla m18 81771, Atreides m22 76726, DuneCity Ordos
+  m22, a time-out) - removed. Local only, still lost m20: harvester safety off, readiness against the strongest enemy from
+  the start, 2x army limit, Palace priority.
+- **Tests:** cluster ctest 20261024T124335-ctest-ca3b9b at 6665f84c (protocol test expects 98) - read with `dunecity-queue report`.
+
 ## 2026-10-24 — Ladder, team play and campaign partner: diagnosis + team harness (branch `fix/ladder-campaign`, worktree `~/Documents/projects/dunecity-ladder-campaign`, from staging 6fd861ae = 1.0.852; protocol 94 and save 9871 unchanged; INCOMPLETE)
 
 Agent LadderCampaign, stopped at the request budget. Only the measurement harness is on this branch; the candidate AI
