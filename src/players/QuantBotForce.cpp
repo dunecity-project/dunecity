@@ -109,14 +109,8 @@ int QuantBot::waveReadinessPercent() const {
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
     // The tempo of the strategy (docs/ai-play-styles.md, "Strategies"); Base keeps the config's.
     const auto* tempo = strategyTempo();
-    const int configured = std::clamp(botConfig().force.waveReadinessPercent, 10, 300);
-    if (tempo && tempo->readinessPercent > 0) {
-        const int own = std::clamp(tempo->readinessPercent, 10, 300);
-        // ArmyBeforeFleet: a small start whose army does not lead sends no wave smaller than the
-        // configured readiness (Swarm's 35% waves died into Medium's 60% defence on the short maps).
-        return own < configured && armyBeforeFleetHold(false) ? configured : own;
-    }
-    return configured;
+    if (tempo && tempo->readinessPercent > 0) return std::clamp(tempo->readinessPercent, 10, 300);
+    return std::clamp(botConfig().force.waveReadinessPercent, 10, 300);
 }
 
 int QuantBot::openingReadinessPercent() const {

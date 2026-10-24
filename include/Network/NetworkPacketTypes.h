@@ -306,9 +306,9 @@
 // 94: Release 1.0.851 combines 90 and 93 (and the render-only unit-jitter fix, which changes no
 //     simulation): a crashing plane's Death Hand also hits Natives worms and troopers, and anti-air
 //     never treats Natives as its own team. An 88, 90 or 93 peer would desync. Save 9871.
-// 98: Ladder, team play and campaign partner (fix/ladder-campaign): the QuantBot config hash names two
-//     new [Force Concentration] switches, JoinAllyWaves and ArmyBeforeFleet (docs/ai-scenario-matrix.md),
-//     so a 94 peer's hash differs. Save 9871.
+// 98: Ladder, team play and campaign partner (fix/ladder-campaign): the QuantBot config hash names a
+//     new [Force Concentration] switch, JoinAllyWaves (docs/ai-scenario-matrix.md, "Team games"), so a
+//     94 peer's hash differs. Save 9871.
 #define NETWORK_PROTOCOL_VERSION            98
 
 // Mod transfer limits

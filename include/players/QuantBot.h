@@ -166,11 +166,6 @@ public:
     /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
     /// in a custom game the house plays itself; 0 elsewhere (no ceiling from the config).
     int configuredCustomHarvesterLimit() const;
-    /// The house has owned a heavy factory (or its tech has none to build).
-    bool firstHeavyFactoryBuilt() const;
-    /// ArmyBeforeFleet holds this Custom Hard/Brutal small start now: its team army does not lead the
-    /// strongest known enemy's, or (fleet) it has no heavy factory yet.
-    bool armyBeforeFleetHold(bool fleet = true) const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
