@@ -3108,7 +3108,9 @@
         }
       },
       "validation": {
-        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "status": "passed targeted content/startup and chooser checks and the 118-test combined suite",
+        "combined_source": "e286003d100a",
+        "combined_job": "20261024T213618-combined-vuk-final-3ee6bc",
         "startup_source": "cdf9b101",
         "startup_job": "20261024T162952-combined-cdf9b101-e51206",
         "menu_source": "09441f0b",
@@ -6210,7 +6212,9 @@
         }
       },
       "validation": {
-        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "status": "passed targeted content/startup and chooser checks and the 118-test combined suite",
+        "combined_source": "e286003d100a",
+        "combined_job": "20261024T213618-combined-vuk-final-3ee6bc",
         "startup_source": "cdf9b101",
         "startup_job": "20261024T162952-combined-cdf9b101-e51206",
         "menu_source": "09441f0b",
@@ -6248,7 +6252,9 @@
         }
       },
       "validation": {
-        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "status": "passed targeted content/startup and chooser checks and the 118-test combined suite",
+        "combined_source": "e286003d100a",
+        "combined_job": "20261024T213618-combined-vuk-final-3ee6bc",
         "startup_source": "cdf9b101",
         "startup_job": "20261024T162952-combined-cdf9b101-e51206",
         "menu_source": "09441f0b",

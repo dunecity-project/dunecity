@@ -292,12 +292,24 @@ The aggregate difficulty order is positive in both arms. All paired differences
 are level by the existing classifier; that is **not noninferiority proof** and
 does not clear the mandatory AAA failure above.
 
-The parent has separately queued the unchanged six mandatory AAA seeds with
-the rule off/on in the current integrated source `e286003d100a`, including the
-Palace/IX correctness fix: jobs `20261024T214127-integrated-aaa-off-4b4f86`
-and `20261024T214128-integrated-aaa-on-29db8b`. These new same-build results
-must not be pooled with the older source's sixty-seed cohort. No current
-integrated on-arm pass or combined-build acceptance is claimed here.
+The parent repeated the unchanged six mandatory AAA seeds in the integrated
+game source, including the Palace/IX correctness fix. Off job
+`20261024T214127-integrated-aaa-off-4b4f86` at `e286003d100a` wins **6/6**.
+The first on job ran no games: writing its overlay inside the run directory
+made the launcher fail with `FileExistsError`. Harness-only fix `45417259`
+writes that file beside the directory. A real shared-build smoke played the
+first seed; `20261024T221200-integrated-aaa-on-fixed-7d5372` skipped it and
+played only the other five. The corrected on cohort wins **5/6**: seed
+`906213928` again times out at 41.00 minutes. The five wins are 38.34, 34.36,
+38.11, 33.90 and 33.64 minutes in the mandatory seed order above.
+
+Only documentation and the overlay launcher differ between these integrated
+snapshots; no production game code changed. Do not pool these six seeds with
+the earlier sixty-seed cohort. The current default-off combined suite at
+`e286003d100a` passed **118/118** (`20261024T213618-combined-vuk-final-3ee6bc`),
+including the explicit on-rule motion probe. That does **not** clear this
+separate AI gate. Continuous Ground Steps remains off and unaccepted; no seed,
+deadline or check was weakened.
 
 ## Verification
 

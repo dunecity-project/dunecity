@@ -222,5 +222,10 @@ which owns the mod-selection callback, rather than an inert legacy chooser.
 All three catalogue identities/non-approval checks passed, and the three
 640-wide selected-mod frames were visually inspected.
 
-These are targeted receipts, not a green final combined suite. Rejected items
+The final combined source `e286003d100a` then passed **118/118 CTests** in
+job `20261024T213618-combined-vuk-final-3ee6bc`, using all four hosts. This
+includes `community_mods_startup` (Air, 67.5 s), `community_maps_startup`
+(Air, 80.0 s), `menu_navigation_probe` (mini, 290.1 s) and the payload check
+(Air). The startup/chooser integration is accepted; this is still not a
+balance certification or an exercised browser-package claim. Rejected items
 were excluded on the review grounds above, not falsely reported as runtime-tested.
