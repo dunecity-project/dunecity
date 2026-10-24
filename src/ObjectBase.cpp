@@ -178,11 +178,10 @@ ObjectBase::ObjectBase(InputStream& stream) {
 
     stream.readBools(&b[0], &b[1], &b[2], &b[3], &b[4], &b[5], &b[6], &b[7]);
     if(currentGame && currentGame->getLoadedSavegameVersion() >= 9821) {
-        stream.readBools(&b[8], &b[9]);
+        // Since 9873 the third bit of this byte is NATIVES_TEAM's; older releases wrote it as 0.
+        stream.readBools(&b[8], &b[9], &b[NATIVES_TEAM]);
     }
-    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_NATIVES_TEAM) {
-        b[NATIVES_TEAM] = stream.readBool();
-    } else {
+    if(!currentGame || currentGame->getLoadedSavegameVersion() < SAVEGAMEVERSION_NATIVES_TEAM) {
         // Before 9873 the Natives house saw with team 0; the slot it sees with now is that one.
         b[NATIVES_TEAM] = b[0];
     }
@@ -253,8 +252,9 @@ void ObjectBase::save(OutputStream& stream) const {
     stream.writeUint32(attackMode);
 
     stream.writeBools(visible[0], visible[1], visible[2], visible[3], visible[4], visible[5], visible[6], visible[7]);
-    stream.writeBools(visible[8], visible[9]);
-    stream.writeBool(visible[NATIVES_TEAM]);
+    // NATIVES_TEAM shares the byte of teams 8 and 9, so the object record keeps its size and
+    // tests that splice it into older records stay byte-exact.
+    stream.writeBools(visible[8], visible[9], visible[NATIVES_TEAM]);
 }
 
 

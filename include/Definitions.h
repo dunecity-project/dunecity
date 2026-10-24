@@ -182,8 +182,9 @@
 //       troopers an older save's crime raised cannot be told from a house's own and keep their
 //       owner (see 9873).
 // 9873: Natives follow-up (fix/natives-followup): the Natives house plays on its own team
-//       (NATIVES_TEAM, the eleventh visibility slot, which every object now saves after the
-//       ten it had), and a sandworm remembers the house whose reinforcement brought it
+//       (NATIVES_TEAM, the eleventh visibility slot, saved as the third bit of the byte that
+//       holds teams 8 and 9, so object records keep their size), and a sandworm remembers the
+//       house whose reinforcement brought it
 //       (Sandworm::summonerHouseID; that house's team is spared). A 9871 or older save loads
 //       with the Natives house moved off team 0, the new visibility slot copied from team 0's
 //       (the team Natives saw with) and no summoner. Crime troopers of a pre-9871 save still

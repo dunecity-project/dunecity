@@ -15,8 +15,11 @@ Agent NativesFollowup. Evidence `~/Documents/projects/dunecity-results/natives-f
   are 1-9, anonymous map houses stay on 0). Natives and anonymous houses fight each other; `House::isAlive()` is
   always true for Natives; `House::lose`'s AI-no-buildings check and `ReinforcementTrigger`'s Enemybase choice skip
   Natives by name (team 0 no longer did it). Win/lose is otherwise unchanged: team 0 still never blocks or wins.
-  Saves: each object stores the 11th visibility bit; a 9871/older save copies it from team 0's and moves the Natives
-  house to `NATIVES_TEAM` on load (`House(InputStream&)`).
+  Saves: each object stores the 11th visibility bit as the spare third bit of its teams-8/9 byte (record size
+  unchanged, so `formation_movement_probe`, `deviation_reward_probe` and `structure_degradation_*`, which splice
+  current records into pre-9849/9859 ones, stay byte-exact; a separate byte broke all six in ctest
+  20261024T130056-ctest-39f8f0); a 9871/older save copies it from team 0's and moves the Natives house to
+  `NATIVES_TEAM` on load (`House(InputStream&)`).
 - **Worm reinforcements:** none in Tornie or the bundled mods; 109 `[REINFORCEMENTS]` worm lines in bundled maps
   (multiplayer Player1-6 at Homebase/Air, e.g. Gamma Sector 40, Wormhole, Rocking Fields; Mercenary on many 4P/5P
   maps; singleplayer Sardaukar Base; OPENSD2 SCENF011-015 Sardaukar/Mercenary at Enemybase). Correction to the
