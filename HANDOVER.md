@@ -1,3 +1,15 @@
+## 2026-10-24 — 1.0.854 publication and Android 0.2.32 authorized
+
+User approved the completed asset candidate and explicitly requested publication
+across desktop, browser, Android, releases and website. This supersedes the local
+play-test hold below. origin/main has no intervening game changes; website-only
+hourly download statistics are preserved. Engine version remains the candidate's
+1.0.854; Android advances to 0.2.32 / 1000552 using the same engine and payload.
+Proceed through PR validation/merge and the signed stable-tag release workflow.
+Use the hosted Android lane, then locally re-sign with the existing upgrade
+identity without uploading signing material. No local native compilation.
+Publication, cross-platform asset hashes and live website/browser checks pending.
+
 ## 2026-10-24 — Special portraits and seven missing building variants
 
 Continued the approved DuneCity skin pass with 39 new 182×110 balanced portraits
