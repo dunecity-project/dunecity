@@ -302,6 +302,10 @@ Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`
   death. Reference/Palace-only 4P arms omit 9/8 final-loser timestamps, changing 18/16 score/drawn rows.
   `VanillaMatch::recordEliminations` now observes the final state once after the loop; no extra simulation
   tick, sample or save. Absent houses remain unknown, Natives excluded. Raw evidence stays unchanged.
+  Scope correction: standard `vanilla-match.py::placings` already imputes missing nonwinner deaths before
+  `--report` scoring. Only raw timestamp/place fields and direct consumers that omit that recovery are
+  wrong; existing standard FFA/RatioSM reports are not invalidated. The 18/16 changed score rows compare
+  recovered inputs against a naive raw-data calculation, not against the existing standard report.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
