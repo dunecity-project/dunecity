@@ -1,3 +1,22 @@
+## 2026-10-24 — Hold unpublished 1.0.854; complete civic portrait integration
+
+Final source inspection found Hospital/Church icons were bundled but not mapped
+to sidebar portrait IDs; civic properties deliberately retained the old map
+preview. Held/canceled stable run 40140428626 and redundant main run 40140382198
+before publication. Keep v1.0.854 immutable and unpublished; public remains 853.
+Complete this as 1.0.855, with the same unpublished Android 0.2.32 / 1000552.
+The Android draft is still engine 854 and MUST be replaced with the rebuilt,
+re-signed engine-855 APK before publishing; its tag has not been published.
+
+Append two presentation-only portrait IDs without renumbering existing IDs,
+register Hospital/Church authored/fallback textures, and refresh selected-zone
+portraits on civic and skin changes. SimCity retains its live preview. No saves,
+simulation or network changes. Extend the real SDL probe to compare all 16 civic
+portrait images against authored PNGs and exercise overlay/skin transitions.
+Previous PR #107, Mac probe and Android build passed; new source needs fresh
+hosted verification and publication under the user's existing authorization.
+No local native compilation. Original engine-854 APK and logs retained locally.
+
 ## 2026-10-24 — 1.0.854 publication and Android 0.2.32 authorized
 
 User approved the completed asset candidate and explicitly requested publication

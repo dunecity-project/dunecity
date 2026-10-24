@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <chrono>
 #include <Menu/OptionsMenu.h>
+#include <cstring>
 
 void skinRequire(bool condition, const char* message) {
     if(!condition) throw std::runtime_error(message);
@@ -126,6 +127,45 @@ int runSkinProbe() {
         init.addHouseInfo(info);
     }
     game->initGame(init);
+    // Check actual decoded portrait pixels, not only a cache pointer: a missing
+    // mapping can otherwise silently derive a top-down fallback from the atlas.
+    const std::array<const char*, 8> factions{
+        "harkonnen", "atreides", "ordos", "fremen", "sardaukar", "mercenary", "neutral", "rebels"};
+    for(int house = 0; house < static_cast<int>(factions.size()); ++house) {
+        pGFXManager->setDuneCityHouseGraphicsSkin(house, true);
+        for(const bool hospital : {true, false}) {
+            const auto picture = hospital ? Picture_Hospital : Picture_Church;
+            const auto icon = std::filesystem::path(ModManager::instance().getModPath("dunecity"))
+                / "graphics_skins/Dune2/buildings"
+                / (std::string("dunecity_") + factions[house] + (hospital ? "_hospital" : "_church")) / "icon.png";
+            auto input = sdl2::RWops_ptr{SDL_RWFromFile(icon.string().c_str(), "rb")};
+            auto raw = input ? LoadPNG_RW(input.get()) : sdl2::surface_ptr{};
+            skinRequire(bool(raw), "Civic authored icon is missing");
+            auto expected = sdl2::surface_ptr{SDL_CreateRGBSurfaceWithFormat(0,91,55,32,SDL_PIXELFORMAT_RGBA32)};
+            skinRequire(bool(expected), "Cannot create expected civic portrait");
+            SDL_SetSurfaceBlendMode(raw.get(), SDL_BLENDMODE_NONE);
+            skinRequire(SDL_BlitScaled(raw.get(), nullptr, expected.get(), nullptr) == 0,
+                        "Cannot fit expected civic portrait");
+            auto expectedTexture = convertSurfaceToTexture(expected.get());
+            auto* actualTexture = pGFXManager->getSmallDetailPic(picture, house);
+            skinRequire(actualTexture != nullptr, "Civic house portrait is missing");
+            SDL_Rect bounds{0,0,91,55};
+            SDL_SetRenderDrawColor(renderer,0,0,0,255); SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, actualTexture, nullptr, &bounds);
+            auto actualPixels = renderReadSurface(renderer);
+            SDL_RenderClear(renderer); SDL_RenderCopy(renderer, expectedTexture.get(), nullptr, &bounds);
+            auto expectedPixels = renderReadSurface(renderer);
+            skinRequire(actualPixels && expectedPixels && actualPixels->w == expectedPixels->w
+                        && actualPixels->h == expectedPixels->h, "Cannot capture civic portrait");
+            for(int row=0; row<actualPixels->h; ++row) {
+                skinRequire(std::memcmp(static_cast<char*>(actualPixels->pixels)+row*actualPixels->pitch,
+                            static_cast<char*>(expectedPixels->pixels)+row*expectedPixels->pitch,
+                            actualPixels->w*actualPixels->format->BytesPerPixel) == 0,
+                            "Selected civic portrait differs from its authored faction icon");
+            }
+        }
+        pGFXManager->setDuneCityHouseGraphicsSkin(house, false);
+    }
     for(const auto house : {HOUSE_ATREIDES, HOUSE_HARKONNEN}) {
         auto* owner = game->getHouse(house);
         skinRequire(owner != nullptr, "House missing");
@@ -152,8 +192,11 @@ int runSkinProbe() {
                 SavePNG(image.get(), filename.c_str());
                 for(auto overlay : {ZoneStructure::CivicOverlay::Hospital, ZoneStructure::CivicOverlay::Church}) {
                     zone->setCivicOverlay(overlay); panel->update();
-                    skinRequire(!panel->objPicture.isVisible() && panel->zonePreview.isVisible(),
-                                "Civic overlay lost live preview");
+                    const auto portraitID = overlay == ZoneStructure::CivicOverlay::Hospital
+                        ? Picture_Hospital : Picture_Church;
+                    skinRequire(panel->objPicture.isVisible() && !panel->zonePreview.isVisible()
+                                && panel->objPicture.pTexture.get() == pGFXManager->getSmallDetailPic(portraitID, house),
+                                "Civic overlay did not select its own house portrait");
                     const int picture = overlay == ZoneStructure::CivicOverlay::Hospital
                         ? ObjPic_Hospital : ObjPic_Church;
                     const SDL_Rect destination{200, 200, 64, 64};
@@ -169,12 +212,22 @@ int runSkinProbe() {
                     skinRequire(drawn,
                                 "Civic overlay failed to select its high-detail house picture");
                     pGFXManager->setDuneCityHouseGraphicsSkin(house, false);
+                    panel->update();
+                    skinRequire(!panel->objPicture.isVisible() && panel->zonePreview.isVisible(),
+                                "SimCity civic overlay lost live preview");
                     skinRequire(!pGFXManager->drawDuneCityBuilding(
                                     item, house, 0, destination, picture),
                                 "High-detail civic overlay leaked into SimCity skin");
                     pGFXManager->setDuneCityHouseGraphicsSkin(house, true);
+                    panel->update();
+                    skinRequire(panel->objPicture.isVisible()
+                                && panel->objPicture.pTexture.get() == pGFXManager->getSmallDetailPic(portraitID, house),
+                                "Open civic properties panel kept a stale icon after skin switching");
                 }
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+                panel->update();
+                skinRequire(panel->objPicture.pTexture.get() == resolveItemPicture(item,house),
+                            "Cleared civic overlay kept its previous portrait");
                 pGFXManager->setDuneCityHouseGraphicsSkin(house, false); panel->update();
                 skinRequire(!panel->objPicture.isVisible() && panel->zonePreview.isVisible(),
                             "SimCity zone lost live preview");
@@ -198,7 +251,7 @@ int runSkinProbe() {
                 "Missing Hospital must retain its fallback, not another faction's art");
     pGFXManager->setDuneCityHouseGraphicsSkin(HOUSE_ORDOS, false);
     pGFXManager->duneCityBuildingDefinitions = definitions;
-    SDL_Log("SKIN_PROBE_PASS: six selected zone portraits; fixed 2x2 footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks");
+    SDL_Log("SKIN_PROBE_PASS: all 16 authored civic portraits; six selected zone portraits; live skin/overlay switches; fixed footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks");
     game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
     return MENU_QUIT_DEFAULT;
 }

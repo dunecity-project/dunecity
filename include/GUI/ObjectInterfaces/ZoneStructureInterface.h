@@ -84,12 +84,23 @@ protected:
             return DefaultStructureInterface::update();
         }
 
-        // The live zone preview predates DuneCity's per-house Icon Sprites.
-        // Use the same portrait as the build menu when a Dune2 skin is active;
-        // civic overlays and unskinned zones still need their live preview.
-        const bool showSkinIcon = pZone->getCivicOverlay() == ZoneStructure::CivicOverlay::None
-            && pZone->getOwner()
-            && pGFXManager->isDuneCityHouseUsingDune2(pZone->getOwner()->getHouseID());
+        // Refresh on every update: civic growth and a live graphics-skin switch
+        // can change the portrait while this same properties panel stays open.
+        SDL_Texture* skinIcon = nullptr;
+        if(pZone->getOwner()
+           && pGFXManager->isDuneCityHouseUsingDune2(pZone->getOwner()->getHouseID())) {
+            const auto house = pZone->getOwner()->getHouseID();
+            switch(pZone->getCivicOverlay()) {
+                case ZoneStructure::CivicOverlay::Hospital:
+                    skinIcon = pGFXManager->getSmallDetailPic(Picture_Hospital, house); break;
+                case ZoneStructure::CivicOverlay::Church:
+                    skinIcon = pGFXManager->getSmallDetailPic(Picture_Church, house); break;
+                default:
+                    skinIcon = resolveItemPicture(itemID, static_cast<HOUSETYPE>(house)); break;
+            }
+        }
+        const bool showSkinIcon = skinIcon != nullptr;
+        if(showSkinIcon) objPicture.setTexture(skinIcon);
         objPicture.setVisible(showSkinIcon);
         zonePreview.setVisible(!showSkinIcon);
 

@@ -2036,6 +2036,9 @@ GFXManager::GFXManager() {
         auto airTex = makeStructDetailPic(ObjPic_Airport, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
         if (airTex) smallDetailPicTex[Picture_Airport] = std::move(airTex);
         else        smallDetailPicTex[Picture_Airport] = extractSmallDetailPic("STARPORT.WSA");
+
+        smallDetailPicTex[Picture_Hospital] = makeStructDetailPic(ObjPic_Hospital, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
+        smallDetailPicTex[Picture_Church] = makeStructDetailPic(ObjPic_Church, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
     }
 
     // Per-house DuneCity Dune2 portraits. Until an authored Icon Sprite is
@@ -2095,7 +2098,9 @@ GFXManager::GFXManager() {
                     const int picture = name == "NuclearPlant" ? Picture_NuclearPlant
                         : (name == "PoliceStation" ? Picture_PoliceStation
                         : (name == "Stadium" ? Picture_Stadium
-                        : (name == "Airport" ? Picture_Airport : -1)));
+                        : (name == "Airport" ? Picture_Airport
+                        : (name == "Hospital" ? Picture_Hospital
+                        : (name == "Church" ? Picture_Church : -1)))));
                     rememberIcon(entry.path(), picture, house);
                 }
             }
@@ -2163,7 +2168,7 @@ GFXManager::GFXManager() {
             ObjPic_ZoneResidential, ObjPic_ZoneCommercial, ObjPic_ZoneIndustrial};
         static const std::array<int, 6> buildingPictures{
             Picture_NuclearPlant, Picture_PoliceStation, Picture_Stadium,
-            Picture_Airport, -1, -1};
+            Picture_Airport, Picture_Hospital, Picture_Church};
         for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
             for(std::size_t zone = 0; zone < zonePictures.size(); ++zone) {
                 SDL_Surface* atlas = duneCityDune2ZonePic[zone][house][0].get();
