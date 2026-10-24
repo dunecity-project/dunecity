@@ -12,8 +12,20 @@ from direct high-detail registration/selection. Pass the active picture ID while
 retaining native destinations and per-house/SimCity/fog/fallback behavior. Added
 civic selection/isolation/fallback assertions to the existing real SDL skin probe
 and wired it into Mac candidate validation. Local packaging/browser audit suites
-pass (8 + 9 tests). Hosted validation is pending; use runners, not local native
-compilation on this low-RAM PC. Current public release remains 1.0.853 with
+pass (8 + 9 tests). Run 40118068387 passed Windows/Linux/browser builds and all
+16 Linux sanitizer CTests. Its Mac benchmark pinned the old PNGs; 31 exact
+hash-named archives now preserve that immutable test fixture outside game assets,
+and its reconstruction test passes. The old headless probe was updated to use
+software rendering and wait for asynchronous texture loads. Mac-only validation
+40120124758 passed the build, all five UI/performance/AI gates, civic/SimCity/
+missing-house checks, and cache recovery. Native code and active art are unchanged
+between runs; only the harness/fixture/CI changed. No local native compilation.
+Verified the 31 PNGs inside the Windows portable; it excludes test archives.
+All 41 existing special packages now use 4× native canvases, adding 4.14 MiB.
+An isolated-profile play-test launcher and comparison sheets are retained under
+build-windows-candidate/skin-review-20261024. Source branch is
+assets/dunecity-special-compacts; it is committed/pushed for review, not merged
+or released. Current public release remains 1.0.853 with
 Android 0.2.31 / engine 1.0.853. Do not tag/publish this candidate automatically.
 
 ## 2026-10-24 — Matching Android 0.2.31 authorized

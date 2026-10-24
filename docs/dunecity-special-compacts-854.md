@@ -41,7 +41,21 @@ are retained by SHA-256 in the immutable test fixture, outside production assets
 Reconstruction checks the save, both revision manifests and every payload byte;
 it passes without substituting new art or weakening the benchmark.
 
-Hosted platform/render validation is pending; no 1.0.854 release is published.
+Hosted validation is complete for this candidate:
+
+- Run 40118068387: Windows, Linux and browser builds passed; all 16 Linux
+  CTest entries passed under sanitizers. Its initial Mac fixture failure led
+  to the exact archived-image recovery described above.
+- Run 40120124758: Mac build, five UI/performance/AI gates, real SDL civic
+  rendering/skin isolation/fallback checks and cache recovery passed.
+- Native code and active artwork are identical between those builds. Follow-up
+  commits repair only test fixtures, probe setup and validation infrastructure.
+- The Windows portable archive contains all 31 new PNGs with verified hashes
+  and excludes the archived test fixture. Its local launcher uses a separate
+  test profile. All 41 existing special packages now have 4× native canvases.
+
+PNG storage increases by 4.14 MiB. Source packages and authoring records are
+updated; no 1.0.854 release, website change or main-branch merge is published.
 
 This batch does not author the seven missing special buildings or the 32
 missing dedicated special-building portraits, and does not add new activity
