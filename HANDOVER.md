@@ -1,3 +1,13 @@
+## 2026-10-24 — Vuk's Classic Desert UI tested on 1.0.852 (branch `test/vuk-classic-ui`, worktree `~/Documents/projects/dunecity-vuk-test`, from staging 6fd861ae; UI-only, protocol 94 / save 9871 unchanged; no version bump)
+
+Agent VukTest. Evidence `~/Documents/projects/dunecity-results/vuk-test/` (gallery-final/ contact sheets, crest-before-after-*.png, perf/, windows/, qb-rename/).
+
+- **New `ui_gallery_probe`** (`tests/menu/run-ui-gallery-probe.py`, docs/ui-skins.md last section): 3 skins x 7 display cases x ~47 real screens incl. a DuneCity game, linted; full matrix 23/23 at f55ebe55.
+- **Fixed (UI-only, each asserted by the probe):** Classic idle main menu re-rendered every button each frame (`MainMenu::refreshContextButtons`; mini CPU 28.2 -> 0.50 ms/frame, Modern 0.52); desert-skin menus covered the background's corner crests at every size (Stefan: keep crests, move menus; Modern unchanged); spectated end plate wider than the map at 640/854 for team lines (font steps down, `misc/WatchedResultLayout.h`); city chat overwrote the Pop/RCI readouts (all skins).
+- **Checked fine:** skin persists/Apply/Back, new and 1.0.850 profiles get Classic, saved choices kept, skin round trip leaves the in-game sidebar pixel-identical, Natives owner line, plate in all 12 colour slots, QuantBot rename bit-identical (14 cluster games, same digests), Windows MSVC build + 16/16 ctest + classic-skin probe 3x6 with --hud (at 6fd861ae), Linux CI green (run 39923696260).
+- **Reported, not fixed:** Lapis 'All Maps'/'Next' 9 pt at 640 Custom Game; 'Zoom 1x' clipped under the drop-down arrow (all skins); Custom Game 'Skin' header raised (all skins); in-game Classic p95 +4 ms on the loaded mini only (Air equal).
+- **Tests:** `dunecity-queue ctest` job 20261024T112123-ctest-b6167a at f55ebe55: 110/110 (mini 88, pro 22; the PC took none). Not pushed.
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and
