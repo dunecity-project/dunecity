@@ -132,11 +132,25 @@ MOD4 game settings record exact map/mod hashes and numbers. Older MOD3 settings
 remain readable. A save of a shipped mod loads with the installed mod when its files
 are the pinned revision's. Vanilla and Dune City stamp the game version into their
 `mod.ini`, so a save from an earlier release is compared under that release's stamp
-(named by the save header); if only the stamp differs, the game runs the shipped mod
-and re-pins it as currently stamped. Otherwise saves and replays resolve their original
-revision from the local store, then from installed mods with the same bytes, and finally
-by downloading the pinned mod revision. Legacy saves with a known mismatched checksum
-report a failure rather than loading unrelated current content.
+(named by the save header). The two captured older builtin metadata layouts,
+including their duplicate Version field and original quoting/order, are also
+recognized for Vanilla and Dune City only. In every case the full hash must match
+after substituting only that known metadata: current rule, option and asset bytes
+must be identical, and base-mod/city-mode semantics must agree. Unknown metadata
+fields or a changed payload do not qualify. The game then re-pins the unchanged
+shipped content as currently stamped.
+
+Otherwise saves and replays resolve their original revision from the local store,
+then from installed mods with the same bytes, and finally by downloading the
+pinned mod revision. Legacy saves with a known mismatched checksum report a
+failure rather than loading unrelated current content.
+
+Verified in shared source `18e64e8f`: the actual MBA `fpsstillfucked` (1.0.849)
+and `skipping` (1.0.850) saves both load in fresh profiles without the MBA's mod
+store, advance 600 cycles, re-save as 9874 and reload. `workshop_store_tests`
+passes, including wrong stamps, changed payload/mode, unknown metadata and
+current-version re-saves of the historical metadata layout. Evidence:
+`dunecity-results/regression-852/savecompat/current-fresh-18e64e8f/`.
 
 ## Service and validation
 

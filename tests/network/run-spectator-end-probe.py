@@ -611,12 +611,12 @@ for case in cases:
                     '-R', '%d:127.0.0.1:%d' % (service.port, service.port), host, command],
                     stdout=log, stderr=subprocess.STDOUT)
             else:
-                profile = case_out / ('profile-' + role)
-                profile.mkdir()
+                profile = case_out / role / 'profile'
+                profile.mkdir(parents=True)
                 context = managed_profile(profile)
                 context.__enter__()
                 profiles.append(context)
-                env.update(SE_OUT=str(case_out), DUNECITY_USERDIR=str(case_out / ('profile-' + role)))
+                env.update(SE_OUT=str(case_out), DUNECITY_USERDIR=str(profile))
                 log = (case_out / (role + '.log')).open('w'); logs.append(log)
                 processes[role] = subprocess.Popen([str(binary), '--window', '--showlog'], cwd=case_out,
                     env=dict(os.environ, **env), stdout=log, stderr=subprocess.STDOUT)
