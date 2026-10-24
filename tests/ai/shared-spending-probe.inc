@@ -1,4 +1,5 @@
 #include <players/CityPlacementPolicy.h>
+#include <players/QuantBotBuildPolicy.h>
 
 // Real queues, market, placement, power and household accounting in both mods.
 void runSharedSpendingProbe(Game& game) {
