@@ -647,6 +647,17 @@ int runNativesProbe() {
     else if(kind == "winlose") runWinLose();
     else if(kind == "save9868") runSave9868();
     else if(kind == "followup") runFollowup();
+    else if(kind == "loadsave") {
+        // Diagnostic, not a ctest case: load NATIVES_LOAD_SAVE in whatever profile DUNECITY_USERDIR
+        // names (run the --keep binary by hand), e.g. to see a pruned ws-<hash> copy reinstalled.
+        const char* path = std::getenv("NATIVES_LOAD_SAVE");
+        nRequire(path != nullptr, "NATIVES_LOAD_SAVE is not set");
+        auto game = nStart(GameInitSettings(std::string(path)));
+        SDL_Log("NATIVES_PROBE: loaded %s (save %u) as mod %s, %zu units", path, game->getLoadedSavegameVersion(),
+                ModManager::instance().getActiveModName().c_str(), unitList.size());
+        runCycles(*game, 100);
+        nEnd(game);
+    }
 #endif
     else nRequire(false, "Unknown case " + kind);
     SDL_Log("NATIVES_PROBE_PASS: %s", kind.c_str());

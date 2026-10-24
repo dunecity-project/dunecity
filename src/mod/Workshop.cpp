@@ -129,8 +129,12 @@ void pruneShippedModCopiesOnce() {
         }
         const fs::path profile=mods.parent_path();
         const auto pins=readProfilePins({profile/"save",profile/"mpsave"},{profile/"replay"});
-        const auto report=pruneShippedModCopies(mods,shipped,pins,manager.getActiveModName(),VERSION);
-        SDL_Log("Workshop: duplicate shipped-mod copies: %zu removed, %zu kept (%zu saves and replays checked)",
+        // A copy whose revision the store holds intact comes back by itself (installMod) when needed.
+        const auto inStore=[](const std::string& hash) {
+            try { store().get(hash); return true; } catch(const std::exception&) { return false; }
+        };
+        const auto report=pruneShippedModCopies(mods,shipped,pins,manager.getActiveModName(),VERSION,inStore);
+        SDL_Log("Workshop: shipped-mod copies: %zu removed, %zu kept (%zu saves and replays checked)",
                 report.removed.size(),report.kept.size(),pins.pins.size());
         // One pass is enough unless something that may change later held a copy back.
         if(report.complete) {

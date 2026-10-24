@@ -9,6 +9,7 @@
 
 #include <SDL.h>
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <stdexcept>
 
@@ -60,31 +61,55 @@ std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion
     return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, {{"mod.ini", bytes}});
 }
 
+namespace {
+/// The name and base of the revision an installed `ws-<hash>` folder holds, or false when the folder
+/// is no immutable installed revision of <hash>.
+bool copyIdentity(const fs::path& folder, const std::string& hash, std::string& name, std::string& base) {
+    const fs::path pointer = folder / "workshop-revision.ini";
+    if(!fs::is_regular_file(pointer)) return false;
+    INIFile meta(pointer.string());
+    if(meta.getStringValue("Workshop", "Hash") != hash || !meta.getBoolValue("Workshop", "Immutable", false)) return false;
+    // Older pointers have no Name; the manifest they carry names the revision exactly.
+    name = meta.getStringValue("Workshop", "Name");
+    base = meta.getStringValue("Workshop", "Base");
+    if(const std::string manifest = meta.getStringValue("Workshop", "Manifest"); !manifest.empty()) {
+        const Revision described = parseManifest(unhex(manifest));
+        if(described.kind != "mod") return false;
+        name = described.name;
+        base = described.base;
+    }
+    return true;
+}
+
+/// Every `ws-<hash>` folder name in `modsDir`.
+std::vector<std::string> installedCopies(const fs::path& modsDir) {
+    std::vector<std::string> folders;
+    std::error_code e;
+    if(fs::is_directory(modsDir, e))
+        for(const auto& entry : fs::directory_iterator(modsDir, e)) {
+            const std::string folder = entry.path().filename().string();
+            if(folder.rfind("ws-", 0) == 0 && isHash(folder.substr(3)) && !entry.is_symlink() && entry.is_directory())
+                folders.push_back(folder);
+        }
+    std::sort(folders.begin(), folders.end());
+    return folders;
+}
+}
+
 std::vector<ShippedModCopy> findShippedModCopies(const fs::path& modsDir, const std::vector<ShippedMod>& shipped) {
     std::vector<ShippedModCopy> copies;
     std::error_code e;
     if(!fs::is_directory(modsDir, e)) return copies;
     std::map<std::pair<std::string, std::string>, std::string> stamped;   // (mod, stamp) -> hash
-    for(const auto& entry : fs::directory_iterator(modsDir, e)) {
-        const std::string folder = entry.path().filename().string();
-        if(folder.rfind("ws-", 0) != 0 || !isHash(folder.substr(3)) || entry.is_symlink() || !entry.is_directory()) continue;
+    for(const std::string& folder : installedCopies(modsDir)) {
+        const fs::path path = modsDir / folder;
         const std::string hash = folder.substr(3);
         try {
-            // Only an installed revision of a bundled snapshot: its pointer names the revision and
-            // its id is derived from the content (contentHash with an empty id reproduces it).
-            const fs::path pointer = entry.path() / "workshop-revision.ini";
-            if(!fs::is_regular_file(pointer)) continue;
-            INIFile meta(pointer.string());
-            if(meta.getStringValue("Workshop", "Hash") != hash || !meta.getBoolValue("Workshop", "Immutable", false)) continue;
-            // Older pointers have no Name; the manifest they carry names the revision exactly.
-            std::string name = meta.getStringValue("Workshop", "Name"), base = meta.getStringValue("Workshop", "Base");
-            if(const std::string manifest = meta.getStringValue("Workshop", "Manifest"); !manifest.empty()) {
-                const Revision described = parseManifest(unhex(manifest));
-                if(described.kind != "mod") continue;
-                name = described.name;
-                base = described.base;
-            }
-            const std::string stamp = stampOf(entry.path());
+            // Only an installed revision of a bundled snapshot: its id is derived from the content
+            // (contentHash with an empty id reproduces it).
+            std::string name, base;
+            if(!copyIdentity(path, hash, name, base)) continue;
+            const std::string stamp = stampOf(path);
             const ShippedMod* match = nullptr;
             for(const ShippedMod& mod : shipped) {
                 if(revisionName(mod) != name || mod.base != base) continue;
@@ -95,11 +120,11 @@ std::vector<ShippedModCopy> findShippedModCopies(const fs::path& modsDir, const 
             }
             if(match == nullptr) continue;
             // The folder's own bytes must be that revision too: nothing else in it, nothing changed.
-            if(contentHash("mod", "", name, base, "", entry.path()) != hash) {
+            if(contentHash("mod", "", name, base, "", path) != hash) {
                 SDL_Log("Workshop: %s names a shipped %s revision but its files differ; kept", folder.c_str(), match->name.c_str());
                 continue;
             }
-            copies.push_back({folder, hash, match->name, stamp, folderBytes(entry.path())});
+            copies.push_back({folder, hash, match->name, stamp, folderBytes(path)});
         } catch(const std::exception& error) {
             SDL_Log("Workshop: could not check %s: %s", folder.c_str(), error.what());
         }
@@ -164,33 +189,53 @@ ProfilePins readProfilePins(const std::vector<fs::path>& saveDirs, const std::ve
 }
 
 PruneReport pruneShippedModCopies(const fs::path& modsDir, const std::vector<ShippedMod>& shipped, const ProfilePins& pins,
-                                  const std::string& activeMod, const std::string& currentVersion) {
+                                  const std::string& activeMod, const std::string& currentVersion,
+                                  const std::function<bool(const std::string&)>& inStore) {
     PruneReport report;
     for(const std::string& file : pins.unreadableNewer)
-        SDL_Log("Workshop: %s was saved by a newer release; no duplicate mod copy is removed", file.c_str());
-    for(ShippedModCopy& copy : findShippedModCopies(modsDir, shipped)) {
-        std::string reason;
-        if(!pins.unreadableNewer.empty()) reason = "a newer release's save may need it";
-        else if(copy.folder == activeMod) reason = "it is the active mod";
-        else for(const ModPin& pin : pins.pins)
-            if(pinNeedsCopy(pin, copy, shipped, currentVersion)) { reason = "needed by " + pin.file; break; }
-        if(reason.empty()) {
-            const fs::path from = modsDir / copy.folder, doomed = modsDir / ("." + copy.folder + ".removing");
-            std::error_code e;
-            fs::remove_all(doomed, e);
-            fs::rename(from, doomed, e);
-            if(e) reason = "could not move it aside: " + e.message();
-            else {
-                fs::remove_all(doomed, e);
-                if(e) SDL_Log("Workshop: %s could not be deleted completely (%s); a later start retries", doomed.string().c_str(), e.message().c_str());
-                SDL_Log("Workshop: removed duplicate mod copy %s (%s, Game Version %s, %llu bytes): the shipped mod runs its saves",
-                        copy.folder.c_str(), copy.shippedMod.c_str(), copy.gameVersion.c_str(), static_cast<unsigned long long>(copy.bytes));
-                report.removed.push_back(copy);
-                continue;
-            }
+        SDL_Log("Workshop: %s was saved by a newer release; no stamp-only copy outside the store is removed", file.c_str());
+    std::map<std::string, ShippedModCopy> stampOnly;
+    for(ShippedModCopy& copy : findShippedModCopies(modsDir, shipped)) stampOnly.emplace(copy.hash, copy);
+    const auto remove = [&](const ShippedModCopy& copy, const char* why) -> std::string {
+        const fs::path from = modsDir / copy.folder, doomed = modsDir / ("." + copy.folder + ".removing");
+        std::error_code e;
+        fs::remove_all(doomed, e);
+        fs::rename(from, doomed, e);
+        if(e) return "could not move it aside: " + e.message();
+        fs::remove_all(doomed, e);
+        if(e) SDL_Log("Workshop: %s could not be deleted completely (%s); a later start retries", doomed.string().c_str(), e.message().c_str());
+        SDL_Log("Workshop: removed mod copy %s (%s, Game Version %s, %llu bytes): %s",
+                copy.folder.c_str(), copy.shippedMod.c_str(), copy.gameVersion.c_str(), static_cast<unsigned long long>(copy.bytes), why);
+        report.removed.push_back(copy);
+        return {};
+    };
+    for(const std::string& folder : installedCopies(modsDir)) {
+        const std::string hash = folder.substr(3);
+        ShippedModCopy copy;
+        if(const auto found = stampOnly.find(hash); found != stampOnly.end()) copy = found->second;
+        else {
+            // Any other installed revision of a shipped mod (an older release's rules and art).
+            std::string name, base;
+            try { if(!copyIdentity(modsDir / folder, hash, name, base)) continue; }
+            catch(const std::exception& error) { SDL_Log("Workshop: could not check %s: %s", folder.c_str(), error.what()); continue; }
+            const auto mod = std::find_if(shipped.begin(), shipped.end(), [&](const ShippedMod& m) { return m.base == base || m.name == base; });
+            if(mod == shipped.end()) continue;   // a revision built on no shipped mod is never touched
+            copy = {folder, hash, mod->name, stampOf(modsDir / folder), folderBytes(modsDir / folder)};
         }
-        if(copy.folder == activeMod || !pins.unreadableNewer.empty() || reason.rfind("could not", 0) == 0) report.complete = false;
-        SDL_Log("Workshop: kept duplicate mod copy %s (%s, Game Version %s): %s",
+        std::string reason;
+        if(copy.folder == activeMod) reason = "it is the active mod";
+        else if(inStore && inStore(hash))
+            reason = remove(copy, "its revision is in the Workshop store; a save that needs it reinstalls it");
+        else if(stampOnly.count(hash)) {
+            if(!pins.unreadableNewer.empty()) reason = "a newer release's save may need it";
+            else for(const ModPin& pin : pins.pins)
+                if(pinNeedsCopy(pin, copy, shipped, currentVersion)) { reason = "needed by " + pin.file; break; }
+            if(reason.empty()) reason = remove(copy, "the shipped mod runs its saves");
+        } else reason = "an older revision that is not in the Workshop store";
+        if(reason.empty()) continue;
+        if(copy.folder == activeMod || (stampOnly.count(hash) && !pins.unreadableNewer.empty()) || reason.rfind("could not", 0) == 0)
+            report.complete = false;
+        SDL_Log("Workshop: kept mod copy %s (%s, Game Version %s): %s",
                 copy.folder.c_str(), copy.shippedMod.c_str(), copy.gameVersion.c_str(), reason.c_str());
         report.kept.emplace_back(copy, reason);
     }

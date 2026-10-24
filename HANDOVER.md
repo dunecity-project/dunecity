@@ -25,15 +25,18 @@ Agent NativesFollowup. Evidence `~/Documents/projects/dunecity-results/natives-f
   records the house as its summoner (`Sandworm::setSummoner`, saved from 9873) and it never targets or bites that
   house's team (`Sandworm::spares`, also in `Map::damage`'s Bullet_Sandworm branch) for its lifetime. Kills stay
   credited to Natives; the summoner's units may still shoot it (as before). Old saves: no summoner (eats all, as before).
-- **Duplicate shipped-mod copies:** `Workshop::pruneShippedModCopiesOnce()` after `ModManager::initialize()`
-  (`src/mod/WorkshopDuplicates.cpp`): removes a `mods/ws-<hash>` folder only when its own files hash to <hash>, it
-  equals an approved shipped mod with mod.ini's Game Version value changed (`stampedModHash`), it is not the active
-  mod, and no `save/`, `mpsave/` or `replay/` file would load through it (mirrors `resolveMod`); a save from a newer
-  release blocks all removal. Renames to `.ws-*.removing` first, logs each removal/kept copy, store revisions stay,
-  marker `mods/.shipped-copies-pruned` once complete. **Stefan's MBA profile (copy on the mini):** of the 14 copies only
-  `ws-980624ac` (Dune City at 1.0.832, 28.5 MB) is stamp-only; the other 13 are older revisions (2-185 files differ,
-  ObjectData/GameOptions/graphics). That one is needed by `test1/2/3.dls` (saved by 1.0.833 *running as* the copy),
-  so on his profile **nothing would be removed**; with those three saves aside it is removed (logs in evidence dir).
+- **Shipped-mod copies (`ws-<hash>`):** `Workshop::pruneShippedModCopiesOnce()` after `ModManager::initialize()`
+  (`src/mod/WorkshopDuplicates.cpp`), before anything loads. For every `mods/ws-<hash>` holding a revision built on a
+  shipped mod, except the active mod: removed when the local Workshop store holds that revision intact
+  (`store().get`; Stefan approved, 2026-10-24: `resolveMod` -> `installMod` reinstalls it whenever a save needs it);
+  otherwise removed only when it is the shipped mod with just mod.ini's Game Version changed (`stampedModHash`, own
+  files re-hashed) and no `save/`, `mpsave/` or `replay/` file loads through it (mirrors `resolveMod`; a newer
+  release's save blocks this). Copies built on no shipped mod are never touched. Renames to `.ws-*.removing` first,
+  logs each removal and kept copy, store revisions stay, marker `mods/.shipped-copies-pruned` once complete.
+  **Stefan's MBA profile (fresh copy on the mini, real one untouched):** all 14 removed (626 MB; 13 were older
+  revisions, 2-185 files different, only `ws-980624ac` was stamp-only); then `test1/2/3.dls` (saved by 1.0.833
+  running as `ws-980624ac`) each loaded through the store (copy reinstalled), 510/674/1221 units, 100 cycles
+  (`natives_probe` diagnostic case `loadsave`; logs `air-copy-*.log` in the evidence dir).
 - **Probe (`natives_probe`, new case `followup`):** unfixed 1.0.852 build-int: Natives and an anonymous Mercenary house
   both team 0, neither can fire, no damage in 2 game minutes; a worm's bite kills the reinforcing house's trooper.
   Fixed: teams 10/0, both fire, hit at cycle 7; summoned worm targets enemy only, bite spares Ordos and kills the enemy

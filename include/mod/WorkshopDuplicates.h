@@ -4,15 +4,16 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <functional>
 #include <vector>
 
 /*
     Before 1.0.851 every release left Vanilla and Dune City saves pinned to a Workshop revision of
     the shipped mod whose mod.ini still said the saving release's Game Version, and loading such a
     save installed that revision as a `ws-<hash>` folder beside the shipped mod (Stefan's MBA had
-    fourteen). Since 1.0.851 those saves run as the shipped mod (WorkshopGameContent::resolveMod,
-    Workshop::bundledModHashAtGameVersion), so the copies are dead weight. This finds and removes
-    them, once, where nothing still needs them; their Workshop store revisions stay.
+    fourteen, most of them older releases' rules and art). A folder is only an installed copy of a
+    store revision: WorkshopGameContent::resolveMod reinstalls it (Workshop::installMod) whenever a
+    save needs it. This removes them once at startup, before anything loads; store revisions stay.
 */
 namespace Workshop {
 
@@ -84,13 +85,20 @@ struct PruneReport {
 };
 
 /**
-    Removes the copies findShippedModCopies() finds that no pin needs and that are not
-    `activeMod`. Every copy is first renamed to a hidden name, so an interrupted removal never
-    leaves a damaged `ws-<hash>` folder behind. Logs every removal and every copy kept.
+    Removes, for every `ws-<hash>` folder holding a revision built on a shipped mod, except
+    `activeMod`:
+    - a copy whose revision `inStore` (the local Workshop store holds it intact), since a save that
+      needs it reinstalls it from there;
+    - otherwise a stamp-only copy (findShippedModCopies) that no pin needs, and only if no save of a
+      newer release exists.
+    Copies of revisions built on no shipped mod are never touched. Every copy is first renamed to a
+    hidden name, so an interrupted removal never leaves a damaged `ws-<hash>` folder behind. Logs
+    every removal and every copy kept.
 */
 PruneReport pruneShippedModCopies(const std::filesystem::path& modsDir, const std::vector<ShippedMod>& shipped,
                                   const ProfilePins& pins, const std::string& activeMod,
-                                  const std::string& currentVersion);
+                                  const std::string& currentVersion,
+                                  const std::function<bool(const std::string&)>& inStore = {});
 
 }
 

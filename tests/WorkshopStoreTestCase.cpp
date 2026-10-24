@@ -287,6 +287,28 @@ TEST_CASE("Pruning removes unneeded shipped-mod copies and keeps the rest","[wor
     report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"dunecity","1.0.852");
     REQUIRE(report.removed.size()==1);REQUIRE(report.removed[0].hash==c);REQUIRE(report.complete);
 }
+TEST_CASE("Pruning removes store-backed copies of shipped-mod revisions, needed or not","[workshop][duplicates]") {
+    ShippedFixture f;
+    const auto older=f.install("1.0.790","maps/older.ini");   // an older release's rules: no stamp-only copy
+    const auto stale=f.install("1.0.840");                     // stamp-only, but a save runs as it
+    const auto active=f.install("1.0.841","maps/active.ini");
+    const std::string authored(64,'b');                         // a revision built on no shipped mod
+    ShippedFixture::put(f.mods/("ws-"+authored)/"workshop-revision.ini",
+        "[Workshop]\nHash = "+authored+"\nName = Mine\nBase = mymod\nImmutable = true\n");
+    Workshop::ProfilePins pins;
+    pins.pins.push_back({"older.dls","dunecity",older,"1.0.790"});
+    pins.pins.push_back({"stale.dls","ws-"+stale,stale,"1.0.841"});
+    // Without the store nothing of these may go.
+    auto report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"ws-"+active,"1.0.852",
+                                                [](const std::string&) { return false; });
+    REQUIRE(report.removed.empty());REQUIRE(report.kept.size()==3);
+    // With every revision in the store, all but the active copy go; the authored one is untouched.
+    report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"ws-"+active,"1.0.852",
+                                           [](const std::string&) { return true; });
+    REQUIRE(report.removed.size()==2);REQUIRE(report.kept.size()==1);REQUIRE_FALSE(report.complete);
+    REQUIRE_FALSE(fs::exists(f.mods/("ws-"+older)));REQUIRE_FALSE(fs::exists(f.mods/("ws-"+stale)));
+    REQUIRE(fs::exists(f.mods/("ws-"+active)));REQUIRE(fs::exists(f.mods/("ws-"+authored)));
+}
 TEST_CASE("Profile pins skip damaged saves and flag a newer release's","[workshop][duplicates]") {
     ShippedFixture f;
     ShippedFixture::put(f.root/"save"/"damaged.dls","not a save");
