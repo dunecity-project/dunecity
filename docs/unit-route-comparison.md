@@ -86,7 +86,10 @@ Dynasty step scheduler (1.0.760-1.0.852):
   a tile per cycle until the ticks caught up (24 tiles in 60 cycles after a
   400-cycle wait).
 
-**Fix (simulation, protocol 95):** `UnitBase::moveDynastyStep` clears the flag
+**Fix (simulation, protocol 103 / save 9874):** the hashed and persisted
+`[Game Options] Continuous Ground Steps` rule controls both scheduler corrections.
+It remains **off by default and unaccepted** pending same-build paired acceptance.
+With the rule on, `UnitBase::moveDynastyStep` clears the flag
 on every cycle of a step. The stop of the previous step was handled on the cycle
 it ended, exactly as for a step that does not chain (where `move()`'s idle
 branch clears it the next cycle), so nothing that reacts to an arrival (tile
@@ -98,14 +101,34 @@ every Dynasty ground step moves through `moveDynastyStep`
 that is more than one tick old to its cadence's next tick. Step timing is
 untouched: the 12-tile routes of 14 unit types, straight and diagonal, sand and
 rock, 16 legs each, take exactly the same cycles (`tests/units/run-movement-effects.py`,
-phase `speed`). 1.0.851-1.0.852's render-only `UnitBase::DrawnStepScope` is gone:
-the simulated positions are what is drawn.
+phase `speed`). With the rule on, the simulated positions are what is drawn.
+With it off, the 1.0.852 simulation and render-only `UnitBase::DrawnStepScope`
+remain intact. MOD8 and earlier settings streams keep it off; MOD9 stores it.
 
 `unit_motion_probe` (`tests/units/run-unit-motion-probe.py`) shuttles ground
 units over open sand through the real main loop at 2 ms game speed with frame
 pacing (1-10 cycles per frame) and checks the simulated (drawn) positions every
 cycle and every rendered frame, that no moving unit keeps `justStoppedMoving`
 mid-step, and that a tank whose carryall never came drives on at its speed.
+
+### Same-build comparison
+
+Use only shared `dunecity-feature-batch/build-int`, with separate results directories
+for the two arms. Do not rebuild a private tree or relax the existing AAA assertions.
+
+- Matrix off: omit `--game-options`; each cell keeps its authored options.
+- Matrix on: append `--game-options tests/ai/continuous-ground-steps-on.ini`.
+  The overlay is merged after the cell's options, including the mandatory AAA
+  concrete, carryall and worker/unit-limit settings; campaign cells use it too.
+- Random-skirmish FFA off: retain
+  `--game-options tests/performance/data/stefan-game-options.ini`.
+- The same FFA on: use
+  `--game-options tests/ai/continuous-ground-steps-ffa-on.ini`, the frozen
+  historical FFA setup with only this rule added. `vanilla-match.py` replaces
+  its options file rather than layering it, unlike the matrix overlay.
+
+Relative paths resolve inside each immutable cluster source checkout. These are
+comparison inputs, not evidence that the movement fix meets AI acceptance.
 
 ### Movement-fix AI evidence (2026-10-24)
 

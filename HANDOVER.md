@@ -1,3 +1,12 @@
+## 2026-10-24 — Movement correction made a same-build comparison rule (not accepted)
+
+- Parent Codex continued the paused `UnitMovement2` edits in this existing source-only lane; history and prior measurements are retained. No new worktree or private build.
+- `[Game Options] Continuous Ground Steps` / `continuousGroundSteps` is hashed and persisted in MOD9 settings. Off retains the 1.0.852 simulation plus its draw-only scope; on selects both stale-stop-flag and missed-route-tick fixes. Default remains **off** until original AAA acceptance is resolved.
+- Save **9874**, protocol **103**, app version unchanged. Older MOD8 settings retain the off behavior; an announced but truncated MOD9 extension fails closed.
+- `scenario-matrix.py --game-options` now overlays each cell's own INI rather than replacing the mandatory AAA setup. Relative on inputs are `tests/ai/continuous-ground-steps-on.ini` (matrix) and `tests/ai/continuous-ground-steps-ffa-on.ini` (frozen FFA setup). Use separate results directories for off/on.
+- Contract coverage concerns match identity, save round-trip, legacy boundaries and truncation; copy-forwarding/default-literal assertions were removed rather than re-pinned.
+- Mod-key parsing is included beside `Plan Building Sites`, with the existing player-choice precedence. Shared integration still must reconcile the combined protocol/save constants, build only shared `build-int`, exercise actual off/on paths and run unchanged acceptance. No new build, test or game run has been claimed for these edits.
+
 ## 2026-10-24 — Unit movement: chained steps fixed in the simulation (branch `fix/unit-movement`, worktree `~/Documents/projects/dunecity-unit-movement`, from staging 6fd861ae = 1.0.852; protocol 95, save 9871; IN PROGRESS, not merged)
 
 Agents UnitMovement / UnitMovement2. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`

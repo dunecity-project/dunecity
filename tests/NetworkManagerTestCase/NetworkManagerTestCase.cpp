@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 95;
+static constexpr int kWireProtocolVersion = 103;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -109,10 +109,11 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // anti-air holds fire over its own side. No saved state change.
     // 93: the Natives house owns every sandworm and crime trooper (new house slot); save 9871.
     // 94 is 1.0.851: 90 + 93 (+ the render-only unit-jitter fix); save 9871.
-    // 95: chained Dynasty ground steps clear justStoppedMoving (no tile-centre hold, no whole-tile
-    // jump, a tracked unit squashes only on arrival); a unit that missed route ticks during a
-    // carryall wait resumes at its cadence instead of starting steps in the past. Save 9871.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 95);
+    // 95-102 are allocated in staging.
+    // 103: the continuous-ground-steps match rule (GameInitSettings MOD9, game-options hash; save
+    // 9874). On, chained Dynasty ground steps clear justStoppedMoving and a unit that missed route
+    // ticks during a carryall wait resumes at its cadence; off (default) is the 94 movement.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 103);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

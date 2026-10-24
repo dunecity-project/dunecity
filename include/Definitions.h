@@ -181,7 +181,12 @@
 //       is needed, and its sandworms are re-tagged to Natives on load (Game::loadSaveGame);
 //       troopers an older save's crime raised cannot be told from a house's own and keep their
 //       owner.
-#define SAVEGAMEVERSION     9871
+// 9874: The continuous-ground-steps match rule (GameOptionsClass::continuousGroundSteps,
+//       docs/unit-route-comparison.md "Chained steps"): GameInitSettings writes marker MOD9 with
+//       the rule's byte after MOD8's. A MOD8 or older stream (any earlier save) loads with the rule
+//       off, the movement it was played with. 9872/9873 belong to parallel branches (staging's
+//       Natives follow-up is 9873); this branch alone cannot read their saves.
+#define SAVEGAMEVERSION     9874
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
 

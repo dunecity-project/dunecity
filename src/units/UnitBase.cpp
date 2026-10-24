@@ -995,6 +995,13 @@ Uint64 UnitBase::formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, 
     return std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/paceScale));
 }
 
+namespace {
+/// The match's movement rule (GameOptionsClass::continuousGroundSteps): every peer runs the same.
+bool continuousGroundSteps() {
+    return currentGame->getGameInitSettings().getGameOptions().continuousGroundSteps;
+}
+}
+
 bool UnitBase::moveDynastyStep() {
     if(!moving || !usesDynastyGroundTiming()) { dynastyStepEnd=0; return false; }
     if(dynastyStepEnd==0) return false; // Pre-9844 save: finish its existing step.
@@ -1002,8 +1009,9 @@ bool UnitBase::moveDynastyStep() {
     // tile centre, a tracked unit squashed that tile). A step chained onto it on that same cycle is
     // moving: a stale flag made GroundUnit::checkPos snap realX/realY to the tile centre on every
     // cycle of the step, so the unit sat still for half a step and jumped a whole tile when its
-    // location changed, and a tracked unit squashed its tile every cycle (protocol 95).
-    justStoppedMoving=false;
+    // location changed, and a tracked unit squashed its tile every cycle. Cleared only under the
+    // continuous-ground-steps rule; off keeps the 1.0.852 simulation (DrawnStepScope draws it).
+    if(continuousGroundSteps()) justStoppedMoving=false;
     const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount())*(GAMESPEED_DEFAULT*3);
     const auto elapsed=now>dynastyStepStart ? now-dynastyStepStart : 0;
     const auto duration=dynastyStepEnd-dynastyStepStart;
@@ -1031,6 +1039,34 @@ bool UnitBase::moveDynastyStep() {
         FixPoint::abs(dynastyEndpoint.y-realY+bumpyOffsetY));
     checkPos();
     return true;
+}
+
+namespace {
+struct DrawnStepSwap { UnitBase* unit; FixPoint x, y; };
+std::vector<DrawnStepSwap> drawnStepSwaps;   // reused every frame
+}
+
+UnitBase::DrawnStepScope::DrawnStepScope() {
+    drawnStepSwaps.clear();
+    if(currentGame==nullptr || currentGame->getGameCycleCount()==0 || continuousGroundSteps()) return;
+    // realX/realY hold the last cycle run; this is moveDynastyStep's position for that cycle,
+    // before GroundUnit::checkPos snapped it (rock bumps included: they are in bumpyOffset).
+    const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount()-1)*(GAMESPEED_DEFAULT*3);
+    for(UnitBase* unit : unitList) {
+        if(!unit->moving || !unit->justStoppedMoving || unit->dynastyStepEnd<=unit->dynastyStepStart
+           || !unit->usesDynastyGroundTiming()) continue;
+        const auto elapsed=now>unit->dynastyStepStart ? now-unit->dynastyStepStart : 0;
+        const auto duration=unit->dynastyStepEnd-unit->dynastyStepStart;
+        const FixPoint progress=FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
+        drawnStepSwaps.push_back({unit, unit->realX, unit->realY});
+        unit->realX=unit->dynastyStartX+(unit->dynastyEndpoint.x-unit->dynastyStartX)*progress+unit->bumpyOffsetX;
+        unit->realY=unit->dynastyStartY+(unit->dynastyEndpoint.y-unit->dynastyStartY)*progress+unit->bumpyOffsetY;
+    }
+}
+
+UnitBase::DrawnStepScope::~DrawnStepScope() {
+    for(const DrawnStepSwap& swap : drawnStepSwaps) { swap.unit->realX=swap.x; swap.unit->realY=swap.y; }
+    drawnStepSwaps.clear();
 }
 
 void UnitBase::move() {
@@ -1170,12 +1206,12 @@ void UnitBase::navigate() {
                 // for harvesters/MCVs and the following update for combat units.
                 dynastyRouteTick=((now+249)/250)*5 + ((itemID==Unit_Harvester || itemID==Unit_MCV) ? 0 : 5);
                 if(dynastyRouteTick==0) dynastyRouteTick=5;
-            } else if(now>=(dynastyRouteTick+1)*50) {
+            } else if(continuousGroundSteps() && now>=(dynastyRouteTick+1)*50) {
                 // Navigating every cycle, a route tick is seen on the cycle it falls due (a cycle is
                 // 48 of these units, a tick 50). Older means this unit did not navigate for a while
                 // (GroundUnit::navigate skips a unit awaiting a carryall). Steps begun from those
                 // missed ticks would start in the past and finish at once, a tile per cycle until the
-                // ticks caught up; it resumes at its cadence's next tick instead (protocol 95).
+                // ticks caught up; it resumes at its cadence's next tick instead (continuous-ground-steps rule).
                 dynastyRouteTick+=(now/50-dynastyRouteTick+14)/15*15;
             }
             routeTick=dynastyRouteTick;

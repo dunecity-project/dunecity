@@ -2453,6 +2453,9 @@ void Game::applyPendingBudgetChanges() {
 
 void Game::drawScreen()
 {
+    // Default movement rule (continuous ground steps off): chained Dynasty steps are drawn where
+    // the step puts them, not where checkPos holds them. A no-op with the rule on.
+    UnitBase::DrawnStepScope drawnSteps;
     const int presentationScale = ModManager::instance().usesDune2RRemasterPresentation()
         && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
     screenborder->setPresentationScale(presentationScale);

@@ -34,6 +34,7 @@ summary table. Games already in games.csv are skipped; each game's run directory
 soon as its rows are written. Scores are tests/ai/match_score.py placement scores.
 """
 import argparse
+import configparser
 import csv
 import re
 import shutil
@@ -337,6 +338,20 @@ def command(args, binary, game, out):
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--no-ai-telemetry']
+    options_path = game.get('options')
+    if getattr(args, 'game_options', None):
+        options = configparser.ConfigParser(strict=False, interpolation=None)
+        options.optionxform = str
+        for path in (options_path, args.game_options):
+            if path:
+                with Path(path).open() as handle:
+                    options.read_file(handle)
+        out.mkdir(parents=True, exist_ok=True)
+        options_path = out / 'game-options.ini'
+        with options_path.open('w') as handle:
+            options.write(handle)
+    if options_path:
+        cmd += ['--game-options', str(options_path)]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
                 '--partner-difficulty', game['partner'], '--enemy-difficulty', 'easy', '--enemy-ai', game['enemy_ai']]
@@ -344,8 +359,6 @@ def command(args, binary, game, out):
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
-    if game['options']:
-        cmd += ['--game-options', str(game['options'])]
     return cmd
 
 
@@ -773,6 +786,9 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
+parser.add_argument('--game-options', type=Path,
+                    help='Overlay this INI after each cell\'s own game options; use a distinct results '
+                         'directory for each comparison arm')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
                          'pair; the short maps get half)')

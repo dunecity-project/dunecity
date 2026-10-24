@@ -214,7 +214,11 @@ int runUnitMotionProbe() {
     currentGame = game.get();
     // A single-player custom game, as Stefan's: its speed is the player's setting (Game::getGameSpeed)
     // and its frames are paced (FramePacing); a network game type would run at the match's speed.
-    GameInitSettings init("motion.ini", mapData, true, settings.gameOptions);
+    // The continuous-ground-steps rule (default off) is what this probe checks: with it off a chained
+    // step keeps justStoppedMoving and is held mid-step, as in 1.0.760-1.0.852.
+    auto rules = settings.gameOptions;
+    rules.continuousGroundSteps = true;
+    GameInitSettings init("motion.ini", mapData, true, rules);
     init.randomSeed = 92;
     GameInitSettings::HouseInfo atreides(HOUSE_ATREIDES, 1);
     atreides.addPlayerInfo({"Motion tester", "HumanPlayer"});
