@@ -14,4 +14,4 @@ Install over the previous version rather than uninstalling, to retain saves
 and preferences. Public upgrades use the existing sideload signing identity,
 not the temporary hosted-runner signing key. This is not a Play Store package.
 
-No physical phone was available for an on-device test of this release.
+On-device gameplay has not been verified for this package.
