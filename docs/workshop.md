@@ -39,6 +39,46 @@ Opening the revision store now deletes that folder once and logs
 saves are untouched; old `collected` receipts left in revision folders are
 ignored.
 
+## Bundled community maps (2026-10-24)
+
+With the catalogue browser gone, the player-made multiplayer maps from the
+catalogue are shipped instead. All 1,267 map revisions (1,102 items) were
+downloaded and reduced to genuinely new maps: dropped were copies of bundled maps
+(same bytes, same content ignoring header/author fields, or same terrain), maps
+named like a bundled map, auto-generated `Random ... T<n> <seed>` maps, RWRK
+campaign scenarios, placeholders/tests, and maps whose slots or starts do not
+match their name. Each accepted map is the latest revision of its item, played as
+two identical two-minute all-AI games in its mod with equal final digests.
+
+The files are the exact catalogue bytes. The catalogue has no author field, so
+`data/maps/community-maps.json` records each map's catalogue item ID, version,
+revision hash and original name, the `[BASIC] Author` written into the map where
+there is one, and the mod revision it was published with. Sidecars carry the
+clean display name, item ID, mod and version. Dune City maps live in
+`data/maps/singleplayer/`, the others in `data/maps/multiplayer/`; all are
+listed in Custom Game and the multiplayer map chooser (All Maps and the mod
+filter). `ctest -R community_maps_startup` checks every entry.
+
+| Map | Mod | Author | Catalogue item, version |
+| --- | --- | --- | --- |
+| 2P - 128x128 - 1v1 - Habbanya-Penny Revised | Tornie | Rippsblack | `762816b6…` v1 |
+| 2P - 128x128 - Deserted Revised | Tornie | kc | `ca99d13b…` v2 |
+| 2P - 192x192 - Kleiner Lvl | Vanilla | – | `cba45259…` v1 |
+| 3P - 128x128 - Oli5 | Vanilla | oli | `7358c937…` v1 |
+| 3P - 128x128 - Wezowe Pola | Vanilla | – | `1eae1e5b…` v1 |
+| 4P - 128x128 - Habbanya-Froiud AA | Dune2R | Rippsblack | `08d7c9c8…` v1 |
+| 4P - 448x448 - Big Border | Vanilla | – | `309721df…` v1 |
+| 4P - 448x448 - No Mercy | Dune City | – | `522b446c…` v2 |
+| 5P - 128x128 - Fremen Homebase | Vanilla | Dune lover | `148fbc36…` v2 |
+| 6P - 128x128 - Alla Map | Dune2R | Mmed | `59de4d55…` v1 |
+| 6P - 512x448 - No Win | Dune2R | cYN | `93133d16…` v1 |
+| 8P - 256x256 - Scattered War | Vanilla (published with the custom mod "new - modded") | TijnAG07 | `92791220…` v4 |
+
+Big Border also places Fremen and Neutral fortresses without lobby slots; Fremen
+Homebase is a four-against-one scenario whose Fremen slot starts with a large army.
+Earlier catalogue maps already bundled: Reacciona rapido forro, Alto mapa HD and La
+guerra dei ricchi (1.0.827), and the Dune City maps in `data/maps/singleplayer/`.
+
 ## Versions and storage
 
 A draft has a permanent item ID. Changed content creates the next numbered

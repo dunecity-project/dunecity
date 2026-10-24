@@ -112,6 +112,37 @@ rendered-mini.jsonl, rendered-air.jsonl).
 - **perf_regression:** 8-house budgets cpu_p99 3.0 -> 1.6 (1.0.852 Pro 1.807 fails), frame_cpu_p99 9.0 -> 5.5.
 - Measurement-only: the vuk-perf tree's `--video` game-perf option was applied temporarily (not committed);
   probe builds wrote `balance-probe-cache/` entries into staging's build-int. Air copies removed, PAUSE removed.
+## 2026-10-24 — community catalogue maps bundled (branch `feat/community-maps`, worktree `~/Documents/projects/dunecity-community-maps`, from staging 6fd861ae = local 1.0.852)
+
+Agent CommunityMaps. Stefan: "look at the metaserver new multiplayer maps and add them to the build". Evidence (downloads,
+selection.json, validate-results.json, minimap montage) in `~/Documents/projects/dunecity-results/community-maps-20261024/`.
+
+- Downloaded every map revision from `https://dunelegacy.com/p2p/v1/content/` (1,267 revisions, 1,102 items,
+  sequential with delays) plus the 167 mod revisions they reference. Latest revision per item, then dropped: same name
+  as a bundled map 858 (two of them differ: `4P - 384x384 - new beginning` and `8P - 256x256 - Colonists` edits, 99%/97%
+  of the bundled terrain), auto-generated Random 166, RWRK 21, placeholders 19, copies of bundled maps by bytes/content/
+  terrain 11. 27 candidates; 12 accepted.
+- Mod association from the map's catalogue mod revision: the Python port of `Workshop::contentHash` reproduces the
+  installed vanilla revision (0be9deed…), and `bundledModHashAtGameVersion`'s restamp matches 265 catalogue map
+  revisions to the shipped Vanilla/Dune City of 1.0.829–1.0.842 and Tornie 1.0.852; older shipped snapshots are recognised by their
+  content-derived IDs. Nine maps used custom mods; only Scattered War (custom "new - modded", Vanilla units only) is
+  bundled, under Vanilla.
+- Added, exact catalogue bytes + `.workshop.ini` sidecars (clean name, item ID, mod, version), provenance in
+  `data/maps/community-maps.json`, docs in `docs/workshop.md` "Bundled community maps": multiplayer/ 2P Habbanya-Penny
+  Revised and Deserted Revised (Tornie), 2P Kleiner Lvl, 3P Oli5, 3P Wezowe Pola, 4P Big Border, 5P Fremen Homebase,
+  8P Scattered War (Vanilla), 4P Habbanya-Froiud AA, 6P Alla Map, 6P No Win (Dune2R); singleplayer/ 4P No Mercy
+  (Dune City, also added to `scripts/check-web-mods.py` CITY_MAPS).
+- Rejected: 17 - Death Ruler, 9 - VS (no starts); 9P SONOB (custom TornUge, 4 slots, no slot starts); 8P Luke, Luke bb,
+  Luke2 (4 slots); 8P Joe 1983 (Rebels slot has no start); Itzik New Map (placeholder, 2 slots empty); fOSTALIGA,
+  CYR's Map, fastgleich (one-sided starts); Sihaya Leona Revised (99.2% the bundled map's terrain); Random Map 1/3
+  (unnamed generator output); No Mercy aa (copy of No Mercy).
+- Validation: every accepted map played twice for 2 game minutes (all-AI hard, seed 4242) in its mod with equal final
+  digests, no crash, every lobby house holding its yard/MCV. New ctest `community_maps_startup`
+  (`tests/maps/check-community-maps.py`): recorded bytes, sidecar, name vs size/slots, a start per slot, chooser skip
+  rules, then a one-minute game per map (about 1 minute wall).
+- Cluster ctest at 9094ba38 (job 20261024T102855-ctest-2b57e1): 110/110 passed, including `community_maps_startup`.
+- No mod checksum, multiplayer content hash, protocol (94) or save (9871) change: maps are outside `mods/`, which is all
+  the mod fingerprints and approved-mod tokens hash; a hosted game sends the map bytes. Not version-bumped or pushed.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
