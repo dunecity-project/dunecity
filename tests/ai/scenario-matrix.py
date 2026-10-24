@@ -353,6 +353,8 @@ def command(args, binary, game, out):
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--no-ai-telemetry']
+    if getattr(args, 'style', None):
+        cmd += ['--scenario-style', args.style]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
                 '--partner-difficulty', game['partner'], '--enemy-difficulty', 'easy', '--enemy-ai', game['enemy_ai']]
@@ -841,6 +843,8 @@ parser.add_argument('--list', action='store_true', help='Print the scheduled gam
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
+parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by: the on '
+                                    'arm of a candidate config switch; compare with a run without it (same seeds)')
 args = parser.parse_args()
 if args.report_dirs:
     report(args)

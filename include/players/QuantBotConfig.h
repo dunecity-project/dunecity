@@ -138,7 +138,7 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading;
+    /// FinishWhenLeading, JoinAllyWaves, HeavyFactoryFirst;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -202,6 +202,14 @@ struct QuantBotConfig {
         /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
         /// choice) instead of the nearest.
         bool finishWhenLeading;
+        /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
+        /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
+        /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
+        bool joinAllyWaves;
+        /// Custom Hard/Brutal: until the house has owned its first heavy factory, plan Medium's
+        /// harvester fleet and hold the Brutal economy step, so the opening reaches the heavy
+        /// factory as early as Medium's (docs/ai-scenario-matrix.md, "Difficulty ladder").
+        bool heavyFactoryFirst;
     };
     ForceSettings force;
 

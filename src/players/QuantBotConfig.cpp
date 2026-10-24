@@ -318,6 +318,10 @@ QuantBotConfig::QuantBotConfig() {
     // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
     // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
     force.finishWhenLeading = true;
+    // Candidates (fix/ladder-campaign, docs/ai-scenario-matrix.md): team waves join an ally's
+    // fresh wave; the opening reaches the heavy factory before the Hard/Brutal economy push.
+    force.joinAllyWaves = false;
+    force.heavyFactoryFirst = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -601,6 +605,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
         iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
         iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+        iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+        iniFile.setBoolValue("Force Concentration", "HeavyFactoryFirst", force.heavyFactoryFirst);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -699,6 +705,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
     force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
     force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+    force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+    force.heavyFactoryFirst = iniFile.getBoolValue("Force Concentration", "HeavyFactoryFirst", force.heavyFactoryFirst);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1169,6 +1177,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("siegeStandoff", force.siegeStandoff);
     addNamed("massAssault", force.massAssault);
     addNamed("finishWhenLeading", force.finishWhenLeading);
+    addNamed("joinAllyWaves", force.joinAllyWaves);
+    addNamed("heavyFactoryFirst", force.heavyFactoryFirst);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

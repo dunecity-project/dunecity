@@ -223,6 +223,31 @@ int64_t QuantBot::teamGroundArmyValue() const {
     return team;
 }
 
+const ObjectBase* QuantBot::allyWaveObjective() const {
+    if (!botConfig().force.joinAllyWaves || difficulty < Difficulty::Hard || !autonomousCustomArmy()) return nullptr;
+    const Uint32 now = getGameCycleCount();
+    const Uint32 window = MILLI2CYCLES(kAllyWaveJoinMs);
+    // Our own wave that left inside the window is the one being joined, never a reason to join
+    // again (two allies would otherwise drip minimum waves after each other).
+    if (customWave.launched != 0 && ArmyPosturePolicy::elapsed(now, customWave.launched) <= window) return nullptr;
+    const int myTeam = getHouse()->getTeamID();
+    // House id order, then player order: the same answer on every peer.
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* house = getHouse(h);
+        if (!house || house == getHouse() || house->isNatives() || !house->isAlive() || house->getTeamID() != myTeam)
+            continue;
+        for (const auto& player : house->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if (!bot || bot->customWave.launched == 0 || ArmyPosturePolicy::elapsed(now, bot->customWave.launched) > window)
+                continue;
+            const ObjectBase* front = getObject(bot->customWave.front);
+            if (front && front->getHealth() > 0 && front->getOwner() && !front->getOwner()->isNatives()
+                && front->getOwner()->getTeamID() != myTeam) return front;
+        }
+    }
+    return nullptr;
+}
+
 bool QuantBot::outnumberedByEstimate() const {
     const Uint32 now = getGameCycleCount();
     if (estimateCycle != now) {

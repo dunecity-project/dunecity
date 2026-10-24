@@ -204,7 +204,27 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
     if (mapsize <= 4096) return 0;
     const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
-    return mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    const int own = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    // HeavyFactoryFirst: Medium's fleet until the first heavy factory stands (Hard/Brutal's larger
+    // fleet drove four to seven refineries first and the heavy factory 1.5-2 minutes after Medium's).
+    if (heavyFactoryFirstHold()) {
+        const auto& medium = botConfig().getSettings(static_cast<int>(Difficulty::Medium));
+        return std::min(own, mapsize <= 16384 ? medium.harvesterLimitCustomLargeMap : medium.harvesterLimitCustomHugeMap);
+    }
+    return own;
+}
+
+bool QuantBot::firstHeavyFactoryBuilt() const {
+    const int houseID = getHouse()->getHouseID();
+    const auto& info = currentGame->objectData.data[Structure_HeavyFactory][houseID];
+    if (!info.enabled || info.techLevel > currentGame->techLevel) return true;   // nothing to wait for
+    return getHouse()->getNumItems(Structure_HeavyFactory) + getHouse()->getNumLostItems(Structure_HeavyFactory) > 0;
+}
+
+bool QuantBot::heavyFactoryFirstHold() const {
+    return botConfig().force.heavyFactoryFirst && difficulty >= Difficulty::Hard && !supportMode
+        && gameMode == GameMode::Custom && currentGame && !isCampaignGameType(currentGame->gameType)
+        && !firstHeavyFactoryBuilt();
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {

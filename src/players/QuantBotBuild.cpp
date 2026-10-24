@@ -556,9 +556,11 @@ void QuantBot::build(int militaryValue) {
             // The Natives (team 0) are always "alive" but are no enemy house.
             if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
-    const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
-        && !supportMode && !isCampaignGameType(currentGame->gameType)
-        && enemyHouses <= ownTeamHouses && !outnumberedByEstimate());
+    // HeavyFactoryFirst holds the step until the house's first heavy factory stands.
+    const bool brutalEconomy = !heavyFactoryFirstHold() && (brutalCityEconomy
+        || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
+            && !supportMode && !isCampaignGameType(currentGame->gameType)
+            && enemyHouses <= ownTeamHouses && !outnumberedByEstimate()));
     const bool openingWorkerFloor = (citySimEnabled && gameMode == GameMode::Custom) || brutalEconomy;
     auto openingFleetIncomplete = [&]() {
         return openingWorkerFloor
