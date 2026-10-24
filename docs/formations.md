@@ -1163,9 +1163,12 @@ to removing a cosmetic tile: it can change which obstacles the army clears and m
 own acceptance. Merely omitting zones from the defeat count has not established a draw-rate gain.
 
 **Regression test and the old false-positive.** `quantbot_strategic_site_stall` continues the
-preserved minute-35 seed-9101 save, restores its already-overdue Palace timer explicitly, verifies
-that the Palace is buildable but has no real site for its yards, then requires other completed
-construction and bounds all-yard idling/storage-cap plateaus over six game minutes. Normal disk
+preserved minute-35 seed-9101 save and restores its already-overdue Palace timer explicitly. To
+make no-siting deterministic after a disk load rebuilds placement plans, every third row of
+unoccupied ground becomes sand: smaller footprints and existing buildings/lots remain, but no
+empty 3x3 Palace site can exist. It verifies that precondition rather than faking placement-cache
+answers, then requires other completed construction and bounds all-yard idling/storage-cap
+plateaus over six game minutes. Normal disk
 saves intentionally rebuild these planning timers; only observer runtime checkpoints carry them.
 The first continuation-only attempt passed with and without the fix and was discarded. The new
 test still needs shared staged validation **and a negative control removing the site gate** before
@@ -1179,6 +1182,24 @@ uses the existing `vanilla-match.py --houses` list with `--ffa default`, for exa
 Each house still has its own team; the four-house default and balanced head-to-head assignments
 are unchanged. The six-house same-bot 24-seed arm and final Fortress, `/weak`, CY and long-game
 ladder checks must not be inferred from the mixed cell or the passing unit suite.
+
+**Final-cycle scoring defect.** `FormationWaveMeasure::run` tests `game.finished` before its
+callback. When `House::lose` decides a match in the last update, `VanillaMatch::tick` never observes
+the final death. The 24-game 4P reference has nine winning games with a missing final-loser
+`eliminated_s`; the Palace-only arm has eight. Treating blanks as survivors incorrectly scores
+all 24 games of either arm as draws, even though `games.csv` reports nine/eight winners.
+The harness now calls an idempotent `recordEliminations` once after the loop as well as in each
+tick, without running another game update or repeating sample/save hooks. An absent house is
+unknown, not evidence of defeat; Natives are not entrants.
+
+Original CSVs remain immutable. Recovered comparisons use each live `alive` flag and label an
+`alive=0` house with a missing elimination time as **imputed final-tick death at the actual game
+end**; this is a reconstruction, not an originally logged timestamp. Alive matrix houses use
+`eliminated_s=-1`, which must not be interpreted as an elimination. The reconstruction changes
+18 reference and 16 Palace-only house-score/drawn rows. Palace-only remains level: corrected
+4P mean-house paired score difference 0.000 (95% -0.0156..+0.0156), mixed 6P -0.0122
+(-0.0330..+0.0052); time-outs are 15 -> 16 of 24 and 16 -> 17 of 24, respectively. A confirmed
+planner correctness bug is not evidence that this fix cures FFA draw rates.
 
 **Preserved verification.** Cluster ctest 20261024T122735-ctest-c4ed92 tested source 3b8fefec:
 109/109 passed (mini 88, Pro 21). That receipt predates the new siting probe and six-house harness

@@ -23,10 +23,13 @@ Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`
 - **Preserved acceptance:** cluster ctest 20261024T122735-ctest-c4ed92 at 3b8fefec completed **109/109**
   (mini 88, Pro 21). Do not rerun it to confirm. This receipt predates the recovered regression below.
 - **Recovery source (no new builds/snapshots):** c38750c2 adds `quantbot_strategic_site_stall` with the existing
-  minute-35 fixture, restores its overdue timer at runtime, requires a genuinely unsited Palace and bounds
-  all-yard idling/storage-cap plateaus while checking completed construction. The old continuation-only test
-  passed with and without the fix and is not accepted evidence. Main must validate the new test and a
-  temporary gate-removal negative control in shared build-int. 71a4cf3d extends existing `--houses` for genuine
+  minute-35 fixture, restores its overdue timer at runtime and checks completed construction plus <=2-minute
+  all-yard idle/storage-cap plateaus. Shared staged execution exposed a real fixture precondition failure:
+  after load, a Palace site exists. The corrected fixture physically fragments only unoccupied ground into
+  at most two consecutive rock rows, retaining existing structures and smaller build sites, then keeps the
+  no-Palace-site assertion. Main must prove the corrected consumer and gate-removal negative control.
+  The original continuation-only test passed with and without the fix and is not accepted evidence.
+  71a4cf3d extends existing `--houses` for genuine
   six-player self-play while preserving the four-player default and balanced assignments.
 - **Still collecting original jobs:** `pal-self4`/`pal-6p`, `c3-self4`/`c3-6p`, `c3-self4-nofl`, `c3-h2h`,
   `c1-self4-120`; no resubmissions. The `*-6p` scenario arms are mixed QB/QH/QM/QE/AH/AM, not same-bot self-play.
@@ -34,6 +37,13 @@ Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`
   Fortress, `/weak`, CY and the long-game ladder for the final siting fix. Zones elimination and targeting
   remain explicitly unaccepted, not release defaults. Clean integration without them: use existing pure
   site-gate commit f9b11643 plus c38750c2 and 71a4cf3d; parent reconciles protocol/history once.
+- **Completed Palace-only arms:** 4P self-play 15 -> 16/24 time-outs, mixed 6P 16 -> 17/24; no evidenced draw
+  cure. Corrected mean-house paired score deltas are 0.000 (-0.0156..+0.0156) and -0.0122
+  (-0.0330..+0.0052), respectively. These comparisons label missing final-tick deaths as imputed at actual end.
+- **Scoring harness correction:** the wave loop exits on `game.finished` before its callback sees the final
+  death. Reference/Palace-only 4P arms omit 9/8 final-loser timestamps, changing 18/16 score/drawn rows.
+  `VanillaMatch::recordEliminations` now observes the final state once after the loop; no extra simulation
+  tick, sample or save. Absent houses remain unknown, Natives excluded. Raw evidence stays unchanged.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
