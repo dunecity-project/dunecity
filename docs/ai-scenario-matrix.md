@@ -349,10 +349,12 @@ numeric seed happens to be equal. Campaign time-outs use the same −0.25 duel d
 
 `JoinAllyWaves` (`--style allyjoin`) lets Custom Hard/Brutal join an allied QuantBot's whole-army
 wave launched in the last 30 seconds, keeping its objective and the viable-wave minimum.
-At 48 games per format, paired Δ is +0.14 [−0.01,+0.33] for 2v2 and +0.04 [−0.17,+0.25] for 3v3.
-Neither clears the default rule. The 2v2 extension reuses the first 48 games rather than replaying
-them. In 54 bundled multiplayer-map games per arm, both configurations beat AI Player Hard in
-all 20 such games; total time-outs are 8 off and 7 on. No accepted team default yet.
+The completed 2v2 extension contains **96 games per arm** (24 seeds per mod, both sets of starts),
+reusing the first 48 rather than replaying them: paired Δ is +0.06 [−0.06,+0.18],
+with 4 control versus 6 candidate time-outs. The 3v3 comparison remains 48 per arm,
+Δ +0.04 [−0.17,+0.25]. Neither clears the default rule. In 54 bundled multiplayer-map
+games per arm, both configurations beat AI Player Hard in all 20 such games;
+total time-outs are 8 off and 7 on. No accepted team default yet.
 
 ### First-wave funding
 
@@ -399,3 +401,26 @@ and `shared-campaign-critical-cases.json`. Jobs are
 `20261024T232453-campaign-{off-f544e9,on-8f53d6}`. The 672 total games use
 the shared build's default movement flag off. Team play and the unresolved
 named losses are not declared fixed by these results.
+
+### Optional construction-capacity runway (candidate, default off)
+
+`CapacityMcvRunway` (`--style mcvrunway`) keeps optional MCV expansion behind the
+existing four-minute production forecast and cash reserve. It subtracts only
+newly accepted optional MCV purchases from that headroom; ordinary unit and zone
+orders are already forecast and must not be charged twice. Actual loss of the
+last yard, existing rock-expansion and colonisation recovery remain exempt.
+Shared combat upgrades, worker targets and first-wave readiness are unchanged.
+The style does not enable either rejected first-wave budget above.
+
+The retained `sdc` trace at cycle52325 bought a900-credit MCV with projected
+cash−406, after forecasting13071 income/cash against13477 continuing-production
+cost. The new same-engine queue regression reproduces the off-arm purchase,
+requires on-arm rejection **and affordable combat fallthrough**, and retains
+funded MCV expansion, real lost-yard recovery and shared technology progression.
+All three shared-spending mod probes pass at `1d0a93be`.
+
+This forecast includes existing idle/held production capacity, not only unpaid
+orders. It is a conservative capacity rule; passing queue boundaries does not
+establish campaign, team or ladder improvement. The switch remains off pending
+the unchanged paired outcome comparisons.
+
