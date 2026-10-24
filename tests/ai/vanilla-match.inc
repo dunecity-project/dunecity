@@ -70,6 +70,7 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
 /// Record each defeated playing house once, including a death on the game's final cycle.
 inline void recordEliminations(Game& game, State& state) {
     const Uint32 now = game.getGameCycleCount();
+
     for (const auto& side : state.sides) {
         const House* house = game.getHouse(side.house);
         // An absent house is unknown, not an observed elimination. Natives are never entrants.
@@ -83,6 +84,7 @@ inline void recordEliminations(Game& game, State& state) {
 /// Once per cycle: per-minute samples and newly eliminated houses. True once one house is left.
 inline bool tick(Game& game, State& state) {
     const Uint32 now = game.getGameCycleCount();
+    EliminationMatch::crushCount.observe();
     if (now % MILLI2CYCLES(60000) == 0) EliminationMatch::sample(game);
     recordEliminations(game, state);
     return FormationDuel::decided(game, state.sides);

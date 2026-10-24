@@ -1,23 +1,23 @@
 // Headless integration fixture (tests/units/run-unit-motion-probe.py); linked with the production
 // game objects, never part of the shipped game.
 //
-// Smooth unit motion at Stefan's 2 ms game speed (HANDOVER "Unit jitter"): ground units of several
+// Smooth unit motion at Stefan's 2 ms game speed (HANDOVER "Unit movement"): ground units of several
 // types and both houses shuttle across open sand while the interactive main loop
 // (Game::runMainLoop) runs at 2 ms per cycle with its real frame pacing, so a rendered frame runs
-// several cycles. Every cycle and every rendered frame the positions the renderer draws
-// (world2screen(realX, realY) inside UnitBase::DrawnStepScope, as Game::drawScreen) are checked
+// several cycles. Every cycle and every rendered frame the units' simulated positions (what
+// blitToScreen draws: world2screen(realX, realY); nothing adjusts them for drawing) are checked
 // against the Dynasty step each unit is on:
 //   - a moving unit advances at most two cycles' worth of its step per cycle (one if the step
 //     changes on that cycle), so it never covers a tile in one cycle;
-//   - a moving unit mid-step never stands still for two cycles (a step chained onto the previous
-//     one on the same cycle keeps justStoppedMoving, and GroundUnit::checkPos holds the simulated
-//     unit on its tile centre for half a step, then moves it a whole tile; 1.0.760-1.0.850 drew it
-//     there);
+//   - a moving unit mid-step never stands still for two cycles and never keeps justStoppedMoving
+//     (1.0.760-1.0.852: a step chained onto the previous one on the same cycle kept the flag, and
+//     GroundUnit::checkPos held the unit on its tile centre for half a step, then jumped it a whole
+//     tile; 1.0.851-1.0.852 only drew it moving);
 //   - between two rendered frames a unit moves at most the cycles run in between times its step
-//     speed (in pixels at the frame's zoom), and never a whole tile unless that speed covers one.
-// The simulation is not changed (protocol 88): held_cycles counts the cycles a moving unit was held
-// on its tile centre, i.e. drawn somewhere else than simulated.
-// The scenario has to chain steps: at least ten chained steps are required.
+//     speed (in pixels at the frame's zoom), and never a whole tile unless that speed covers one;
+//   - a unit that waited for a carryall which never came drives off at its step speed (before:
+//     its stale route ticks started steps in the past, one tile per cycle until they caught up).
+// The scenario has to exercise both: chained steps and a cancelled carryall wait are required.
 // A step chains onto the previous one on the same cycle when it is a whole number of route periods
 // long and starts on a route tick that is a multiple of 3 (UnitBase::beginDynastyStep): Launcher,
 // Deviator and Sonic Tank cross a sand tile in 20 movement ticks, so shuttles are sent back only on
@@ -44,6 +44,7 @@
 namespace UnitMotionProbe {
 
 constexpr Uint32 kCycles = 4000;
+constexpr Uint32 kWaitStart = 600, kWaitCycles = 400;   // the carryall wait, relative to the first cycle
 constexpr double kSlack = 0.05;                           // FixPoint rounding, world units
 constexpr Uint32 kFrameDelayMs[] = {3, 9, 20};
 
@@ -71,9 +72,12 @@ struct State {
     std::vector<Uint32> shuttles;
     std::map<Uint32, Coord> homes;         // the other end of each shuttle's lane
     std::set<Uint32> lost;                 // shuttles destroyed during the run
-    int heldCycles = 0;                    // cycles a moving unit was held on its tile centre
+    Uint32 waiter = NONE_ID;
+    Uint32 carrier = NONE_ID;
+    Coord waiterAt = Coord::Invalid();
+    double waiterTilesAfter = 0;
     int cycles = 0, frames = 0, frameCycles = 0, chained = 0;
-    int cycleViolations = 0, stillViolations = 0, frameViolations = 0, frameTileJumps = 0;
+    int cycleViolations = 0, stillViolations = 0, heldViolations = 0, frameViolations = 0, frameTileJumps = 0;
     double maxCycleMove = 0, maxFramePx = 0, maxFrameRatio = 0;
     double tilePx = 0;
     std::ofstream cyclesCsv, framesCsv;
@@ -94,11 +98,10 @@ inline double stepSpeed(const UnitBase* u) {
     return length * (GAMESPEED_DEFAULT * 3) / static_cast<double>(u->dynastyStepEnd - u->dynastyStepStart);
 }
 
-/// Checks the positions read now, before @a g runs its next cycle (onCycle reads them inside the
-/// renderer's UnitBase::DrawnStepScope).
-inline void measure(Game& g) {
+inline void onCycle(Game& g) {
     State& s = state;
     const Uint32 cycle = g.getGameCycleCount();
+    const Uint32 rel = cycle - s.firstCycle;
     const bool frameStart = g.frameTiming.gameCyclesThisFrame == 0;
     if (frameStart) ++s.frames;
     ++s.frameCycles;
@@ -129,7 +132,9 @@ inline void measure(Game& g) {
             const bool midStep = u->moving && !newStep && now > u->dynastyStepStart + GAMESPEED_DEFAULT * 3
                                  && now < u->dynastyStepEnd;
             p.stillMidStep = midStep && moved == 0 ? p.stillMidStep + 1 : 0;
-            if (midStep && u->justStoppedMoving) ++s.heldCycles;   // simulated on its tile centre
+            if (midStep && u->justStoppedMoving)
+                fail(s.heldViolations, "cycle " + std::to_string(cycle) + ": unit " + std::to_string(u->getObjectID())
+                     + " (item " + std::to_string(u->getItemID()) + ") keeps justStoppedMoving mid-step");
             if (p.stillMidStep == 2)
                 fail(s.stillViolations, "cycle " + std::to_string(cycle) + ": unit " + std::to_string(u->getObjectID())
                      + " (item " + std::to_string(u->getItemID()) + ") stands still mid-step at "
@@ -161,29 +166,34 @@ inline void measure(Game& g) {
     }
     if (frameStart) s.frameCycles = 1;
     ++s.cycles;
-}
 
-inline void onCycle(Game& g) {
-    State& s = state;
-    {
-        // What Game::drawScreen would draw now; the simulation's positions come back at the brace.
-        const UnitBase::DrawnStepScope drawn;
-        measure(g);
-    }
     // Shuttles turn round at either end of their lane, on a cycle whose first route tick is a
     // multiple of 3 (see the top). Looked up by ID: a destroyed unit is gone from the object manager.
-    const Uint32 cycle = g.getGameCycleCount();
+    auto* waiter = dynamic_cast<GroundUnit*>(g.getObjectManager().getObject(s.waiter));
     for (const Uint32 id : s.shuttles) {
         auto* u = dynamic_cast<UnitBase*>(g.getObjectManager().getObject(id));
         if (u == nullptr) {
             if (s.lost.insert(id).second) SDL_Log("UNIT_MOTION_PROBE_LOST: unit %u at cycle %u", id, cycle);
             continue;
         }
+        if (u == waiter && rel < kWaitStart + kWaitCycles) continue;
         if (!u->moving && u->location == u->destination && firstRouteTick(u->getItemID(), cycle) % 3 == 0) {
             const Coord back = s.homes[id];
             s.homes[id] = u->location;
             u->doMove2Pos(back.x, back.y, true);
         }
+    }
+    // A carryall wait that ends without a lift (GroundUnit::navigate skips the waiting unit).
+    if (waiter == nullptr) return;
+    if (rel == kWaitStart) {
+        waiter->awaitingPickup = true;
+        waiter->bookedCarrier = s.carrier;
+    } else if (rel == kWaitStart + kWaitCycles) {
+        waiter->cancelCarryallPickup();
+        s.waiterAt = waiter->location;
+    } else if (rel > kWaitStart + kWaitCycles && s.waiterAt.isValid()) {
+        s.waiterTilesAfter = std::max(s.waiterTilesAfter,
+            static_cast<double>(std::max(std::abs(waiter->location.x - s.waiterAt.x), std::abs(waiter->location.y - s.waiterAt.y))));
     }
 }
 
@@ -204,7 +214,11 @@ int runUnitMotionProbe() {
     currentGame = game.get();
     // A single-player custom game, as Stefan's: its speed is the player's setting (Game::getGameSpeed)
     // and its frames are paced (FramePacing); a network game type would run at the match's speed.
-    GameInitSettings init("motion.ini", mapData, true, settings.gameOptions);
+    // The continuous-ground-steps rule (default off) is what this probe checks: with it off a chained
+    // step keeps justStoppedMoving and is held mid-step, as in 1.0.760-1.0.852.
+    auto rules = settings.gameOptions;
+    rules.continuousGroundSteps = true;
+    GameInitSettings init("motion.ini", mapData, true, rules);
     init.randomSeed = 92;
     GameInitSettings::HouseInfo atreides(HOUSE_ATREIDES, 1);
     atreides.addPlayerInfo({"Motion tester", "HumanPlayer"});
@@ -255,6 +269,12 @@ int runUnitMotionProbe() {
         s.homes[unit->getObjectID()] = home;
         s.shuttles.push_back(unit->getObjectID());
     }
+    // The carryall the waiting tank books never comes: it exists but is not deployed.
+    auto* carryall = houses[0]->createUnit(Unit_Carryall, true);
+    require(carryall != nullptr, "Could not create the booked carryall");
+    s.carrier = carryall->getObjectID();
+    s.waiter = s.shuttles.front();
+    require(game->getObjectManager().getObject(s.waiter)->getItemID() == Unit_Tank, "The first lane should hold the waiting tank");
 
     // Stefan's game speed; the interactive loop, its frame pacing and the renderer (dummy driver).
     settings.gameOptions.gameSpeed = 2;
@@ -285,17 +305,20 @@ int runUnitMotionProbe() {
 
     const double cyclesPerFrame = s.frames ? static_cast<double>(s.cycles) / s.frames : 0;
     SDL_Log("UNIT_MOTION_PROBE: cycles=%d frames=%d cycles_per_frame=%.2f tile_px=%.0f chained_steps=%d "
-            "held_cycles=%d max_cycle_move=%.2f max_frame_px=%.2f max_frame_ratio=%.3f "
-            "cycle_violations=%d still_mid_step=%d frame_violations=%d frame_tile_jumps=%d lost_shuttles=%zu",
-            s.cycles, s.frames, cyclesPerFrame, s.tilePx, s.chained, s.heldCycles, s.maxCycleMove, s.maxFramePx,
-            s.maxFrameRatio, s.cycleViolations, s.stillViolations, s.frameViolations, s.frameTileJumps, s.lost.size());
+            "waiter_tiles_after=%.0f max_cycle_move=%.2f max_frame_px=%.2f max_frame_ratio=%.3f "
+            "cycle_violations=%d still_mid_step=%d held_mid_step=%d frame_violations=%d frame_tile_jumps=%d lost_shuttles=%zu",
+            s.cycles, s.frames, cyclesPerFrame, s.tilePx, s.chained, s.waiterTilesAfter, s.maxCycleMove, s.maxFramePx,
+            s.maxFrameRatio, s.cycleViolations, s.stillViolations, s.heldViolations, s.frameViolations, s.frameTileJumps,
+            s.lost.size());
     if (!s.firstFailure.empty()) SDL_Log("UNIT_MOTION_PROBE_FIRST_FAILURE: %s", s.firstFailure.c_str());
     require(s.cycles >= static_cast<int>(kCycles) - 1, "The main loop ended early");
     require(cyclesPerFrame >= 2.0, "2 ms game speed should run several cycles per rendered frame");
     require(s.lost.empty(), "A shuttle was destroyed during the run");
     require(s.chained >= 10, "The scenario no longer chains steps on the cycle the previous one ended");
+    require(s.waiterTilesAfter >= 3, "The tank that waited for a carryall did not drive on");
     require(s.cycleViolations == 0, "A moving unit covered more than its step speed in one cycle: " + s.firstFailure);
     require(s.stillViolations == 0, "A moving unit stood still mid-step: " + s.firstFailure);
+    require(s.heldViolations == 0, "A moving unit kept justStoppedMoving mid-step: " + s.firstFailure);
     require(s.frameViolations == 0 && s.frameTileJumps == 0,
             "A unit was drawn further from its previous frame than its speed allows: " + s.firstFailure);
     SDL_Log("UNIT_MOTION_PROBE_PASS");

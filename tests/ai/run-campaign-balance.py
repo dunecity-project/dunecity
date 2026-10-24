@@ -16,6 +16,7 @@ import atexit
 import ctypes
 import gzip
 import configparser
+from collections import defaultdict
 import hashlib
 import json
 import os
@@ -230,6 +231,9 @@ parser.add_argument('--force-probe', action='store_true',
 parser.add_argument('--strategy-probe', action='store_true',
                     help='Verify QuantBot strategies: peers and reloads agree on the pick, mixes follow their priors '
                          '(needs --custom-map, a multi-house map, for the lockstep and save/load checks)')
+parser.add_argument('--strategy-margin-seeds', default='11,22',
+                    help='Strategy probe: further seeds whose mix-production section (3) is played too; each fixed '
+                         'mix\'s lead-slot margin over the Learned game must be positive on the mean over --seed and these')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -754,6 +758,39 @@ summary = {'result':results[0],'sourceCommit':source_commit,
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
+
+if args.strategy_probe:
+    # Mix production (section 3) on further seeds: one 12-minute game per mix is one trajectory, so a
+    # fixed mix's lead-slot margin over the Learned game is required on the mean over the seeds
+    # (tests/ai/strategy-probe.inc, the note above checkMix).
+    margins = defaultdict(list)
+    def read_margins(log_path):
+        for line in log_path.read_text(errors='replace').splitlines():
+            if 'STRATEGY_PROBE: check=lead_margin' in line:
+                fields = dict(part.split('=', 1) for part in line.split('check=lead_margin', 1)[1].split() if '=' in part)
+                margins[fields['mix']].append(int(fields['margin_bps']))
+    read_margins(out/'run.log')
+    for extra in [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]:
+        profile = out/f'profile-seed{extra}'
+        atexit.register(discard_profile_assets, profile)
+        extra_log = out/f'run-seed{extra}.log'
+        with extra_log.open('w') as log:
+            subprocess.run([str(binary),'--window','--showlog'],cwd=out,
+                           env=dict(env,DUNECITY_USERDIR=str(profile),BALANCE_SEED=str(extra),BALANCE_STRATEGY_SECTIONS='3',
+                                    BALANCE_STRATEGY_MARGIN_ONLY='1'),
+                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
+        read_margins(extra_log)
+    seeds = 1 + len([seed for seed in args.strategy_margin_seeds.split(',') if seed.strip()])
+    weak = []
+    for mix, values in sorted(margins.items()):
+        mean = sum(values) / len(values)
+        print(f'STRATEGY_LEAD_MARGIN: mix={mix} seeds={len(values)} mean_bps={mean:+.0f} '
+              + ' '.join(f'{v:+d}' for v in values))
+        if len(values) != seeds or mean < 1:
+            weak.append(mix)
+    if not margins or weak:
+        raise RuntimeError('Strategy probe: the lead slots got no larger share of the built value than in the Learned game '
+                           'on the mean over the seeds: ' + (', '.join(weak) or 'no margins logged'))
 
 if args.require_win and 'outcome=won' not in results[0]:
     raise RuntimeError('Full-match acceptance requires victory: ' + results[0])

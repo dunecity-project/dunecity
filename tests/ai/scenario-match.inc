@@ -224,6 +224,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const auto& triggers = game.getTriggerManager().getTriggers();
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
+        EliminationMatch::crushCount.observe();
         const Uint32 cycle = game.getGameCycleCount();
         if (cycle % minute == 0) {
             EliminationMatch::sample(game);
@@ -252,12 +253,12 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const HouseTrack& track = tracks[house->getHouseID()];
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d start=%d:%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
-                track.start.x, track.start.y);
+                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()));
     }
     std::string outcome;
     int winnerTeam = winner;

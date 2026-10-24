@@ -1274,6 +1274,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.maximumNumberOfConstructionYardsOverride = myINIFile.getIntValue("Game Options","Maximum Number of Construction Yards Override",-1);
             settings.gameOptions.originalUnitDamage = myINIFile.getBoolValue("Game Options", "Original Unit Damage", false);
             settings.gameOptions.planBuildingSites = myINIFile.getBoolValue("Game Options", "Plan Building Sites", true);
+            settings.gameOptions.continuousGroundSteps = myINIFile.getBoolValue("Game Options", "Continuous Ground Steps", false);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

@@ -158,6 +158,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "City Effects", options.cityEffects);
     config.setBoolValue(section, "Original Unit Damage", options.originalUnitDamage);
     config.setBoolValue(section, "Plan Building Sites", options.planBuildingSites);
+    config.setBoolValue(section, "Continuous Ground Steps", options.continuousGroundSteps);
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -187,6 +188,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("City Effects", options.cityEffects);
     readBool("Original Unit Damage", options.originalUnitDamage);
     readBool("Plan Building Sites", options.planBuildingSites);
+    readBool("Continuous Ground Steps", options.continuousGroundSteps);
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {

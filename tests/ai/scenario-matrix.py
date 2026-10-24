@@ -34,6 +34,7 @@ summary table. Games already in games.csv are skipped; each game's run directory
 soon as its rows are written. Scores are tests/ai/match_score.py placement scores.
 """
 import argparse
+import configparser
 import csv
 import re
 import shutil
@@ -71,7 +72,7 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'city_pop', 'win_type', 'digest', 'wall_s', 'error')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn', 'start')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
 # Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
@@ -234,9 +235,14 @@ def campaign_missions(first_only):
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
+
+
+def aaa_seeds(count):
+    """All against Atreides: the six fixed seeds of the mandatory test, then generated ones."""
+    return list(AAA_SEEDS[:count]) + seeds_for('aaa', 'extra', max(0, count - len(AAA_SEEDS)))
 
 
 def schedule(args):
@@ -249,6 +255,8 @@ def schedule(args):
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
+        if cell['category'] == 'aaa' and getattr(args, 'aaa_seeds', None) and args.tier == 'full':
+            count = args.aaa_seeds
         if count <= 0:
             continue
         if cell['kind'] == 'campaign':
@@ -257,7 +265,7 @@ def schedule(args):
                     for seed in seeds_for('campaign', f'{house}{mission}', count):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
-        seeds = list(AAA_SEEDS[:count]) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
+        seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
         for index, seed in enumerate(seeds):
             games.append(match_game(cell, index, seed))
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
@@ -355,6 +363,20 @@ def command(args, binary, game, out):
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--no-ai-telemetry']
     if getattr(args, 'style', None):
         cmd += ['--scenario-style', args.style]
+    options_path = game.get('options')
+    if getattr(args, 'game_options', None):
+        options = configparser.ConfigParser(strict=False, interpolation=None)
+        options.optionxform = str
+        for path in (options_path, args.game_options):
+            if path:
+                with Path(path).open() as handle:
+                    options.read_file(handle)
+        out.mkdir(parents=True, exist_ok=True)
+        options_path = out / 'game-options.ini'
+        with options_path.open('w') as handle:
+            options.write(handle)
+    if options_path:
+        cmd += ['--game-options', str(options_path)]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
                 '--partner-difficulty', game['partner'], '--enemy-difficulty', 'easy', '--enemy-ai', game['enemy_ai']]
@@ -362,8 +384,6 @@ def command(args, binary, game, out):
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
-    if game['options']:
-        cmd += ['--game-options', str(game['options'])]
     return cmd
 
 
@@ -427,7 +447,8 @@ def play(args, scratch, binary, game):
                            'army_value': h['army_value'], 'army_units': h['army_units'], 'away_peak': h['away_peak'],
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
-                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', '')})
+                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
+                           'crush_kills': h.get('crush_kills', '')})
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
@@ -890,12 +911,17 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
+parser.add_argument('--game-options', type=Path,
+                    help='Overlay this INI after each cell\'s own game options; use a distinct results '
+                         'directory for each comparison arm')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
                          'pair; the short maps get half)')
 parser.add_argument('--team-seeds', type=int, default=TEAM_SEEDS,
                     help='Full tier: seeds per team cell (2v2/3v3 Hard v Medium, two mods, both sets of starts; '
                          '12 = 48 games per format)')
+parser.add_argument('--aaa-seeds', type=int,
+                    help='Full tier: seeds per All against Atreides cell (the mandatory six, then generated ones)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')

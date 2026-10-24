@@ -312,7 +312,13 @@
 //     and reinforcement worms spare their summoner's team. Save 9873.
 // 102: Combined follow-up batch includes the observer end-stream protocol and Natives team /
 //     reinforcement-worm rules. Older peers cannot interpret the same match state. Save 9873.
-#define NETWORK_PROTOCOL_VERSION            102
+// 103: Adds the continuous-ground-steps match rule to the combined follow-up batch:
+//     GameOptionsClass::continuousGroundSteps is hashed and streamed in MOD9 (save 9874).
+//     On: chained Dynasty ground steps clear justStoppedMoving, and a unit that missed
+//     route ticks while awaiting a carryall resumes at its cadence instead of in the past.
+//     Off (default): retains the old movement and render-only UnitBase::DrawnStepScope.
+//     A 102 peer cannot read the MOD9 settings stream.
+#define NETWORK_PROTOCOL_VERSION            103
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

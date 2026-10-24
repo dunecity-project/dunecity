@@ -84,7 +84,7 @@ DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed'
                      'siege_holds', 'assault_holds', 'assault_waves', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS + ('start_mix',)
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
-                 'kill_value', 'loss_value', 'alive')
+                 'kill_value', 'loss_value', 'alive', 'crush_kills')
 MIX_FIELDS = ('minute', 'final', 'built', 'lost', 'army', 'reward')
 MIX_ROW_FIELDS = KEY + ('house', 'label') + MIX_FIELDS
 SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS

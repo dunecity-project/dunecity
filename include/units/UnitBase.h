@@ -598,13 +598,15 @@ public:
     virtual void cancelCarryallPickup() {}
 
     /**
-        Render only (Game::drawScreen; docs/unit-route-comparison.md, "Drawing chained steps"):
-        while it exists, every Dynasty ground unit on a step that kept a stale justStoppedMoving
-        has realX/realY set to where its step puts it; the destructor puts the simulation's values
+        Render only (Game::drawScreen; docs/unit-route-comparison.md, "Chained steps"): under the
+        default movement rule (GameOptionsClass::continuousGroundSteps off, the 1.0.852 simulation),
+        while it exists every Dynasty ground unit on a step that kept a stale justStoppedMoving has
+        realX/realY set to where its step puts it; the destructor puts the simulation's values
         back. Such a step was chained onto the previous one on the cycle that ended it, and
         GroundUnit::checkPos holds the unit on its tile centre for the whole step, so drawn as
-        simulated it stands still for half a step and then jumps a whole tile. The simulation is
-        unchanged (protocol 88): nothing runs a cycle while the scope exists.
+        simulated it stands still for half a step and then jumps a whole tile. Nothing runs a cycle
+        while the scope exists, so the simulation and its digest are unchanged. With the rule on the
+        simulation clears the flag and the scope does nothing.
     */
     class DrawnStepScope {
     public:

@@ -190,7 +190,10 @@
 //       (the team Natives saw with) and no summoner. Crime troopers of a pre-9871 save still
 //       keep their owner: nothing that save stores tells them from the house's own (HANDOVER,
 //       2026-10-24 Natives follow-up).
-#define SAVEGAMEVERSION     9873
+// 9874: Adds the continuous-ground-steps match rule to the Natives follow-up format.
+//       GameInitSettings writes marker MOD9 with its byte after MOD8's. MOD8 and older
+//       settings load with the rule off, preserving the movement they were played with.
+#define SAVEGAMEVERSION     9874
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
 /// First save with NATIVES_TEAM's visibility slot and the sandworm's summoner.

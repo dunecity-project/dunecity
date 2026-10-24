@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 102;
+static constexpr int kWireProtocolVersion = 103;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -112,7 +112,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 100: host streams remaining observer cycles and an end marker before leaving.
     // 101: Natives uses its own team and reinforcement worms spare the summoner; save 9873.
     // 102 combines both incompatible protocol changes in this batch.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 102);
+    // 103 adds the hashed continuous-ground-steps match rule in MOD9 (save 9874).
+    // Off preserves the previous movement; on corrects chained steps and missed route ticks.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 103);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

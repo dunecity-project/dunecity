@@ -819,6 +819,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Game Options","Maximum Number of Construction Yards Override",settings.gameOptions.maximumNumberOfConstructionYardsOverride);
     myINIFile.setBoolValue("Game Options", "Original Unit Damage", settings.gameOptions.originalUnitDamage);
     myINIFile.setBoolValue("Game Options", "Plan Building Sites", settings.gameOptions.planBuildingSites);
+    myINIFile.setBoolValue("Game Options", "Continuous Ground Steps", settings.gameOptions.continuousGroundSteps);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);

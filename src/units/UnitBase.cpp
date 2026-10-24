@@ -995,9 +995,23 @@ Uint64 UnitBase::formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, 
     return std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/paceScale));
 }
 
+namespace {
+/// The match's movement rule (GameOptionsClass::continuousGroundSteps): every peer runs the same.
+bool continuousGroundSteps() {
+    return currentGame->getGameInitSettings().getGameOptions().continuousGroundSteps;
+}
+}
+
 bool UnitBase::moveDynastyStep() {
     if(!moving || !usesDynastyGroundTiming()) { dynastyStepEnd=0; return false; }
     if(dynastyStepEnd==0) return false; // Pre-9844 save: finish its existing step.
+    // The previous step's stop was handled on the cycle it ended (checkPos snapped the unit to its
+    // tile centre, a tracked unit squashed that tile). A step chained onto it on that same cycle is
+    // moving: a stale flag made GroundUnit::checkPos snap realX/realY to the tile centre on every
+    // cycle of the step, so the unit sat still for half a step and jumped a whole tile when its
+    // location changed, and a tracked unit squashed its tile every cycle. Cleared only under the
+    // continuous-ground-steps rule; off keeps the 1.0.852 simulation (DrawnStepScope draws it).
+    if(continuousGroundSteps()) justStoppedMoving=false;
     const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount())*(GAMESPEED_DEFAULT*3);
     const auto elapsed=now>dynastyStepStart ? now-dynastyStepStart : 0;
     const auto duration=dynastyStepEnd-dynastyStepStart;
@@ -1034,7 +1048,7 @@ std::vector<DrawnStepSwap> drawnStepSwaps;   // reused every frame
 
 UnitBase::DrawnStepScope::DrawnStepScope() {
     drawnStepSwaps.clear();
-    if(currentGame==nullptr || currentGame->getGameCycleCount()==0) return;
+    if(currentGame==nullptr || currentGame->getGameCycleCount()==0 || continuousGroundSteps()) return;
     // realX/realY hold the last cycle run; this is moveDynastyStep's position for that cycle,
     // before GroundUnit::checkPos snapped it (rock bumps included: they are in bumpyOffset).
     const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount()-1)*(GAMESPEED_DEFAULT*3);
@@ -1192,6 +1206,13 @@ void UnitBase::navigate() {
                 // for harvesters/MCVs and the following update for combat units.
                 dynastyRouteTick=((now+249)/250)*5 + ((itemID==Unit_Harvester || itemID==Unit_MCV) ? 0 : 5);
                 if(dynastyRouteTick==0) dynastyRouteTick=5;
+            } else if(continuousGroundSteps() && now>=(dynastyRouteTick+1)*50) {
+                // Navigating every cycle, a route tick is seen on the cycle it falls due (a cycle is
+                // 48 of these units, a tick 50). Older means this unit did not navigate for a while
+                // (GroundUnit::navigate skips a unit awaiting a carryall). Steps begun from those
+                // missed ticks would start in the past and finish at once, a tile per cycle until the
+                // ticks caught up; it resumes at its cadence's next tick instead (continuous-ground-steps rule).
+                dynastyRouteTick+=(now/50-dynastyRouteTick+14)/15*15;
             }
             routeTick=dynastyRouteTick;
             if(now>=routeTick*50) { routeDue=true; dynastyRouteTick+=15; }

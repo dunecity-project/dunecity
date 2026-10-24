@@ -57,9 +57,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9866 adds the starting ratios a Tuned/Bounded strategy resolved to.
     // 9868 gives every special its own unit-mix slot (ten slots instead of eight).
     // 9871 adds the Natives house slot (HOUSE_NATIVES; 9869/9870 are left to parallel branches).
-    // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is left to
-    // parallel branches).
-    REQUIRE(SAVEGAMEVERSION == 9873);
+    // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is reserved).
+    // 9874 adds the continuous-ground-steps match rule (GameInitSettings MOD9).
+    REQUIRE(SAVEGAMEVERSION == 9874);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
     REQUIRE(SAVEGAMEVERSION >= 9818);

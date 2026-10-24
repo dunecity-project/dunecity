@@ -1,12 +1,12 @@
 ## 2026-10-24 — Shared follow-up integration, not yet release accepted
 
 - Single staging checkout/build: `dunecity-feature-batch/build-int`; completed source handoffs retain their original commits and evidence below. No new version or install.
-- Combined protocol **102**, save **9873**: includes online observer completion plus the independent Natives team and reinforcement-worm summoner state. Protocol pins reconciled together.
+- Combined protocol **103**, save **9874**: online observer completion, the independent Natives team/reinforcement-worm summoner state, and the hashed MOD9 movement rule. Older settings retain movement off; protocol pins reconciled together.
 - Integrated Vuk UI fixes, online spectator completion, simultaneous-defeat ordering, Natives follow-up including byte-compatible visibility packing, exact FPS optimizations, twelve community maps and paired-score correction. Palace/IX integration is restricted to the placeable-site guards and its consumer regression, not the unaccepted FFA experiments.
-- `JoinAllyWaves`, `OpeningCombatBudget` and `CampaignCombatBudget` remain **off and unaccepted**. Sardaukar/Mercenary defaults unchanged. Unit-movement acceptance and community-mod review remain open.
+- `JoinAllyWaves`, `OpeningCombatBudget`, `CampaignCombatBudget` and `Continuous Ground Steps` remain **off and unaccepted**. Sardaukar/Mercenary defaults unchanged. Three reviewed community mods are integrated; actual menu/production acceptance is pending the shared build.
 - Registered the missing live Harkonnen level-9 campaign-pressure cases for vanilla/DuneCity. Windows diagnostic compilation recognizes actual ccache and sccache launchers; no masquerading wrapper.
 - Combined source **b617a9d3** built successfully in shared `build-int`; dependency checks passed before/after. Actual combined gallery winner plate inspected; observer completion, Natives interactions and all six previous visibility/legacy-layout failures passed.
-- Cluster job `20261024T143241-combined-b617a9d3-da3ff9`: **113/117 passed** before its CLI watcher timed out at 3600 s. The durable job continues independently. Both new campaign-pressure cases failed on an obsolete worker-limit fixture assumption; Palace-site case failed its no-site precondition after load. Corrections are source handoffs, not yet verified. Scenario-matrix coverage is still pending; this is **not a green full suite**.
+- Cluster job `20261024T143241-combined-b617a9d3-da3ff9`: **113/117 passed** before its CLI watcher timed out at 3600 s. The durable job continues independently. Both new campaign-pressure cases failed on an obsolete worker-limit fixture assumption; Palace-site case failed its no-site precondition after load. Corrections are now integrated, not yet verified. Scenario-matrix coverage is still pending; this is **not a green full suite**.
 - Six legacy save fixtures (1.0.842/847/850/public 851) loaded, advanced 600 cycles, re-saved as 9873 and reloaded; Natives remained on team 10. Performance fallback ran on the **mini, not the offline Pro**: eight-house CPU p99 ratio 0.909/1.600, modeled frame 3.210/5.500, main-loop frame 5.016/8.000; all budgets passed.
 - Release acceptance remains **pending**. Earlier branch receipts below are not substitutes for the final combined suite.
 
@@ -355,6 +355,65 @@ Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`
   `--report` scoring. Only raw timestamp/place fields and direct consumers that omit that recovery are
   wrong; existing standard FFA/RatioSM reports are not invalidated. The 18/16 changed score rows compare
   recovered inputs against a naive raw-data calculation, not against the existing standard report.
+## 2026-10-24 — Movement correction made a same-build comparison rule (not accepted)
+
+- Parent Codex continued the paused `UnitMovement2` edits in this existing source-only lane; history and prior measurements are retained. No new worktree or private build.
+- `[Game Options] Continuous Ground Steps` / `continuousGroundSteps` is hashed and persisted in MOD9 settings. Off retains the 1.0.852 simulation plus its draw-only scope; on selects both stale-stop-flag and missed-route-tick fixes. Default remains **off** until original AAA acceptance is resolved.
+- Save **9874**, protocol **103**, app version unchanged. Older MOD8 settings retain the off behavior; an announced but truncated MOD9 extension fails closed.
+- `scenario-matrix.py --game-options` now overlays each cell's own INI rather than replacing the mandatory AAA setup. Relative on inputs are `tests/ai/continuous-ground-steps-on.ini` (matrix) and `tests/ai/continuous-ground-steps-ffa-on.ini` (frozen FFA setup). Use separate results directories for off/on.
+- Contract coverage concerns match identity, save round-trip, legacy boundaries and truncation; copy-forwarding/default-literal assertions were removed rather than re-pinned.
+- Mod-key parsing is included beside `Plan Building Sites`, with the existing player-choice precedence. Shared integration still must reconcile the combined protocol/save constants, build only shared `build-int`, exercise actual off/on paths and run unchanged acceptance. No new build, test or game run has been claimed for these edits.
+
+## 2026-10-24 — Unit movement: chained steps fixed in the simulation (branch `fix/unit-movement`, worktree `~/Documents/projects/dunecity-unit-movement`, from staging 6fd861ae = 1.0.852; protocol 95, save 9871; IN PROGRESS, not merged)
+
+Agents UnitMovement / UnitMovement2. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`
+(`trace-summary.json`, `effects-*`, `crush-*`, `motion-probe-*`, `aaa-*`, `ffa-*`, `strategy-cluster-*-logs`, paired-analysis scripts beside them).
+
+- **Sim fix (9f4f492b):** `UnitBase::moveDynastyStep` clears `justStoppedMoving` (a step chained on the cycle the
+  previous one ended kept it: snapped to the tile centre every cycle, still then a whole-tile jump); `UnitBase::navigate`
+  resyncs a route tick more than one tick old (missed during a carryall wait) to its cadence. One step-start site
+  (`navigate`); every Dynasty ground step moves through `moveDynastyStep` (UnitBase/InfantryBase::move): plain steps,
+  formations, carryall drops, harvesters, infantry. `UnitBase::DrawnStepScope` removed (dead: the sim is what is drawn).
+- **skipping.dls** (3,750 cycles from 85,728, stepped, simulated positions): half-tile-or-more jumps per cycle 132 -> 8
+  (harvesters leaving refineries, a trike leaving its factory, the first traced cycle), mid-step holds 121 -> 0 (Tanks 101 -> 0).
+- **unit_motion_probe** now checks the simulation alone (plus `held_mid_step` and the restored carryall-wait tank): fix 0
+  violations; old sim 135 cycle violations, 226 stalls, 6,803 held cycles, 118 frame tile jumps.
+- **Speed:** 12-tile routes, 14 types x straight/diagonal x sand/rock x 16 legs: identical cycles in all 56 groups
+  (`tests/units/run-movement-effects.py`).
+- **Crushing:** controlled arena (tracked vehicles through enemy infantry, 10 game minutes, no weapon deaths): rock 63 -> 66,
+  sand 49 -> 49 kills (3,393 / 19,513 held cycles before, 0 after). Real games (new harness column `crush_kills`): All
+  against Atreides about 1 crush per game either way. Not a factor.
+- **Carryall-wait catch-up:** after a 400-cycle wait ending without a lift, before: Tank 24 tiles in 60 cycles (64 world
+  units per cycle); after: 1 tile, at most 2.3 units per cycle.
+- **All against Atreides, completed 60-seed cluster comparison:** 1.0.852 game code (13c29c5d, harness-only additions)
+  versus movement fix (9f4f492b / 666c53bf; no AI change). Wins within 40 min: **57/60 -> 52/60**;
+  median winning time **35.4 -> 34.8 min**. Paired win-rate difference -0.083, 95% bootstrap [-0.167, 0.000];
+  Atreides placement-score difference -0.113 [-0.237, +0.008] (`match_score`, draw -0.25). The scoring rule calls
+  this level; it does **not** establish noninferiority. Fixed six: 6/6 -> 5/6; 906213928 still times out.
+  Jobs `20261024T111817-um-aaa-before60-aabee5` / `20261024T111809-um-aaa-after60-093f8c` added 36 games to each
+  original 24. All per-seed outcomes are in `aaa-before` / `aaa-after`, reproduced by `aaa_paired.py`.
+- **Saved failure diagnosis (no rerun):** 906213928's retained `events.jsonl` first differs in learned production
+  weights at minute 9.994; combat-kiting decisions differ by 10.014. Enemy army is already 69.9k versus the old
+  game's 46.4k at minute 20. The 137 base-scramble records start only at 23.35, stop at 33.44, include 69 with
+  zero new responders, and total 466 responder assignments (not 137 army recalls). Finish waves still launch at
+  36.20 / 38.92, with 94 / 69 units and no launchers held by defence. Enemy structures keep falling, 931 at
+  minute 34 -> 671 at 41 (includes walls/concrete). No persistent stale-defence lock is demonstrated.
+- **12-seed FFA, completed:** rs160-dunecity, four Brutal QuantBots, 45-min limit: decided 2/12 -> 4/12, mean end
+  43.6 -> 42.1 min. Game-mean placement-score paired difference +0.026 [-0.052, +0.099], level. The final defeated
+  house can lack its elimination event; `ffa_paired.py` uses `vanilla-match.placings`' end-time fallback.
+- **quantbot_strategy, cluster:** current three-seed test passes on both builds. Twelve individual main-seed
+  probes plus twelve margin-only probes per build: baseline job `20261024T111949-ctest-bdc04e` 11/25 passed;
+  fix job `20261024T111937-ctest-40f2d0` 14/25 passed. Single-seed full probes pass 3/12 -> 4/12; saved failures
+  are Bounded not drawn (both seeds 11/99), Air availability/quantity, Infantry quantity, or single-seed margins.
+  All seven mixes' twelve-seed mean lead margins are positive; three-seed mean fails 5/220 -> 8/220 seed triples.
+  Details in `docs/unit-route-comparison.md`; saved run logs and `strategy_cluster.py` retain each diagnosis.
+- **Acceptance remains blocked:** full cluster ctest `20261024T104919-ctest-c7a6bb` is **108/109**, only
+  `quantbot_all_against_atreides` fails (both machines). Its six-of-six criterion and 40-min limit are unchanged.
+  The proposed five-of-six plus median criterion was not adopted: the interval crossing zero is not evidence
+  that the fix is no worse. Parent will decide acceptance in the one shared integration build.
+- **Long-game ladder still queued:** existing jobs `20261024T112050-um-ladder-before-0983dd` /
+  `20261024T112050-um-ladder-after-fb033c`, 720 games each (144 per pair; 18 seeds x both houses x four long maps).
+  At recovery collection: 0/720 baseline, 24/720 fix; no full ladder verdict. No resubmission or local build.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
