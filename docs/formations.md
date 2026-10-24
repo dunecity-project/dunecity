@@ -1152,6 +1152,11 @@ rules can still run. A future pass tries the strategic structure again using ord
 invalidation; there is no extra retry timer or changed building price, target or military cap.
 This is a planner correctness fix, not a new aggressive doctrine.
 
+`[General Behavior] StrategicSiteGuards` in QuantBot Config is on by default, saved and hashed for
+multiplayer. Turning it off restores the four old IX/Palace selection rules for same-build
+comparisons; the pre-existing strategic cash-reserve checks are unchanged. The test-only
+`strategic-sites-on` and `strategic-sites-off` styles differ only in that key.
+
 **Zones and elimination are separate questions.** The shipped `House::isAlive` excludes walls and
 non-combat transports/workers/ambient aircraft, but counts residential/commercial/industrial
 structures. Roads and power lines are tile infrastructure, not a growing population of actual
@@ -1164,16 +1169,26 @@ own acceptance. Merely omitting zones from the defeat count has not established 
 
 **Regression test and the old false-positive.** `quantbot_strategic_site_stall` continues the
 preserved minute-35 seed-9101 save and restores its already-overdue Palace timer explicitly. To
-make no-siting deterministic after a disk load rebuilds placement plans, every third row of
-unoccupied ground becomes sand: smaller footprints and existing buildings/lots remain, but no
-empty 3x3 Palace site can exist. It verifies that precondition rather than faking placement-cache
-answers, then requires other completed construction and bounds all-yard idling/storage-cap
-plateaus over six game minutes. Normal disk
-saves intentionally rebuild these planning timers; only observer runtime checkpoints carry them.
-The first continuation-only attempt passed with and without the fix and was discarded. The new
-test still needs shared staged validation **and a negative control removing the site gate** before
-it can be cited as a discriminating regression result. A fixture precondition failure is a failed
-test, never a pass.
+make no-siting deterministic after a disk load rebuilds placement plans, bare rock/slab tiles on
+every third row become sand. Roads, mountains, spice, existing buildings and city lots are left
+untouched. The test verifies the actual no-Palace-site precondition rather than faking placement
+cache answers, then bounds all-yard idling and storage-cap plateaus over six game minutes.
+Normal disk saves rebuild these planning timers; only observer runtime checkpoints carry them.
+The first continuation-only attempt passed with and without the fix and was discarded.
+
+The permanent driver now runs matched on/off styles in the same shared build. The guarded arm must
+pass. The legacy arm must fail specifically with the yard-starvation diagnostic and report
+`site_guards=0`; a precondition, compiler, crash or other failure cannot count as the negative control.
+Only newly created run logs are eligible. Source `5e96cf13` passed this paired CTest in 42.29 s:
+
+| Six-minute continuation | Guards on | Guards off |
+|---|---:|---:|
+| Completed structures | 13 | 1 |
+| Longest all-yard idle plateau, minutes | 0 | 4 |
+| Longest storage-cap plateau, minutes | 0 | 6 |
+
+Evidence is under `build-int/strategic-site-stall/strategic-sites-{on,off}/continuation/`.
+This proves the construction-starvation regression, not a cure for long FFA time-outs.
 
 **Coverage distinction.** Existing `*-6p` arms are the mixed scenario-matrix cell
 `6p-ffa-small-smallarmy` (QB/QH/QM/QE/AH/AM), not six identical bots. True six-player self-play now
