@@ -298,6 +298,10 @@ void runCampaignPressureProbe(Game& game) {
             if (building->getOwner()==house && building->getItemID()==Structure_ConstructionYard)
                 {yard=dynamic_cast<BuilderBase*>(building);break;}
         require(yard,"Power fixture needs construction yard");
+        while (yard->getProductionQueueSize()) yard->doCancelItem(yard->getCurrentProducedItem());
+        yard->upgrading=false;
+        yard->updateBuildList();
+        require(yard->isAvailableToBuild(Structure_WindTrap),"Power fixture cannot build a Windtrap");
         const int oldPower=house->powerRequirement;
         house->powerRequirement=house->getProducedPower()+300;
         house->addCredits(10000);bot->lastCalculatedSpice=100000;

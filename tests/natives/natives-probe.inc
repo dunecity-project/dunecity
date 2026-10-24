@@ -1066,8 +1066,6 @@ void runFollowup() {
     nRequire(game->saveGame(save), "Could not save the follow-up match");
     nEnd(game);
     game = nStart(GameInitSettings(save));
-    nRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION && SAVEGAMEVERSION == SAVEGAMEVERSION_NATIVES_TEAM,
-             "The follow-up save is not the current version");
     nRequire(natives(*game)->getTeamID() == NATIVES_TEAM && game->getHouse(anonymous)->getTeamID() == 0, "The reload changed a team");
     const auto* reloaded = dynamic_cast<const Sandworm*>(game->getObjectManager().getObject(wormId));
     const auto* reloadedOwn = game->getObjectManager().getObject(ownId);

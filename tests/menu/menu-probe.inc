@@ -2465,7 +2465,7 @@ int runMenuProbe() {
     {
         auto& mods = ModManager::instance();
         const auto previousActive = mods.getActiveModName();
-        CustomGameMenu browser(false, false);
+        CustomGameMenu browser(false, false, &setup);
         const int previousChoice = browser.modDropDown.getSelectedIndex();
         const std::pair<const char*, const char*> community[] = {
             {"community-93d3ab43ccc64ade", "93d3ab43ccc64ade50a3f8a75e934949611e5f36cf0979b5f4a96c43dcf22e57"},
@@ -2481,6 +2481,7 @@ int runMenuProbe() {
             menuRequire(mods.getActiveModName() == name, "Community mod choice did not activate its rules/assets");
             menuRequire(!OnlineModPolicy::approved(name), "Community upload acquired built-in approval");
             menuRequire(OnlineModPolicy::fingerprint() == revision, "Community mod lost its exact catalogue identity");
+            menuCapture(browser, "community-mod-" + std::string(name));
             SDL_Log("COMMUNITY_MOD_MENU_PASS: %s revision=%s", name, revision);
         }
         if(previousChoice >= 0) browser.modDropDown.setSelectedItem(previousChoice, true);
