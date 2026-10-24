@@ -306,7 +306,12 @@
 // 94: Release 1.0.851 combines 90 and 93 (and the render-only unit-jitter fix, which changes no
 //     simulation): a crashing plane's Death Hand also hits Natives worms and troopers, and anti-air
 //     never treats Natives as its own team. An 88, 90 or 93 peer would desync. Save 9871.
-#define NETWORK_PROTOCOL_VERSION            94
+// 100: Online spectating to the end (fix/spectator-online): when the host's game ends it sends each
+//     spectator the rest of the game past the replay window (JOIN_SYNC operation 18, a batch of
+//     cycles) and an end marker (19, acknowledged with JOIN_ACK 19) before it leaves, so a spectator
+//     that is behind plays to the host's last cycle. A 94 peer refuses operations 18/19 as invalid
+//     join packets. No simulation or save change (save 9871).
+#define NETWORK_PROTOCOL_VERSION            100
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

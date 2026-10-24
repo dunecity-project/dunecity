@@ -263,9 +263,11 @@ bool GamePayloadRouter::handle(Uint32 packetType, InputStream& stream, GamePaylo
             const Uint32 operation=stream.readUint32(), transaction=stream.readUint32(), offset=stream.readUint32();
             const auto data=stream.readString();
             // Prepare=1, chunk=2, abort=3. ACK offsets are cumulative; UINT_MAX acknowledges prepare.
-            if(data.size()>48u*1024 || transaction==0 || (packetType==NETWORKPACKET_JOIN_SYNC && ((operation<1 || operation>3) && ((operation<10 || operation>12) && operation!=15 && operation!=16 && operation!=20)))
-               || (packetType==NETWORKPACKET_JOIN_ACK && ((operation!=0 && operation!=10 && operation!=11 && operation!=13 && operation!=14 && operation!=17) || !data.empty()))
-               || ((operation==1 || operation==20) && (data.empty() || data.size()>64)) || ((operation==3 || operation==16) && !data.empty()) || (operation==20 && offset!=0)) {
+            // Spectator streams: checkpoint 10/11, cycle 12, chat 15, progress 16, the rest of an
+            // ended game 18 and its end marker 19 (acknowledged with 19).
+            if(data.size()>48u*1024 || transaction==0 || (packetType==NETWORKPACKET_JOIN_SYNC && ((operation<1 || operation>3) && ((operation<10 || operation>12) && operation!=15 && operation!=16 && operation!=18 && operation!=19 && operation!=20)))
+               || (packetType==NETWORKPACKET_JOIN_ACK && ((operation!=0 && operation!=10 && operation!=11 && operation!=13 && operation!=14 && operation!=17 && operation!=19) || !data.empty()))
+               || ((operation==1 || operation==20) && (data.empty() || data.size()>64)) || ((operation==3 || operation==16 || operation==19) && !data.empty()) || (operation==20 && offset!=0)) {
                 peer.refuse("invalid join synchronization packet"); return true;
             }
             if(callbacks.onJoinSync && *callbacks.onJoinSync)

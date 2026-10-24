@@ -291,6 +291,8 @@ private:
     void openLink(std::uint32_t peerId, std::uint32_t nowMs);
     void dropLink(std::uint32_t peerId, const std::string& reason);
     void handleReceivedValue(Link& link, const std::string& value, std::uint32_t nowMs);
+    /// Hands a connected link's still-queued values to handleReceivedValue before it is dropped.
+    void deliverQueuedValues(std::uint32_t peerId, std::uint32_t nowMs);
     void sendReadiness();
     std::string localRosterKey() const;
     bool sendEnvelopeTo(Link& link, const std::string& envelope);
@@ -335,6 +337,9 @@ private:
     std::vector<std::string> iceServers_;
 
     std::vector<Peer>              peers_;
+    /// Peers that have left but whose PeerLeft event has not been taken yet. What they sent before
+    /// leaving is queued in front of that event and still has to find its sender (findPeer).
+    std::vector<Peer>              departing_;
     std::vector<std::unique_ptr<Link>> links_;
     std::bitset<65536> retiredPeerIds_;
     std::deque<Event>              events_;

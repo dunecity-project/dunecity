@@ -1456,6 +1456,12 @@ private:
     void loadObserverRuntime(const std::string& bytes);
     void prepareObserverStreams();
     bool observerCyclePrepared = false;
+    // A spectator whose host has left plays the cycles it already received (all of them, when the
+    // host ended its streams), then ends: normally if the game was decided, otherwise with a message.
+    bool observerHostLeft = false;
+    Uint32 observerEndAtTicks = 0;  ///< a decided game's end plate, timed on the clock once no cycles remain
+    /// Called when the host has left and no received cycle is left to play.
+    void endObservationWithoutHost();
     TextProgressBar observerProgress;
 
     /**
