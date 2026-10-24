@@ -134,8 +134,9 @@ def run_case(label, skin, case, extra_env=None, write_ini=True, skin_in_ini=True
         if m:
             issues.append((label, case, m.group(1), m.group(2), m.group(3)))
     plates = [line.split('UI_GALLERY_PLATE:', 1)[1].strip() for line in text.splitlines() if 'UI_GALLERY_PLATE:' in line]
-    # A screen that could not be built or broke an assertion is a failure, not a layout finding.
-    broken = [issue for issue in issues if issue[3] == 'failed']
+    # A screen that could not be built or broke an assertion is a failure, not a layout finding;
+    # so is any widget over a desert background's corner crest.
+    broken = [issue for issue in issues if issue[3] in ('failed', 'over-corner-crest')]
     failed += [f'{issue[2]}: {issue[4]}' for issue in broken]
     ok = code == 0 and len(passed) == 1 and not broken
     return dict(label=label, case=case, ok=ok, code=code, failed=failed, issues=issues, log=logpath, plates=plates)

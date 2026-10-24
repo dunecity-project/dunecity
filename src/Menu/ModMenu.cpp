@@ -2,6 +2,7 @@
 #include <Menu/ModEditorMenu.h>
 #include <Menu/Dune2REditorMenu.h>
 #include <MapEditor/MapEditor.h>
+#include <misc/MenuPalette.h>
 #include <globals.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -57,10 +58,13 @@ ModMenu::ModMenu(Purpose purpose) : purpose(purpose) {
     createButton.setOnClick([this]() { onCreateNew(); });
     windowWidget.addWidget(&createButton, Point(x+width-140,y+height-100), Point(140,28));
     statusLabel.setTextFontSize(12);
-    windowWidget.addWidget(&statusLabel, Point(x,y+height-68), Point(width,26));
+    // Desert skins draw the original background's house crest (53x54, 11 px in) in the
+    // bottom-left corner: on a small screen the two bottom rows start beside it.
+    const int crestInset = MenuTheme::isDesertUISkin() ? std::max(0, 11 + 53 + 6 - x) : 0;
+    windowWidget.addWidget(&statusLabel, Point(x + crestInset,y+height-68), Point(width - crestInset,26));
     editButton.setText(purpose == Purpose::ModEditor ? _("Edit Draft") : _("Open Editor"));
     editButton.setOnClick([this]() { onEdit(); });
-    windowWidget.addWidget(&editButton, Point(x,y+height-32), Point(width/2-8,32));
+    windowWidget.addWidget(&editButton, Point(x + crestInset,y+height-32), Point(width/2-8-crestInset,32));
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { quit(); });
     windowWidget.addWidget(&backButton, Point(x+width/2+8,y+height-32), Point(width/2-8,32));

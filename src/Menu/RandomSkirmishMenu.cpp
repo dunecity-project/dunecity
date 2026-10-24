@@ -27,6 +27,7 @@
 #include <mod/ModManager.h>
 #include <players/PlayerFactory.h>
 #include <misc/WebRuntime.h>
+#include <misc/MenuPalette.h>
 #include <misc/fnkdat.h>
 #include <globals.h>
 #include <main.h>
@@ -318,11 +319,14 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
 
     statusLabel.setTextFontSize(12);
     statusLabel.setAlignment(Alignment_HCenter);
-    windowWidget.addWidget(&statusLabel, Point(16, height - 66), Point(width - 32, 22));
+    // Desert skins draw the original background's house crest (53x54, 11 px in) in the
+    // bottom-left corner: the status line and the button row keep clear of it, centred.
+    const int crestInset = MenuTheme::isDesertUISkin() ? std::max(0, 11 + 53 + 6 - columnX(width, 0)) : 0;
+    windowWidget.addWidget(&statusLabel, Point(16 + crestInset, height - 66), Point(width - 32 - 2 * crestInset, 22));
 
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { onCancel(); });
-    const int left = columnX(width, 0), span = contentWidth(width);
+    const int left = columnX(width, 0) + crestInset, span = contentWidth(width) - 2 * crestInset;
     const int buttonWidth = std::min(160, (span - 3 * 16) / 4);
     const int gap = (span - 4 * buttonWidth) / 3;
     if(multiplayer) {
@@ -370,8 +374,11 @@ void RandomSkirmishMenu::addHeader(int column, int row, const std::string& capti
     label.setText(caption);
     label.setTextFontSize(16);
     const int columnWidth = columnSpan(getSize().x);
-    windowWidget.addWidget(&label, Point(columnX(getSize().x, column), 44 + row * rowPitch),
-                           Point(columnWidth, rowPitch - kRowGap));
+    const int y = 44 + row * rowPitch;
+    int x = columnX(getSize().x, column);
+    // Desert skins: the first header sits beside the background's top-left crest (53x54, 11 px in).
+    if(MenuTheme::isDesertUISkin() && column == 0 && y < 11 + 54) x = std::max(x, 11 + 53 + 6);
+    windowWidget.addWidget(&label, Point(x, y), Point(columnWidth - (x - columnX(getSize().x, column)), rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption, Widget* control) {

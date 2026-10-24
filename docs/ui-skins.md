@@ -233,3 +233,36 @@ the updated version label. The separate portable installation passes its
 desktop runtime check; executable, font, license and template copies match.
 This remains a local play-test candidate on the production 1.0.832 source base,
 not a newer-main integration or a published release.
+
+## Corner crests and the macOS UI gallery (local, after 1.0.852)
+
+Both desert skins use the original menu background, with 53×54 house crests 11 px
+in from the top-left, top-right and bottom-left corners. The menus were laid out
+for the flat Modern background and ran text and buttons over them at every size.
+Stefan chose to keep the crests: in the desert skins the main-menu version
+label, Play Online's player-name row, status line and Back button, Random
+Skirmish's first header, status line and button row, the Custom Game setup's map
+row and Back button, the Options tabs on narrow screens and the Mods editor's
+bottom rows now start beside the crests. Modern is unchanged.
+
+An idle main-menu frame no longer re-lays the menu out: `MainMenu::update()` ran
+`refreshContextButtons()` every frame, whose resizes discarded every button and
+banner texture, so each frame re-rendered the Classic pixel lettering (17-33 ms
+CPU against Modern's 2-3 ms). It now only moves what moved.
+
+`tests/menu/run-ui-gallery-probe.py` renders every skin at 640×480, 854×480,
+1024×768, 1280×720, 1440×900 (Medium, Stefan's), 1920×1080 Native and 1920×1080
+scaled: the real menus (main, single player, Random Skirmish incl. Spectate,
+Custom Game and its setup incl. Spectate, campaign, multiplayer and Play Online,
+every Options page and a skin preview with Back, Mods, Mentat, the map editor) and
+a real DuneCity game (sidebar and build grid, unit/structure/enemy inspect panels,
+Natives' worm and crime trooper, chat and ticker, F12, pause and its settings, city
+budget, house statistics, a spectated game's end plate in every house colour slot
+and its statistics). Every window is linted (offscreen widgets, clipped labels,
+buttons, checkboxes and drop-downs, overlapping text) and contact sheets are
+written. It fails on a widget over a crest, a re-rendered idle main-menu frame,
+a Classic idle main-menu frame costing more than 1.5× Modern + 0.5 ms, an end
+plate wider than the map, chat over the city readouts, or an in-game sidebar that
+differs after switching skins and back; new and 1.0.850 profiles must get
+Classic Desert. CTest `ui_gallery_probe` runs Modern and Classic at 640×480 and
+1440×900.

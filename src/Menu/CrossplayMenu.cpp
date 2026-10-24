@@ -17,6 +17,7 @@
 
 #include <Menu/CrossplayMenu.h>
 #include <mod/ModManager.h>
+#include <misc/MenuPalette.h>
 #include <Network/WorkshopGameContent.h>
 #include <Menu/PlaySetup.h>
 #include <Menu/SinglePlayerMenu.h>
@@ -177,8 +178,11 @@ void CrossplayMenu::layoutControls() {
         windowWidget.addWidget(widget, Point(x,y), Point(width,height));
     };
     place(&captionLabel,x,12,w,30);
-    place(&playerNameLabel,x,49,95,24);
-    place(&playerNameValue,x+100,49,220,26);
+    // Desert skins draw the original background's house crests (53x54, 11 px in) in the
+    // top-left and bottom-left corners: the controls in those rows start beside them.
+    const int crestX = MenuTheme::isDesertUISkin() ? std::max(x, 11 + 53 + 6) : x;
+    place(&playerNameLabel,crestX,49,95,24);
+    place(&playerNameValue,crestX+100,49,220,26);
     if(preparedGame) {
         place(&preparedSummary,x+20,110,w-40,150);
         place(&refreshGamesButton,x+20,280,160,30);
@@ -210,10 +214,10 @@ void CrossplayMenu::layoutControls() {
         place(&hostCustomGameButton,x+(w+10)/2,h-99,(w-10)/2,28);
 
     }
-    place(&statusLabel,x,h-65,w,26);
-    place(&joinProgress,x,h-65,w,26);
+    place(&statusLabel,crestX,h-65,w-(crestX-x),26);
+    place(&joinProgress,crestX,h-65,w-(crestX-x),26);
     joinProgress.setVisible(false);
-    place(&backButton,x,h-34,95,28);
+    place(&backButton,crestX,h-34,95,28);
     // In the browser this opens the matchmaking lobby (Find Match), natively
     // the LAN/direct connection screen; the button is the same MultiPlayerMenu
     // route either way.

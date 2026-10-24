@@ -36,6 +36,7 @@
 #include <GUI/TextButton.h>
 #include <GUI/Checkbox.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/Spacer.h>
 #include <GUI/dune/DuneStyle.h>
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/dune/CityBudgetWindow.h>
@@ -58,6 +59,8 @@
 #include <FileClasses/GFXManager.h>
 #include <array>
 
+#include <algorithm>
+#include <ctime>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -210,17 +213,24 @@ void lint(Window& window, const std::string& screen, bool checkOverlap = true) {
         }
     }
     // Both desert skins draw the original menu background (PictureFactory::createMainBackground):
-    // 53x54 house crests 11 px in from the top-left, top-right and bottom-left corners. Menus
-    // laid out for the flat Modern background can run text into them.
+    // 53x54 house crests 11 px in from the top-left, top-right and bottom-left corners. No
+    // widget may cover one (Stefan, 2026-10-24: keep the crests, move the menus). A failure:
+    // the runner fails the case on any over-corner-crest finding.
     if(MenuTheme::isDesertUISkin() && window.pBackground.get() == pGFXManager->getUIGraphic(UI_MenuBackground)
        && window.getPosition().x == 0 && window.getPosition().y == 0) {
         const std::array<SDL_Rect, 3> crests{{{11, 11, 53, 54}, {W - 11 - 53, 11, 53, 54}, {11, H - 11 - 54, 53, 54}}};
         for(const auto& leaf : leaves) {
-            if(leaf.text.empty()) continue;
+            if(dynamic_cast<Spacer*>(leaf.widget) || dynamic_cast<HSpacer*>(leaf.widget) || dynamic_cast<VSpacer*>(leaf.widget))
+                continue;
+            // A label draws nothing outside its lettering (wide centred titles, empty status
+            // lines); every other widget draws its whole box.
+            const bool label = dynamic_cast<Label*>(leaf.widget) != nullptr;
+            if(label && leaf.text.empty()) continue;
+            const SDL_Rect& drawn = label ? leaf.ink : leaf.rect;
             for(const auto& crest : crests) {
                 SDL_Rect both;
-                if(SDL_IntersectRect(&leaf.ink, &crest, &both) && both.w > 2 && both.h > 2)
-                    issue(screen, "over-corner-crest", UIGallery::quoted(leaf.text) + "@" + rectText(leaf.ink) + " crest@" + rectText(crest));
+                if(SDL_IntersectRect(&drawn, &crest, &both) && both.w > 0 && both.h > 0)
+                    issue(screen, "over-corner-crest", UIGallery::quoted(leaf.text) + "@" + rectText(drawn) + " crest@" + rectText(crest));
             }
         }
     }
@@ -545,7 +555,20 @@ void runSpectatorEnd() {
 // ---------------------------------------------------------------- menus
 
 void runMenus() {
-    screen("menu-main", [] { MainMenu menu; captureWindow(menu, "menu-main"); });
+    screen("menu-main", [] {
+        MainMenu menu;
+        captureWindow(menu, "menu-main");
+        // Regression (1.0.852): update() re-laid the menu out every frame, throwing away every
+        // button texture, so each idle frame re-rendered all lettering (17-33 ms with Classic).
+        menu.update();
+        menu.draw();
+        const auto* button = menu.onlineButton.pUnpressedTexture.get();
+        const auto* banner = menu.activeModLabel.pTexture.get();
+        require(button != nullptr && banner != nullptr, "The main menu drew no button or banner texture");
+        for(int frame = 0; frame < 3; ++frame) { menu.update(); menu.draw(); }
+        require(menu.onlineButton.pUnpressedTexture.get() == button && menu.activeModLabel.pTexture.get() == banner,
+                "An idle main-menu frame re-rendered the buttons or the banner");
+    });
     screen("menu-single-player", [] { SinglePlayerMenu menu; captureWindow(menu, "menu-single-player"); });
     screen("menu-random-skirmish", [] {
         RandomSkirmishMenu menu;
@@ -643,6 +666,25 @@ int applySkin(int skin) {
     return MENU_QUIT_REINITIALIZE;
 }
 
+/// CPU ms of one idle main-menu frame as MenuBase::showMenu runs it (update, then draw): the
+/// median of 7 batches of 40 frames, after a warm-up batch.
+double menuFrameCpuMs() {
+    MainMenu menu;
+    std::vector<double> batches;
+    for(int batch = 0; batch < 8; ++batch) {
+        const std::clock_t start = std::clock();
+        for(int frame = 0; frame < 40; ++frame) {
+            SDL_RenderClear(renderer);
+            menu.update();
+            menu.draw();
+            menu.drawOverlay();
+        }
+        if(batch > 0) batches.push_back(1000.0 * (std::clock() - start) / CLOCKS_PER_SEC / 40);
+    }
+    std::sort(batches.begin(), batches.end());
+    return batches[batches.size() / 2];
+}
+
 int run() {
     const char* profile = std::getenv("DUNECITY_USERDIR");
     require(profile && *profile, "The gallery requires an isolated profile");
@@ -660,6 +702,7 @@ int run() {
     const int startSkin = std::atoi(std::getenv("UI_GALLERY_SKIN"));
     static int stage = 0;
     static std::string stage0Pixels;
+    static std::array<double, 3> menuMs{};
     const int expected = stage == 1 ? (startSkin + 1) % 3 : startSkin;
     require(settings.video.uiSkin == expected && MenuTheme::uiSkin == expected,
             "Stage " + std::to_string(stage) + " runs skin " + std::to_string(MenuTheme::uiSkin) + ", expected " + std::to_string(expected));
@@ -673,6 +716,7 @@ int run() {
         runInGame();
         runSpectatorEnd();
         stage0Pixels = sidebarRoundTrip();
+        menuMs[MenuTheme::uiSkin] = menuFrameCpuMs();
         ++stage;
         return applySkin((startSkin + 1) % 3);
     }
@@ -680,6 +724,15 @@ int run() {
     if(stage == 1) {
         const auto other = sidebarRoundTrip();
         require(other != stage0Pixels, "The in-game sidebar looks the same in two different skins");
+        menuMs[MenuTheme::uiSkin] = menuFrameCpuMs();
+        // Regression (1.0.852): an idle Classic main-menu frame re-rendered every button's pixel
+        // lettering (17-33 ms CPU against Modern's 2-3 ms). Classic -> Modern runs compare both.
+        if(startSkin == 2) {
+            SDL_Log("UI_GALLERY_MENU_FRAME: Classic %.3f ms, Modern %.3f ms CPU per idle main-menu frame", menuMs[2], menuMs[0]);
+            require(menuMs[2] <= 1.5 * menuMs[0] + 0.5,
+                    "An idle Classic main-menu frame costs " + std::to_string(menuMs[2]) + " ms, Modern "
+                    + std::to_string(menuMs[0]) + " ms (more than 1.5x + 0.5 ms)");
+        }
         ++stage;
         return applySkin(startSkin);
     }
