@@ -1195,8 +1195,8 @@ This proves the construction-starvation regression, not a cure for long FFA time
 uses the existing `vanilla-match.py --houses` list with `--ffa default`, for example
 `--houses harkonnen atreides ordos sardaukar fremen mercenary --maps rs192-dunecity`.
 Each house still has its own team; the four-house default and balanced head-to-head assignments
-are unchanged. The six-house same-bot 24-seed arm and final Fortress, `/weak`, CY and long-game
-ladder checks must not be inferred from the mixed cell or the passing unit suite.
+are unchanged. These genuine six-house and separate Fortress, `/weak`, CY and long-game
+ladder checks have now completed; their receipts are below, not inferred from the mixed cell.
 
 **Final-cycle scoring defect.** `FormationWaveMeasure::run` tests `game.finished` before its
 callback. When `House::lose` decides a match in the last update, `VanillaMatch::tick` never observes
@@ -1224,6 +1224,64 @@ planner correctness bug is not evidence that this fix cures FFA draw rates.
 **Preserved verification.** Cluster ctest 20261024T122735-ctest-c4ed92 tested source 3b8fefec:
 109/109 passed (mini 88, Pro 21). That receipt predates the new siting probe and six-house harness
 extension. It is not a receipt for the final accepted behavior combination.
+
+**Completed same-build site-guard acceptance (shared staging).** Genuine six-house self-play used
+source `e1a44eb0`, all six playable houses as Brutal QuantBots on their own teams, rs192 DuneCity,
+seeds 9101–9124 and the unchanged **120-game-minute** limit. Jobs
+`20261024T201752-ffa6p-sites-on-ab3d19` / `20261024T201752-ffa6p-sites-off-e09f93`
+completed all 24 games per arm. Both styles use the same lifecycle and differ only in
+`StrategicSiteGuards`; no zone/elimination experiment is included.
+
+| Genuine 6P measurement | Guards off | Guards on |
+|---|---:|---:|
+| Decided games | 4/24 | 3/24 |
+| Games reaching the 120-minute limit | 20/24 | 21/24 |
+| Eliminated houses | 91 | 90 |
+| Mean per-game house placement score | -0.0851 | -0.0885 |
+| Army value outside base in drawn-game samples from minute 105 onward | 53.2% | 51.8% |
+| Drawn games with increasing kill value after minute 105 | 20/20 | 21/21 |
+
+Paired per-game mean placement difference, on minus off: **-0.00347
+[-0.01736, +0.00694]**, 24 paired seeds, level. This self-play score measures
+decisiveness/draw penalties, not superiority against another controller. No armed house-minute
+in the late draw window was classified as garrisoned (793 off / 819 on observations).
+The draws remain real endgame/strategy limitations; these measurements do not show an
+all-army-at-home freeze or justify changing the victory rule to force a winner.
+
+All six house rows per game were checked, including raw timestamps for every defeated house:
+no final-death fallback was needed. For example, on-rule seed 9101 records Mercenary's last defeat
+at **5198.4 s**, the actual end time, with Fremen the sole survivor. This exercises the
+post-loop `recordEliminations` fix in a naturally deciding six-house game.
+
+The additional source-`09441f0b` acceptance jobs also completed:
+`20261024T204426-sites-duel-645243`, `20261024T204427-sites-cy-8385ed`,
+`20261024T204427-sites-ladder-on-ba8688` / `20261024T204427-sites-ladder-off-4bc400`.
+
+| Check | Completed games | Reported score difference, on minus off [95% interval] |
+|---|---:|---|
+| Fortress head-to-head, 128/160/192, eight seeds, both assignments | 48 | +0.000 [-0.58, +0.54] |
+| `/weak` versus `none`, matched against the guards-off `/weak` | 48 per arm | +0.000 [+0.00, +0.00] |
+| CY starts, five maps, five seeds, both assignments | 50 | +0.000 [-0.48, +0.56] |
+| Long-map Brutal versus Hard | 48 per arm | +0.00 [-0.05, +0.05] |
+| Long-map Hard versus Medium | 48 per arm | -0.03 [-0.08, +0.00] |
+| Long-map Medium versus Easy | 48 per arm | +0.00 [+0.00, +0.00] |
+
+Fortress/CY use the canonical head-to-head own-minus-opponent score contrast; `/weak` and ladder
+rows compare the same side in matched on/off setups. `/weak` is a test style, not a difficulty.
+The three long-map difficulty orders remain positive in both arms; guards-on stronger-side
+intervals are Brutal/Hard +0.51 [+0.23, +0.76], Hard/Medium +0.61 [+0.43, +0.80],
+Medium/Easy +0.93 [+0.83, +1.00]. These are six seeds per long-map cell, not the separate
+eighteen-seed full-tier release comparison. Level differences do not prove noninferiority.
+
+Exact reports and derived activity/raw-elimination receipts are in
+`ffa-finish/sites-acceptance/{duel,cy,ladder}-completed-report.txt`,
+`ladder-{on,off}-completed-report.txt`, `six-player-completed-summary.json` and
+`six-player-late-activity.json`; original CSVs and failed-attempt logs remain preserved.
+The combined current game source subsequently passed 118/118 CTests at `e286003d100a`,
+including the permanent positive/negative siting regression. Keep the site guards as a
+construction-correctness fix, **not a claimed FFA draw-rate cure**. `FinishWhenLeading`
+stays on; the unaccepted zone experiments remain excluded.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
