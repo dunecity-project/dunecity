@@ -13,6 +13,13 @@ then verified before release. Local signing can use a bounded JVM; no local
 native compilation is needed. Keep Android publication latest=false so the
 desktop updater's latest release remains the desktop stable tag. Build,
 upgrade-signature verification, metadata merge and publication are pending.
+Hosted Android run: 40078874839, source 7908e9a5. Six payload-checker unit cases
+passed locally after dispatch; the running job uses the same verifier/native
+source, while its later unit-test invocation/docs are verification-only changes.
+
+Final desktop PR #104 run: 40077059573 at 1f722fdc. Windows, Linux and browser
+builds plus relay/signaling checks passed; the capped sanitizer build succeeded
+and its CTest suite is still running. Await full checks before merging/tagging.
 
 ## 2026-10-24 — 1.0.852 publication authorized
 
