@@ -103,6 +103,10 @@ python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/p
 # category/cell/mod), --ladder-seeds 9 (72 long ladder games per pair), --list (print the plan)
 # report over any number of results directories (e.g. the four shards)
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
+# A/B of a candidate config switch: the same games with every QuantBot playing a play style
+# (tests/ai/play-styles/<style>.ini, e.g. allyjoin = [Force Concentration] JoinAllyWaves=true);
+# compare per game id with a run without --style
+python3 tests/ai/scenario-matrix.py --tier full --categories team --style allyjoin --results DIR
 ```
 
 Split across the four machines with `--shard K/N` (every N-th game from the K-th), each into its own

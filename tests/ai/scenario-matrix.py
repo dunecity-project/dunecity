@@ -763,6 +763,64 @@ def team_table(rows, houses, problems):
     print()
 
 
+def subject_score(game, houses):
+    """The A/B subject's score in one game: the ladder's stronger side, the team category's Hard
+    team (QH), the Hard partner in a campaign (won +1, else -1); None for other categories."""
+    if game['error']:
+        return None
+    if game['category'] == 'campaign':
+        return 1.0 if game['outcome'] == 'won' else -1.0
+    name = game['cell'].split('/')[0]
+    code = name.split('-')[0] if game['category'] == 'ladder' else 'QH' if game['category'] == 'team' else None
+    scores = [float(h['score']) for h in houses if h['code'] == code and h['score'] != '']
+    return scores[0] if code and scores else None
+
+
+def compare(args):
+    """Paired A/B (AGENTS.md "AI test games"): the same game ids in a control and a candidate run
+    (e.g. --style); each seed's games (both sides or both sets of starts) count as one mean, and the
+    candidate is better where the 95% interval of the paired difference is above 0."""
+    control, candidate = (load([d]) for d in args.compare_dirs)
+    groups = defaultdict(lambda: defaultdict(lambda: [[], []]))
+    timeouts = defaultdict(lambda: [0, 0])
+    for gid, game in candidate[0].items():
+        if gid not in control[0]:
+            continue
+        a = subject_score(control[0][gid], control[1].get(gid, []))
+        b = subject_score(game, candidate[1].get(gid, []))
+        if a is None or b is None:
+            continue
+        name, mod = game['cell'].split('/')
+        if game['category'] == 'ladder':
+            strong, _, weak, map_name = name.split('-', 3)
+            pair = f'{strong} v {weak}'
+            labels = (f'ladder {pair} {map_name} {mod}',
+                      f'ladder {pair} {"long" if map_name.startswith("long-") else "short"} maps')
+        elif game['category'] == 'team':
+            labels = (f'team {name.split("-")[0]} {mod}', f'team {name.split("-")[0]}')
+        else:
+            labels = (f'{game["category"]} {mod}', game['category'])
+        for label in labels:
+            groups[label][(game['cell'], game['seed'])][0].append(a)
+            groups[label][(game['cell'], game['seed'])][1].append(b)
+            timeouts[label][0] += control[0][gid]['outcome'] == 'time_limit'
+            timeouts[label][1] += game['outcome'] == 'time_limit'
+    print(f'# Paired A/B: control {args.compare_dirs[0]}, candidate {args.compare_dirs[1]}\n')
+    print('| Group | Games | Seeds | Control | Candidate | Difference [95% CI] | Verdict | Time-outs control / candidate |')
+    print('|---|---|---|---|---|---|---|---|')
+    for label in sorted(groups):
+        seeds = groups[label]
+        ctl = [statistics.mean(v[0]) for v in seeds.values()]
+        cnd = [statistics.mean(v[1]) for v in seeds.values()]
+        diff = [b - a for a, b in zip(ctl, cnd)]
+        low, high = match_score.bootstrap(diff, 1)
+        verdict = 'better' if low > 0 else 'worse' if high < 0 else 'not shown'
+        games = sum(len(v[0]) for v in seeds.values())
+        print(f'| {label} | {games} | {len(seeds)} | {statistics.mean(ctl):+.2f} | {statistics.mean(cnd):+.2f} | '
+              f'{statistics.mean(diff):+.2f} [{low:+.2f}, {high:+.2f}] | {verdict} | '
+              f'{timeouts[label][0]} / {timeouts[label][1]} |')
+
+
 def campaign_report(rows, houses, problems):
     print('| Mod | Partner | Enemy | Missions | Won | Lost | Not finished | Crash | Win by conquest/quota '
           '| Mean min (won) | Triggers fired |')
@@ -845,8 +903,13 @@ parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS'
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
 parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by: the on '
                                     'arm of a candidate config switch; compare with a run without it (same seeds)')
+parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
+                    help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
+                         'side; team: the Hard team; campaign: the Hard partner won)')
 args = parser.parse_args()
-if args.report_dirs:
+if args.compare_dirs:
+    compare(args)
+elif args.report_dirs:
     report(args)
 elif args.list:
     plan = schedule(args)
