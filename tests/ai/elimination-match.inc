@@ -104,12 +104,17 @@ inline void sample(Game& game, bool final = false) {
                      || item == Structure_Airport) ++civic;
             else ++base;
         }
+        // Structures this house has completed so far (rebuilt ones included), and its credit storage.
+        int builtStructures = 0;
+        for (int item = Structure_FirstID; item <= ItemID_LastID; ++item)
+            if (isStructure(item)) builtStructures += house->getNumBuiltItems(item);
         SDL_Log("ELIMINATION_SAMPLE: minute=%d cycle=%u house=%d team=%d alive=%d credits=%d army_value=%d army_units=%d "
                 "harvesters=%d structures=%d factories=%d kill_value=%d loss_value=%d zones=%d turrets=%d walls=%d "
-                "civic=%d base=%d",
+                "civic=%d base=%d capacity=%d built_structures=%d",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), int(house->isAlive()),
                 house->getCredits(), armyValue, armyUnits, harvesters, structures, factories,
-                house->getKillValue(), house->getLossValue(), zones, turrets, walls, civic, base);
+                house->getKillValue(), house->getLossValue(), zones, turrets, walls, civic, base,
+                house->getCapacity(), builtStructures);
         // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }

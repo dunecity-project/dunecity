@@ -309,8 +309,10 @@
 // 95, 96: taken by fix/unit-movement and test/vuk-classic-ui (1.0.853 batch).
 // 97: Free-for-all finish (fix/ffa-finish): city zones no longer keep a house alive
 //     (House::isAlive counts them like walls); a defeated house's remaining zones are demolished
-//     on its next update; defeat is reported once, on the transition. A 94-96 peer would keep a
-//     zones-only house alive and desync. No saved state change; save 9871.
+//     on its next update; defeat is reported once, on the transition. Automatic targeting ranks
+//     zones with walls (after any turret, building or unit), and QuantBot's finishing objective
+//     ignores them. A 94-96 peer would keep a zones-only house alive, target differently and
+//     desync. No saved state change; save 9871.
 #define NETWORK_PROTOCOL_VERSION            97
 
 // Mod transfer limits

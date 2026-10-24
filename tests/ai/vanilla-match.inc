@@ -71,6 +71,13 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
 inline bool tick(Game& game, State& state) {
     const Uint32 now = game.getGameCycleCount();
     if (now % MILLI2CYCLES(60000) == 0) EliminationMatch::sample(game);
+    // BALANCE_SAVE_AT_MINUTE / BALANCE_SAVE_PATH: save the match once at that game minute (a fixture
+    // for a continuation probe, e.g. tests/ai/run-strategic-site-stall.py).
+    if (const char* minute = std::getenv("BALANCE_SAVE_AT_MINUTE"); minute && std::getenv("BALANCE_SAVE_PATH")
+        && now == MILLI2CYCLES(std::atoi(minute) * 60000)) {
+        const bool saved = game.saveGame(std::getenv("BALANCE_SAVE_PATH"));
+        SDL_Log("VANILLA_MATCH_SAVED: cycle=%u path=%s ok=%d", now, std::getenv("BALANCE_SAVE_PATH"), int(saved));
+    }
     for (const auto& side : state.sides) {
         const House* house = game.getHouse(side.house);
         if (state.eliminated.count(side.house) || (house && house->isAlive())) continue;
