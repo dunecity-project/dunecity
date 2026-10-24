@@ -1186,8 +1186,12 @@ ladder checks must not be inferred from the mixed cell or the passing unit suite
 **Final-cycle scoring defect.** `FormationWaveMeasure::run` tests `game.finished` before its
 callback. When `House::lose` decides a match in the last update, `VanillaMatch::tick` never observes
 the final death. The 24-game 4P reference has nine winning games with a missing final-loser
-`eliminated_s`; the Palace-only arm has eight. Treating blanks as survivors incorrectly scores
-all 24 games of either arm as draws, even though `games.csv` reports nine/eight winners.
+`eliminated_s`; the Palace-only arm has eight. A **direct** `match_score.score_game` call treating
+those raw blanks as survivors incorrectly labels every game as drawn. Raw `houses.csv` elimination
+timestamps and `place` values are therefore defective. The existing standard `--report` path is
+**not affected**: `vanilla-match.py::placings` already imputes missing nonwinner deaths at game
+end before scoring. Prior standard FFA/RatioSM report estimates must not be declared invalid on
+this evidence. The initial recovery calculation that bypassed `placings` was corrected.
 The harness now calls an idempotent `recordEliminations` once after the loop as well as in each
 tick, without running another game update or repeating sample/save hooks. An absent house is
 unknown, not evidence of defeat; Natives are not entrants.
@@ -1196,7 +1200,8 @@ Original CSVs remain immutable. Recovered comparisons use each live `alive` flag
 `alive=0` house with a missing elimination time as **imputed final-tick death at the actual game
 end**; this is a reconstruction, not an originally logged timestamp. Alive matrix houses use
 `eliminated_s=-1`, which must not be interpreted as an elimination. The reconstruction changes
-18 reference and 16 Palace-only house-score/drawn rows. Palace-only remains level: corrected
+18 reference and 16 Palace-only house-score/drawn rows relative to a naive raw-data calculation,
+not relative to the existing standard report. Palace-only remains level: recovered
 4P mean-house paired score difference 0.000 (95% -0.0156..+0.0156), mixed 6P -0.0122
 (-0.0330..+0.0052); time-outs are 15 -> 16 of 24 and 16 -> 17 of 24, respectively. A confirmed
 planner correctness bug is not evidence that this fix cures FFA draw rates.
