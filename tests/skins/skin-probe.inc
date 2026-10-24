@@ -158,10 +158,16 @@ int runSkinProbe() {
             skinRequire(actualPixels && expectedPixels && actualPixels->w == expectedPixels->w
                         && actualPixels->h == expectedPixels->h, "Cannot capture civic portrait");
             for(int row=0; row<actualPixels->h; ++row) {
-                skinRequire(std::memcmp(static_cast<char*>(actualPixels->pixels)+row*actualPixels->pitch,
+                  const bool equal = std::memcmp(static_cast<char*>(actualPixels->pixels)+row*actualPixels->pitch,
                             static_cast<char*>(expectedPixels->pixels)+row*expectedPixels->pitch,
-                            actualPixels->w*actualPixels->format->BytesPerPixel) == 0,
-                            "Selected civic portrait differs from its authored faction icon");
+                              actualPixels->w*actualPixels->format->BytesPerPixel) == 0;
+                  if(!equal) {
+                      SDL_Log("Civic portrait mismatch: house=%d kind=%s row=%d", house,
+                              hospital ? "hospital" : "church", row);
+                      SavePNG(actualPixels.get(), "civic-actual.png");
+                      SavePNG(expectedPixels.get(), "civic-expected.png");
+                  }
+                  skinRequire(equal, "Selected civic portrait differs from its authored faction icon");
             }
         }
         pGFXManager->setDuneCityHouseGraphicsSkin(house, false);

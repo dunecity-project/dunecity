@@ -1,5 +1,12 @@
 ## 2026-10-24 — Hold unpublished 1.0.854; complete civic portrait integration
 
+The new pixel test exposed a second issue: switching from vanilla constructed
+the correct active-mod skin caches in a temporary GFXManager, then discarded
+them while moving only object pictures into the live manager. Move the five
+house skin/portrait caches and their flags together with the object pictures.
+The probe starts from vanilla, so its 16 authored civic pixel comparisons cover
+this real menu transition rather than only a DuneCity startup profile.
+
 Final source inspection found Hospital/Church icons were bundled but not mapped
 to sidebar portrait IDs; civic properties deliberately retained the old map
 preview. Held/canceled stable run 40140428626 and redundant main run 40140382198

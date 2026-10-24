@@ -5505,6 +5505,15 @@ void GFXManager::reloadAllObjectGraphicsForActiveMod() {
     scoutpostBaseGraphics = std::move(refreshedGraphics.scoutpostBaseGraphics);
     chaosFactoryBaseGraphics = std::move(refreshedGraphics.chaosFactoryBaseGraphics);
     hdObjPicOverrides = std::move(refreshedGraphics.hdObjPicOverrides);
+    // The replacement manager also owns the active mod's house skins. Retaining
+    // the old caches here made a vanilla -> DuneCity switch keep native sidebar
+    // portraits, even though the new map sprites had loaded successfully.
+    duneCitySimCityZonePic = std::move(refreshedGraphics.duneCitySimCityZonePic);
+    duneCityDune2ZonePic = std::move(refreshedGraphics.duneCityDune2ZonePic);
+    duneCitySimCityBuildingPic = std::move(refreshedGraphics.duneCitySimCityBuildingPic);
+    duneCityDune2BuildingPic = std::move(refreshedGraphics.duneCityDune2BuildingPic);
+    duneCityDune2DetailPicTex = std::move(refreshedGraphics.duneCityDune2DetailPicTex);
+    duneCityHouseUsesDune2 = refreshedGraphics.duneCityHouseUsesDune2;
 
     // Editor previews and runtime portraits depend on the freshly installed
     // object surfaces, so rebuild only those mod-sensitive UI caches.
