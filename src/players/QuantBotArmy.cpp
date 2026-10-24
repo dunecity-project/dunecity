@@ -531,7 +531,9 @@ void QuantBot::attack(int militaryValue) {
     // raises it to 100% while the house is outnumbered).
     if (const int percent=launchReadinessPercent(); percent!=100)
         requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,percent));
-    if (militaryValue < requiredMilitary) {
+    // JoinAllyWaves (team play): an allied QuantBot's wave that has just left is joined by
+    // whatever viable wave we have, whatever our own readiness.
+    if (militaryValue < requiredMilitary && !allyWaveObjective()) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
         if (campaign || (vanillaCustom && difficulty == Difficulty::Brutal))
             attackTimer = std::min(attackTimer, static_cast<int>(MILLI2CYCLES(15000)));
@@ -780,6 +782,8 @@ void QuantBot::launchGroundHunt() {
     // target or a move order may hold a troop back. Hunters already in the
     // field are not reset; they are tracked with the army that joins them.
     const bool wholeArmy=!limited && autonomousCustomArmy();
+    // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
+    const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
     std::vector<SimpleArmyPolicy::Responder> candidates;
     // Launcher accounting for the dispatch audit. launchGroundHunt() has never
@@ -937,7 +941,7 @@ void QuantBot::launchGroundHunt() {
             // A viable main wave, not a patrol: the established minimum is six
             // units and three thousand credits of value (a test-only play style may change it).
             const bool viable=availableUnits>=minWaveUnits() && availableValue>=minWaveValue();
-            if (availableValue<requiredReady || !viable) {
+            if ((availableValue<requiredReady && !allyFront) || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
                 bundleGateSince=0;
@@ -1015,7 +1019,7 @@ void QuantBot::launchGroundHunt() {
             }
             // Launch from the bundle (W, on by default): a ready wave leaves once most of it
             // stands in the bundle - only while there is one and bundling owns the reserve.
-            if (forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
+            if (!allyFront && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
                 && (bundlePoint.isValid() || bundleCentre.isValid())) {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
@@ -1075,6 +1079,8 @@ void QuantBot::launchGroundHunt() {
         campaignWave.lastActive=getGameCycleCount();
         campaignWave.members.insert(selected.begin(),selected.end());
     }
+    if (campaignCombatBudgetActive() && !selected.empty())
+        campaignWave.launched=getGameCycleCount();
     // Custom Hard/Brutal tracks which troops it has committed, so a withdrawal
     // can recall them and so they are distinguishable from the reserve held at
     // home. Tracking is accounting only: the attackers themselves hunt, and
@@ -1095,7 +1101,7 @@ void QuantBot::launchGroundHunt() {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
         }
-        observedFront=customWaveObjective(lead);
+        observedFront=allyFront ? allyFront : customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
         if (recoveryActive() && gate.defer) {
@@ -1258,7 +1264,7 @@ void QuantBot::launchGroundHunt() {
         const UnitBase* lead=nullptr;
         for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
         finishTeam=finishTargetTeam();
-        const ObjectBase* objective=finishObjective(lead,finishTeam);
+        const ObjectBase* objective=allyFront ? allyFront : finishObjective(lead,finishTeam);
         if (!objective && massAssault) objective=observedFront;
         const Coord point=objective ? objective->getClosestPoint(lead->getLocation()) : Coord::Invalid();
         for (const auto* unit : finishers) {

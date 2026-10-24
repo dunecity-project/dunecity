@@ -204,7 +204,27 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
     if (mapsize <= 4096) return 0;
     const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
-    return mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    const int configured = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    return openingCombatBudgetActive() ? std::min(configured, 4) : configured;
+}
+
+bool QuantBot::openingCombatBudgetActive() const {
+    if (!botConfig().force.openingCombatBudget || difficulty < Difficulty::Hard || supportMode
+        || gameMode != GameMode::Custom || !currentGame || !currentGameMap
+        || isCampaignGameType(currentGame->gameType) || initialMilitaryValue < 0
+        || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
+        || currentGameMap->getSizeX() * currentGameMap->getSizeY() <= 4096) return false;
+    const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
+    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+}
+
+bool QuantBot::campaignCombatBudgetActive() const {
+    if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || supportMode
+        || !currentGame || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
+        || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
+        || campaignWave.launched != 0) return false;
+    const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
+    return factory.enabled && factory.techLevel <= currentGame->techLevel;
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
@@ -592,6 +612,7 @@ void QuantBot::update() {
 	int oldLimit = harvesterLimit;
 	harvesterLimit = std::min(baseHarvesterLimit, std::max(1, maxHarvestersForSpice));
     if (campaignCityEconomy()) harvesterLimit=std::min(harvesterLimit,campaignHarvesterTarget());
+    if (campaignCombatBudgetActive()) harvesterLimit=std::min(harvesterLimit,4);
 
 	// Log when the limit changes
 	if (oldLimit != harvesterLimit) {

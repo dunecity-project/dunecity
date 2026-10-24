@@ -270,6 +270,9 @@ parser.add_argument('--skirmish',
                     help='Scenario match on a generated Random Skirmish multiplayer map, one start per side: '
                          'key=value,... (size, base none|cy|outpost|small|medium|large|fortress, army, city, seed, '
                          'tech, rock, spice, credits, symmetric; scenario-match.inc)')
+parser.add_argument('--scenario-style',
+                    help='Scenario game: a play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
+                         'e.g. a candidate config switch (test-only: not saved or hashed)')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
 parser.add_argument('--seed', type=int, default=486409243)
@@ -717,6 +720,7 @@ if args.scenario:
         env['BALANCE_SCENARIO_SIDES'] = ','.join(f'{house}:{team}:{player_class}'
                                                  for house, team, player_class in scenario_sides)
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
+    if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
