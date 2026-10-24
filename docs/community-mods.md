@@ -209,7 +209,18 @@ lists are in the external review evidence, rather than 154 duplicate catalogue r
   coverage, **not a balance certification**. `community_maps_startup` also loads
   Scattered War under its corrected mod association.
 
-**Runtime status at source handoff:** pending the parent's shared-build acceptance
-and full cluster CTest run. No child build, menu/game run or CTest was performed for
-this mod batch; existing successful map-only tests predate it. Rejected items were
-excluded on the review grounds above, not falsely reported as runtime-tested.
+**Parent runtime verification:** source `cdf9b101`, cluster job
+`20261024T162952-combined-cdf9b101-e51206`: `community_mods_startup` passed on the
+MacBook Air in 98.00 s, with matching five-minute digests for both runs of each
+mod. `community_maps_startup` passed there too (165.61 s); Scattered War ran in
+authored `new` with all eight lobby houses surviving at cycle 3750. The preload
+payload checker passed on the mini; this is not a claim of a browser package run.
+
+Source `09441f0b`'s shared-build `menu_navigation_probe` passed in 355.48 s at
+640, 854 and 1280 widths. The fixture now supplies the actual `CustomPlaySetup`,
+which owns the mod-selection callback, rather than an inert legacy chooser.
+All three catalogue identities/non-approval checks passed, and the three
+640-wide selected-mod frames were visually inspected.
+
+These are targeted receipts, not a green final combined suite. Rejected items
+were excluded on the review grounds above, not falsely reported as runtime-tested.

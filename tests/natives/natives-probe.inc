@@ -503,7 +503,7 @@ void runSave9868() {
     nEnd(game);
     game = nStart(GameInitSettings(save));
     nRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION, "The re-saved game is not the current version");
-    expectWormsNative(*game, "re-saved 9871", 40);
+    expectWormsNative(*game, "re-saved current format", 40);
     nRequire(worms().size() == count, "The re-saved game has a different number of worms");
     runCycles(*game, 100);
     nEnd(game);

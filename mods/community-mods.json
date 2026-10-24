@@ -3108,7 +3108,11 @@
         }
       },
       "validation": {
-        "status": "pending shared-batch menu_navigation_probe and community_mods_startup",
+        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "startup_source": "cdf9b101",
+        "startup_job": "20261024T162952-combined-cdf9b101-e51206",
+        "menu_source": "09441f0b",
+        "menu_viewports": [640, 854, 1280],
         "game_minutes": 5,
         "runs": 2,
         "seed": 4242
@@ -6206,7 +6210,11 @@
         }
       },
       "validation": {
-        "status": "pending shared-batch menu_navigation_probe and community_mods_startup",
+        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "startup_source": "cdf9b101",
+        "startup_job": "20261024T162952-combined-cdf9b101-e51206",
+        "menu_source": "09441f0b",
+        "menu_viewports": [640, 854, 1280],
         "game_minutes": 5,
         "runs": 2,
         "seed": 4242
@@ -6240,7 +6248,11 @@
         }
       },
       "validation": {
-        "status": "pending shared-batch menu_navigation_probe and community_mods_startup",
+        "status": "passed targeted content/startup and chooser checks; final combined suite pending",
+        "startup_source": "cdf9b101",
+        "startup_job": "20261024T162952-combined-cdf9b101-e51206",
+        "menu_source": "09441f0b",
+        "menu_viewports": [640, 854, 1280],
         "game_minutes": 5,
         "runs": 2,
         "seed": 4242

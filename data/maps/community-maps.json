@@ -297,7 +297,13 @@
       "catalogue_mod_revision": "4a2905f3b397951725fc937185d3ad6cbcc0018f60c02db81aefd44031385bf7",
       "catalogue_mod_note": "Exact authored dependency is now bundled: new - modded v4, installed folder new. Map bytes are unchanged; the workshop sidecar selects its original rules.",
       "validation": {
-        "status": "pending shared-batch community_maps_startup in new - modded"
+        "status": "passed community_maps_startup in authored new - modded",
+        "source": "cdf9b101",
+        "job": "20261024T162952-combined-cdf9b101-e51206",
+        "game_minutes": 1,
+        "final_cycle": 3750,
+        "final_digest": "7ed165a6df6219b2",
+        "surviving_lobby_houses": 8
       },
       "previous_validation": {
         "mod": "vanilla",
