@@ -18,6 +18,10 @@ on:
         description: 'Validation only: build/test Linux audio and packages; no other platforms or publication.'
         type: boolean
         default: false
+      android_package_probe:
+        description: 'Build an ARM64 Android candidate only; signing for public upgrades is performed separately.'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -26,7 +30,7 @@ concurrency:
 jobs:
   relay-tests:
     # A Windows cache probe validates the Windows job in isolation.
-    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true
+    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,7 +48,7 @@ jobs:
           python3 tools/room-relay/deploy/test-release-pinning.py
   # Exercise the real PHP introduction service; this job never deploys it.
   signaling-tests:
-    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true
+    if: inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,7 +63,7 @@ jobs:
   # (CMakeLists.txt, include/config.h, vcpkg.json) already matches the tag.
   # This catches missing bump commits BEFORE any build/release/upload runs.
   verify-version:
-    if: startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.android_package_probe != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -84,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true &&
+      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
@@ -148,7 +152,7 @@ jobs:
       contents: read
     needs: [verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true &&
+      always() && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
@@ -234,7 +238,7 @@ jobs:
     runs-on: windows-latest
     # Wait for version check on tag builds; run unconditionally otherwise
     needs: [verify-version]
-    if: always() && inputs.linux_audio_probe != true && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
+    if: always() && inputs.linux_audio_probe != true && inputs.android_package_probe != true && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
 
@@ -467,6 +471,7 @@ jobs:
       github.event_name != 'pull_request' &&
       inputs.linux_audio_probe != true &&
       vars.ENABLE_MACOS_BUILD == 'true' &&
+      inputs.android_package_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     timeout-minutes: 60
     permissions:
@@ -641,7 +646,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [verify-version]
     if: |
-      always() && inputs.windows_cache_probe != true &&
+      always() && inputs.windows_cache_probe != true && inputs.android_package_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     steps:
       - uses: actions/checkout@v7
@@ -833,6 +838,87 @@ jobs:
             build/*.tar.gz
             build/*.AppImage
 
+  # Candidate only: never upload a private signing key to this hosted runner.
+  android-package:
+    if: inputs.android_package_probe == true
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+      - name: Configure Android toolchain and dependency cache
+        id: android-cache
+        shell: pwsh
+        run: |
+          $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:ANDROID_SDK_ROOT }
+          if (-not $sdk) { throw 'Android SDK not found on runner' }
+          $manager = Join-Path $sdk 'cmdline-tools/latest/bin/sdkmanager.bat'
+          & $manager --install 'ndk;28.2.13676358' 'platforms;android-34' 'build-tools;34.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed' }
+          "ANDROID_HOME=$sdk" >> $env:GITHUB_ENV
+          "ANDROID_SDK_ROOT=$sdk" >> $env:GITHUB_ENV
+          "ANDROID_NDK_HOME=$(Join-Path $sdk 'ndk/28.2.13676358')" >> $env:GITHUB_ENV
+          $vcpkg = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { $env:VCPKG_INSTALLATION_ROOT }
+          if (-not (Test-Path -LiteralPath (Join-Path $vcpkg 'vcpkg.exe'))) { throw 'vcpkg not found on runner' }
+          "VCPKG_ROOT=$vcpkg" >> $env:GITHUB_ENV
+          $cache = Join-Path $env:LOCALAPPDATA 'vcpkg/archives'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" >> $env:GITHUB_ENV
+          "path=$cache" >> $env:GITHUB_OUTPUT
+          "image=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+          $dependencies = python scripts/vcpkg-dependency-key.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "dependencies=$dependencies" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.android-cache.outputs.path }}
+          key: vcpkg-android-arm64-v1-${{ steps.android-cache.outputs.image }}-${{ steps.android-cache.outputs.dependencies }}
+          restore-keys: |
+            vcpkg-android-arm64-v1-${{ steps.android-cache.outputs.image }}-
+            vcpkg-android-arm64-v1-
+            vcpkg-windows-x64-v1-${{ steps.android-cache.outputs.image }}-
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-v1-${{ runner.os }}-${{ hashFiles('scripts/package-android-apk.ps1') }}
+          restore-keys: gradle-android-v1-${{ runner.os }}-
+      - name: Install pinned SDK headers
+        working-directory: platform/web
+        run: npm ci --ignore-scripts
+      - name: Build native ARM64 and APK candidate
+        shell: pwsh
+        run: |
+          ./scripts/package-android-apk.ps1 -RepoRoot $env:GITHUB_WORKSPACE -BuildNative -NativeBuildJobs 2 -BuildApk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check-build-deps.py build-android-arm64-ndk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/verify-android-payload.py --root $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload runner-key-signed candidate (not public release)
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Android-Runner-Candidate
+          path: |
+            build-android-apk/app/build/outputs/apk/debug/DuneLegacy.apk
+            android-version.json
+
   # Rolling dev build: update a "latest-dev" pre-release on every main push
   # so builds are always downloadable from the releases page.
   dev-release:
@@ -843,6 +929,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       inputs.linux_audio_probe != true &&
       needs.test-linux.result == 'success' &&
+      inputs.android_package_probe != true &&
       needs.relay-tests.result == 'success' &&
       needs.signaling-tests.result == 'success' &&
       needs.build-emscripten.result == 'success' &&
@@ -899,7 +986,7 @@ jobs:
   # Only trusted stable tags reach the local update-signing key.
   sign-desktop-updates:
     needs: [build-windows, build-linux, build-macos]
-    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true
+    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true
     runs-on: [self-hosted, macOS, ARM64, dunecity-builder]
     timeout-minutes: 15
     permissions:
@@ -949,7 +1036,7 @@ jobs:
     needs: [verify-version, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos, sign-desktop-updates]
     # The website advertises all desktop platforms at this version. Publish only
     # after tests and every desktop package have actually succeeded.
-    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true
+    if: success() && startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true
     runs-on: ubuntu-latest
     permissions:
       contents: write

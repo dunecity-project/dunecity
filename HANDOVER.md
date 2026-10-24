@@ -1,3 +1,19 @@
+## 2026-10-24 — Matching Android 0.2.31 authorized
+
+User opted into an Android update so multiplayer engine versions match desktop
+and browser 1.0.852. Incremented Android metadata to 0.2.31 / 1000551. Added
+android_package_probe to the existing build workflow: a hosted Windows runner
+builds native ARM64/APK with two compiler jobs, pinned NDK 28.2/JDK 17 and binary
+dependency caching, then verifies packaged payload bytes against source.
+Other build/publication jobs are skipped in this manual candidate lane.
+
+No private signing key is uploaded. The hosted debug signer is temporary: the
+downloaded candidate must be re-signed locally with the existing upgrade identity,
+then verified before release. Local signing can use a bounded JVM; no local
+native compilation is needed. Keep Android publication latest=false so the
+desktop updater's latest release remains the desktop stable tag. Build,
+upgrade-signature verification, metadata merge and publication are pending.
+
 ## 2026-10-24 — 1.0.852 publication authorized
 
 User authorized publishing the verified Linux audio fix, updating repository,
