@@ -442,6 +442,9 @@ endif()
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/test_match_score.py)
+        set_tests_properties(quantbot_match_score PROPERTIES TIMEOUT 30)
         add_test(NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression

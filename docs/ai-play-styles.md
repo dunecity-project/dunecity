@@ -967,3 +967,85 @@ not pooled because it chose the candidate.
 Not run (scope cut by Stefan, 2026-10-18): Brutal, Fortress and `/weak` with the band defaults, and
 exploration at tech 3-6. Compact rows: `docs/formation-results/play-styles/ratios/{x8,r8-t8-cost,
 r8-t8-winners-end,c8-t8-best,f8-fremen}`.
+
+### 8.11 Sardaukar/Mercenary top-band revisit: exploratory only; defaults unchanged
+
+Branch `feat/ratio-sardaukar-mercenary`, base local 1.0.852 (`6fd861ae`, protocol 94, save 9871).
+The original acceptance remains a positive paired 95% interval on fresh seeds with at least **420
+candidate-on-house games per house**, opponents unchanged between arms, and both map positions covered.
+Resource-constrained recovery was explicitly limited to existing jobs/results and a source/evidence
+handoff. Neither a smaller sample nor a non-significant result authorizes a default change.
+
+**Exploration (`x9`).** CY, Hard, Swarm, learning on, the six maps of 8.10, 80-game-minute limit
+(the harness default; not shortened), seeds 80000-80060, `--seed-per-map 1`. Bounded v shipped Tuned,
+Sardaukar and Mercenary against each other and each of the other four houses; both house orders were
+scheduled. The 18 shards `20261024T095042-sm-x9-c3d0b9-{1..18}` were cancelled after 82 games as
+cluster capacity went to release fixes. Preserve those rows; they are not a completed balanced screen.
+Only **40** random-side Sardaukar games and **3** random-side Mercenary games completed. Sardaukar's
+opponent counts are 21 Atreides, 14 Harkonnen, 2 Ordos, 2 Fremen, 1 Mercenary; Mercenary played only
+Sardaukar (2) and Atreides (1), all on Habbanya-Penny.
+
+The regression is noisy: Sardaukar's coefficients relative to tanks range from -0.19 (Devastator) to
++0.27 (ornithopter), with standard errors about 1; Mercenary has only three wins and no informative
+regression contrast. The cost ranking and winners' composition provide hypotheses, not confirmation:
+Sardaukar's Sonic reward/value is 2.55, launcher 1.60, siege 1.56, tank 0.79; winners' final built-value
+Sonic share is 9% v losers' 6%. The earlier `x8` Mercenary sample (36 random-side games) has Sonic
+reward/value 2.63 and winners' Sonic share 10% v losers' 6%. Those exploratory samples chose the
+candidates and must not be pooled into confirmation.
+
+Candidate percentages, ten-slot order of 8.8 (Deviator always 0 in vanilla):
+
+| House / derivation | Tank, siege, launcher, Devastator, Sonic, Deviator, orni, trike, raider, quad |
+|---|---|
+| Sardaukar `x9` regression | 8,16,8,6,12,0,29,8,7,6 |
+| Sardaukar `x9` winners' end | 10,11,18,3,9,0,17,11,10,11 |
+| Sardaukar `x9` cost | 7,14,14,9,22,0,14,6,6,8 |
+| Mercenary `x8` regression | 7,13,7,6,13,0,8,25,5,16 |
+| Mercenary `x8` winners' end | 9,13,16,5,10,0,17,11,8,11 |
+| Mercenary `x8` cost | 8,15,13,8,21,0,10,8,8,9 |
+| Sardaukar conservative Sonic refinement (`t8-sard-sonic`) | 4,32,32,2,14,0,10,2,2,2 |
+| Mercenary conservative Sonic refinement (`t8-merc-sonic`) | 15,27,25,2,14,0,11,2,2,2 |
+
+The two refinements keep much more of the configured opening's artillery than the failed `t8-cost`
+candidate (8.10), while raising Sonic from approximately 2% to 14%. They are test-only hypotheses, not
+measured winners or the outcome of a completed refinement tournament. Each sums to 100, stays within
+2-50% for all nine vanilla-buildable slots, and leaves learning on.
+
+**Preserved fresh-seed jobs (`c9`).** `20261024T132117-sm-c9-26c010-{1..5}` are Sardaukar, `{6..10}`
+Mercenary; each house faces Atreides, Harkonnen, Ordos, Fremen, then the other revisited house. Each shard
+schedules 84 games: seven seeds (84000-84060 by 10), six maps, two label assignments. Candidate labels
+are `default@t8-sard-sonic#Tuned-Swarm` or `default@t8-merc-sonic#Tuned-Swarm`, control
+`default#Tuned-Swarm`. Each style sets only its target house's top mix; the opponent's shipped mix is
+therefore identical in both arms. Source snapshot `6fd861ae958d-edc7d444`.
+
+At the recovery evidence handoff **all 840 games were pending**, so both houses have n=0 complete
+pairs and **no estimate or interval**. More importantly, even a completed `c9` gives only **210
+candidate-on-house games per house** (420 total games), and the target house is always first in map
+order. Swapping labels does not swap positions. These jobs are explicitly **exploratory and inadequate
+for the original acceptance**, regardless of any eventual interval. Keep them and their rows; a
+properly sized, position-balanced confirmation belongs on the parent's shared integrated build.
+
+**Analysis correction.** `ratio-analysis.py --arms A:B --paired HOUSE` matches tag, difficulty, map,
+seed, opponent and ordered houses, then bootstraps complete pairs of HOUSE's placement score as A
+minus its score as B. Win/loss/draw are +1/-1/-0.25, from `match_score.py`. This is not a difference of
+within-game house-minus-opponent contrasts: the first helper in `42635523` used that doubled contrast
+and cancelled the draw penalty; the corrected helper retains it. Missing twins are excluded; zero
+complete pairs report an unavailable interval, never zero gain. Regression cases cover the score
+scale, draws, incomplete pairs and mismatched positions/opponents in `quantbot_match_score`.
+
+Evidence on the mini: `~/Documents/projects/dunecity-results/ratio-sm/x9/` (raw rows,
+`analysis-report.txt`, `analysis/{candidates,regression,slots,types,random-games}.csv`),
+`c9-sard/paired-report.txt`, `c9-merc/paired-report.txt`. Recompute each paired report with:
+
+```sh
+python3 tests/ai/ratio-analysis.py ~/Documents/projects/dunecity-results/ratio-sm/c9-sard \
+  --arms 'default@t8-sard-sonic#Tuned-Swarm:default#Tuned-Swarm' --paired sardaukar
+python3 tests/ai/ratio-analysis.py ~/Documents/projects/dunecity-results/ratio-sm/c9-merc \
+  --arms 'default@t8-merc-sonic#Tuned-Swarm:default#Tuned-Swarm' --paired mercenary
+```
+
+**Decision:** keep both configured openings, bounded. `QuantBotConfig.cpp`, protocol and save format
+are unchanged; protocol 99 is not consumed. No revised-branch build, ctest, all-against-Atreides or
+ladder result is claimed. The parent owns combined acceptance on `build-int`, including
+`quantbot_match_score`, `quantbot_strategy`, all-against-Atreides and the ladder; test-only candidate
+styles must not be treated as shipped defaults.
