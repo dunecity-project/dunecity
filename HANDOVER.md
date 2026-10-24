@@ -3,11 +3,12 @@
 Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`base-*` = 1.0.852, `c1-*`, `c3-*`,
 `pal-*`, decision logs `diag-c1-9101`, `diag-c2-9101`, save `fixture/ffa-9101-c1-m35.dls`).
 
-- **Diagnosis (4P DuneCity Brutal, seed 9101 decision log, samples of 21 baseline games):** the draws are not
-  zone remnants. At the 60-minute limit the surviving houses still hold 70-256 turrets, 25-66 base buildings and
-  9-96k armies; a house whose army is gone falls within ~2-6 minutes. Units die mostly to units (turrets ~30%);
-  the defender's tax-funded factories refill its army. The leader's waves are ~40% new units on top of the
-  previous wave's survivors (effectively the whole army hunting), finish target persists (Sard -> Hark -> Ordos).
+- **Diagnosis (4P DuneCity Brutal, seed 9101 decision log, partial baseline samples):** the diagnosed survivors
+  are not zones-only remnants. They retain turrets, base structures and armies; in seed 9101 the last few
+  minutes of clearing follow the army's collapse. Known turrets account for 164/487 and 151/285 of Atreides'
+  hostile unit deaths during minutes 30–40 and 40–50; other/unknown shooters remain classified separately.
+  New waves join previously committed survivors, so new-dispatch percentages alone understate commitment.
+  This does not mean every unit is always attacking. See docs/formations.md for exact sample boundaries.
   **Bug found:** from minute ~32 the leader's Construction Yard built nothing for 28 minutes: the Palace became
   "overdue", `palaceOverdue` replaced every earlier choice (heavy factories for a funded backlog, zones, turrets)
   with an unsiteable Palace, rejected each pass (no site); credits sat at the 48k storage cap. Baseline leaders
@@ -19,12 +20,20 @@ Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`
   `scenario-matrix.py --cell-seeds`. `exp/ffa-palace-only` f9b11643 = staging + the site gate alone (arm only).
 - **Measured so far:** baseline 4P self-play 13/21 time-outs, 6P cell 16/24; zones rule alone level (12 paired
   4P seeds 9 v 9; 6P 17/24). Seed 9101 with the zone targeting: eliminations 37.0/41.3 min (baseline 46.7/52.7).
-- **Running (cluster):** `pal-self4`/`pal-6p` (site gate alone), `c3-self4`/`c3-6p` (branch), `c3-self4-nofl` and
-  `c3-h2h` (FinishWhenLeading decision), `c1-self4-120` (end times at 120 min), ctest 20261024T122735-ctest-c4ed92.
-- **Open:** decide the zones rule/targeting and FinishWhenLeading on those arms; Fortress, `/weak`, CY (vanilla:
-  unaffected by the zone changes) and DuneCity ladder checks; a discriminating regression probe for the site
-  stall (WIP in `stall-probe-wip/`: continuing the minute-35 save passes with and without the fix - the overdue
-  timers are not saved, so the stall does not recur within 6 minutes after a load); docs/formations.md section.
+- **Preserved acceptance:** cluster ctest 20261024T122735-ctest-c4ed92 at 3b8fefec completed **109/109**
+  (mini 88, Pro 21). Do not rerun it to confirm. This receipt predates the recovered regression below.
+- **Recovery source (no new builds/snapshots):** c38750c2 adds `quantbot_strategic_site_stall` with the existing
+  minute-35 fixture, restores its overdue timer at runtime, requires a genuinely unsited Palace and bounds
+  all-yard idling/storage-cap plateaus while checking completed construction. The old continuation-only test
+  passed with and without the fix and is not accepted evidence. Main must validate the new test and a
+  temporary gate-removal negative control in shared build-int. 71a4cf3d extends existing `--houses` for genuine
+  six-player self-play while preserving the four-player default and balanced assignments.
+- **Still collecting original jobs:** `pal-self4`/`pal-6p`, `c3-self4`/`c3-6p`, `c3-self4-nofl`, `c3-h2h`,
+  `c1-self4-120`; no resubmissions. The `*-6p` scenario arms are mixed QB/QH/QM/QE/AH/AM, not same-bot self-play.
+- **Open acceptance:** measured zones/FinishWhenLeading decision; actual six-house 24-seed same-bot arms;
+  Fortress, `/weak`, CY and the long-game ladder for the final siting fix. Zones elimination and targeting
+  remain explicitly unaccepted, not release defaults. Clean integration without them: use existing pure
+  site-gate commit f9b11643 plus c38750c2 and 71a4cf3d; parent reconciles protocol/history once.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
