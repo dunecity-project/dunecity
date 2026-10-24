@@ -1,3 +1,13 @@
+## 2026-10-24 — 1.0.852 publication authorized
+
+User authorized publishing the verified Linux audio fix, updating repository,
+releases and website. origin/main remains 6b269b55; latest stable is 1.0.851,
+with no intervening upstream game changes. Added user-facing 1.0.852 notes.
+Proceed through PR checks and the signed stable-tag pipeline; Linux-only run
+40031124610 is prior evidence, not proof of full release publication. Existing
+Android 0.2.30 stays separately versioned on engine 1.0.851. No new APK or
+local compiler build is part of this audio-hotfix publication.
+
 ## 2026-10-23 — Linux audio recovery candidate 1.0.852
 
 HAL9081 reported an AppImage 1.0.851 crash: dsp unavailable, followed by silent
