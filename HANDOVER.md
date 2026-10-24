@@ -1,3 +1,15 @@
+## 2026-10-24 — Hold unpublished 1.0.852; normalize cross-platform payloads
+
+Final Android audit found 65 DuneCity manifests whose packaged bytes differed
+from Git blobs only by CRLF. Installer content hashes include these raw bytes,
+so matching engine versions alone would not ensure cross-platform compatibility.
+Canceled tag run 40080702866 and duplicate main run 40080668028 before release.
+The pushed v1.0.852 tag remains immutable; no 1.0.852 release was published.
+Proceed as 1.0.853 with automatic text detection and LF checkout policy, preserving
+binary assets. A real Git clone regression covers both core.autocrlf settings and
+binary preservation. User authorized Android 0.2.31 using a hosted runner too;
+retarget that unpublished APK to engine 1.0.853 and recheck canonical Git bytes.
+
 ## 2026-10-24 — 1.0.852 publication authorized
 
 User authorized publishing the verified Linux audio fix, updating repository,
