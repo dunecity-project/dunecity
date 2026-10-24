@@ -1,7 +1,7 @@
 ## 2026-10-24 — Unit movement: chained steps fixed in the simulation (branch `fix/unit-movement`, worktree `~/Documents/projects/dunecity-unit-movement`, from staging 6fd861ae = 1.0.852; protocol 95, save 9871; IN PROGRESS, not merged)
 
-Agent UnitMovement. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`
-(`trace-summary.json`, `effects-*`, `crush-*`, `motion-probe-*`, `aaa-*`, `ffa-*`, `strategy-seeds*`, scripts beside them).
+Agents UnitMovement / UnitMovement2. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`
+(`trace-summary.json`, `effects-*`, `crush-*`, `motion-probe-*`, `aaa-*`, `ffa-*`, `strategy-cluster-*-logs`, paired-analysis scripts beside them).
 
 - **Sim fix (9f4f492b):** `UnitBase::moveDynastyStep` clears `justStoppedMoving` (a step chained on the cycle the
   previous one ended kept it: snapped to the tile centre every cycle, still then a whole-tile jump); `UnitBase::navigate`
@@ -19,21 +19,35 @@ Agent UnitMovement. Stefan: "i want the unit movement bug fixed". Evidence `~/Do
   against Atreides about 1 crush per game either way. Not a factor.
 - **Carryall-wait catch-up:** after a 400-cycle wait ending without a lift, before: Tank 24 tiles in 60 cycles (64 world
   units per cycle); after: 1 tile, at most 2.3 units per cycle.
-- **All against Atreides** (scenario-matrix aaa, `--aaa-seeds 24`, cluster jobs um-aaa-before/after): 1.0.852 22/24 within
-  40 min (1 loss, 1 at 40.8), fixed six 6/6; fix 15/18 so far (2 time-outs with nobody eliminated, 1 at 40.4), fixed six
-  5/6 (906213928 times out), median win 35.6 -> 33.8 min. Locally each half of the fix alone flips a different fixed seed
-  (flag only: 906213928, 1756374161; route only: 1756374161). Seed 906213928 diverges at minute 11; by minute 20 the
-  enemies hold 70k army v 46k and Atreides defends its base (137 scrambles). No systematic weakening found (crush, speed
-  unchanged); 15/18 v 22/24 is not significant. OPEN: the ctest still fails on 906213928.
-- **quantbot_ffa_army_deploys:** passes on the fix (cluster ctest 20261024T101313-ctest-cb7501); 12-seed FFA sweeps
-  (`ffa-before`/`ffa-after`) were still running.
-- **quantbot_strategy:** at 486409243 the fix failed Specials' lead margin (-499) and its tech-4 game ended at 10.1 min.
-  Twelve seeds in both builds: a single-seed lead margin below 1 bps in 6/84 (1.0.852) and 4/84 (fix) checks; the tech-4
-  game was decided before minute 12 on 9/12 and 11/12 seeds; 1.0.852 itself failed the full probe on 8 of 12 seeds. The
-  test now requires the lead margins on the mean over 486409243, 11 and 22 (extra seeds margin-only; the mean failed in
-  5 and 8 of 220 seed triples) and lets the tech-4 game end once played. Passes on the fix locally (Specials mean +268).
-- **Not done:** the long-game ladder re-run (before = Regression852's sm-full-852 ladder cells), a full cluster ctest,
-  the AAA decision (more seeds, or an AI change for seed 906213928's base defence).
+- **All against Atreides, completed 60-seed cluster comparison:** 1.0.852 game code (13c29c5d, harness-only additions)
+  versus movement fix (9f4f492b / 666c53bf; no AI change). Wins within 40 min: **57/60 -> 52/60**;
+  median winning time **35.4 -> 34.8 min**. Paired win-rate difference -0.083, 95% bootstrap [-0.167, 0.000];
+  Atreides placement-score difference -0.113 [-0.237, +0.008] (`match_score`, draw -0.25). The scoring rule calls
+  this level; it does **not** establish noninferiority. Fixed six: 6/6 -> 5/6; 906213928 still times out.
+  Jobs `20261024T111817-um-aaa-before60-aabee5` / `20261024T111809-um-aaa-after60-093f8c` added 36 games to each
+  original 24. All per-seed outcomes are in `aaa-before` / `aaa-after`, reproduced by `aaa_paired.py`.
+- **Saved failure diagnosis (no rerun):** 906213928's retained `events.jsonl` first differs in learned production
+  weights at minute 9.994; combat-kiting decisions differ by 10.014. Enemy army is already 69.9k versus the old
+  game's 46.4k at minute 20. The 137 base-scramble records start only at 23.35, stop at 33.44, include 69 with
+  zero new responders, and total 466 responder assignments (not 137 army recalls). Finish waves still launch at
+  36.20 / 38.92, with 94 / 69 units and no launchers held by defence. Enemy structures keep falling, 931 at
+  minute 34 -> 671 at 41 (includes walls/concrete). No persistent stale-defence lock is demonstrated.
+- **12-seed FFA, completed:** rs160-dunecity, four Brutal QuantBots, 45-min limit: decided 2/12 -> 4/12, mean end
+  43.6 -> 42.1 min. Game-mean placement-score paired difference +0.026 [-0.052, +0.099], level. The final defeated
+  house can lack its elimination event; `ffa_paired.py` uses `vanilla-match.placings`' end-time fallback.
+- **quantbot_strategy, cluster:** current three-seed test passes on both builds. Twelve individual main-seed
+  probes plus twelve margin-only probes per build: baseline job `20261024T111949-ctest-bdc04e` 11/25 passed;
+  fix job `20261024T111937-ctest-40f2d0` 14/25 passed. Single-seed full probes pass 3/12 -> 4/12; saved failures
+  are Bounded not drawn (both seeds 11/99), Air availability/quantity, Infantry quantity, or single-seed margins.
+  All seven mixes' twelve-seed mean lead margins are positive; three-seed mean fails 5/220 -> 8/220 seed triples.
+  Details in `docs/unit-route-comparison.md`; saved run logs and `strategy_cluster.py` retain each diagnosis.
+- **Acceptance remains blocked:** full cluster ctest `20261024T104919-ctest-c7a6bb` is **108/109**, only
+  `quantbot_all_against_atreides` fails (both machines). Its six-of-six criterion and 40-min limit are unchanged.
+  The proposed five-of-six plus median criterion was not adopted: the interval crossing zero is not evidence
+  that the fix is no worse. Parent will decide acceptance in the one shared integration build.
+- **Long-game ladder still queued:** existing jobs `20261024T112050-um-ladder-before-0983dd` /
+  `20261024T112050-um-ladder-after-fb033c`, 720 games each (144 per pair; 18 seeds x both houses x four long maps).
+  At recovery collection: 0/720 baseline, 24/720 fix; no full ladder verdict. No resubmission or local build.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
