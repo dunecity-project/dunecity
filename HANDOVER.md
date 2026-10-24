@@ -16,6 +16,11 @@ Bootstrap now always runs the installer's idempotent install for the SAME pinned
 4.0.14 SDK before activation. No SDK/compiler pin changed. Added a fake-installer
 regression proving advertised versions cannot skip dependency installation.
 
+The first two PR sanitizer jobs received runner shutdown signals during the
+unbounded parallel compile (exit 143, no C++ error). Capped that compile at two
+jobs, matching the memory-bounded Linux package build. No test targets,
+sanitizer flags, seeds or assertions were removed; full rerun is required.
+
 ## 2026-10-23 — Linux audio recovery candidate 1.0.852
 
 HAL9081 reported an AppImage 1.0.851 crash: dsp unavailable, followed by silent

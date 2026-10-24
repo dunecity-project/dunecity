@@ -122,7 +122,9 @@ jobs:
 
       - name: Build tests
         run: |
-          cmake --build build --parallel --target dunelegacy_tests network_wire_harness \
+          # No unbounded -j: sanitizer translation units can exhaust a hosted
+          # runner before it reports a compiler error. Keep all test targets.
+          cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
             relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests
 
       - name: Check native and browser framing still agree
