@@ -138,7 +138,7 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves;
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -206,6 +206,13 @@ struct QuantBotConfig {
         /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
         /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
         bool joinAllyWaves;
+        /// Custom Hard/Brutal starts without a heavy factory establish a four-worker economy,
+        /// then fund their first full combat wave before optional fleet/yard expansion. Initial
+        /// heavy-factory starts, Easy/Medium and campaign games are unchanged.
+        bool openingCombatBudget;
+        /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
+        /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
+        bool campaignCombatBudget;
     };
     ForceSettings force;
 

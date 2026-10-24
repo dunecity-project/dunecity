@@ -1079,6 +1079,8 @@ void QuantBot::launchGroundHunt() {
         campaignWave.lastActive=getGameCycleCount();
         campaignWave.members.insert(selected.begin(),selected.end());
     }
+    if (campaignCombatBudgetActive() && !selected.empty())
+        campaignWave.launched=getGameCycleCount();
     // Custom Hard/Brutal tracks which troops it has committed, so a withdrawal
     // can recall them and so they are distinguishable from the reserve held at
     // home. Tracking is accounting only: the attackers themselves hunt, and

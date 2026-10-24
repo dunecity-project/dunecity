@@ -336,3 +336,47 @@ mirror (144 games, both houses of every seed, each side keeping its start) Harko
 draws: no Harkonnen advantage overall. The start decides more than the house (the same start won both games of
 a seed in 41 of 72 pairs, the same house in 27); the one house effect is Habbanya-Penny, Atreides 25-10 from
 either start. Every ladder seed is now played with both houses (`#swap`).
+
+## Ladder and campaign candidates (protocol 98, default off)
+
+These candidates are hashed `[Force Concentration]` settings, not environment-variable gameplay
+switches. They do not become defaults until their paired score difference clears the 95% rule.
+Use `--compare CONTROL CANDIDATE` on matching game ids; bootstrap clusters keep both starting sides
+of a ladder/team seed together. Campaign house/mission identities remain separate even if their
+numeric seed happens to be equal. Campaign time-outs use the same −0.25 duel draw as other games.
+
+### Team games
+
+`JoinAllyWaves` (`--style allyjoin`) lets Custom Hard/Brutal join an allied QuantBot's whole-army
+wave launched in the last 30 seconds, keeping its objective and the viable-wave minimum.
+At 48 games per format, paired Δ is +0.14 [−0.01,+0.33] for 2v2 and +0.04 [−0.17,+0.25] for 3v3.
+Neither clears the default rule. The 2v2 extension reuses the first 48 games rather than replaying
+them. In 54 bundled multiplayer-map games per arm, both configurations beat AI Player Hard in
+all 20 such games; total time-outs are 8 off and 7 on. No accepted team default yet.
+
+### First-wave funding
+
+Saved telemetry for the 96×96 DuneCity Hard-v-Medium loss on seed 65829 shows the Hard heavy factory
+buying four harvesters and three MCVs, but no combat units, between minutes 8 and 16. Medium's heavy
+factory produces seven launchers in that interval. Capping the fleet only until factory construction
+(HeavyFactoryFirst), or until the remembered enemy army leads (ArmyBeforeFleet), did not establish
+a paired improvement and those candidates were removed.
+
+`OpeningCombatBudget` (`--style openingcombat`) instead keeps a Custom Hard/Brutal start's
+four-worker economy until its first **actual full wave dispatch**, and defers optional extra
+construction capacity in that window. Recovering a lost yard and opening new rock when the base
+cannot grow still take precedence. The first-wave readiness is 100%; subsequent waves and normal
+fleet limits resume at dispatch. A starting heavy factory makes the rule inert, preserving the
+medium-base long ladder; Easy/Medium and campaigns are unchanged.
+
+`CampaignCombatBudget` (`--style campcombat`) applies that four-worker first-dispatch budget only
+to a human's Hard/Brutal campaign partner that started without a heavy factory. It does not alter
+enemy controllers, Easy/Medium partners, resources, production costs, fog or combat strength.
+Completion uses the existing saved campaign-wave launch marker. This differs from the rejected
+CampaignFactoryFirst rule, which released the fleet as soon as the factory stood.
+
+Both first-wave funding switches remain **off and unaccepted** pending the shared integration build,
+the existing opening-economy/campaign-pressure consumer probes, at least 72 short-ladder games per
+pair, the named campaign losses and the full campaign comparison. Existing control results must
+be reused. No test thresholds are relaxed. Release decisions must also include the full cluster
+ctest and the campaign/ladder/multiplayer matrix comparison.

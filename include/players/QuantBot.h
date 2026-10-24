@@ -166,6 +166,11 @@ public:
     /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
     /// in a custom game the house plays itself; 0 elsewhere (no ceiling from the config).
     int configuredCustomHarvesterLimit() const;
+    /// OpeningCombatBudget: reserve a small start's first full combat wave before growing the fleet
+    /// and optional yard capacity. Uses saved start counts and the existing first-wave marker.
+    bool openingCombatBudgetActive() const;
+    /// CampaignCombatBudget: the human's Hard/Brutal partner funds its first wave before fleet growth.
+    bool campaignCombatBudgetActive() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;

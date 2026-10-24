@@ -763,13 +763,13 @@ def team_table(rows, houses, problems):
     print()
 
 
-def subject_score(game, houses):
-    """The A/B subject's score in one game: the ladder's stronger side, the team category's Hard
-    team (QH), the Hard partner in a campaign (won +1, else -1); None for other categories."""
+def subject_score(game, houses, draw_score=match_score.DRAW_SCORE):
+    """The A/B subject's score: the stronger ladder side, the team category's Hard team,
+    or the campaign partner (mission win/loss and the same negative draw as other duels)."""
     if game['error']:
         return None
     if game['category'] == 'campaign':
-        return 1.0 if game['outcome'] == 'won' else -1.0
+        return match_score.duel(game['outcome'] == 'won', game['outcome'] == 'lost', draw_score)[0].score
     name = game['cell'].split('/')[0]
     code = name.split('-')[0] if game['category'] == 'ladder' else 'QH' if game['category'] == 'team' else None
     scores = [float(h['score']) for h in houses if h['code'] == code and h['score'] != '']
@@ -786,8 +786,8 @@ def compare(args):
     for gid, game in candidate[0].items():
         if gid not in control[0]:
             continue
-        a = subject_score(control[0][gid], control[1].get(gid, []))
-        b = subject_score(game, candidate[1].get(gid, []))
+        a = subject_score(control[0][gid], control[1].get(gid, []), args.draw_score)
+        b = subject_score(game, candidate[1].get(gid, []), args.draw_score)
         if a is None or b is None:
             continue
         name, mod = game['cell'].split('/')

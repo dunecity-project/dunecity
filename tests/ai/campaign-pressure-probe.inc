@@ -301,6 +301,65 @@ void runCampaignPressureProbe(Game& game) {
         require(yard->getCurrentProducedItem()==Structure_WindTrap,"Easy/Medium did not queue power deficit Windtrap");
         house->powerRequirement=oldPower;
     }
+    // A human partner's first-wave funding must release on actual dispatch, survive a save, and
+    // never apply the small opening ceiling to Easy/Medium or to an enemy controller.
+    {
+        const auto savedConfig=partner->configOverride;
+        const auto savedTier=partner->difficulty;
+        const int savedTech=game.techLevel;
+        const Uint32 savedCycle=game.gameCycleCount;
+        auto config=std::make_shared<QuantBotConfig>(partner->botConfig());
+        config->force.campaignCombatBudget=true;
+        partner->configOverride=config;
+        partner->initialMilitaryValue=0;
+        partner->initialItemCount[Structure_HeavyFactory]=0;
+        partner->campaignWave={};
+        game.techLevel=8;
+        auto updateFleet=[&](QuantBot::Difficulty tier) {
+            partner->difficulty=tier;
+            partner->lastCalculatedSpice=1300000;
+            partner->attackTimer=INT32_MAX;
+            partner->buildTimer=INT32_MAX;
+            game.gameCycleCount=150; // Harkonnen's update cadence, not the 500-cycle spice scan.
+            partner->update();
+            return partner->harvesterLimit;
+        };
+        require(updateFleet(QuantBot::Difficulty::Easy)>4,
+            "Campaign combat budget restricted an Easy partner");
+        require(updateFleet(QuantBot::Difficulty::Medium)>4,
+            "Campaign combat budget restricted a Medium partner");
+        require(updateFleet(QuantBot::Difficulty::Hard)==4,
+            "Hard partner did not reserve its first combat wave before fleet expansion");
+        int spawned=0;
+        auto* house=const_cast<House*>(partner->getHouse());
+        for(int y=1;y<currentGameMap->getSizeY()-1 && spawned<12;++y)
+            for(int x=1;x<currentGameMap->getSizeX()-1 && spawned<12;++x)
+                if(!currentGameMap->getTile(x,y)->hasAGroundObject()
+                    && !currentGameMap->getTile(x,y)->hasAStructure()
+                    && !currentGameMap->getTile(x,y)->isMountain()) {
+                    auto* unit=house->createUnit(Unit_Tank);
+                    require(unit!=nullptr,"Partner combat tank creation failed");
+                    unit->deploy(Coord(x,y));++spawned;
+                }
+        require(spawned==12,"No space for partner combat fixture");
+        partner->launchGroundHunt();
+        require(partner->campaignWave.launched!=0,"Partner combat dispatch did not release its opening");
+        require(updateFleet(QuantBot::Difficulty::Hard)>4,
+            "Partner fleet stayed restricted after its first combat dispatch");
+        OMemoryStream partnerSave;partnerSave.open();partner->save(partnerSave);
+        IMemoryStream partnerInput(partnerSave.getData(),partnerSave.getDataLength());
+        game.loadedSavegameVersion=SAVEGAMEVERSION;
+        {QuantBot restored(partnerInput,house);
+            require(restored.campaignWave.launched==partner->campaignWave.launched,
+                "Partner save lost its completed combat opening");
+        }
+        game.loadedSavegameVersion=previousVersion;
+        partner->configOverride=savedConfig;
+        partner->difficulty=savedTier;
+        game.techLevel=savedTech;game.gameCycleCount=savedCycle;
+        SDL_Log("CAMPAIGN_COMBAT_BUDGET_PASS: Easy/Medium unchanged, Hard four-worker first-wave "
+            "budget, actual dispatch releases fleet growth, saved completion");
+    }
     HouseChoiceMenu menu;
     menu.setCurrentPosition(0,0,640,480);
     const auto size=menu.getSize();

@@ -666,6 +666,11 @@ void QuantBot::build(int militaryValue) {
     // the yard target rather than through it, so production capacity is still
     // governed by that target alone.
     const bool colonisationNeeded = colonisationMcvDue(itemCount[Unit_MCV],yardLimit);
+    // Optional construction capacity must not occupy the first heavy factory while a small start
+    // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
+    const bool postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
+        && itemCount[Structure_ConstructionYard] > 0 && !rockExpansionNeeded && !colonisationNeeded;
+    if (postponeCapacityMcv) cityYardTarget = std::min(cityYardTarget, cityConstructionCapacity);
 
     // Custom-game city size ceiling for this bot, including shared-house
     // helpers. Campaign games keep their own separate gates.
@@ -2360,7 +2365,7 @@ void QuantBot::build(int militaryValue) {
         }
         if (ready && building==Structure_HeavyFactory && campaignAvailableToBuild(builder,Unit_MCV)
             && !getHouse()->isGroundUnitLimitReached() && itemCount[Unit_MCV]==0
-            && gameMode==GameMode::Custom && !openingWorkersNeeded()) {
+            && gameMode==GameMode::Custom && !openingWorkersNeeded() && !postponeCapacityMcv) {
             CapitalCandidate mcv;
             mcv.builder=builder->getObjectID();mcv.item=Unit_MCV;mcv.kind="construction";
             mcv.price=data[Unit_MCV][houseID].price;mcv.cost=mcv.price;
@@ -3239,7 +3244,7 @@ void QuantBot::build(int militaryValue) {
                 const CapitalCandidate* localUnitChoice=nullptr;
                 // A rich opening can fund its MCV now. Do not repeatedly buy
                 // workers before the factory gets to unlock that construction.
-                const bool unlockingVanillaMcv=vanillaEconomy && gameMode==GameMode::Custom
+                const bool unlockingVanillaMcv=!postponeCapacityMcv && vanillaEconomy && gameMode==GameMode::Custom
                     && pBuilder->getItemID()==Structure_HeavyFactory
                     && !campaignAvailableToBuild(pBuilder,Unit_MCV)
                     && pBuilder->getCurrentUpgradeLevel()<pBuilder->getMaxUpgradeLevel()
@@ -3469,7 +3474,7 @@ void QuantBot::build(int militaryValue) {
                     if(expansionProducer && !pBuilder->isUpgrading() && pBuilder->getProductionQueueSize()==0
                         && money < (campaignAvailableToBuild(pBuilder,Unit_MCV)
                             ? data[Unit_MCV][houseID].price : pBuilder->getUpgradeCost())) break;
-                    const bool prioritizeCityMcv = citySimEnabled && gameMode == GameMode::Custom
+                    const bool prioritizeCityMcv = !postponeCapacityMcv && citySimEnabled && gameMode == GameMode::Custom
                         && (fundedCityProduction || !openingWorkersNeeded() || rockExpansionNeeded)
                         && !getHouse()->isGroundUnitLimitReached()
                         && (expansionProducer || QuantBotBuildPolicy::canFundCityYard(cityMcvCash, data[Unit_MCV][houseID].price,
@@ -3479,7 +3484,7 @@ void QuantBot::build(int militaryValue) {
                     const int styleYardShortfall = vanillaEconomy && gameMode == GameMode::Custom
                         && itemCount[Structure_HeavyFactory] > 0
                         ? style().minYards - itemCount[Structure_ConstructionYard] - itemCount[Unit_MCV] : 0;
-                    const bool prioritizeMcv = prioritizeCityMcv || (vanillaEconomy && gameMode == GameMode::Custom
+                    const bool prioritizeMcv = prioritizeCityMcv || (!postponeCapacityMcv && vanillaEconomy && gameMode == GameMode::Custom
                         && !getHouse()->isGroundUnitLimitReached()
                         && (DuneCity::prioritizeVanillaMcv(money, getHouse()->getNumItems(Unit_Harvester),
                             itemCount[Structure_ConstructionYard], itemCount[Unit_MCV], data[Unit_MCV][houseID].price)

@@ -107,6 +107,9 @@ int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    // A small start buys one full wave before its tempo starts splitting production into raids.
+    // This ends only when that wave actually launches, not when its first heavy factory stands.
+    if (openingCombatBudgetActive()) return 100;
     // The tempo of the strategy (docs/ai-play-styles.md, "Strategies"); Base keeps the config's.
     const auto* tempo = strategyTempo();
     if (tempo && tempo->readinessPercent > 0) return std::clamp(tempo->readinessPercent, 10, 300);
