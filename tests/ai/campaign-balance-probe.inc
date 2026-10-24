@@ -35,6 +35,7 @@
 #include "custom-attack-probe.inc"
 #include "custom-city-cap-probe.inc"
 #include "factory-recovery-probe.inc"
+#include "strategic-site-probe.inc"
 #include "radar-power-probe.inc"
 #include "campaign-stats-probe.inc"
 #include "campaign-pressure-probe.inc"
@@ -392,6 +393,11 @@ int runCampaignBalanceProbe() {
     if (std::getenv("BALANCE_HELPER_ECONOMY_PROBE")) {
         runCampaignHelperEconomyProbe(*game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_STRATEGIC_SITE_PROBE")) {
+        runStrategicSiteProbe(*game);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_FACTORY_RECOVERY_PROBE")) {
