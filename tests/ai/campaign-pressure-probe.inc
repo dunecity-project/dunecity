@@ -16,6 +16,10 @@ void runCampaignPressureProbe(Game& game) {
         }
     require(enemies.size()>=2,"Pressure probe needs two campaign enemy houses");
     require(partner && !partner->isCampaignEnemy(),"Human partner inherited enemy restrictions");
+    // Capture the authored campaign permissions through the normal controller entry point,
+    // before synthetic armies and the controlled structure list change the world.
+    for (auto* bot:enemies) bot->update();
+    partner->update();
     // The engine ceiling follows controller difficulty, including a human's
     // shared house. Switching back restores the authored limit; workers stay capped.
     // No explicit unit-count override is selected here, which is what keeps Hard and
@@ -303,7 +307,8 @@ void runCampaignPressureProbe(Game& game) {
         while (yard->getProductionQueueSize()) yard->doCancelItem(yard->getCurrentProducedItem());
         yard->upgrading=false;
         yard->updateBuildList();
-        require(yard->isAvailableToBuild(Structure_WindTrap),"Power fixture cannot build a Windtrap");
+        require(bot->campaignAvailableToBuild(yard,Structure_WindTrap),
+            "Power fixture cannot build an authored campaign Windtrap");
         const auto previousPlanner=bot->planningBuilder;
         bot->planningBuilder=yard->getObjectID();
         bot->clearPlacementCache();
