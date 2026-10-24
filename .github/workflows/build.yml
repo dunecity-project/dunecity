@@ -905,6 +905,8 @@ jobs:
       - name: Build native ARM64 and APK candidate
         shell: pwsh
         run: |
+          python -m unittest discover -s scripts/tests -p test_android_payload.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./scripts/package-android-apk.ps1 -RepoRoot $env:GITHUB_WORKSPACE -BuildNative -NativeBuildJobs 2 -BuildApk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/check-build-deps.py build-android-arm64-ndk
