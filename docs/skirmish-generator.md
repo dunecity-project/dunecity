@@ -128,10 +128,30 @@ never serialized or sent, and no protocol, save or map format changed.
   menu; a skirmish-type game goes to the statistics instead of a debriefing. Campaign and co-op
   campaign missions keep their own rules. Players' win/lose is unchanged. Nothing simulated
   changes (`finished` is local), so every peer, spectator included, ends at the same cycle with
-  the same state; a spectator whose game is decided and whose host then leaves ends normally
-  instead of reporting a lost connection. No protocol or save change. Test:
-  `spectator_game_end_probe` (`tests/spectator/run-game-end-probe.py`; `--baseline` reports the
-  old behaviour).
+  the same state. No protocol or save change. Test: `spectator_game_end_probe`
+  (`tests/spectator/run-game-end-probe.py`; `--baseline` reports the old behaviour).
+- **The end online** (protocol 100). A network spectator plays the host's stream, at most 64
+  unacknowledged cycles ahead of what it has applied, so a spectator that is behind (slow machine,
+  a hang, still catching up) did not have the decision yet when the host left after its six-second
+  end, and showed "The connection to the host was interrupted"; one only a second behind lost the
+  rest of its end. Now, when the host's game has run its last cycle (won, lost or quit), it sends
+  every spectator all the cycles it does not have (JOIN_SYNC 18, batches past the replay window)
+  and an end marker (19, acknowledged), waiting up to 3 s for the acknowledgements before it can
+  leave; the host keeps 8,192 cycles (4 MiB) for this. The spectator no longer fails when the host
+  leaves: it plays every received cycle, then ends normally if the game was decided (the end plate
+  finishes its time on the clock if the host quit at the decision), or says "The host left before
+  the game was decided." (all cycles played) or that the connection was interrupted (cycles
+  missing). The direct transport delivers what a peer sent before it closed the channel ahead of
+  its departure (it was dropped with the connection), and a player whose own game had ended also
+  ends normally when the host leaves. No cycle runs after the end message or a quit, so every peer
+  leaves on the same cycle. Test: `spectator_online_end_probe`
+  (`tests/network/run-spectator-end-probe.py`): host, partner and a mid-game spectator as three
+  processes over the local signaling service and WebRTC, each in the real main loop, the match
+  decided by the simulation (hunting tanks); the spectator must decide on the same cycle and digest,
+  end on the host's last cycle and digest, and show the winner on its plate and statistics -
+  host leaving after its end, quitting at the decision, the spectator hanging 20 s or 25 s,
+  running at half speed (35 s behind when the host left), and a Dune City game with Natives worms.
+  `--remote ROLE=SSHHOST` runs a role on another Mac (the service through an ssh tunnel).
 
 ## Generation
 - **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
