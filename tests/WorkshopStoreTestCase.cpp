@@ -238,7 +238,7 @@ TEST_CASE("Legacy builtin metadata pins require unchanged payload and mode","[wo
         f.shipped.name = city ? "dunecity" : "vanilla";
         f.shipped.displayName = city ? "Dune City" : "Vanilla";
         f.shipped.base = f.shipped.name;
-        INIFile current(false, "Mod metadata");
+        INIFile current(false, std::string("Mod metadata"));
         current.setStringValue("Mod", "Display Name", f.shipped.displayName);
         current.setStringValue("Mod", "Author", city ? "Stefan" : "Dune City");
         current.setStringValue("Mod", "Description", city

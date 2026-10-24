@@ -25,6 +25,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/IMemoryStream.h>
 #include <misc/draw_util.h>
+#include <mmath.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -115,14 +116,22 @@ void seFeatures(Game& game, Uint32 cycle) {
         for(UnitBase* unit : raised.units) {
             seRequire(unit->getOwner() == native && unit->getOriginalHouseID() == HOUSE_NATIVES
                       && unit->getAttackMode() == HUNT && unit->getTarget() == last, "wrong crime ownership/order");
-            unit->doSetAttackMode(STOP);  // Saved, ordinary order: await the identical shootAt cycle.
+            unit->doSetAttackMode(STOP);
+            // Use the same four-tile firing geometry as natives-probe's real aircraft
+            // interaction. Crime spawns beside the building: firing from there is too close
+            // for a SmallRocket's doubled anti-air arming delay. Walk these SAME crime units
+            // to the firing site using a normal saved forced move; STOP prevents an early
+            // attack on the unrest building while awaiting the absolute shootAt cycle.
+            unit->doMove2Pos(last->getLocation() + Coord(1, 5), true);
         }
     }
     if(cycle > crimeAt && cycle <= shootAt) {
+        seRequire(last != nullptr, "crime origin disappeared before its deciding aircraft crash");
         seRequire(troops.size() == 3 && native->getNumItems(Unit_Trooper) == 3, "crime troops did not survive checkpoint");
         for(const UnitBase* unit : troops)
             seRequire(unit->getOriginalHouseID() == HOUSE_NATIVES && unit->getAttackMode() == STOP
-                      && !unit->getTarget(), "checkpoint changed the staged crime orders");
+                      && !unit->getTarget() && unit->getDestination() == last->getLocation() + Coord(1, 5),
+                      "checkpoint changed the staged crime move/STOP orders");
         if(se.viewer && !se.featureCheckpoint) {
             seRequire(cycle < shootAt, "spectator missed the crime checkpoint window");
             se.featureCheckpoint = true;
@@ -141,8 +150,19 @@ void seFeatures(Game& game, Uint32 cycle) {
         plane->setHealth(10);
         for(UnitBase* unit : troops) {
             unit->setVisible(VIS_ALL, true);
+            const Coord firingSite = last->getLocation() + Coord(1, 5);
+            seRequire(unit->getLocation() == firingSite && !unit->isMoving(),
+                      "crime trooper did not finish its ordinary move to the aircraft firing site");
+            seRequire(blockDistance(unit->getLocation(), plane->getLocation()) <= unit->getWeaponRange(),
+                      "crime trooper outside real aircraft weapon range");
+            unit->doSetAttackMode(GUARD);  // Resume the working Natives interaction's firing mode.
             seRequire(unit->canAttack(plane), "crime trooper cannot attack airplane");
             unit->doAttackObject(plane, true);
+            seRequire(unit->getTarget() == plane && unit->getAttackMode() == GUARD,
+                      "ordinary crime-trooper aircraft attack order was not accepted");
+            SDL_Log("SPECTATOR_END: %s crime trooper %u at %d,%d attacks airplane %u at %d,%d, range %d",
+                    seRole.c_str(), unit->getObjectID(), unit->getLocation().x, unit->getLocation().y,
+                    plane->getObjectID(), plane->getLocation().x, plane->getLocation().y, unit->getWeaponRange());
         }
     }
     if(cycle > shootAt && game.soleSurvivingTeam() != 0 && !se.decidedCycle) {
@@ -162,7 +182,18 @@ void seFeatures(Game& game, Uint32 cycle) {
                 + " native_structure_kills=" + std::to_string(native->getNumDestroyedStructures())
                 + " airplane_losses=" + std::to_string(game.getHouse(se.winner)->getNumLostItems(Unit_AmbientAirplane)) + "\n");
     }
-    seRequire(cycle <= shootAt + MILLI2CYCLES(60 * 1000) || game.finished, "airplane was not shot down in 60 game seconds");
+    if(cycle > shootAt + MILLI2CYCLES(60 * 1000) && !game.finished) {
+        SDL_Log("SPECTATOR_END: aircraft deadline at %u: plane=%u hp=%.1f last_building=%u hp=%.1f native_plane_kills=%d",
+                cycle, plane ? plane->getObjectID() : 0, plane ? plane->getHealth().toDouble() : 0.0,
+                last ? last->getObjectID() : 0, last ? last->getHealth().toDouble() : 0.0,
+                native->getNumKilledItems(Unit_AmbientAirplane));
+        for(const UnitBase* unit : troops)
+            SDL_Log("SPECTATOR_END: crime trooper %u at %d,%d mode=%d target=%u reload=%d hp=%.1f",
+                    unit->getObjectID(), unit->getLocation().x, unit->getLocation().y, int(unit->getAttackMode()),
+                    unit->getTarget() ? unit->getTarget()->getObjectID() : 0, unit->primaryWeaponTimer,
+                    unit->getHealth().toDouble());
+        seRequire(false, "airplane was not shot down in 60 game seconds");
+    }
 }
 
 
