@@ -20,8 +20,12 @@ void runCampaignPressureProbe(Game& game) {
     // shared house. Switching back restores the authored limit; workers stay capped.
     // No explicit unit-count override is selected here, which is what keeps Hard and
     // Brutal unlimited; explicit override cases have their own registered fixture.
+    // The engine worker ceiling is only a lobby-selected harvester override (unchecked
+    // or 0 is unlimited, see GameOptions::harvesterCeiling), so the fixture selects one.
     const auto savedUnitOverride=game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride;
+    const auto savedHarvesterOverride=game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride;
     game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=-1;
+    game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=5;
     for (auto* bot : {partner,enemies[0]}) {
         auto* house=const_cast<House*>(bot->getHouse());
         const auto savedDifficulty=bot->difficulty;
@@ -41,12 +45,14 @@ void runCampaignPressureProbe(Game& game) {
             require(house->isHarvesterLimitReached(),"Removing unit ceiling removed the worker ceiling");
             if(tier==QuantBot::Difficulty::Brutal) {
                 if(bot==partner) require(bot->harvesterCountCeiling()==0,"Shared helper inherited enemy worker cap");
-                else require(house->getMaxHarvesters()<=7,"Brutal enemy engine worker cap exceeds seven");
+                else require(bot->harvesterCountCeiling()>0 && bot->harvesterCountCeiling()<=7,
+                    "Brutal enemy worker cap missing or exceeds seven");
             }
         }
         house->maxUnits=savedLimit;house->numItem[Unit_Harvester]=savedWorkers;bot->difficulty=savedDifficulty;
     }
     game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=savedUnitOverride;
+    game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=savedHarvesterOverride;
     // Earliest offensive trigger, excluding earlier home and worker deliveries.
     auto savedTriggers=std::move(game.getTriggerManager().triggers);
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Tank,Drop_Homebase,false,100));
