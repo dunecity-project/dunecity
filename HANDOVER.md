@@ -256,6 +256,53 @@ changes are on `exp/ladder-campaign-variants` (env switch `LC_VARIANT`, test-onl
   Cluster baselines submitted: jobs 20261024T095456-lc-team-before-3a471a, 20261024T101417-lc-short-before-27c8f8
   (results `~/Documents/projects/dunecity-results/ladder-campaign/`). No ctest run.
 
+## 2026-10-24 — FFA finish, in progress (branch `fix/ffa-finish`, worktree `~/Documents/projects/dunecity-ffa-finish`, from staging 6fd861ae; protocol 97, save 9871 unchanged; NOT accepted yet)
+
+Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`base-*` = 1.0.852, `c1-*`, `c3-*`,
+`pal-*`, decision logs `diag-c1-9101`, `diag-c2-9101`, save `fixture/ffa-9101-c1-m35.dls`).
+
+- **Diagnosis (4P DuneCity Brutal, seed 9101 decision log, partial baseline samples):** the diagnosed survivors
+  are not zones-only remnants. They retain turrets, base structures and armies; in seed 9101 the last few
+  minutes of clearing follow the army's collapse. Known turrets account for 164/487 and 151/285 of Atreides'
+  hostile unit deaths during minutes 30–40 and 40–50; other/unknown shooters remain classified separately.
+  New waves join previously committed survivors, so new-dispatch percentages alone understate commitment.
+  This does not mean every unit is always attacking. See docs/formations.md for exact sample boundaries.
+  **Bug found:** from minute ~32 the leader's Construction Yard built nothing for 28 minutes: the Palace became
+  "overdue", `palaceOverdue` replaced every earlier choice (heavy factories for a funded backlog, zones, turrets)
+  with an unsiteable Palace, rejected each pass (no site); credits sat at the 48k storage cap. Baseline leaders
+  bank 36-63k at the limit.
+- **Commits:** 21f73a28 city zones keep no house alive (walls-like), a defeated house's zones are demolished,
+  defeat reported once; 0b3bd9cf automatic targeting ranks zones with walls, finishing objective ignores zones;
+  3b8fefec IX/Palace rules (and their overdue overrides) only choose a placeable site; harness: structure kinds,
+  capacity and completed structures per sample, `BALANCE_SAVE_AT_MINUTE`/`BALANCE_SAVE_PATH`,
+  `scenario-matrix.py --cell-seeds`. `exp/ffa-palace-only` f9b11643 = staging + the site gate alone (arm only).
+- **Measured so far:** baseline 4P self-play 13/21 time-outs, 6P cell 16/24; zones rule alone level (12 paired
+  4P seeds 9 v 9; 6P 17/24). Seed 9101 with the zone targeting: eliminations 37.0/41.3 min (baseline 46.7/52.7).
+- **Preserved acceptance:** cluster ctest 20261024T122735-ctest-c4ed92 at 3b8fefec completed **109/109**
+  (mini 88, Pro 21). Do not rerun it to confirm. This receipt predates the recovered regression below.
+- **Recovery source (no new builds/snapshots):** c38750c2 adds `quantbot_strategic_site_stall` with the existing
+  minute-35 fixture, restores its overdue timer at runtime and checks completed construction plus <=2-minute
+  all-yard idle/storage-cap plateaus. Shared staged execution exposed a real fixture precondition failure:
+  after load, a Palace site exists. The corrected fixture physically fragments only unoccupied ground into
+  at most two consecutive rock rows, retaining existing structures and smaller build sites, then keeps the
+  no-Palace-site assertion. Main must prove the corrected consumer and gate-removal negative control.
+  The original continuation-only test passed with and without the fix and is not accepted evidence.
+  71a4cf3d extends existing `--houses` for genuine
+  six-player self-play while preserving the four-player default and balanced assignments.
+- **Still collecting original jobs:** `pal-self4`/`pal-6p`, `c3-self4`/`c3-6p`, `c3-self4-nofl`, `c3-h2h`,
+  `c1-self4-120`; no resubmissions. The `*-6p` scenario arms are mixed QB/QH/QM/QE/AH/AM, not same-bot self-play.
+- **Open acceptance:** measured zones/FinishWhenLeading decision; actual six-house 24-seed same-bot arms;
+  Fortress, `/weak`, CY and the long-game ladder for the final siting fix. Zones elimination and targeting
+  remain explicitly unaccepted, not release defaults. Clean integration without them: use existing pure
+  site-gate commit f9b11643 plus c38750c2 and 71a4cf3d; parent reconciles protocol/history once.
+- **Completed Palace-only arms:** 4P self-play 15 -> 16/24 time-outs, mixed 6P 16 -> 17/24; no evidenced draw
+  cure. Corrected mean-house paired score deltas are 0.000 (-0.0156..+0.0156) and -0.0122
+  (-0.0330..+0.0052), respectively. These comparisons label missing final-tick deaths as imputed at actual end.
+- **Scoring harness correction:** the wave loop exits on `game.finished` before its callback sees the final
+  death. Reference/Palace-only 4P arms omit 9/8 final-loser timestamps, changing 18/16 score/drawn rows.
+  `VanillaMatch::recordEliminations` now observes the final state once after the loop; no extra simulation
+  tick, sample or save. Absent houses remain unknown, Natives excluded. Raw evidence stays unchanged.
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and

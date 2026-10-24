@@ -1112,6 +1112,98 @@ first elimination 6 minutes sooner) and makes both mandatory 1.0.848 tests pass.
 draw-rate gain is a direction over 24 seeds, not yet significant. Still open: the 6P DuneCity FFA cell
 (0/4 decided), and 4P DuneCity self-play still times out in 13 of 24.
 
+### Free-for-all: finishing the game, 1.0.852 investigation (branch `fix/ffa-finish`, protocol 97, save 9871)
+
+Evidence: `~/Documents/projects/dunecity-results/ffa-finish/`. The reference is local 1.0.852,
+6fd861ae, not the older 1.0.848 trajectory above. `base-*` has only observational harness changes;
+`pal-*` adds the Palace/IX site gate alone; `c1-*` excludes zones from elimination; `c3-*` combines
+that rule, zone target deprioritization and the site gate. These names describe experiments,
+**not accepted defaults**. The final selection must follow the paired measurements below.
+
+**What was diagnosed.** In the reference seed 9101 (`diag-c1-9101`, also reproduced in
+`base-self4`), the winning army has not simply stayed home. New dispatches of 33–41k at minutes
+41–58 join 14–52k of previously committed survivors: the new-wave percentage alone omits that
+existing commitment. Its finishing teams progress from Sardaukar to Harkonnen to Ordos, rather
+than changing away from the crippled house on each attack. At minute 60 its ground-army sample
+has no stuck value, no defence assignment, 25,650 in waves and 32,660 free (only 6,400 inside its
+base). These observations rule out the original all-army-at-home bug for this match; they do not
+claim that every unit is attacking continuously.
+
+The surviving cities in the first six reference games are not zones-only remnants: they retain
+71–256 turrets, 25–80 other base structures and armies. In seed 9101 the losing Sardaukar house
+has no army at minute 45 and is eliminated at 46.7; Harkonnen has 1,050 at minute 50 and is
+eliminated at 52.7. Unit-v-unit combat remains substantial. Mapping the diagnostic's lethal-damage
+attacker object IDs back to their built item types attributes 164 of Atreides' 487 hostile unit
+deaths at minutes 30–40, and 151 of 285 at minutes 40–50, to known turrets; initial/unknown shooter
+IDs remain unclassified. Turrets matter, but they are not the only source of attrition.
+
+**An actual construction starvation bug.** The leading Atreides city stops completing structures
+around minute 35 and stays at the same 299 zones, 119 turrets and 41 base structures through
+minute 60, while holding about 48k credits at storage capacity. Its build diagnostics report a
+funded heavy-factory backlog (six busy heavy factories, target 18). The later `palaceOverdue`
+override replaces an earlier construction choice with a Palace **without checking for a site**.
+Final placement rejects it (`no_site`), discarding that earlier choice again on the next pass.
+The normal Palace selection and the analogous IX override have the same missing precondition.
+The strategic cash reserve already rejects unsiteable projects; the final selection must do so too.
+
+The site-gate fix checks `findPlaceLocation(...).isValid()` in all four IX/Palace selection rules,
+including their overdue overrides. When no site exists, the previous choice survives and later
+rules can still run. A future pass tries the strategic structure again using ordinary placement
+invalidation; there is no extra retry timer or changed building price, target or military cap.
+This is a planner correctness fix, not a new aggressive doctrine.
+
+**Zones and elimination are separate questions.** The shipped `House::isAlive` excludes walls and
+non-combat transports/workers/ambient aircraft, but counts residential/commercial/industrial
+structures. Roads and power lines are tile infrastructure, not a growing population of actual
+buildings that independently keeps a house alive. Zones occupy real 2x2 structure footprints:
+ordinary ground passability rejects their occupied tiles, just like other buildings. Their city
+density/population growth is not resurrection of destroyed structure objects; replacement lots
+are new construction orders. A targeting change that ignores zones is therefore not equivalent
+to removing a cosmetic tile: it can change which obstacles the army clears and must earn its
+own acceptance. Merely omitting zones from the defeat count has not established a draw-rate gain.
+
+**Regression test and the old false-positive.** `quantbot_strategic_site_stall` continues the
+preserved minute-35 seed-9101 save and restores its already-overdue Palace timer explicitly. To
+make no-siting deterministic after a disk load rebuilds placement plans, every third row of
+unoccupied ground becomes sand: smaller footprints and existing buildings/lots remain, but no
+empty 3x3 Palace site can exist. It verifies that precondition rather than faking placement-cache
+answers, then requires other completed construction and bounds all-yard idling/storage-cap
+plateaus over six game minutes. Normal disk
+saves intentionally rebuild these planning timers; only observer runtime checkpoints carry them.
+The first continuation-only attempt passed with and without the fix and was discarded. The new
+test still needs shared staged validation **and a negative control removing the site gate** before
+it can be cited as a discriminating regression result. A fixture precondition failure is a failed
+test, never a pass.
+
+**Coverage distinction.** Existing `*-6p` arms are the mixed scenario-matrix cell
+`6p-ffa-small-smallarmy` (QB/QH/QM/QE/AH/AM), not six identical bots. True six-player self-play now
+uses the existing `vanilla-match.py --houses` list with `--ffa default`, for example
+`--houses harkonnen atreides ordos sardaukar fremen mercenary --maps rs192-dunecity`.
+Each house still has its own team; the four-house default and balanced head-to-head assignments
+are unchanged. The six-house same-bot 24-seed arm and final Fortress, `/weak`, CY and long-game
+ladder checks must not be inferred from the mixed cell or the passing unit suite.
+
+**Final-cycle scoring defect.** `FormationWaveMeasure::run` tests `game.finished` before its
+callback. When `House::lose` decides a match in the last update, `VanillaMatch::tick` never observes
+the final death. The 24-game 4P reference has nine winning games with a missing final-loser
+`eliminated_s`; the Palace-only arm has eight. Treating blanks as survivors incorrectly scores
+all 24 games of either arm as draws, even though `games.csv` reports nine/eight winners.
+The harness now calls an idempotent `recordEliminations` once after the loop as well as in each
+tick, without running another game update or repeating sample/save hooks. An absent house is
+unknown, not evidence of defeat; Natives are not entrants.
+
+Original CSVs remain immutable. Recovered comparisons use each live `alive` flag and label an
+`alive=0` house with a missing elimination time as **imputed final-tick death at the actual game
+end**; this is a reconstruction, not an originally logged timestamp. Alive matrix houses use
+`eliminated_s=-1`, which must not be interpreted as an elimination. The reconstruction changes
+18 reference and 16 Palace-only house-score/drawn rows. Palace-only remains level: corrected
+4P mean-house paired score difference 0.000 (95% -0.0156..+0.0156), mixed 6P -0.0122
+(-0.0330..+0.0052); time-outs are 15 -> 16 of 24 and 16 -> 17 of 24, respectively. A confirmed
+planner correctness bug is not evidence that this fix cures FFA draw rates.
+
+**Preserved verification.** Cluster ctest 20261024T122735-ctest-c4ed92 tested source 3b8fefec:
+109/109 passed (mini 88, Pro 21). That receipt predates the new siting probe and six-house harness
+extension. It is not a receipt for the final accepted behavior combination.
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
