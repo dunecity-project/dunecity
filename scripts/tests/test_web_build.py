@@ -66,6 +66,25 @@ class WebBuildSafetyTest(unittest.TestCase):
             out.write("# modified after pinning\n")
         self.assertIn("modified tracked files", self.run_script())
 
+    def test_installs_sdk_dependencies_even_when_list_advertises_version(self):
+        # The real pinned installer does not filter list output with --installed.
+        # Activation must never run first just because the version is advertised.
+        version = (self.root / "tools/web/emsdk-version.txt").read_text().strip()
+        (self.sdk / "emsdk").write_text(
+            '#!/bin/sh\ncase "$1" in\n'
+            f'list) printf "%s\\n" "{version}" ;;\n'
+            'install) printf "install %s\\n" "$2" >> "$TEST_MARKER" ;;\n'
+            'activate) printf "activate %s\\n" "$2" >> "$TEST_MARKER"; exit 73 ;;\n'
+            '*) exit 74 ;;\nesac\n')
+        (self.sdk / "emsdk").chmod(0o755)
+        self.init_sdk("https://github.com/emscripten-core/emsdk.git")
+        (self.root / "tools/web/emsdk-revision.txt").write_text(self.git("rev-parse", "HEAD") + "\n")
+        result = subprocess.run(["bash", str(self.root / "tools/web/build-emscripten.sh")],
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 73, result.stdout + result.stderr)
+        self.assertEqual(self.marker.read_text().splitlines(),
+                         [f"install {version}", f"activate {version}"])
+
 
 if __name__ == "__main__":
     unittest.main()
