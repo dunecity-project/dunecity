@@ -8,6 +8,14 @@ Proceed through PR checks and the signed stable-tag pipeline; Linux-only run
 Android 0.2.30 stays separately versioned on engine 1.0.851. No new APK or
 local compiler build is part of this audio-hotfix publication.
 
+PR #104 initial browser job failed before game compilation: a clean emsdk
+checkout advertised 4.0.14 in list output, so the old installed-version grep
+skipped installation and activation could not find Node 24.19.0. The pinned
+emsdk revision does not implement the assumed --installed listing filter.
+Bootstrap now always runs the installer's idempotent install for the SAME pinned
+4.0.14 SDK before activation. No SDK/compiler pin changed. Added a fake-installer
+regression proving advertised versions cannot skip dependency installation.
+
 ## 2026-10-23 — Linux audio recovery candidate 1.0.852
 
 HAL9081 reported an AppImage 1.0.851 crash: dsp unavailable, followed by silent
