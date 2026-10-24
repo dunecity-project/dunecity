@@ -7,6 +7,42 @@ Agent VukTest. Evidence `~/Documents/projects/dunecity-results/vuk-test/` (galle
 - **Checked fine:** skin persists/Apply/Back, new and 1.0.850 profiles get Classic, saved choices kept, skin round trip leaves the in-game sidebar pixel-identical, Natives owner line, plate in all 12 colour slots, QuantBot rename bit-identical (14 cluster games, same digests), Windows MSVC build + 16/16 ctest + classic-skin probe 3x6 with --hud (at 6fd861ae), Linux CI green (run 39923696260).
 - **Reported, not fixed:** Lapis 'All Maps'/'Next' 9 pt at 640 Custom Game; 'Zoom 1x' clipped under the drop-down arrow (all skins); Custom Game 'Skin' header raised (all skins); in-game Classic p95 +4 ms on the loaded mini only (Air equal).
 - **Tests:** `dunecity-queue ctest` job 20261024T112123-ctest-b6167a at f55ebe55: 110/110 (mini 88, pro 22; the PC took none). Not pushed.
+## 2026-10-24 — Online spectating ends with the game, between real machines (branch `fix/spectator-online`, worktree `~/Documents/projects/dunecity-spectator-online`, from staging 6fd861ae = 1.0.852; protocol 100, save 9871 unchanged)
+
+Agent SpectatorNet. Evidence `~/Documents/projects/dunecity-results/spectator-online/`. `fix/spectator-game-end` was only
+tested in-process; the online paths were never exercised.
+
+- **New test** `spectator_online_end_probe` (`tests/network/run-spectator-end-probe.py` + `spectator-end-probe.inc`): Host,
+  Partner and a Viewer that asks to spectate mid-game (cycle 120) as three processes over the local PHP signaling service and
+  WebRTC, each in the real `Game::runMainLoop`; ten hunting tanks against three troopers on Habbanya-Autumn, so the
+  simulation decides the match (cycle 2491; Dune City with Natives worms 4881). Checks: same decision cycle and digest on
+  every peer, the viewer ends normally on the host's last cycle and digest, winner on its plate and in the statistics
+  (text and colour). Cases end, decision (host quits at it), lag-end (viewer hangs 20 s), lag-decision (25 s), slow (viewer
+  at under half speed: 2,190 cycles = 35 s behind when the host left), natives. `--remote ROLE=SSHHOST` runs roles on other
+  Macs (probe app rsynced, service through `ssh -R`, rendezvous files relayed); `--baseline` only reports.
+- **Before (6fd861ae), same matrix:** end/natives/lag-end ended normally but 76-373 cycles short of the host (the viewer cut its
+  end at the host's departure); decision, lag-decision and slow showed "The connection to the host was interrupted" (slow
+  also needed a fresh checkpoint: history 1,500 cycles). Real 3-Mac baseline (host Pro, partner Air, viewer mini): the same.
+- **Causes:** (1) the host streams at most 64 unacknowledged cycles (`ObserverStreamPolicy::replayWindow`) and nothing more
+  once it left, so a spectator behind the host never got the decision; `Game::onPeerDisconnected` then failed it (or cut a
+  decided game short). (2) `DirectRoomTransport` dropped a link's queued messages with the connection, and erased the peer
+  before the game read the payloads queued ahead of its PeerLeft (`handleRelayGamePayload` found no sender), so whatever the
+  host sent last was lost. (3) the main loop could run more cycles after `finishedLevel` in the same frame (partner ended a
+  cycle after the host).
+- **Fix:** host: at the end of its `runMainLoop`, `NetworkManager::endObserverStreams` sends every ready spectator the rest
+  past the window (JOIN_SYNC 18 batches) and an end marker (19, JOIN_ACK 19), waiting at most 3 s for the acks
+  (`observerStreamsDelivered`); ended streams don't expire; history 8,192 cycles (4 MiB kept). Spectator: host departure
+  sets `observerHostLeft`; it plays the received cycles, then `endObservationWithoutHost`: decided -> normal end (plate
+  finishes on the clock), all cycles played -> "The host left before the game was decided.", else "connection interrupted".
+  A player whose game had finished also ends normally. Transport: `deliverQueuedValues` before dropping a closed/departed
+  link, `departing_` peers stay findable until their PeerLeft is taken, `relayHostPeerId` remembers the departing host.
+  Main loop: no cycle after `finishedLevel`/quit. Router accepts 18/19. Protocol 100 (a 94 spectator refuses 18/19).
+- **Real machines** (fixed build d1718c60): host MacBook Pro, partner MacBook Air (headless, no dunecity running), viewer
+  mini: all six cases pass; viewer on the Pro, host mini, partner Air, host winning: end, lag-end, slow pass. Not done: a
+  Windows peer (probe is macOS/Ninja-only) and the dunelegacy.com service/relay (would publish a production room); ENet
+  direct has no spectators (observer streams need the direct room transport).
+- **Tests:** `dunecity-queue ctest` job 20261024T110745-ctest-4af3ea at d1718c60: 110/110 passed (mini 37, pro 73;
+  PC offline), incl. `spectator_online_end_probe` 719 s on the mini (six cases, ~2 min each; skipped with code 77 without PHP).
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 

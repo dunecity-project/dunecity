@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 94;
+static constexpr int kWireProtocolVersion = 100;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -109,7 +109,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // anti-air holds fire over its own side. No saved state change.
     // 93: the Natives house owns every sandworm and crime trooper (new house slot); save 9871.
     // 94 is 1.0.851: 90 + 93 (+ the render-only unit-jitter fix); save 9871.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 94);
+    // 100: a host ends its spectator streams with the rest of the game (JOIN_SYNC 18) and an end
+    // marker (19); a 94 spectator would refuse them. No simulation change.
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 100);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

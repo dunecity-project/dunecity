@@ -11,7 +11,12 @@ namespace {
 // envelope on both endpoints; ordinary network-save and chunk limits stay fixed.
 constexpr Uint32 maxSnapshot=SnapshotTransfer::maxBytes;
 constexpr Uint32 chunkBytes=ObserverStreamPolicy::chunkBytes;
-constexpr Uint32 maxHistoryCycles=1500;
+// Kept cycles bound how far behind a spectator can be and still be served: when the host's game
+// ends, a spectator that is behind receives everything it has not had yet (endObserverStreams).
+// 8,192 cycles are over two minutes at the default speed; the byte bound holds either way.
+constexpr Uint32 maxHistoryCycles=8192;
+// What the end of a stream may send per update, in batches of at most one chunk.
+constexpr std::size_t endBytesPerUpdate=256u*1024;
 constexpr std::size_t maxHistoryBytes=4u*1024*1024;
 }
 
@@ -94,6 +99,35 @@ void NetworkManager::updateObservers() {
     for(auto peer : order) {
         auto& t=observerTransfers.at(peer);
         if(!direct->isSpectatorPeer(peer)) { dropped.push_back(peer); continue; }
+        if(observerEndCycle && t.ready) {
+            // The host's game is over: no more cycles come, so the replay window and the expiry
+            // no longer apply. Send the rest in batches, then the end marker.
+            if(t.endSent) continue;
+            std::size_t budget=endBytesPerUpdate;
+            bool failed=false;
+            while(t.nextCycle<observerEndCycle && budget>0) {
+                if(observerHistory.empty() || t.nextCycle<observerHistory.front().first
+                   || t.nextCycle>observerHistory.back().first) { failed=true; break; }
+                OMemoryStream batch; batch.open();
+                const Uint32 first=t.nextCycle;
+                for(auto it=observerHistory.begin()+(t.nextCycle-observerHistory.front().first);
+                    it!=observerHistory.end() && t.nextCycle<observerEndCycle; ++it) {
+                    if(it->first!=t.nextCycle) { failed=true; break; }
+                    if(batch.getDataLength()+4+it->second.size()>chunkBytes) break;
+                    batch.writeString(it->second); ++t.nextCycle;
+                }
+                if(failed || t.nextCycle==first
+                   || !sendObserverPacket(peer,18,t.epoch,first,std::string(batch.getData(),batch.getDataLength()))) { failed=true; break; }
+                budget-=std::min<std::size_t>(budget,batch.getDataLength()+24);
+            }
+            if(failed) { dropped.push_back(peer); continue; }
+            if(t.nextCycle==observerEndCycle) {
+                if(!sendObserverPacket(peer,19,t.epoch,observerEndCycle,{})) { dropped.push_back(peer); continue; }
+                t.endSent=true;
+                SDL_Log("Spectator stream ended: peer=%u end=%u acknowledged=%u",peer,observerEndCycle,t.ackCycle);
+            }
+            continue;
+        }
         const bool idle=t.ready && t.nextCycle==t.ackCycle && (observerHistory.empty() || t.nextCycle>observerHistory.back().first);
         if(idle) t.deadline=SDL_GetTicks()+30000;
         if(SDL_TICKS_PASSED(SDL_GetTicks(),t.deadline)
@@ -186,6 +220,7 @@ void NetworkManager::receiveObserverPacket(Uint32 peer, Uint32 op, Uint32 epoch,
             SDL_Log("Spectator checkpoint loaded: peer=%u bytes=%u cycle=%u",peer,t.offset,offset);
         }
         else if(op==14 && t.ready && offset>t.ackCycle && offset<=t.nextCycle) t.ackCycle=offset;
+        else if(op==19 && t.endSent && offset==observerEndCycle) t.endAcked=true;
         else return;
         t.deadline=SDL_GetTicks()+30000;
         return;
@@ -208,6 +243,7 @@ void NetworkManager::receiveObserverPacket(Uint32 peer, Uint32 op, Uint32 epoch,
         joinSnapshot.reset(); observerRuntime.clear(); observerNextCycle=0;
         joinStage=JoinStage::Receiving; joinStatus="Downloading game state";
         observerCatchup=false; observerResyncPending=false; observerStartCycle=observerHostCycle=observerAppliedCycle=0;
+        observerEndCycle=0;
         joinFailureReason.clear();
         SDL_Log("Spectator checkpoint receiving: bytes=%u decoded=%u epoch=%u",offset,observerDecodedSize ? observerDecodedSize : offset,epoch);
         bGameInProgress=false;
@@ -244,7 +280,45 @@ void NetworkManager::receiveObserverPacket(Uint32 peer, Uint32 op, Uint32 epoch,
         if(observerResyncPending) return; // Drain old reliable ticks until the new epoch header.
         if(!bGameInProgress || offset!=observerNextCycle || bytes.empty() || bytes.size()>chunkBytes || observerIncoming.size()>=ObserverStreamPolicy::replayWindow) { fail(); return; }
         observerIncoming.emplace_back(offset,bytes); ++observerNextCycle;
+        return;
     }
+    if(op==18) {
+        // The rest of an ended game, past the replay window (endObserverStreams).
+        if(observerResyncPending) return;
+        if(!bGameInProgress || offset!=observerNextCycle || bytes.empty()) { fail(); return; }
+        try {
+            IMemoryStream in(bytes.data(),bytes.size());
+            while(in.getRemainingLength()!=0) {
+                auto frame=in.readString();
+                if(frame.empty() || frame.size()>chunkBytes || observerIncoming.size()>=maxHistoryCycles)
+                    throw std::runtime_error("Invalid spectator batch");
+                observerIncoming.emplace_back(observerNextCycle++,std::move(frame));
+            }
+        } catch(const std::exception&) { fail(); return; }
+        return;
+    }
+    if(op==19) {
+        if(observerResyncPending) return;
+        if(!bytes.empty() || offset!=observerNextCycle) { fail(); return; }
+        observerEndCycle=offset;
+        observerHostCycle=std::max(observerHostCycle,offset);
+        SDL_Log("Spectator stream end received: end=%u applied=%u buffered=%zu",offset,observerAppliedCycle,observerIncoming.size());
+        sendObserverPacket(peer,19,epoch,offset,{});
+    }
+}
+
+void NetworkManager::endObserverStreams(Uint32 endCycle) {
+    if(!bIsServer || observerEndCycle) return;
+    observerEndCycle=endCycle;
+    if(!observerTransfers.empty()) SDL_Log("Spectator streams end at cycle %u (%zu spectators)",endCycle,observerTransfers.size());
+}
+
+bool NetworkManager::observerStreamsDelivered() const {
+    const auto* direct=getDirectTransport();
+    if(!bIsServer || !observerEndCycle || !direct || !pRelayClient || !pRelayClient->isJoined()) return true;
+    for(const auto& entry : observerTransfers)
+        if(entry.second.ready && !entry.second.endAcked && direct->isSpectatorPeer(entry.first)) return false;
+    return true;
 }
 
 void NetworkManager::observerLoaded(Uint32 cycle) {

@@ -306,6 +306,16 @@ public:
     std::string takeObserverRuntime() { auto bytes=std::move(observerRuntime); observerRuntime.clear(); return bytes; }
     void observerLoaded(Uint32 cycle);
     Uint32 observerFrontier() const { return observerNextCycle; }
+    // The end of a match's spectator streams. The host calls endObserverStreams() once its game
+    // has run its last cycle; every spectator then receives all the cycles it does not have yet
+    // (past the replay window) and an end marker, which it acknowledges. A spectator that is behind
+    // plays them after the host has left, so it sees the end of the game the players saw.
+    void endObserverStreams(Uint32 endCycle);
+    /// True once every spectator with a running stream has acknowledged the end marker (or the
+    /// session has ended): the host can leave without taking the rest of the game with it.
+    bool observerStreamsDelivered() const;
+    /// The cycle at which the host's game ended (the end marker), 0 while it is still running.
+    Uint32 observerFinalCycle() const { return observerEndCycle; }
     void beginSimulation(Uint32 seed);
     void sendCommandList(const CommandList& commandList);
 
@@ -585,7 +595,7 @@ private:
     struct ObserverTransfer {
         SnapshotTransfer::Sender checkpoint;
         Uint32 epoch=0, offset=0, sent=0, nextCycle=0, ackCycle=0, deadline=0;
-        bool began=false, ready=false;
+        bool began=false, ready=false, endSent=false, endAcked=false;
         Uint32 progressAt=0;
     };
     std::map<Uint32,ObserverTransfer> observerTransfers;
@@ -594,7 +604,7 @@ private:
     std::string observerBytes, observerRuntime;
     Uint32 observerDecodedSize=0;
     Uint32 observerEpoch=0, observerTotal=0, observerNextCycle=0, observerSendCursor=0;
-    Uint32 observerStartCycle=0, observerHostCycle=0, observerAppliedCycle=0;
+    Uint32 observerStartCycle=0, observerHostCycle=0, observerAppliedCycle=0, observerEndCycle=0;
     bool observerCatchup=false, observerResyncPending=false;
     Uint32 observerResyncDeadline=0, observerSnapshotSerial=0;
     unsigned observerResyncAttempts=0;
@@ -632,6 +642,7 @@ private:
 
     /// The relay peer id of the designated host, or 0 if this process is the host.
     std::uint32_t relayHostPeerId() const;
+    mutable std::uint32_t knownRelayHostPeerId = 0;   ///< the host's id, still valid while it departs
 
     void sendPacketToHost(NetworkPacketOStream& packetStream, int channel = 0);
 

@@ -3766,7 +3766,10 @@ void Game::runMainLoop() {
             return !catchUpBudgetSpent;
         };
 
+        // No cycle runs once the end message has run out (finishedLevel): every peer then leaves
+        // on the same cycle, however many cycles its last frame would have caught up.
         while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle)))
+              && !finishedLevel && !bQuitGame
               && cyclesExecuted < kMaxCyclesPerFrame && mayRunAnotherCycle()) {
             loopIterations++;
             
@@ -4066,6 +4069,21 @@ void Game::runMainLoop() {
         yieldFrameToBrowser();
 
     } while (!bQuitGame && !finishedLevel);
+
+    // The host's game has run its last cycle (won, lost, or quit). Spectators that are behind get
+    // the rest of it now, past their replay window, and acknowledge the end; the host waits for
+    // that, at most a few seconds, before anything can close the session. A spectator then plays
+    // to the same last cycle after the host has gone. Not when a checkpoint replaces this Game.
+    if(pNetworkManager && pNetworkManager->isServer() && !pNetworkManager->lateJoinReady()) {
+        pNetworkManager->endObserverStreams(gameCycleCount);
+        const Uint32 until = SDL_GetTicks() + 3000;
+        while(!pNetworkManager->observerStreamsDelivered() && !SDL_TICKS_PASSED(SDL_GetTicks(), until)) {
+            pNetworkManager->update();
+            SDL_Delay(5);
+        }
+        if(!pNetworkManager->observerStreamsDelivered())
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Not every spectator confirmed the end of the game");
+    }
 }
 
 void Game::initializeGameLoop() {
@@ -5786,15 +5804,24 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
     
     // If host disconnected, the game cannot continue - end it
     if(bHost) {
-        // The players leave once their match is decided; a view that has already seen that
-        // result ends normally instead of reporting a lost connection.
-        if(watchedWinnerTeam >= 0) {
+        // A spectator plays on through the cycles the host sent before it left - every one of
+        // them when the host's game had ended (NetworkManager::endObserverStreams) - and ends
+        // once they run out (endObservationWithoutHost): normally if the game was decided by then.
+        if(isSpectating() && pNetworkManager && pNetworkManager->joinFailure().empty()) {
+            if(!observerHostLeft) {
+                observerHostLeft = true;
+                SDL_Log("Host '%s' left at spectator cycle %u (host's game ended at %u) - playing the received cycles",
+                        name.c_str(), gameCycleCount, pNetworkManager->observerFinalCycle());
+            }
+            return;
+        }
+        // The players leave once their match is decided; a player whose game has already ended
+        // ends normally instead of reporting a lost connection.
+        if(finished) {
             SDL_Log("Host '%s' left after the game was decided - ending normally", name.c_str());
             finishedLevel = true;
             return;
         }
-        if(isSpectating() && pNetworkManager && pNetworkManager->joinFailure().empty())
-            pNetworkManager->failObserver("The connection to the host was interrupted.\nPlease try joining again.");
         SDL_Log("Host '%s' disconnected - ending game", name.c_str());
         pInterface->getChatManager().addInfoMessage("Host disconnected! Game ending...");
         
@@ -5816,6 +5843,31 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
         logPerformance("[PathBudget] Cycle %d: Cleared %zu client stats due to disconnect (%s) - active clients will re-register",
                 gameCycleCount, removedCount, name.c_str());
     }
+}
+
+void Game::endObservationWithoutHost() {
+    if(finished) {
+        // Decided: the end plate runs out its usual time on the clock, since no cycles are left
+        // to count it (the host may have quit at the decision), then the statistics follow.
+        if(observerEndAtTicks == 0) {
+            const Uint32 shown = gameCycleCount - finishedLevelCycle;
+            const Uint32 total = MILLI2CYCLES(END_WAIT_TIME);
+            observerEndAtTicks = SDL_GetTicks() + (shown < total ? (total - shown) * getGameSpeed() : 0);
+            SDL_Log("Spectator played every received cycle (%u, decided at %u); the game ends normally",
+                    gameCycleCount, finishedLevelCycle);
+        }
+        if(SDL_TICKS_PASSED(SDL_GetTicks(), observerEndAtTicks)) finishedLevel = true;
+        return;
+    }
+    const Uint32 hostEnd = pNetworkManager->observerFinalCycle();
+    SDL_Log("Spectator stopped at cycle %u after the host left (host's game ended at %u)", gameCycleCount, hostEnd);
+    // All of the host's game was received and played, and nobody had won: the host quit.
+    // Otherwise cycles are missing: the connection was lost.
+    pNetworkManager->failObserver(hostEnd != 0 && gameCycleCount >= hostEnd
+        ? "The host left before the game was decided."
+        : "The connection to the host was interrupted.\nPlease try joining again.");
+    pInterface->getChatManager().addInfoMessage("Host disconnected! Game ending...");
+    bQuitGame = true;
 }
 
 void Game::setGameWon() {
@@ -7830,6 +7882,8 @@ bool Game::handleNetworkUpdates() {
         bQuitGame=true; return true;
     }
     if(pNetworkManager->lateJoinPaused()) {
+        // A fresh checkpoint the host left in the middle of will never be complete.
+        if(observerHostLeft) { endObservationWithoutHost(); return true; }
         startWaitingForOtherPlayersTime=0; pWaitingForOtherPlayers.reset();
         // During a checkpoint transfer, doInput() only accepts progress-window events.
         // Replace any open menu so the visible controls remain usable.
@@ -7844,10 +7898,16 @@ bool Game::handleNetworkUpdates() {
 
     if(pNetworkManager->isServer()) prepareObserverStreams();
     if(isSpectating()) {
-        if(pNetworkManager->observerResyncWaiting()) return true;
+        if(pNetworkManager->observerResyncWaiting()) {
+            if(observerHostLeft) endObservationWithoutHost();
+            return true;
+        }
         if(observerCyclePrepared) return false;
         std::string bytes;
-        if(!pNetworkManager->takeObserverCycle(gameCycleCount,bytes)) return true;
+        if(!pNetworkManager->takeObserverCycle(gameCycleCount,bytes)) {
+            if(observerHostLeft) endObservationWithoutHost();
+            return true;
+        }
         try {
             IMemoryStream frame(bytes.data(),bytes.size());
             const auto budget=frame.readUint32(); const auto fingerprint=frame.readString();

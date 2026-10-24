@@ -565,6 +565,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/spectator/run-game-end-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-game-end-probe)
         set_tests_properties(spectator_game_end_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # The same end online: host, partner and a mid-game spectator as three processes over the
+        # local signaling service (PHP) and WebRTC, each in the real main loop. The spectator ends
+        # on the host's last cycle and digest with the winner on its plate and statistics when the
+        # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
+        # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP.
+        add_test(NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
+            --cases end,decision,lag-end,lag-decision,slow,natives
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
+        set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         # Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house".
         # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
         # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
