@@ -154,6 +154,25 @@ int runSkinProbe() {
                     zone->setCivicOverlay(overlay); panel->update();
                     skinRequire(!panel->objPicture.isVisible() && panel->zonePreview.isVisible(),
                                 "Civic overlay lost live preview");
+                    const int picture = overlay == ZoneStructure::CivicOverlay::Hospital
+                        ? ObjPic_Hospital : ObjPic_Church;
+                    const SDL_Rect destination{200, 200, 64, 64};
+                    // The real atlas cache decodes asynchronously. Retry on the
+                    // render thread just as consecutive game frames do.
+                    const Uint32 started = SDL_GetTicks();
+                    bool drawn = false;
+                    do {
+                        drawn = pGFXManager->drawDuneCityBuilding(
+                            item, house, 0, destination, picture);
+                        if(!drawn) SDL_Delay(10);
+                    } while(!drawn && SDL_GetTicks() - started < 3000);
+                    skinRequire(drawn,
+                                "Civic overlay failed to select its high-detail house picture");
+                    pGFXManager->setDuneCityHouseGraphicsSkin(house, false);
+                    skinRequire(!pGFXManager->drawDuneCityBuilding(
+                                    item, house, 0, destination, picture),
+                                "High-detail civic overlay leaked into SimCity skin");
+                    pGFXManager->setDuneCityHouseGraphicsSkin(house, true);
                 }
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
                 pGFXManager->setDuneCityHouseGraphicsSkin(house, false); panel->update();
@@ -166,7 +185,20 @@ int runSkinProbe() {
                         GFXManager::DuneCityZoneActivity::Idle,0,200,200), "Missing cell lost native fallback");
         }
     }
-    SDL_Log("SKIN_PROBE_PASS: six real selected zones use construction portraits; 2x2 footprints, civic/SimCity live previews and missing-cell fallback pass");
+    // Make the missing-house fixture independent of future artwork additions.
+    const auto definitions = pGFXManager->duneCityBuildingDefinitions;
+    auto& missingFixture = pGFXManager->duneCityBuildingDefinitions;
+    missingFixture.erase(std::remove_if(missingFixture.begin(), missingFixture.end(),
+        [](const auto& definition) {
+            return definition.houseID == HOUSE_ORDOS && definition.pictureID == ObjPic_Hospital;
+        }), missingFixture.end());
+    pGFXManager->setDuneCityHouseGraphicsSkin(HOUSE_ORDOS, true);
+    skinRequire(!pGFXManager->drawDuneCityBuilding(Structure_ZoneResidential,
+                    HOUSE_ORDOS, 0, SDL_Rect{200,200,64,64}, ObjPic_Hospital),
+                "Missing Hospital must retain its fallback, not another faction's art");
+    pGFXManager->setDuneCityHouseGraphicsSkin(HOUSE_ORDOS, false);
+    pGFXManager->duneCityBuildingDefinitions = definitions;
+    SDL_Log("SKIN_PROBE_PASS: six selected zone portraits; fixed 2x2 footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks");
     game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
     return MENU_QUIT_DEFAULT;
 }

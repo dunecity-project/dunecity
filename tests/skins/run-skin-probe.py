@@ -29,6 +29,13 @@ if main.count(needle) != 1:
     raise RuntimeError('Main menu entry changed; update the test injection point.')
 main = main.replace(needle, 'int menuResult = runSkinProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+# SDL's dummy video backend has no accelerated renderer. Match the existing
+# headless Classic UI probe without changing the production renderer settings.
+renderer_flags = 'Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;'
+if main.count(renderer_flags) != 1:
+    raise RuntimeError('Renderer initialization changed; update the headless probe.')
+main = main.replace(renderer_flags,
+    'Uint32 rendererFlags = SDL_RENDERER_SOFTWARE | SDL_RENDERER_TARGETTEXTURE;')
 pos = main.index('int main(')
 include = root / 'tests/skins/skin-probe.inc'
 main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
@@ -78,7 +85,8 @@ link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
 with (out / 'build.log').open('w') as log:
     subprocess.run(cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
-env = dict(os.environ, DUNECITY_USERDIR=str(out / 'profile'), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
+env = dict(os.environ, DUNECITY_USERDIR=str(out / 'profile'), SDL_VIDEODRIVER='dummy',
+           SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software')
 with (out / 'run.log').open('w') as log:
     subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
                    stdout=log, stderr=subprocess.STDOUT, check=True, timeout=60)

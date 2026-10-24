@@ -1,3 +1,61 @@
+## 2026-10-24 — 1.0.854 publication and Android 0.2.32 authorized
+
+User approved the completed asset candidate and explicitly requested publication
+across desktop, browser, Android, releases and website. This supersedes the local
+play-test hold below. origin/main has no intervening game changes; website-only
+hourly download statistics are preserved. Engine version remains the candidate's
+1.0.854; Android advances to 0.2.32 / 1000552 using the same engine and payload.
+Proceed through PR validation/merge and the signed stable-tag release workflow.
+Use the hosted Android lane, then locally re-sign with the existing upgrade
+identity without uploading signing material. No local native compilation.
+Publication, cross-platform asset hashes and live website/browser checks pending.
+
+## 2026-10-24 — Special portraits and seven missing building variants
+
+Continued the approved DuneCity skin pass with 39 new 182×110 balanced portraits
+and seven missing map-building variants (four Hospitals, three Nuclear Plants).
+The resulting coverage is 48/48 special-building variants and 72/72 dedicated
+portraits across the 72 R/C/I/special packages. See
+docs/dunecity-special-portraits-854.md for scope, dimensions and validation.
+All 849 files from the preceding Compact candidate remain byte-identical.
+Only 46 PNGs and seven building INIs are added to the production skin payload;
+private sources/authoring metadata are excluded. No engine or Dune2R changes.
+Reviewed results were also posted to the authorized asset processor channel.
+The local portable test copy is refreshed with verified artwork, using the
+existing validated 1.0.854 executable; this is not a new native CI build.
+Keep this on assets/dunecity-special-compacts for play-testing. Do not publish,
+tag, merge main, or update the website automatically. Public remains 1.0.853.
+
+## 2026-10-24 — Special-building Compacts / 1.0.854 candidate
+
+User authorized the next skin improvement pass after the current asset audit.
+Recompacted 31 native-resolution special-building stills from existing HQ sources
+at 4× native canvas / balanced. Exact scope and dimensions are recorded in
+docs/dunecity-special-compacts-854.md. No other skin PNG/manifest changed; original
+Compacts and authoring records were snapshotted before promotion, and versioned
+new source Compacts are now selected so future exports retain this pass.
+
+Found/fixed a necessary renderer gap: Hospital/Church civic overlays were omitted
+from direct high-detail registration/selection. Pass the active picture ID while
+retaining native destinations and per-house/SimCity/fog/fallback behavior. Added
+civic selection/isolation/fallback assertions to the existing real SDL skin probe
+and wired it into Mac candidate validation. Local packaging/browser audit suites
+pass (8 + 9 tests). Run 40118068387 passed Windows/Linux/browser builds and all
+16 Linux sanitizer CTests. Its Mac benchmark pinned the old PNGs; 31 exact
+hash-named archives now preserve that immutable test fixture outside game assets,
+and its reconstruction test passes. The old headless probe was updated to use
+software rendering and wait for asynchronous texture loads. Mac-only validation
+40120124758 passed the build, all five UI/performance/AI gates, civic/SimCity/
+missing-house checks, and cache recovery. Native code and active art are unchanged
+between runs; only the harness/fixture/CI changed. No local native compilation.
+Verified the 31 PNGs inside the Windows portable; it excludes test archives.
+All 41 existing special packages now use 4× native canvases, adding 4.14 MiB.
+An isolated-profile play-test launcher and comparison sheets are retained under
+build-windows-candidate/skin-review-20261024. Source branch is
+assets/dunecity-special-compacts; it is committed/pushed for review, not merged
+or released. Current public release remains 1.0.853 with
+Android 0.2.31 / engine 1.0.853. Do not tag/publish this candidate automatically.
+
 ## 2026-10-24 — Matching Android 0.2.31 authorized
 
 User opted into an Android update so multiplayer engine versions match desktop
