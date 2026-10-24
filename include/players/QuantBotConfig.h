@@ -138,7 +138,7 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget;
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway;
     /// optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
@@ -213,6 +213,10 @@ struct QuantBotConfig {
         /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
         /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
         bool campaignCombatBudget;
+        /// Optional capacity MCVs retain the forecast costs of existing production plus its
+        /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
+        /// Independent candidate, off until same-build outcome acceptance.
+        bool capacityMcvRunway;
     };
     ForceSettings force;
 
