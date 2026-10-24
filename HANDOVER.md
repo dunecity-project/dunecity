@@ -14871,3 +14871,34 @@ Publish only after matching desktop 1.0.853 is public; Android must not become
 the repository's latest desktop release. Metadata/workflow-only integration can
 reuse this hosted verification; no native game code is changed by that PR.
 
+## 2026-10-24 — 1.0.853 and Android 0.2.31 published
+
+PRs #105 and #106 are merged; main and native tag v1.0.853 contain
+3885e06773af0920b712607ab83e527afffcac78. The earlier v1.0.852 tag remains
+immutable and unpublished. Stable run 40083619720 passed all platform builds,
+16 Linux CTest entries under ASAN/UBSAN, five Mac regression entries and nine
+Linux audio startup checks (raw executable, TGZ and AppImage). Mac app/DMG
+signing and Apple notarization passed. All 13 release assets are public.
+
+Public audit verified all eight desktop package downloads by size/SHA-256,
+all three Ed25519 update-feed signatures using the committed public key, legacy
+feed redirects, and both appcast enclosures. Latest remains v1.0.853.
+
+Android 0.2.31 / 1000551 (engine 1.0.853) is public with latest=false at
+android-v0.2.31, tagged at the actual hosted build source 6c54ff0b. The public
+APK read-back matches SHA-256
+391a44d646f9b91bcaefc5c077fa619ac7b16a1966c6d1b8abfe25a0c35f5a28
+and 65,066,127 bytes. Upgrade signing identity and package ID are preserved;
+on-device gameplay is unverified. All 849 DuneCity files match byte-for-byte
+across Windows, Linux, notarized Mac, browser candidate and Android packages.
+
+SourceForge run 40085457098 succeeded: seven packages plus notes/checksums,
+all upload checksums read back, source tag/branch at 3885e067, and Windows,
+Mac and Linux defaults confirmed. Website copy and Android links are deployed
+from 95ee0a8 via run 40085650230; both live pages show 1.0.853 and Android
+0.2.31 / engine 1.0.853. Browser publication run 40085457071 succeeded and
+website commit a108e55 deployed successfully in run 40086096589. Live build.json
+reports engine 1.0.853 from 3885e067; all eight served artifact hashes passed
+download verification. Core engine hashes match the website repository; the
+delivery-layer loading-progress helper matches its canonical Git source.
+
