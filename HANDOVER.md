@@ -26,6 +26,7 @@ selection.json, validate-results.json, minimap montage) in `~/Documents/projects
   digests, no crash, every lobby house holding its yard/MCV. New ctest `community_maps_startup`
   (`tests/maps/check-community-maps.py`): recorded bytes, sidecar, name vs size/slots, a start per slot, chooser skip
   rules, then a one-minute game per map (about 1 minute wall).
+- Cluster ctest at 9094ba38 (job 20261024T102855-ctest-2b57e1): 110/110 passed, including `community_maps_startup`.
 - No mod checksum, multiplayer content hash, protocol (94) or save (9871) change: maps are outside `mods/`, which is all
   the mod fingerprints and approved-mod tokens hash; a hosted game sends the map bytes. Not version-bumped or pushed.
 
