@@ -442,3 +442,25 @@ digests identical. Seed906213928 still times out at41; this rule does not fix it
 Raw data, reports, matching-input coverage and named losses:
 `~/Documents/projects/dunecity-results/ladder-campaign/mcv-runway-64c370dc/`.
 
+### Light-raider service ownership (candidate, default off)
+
+`RespectServiceOwnership` (`--style serviceownership`) keeps the periodic
+light-raider scan from replacing an existing repair reservation or promised
+carryall pickup with an evade/prey order. It uses the existing repair role and
+pickup ownership checks already respected by hunting-launcher reactions.
+It does not change movement, firing, carrier selection, rescue timing or the
+three rejected funding/team policies.
+
+The actual corrected-movement battle at source `64c370dc04c7` records Quad3190
+repairing and awaiting pickup at cycle98,053. At98,104, periodic raider micro
+changes its mode, releases pickup/repair ownership and selects a retreat.
+The unit dies at98,139, but the trace lacks the original carrier/arrival history:
+preserving that service is **not** established to save it or fix AAA.
+
+The existing real kiting probe at `c22c9455` now checks eight matched off/on
+cases: repair-only reservation, healthy pickup-only booking, combined repair
+and pickup, and an unreserved raider that must still evade. Repair requests and
+reciprocal carrier targets come from normal engine APIs; ownership flags are
+not manufactured. The probe passes; no completed rescue or strategic-outcome
+claim is made. The switch remains off pending the unchanged outcome gates.
+
