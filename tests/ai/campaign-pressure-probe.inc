@@ -293,6 +293,8 @@ void runCampaignPressureProbe(Game& game) {
     for (auto* bot : {first,second,partner}) {
         bot->difficulty=bot==second ? QuantBot::Difficulty::Medium : QuantBot::Difficulty::Easy;
         auto* house=const_cast<House*>(bot->getHouse());
+        // Optional-power Vanilla makes an economic investment decision, not mandatory recovery.
+        if (!house->isPowerRequired()) continue;
         BuilderBase* yard=nullptr;
         for (auto* building : structureList)
             if (building->getOwner()==house && building->getItemID()==Structure_ConstructionYard)
@@ -302,13 +304,23 @@ void runCampaignPressureProbe(Game& game) {
         yard->upgrading=false;
         yard->updateBuildList();
         require(yard->isAvailableToBuild(Structure_WindTrap),"Power fixture cannot build a Windtrap");
+        const auto previousPlanner=bot->planningBuilder;
+        bot->planningBuilder=yard->getObjectID();
+        bot->clearPlacementCache();
+        const Coord powerSite=bot->findPlaceLocation(Structure_WindTrap);
+        bot->planningBuilder=previousPlanner;
+        bot->clearPlacementCache();
+        require(powerSite.isValid(),"Power fixture has no Windtrap site");
         const int oldPower=house->powerRequirement;
         house->powerRequirement=house->getProducedPower()+300;
         house->addCredits(10000);bot->lastCalculatedSpice=100000;
         auto structures=structureList; structureList.clear();structureList.push_back(yard);
         try {bot->build(0);}catch(...){structureList=structures;throw;}
         structureList=structures;
-        require(yard->getCurrentProducedItem()==Structure_WindTrap,"Easy/Medium did not queue power deficit Windtrap");
+        const auto& orders=yard->getProductionQueue();
+        require(std::any_of(orders.begin(),orders.end(),[&](const auto& order) {
+            return game.objectData.data[order.itemID][house->getHouseID()].power<0;
+        }),"Easy/Medium did not fund generation for a required power deficit");
         house->powerRequirement=oldPower;
     }
     // A human partner's first-wave funding must release on actual dispatch, survive a save, and
