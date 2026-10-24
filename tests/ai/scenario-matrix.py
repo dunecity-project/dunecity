@@ -800,9 +800,12 @@ def compare(args):
             labels = (f'team {name.split("-")[0]} {mod}', f'team {name.split("-")[0]}')
         else:
             labels = (f'{game["category"]} {mod}', game['category'])
+        # Campaign seeds can repeat across different houses and missions; those are independent
+        # games, not the two starting sides of one seed as in the ladder/team categories.
+        seed_key = (game['cell'], game['seed'], game['map'] if game['category'] == 'campaign' else '')
         for label in labels:
-            groups[label][(game['cell'], game['seed'])][0].append(a)
-            groups[label][(game['cell'], game['seed'])][1].append(b)
+            groups[label][seed_key][0].append(a)
+            groups[label][seed_key][1].append(b)
             timeouts[label][0] += control[0][gid]['outcome'] == 'time_limit'
             timeouts[label][1] += game['outcome'] == 'time_limit'
     print(f'# Paired A/B: control {args.compare_dirs[0]}, candidate {args.compare_dirs[1]}\n')
