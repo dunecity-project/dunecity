@@ -127,7 +127,7 @@ parser.add_argument('--free-for-all', action='store_true', help='Give each custo
 parser.add_argument('--capture-mib', type=int, default=1024, help='Diagnostic capture allowance; shipped default is unchanged')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Maximum wall seconds for the simulation')
 parser.add_argument('--level', type=int, choices=range(1,10), default=4)
-parser.add_argument('--mod', choices=('vanilla','dunecity','Dune2R','Tornie'), default='vanilla')
+parser.add_argument('--mod', default='vanilla', help='Installed mod folder (validated by the real ModManager)')
 parser.add_argument('--house', choices=tuple(h for h in house_names if h!='neutral'), default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
 parser.add_argument('--local-spectator', action='store_true',

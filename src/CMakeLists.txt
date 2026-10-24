@@ -631,9 +631,7 @@ if(EMSCRIPTEN)
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/data@/"
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/config@/config"
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/imported_sprites@/imported_sprites"
-        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/mods/Tornie@/mods/Tornie"
-        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/mods/Dune2R@/mods/Dune2R"
-        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/mods/dunecity@/mods/dunecity"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/mods@/mods"
         # Keep the Dune2R mod/catalog available; its optional art downloads
         # separately, just as in the native packages.
         "SHELL:--exclude-file ${CMAKE_SOURCE_DIR}/mods/Dune2R/graphics_hd/units"
@@ -646,10 +644,7 @@ if(EMSCRIPTEN)
         "SHELL:--js-library ${DUNECITY_P2PKIT_DIR}/emscripten/js/p2pkit_webrtc_glue.cjs"
         "SHELL:--js-library ${CMAKE_SOURCE_DIR}/platform/web/dunecity_webrtc_config.js"
     )
-    file(GLOB_RECURSE WEB_MOD_FILES CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/mods/Tornie/*"
-        "${CMAKE_SOURCE_DIR}/mods/Dune2R/*"
-        "${CMAKE_SOURCE_DIR}/mods/dunecity/*")
+    file(GLOB_RECURSE WEB_MOD_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/mods/*")
     list(FILTER WEB_MOD_FILES EXCLUDE REGEX "/graphics_hd/units/|/graphics_compact/objpics/")
     set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${WEB_MOD_FILES})
 else()
@@ -707,8 +702,10 @@ if(NOT EMSCRIPTEN)
     # trigger that packaging step too, or the local app keeps stale weapon data.
     file(GLOB BUNDLED_OBJECT_DATA CONFIGURE_DEPENDS
         "${MODS_DIR}/*/ObjectData.ini" "${MODS_DIR}/*/checksums.sha256")
+    file(GLOB_RECURSE COMMUNITY_MOD_FILES CONFIGURE_DEPENDS
+        "${MODS_DIR}/community-*/*" "${MODS_DIR}/new/*")
     set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS
-        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA})
+        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES})
 endif()
 
 function(add_copy_mods DEST_DIR)
