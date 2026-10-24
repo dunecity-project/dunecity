@@ -200,3 +200,124 @@ TEST_CASE("Bundled GameOptions.ini reaches the disk byte for byte with LF line e
     REQUIRE(BundledGameOptions::city().find("City Effects = true\n")!=std::string::npos);
     REQUIRE_FALSE(BundledGameOptions::write(f.root/"missing"/"GameOptions.ini",BundledGameOptions::vanilla()));
 }
+
+#include <mod/WorkshopDuplicates.h>
+#include <FileClasses/INIFile.h>
+#include <Definitions.h>
+#include <cstring>
+namespace {
+namespace fs=std::filesystem;
+/// A profile's mods folder with a shipped "dunecity" stamped 1.0.852 and installed Workshop copies.
+struct ShippedFixture {
+    fs::path root=fs::temp_directory_path()/("workshop-dup-"+Workshop::newID());
+    fs::path mods=root/"mods";
+    Workshop::ShippedMod shipped{"dunecity","Dune City","dunecity",mods/"dunecity"};
+    ShippedFixture() {
+        // Stamped the way ModManager::writeModInfo stamps it, so a same-stamp copy is byte-identical.
+        put(shipped.path/"mod.ini","[Mod]\nDisplay Name = Dune City\nGame Version = 0\nAuthor = Dune City\n");
+        INIFile ini((shipped.path/"mod.ini").string());ini.setStringValue("Mod","Game Version","1.0.852");
+        ini.saveChangesTo((shipped.path/"mod.ini").string());
+        put(shipped.path/"ObjectData.ini","[Tank]\nPrice = 500\n");
+        put(shipped.path/"graphics/zone.png",std::string(5000,'z'));
+    }
+    ~ShippedFixture(){std::error_code e;fs::remove_all(root,e);}
+    static void put(const fs::path& p,const std::string& data){fs::create_directories(p.parent_path());std::ofstream(p,std::ios::binary)<<data;}
+    /// What an older release installed: the shipped files with mod.ini restamped as writeModInfo did.
+    std::string install(const std::string& stamp,const std::string& extraFile={}) {
+        const auto stage=root/("stage-"+Workshop::newID());
+        fs::copy(shipped.path,stage,fs::copy_options::recursive);
+        INIFile ini((stage/"mod.ini").string());ini.setStringValue("Mod","Game Version",stamp);ini.saveChangesTo((stage/"mod.ini").string());
+        if(!extraFile.empty()) put(stage/extraFile,"extra");
+        const auto hash=Workshop::contentHash("mod","","Dune City","dunecity","",stage);
+        put(stage/"workshop-revision.ini","[Workshop]\nID = x\nVersion = 1\nHash = "+hash+"\nName = Dune City\nBase = dunecity\nImmutable = true\n");
+        fs::rename(stage,mods/("ws-"+hash));
+        return hash;
+    }
+};
+}
+TEST_CASE("Shipped-mod copies differing only in the Game Version stamp are found","[workshop][duplicates]") {
+    ShippedFixture f;
+    const auto old=f.install("1.0.840");
+    const auto same=f.install("1.0.852");                       // byte-identical to the shipped mod
+    f.install("1.0.841","maps/extra.ini");                      // more than a stamp differs
+    REQUIRE(Workshop::stampedModHash(f.shipped,"1.0.840")==old);
+    REQUIRE(Workshop::stampedModHash(f.shipped,{})==same);
+    const auto copies=Workshop::findShippedModCopies(f.mods,{f.shipped});
+    REQUIRE(copies.size()==2);
+    for(const auto& copy:copies) {
+        REQUIRE(copy.shippedMod=="dunecity");
+        REQUIRE(((copy.hash==old && copy.gameVersion=="1.0.840") || (copy.hash==same && copy.gameVersion=="1.0.852")));
+    }
+    // A copy whose files were changed after installation is no copy of the shipped mod.
+    ShippedFixture::put(f.mods/("ws-"+old)/"ObjectData.ini","[Tank]\nPrice = 1\n");
+    REQUIRE(Workshop::findShippedModCopies(f.mods,{f.shipped}).size()==1);
+}
+TEST_CASE("A shipped-mod copy is needed only by a pin resolveMod would load through it","[workshop][duplicates]") {
+    ShippedFixture f;
+    const auto old=f.install("1.0.840");
+    const auto copy=Workshop::findShippedModCopies(f.mods,{f.shipped}).at(0);
+    const auto needs=[&](const std::string& mod,const std::string& hash,const std::string& version) {
+        return Workshop::pinNeedsCopy({"save",mod,hash,version},copy,{f.shipped},"1.0.852");
+    };
+    REQUIRE_FALSE(needs("dunecity",old,"1.0.840"));   // re-stamped to the shipped mod
+    REQUIRE_FALSE(needs("dunecity",std::string(64,'a'),"1.0.840"));   // another revision
+    REQUIRE(needs("dunecity",old,"1.0.845"));          // another release saved it: no re-stamp
+    REQUIRE(needs("dunecity",old,""));                 // a replay records no release
+    REQUIRE(needs("ws-"+old,old,"1.0.840"));           // saved while running as the copy
+    REQUIRE(needs("vanilla",old,"1.0.840"));
+}
+TEST_CASE("Pruning removes unneeded shipped-mod copies and keeps the rest","[workshop][duplicates]") {
+    ShippedFixture f;
+    const auto a=f.install("1.0.840"), b=f.install("1.0.845"), c=f.install("1.0.846");
+    Workshop::ProfilePins pins;
+    pins.pins.push_back({"needs-b.dls","ws-"+b,b,"1.0.845"});
+    pins.pins.push_back({"fine-a.dls","dunecity",a,"1.0.840"});
+    auto report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"ws-"+c,"1.0.852");
+    REQUIRE(report.removed.size()==1);REQUIRE(report.removed[0].hash==a);
+    REQUIRE(report.kept.size()==2);REQUIRE_FALSE(report.complete);   // the active copy may go later
+    REQUIRE_FALSE(fs::exists(f.mods/("ws-"+a)));
+    REQUIRE(fs::exists(f.mods/("ws-"+b)));REQUIRE(fs::exists(f.mods/("ws-"+c)));
+    REQUIRE(fs::exists(f.shipped.path/"mod.ini"));
+    for(const auto& entry:fs::directory_iterator(f.mods)) REQUIRE(entry.path().filename().string().find(".removing")==std::string::npos);
+    // A save from a newer release could pin anything: nothing goes.
+    pins.unreadableNewer.push_back("newer.dls");
+    report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"dunecity","1.0.852");
+    REQUIRE(report.removed.empty());REQUIRE_FALSE(report.complete);
+    pins.unreadableNewer.clear();
+    report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"dunecity","1.0.852");
+    REQUIRE(report.removed.size()==1);REQUIRE(report.removed[0].hash==c);REQUIRE(report.complete);
+}
+TEST_CASE("Pruning removes store-backed copies of shipped-mod revisions, needed or not","[workshop][duplicates]") {
+    ShippedFixture f;
+    const auto older=f.install("1.0.790","maps/older.ini");   // an older release's rules: no stamp-only copy
+    const auto stale=f.install("1.0.840");                     // stamp-only, but a save runs as it
+    const auto active=f.install("1.0.841","maps/active.ini");
+    const std::string authored(64,'b');                         // a revision built on no shipped mod
+    ShippedFixture::put(f.mods/("ws-"+authored)/"workshop-revision.ini",
+        "[Workshop]\nHash = "+authored+"\nName = Mine\nBase = mymod\nImmutable = true\n");
+    Workshop::ProfilePins pins;
+    pins.pins.push_back({"older.dls","dunecity",older,"1.0.790"});
+    pins.pins.push_back({"stale.dls","ws-"+stale,stale,"1.0.841"});
+    // Without the store nothing of these may go.
+    auto report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"ws-"+active,"1.0.852",
+                                                [](const std::string&) { return false; });
+    REQUIRE(report.removed.empty());REQUIRE(report.kept.size()==3);
+    // With every revision in the store, all but the active copy go; the authored one is untouched.
+    report=Workshop::pruneShippedModCopies(f.mods,{f.shipped},pins,"ws-"+active,"1.0.852",
+                                           [](const std::string&) { return true; });
+    REQUIRE(report.removed.size()==2);REQUIRE(report.kept.size()==1);REQUIRE_FALSE(report.complete);
+    REQUIRE_FALSE(fs::exists(f.mods/("ws-"+older)));REQUIRE_FALSE(fs::exists(f.mods/("ws-"+stale)));
+    REQUIRE(fs::exists(f.mods/("ws-"+active)));REQUIRE(fs::exists(f.mods/("ws-"+authored)));
+}
+TEST_CASE("Profile pins skip damaged saves and flag a newer release's","[workshop][duplicates]") {
+    ShippedFixture f;
+    ShippedFixture::put(f.root/"save"/"damaged.dls","not a save");
+    std::string newer(8,'\0');
+    const Uint32 header[2]={SAVEMAGIC,SAVEGAMEVERSION+1};
+    std::memcpy(newer.data(),header,sizeof(header));
+    ShippedFixture::put(f.root/"save"/"newer.dls",newer);
+    ShippedFixture::put(f.root/"replay"/"damaged.rpl","x");
+    const auto pins=Workshop::readProfilePins({f.root/"save",f.root/"missing"},{f.root/"replay"});
+    REQUIRE(pins.pins.empty());
+    REQUIRE(pins.unreadableNewer.size()==1);
+}

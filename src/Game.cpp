@@ -976,9 +976,10 @@ House* Game::getOrCreateNativesHouse() {
                  : mapsize < 16384 ? objectData.unitLimitLargeMap
                  : objectData.unitLimitHugeMap;
     }
-    // Team 0 is the non-participant team: hostile to every player, always "alive", and never
-    // a survivor or a blocker in any win/lose check.
-    house[HOUSE_NATIVES] = std::make_unique<House>(HOUSE_NATIVES, 0, maxUnits, 0, 0, 0);
+    // NATIVES_TEAM is nobody else's team: hostile to every house, the anonymous team-0 houses a
+    // custom map creates included. isAlive() is always true and every win/lose check skips the
+    // house by name, so it is never a survivor or a blocker.
+    house[HOUSE_NATIVES] = std::make_unique<House>(HOUSE_NATIVES, 0, maxUnits, 0, NATIVES_TEAM, 0);
     setHouseVisualHouse(HOUSE_NATIVES, HOUSECOLOR_NATIVES);
     return house[HOUSE_NATIVES].get();
 }
@@ -1051,7 +1052,7 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
     if (finishedMatch) {
         std::set<int> survivingTeams;
         for (const auto& currentHouse : house) {
-            // The Natives house plays on team 0 and is never a survivor (see survivingTeams below).
+            // The Natives house (NATIVES_TEAM) is never a survivor (see survivingTeams below).
             if (currentHouse && currentHouse->getTeamID() != 0 && !currentHouse->isNatives() && currentHouse->isAlive()) {
                 survivingTeams.insert(currentHouse->getTeamID());
             }
@@ -5903,8 +5904,8 @@ void Game::setGameLost() {
 
 namespace {
 /// Teams with a house still alive: the houses House::lose() counts (team 0 never dies). The
-/// Natives house (worms, crime troopers) is on team 0 and is skipped by name as well, so its
-/// units never keep a decided match running or count as the winner.
+/// Natives house (worms, crime troopers, NATIVES_TEAM) is skipped by name, so its units never
+/// keep a decided match running or count as the winner.
 std::set<int> survivingTeams(const std::array<std::unique_ptr<House>, NUM_HOUSES>& houses) {
     std::set<int> teams;
     for(const auto& h : houses) if(h && h->getTeamID() != 0 && !h->isNatives() && h->isAlive()) teams.insert(h->getTeamID());

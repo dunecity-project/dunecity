@@ -278,6 +278,7 @@ target_sources(dunecity
         mod/Dune2RAssetManager.cpp
         mod/WorkshopStore.cpp
         mod/Workshop.cpp
+        mod/WorkshopDuplicates.cpp
         mod/WorkshopClient.cpp
         Menu/WorkshopTransferMenu.cpp
         mod/ModManager.cpp

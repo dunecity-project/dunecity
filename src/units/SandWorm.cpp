@@ -83,6 +83,11 @@ Sandworm::Sandworm(InputStream& stream) : GroundUnit(stream) {
         lastLocs[i].x = stream.readSint32();
         lastLocs[i].y = stream.readSint32();
     }
+    // An older save cannot say which worms a reinforcement brought: none spares anybody.
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_NATIVES_TEAM) {
+        summonerHouseID = stream.readSint32();
+        if(summonerHouseID < HOUSE_INVALID || summonerHouseID >= NUM_HOUSES) summonerHouseID = HOUSE_INVALID;
+    }
 }
 
 void Sandworm::init() {
@@ -118,6 +123,13 @@ void Sandworm::save(OutputStream& stream) const {
         stream.writeSint32(lastLocs[i].x);
         stream.writeSint32(lastLocs[i].y);
     }
+    stream.writeSint32(summonerHouseID);
+}
+
+bool Sandworm::spares(const ObjectBase& object) const {
+    if(summonerHouseID == HOUSE_INVALID || object.getOwner() == nullptr) return false;
+    const House* summoner = currentGame->getHouse(summonerHouseID);
+    return summoner != nullptr && object.getOwner()->getTeamID() == summoner->getTeamID();
 }
 
 void Sandworm::assignToMap(const Coord& pos) {
@@ -461,6 +473,7 @@ bool Sandworm::canAttack(const ObjectBase* object) const {
         && currentGameMap->tileExists(location)
         && object->isAGroundUnit()
         && (object->getItemID() != Unit_Sandworm)   //wont kill other sandworms
+        && !spares(*object)                         // nor the side whose reinforcement it is
         //&& object->isVisible(getOwner()->getTeamID())
         //&& (object->getOwner()->getTeamID() != owner->getTeamID())
         && currentGameMap->tileExists(object->getLocation())

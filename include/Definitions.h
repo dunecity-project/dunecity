@@ -180,10 +180,21 @@
 //       parallel branches. A 9868 or older save loads its twelve, gets no Natives house until one
 //       is needed, and its sandworms are re-tagged to Natives on load (Game::loadSaveGame);
 //       troopers an older save's crime raised cannot be told from a house's own and keep their
-//       owner.
-#define SAVEGAMEVERSION     9871
+//       owner (see 9873).
+// 9873: Natives follow-up (fix/natives-followup): the Natives house plays on its own team
+//       (NATIVES_TEAM, the eleventh visibility slot, saved as the third bit of the byte that
+//       holds teams 8 and 9, so object records keep their size), and a sandworm remembers the
+//       house whose reinforcement brought it
+//       (Sandworm::summonerHouseID; that house's team is spared). A 9871 or older save loads
+//       with the Natives house moved off team 0, the new visibility slot copied from team 0's
+//       (the team Natives saw with) and no summoner. Crime troopers of a pre-9871 save still
+//       keep their owner: nothing that save stores tells them from the house's own (HANDOVER,
+//       2026-10-24 Natives follow-up).
+#define SAVEGAMEVERSION     9873
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
+/// First save with NATIVES_TEAM's visibility slot and the sandworm's summoner.
+#define SAVEGAMEVERSION_NATIVES_TEAM 9873
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added
@@ -239,7 +250,11 @@
 #define INVALID_GAMECYCLE (static_cast<Uint32>(-1))
 
 #define NUM_TEAMS 9
-#define NUM_TEAM_SLOTS (NUM_TEAMS + 1)
+/// The Natives house's team: no lobby row can choose it (lobby teams are 1-9, team 0 is the
+/// anonymous houses a custom map creates), so worms and crime troopers are hostile to every
+/// other house, anonymous ones included. It is no participant in any win/lose check.
+#define NATIVES_TEAM (NUM_TEAMS + 1)
+#define NUM_TEAM_SLOTS (NUM_TEAMS + 2)
 
 #define DEVIATIONTIME MILLI2CYCLES(120*1000)
 #define TRACKSTIME MILLI2CYCLES((1 << 16))

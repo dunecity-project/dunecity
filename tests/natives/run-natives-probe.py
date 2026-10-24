@@ -15,7 +15,12 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/natives
   winlose    a played game is won on the last enemy with Natives units alive; the Natives losing
              every unit ends nothing; a spectated free-for-all ends naming the last real team
   save9868   tests/natives/data/worms-9868.dls.gz (Gamma Sector, worms owned by a played house)
-             loads with every worm the Natives'; re-saved as the current version it stays so
+             loads with every worm the Natives' (on NATIVES_TEAM); re-saved as the current version
+             it stays so
+  followup   (save 9873) a custom map's unlisted unit owner is an anonymous team-0 house that the
+             Natives fight (NATIVES_TEAM), neither deciding the match; a worm a reinforcement brings
+             for a house (Sandworm::spares) never targets or bites that house's side, also after a
+             save and reload. Against a tree without the follow-up it only logs NATIVES_PROBE_OBS.
 
 Release 1.0.852 interactions with the spectated game end and the city airplane's Death Hand crash:
 
@@ -47,8 +52,8 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--cases', default='maps,crime,winlose,save9868,spectated-interactions,played-interactions,'
-                    'campaign-interactions,lockstep-interactions')
+parser.add_argument('--cases', default='maps,crime,winlose,save9868,followup,spectated-interactions,'
+                    'played-interactions,campaign-interactions,lockstep-interactions')
 parser.add_argument('--baseline', action='store_true', help='Link against a tree without the Natives house; make-save only')
 parser.add_argument('--keep', action='store_true', help='Keep the profiles and the probe executable')
 args = parser.parse_args()

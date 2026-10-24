@@ -100,6 +100,8 @@ House::House(InputStream& stream) : choam(this) {
 
     houseID = stream.readUint8();
     teamID = stream.readUint8();
+    // A save from before 9873 has the Natives house on team 0, with the anonymous houses.
+    if(houseID == HOUSE_NATIVES) teamID = NATIVES_TEAM;
     autoRepairEnabled = currentGame && currentGame->getLoadedSavegameVersion() >= 9824
         ? stream.readBool() : false;
 
@@ -1054,7 +1056,7 @@ void House::lose(bool bSilent) {
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
                 finished = false;
                 break;
             }

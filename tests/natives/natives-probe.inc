@@ -15,6 +15,8 @@
 #include <Map.h>
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <units/SandWorm.h>
+#include <Trigger/ReinforcementTrigger.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/string_util.h>
@@ -112,6 +114,14 @@ void makeSave() {
 
 House* natives(Game& game) { return game.getHouse(HOUSE_NATIVES); }
 
+/// The Natives' team: NATIVES_TEAM since save 9873, team 0 in a tree before the follow-up (1.0.852),
+/// against which only the follow-up case's observations are meaningful.
+#ifdef NATIVES_TEAM
+constexpr int kNativesTeam = NATIVES_TEAM;
+#else
+constexpr int kNativesTeam = 0;
+#endif
+
 /// Every worm is the Natives house's, the counts follow it, and no other house counts a worm.
 void expectWormsNative(Game& game, const std::string& label, size_t minimum) {
     const auto all = worms();
@@ -128,11 +138,11 @@ void expectWormsNative(Game& game, const std::string& label, size_t minimum) {
             nRequire(house->getNumItems(Unit_Sandworm) == 0, label + ": " + houseName(h) + " still counts a worm");
     if(owner) {
         nRequire(owner->getNumItems(Unit_Sandworm) == static_cast<int>(all.size()), label + ": the Natives' worm count is wrong");
-        nRequire(owner->getTeamID() == 0 && owner->getPlayerList().empty() && owner->getNumStructures() == 0,
-                 label + ": the Natives house has a team, a player or a base");
+        nRequire(owner->getTeamID() == kNativesTeam && owner->getPlayerList().empty() && owner->getNumStructures() == 0,
+                 label + ": the Natives house is off its team, has a player or a base");
         nRequire(owner->isNatives() && houseName(HOUSE_NATIVES) == "Natives", label + ": the house is not named Natives");
     }
-    SDL_Log("NATIVES_PROBE: %s: %zu worms, all owned by Natives (team 0, no players)", label.c_str(), all.size());
+    SDL_Log("NATIVES_PROBE: %s: %zu worms, all owned by Natives (team %d, no players)", label.c_str(), all.size(), kNativesTeam);
 }
 
 /// Natives is no house anybody chooses, browses or ranks.
@@ -346,7 +356,7 @@ void runCrime() {
     }
     nRequire(victim->getNumItems(Unit_Trooper) == victimTroopers && troops.natives->getNumItems(Unit_Trooper) == 3,
              "The crime troopers are counted by the wrong house");
-    nRequire(troops.natives->getTeamID() == 0 && troops.natives->getPlayerList().empty(), "The Natives house has a team or a player");
+    nRequire(troops.natives->getTeamID() == kNativesTeam && troops.natives->getPlayerList().empty(), "The Natives house is off its team or has a player");
     bot->updateEnemySightings();
     for(const auto& [id, sighting] : bot->enemySightings)
         nRequire(!game->getObjectManager().getObject(id) || !game->getObjectManager().getObject(id)->getOwner()->isNatives(),
@@ -956,6 +966,129 @@ void runLockstepInteractions() {
             peers[0].digests.size(), peers[2].finishedAt);
 }
 
+/// The 1.0.853 follow-up. A custom map's unlisted unit owner becomes an anonymous team-0 house: the
+/// Natives fight it, and neither it nor the Natives decide the match. A worm a reinforcement brings
+/// for a house never eats that house's side, also after a save and a reload. Built against a tree
+/// without the follow-up (no NATIVES_TEAM), the case only logs what that tree does.
+void runFollowup() {
+    const Params played = skirmishParams("vanilla", 1, false);
+    Result result = generateFor(played);
+    int enemy = -1;
+    std::set<int> playedHouses;
+    for(const HouseSetup& h : result.houses) { playedHouses.insert(h.house); if(h.role == Role::Enemy) enemy = h.house; }
+    const int anonymous = playedHouses.count(HOUSE_MERCENARY) ? HOUSE_FREMEN : HOUSE_MERCENARY;
+    nRequire(!playedHouses.count(anonymous), "Both candidate anonymous houses play");
+    // Two Trooper lines for the unlisted house in the middle of the map, as a custom map may write.
+    const int size = result.map.getSizeX();
+    std::vector<int> spots;
+    for(int y = size / 2 - 10; y < size / 2 + 10 && spots.size() < 2; ++y)
+        for(int x = size / 2 - 10; x < size / 2 + 10 && spots.size() < 2; ++x)
+            if(result.map(x, y) == Terrain_Sand && (spots.empty() || spots.back() != y * size + x - 1)) spots.push_back(y * size + x);
+    nRequire(spots.size() == 2, "No sand in the middle of the generated map");
+    const std::string section = "[UNITS]\n";
+    const auto at = result.ini.find(section);
+    nRequire(at != std::string::npos, "The generated map has no [UNITS] section");
+    for(size_t i = 0; i < spots.size(); ++i)
+        result.ini.insert(at + section.size(), "ID" + std::to_string(9101 + i) + "=" + iniHouse(anonymous) + ",Trooper,256,"
+                          + std::to_string(spots[i]) + ",64,Guard\n");
+    auto game = startSkirmish(played, result);
+    House* anon = game->getHouse(anonymous);
+    nRequire(anon != nullptr && anon->getTeamID() == 0 && anon->getPlayerList().empty(), "The map loader made no anonymous team-0 house");
+    UnitBase* anonTrooper = nullptr;
+    for(UnitBase* u : unitList) if(u->getOwner() == anon && u->getItemID() == Unit_Trooper) anonTrooper = u;
+    nRequire(anonTrooper != nullptr, "The anonymous house's troopers were not placed");
+    House* nativesHouse = game->getOrCreateNativesHouse();
+    UnitBase* nativeTrooper = placeNear(nativesHouse, Unit_Trooper, anonTrooper->getLocation() + Coord(1, 0));
+    nativeTrooper->setVisible(VIS_ALL, true);
+    const bool nativeShoots = nativeTrooper->canAttack(anonTrooper), anonShoots = anonTrooper->canAttack(nativeTrooper);
+    SDL_Log("NATIVES_PROBE_OBS: natives_team=%d anonymous_team=%d natives_fire_on_anonymous=%d anonymous_fire_on_natives=%d",
+            nativesHouse->getTeamID(), anon->getTeamID(), nativeShoots, anonShoots);
+    // Run until either side is hurt (two game minutes at most).
+    const auto health = [&](Uint32 id) { const ObjectBase* o = game->getObjectManager().getObject(id); return o ? o->getHealth() : FixPoint(0); };
+    const Uint32 nativeId = nativeTrooper->getObjectID(), anonId = anonTrooper->getObjectID();
+    const FixPoint nativeStart = health(nativeId), anonStart = health(anonId);
+    const Uint32 limit = game->getGameCycleCount() + MILLI2CYCLES(120 * 1000);
+    while(game->getGameCycleCount() < limit && health(nativeId) == nativeStart && health(anonId) == anonStart) game->updateGameState();
+    const bool fought = health(nativeId) < nativeStart || health(anonId) < anonStart;
+    SDL_Log("NATIVES_PROBE_OBS: natives_v_anonymous fought=%d by cycle %u (natives %.0f -> %.0f, anonymous %.0f -> %.0f)", fought,
+            game->getGameCycleCount(), nativeStart.toDouble(), health(nativeId).toDouble(), anonStart.toDouble(), health(anonId).toDouble());
+
+    // A worm Ordos's reinforcement brings, and Ordos and enemy troopers sharing a tile with its bite.
+    House* ordos = game->getHouse(HOUSE_ORDOS);
+    const Coord middle(size / 2, size / 2);
+    auto* worm = dynamic_cast<Sandworm*>(placeNear(nativesHouse, Unit_Sandworm, middle));
+    nRequire(worm != nullptr && worm->getOwner() == nativesHouse, "The worm is not the Natives'");
+    // Two free sand tiles beside the worm (infantry of different houses never share a tile).
+    std::vector<Coord> sand;
+    for(int ring = 1; ring < 20 && sand.size() < 2; ++ring)
+        for(int dx = -ring; dx <= ring && sand.size() < 2; ++dx) {
+            const Coord c = worm->getLocation() + Coord(dx, ring);
+            if(currentGameMap->tileExists(c) && currentGameMap->getTile(c)->isSand() && !currentGameMap->getTile(c)->hasAnObject()) sand.push_back(c);
+        }
+    nRequire(sand.size() == 2, "No free sand beside the worm");
+    UnitBase* own = ordos->placeUnit(Unit_Trooper, sand[0].x, sand[0].y, true);
+    UnitBase* foe = game->getHouse(enemy)->placeUnit(Unit_Trooper, sand[1].x, sand[1].y, true);
+    nRequire(own && foe, "Could not place the two troopers");
+    own->setVisible(VIS_ALL, true); foe->setVisible(VIS_ALL, true);
+#ifdef NATIVES_TEAM
+    worm->setSummoner(HOUSE_ORDOS);
+#endif
+    const bool eatsOwn = worm->canAttack(own), eatsFoe = worm->canAttack(foe);
+    const Uint32 ownId = own->getObjectID(), foeId = foe->getObjectID();
+    // The bite a worm deals with its mouth over each tile (Sandworm::update -> Map::damage).
+    for(const Coord& bite : sand)
+        currentGameMap->damage(worm->getObjectID(), nativesHouse, Coord(bite.x * TILESIZE + TILESIZE / 2, bite.y * TILESIZE + TILESIZE / 2),
+                               Bullet_Sandworm, 5000, NONE_ID, false);
+    const bool ownSurvives = health(ownId) > 0, foeSurvives = health(foeId) > 0;
+    SDL_Log("NATIVES_PROBE_OBS: summoned worm targets_own=%d targets_enemy=%d; bite: own_survives=%d enemy_survives=%d",
+            eatsOwn, eatsFoe, ownSurvives, foeSurvives);
+
+#ifdef NATIVES_TEAM
+    nRequire(nativesHouse->getTeamID() == NATIVES_TEAM, "The Natives house is not on NATIVES_TEAM");
+    nRequire(nativeShoots && anonShoots, "The Natives and an anonymous team-0 house do not fight each other");
+    nRequire(fought, "Neither the Natives trooper nor the anonymous trooper was hurt in two game minutes");
+    nRequire(!eatsOwn && eatsFoe, "The summoned worm targets its summoner's side or spares the enemy");
+    nRequire(ownSurvives && !foeSurvives, "The summoned worm's bite took its summoner's trooper or spared the enemy's");
+
+    // The reinforcement trigger itself names the summoner: Ordos's Homebase worm comes by carryall.
+    std::set<Uint32> before;
+    for(const UnitBase* u : unitList) before.insert(u->getObjectID());
+    ReinforcementTrigger(HOUSE_ORDOS, Unit_Sandworm, Drop_Homebase, false, game->getGameCycleCount()).trigger();
+    const Sandworm* delivered = nullptr;
+    for(const UnitBase* u : unitList)
+        if(!before.count(u->getObjectID())) if(const auto* w = dynamic_cast<const Sandworm*>(u)) delivered = w;
+    nRequire(delivered && delivered->getOwner() == nativesHouse && delivered->getSummoner() == HOUSE_ORDOS,
+             "Ordos's reinforcement worm is not a Natives worm summoned by Ordos");
+
+    // Save and reload: the summoner, the teams and the spared trooper come back.
+    const Uint32 wormId = worm->getObjectID(), deliveredId = delivered->getObjectID();
+    const std::string save = nOut("followup-9873.dls");
+    nRequire(game->saveGame(save), "Could not save the follow-up match");
+    nEnd(game);
+    game = nStart(GameInitSettings(save));
+    nRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION && SAVEGAMEVERSION == SAVEGAMEVERSION_NATIVES_TEAM,
+             "The follow-up save is not the current version");
+    nRequire(natives(*game)->getTeamID() == NATIVES_TEAM && game->getHouse(anonymous)->getTeamID() == 0, "The reload changed a team");
+    const auto* reloaded = dynamic_cast<const Sandworm*>(game->getObjectManager().getObject(wormId));
+    const auto* reloadedOwn = game->getObjectManager().getObject(ownId);
+    const auto* reloadedDelivered = dynamic_cast<const Sandworm*>(game->getObjectManager().getObject(deliveredId));
+    nRequire(reloaded && reloaded->getSummoner() == HOUSE_ORDOS && reloadedDelivered && reloadedDelivered->getSummoner() == HOUSE_ORDOS,
+             "A reloaded worm forgot its summoner");
+    nRequire(reloadedOwn && !reloaded->canAttack(reloadedOwn), "The reloaded worm targets its summoner's trooper");
+    nRequire(reloadedOwn->isVisible(NATIVES_TEAM), "The reloaded trooper lost its Natives visibility slot");
+
+    // Win/lose: the enemy's last unit decides the game; the anonymous house's and the Natives' units do not count.
+    nRequire(game->getHouse(anonymous)->getNumUnits() > 0 && natives(*game)->getNumUnits() > 0,
+             "No anonymous or Natives unit is left to test the win with");
+    const Uint32 decided = eliminate(*game, enemy);
+    nRequire(game->finished && game->won && game->finishedLevelCycle == decided,
+             "The player did not win on the last enemy while anonymous and Natives units are alive");
+    SDL_Log("NATIVES_PROBE: follow-up: Natives team %d fight anonymous team 0; Ordos's worm spares Ordos; win at cycle %u",
+            NATIVES_TEAM, decided);
+#endif
+    nEnd(game);
+}
+
 #endif
 
 }
@@ -975,6 +1108,18 @@ int runNativesProbe() {
     else if(kind == "played-interactions") runPlayedInteractions();
     else if(kind == "campaign-interactions") runCampaignInteractions();
     else if(kind == "lockstep-interactions") runLockstepInteractions();
+    else if(kind == "followup") runFollowup();
+    else if(kind == "loadsave") {
+        // Diagnostic, not a ctest case: load NATIVES_LOAD_SAVE in whatever profile DUNECITY_USERDIR
+        // names (run the --keep binary by hand), e.g. to see a pruned ws-<hash> copy reinstalled.
+        const char* path = std::getenv("NATIVES_LOAD_SAVE");
+        nRequire(path != nullptr, "NATIVES_LOAD_SAVE is not set");
+        auto game = nStart(GameInitSettings(std::string(path)));
+        SDL_Log("NATIVES_PROBE: loaded %s (save %u) as mod %s, %zu units", path, game->getLoadedSavegameVersion(),
+                ModManager::instance().getActiveModName().c_str(), unitList.size());
+        runCycles(*game, 100);
+        nEnd(game);
+    }
 #endif
     else nRequire(false, "Unknown case " + kind);
     SDL_Log("NATIVES_PROBE_PASS: %s", kind.c_str());

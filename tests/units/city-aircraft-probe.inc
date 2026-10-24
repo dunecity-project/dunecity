@@ -1624,8 +1624,8 @@ void checkAntiAirSparesOwnSide() {
 /// Release 1.0.851 cross-check: the hold-fire guard never counts Natives worms
 /// or crime troopers as anybody's own side. A turret fires over them, a Natives
 /// trooper fires over its own house's units, and a team-0 house (the anonymous
-/// owner a custom map creates for an unlisted house shares team 0 with the
-/// Natives) fires over them too - while still holding over its own wall.
+/// owner a custom map creates for an unlisted house; it shared team 0 with the
+/// Natives before save 9873) fires over them too - while still holding over its own wall.
 void checkAntiAirIgnoresNatives() {
     auto game = newCityGame(1833);
     auto* owner = game->getHouse(HOUSE_ATREIDES);
@@ -1669,7 +1669,7 @@ void checkAntiAirIgnoresNatives() {
     auto* nativeShooter = placeNative(Unit_Trooper, turretAt + Coord(4, -4));
     cityRequire(nativeShooter->canAttack(plane), "a Natives trooper holds fire over Natives units");
 
-    // A team-0 house shares the Natives' team number but not their side.
+    // A team-0 house (the Natives' team before 9873) is not their side either.
     enemy->teamID = 0;
     cityRequire(turret->canAttack(plane), "a team-0 house's turret holds fire over Natives units");
     auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 6, turretAt.y - 2, true, true);

@@ -553,7 +553,7 @@ void QuantBot::build(int militaryValue) {
     int ownTeamHouses = 0, enemyHouses = 0;
     if (!brutalCityEconomy && difficulty == Difficulty::Brutal)
         for (int i = 0; i < NUM_HOUSES; ++i)
-            // The Natives (team 0) are always "alive" but are no enemy house.
+            // The Natives are always "alive" but are no enemy house.
             if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal

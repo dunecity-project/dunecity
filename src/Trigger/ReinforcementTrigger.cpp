@@ -29,6 +29,7 @@
 
 #include <units/UnitBase.h>
 #include <units/Carryall.h>
+#include <units/SandWorm.h>
 
 
 ReinforcementTrigger::ReinforcementTrigger(int houseID, Uint32 itemID, DropLocation location, bool bRepeat, Uint32 triggerCycleNumber)
@@ -68,6 +69,13 @@ void ReinforcementTrigger::trigger()
         if (dropLocation == Drop_Homebase) return;
         for (const auto& player : dropHouse->getPlayerList())
             if (auto* bot=dynamic_cast<QuantBot*>(player.get())) bot->onScriptedReinforcement(unit);
+    };
+    // A worm is always the Natives' (ObjectBase::createObject); the house it was meant for is
+    // its summoner, whose side it never eats.
+    auto createDropUnit = [&](Uint32 itemID) {
+        UnitBase* unit = dropHouse->createUnit(itemID);
+        if (auto* worm = dynamic_cast<Sandworm*>(unit)) worm->setSummoner(dropHouse->getHouseID());
+        return unit;
     };
 
     switch(dropLocation) {
@@ -121,7 +129,7 @@ void ReinforcementTrigger::trigger()
                 if(currentGameMap->tileExists(newCoord)
                     && (currentGameMap->getTile(newCoord)->hasAGroundObject() == false)
                     && ((units2Drop.front() != Unit_Sandworm) || (currentGameMap->getTile(newCoord)->isSand()))) {
-                    UnitBase* pUnit2Drop = dropHouse->createUnit(units2Drop.front());
+                    UnitBase* pUnit2Drop = createDropUnit(units2Drop.front());
                     units2Drop.erase(units2Drop.begin());
 
                     pUnit2Drop->deploy(newCoord);
@@ -165,7 +173,7 @@ void ReinforcementTrigger::trigger()
                 case Drop_Enemybase: {
                     for(int i=0;i<NUM_HOUSES;i++) {
                         House* pHouse = currentGame->getHouse(i);
-                        if(pHouse != nullptr && pHouse->getNumStructures() != 0 && pHouse->getTeamID() != 0 && pHouse->getTeamID() != dropHouse->getTeamID()) {
+                        if(pHouse != nullptr && pHouse->getNumStructures() != 0 && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != dropHouse->getTeamID()) {
                             dropCoord = pHouse->getCenterOfMainBase();
                             break;
                         }
@@ -175,7 +183,7 @@ void ReinforcementTrigger::trigger()
                         // no house with structures found => search for units
                         for(int i=0;i<NUM_HOUSES;i++) {
                             House* pHouse = currentGame->getHouse(i);
-                            if(pHouse != nullptr && pHouse->getNumUnits() != 0 && pHouse->getTeamID() != 0 && pHouse->getTeamID() != dropHouse->getTeamID()) {
+                            if(pHouse != nullptr && pHouse->getNumUnits() != 0 && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != dropHouse->getTeamID()) {
                                 dropCoord = pHouse->getStrongestUnitPosition();
                                 break;
                             }
@@ -230,7 +238,7 @@ void ReinforcementTrigger::trigger()
                     carryall->setOwned(false);
 
                     for(Uint32 itemID2Drop : droppedUnits) {
-                        UnitBase* pUnit2Drop = dropHouse->createUnit(itemID2Drop);
+                        UnitBase* pUnit2Drop = createDropUnit(itemID2Drop);
                         pUnit2Drop->setActive(false);
                         carryall->giveCargo(pUnit2Drop);
                         registerAssault(pUnit2Drop);

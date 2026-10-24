@@ -43,6 +43,53 @@ tested in-process; the online paths were never exercised.
   direct has no spectators (observer streams need the direct room transport).
 - **Tests:** `dunecity-queue ctest` job 20261024T110745-ctest-4af3ea at d1718c60: 110/110 passed (mini 37, pro 73;
   PC offline), incl. `spectator_online_end_probe` 719 s on the mini (six cases, ~2 min each; skipped with code 77 without PHP).
+## 2026-10-24 — Natives follow-up: own team, reinforcement worms spare their summoner, ws-copy prune; old-save crime troopers proven unmarkable (branch `fix/natives-followup`, worktree `~/Documents/projects/dunecity-natives-followup`, from staging 6fd861ae = 1.0.852; protocol 101, save 9873; not released)
+
+Agent NativesFollowup. Evidence `~/Documents/projects/dunecity-results/natives-followup/`.
+
+- **Old-save crime troopers (left as they are, proven):** before 9871 `raiseCrimeTroopers` gave troopers to an
+  existing opposing house *with structures* via `House::createUnit(Unit_Trooper)` and kept only an AITelemetry
+  `crime_unrest` line (not saved). Every persisted field is shared with a house's own troopers: originalHouse =
+  owner, `byScenario` false (as factory, police, palace-Fremen and reinforcement troopers), guard point / HUNT /
+  forced target (also set by QuantBot waves and player orders, and cleared once the target dies). The city keeps no
+  per-trooper list (only `crimeUnrestProgress_` timers); `numItemBuilt` is not saved and `numBuiltUnits` is one
+  total over all types. "Owner never had a WOR/Barracks" is no marker either: troopers also come from police stations
+  (`PoliceStation`, trike/trooper patrols), Palace Fremen, starport, reinforcements, and a sold WOR records no loss
+  (`demolishedByOwner_` -> `decrementStructures(..., recordLoss=false)`). So no conversion; only worms convert.
+- **Custom-map team-0 houses:** the Natives house now plays on `NATIVES_TEAM` (10; `NUM_TEAM_SLOTS` 11; lobby teams
+  are 1-9, anonymous map houses stay on 0). Natives and anonymous houses fight each other; `House::isAlive()` is
+  always true for Natives; `House::lose`'s AI-no-buildings check and `ReinforcementTrigger`'s Enemybase choice skip
+  Natives by name (team 0 no longer did it). Win/lose is otherwise unchanged: team 0 still never blocks or wins.
+  Saves: each object stores the 11th visibility bit as the spare third bit of its teams-8/9 byte (record size
+  unchanged, so `formation_movement_probe`, `deviation_reward_probe` and `structure_degradation_*`, which splice
+  current records into pre-9849/9859 ones, stay byte-exact; a separate byte broke all six in ctest
+  20261024T130056-ctest-39f8f0); a 9871/older save copies it from team 0's and moves the Natives house to
+  `NATIVES_TEAM` on load (`House(InputStream&)`).
+- **Worm reinforcements:** none in Tornie or the bundled mods; 109 `[REINFORCEMENTS]` worm lines in bundled maps
+  (multiplayer Player1-6 at Homebase/Air, e.g. Gamma Sector 40, Wormhole, Rocking Fields; Mercenary on many 4P/5P
+  maps; singleplayer Sardaukar Base; OPENSD2 SCENF011-015 Sardaukar/Mercenary at Enemybase). Correction to the
+  feat/natives-house risk note: worms never checked teams (`Sandworm::canAttack`'s team test is commented out since
+  Dune Legacy), so a house's own worm always ate its units. Now: the worm stays the Natives', `ReinforcementTrigger`
+  records the house as its summoner (`Sandworm::setSummoner`, saved from 9873) and it never targets or bites that
+  house's team (`Sandworm::spares`, also in `Map::damage`'s Bullet_Sandworm branch) for its lifetime. Kills stay
+  credited to Natives; the summoner's units may still shoot it (as before). Old saves: no summoner (eats all, as before).
+- **Shipped-mod copies (`ws-<hash>`):** `Workshop::pruneShippedModCopiesOnce()` after `ModManager::initialize()`
+  (`src/mod/WorkshopDuplicates.cpp`), before anything loads. For every `mods/ws-<hash>` holding a revision built on a
+  shipped mod, except the active mod: removed when the local Workshop store holds that revision intact
+  (`store().get`; Stefan approved, 2026-10-24: `resolveMod` -> `installMod` reinstalls it whenever a save needs it);
+  otherwise removed only when it is the shipped mod with just mod.ini's Game Version changed (`stampedModHash`, own
+  files re-hashed) and no `save/`, `mpsave/` or `replay/` file loads through it (mirrors `resolveMod`; a newer
+  release's save blocks this). Copies built on no shipped mod are never touched. Renames to `.ws-*.removing` first,
+  logs each removal and kept copy, store revisions stay, marker `mods/.shipped-copies-pruned` once complete.
+  **Stefan's MBA profile (fresh copy on the mini, real one untouched):** all 14 removed (626 MB; 13 were older
+  revisions, 2-185 files different, only `ws-980624ac` was stamp-only); then `test1/2/3.dls` (saved by 1.0.833
+  running as `ws-980624ac`) each loaded through the store (copy reinstalled), 510/674/1221 units, 100 cycles
+  (`natives_probe` diagnostic case `loadsave`; logs `air-copy-*.log` in the evidence dir).
+- **Probe (`natives_probe`, new case `followup`):** unfixed 1.0.852 build-int: Natives and an anonymous Mercenary house
+  both team 0, neither can fire, no damage in 2 game minutes; a worm's bite kills the reinforcing house's trooper.
+  Fixed: teams 10/0, both fire, hit at cycle 7; summoned worm targets enemy only, bite spares Ordos and kills the enemy
+  trooper; summoner survives save/reload (9873); played win on the last enemy with anonymous and Natives units alive.
+  New `[workshop][duplicates]` unit cases; protocol/save pins 101/9873, `NUM_TEAM_SLOTS` 11.
 
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 

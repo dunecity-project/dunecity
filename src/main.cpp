@@ -59,6 +59,7 @@
 
 #include <players/QuantBotConfig.h>
 #include <mod/ModManager.h>
+#include <mod/Workshop.h>
 
 #include <CrashHandler.h>
 #include <SoundPlayer.h>
@@ -1456,6 +1457,8 @@ int main(int argc, char *argv[]) {
             // Initialize the mod system (seeds vanilla mod from install defaults if needed)
             SDL_Log("Initializing mod system...");
             ModManager::instance().initialize();
+            // Once per profile: the `ws-<hash>` copies older releases left of Vanilla and Dune City.
+            Workshop::pruneShippedModCopiesOnce();
 
             // Initialize effective game options (base settings + mod overrides)
             effectiveGameOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
