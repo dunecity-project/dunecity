@@ -1,3 +1,37 @@
+## 2026-10-24 — Sardaukar/Mercenary top-band research recovery: no default change
+
+Branch `feat/ratio-sardaukar-mercenary`, source-only worktree
+`/Users/stefan/Documents/projects/dunecity-ratio-sm` on the mini. Preserves `42635523`; base `6fd861ae`
+(local 1.0.852, protocol 94, save 9871). Full research/design/evidence caveats: `docs/ai-play-styles.md` 8.11.
+
+- **Decision:** both configured openings remain unchanged. No accepted mix, no protocol 99 consumption,
+  no saved-state change, no edits to `QuantBotConfig.cpp`, bundled config or mod/map files.
+- **Exploration:** `sm-x9-c3d0b9-{1..18}` cancelled after 82 full-length CY games; only 40 random-side
+  Sardaukar games and 3 Mercenary games. Too small/unbalanced for reliable regression. Derived candidates
+  and Sonic cost-effectiveness informed test-only conservative Sonic refinements (not measured winners):
+  Sardaukar `4,32,32,2,14,0,10,2,2,2`; Mercenary `15,27,25,2,14,0,11,2,2,2`.
+- **Queued evidence preserved:** `20261024T132117-sm-c9-26c010-{1..10}`, source
+  `6fd861ae958d-edc7d444`, all 840 games pending at recovery handoff; n=0 complete pairs per house,
+  estimates/intervals unavailable. Shards 1-5 Sardaukar, 6-10 Mercenary; each 84 games against one
+  opponent. Neither cancel nor restart them. Their full completion would still give only 210
+  candidate-on-house games per house, not 420; target house is always first. Label swaps are not
+  position swaps. **Exploratory only, never acceptance evidence for a default change.**
+- **Analysis fix:** `ratio-analysis.py --paired HOUSE` now computes HOUSE's actual placement-score gain
+  between matched games, +1/-1/-0.25 for win/loss/draw. `42635523` incorrectly subtracted within-game
+  house-minus-opponent contrasts, doubling the win/loss scale and cancelling draw penalties. Matches
+  preserve house order and opponent; incomplete pairs excluded; no pairs reports interval unavailable.
+  Two consumer-visible regression cases added to existing `tests/test_match_score.py`; registered
+  `quantbot_match_score` in CTest (30 s).
+- **Evidence:** `/Users/stefan/Documents/projects/dunecity-results/ratio-sm/x9/` raw CSVs,
+  `analysis-report.txt`, compact `analysis/*.csv`; `c9-{sard,merc}/paired-report.txt`. Those paired
+  reports reflect the n=0 handoff, not future job completion. Rerun analysis over preserved rows, never
+  replay completed games. Learning and the 2-50% bounds are unchanged.
+- **Acceptance handoff:** no new local build, test run or cluster snapshot. Parent explicitly owns
+  combined `build-int`/cluster acceptance: full ctest including `quantbot_match_score`,
+  `quantbot_strategy`, all-against-Atreides and the ladder. No fresh 6/6 or non-regression claim.
+  Any accepted default later needs a positive 95% paired interval and at least 420 fresh
+  candidate-on-house games per house with both positions and identical opponent mixes.
+
 ## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
 
 main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and

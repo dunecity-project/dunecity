@@ -18,6 +18,10 @@ composition per unit-mix slot every 10 game minutes and at the end) and prints:
                      per-type cost-effectiveness (combat reward per value built, survival), and the
                      candidate tuned mixes derived from them (--candidates DIR writes them as play
                      styles with [Unit Ratios Tuned] keys)
+  --paired HOUSE     with --arms: HOUSE's placement score as A minus its score as B in the matched
+                     game (same map, seed, opponent and house order). Opponents must play identical
+                     mixes in both arms; bootstrap complete pairs only. This is a between-game gain,
+                     not the within-game house-minus-opponent contrast printed by --arms.
 
   --csv DIR          also writes the compact CSV tables (per-house records, slot tables, candidates)
   --tech N           only the games played at tech level N (vanilla-match.py --tech: maps named
@@ -404,11 +408,9 @@ def report_arms(args, games, houses, out_rows=None):
 
 
 def report_paired(args, games, houses, out_rows=None):
-    """Paired gain of playing A instead of B as one house (--paired H), for runs where only H's side
-    differs between the labels (e.g. a style that sets only H's top band): for each game with H as A
-    its twin with the labels swapped (same tag, map, seed and house order) has H as B and the same
-    opponent mix, so gain = H's Δ (placement score minus the opponent's) as A - as B; bootstrap over the
-    pairs. In the units of the per-house effect (house_effects)."""
+    """HOUSE's placement-score gain between matched games, bootstrapped over complete pairs.
+    The two labels must differ only on HOUSE (e.g. a style setting only its top band). Keep house
+    order in the key: swapping labels does not swap map positions. Draws keep their -0.25 score."""
     house = args.paired
     for pair in args.arms.split(','):
         x, y = pair.split(':')
@@ -423,10 +425,10 @@ def report_paired(args, games, houses, out_rows=None):
             theirs = next(r for h, r in rows.items() if h != house)
             if {mine['label'], theirs['label']} != {x, y}:
                 continue
-            a, b = match_score.duel(game['winner_label'] == mine['label'], game['winner_label'] == theirs['label'])
+            a, _ = match_score.duel(game['winner_label'] == mine['label'], game['winner_label'] == theirs['label'])
             order = '|'.join(h for h, _ in sides(game))
             twin = (game['tag'], game['difficulty'], game['map'], game['seed'], order, theirs['house'])
-            played[twin][mine['label']] = a.score - b.score
+            played[twin][mine['label']] = a.score
         gains = defaultdict(list)
         for twin, by_label in played.items():
             if x in by_label and y in by_label:
@@ -435,9 +437,11 @@ def report_paired(args, games, houses, out_rows=None):
                 gains[twin[-1]].append(gain)
                 gains['first' if twin[4].startswith(house + '|') else 'second'].append(gain)
         print(f'\n### Paired gain of {house.capitalize()} as {x} over {y} (same map, seed, opponent and position; '
-              'H\'s Δ as A - as B)\n')
+              'house placement score as A - as B)\n')
         print('| Pairs | Gain (95% CI) n |')
         print('|---|---|')
+        if not gains['all']:
+            print('| all | No complete pairs; interval unavailable |')
         for name in ['all', 'first', 'second'] + [h for h in HOUSES if h != house]:
             if gains[name]:
                 print(f'| {name} | {fmt_delta(gains[name])} |')

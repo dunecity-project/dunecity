@@ -1,10 +1,17 @@
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 spec = importlib.util.spec_from_file_location('match_score', Path(__file__).parents[1] / 'tests/ai/match_score.py')
 ms = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ms)
+
+ratio_spec = importlib.util.spec_from_file_location('ratio_analysis', Path(__file__).parent / 'ai/ratio-analysis.py')
+ratio = importlib.util.module_from_spec(ratio_spec)
+ratio_spec.loader.exec_module(ratio)
 
 
 def scores(placing):
@@ -97,6 +104,46 @@ class PlacementScoreTest(unittest.TestCase):
         self.assertEqual((fewer.candidate_draws, fewer.control_draws), (1 / 3, 1.0))
         legacy = ms.compare([(0.5, 0.5, True, True)] * 10, 1, 'legacy')
         self.assertEqual((legacy.difference, legacy.verdict), (0.5, 'level with'))
+
+    def test_ratio_paired_gain_keeps_draw_penalty_and_house_position(self):
+        games, houses = {}, {}
+
+        def add(seed, candidate, winner, reverse=False, opponent='atreides'):
+            mine, other = ('A', 'B') if candidate else ('B', 'A')
+            sides = [(opponent, other), ('sardaukar', mine)] if reverse else [('sardaukar', mine), (opponent, other)]
+            game = {'tag': 'paired', 'difficulty': 'hard', 'map': 'habbanya-penny',
+                    'seed': str(seed), 'sides': '|'.join(f'{h}:{label}' for h, label in sides),
+                    'players': '2', 'winner_label': mine if winner == 'mine' else other if winner == 'other' else ''}
+            key = tuple(game[k] for k in ratio.KEY)
+            games[key] = game
+            houses[key] = {h: {'house': h, 'label': label} for h, label in sides}
+
+        add(1, True, 'mine')
+        add(1, False, 'other')       # +1 - (-1) = +2, not the doubled contrast gain +4.
+        add(2, True, None)
+        add(2, False, 'other')       # -0.25 - (-1) = +0.75.
+        add(3, True, 'other')
+        add(3, False, None)          # -1 - (-0.25) = -0.75.
+        add(4, True, 'mine')
+        add(4, False, 'other', reverse=True)  # Different positions: not a pair.
+        add(5, True, 'mine')         # No control result: not a pair.
+        add(6, True, 'mine')
+        add(6, False, 'other', opponent='harkonnen')  # Different opponents: not a pair.
+        rows = {'paired': []}
+        with contextlib.redirect_stdout(io.StringIO()):
+            ratio.report_paired(SimpleNamespace(paired='sardaukar', arms='A:B'), games, houses, rows)
+        overall = next(r for r in rows['paired'] if r['pairs'] == 'all')
+        self.assertEqual(overall['n'], 3)
+        self.assertEqual(overall['gain'], '0.667')
+        self.assertFalse(any(r['pairs'] == 'second' for r in rows['paired']))
+
+    def test_ratio_paired_gain_reports_unavailable_interval_without_pairs(self):
+        text = io.StringIO()
+        rows = {'paired': []}
+        with contextlib.redirect_stdout(text):
+            ratio.report_paired(SimpleNamespace(paired='mercenary', arms='A:B'), {}, {}, rows)
+        self.assertIn('No complete pairs; interval unavailable', text.getvalue())
+        self.assertEqual(rows['paired'], [])
 
 
 if __name__ == '__main__':
