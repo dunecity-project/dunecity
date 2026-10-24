@@ -18,8 +18,10 @@ viewer joins mid-game as a spectator. Cases:
                  late Viewer hangs 25 s from cycle 1200, with causal verdict/departure receipts
   feature-decision  the same fixture, with host departure exactly at the decision
 
-Every case requires identical decision/final cycles and digests, a clean observer end and the
-correct winner plate/statistics. --baseline reports instead of failing.
+Every case requires identical decision cycles/digests and the Viewer's exact Host final cycle/state,
+plus a clean observer end and correct winner plate/statistics. Feature cases also compare the played
+Partner at that exact authoritative Host tick; buffered post-verdict ticks are not same-cycle states.
+--baseline reports instead of failing.
 
 Mac modes remain local or --remote ROLE=SSHHOST. For a native Windows Viewer (or Partner), first
 prepare the combined source once through the shared cluster, then select its existing registered
@@ -785,9 +787,17 @@ for case in cases:
             need(viewer.get('last_cycle') == host.get('last_cycle') and viewer.get('last_digest') == host.get('last_digest'),
                  'viewer ended at %s %s, host at %s %s' % (viewer.get('last_cycle'), viewer.get('last_digest'),
                                                            host.get('last_cycle'), host.get('last_digest')))
-    if host and partner and (env_case.get('SE_HOST_LEAVE') != 'decision' or 'SE_FEATURE_COMBO' in env_case):
-        need(partner.get('last_cycle') == host.get('last_cycle') and partner.get('last_digest') == host.get('last_digest'),
-             'partner and host ended differently')
+    if host and partner:
+        if 'SE_FEATURE_COMBO' in env_case:
+            # A played peer can drain already-buffered ticks while the Host's disconnect is
+            # in transit. Compare real observations at the SAME last authoritative Host tick,
+            # not different cycles (GameStateDigest::Digest::divergesFrom has the same rule).
+            # Missing that tick is a failure; the legacy decision-case exemption is not used.
+            need(partner.get('digest_at_' + host.get('last_cycle', '')) == host.get('last_digest'),
+                 'partner did not reproduce the exact final authoritative host cycle/state')
+        elif env_case.get('SE_HOST_LEAVE') != 'decision':
+            need(partner.get('last_cycle') == host.get('last_cycle') and partner.get('last_digest') == host.get('last_digest'),
+                 'partner and host ended differently')
     line = '%s: decided %s; host last %s; viewer last %s finished=%s quit=%s failure=%r stats=%r restarts=%s' % (
         case, (decided.get('Host') or '?').split(' ')[0], host.get('last_cycle'), viewer.get('last_cycle'),
         viewer.get('finished'), viewer.get('quit'), viewer.get('join_failure'), viewer.get('stats_text'), viewer.get('restarts'))

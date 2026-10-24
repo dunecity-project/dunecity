@@ -30,6 +30,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <array>
 
 namespace {
 std::string seRole, seOut;
@@ -58,6 +59,8 @@ struct SeState {
     std::string plateText;
     Uint32 plateTextColour = 0, plateFrameColour = 0;
     bool plateObserved = false, plateFramed = false;
+    std::array<GameStateDigest::Digest, 1024> terminalDigests{};
+    size_t terminalDigestCount = 0;
 };
 SeState se;
 
@@ -83,6 +86,17 @@ void seCapture(Game& game, const std::string& name) {
 }
 void seRequire(bool ok, const std::string& message) {
     if(!ok) throw std::runtime_error("feature-combo: " + message);
+}
+
+void seRecordTerminalDigest(const Game& game) {
+    if(!se.features || !game.finished) return;
+    const auto digest = game.computeStateDigest();
+    if(se.terminalDigestCount && se.terminalDigests[se.terminalDigestCount - 1].gameCycle == digest.gameCycle) {
+        se.terminalDigests[se.terminalDigestCount - 1] = digest;
+        return;
+    }
+    seRequire(se.terminalDigestCount < se.terminalDigests.size(), "terminal digest trace exceeded its bound");
+    se.terminalDigests[se.terminalDigestCount++] = digest;
 }
 
 // No fixture progress is kept outside the saved simulation. A late checkpoint already contains
@@ -236,6 +250,7 @@ void seHook(Game& game) {
     }
     if(se.viewer && se.slowMs && !game.finished) SDL_Delay(se.slowMs);
     if(game.finished) {
+        seRecordTerminalDigest(game);
         ++se.finishedCycles;
         if(!se.captured && !(se.host && se.leave == "decision")) {
             seCapture(game, se.viewer ? "viewer-plate.png" : seRole + "-plate.png");
@@ -378,7 +393,12 @@ int runSpectatorEndProbe() {
         break;
     }
     const Uint32 endTicks = SDL_GetTicks();
+    seRecordTerminalDigest(*game);
     std::ostringstream result;
+    for(size_t i = 0; i < se.terminalDigestCount; ++i) {
+        const auto& digest = se.terminalDigests[i];
+        result << "digest_at_" << digest.gameCycle << "=" << GameStateDigest::describe(digest) << "\n";
+    }
     result << "role=" << seRole << "\n"
            << "last_cycle=" << game->getGameCycleCount() << "\n"
            << "last_digest=" << seDigest(*game) << "\n"
