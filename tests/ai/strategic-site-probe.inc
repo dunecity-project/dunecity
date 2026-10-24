@@ -32,13 +32,16 @@ void runStrategicSiteProbe(Game& game) {
     bot->reservedStructures.clear();
     // A disk load rebuilds placement plans, so the historical map can regain a Palace site
     // before its overdue condition is restored. Make the *physical* no-site condition explicit:
-    // open ground has at most two consecutive rock rows. This preserves existing buildings and
-    // city lots, leaves 3x2 production sites and smaller construction possible, but no empty
-    // 3x3 Palace footprint can pass Map::okayToPlaceStructure. Never fake the placement cache.
+    // Fragment only bare rock/slab rows. Never open mountain paths, alter spice or change roads'
+    // underlying terrain; existing buildings and city lots are preserved too. The real placement
+    // assertion below remains authoritative: an untouched Palace site must fail this setup.
     for (int y=0;y<currentGameMap->getSizeY();y+=3)
         for (int x=0;x<currentGameMap->getSizeX();++x) {
             auto* tile=currentGameMap->getTile(x,y);
-            if (!tile->hasAStructure() && !tile->hasCityZone()) tile->setType(Terrain_Sand);
+            const int terrain=tile->getType();
+            if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
+                && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad())
+                tile->setType(Terrain_Sand);
         }
     for (const auto* yard:yards) {
         bot->planningBuilder=yard->getObjectID();
