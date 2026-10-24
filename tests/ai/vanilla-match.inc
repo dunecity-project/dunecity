@@ -67,6 +67,19 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
     return init;
 }
 
+/// Record each defeated playing house once, including a death on the game's final cycle.
+inline void recordEliminations(Game& game, State& state) {
+    const Uint32 now = game.getGameCycleCount();
+    for (const auto& side : state.sides) {
+        const House* house = game.getHouse(side.house);
+        // An absent house is unknown, not an observed elimination. Natives are never entrants.
+        if (!house || house->isNatives() || state.eliminated.count(side.house) || house->isAlive()) continue;
+        state.eliminated[side.house] = now;
+        SDL_Log("VANILLA_MATCH_ELIMINATED: house=%d label=%s cycle=%u end_s=%.1f", side.house, side.label.c_str(), now,
+                FormationWaveMeasure::seconds(now));
+    }
+}
+
 /// Once per cycle: per-minute samples and newly eliminated houses. True once one house is left.
 inline bool tick(Game& game, State& state) {
     const Uint32 now = game.getGameCycleCount();
@@ -78,13 +91,7 @@ inline bool tick(Game& game, State& state) {
         const bool saved = game.saveGame(std::getenv("BALANCE_SAVE_PATH"));
         SDL_Log("VANILLA_MATCH_SAVED: cycle=%u path=%s ok=%d", now, std::getenv("BALANCE_SAVE_PATH"), int(saved));
     }
-    for (const auto& side : state.sides) {
-        const House* house = game.getHouse(side.house);
-        if (state.eliminated.count(side.house) || (house && house->isAlive())) continue;
-        state.eliminated[side.house] = now;
-        SDL_Log("VANILLA_MATCH_ELIMINATED: house=%d label=%s cycle=%u end_s=%.1f", side.house, side.label.c_str(), now,
-                FormationWaveMeasure::seconds(now));
-    }
+    recordEliminations(game, state);
     return FormationDuel::decided(game, state.sides);
 }
 
@@ -95,6 +102,10 @@ inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& 
         ProbeDigest::periodic(game);
         return tick(game, state);
     });
+    // House::lose may set game.finished in updateGameState. The wave loop then exits before
+    // invoking tick again; without this final observation the winner and last defeated house
+    // were both scored as surviving a draw despite FORMATION_DUEL_RESULT reporting a winner.
+    recordEliminations(game, state);
     EliminationMatch::sample(game, true);
     FormationDuel::report(game, sides);
 }

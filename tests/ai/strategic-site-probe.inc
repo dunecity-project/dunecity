@@ -30,6 +30,16 @@ void runStrategicSiteProbe(Game& game) {
     require(available,"Siting fixture cannot build a Palace for reasons other than siting");
     bot->builderPlaceLocations.clear();
     bot->reservedStructures.clear();
+    // A disk load rebuilds placement plans, so the historical map can regain a Palace site
+    // before its overdue condition is restored. Make the *physical* no-site condition explicit:
+    // open ground has at most two consecutive rock rows. This preserves existing buildings and
+    // city lots, leaves 3x2 production sites and smaller construction possible, but no empty
+    // 3x3 Palace footprint can pass Map::okayToPlaceStructure. Never fake the placement cache.
+    for (int y=0;y<currentGameMap->getSizeY();y+=3)
+        for (int x=0;x<currentGameMap->getSizeX();++x) {
+            auto* tile=currentGameMap->getTile(x,y);
+            if (!tile->hasAStructure() && !tile->hasCityZone()) tile->setType(Terrain_Sand);
+        }
     for (const auto* yard:yards) {
         bot->planningBuilder=yard->getObjectID();
         bot->clearPlacementCache();
