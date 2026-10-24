@@ -215,6 +215,13 @@ selection.json, validate-results.json, minimap montage) in `~/Documents/projects
   the mod fingerprints and approved-mod tokens hash; a hosted game sends the map bytes. Not version-bumped or pushed.
 ## 2026-10-24 — Sardaukar/Mercenary top-band research recovery: no default change
 
+**Integration update:** the preserved `c9` jobs completed and remained exploratory.
+The subsequent shared-source `c10` confirmation also completed, with the required
+420 paired candidate-on-house games per house, balanced positions and unchanged
+opponents. Neither overall 95% interval is positive; both defaults remain unchanged.
+Current evidence and the full decision are in `docs/ai-play-styles.md` §8.11.
+The queued/n=0 statements below describe the original recovery handoff only.
+
 Branch `feat/ratio-sardaukar-mercenary`, source-only worktree
 `/Users/stefan/Documents/projects/dunecity-ratio-sm` on the mini. Preserves `42635523`; base `6fd861ae`
 (local 1.0.852, protocol 94, save 9871). Full research/design/evidence caveats: `docs/ai-play-styles.md` 8.11.

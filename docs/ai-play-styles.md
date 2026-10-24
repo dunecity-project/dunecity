@@ -968,7 +968,7 @@ Not run (scope cut by Stefan, 2026-10-18): Brutal, Fortress and `/weak` with the
 exploration at tech 3-6. Compact rows: `docs/formation-results/play-styles/ratios/{x8,r8-t8-cost,
 r8-t8-winners-end,c8-t8-best,f8-fremen}`.
 
-### 8.11 Sardaukar/Mercenary top-band revisit: exploratory only; defaults unchanged
+### 8.11 Sardaukar/Mercenary top-band revisit: confirmation complete; defaults unchanged
 
 Branch `feat/ratio-sardaukar-mercenary`, base local 1.0.852 (`6fd861ae`, protocol 94, save 9871).
 The original acceptance remains a positive paired 95% interval on fresh seeds with at least **420
@@ -1033,9 +1033,32 @@ in these 42-pair subgroups, but that does not establish an overall improvement.
 The target house is always first in map order: swapping labels does not swap
 positions. Thus `c9` is **exploratory and inadequate for the original acceptance**:
 210, not 420, candidate-on-house games per house and no second map position.
-Do not pool the candidate-selection `x8`/`x9` rows into confirmation. A properly
-sized, position-balanced confirmation belongs on the shared integrated build,
-after its movement rules have passed acceptance. Both configured openings stay unchanged.
+Do not pool the candidate-selection `x8`/`x9` or this inadequate `c9` screen into
+the balanced confirmation below. Both configured openings stay unchanged.
+
+**Completed shared-build confirmation (`c10`).** Twenty jobs
+`20261024T233534-ratio-c10-2e4abb-{1..20}` completed successfully from shared
+source `06bda05bd9f8`: ten per house, all five opponents, both explicit house
+orders, six maps and seven fresh seed bases (1240000–1240060 by ten, with
+`--seed-per-map 1`). The 80-minute game limit was unchanged. Each house has
+840 completed games and 420 candidate-on-target pairs, split 210/210 between
+map positions and 84 per opponent. Raw initial opponent mixes and strategies
+match between every pair; there are no error rows. These games use the current
+default movement rules, with the unaccepted continuous-ground-step flag off;
+they do not validate a future enabled movement candidate.
+
+| Target house | Complete pairs | Overall paired gain [95% interval] | First position | Second position |
+|---|---:|---|---|---|
+| Sardaukar | 420 | +0.025 [-0.07, +0.12] | +0.019 [-0.10, +0.15] | +0.031 [-0.11, +0.17] |
+| Mercenary | 420 | +0.046 [-0.05, +0.14] | +0.044 [-0.09, +0.17] | +0.048 [-0.09, +0.18] |
+
+The required sample and position balance are now satisfied, but neither
+overall interval is positive. Isolated opponent subgroups do not override that
+predeclared rule. Neither candidate becomes a default. Canonical reports and
+raw CSVs are in `ratio-sm/c10-shared-{sard,merc}/`; input/submission provenance
+is `c10-shared-plan.json`, and verified coverage/opponent invariants are
+`c10-shared-coverage.json`. These are separate fresh-seed results, not pooled
+with exploratory runs.
 
 **Analysis correction.** `ratio-analysis.py --arms A:B --paired HOUSE` matches tag, difficulty, map,
 seed, opponent and ordered houses, then bootstraps complete pairs of HOUSE's placement score as A

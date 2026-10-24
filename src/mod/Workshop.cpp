@@ -101,16 +101,19 @@ Revision saveMod(const std::string& modName) {
     if(!bundled) pointer(metadata,r);
     return r;
 }
-std::string bundledModHashAtGameVersion(const std::string& modName,const std::string& gameVersion) {
+bool bundledModMatchesRevisionAtGameVersion(const std::string& modName,const std::string& gameVersion,
+                                           const std::string& revisionHash) {
     auto& manager=ModManager::instance();
-    if(gameVersion.empty()||gameVersion==VERSION||!bundledMod(modName)||!manager.modExists(modName)) return {};
+    if(gameVersion.empty()||revisionHash.empty()||!bundledMod(modName)||!manager.modExists(modName)) return false;
     const fs::path path=manager.getModPath(modName), metadataPath=path/"mod.ini";
-    if(!fs::is_regular_file(metadataPath)) return {};
+    if(!fs::is_regular_file(metadataPath)) return false;
     // Only a stamp this release wrote (Vanilla, Dune City; Tornie and Dune2R ship their own) is
     // one an earlier release wrote differently.
-    if(INIFile(metadataPath.string()).getStringValue("Mod","Game Version")!=VERSION) return {};
+    if(INIFile(metadataPath.string()).getStringValue("Mod","Game Version")!=VERSION) return false;
     const auto info=manager.getModInfo(modName);
-    return stampedModHash({modName,info.displayName,manager.getContentBase(modName),path},gameVersion);
+    const ShippedMod mod{modName,info.displayName,manager.getContentBase(modName),path};
+    if(gameVersion!=VERSION && stampedModHash(mod,gameVersion)==revisionHash) return true;
+    return legacyBundledModHash(mod,gameVersion)==revisionHash;
 }
 void pruneShippedModCopiesOnce() {
     auto& manager=ModManager::instance();

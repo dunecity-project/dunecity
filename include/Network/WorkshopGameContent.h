@@ -22,11 +22,11 @@ inline void resolveMod(GameInitSettings& init, bool allowDownload = true) {
         // of installing a second, hash-named copy just to join a game.
         if(OnlineModPolicy::approved(init.getModName()) && mods.modExists(init.getModName())) {
             const auto installed = Workshop::saveMod(init.getModName());
-            // A save from an earlier release pins these same files under that release's
-            // Game Version stamp. They run as the shipped mod, pinned as it is now stamped.
+            // Older releases/profiles used different metadata stamps/layouts. Reconstruct the
+            // full pinned revision from these payload bytes before running as the shipped mod.
             const bool restamped = installed.hash != init.getModRevisionHash()
-                && Workshop::bundledModHashAtGameVersion(init.getModName(), init.getSavedGameVersion())
-                       == init.getModRevisionHash();
+                && Workshop::bundledModMatchesRevisionAtGameVersion(init.getModName(), init.getSavedGameVersion(),
+                                                                    init.getModRevisionHash());
             if(installed.hash == init.getModRevisionHash() || restamped) {
                 if(mods.getActiveModName() != init.getModName() && !mods.setActiveMod(init.getModName()))
                     throw std::runtime_error("Could not load the approved mod.");

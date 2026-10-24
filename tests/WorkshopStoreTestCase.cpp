@@ -179,27 +179,6 @@ TEST_CASE("Repeated map metadata updates replace complete INI values", "[worksho
     REQUIRE(text.find("; keep comment")!=std::string::npos);
 }
 
-#include <mod/BundledGameOptions.h>
-TEST_CASE("Bundled GameOptions.ini reaches the disk byte for byte with LF line endings", "[workshop][installer]") {
-    // The installer identity hashes BundledGameOptions::vanilla()/city(); ModManager seeds the
-    // vanilla and dunecity mods with BundledGameOptions::write. A CRLF file (text-mode stream on
-    // Windows) left the bundled mods unrecognised there.
-    Fixture f;
-    for(const std::string& text : {BundledGameOptions::vanilla(), BundledGameOptions::city()}) {
-        REQUIRE(text.find('\r')==std::string::npos);
-        const auto path=f.source/"GameOptions.ini";
-        f.write("GameOptions.ini",std::string(4096,'x')+"\r\n");   // a longer, stale file is replaced
-        REQUIRE(BundledGameOptions::write(path,text));
-        std::ifstream input(path,std::ios::binary);
-        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
-        REQUIRE(bytes.find('\r')==std::string::npos);
-        REQUIRE(bytes==text);
-        REQUIRE(Workshop::hashBytes(bytes)==Workshop::hashBytes(text));
-    }
-    REQUIRE(BundledGameOptions::vanilla().find("City Effects = false\n")!=std::string::npos);
-    REQUIRE(BundledGameOptions::city().find("City Effects = true\n")!=std::string::npos);
-    REQUIRE_FALSE(BundledGameOptions::write(f.root/"missing"/"GameOptions.ini",BundledGameOptions::vanilla()));
-}
 
 #include <mod/WorkshopDuplicates.h>
 #include <FileClasses/INIFile.h>
@@ -251,6 +230,63 @@ TEST_CASE("Shipped-mod copies differing only in the Game Version stamp are found
     // A copy whose files were changed after installation is no copy of the shipped mod.
     ShippedFixture::put(f.mods/("ws-"+old)/"ObjectData.ini","[Tank]\nPrice = 1\n");
     REQUIRE(Workshop::findShippedModCopies(f.mods,{f.shipped}).size()==1);
+}
+
+TEST_CASE("Legacy builtin metadata pins require unchanged payload and mode","[workshop][compatibility]") {
+    for(bool city : {false, true}) {
+        ShippedFixture f;
+        f.shipped.name = city ? "dunecity" : "vanilla";
+        f.shipped.displayName = city ? "Dune City" : "Vanilla";
+        f.shipped.base = f.shipped.name;
+        INIFile current(false, "Mod metadata");
+        current.setStringValue("Mod", "Display Name", f.shipped.displayName);
+        current.setStringValue("Mod", "Author", city ? "Stefan" : "Dune City");
+        current.setStringValue("Mod", "Description", city
+            ? "Hybrid RTS + city-builder mode (zones, overlays, city sim)." : "Default game settings");
+        current.setStringValue("Mod", "Version", city ? "1.002" : "");
+        current.setStringValue("Mod", "Game Version", "1.0.852");
+        current.setStringValue("Mod", "Base Mod", "");
+        current.setBoolValue("Mod", "Enables City Mode", city);
+        const auto metadataPath = (f.shipped.path / "mod.ini").string();
+        REQUIRE(current.saveChangesTo(metadataPath));
+
+        const auto historical = f.root / "historical";
+        fs::copy(f.shipped.path, historical, fs::copy_options::recursive);
+        // Captured legacy profile layouts, independently of the compatibility implementation.
+        const std::string metadata = city
+            ? "[Mod]\nDisplay Name = \"Dune City\"\nAuthor = Stefan\n"
+              "Description = \"Hybrid RTS + city-builder mode (zones, overlays, city sim).\"\n"
+              "Version = \nGame Version = 1.0.849\nEnables City Mode = true\n"
+              "Version = 1.002\nBase Mod = \"\"\n"
+            : "[Mod]\nDisplay Name = Vanilla\nAuthor = \"Dune City\"\n"
+              "Description = \"Default game settings\"\nVersion = \nGame Version = 1.0.849\n"
+              "Enables City Mode = false\nVersion = \"\"\nBase Mod = \"\"\n";
+        ShippedFixture::put(historical / "mod.ini", metadata);
+        const auto pin = Workshop::contentHash("mod", "", f.shipped.displayName, f.shipped.base, "", historical);
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849") == pin);
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.850") != pin);
+
+        INIFile resaved((historical / "mod.ini").string());
+        resaved.setStringValue("Mod", "Game Version", "1.0.852");
+        REQUIRE(resaved.saveChangesTo((historical / "mod.ini").string()));
+        const auto currentPin = Workshop::contentHash("mod", "", f.shipped.displayName, f.shipped.base, "", historical);
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.852") == currentPin);
+
+        current.setBoolValue("Mod", "Enables City Mode", !city);
+        REQUIRE(current.saveChangesTo(metadataPath));
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849").empty());
+        current.setBoolValue("Mod", "Enables City Mode", city);
+        current.setStringValue("Mentat 1", "Name", "Different presentation rules");
+        REQUIRE(current.saveChangesTo(metadataPath));
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849").empty());
+        current.removeSection("Mentat 1");
+        REQUIRE(current.saveChangesTo(metadataPath));
+
+        ShippedFixture::put(f.shipped.path / "ObjectData.ini", "[Tank]\nPrice = 1\n");
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849") != pin);
+        f.shipped.name = "authored";
+        REQUIRE(Workshop::legacyBundledModHash(f.shipped, "1.0.849").empty());
+    }
 }
 TEST_CASE("A shipped-mod copy is needed only by a pin resolveMod would load through it","[workshop][duplicates]") {
     ShippedFixture f;

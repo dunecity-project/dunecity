@@ -375,8 +375,27 @@ enemy controllers, Easy/Medium partners, resources, production costs, fog or com
 Completion uses the existing saved campaign-wave launch marker. This differs from the rejected
 CampaignFactoryFirst rule, which released the fleet as soon as the factory stood.
 
-Both first-wave funding switches remain **off and unaccepted** pending the shared integration build,
-the existing opening-economy/campaign-pressure consumer probes, at least 72 short-ladder games per
-pair, the named campaign losses and the full campaign comparison. Existing control results must
-be reused. No test thresholds are relaxed. Release decisions must also include the full cluster
-ctest and the campaign/ladder/multiplayer matrix comparison.
+Both first-wave funding switches remain **off and rejected for default use**.
+The shared-build comparisons from source `06bda05bd9f8` completed without
+relaxing deadlines or reusing a mismatched physics arm:
+
+| Comparison | Games per arm | Control score | Candidate score | Paired difference [95% interval] |
+|---|---:|---:|---:|---|
+| Short-map Brutal versus Hard, opening budget | 72 | +0.22 | +0.14 | -0.08 [-0.30, +0.14] |
+| Short-map Hard versus Medium, opening budget | 72 | +0.23 | -0.49 | -0.71 [-0.99, -0.44] |
+| All standard Hard campaign partners, campaign budget | 192 | +0.95 | +0.91 | -0.04 [-0.10, +0.01] |
+
+The opening rule significantly worsens the Hard/Medium comparison. The campaign
+rule does not establish improvement: Vanilla's 96 cases move from +0.94 to +0.85,
+while Dune City's 96 remain +0.96. Atreides mission 20 seeds 74708 and 75717
+still lose; mission 22 gains one Vanilla seed but loses another. The Dune City
+Harkonnen mission 22 loss at 95897 has an identical on/off final digest.
+Passing the opening/campaign-pressure consumer probes is not balance acceptance.
+
+Evidence: `~/Documents/projects/dunecity-results/ladder-campaign/`,
+`shared-{opening,campaign}-{off,on}/`, `shared-{opening,campaign}-comparison.txt`
+and `shared-campaign-critical-cases.json`. Jobs are
+`20261024T232452-opening-{off-902203,on-e7b0c8}` and
+`20261024T232453-campaign-{off-f544e9,on-8f53d6}`. The 672 total games use
+the shared build's default movement flag off. Team play and the unresolved
+named losses are not declared fixed by these results.

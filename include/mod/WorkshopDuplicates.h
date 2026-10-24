@@ -52,6 +52,11 @@ struct ShippedModCopy {
 */
 std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion);
 
+/// Hash the current payload with the known older builtin metadata layout and saved Game Version.
+/// Empty for custom mods or metadata with changed gameplay semantics/unknown fields. Acceptance
+/// still requires equality with the save's complete cryptographic revision; no hash alias exists.
+std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion);
+
 /// Every `ws-<hash>` folder in `modsDir` that is an intact copy (its own files hash to <hash>) of
 /// one of `shipped` apart from the Game Version value.
 std::vector<ShippedModCopy> findShippedModCopies(const std::filesystem::path& modsDir,

@@ -47,10 +47,11 @@ std::string contentHash(const std::string& kind, const std::string& id, const st
 Revision parseManifest(const std::string& manifest);
 Store& store();
 Revision saveMod(const std::string& modName);
-// The hash saveMod() gives a bundled mod whose mod.ini says `gameVersion`: Vanilla and Dune
-// City stamp the running game version there (ModManager::writeModInfo), so a save keeps the
-// hash of the release that wrote it although no other byte changed. Empty if not applicable.
-std::string bundledModHashAtGameVersion(const std::string& modName, const std::string& gameVersion);
+// Verify a builtin revision reconstructed from current payload bytes and recognised historical
+// metadata. Only metadata layout/stamps may differ; changed rules/assets still require the exact
+// archived revision. Also handles a legacy layout re-saved by the current application version.
+bool bundledModMatchesRevisionAtGameVersion(const std::string& modName, const std::string& gameVersion,
+                                           const std::string& revisionHash);
 // Once per profile at startup (marker `mods/.shipped-copies-pruned`): removes the `ws-<hash>`
 // copies of revisions built on a shipped mod, except the active one, when the Workshop store holds
 // the revision (it reinstalls on demand) or when the copy differs from the shipped mod only in

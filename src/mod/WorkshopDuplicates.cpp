@@ -10,8 +10,10 @@
 #include <SDL.h>
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <stdexcept>
+#include <string_view>
 
 namespace Workshop {
 namespace fs = std::filesystem;
@@ -39,6 +41,21 @@ uint64_t folderBytes(const fs::path& folder) {
     return total;
 }
 
+std::string hashStampedMetadata(const ShippedMod& mod, INIFile& metadata,
+                                size_t metadataSize, const std::string& gameVersion) {
+    if(!metadata.hasKey("Mod", "Game Version")) return {};
+    metadata.setStringValue("Mod", "Game Version", gameVersion);
+    std::map<std::string, std::string> replaced;
+    auto& bytes = replaced["mod.ini"];
+    bytes.resize(metadataSize + gameVersion.size() + 2, '\0');
+    auto rw = sdl2::RWops_ptr{SDL_RWFromMem(bytes.data(), static_cast<int>(bytes.size()))};
+    if(!rw || !metadata.saveChangesTo(rw.get())) return {};
+    const auto size = SDL_RWtell(rw.get());
+    if(size < 0) return {};
+    bytes.resize(static_cast<size_t>(size));
+    return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, replaced);
+}
+
 }
 
 std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion) {
@@ -46,19 +63,50 @@ std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion
     if(gameVersion.empty() || gameVersion == stampOf(mod.path))
         return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path);
     if(!fs::is_regular_file(ini)) return {};
-    // Change the value the way ModManager::writeModInfo() does: in place, every other byte kept.
+    // Keep every other byte, including comments and historical duplicate metadata keys.
     INIFile metadata(ini.string());
-    if(!metadata.hasKey("Mod", "Game Version")) return {};
-    metadata.setStringValue("Mod", "Game Version", gameVersion);
-    std::string bytes(fs::file_size(ini) + gameVersion.size() + 2, '\0'); // +2: quotes
-    auto rw = SDL_RWFromMem(bytes.data(), static_cast<int>(bytes.size()));
-    if(rw == nullptr) return {};
-    const bool written = metadata.saveChangesTo(rw);
-    const auto size = SDL_RWtell(rw);
-    SDL_RWclose(rw);
-    if(!written || size < 0) return {};
-    bytes.resize(static_cast<size_t>(size));
-    return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, {{"mod.ini", bytes}});
+    return hashStampedMetadata(mod, metadata, fs::file_size(ini), gameVersion);
+}
+
+std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion) {
+    // Older builtin profiles retained a blank Version plus a later Version/Base Mod entry.
+    // Reconstruct that observed layout, never accept a hash alias or discard payload differences.
+    static constexpr std::string_view vanilla =
+        "[Mod]\nDisplay Name = Vanilla\nAuthor = \"Dune City\"\n"
+        "Description = \"Default game settings\"\nVersion = \nGame Version = 1.0.851\n"
+        "Enables City Mode = false\nVersion = \"\"\nBase Mod = \"\"\n";
+    static constexpr std::string_view city =
+        "[Mod]\nDisplay Name = \"Dune City\"\nAuthor = Stefan\n"
+        "Description = \"Hybrid RTS + city-builder mode (zones, overlays, city sim).\"\n"
+        "Version = \nGame Version = 1.0.851\nEnables City Mode = true\n"
+        "Version = 1.002\nBase Mod = \"\"\n";
+    const auto legacy = mod.name == "vanilla" ? vanilla : mod.name == "dunecity" ? city : std::string_view{};
+    const auto path = mod.path / "mod.ini";
+    if(legacy.empty() || gameVersion.empty() || !fs::is_regular_file(path)) return {};
+    INIFile current(path.string());
+    // Only these cosmetic metadata fields may differ. Unknown sections (including Mentats)
+    // and future keys fail closed; Base Mod and City Mode must retain their actual semantics.
+    static constexpr const char* keys[] = {
+        "Display Name", "Author", "Description", "Version", "Game Version", "Base Mod", "Enables City Mode"
+    };
+    for(const auto& section : current) {
+        const auto sectionName = section.getSectionName();
+        if(sectionName.empty() && section.begin() == section.end()) continue;
+        if(SDL_strcasecmp(sectionName.c_str(), "Mod") != 0) return {};
+        for(const auto& key : section) {
+            const auto name = key.getKeyName();
+            if(std::none_of(std::begin(keys), std::end(keys),
+                            [&](const char* known) { return SDL_strcasecmp(name.c_str(), known) == 0; })) return {};
+        }
+    }
+    auto rw = sdl2::RWops_ptr{SDL_RWFromConstMem(legacy.data(), static_cast<int>(legacy.size()))};
+    if(!rw) return {};
+    INIFile metadata(rw.get());
+    if(current.getStringValue("Mod", "Base Mod") != metadata.getStringValue("Mod", "Base Mod")
+       || current.getBoolValue("Mod", "Enables City Mode", false)
+            != metadata.getBoolValue("Mod", "Enables City Mode", false)) return {};
+    // All rules/assets remain the installed bytes. A changed payload cannot recreate the pin.
+    return hashStampedMetadata(mod, metadata, legacy.size(), gameVersion);
 }
 
 namespace {
@@ -139,9 +187,11 @@ bool pinNeedsCopy(const ModPin& pin, const ShippedModCopy& copy, const std::vect
     for(const ShippedMod& mod : shipped) {
         if(mod.name != pin.modName) continue;
         if(stampedModHash(mod, {}) == copy.hash) return false;
-        // resolveMod re-stamps only a shipped mod stamped with this release, for an earlier one.
-        if(!pin.gameVersion.empty() && pin.gameVersion != currentVersion && stampOf(mod.path) == currentVersion
-           && stampedModHash(mod, pin.gameVersion) == copy.hash) return false;
+        // Mirror resolveMod's recognised metadata variants, including an old layout re-saved
+        // by this release. Other payload changes still need their archived revision.
+        if(!pin.gameVersion.empty() && stampOf(mod.path) == currentVersion
+           && ((pin.gameVersion != currentVersion && stampedModHash(mod, pin.gameVersion) == copy.hash)
+               || legacyBundledModHash(mod, pin.gameVersion) == copy.hash)) return false;
     }
     return true;
 }
