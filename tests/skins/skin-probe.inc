@@ -177,11 +177,19 @@ int runSkinProbe() {
                         GFXManager::DuneCityZoneActivity::Idle,0,200,200), "Missing cell lost native fallback");
         }
     }
+    // Make the missing-house fixture independent of future artwork additions.
+    const auto definitions = pGFXManager->duneCityBuildingDefinitions;
+    auto& missingFixture = pGFXManager->duneCityBuildingDefinitions;
+    missingFixture.erase(std::remove_if(missingFixture.begin(), missingFixture.end(),
+        [](const auto& definition) {
+            return definition.houseID == HOUSE_ORDOS && definition.pictureID == ObjPic_Hospital;
+        }), missingFixture.end());
     pGFXManager->setDuneCityHouseGraphicsSkin(HOUSE_ORDOS, true);
     skinRequire(!pGFXManager->drawDuneCityBuilding(Structure_ZoneResidential,
                     HOUSE_ORDOS, 0, SDL_Rect{200,200,64,64}, ObjPic_Hospital),
                 "Missing Hospital must retain its fallback, not another faction's art");
     pGFXManager->setDuneCityHouseGraphicsSkin(HOUSE_ORDOS, false);
+    pGFXManager->duneCityBuildingDefinitions = definitions;
     SDL_Log("SKIN_PROBE_PASS: six selected zone portraits; fixed 2x2 footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks");
     game.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
     return MENU_QUIT_DEFAULT;
