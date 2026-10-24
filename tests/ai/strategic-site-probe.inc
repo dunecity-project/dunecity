@@ -12,6 +12,7 @@ void runStrategicSiteProbe(Game& game) {
         if (auto* candidate=dynamic_cast<QuantBot*>(player.get())) bot=candidate;
     require(bot && bot->gameMode==QuantBot::GameMode::Custom,"Siting fixture lost its Custom QuantBot");
     require(game.getGameCycleCount()==MILLI2CYCLES(35*60000),"Siting fixture is not at minute 35");
+    SDL_Log("STRATEGIC_SITE_SETUP: site_guards=%d", int(bot->botConfig().strategicSiteGuards));
     require(house->getNumItems(Structure_HeavyFactory)>0 && house->getNumItems(Structure_LightFactory)>0,
         "Siting fixture lost the Palace prerequisites");
 

@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-dir', type=Path, default=root / 'build')
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--style', help='Existing play style for a same-build comparison, e.g. strategic-sites-off')
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='fixture-', dir=args.output_dir) as fixture_dir:
@@ -33,6 +34,8 @@ def main():
                    '--repeatable', '--load-save', str(save), '--mod', 'dunecity',
                    '--strategic-site-probe', '--minutes', '41', '--wall-timeout', '900',
                    '--path-workers', '1', '--no-ai-telemetry']
+        if args.style:
+            command += ['--scenario-style', args.style]
         result = subprocess.run(command, cwd=root, capture_output=True, text=True)
     print(result.stdout, end='')
     print(result.stderr, end='', file=sys.stderr)

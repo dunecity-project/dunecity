@@ -395,6 +395,13 @@ int runCampaignBalanceProbe() {
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    // Same-build config comparisons, including the strategic-site regression's negative control.
+    if (scenario || std::getenv("BALANCE_STRATEGIC_SITE_PROBE"))
+        if (const char* style = std::getenv("BALANCE_SCENARIO_STYLE"); style && *style)
+            for (int h = 0; h < NUM_HOUSES; ++h)
+                if (House* house = game->getHouse(h))
+                    for (const auto& player : house->getPlayerList())
+                        if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
     if (std::getenv("BALANCE_STRATEGIC_SITE_PROBE")) {
         runStrategicSiteProbe(*game);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
@@ -425,12 +432,6 @@ int runCampaignBalanceProbe() {
     } else if (std::getenv("BALANCE_FORMATION_MEASURE")) {
         FormationWaveMeasure::run(*game, end, [&]() { ProbeDigest::periodic(*game); return false; });
     } else if (scenario) {
-        // A candidate config switch for every QuantBot (scenario-matrix.py --style; test-only).
-        if (const char* style = std::getenv("BALANCE_SCENARIO_STYLE"); style && *style)
-            for (int h = 0; h < NUM_HOUSES; ++h)
-                if (House* house = game->getHouse(h))
-                    for (const auto& player : house->getPlayerList())
-                        if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
         outcome = ScenarioMatch::run(*game, end, scenarioSides.empty(), humanHouse, constructionYardOnly);
     } else if (!matchSides.empty()) {
         VanillaMatch::run(*game, end, matchSides);

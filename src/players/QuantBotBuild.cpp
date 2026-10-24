@@ -5286,7 +5286,7 @@ void QuantBot::build(int militaryValue) {
 					&& itemCount[Structure_RepairYard] > 0
 					&& campaignAvailableToBuild(pBuilder,Structure_IX)
 					&& money > 1000
-					&& findPlaceLocation(Structure_IX).isValid()) {
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 					logDebug("Build IX... money: %d", money);
 				}
@@ -5298,7 +5298,7 @@ void QuantBot::build(int militaryValue) {
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
 					&& itemID != Structure_NuclearPlant
-					&& findPlaceLocation(Structure_IX).isValid()) {
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 				}
                 // Missing prerequisites never start the IX overdue timer.
@@ -5391,7 +5391,7 @@ void QuantBot::build(int militaryValue) {
 									&& palaceAllowed
 									&& itemCount[Structure_HeavyFactory] > 0
 									&& itemCount[Structure_LightFactory] > 0
-									&& findPlaceLocation(Structure_Palace).isValid()) {
+									&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
 								itemID = Structure_Palace; structureRule = "palace_strategy";
 							}
 				if (palaceOverdue && !skipRemainingStructureLogic
@@ -5405,7 +5405,7 @@ void QuantBot::build(int militaryValue) {
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
 					&& itemID != Structure_NuclearPlant
-					&& findPlaceLocation(Structure_Palace).isValid()) {
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
 					itemID = Structure_Palace; structureRule = "palace_strategy";
 				}
 				// Same demand as the palace rules above, for a map whose Palace

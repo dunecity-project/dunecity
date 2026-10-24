@@ -149,6 +149,13 @@ TEST_CASE("Strategy: modes and weights parse strictly", "[ai][strategy]") {
     }
 }
 
+TEST_CASE("Strategic site guards distinguish multiplayer configurations", "[ai][config][strategic-sites]") {
+    QuantBotConfig guarded, legacy;
+    guarded.strategicSiteGuards = true;
+    legacy.strategicSiteGuards = false;
+    REQUIRE(guarded.getConfigHash() != legacy.getConfigHash());
+}
+
 TEST_CASE("Strategy: the [Strategy] keys are read and every one is hashed", "[ai][strategy][config]") {
     const QuantBotConfig baseline;
     const std::string base = baseline.getConfigHash();

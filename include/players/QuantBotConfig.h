@@ -244,6 +244,9 @@ struct QuantBotConfig {
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
+    /// [General Behavior] StrategicSiteGuards: IX/Palace selections require a real site.
+    /// Off reproduces the old overdue-order starvation for same-build comparisons. Hashed.
+    bool strategicSiteGuards;
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
     /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
     /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into
