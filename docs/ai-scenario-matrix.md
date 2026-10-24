@@ -412,8 +412,8 @@ last yard, existing rock-expansion and colonisation recovery remain exempt.
 Shared combat upgrades, worker targets and first-wave readiness are unchanged.
 The style does not enable either rejected first-wave budget above.
 
-The retained `sdc` trace at cycle52325 bought a900-credit MCV with projected
-cash−406, after forecasting13071 income/cash against13477 continuing-production
+The retained `sdc` trace at cycle 52,325 bought a 900-credit MCV with projected
+cash −406, after forecasting 13,071 income/cash against 13,477 continuing-production
 cost. The new same-engine queue regression reproduces the off-arm purchase,
 requires on-arm rejection **and affordable combat fallthrough**, and retains
 funded MCV expansion, real lost-yard recovery and shared technology progression.
@@ -421,6 +421,24 @@ All three shared-spending mod probes pass at `1d0a93be`.
 
 This forecast includes existing idle/held production capacity, not only unpaid
 orders. It is a conservative capacity rule; passing queue boundaries does not
-establish campaign, team or ladder improvement. The switch remains off pending
-the unchanged paired outcome comparisons.
+establish campaign, team or ladder improvement. The completed source `64c370dc04c7`
+comparison contains **876 games**, with matched inputs and zero game errors:
+
+| Comparison | Games per arm | Control score | Candidate score | Paired difference [95% interval] |
+|---|---:|---:|---:|---|
+| Short-map Brutal versus Hard | 72 | +0.22 | +0.19 | −0.03 [−0.08,0.00] |
+| Short-map Hard versus Medium | 72 | +0.23 | +0.23 | 0.00 [−0.06,+0.06] |
+| Standard Hard campaign partners | 192 | +0.95 | +0.95 | 0.00 [0.00,0.00] |
+| Hard versus Medium, 2v2 teams | 48 | +0.57 | +0.50 | −0.07 [−0.24,+0.09] |
+| Hard versus Medium, 3v3 teams | 48 | +0.29 | +0.35 | +0.06 [−0.22,+0.33] |
+
+No group establishes paired improvement. All five named campaign losses remain
+losses; nine campaign final digests change, so unchanged scores are not evidence
+that every campaign was inert. With corrected movement on, the mandatory six-seed
+AAA comparison is 5/6 within 40 minutes in both MCV states, with all six paired
+digests identical. Seed906213928 still times out at41; this rule does not fix it.
+`CapacityMcvRunway` stays off and is rejected for default use.
+
+Raw data, reports, matching-input coverage and named losses:
+`~/Documents/projects/dunecity-results/ladder-campaign/mcv-runway-64c370dc/`.
 

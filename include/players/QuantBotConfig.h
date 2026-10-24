@@ -138,8 +138,8 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway;
-    /// optional keys, the code defaults
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
+    /// RespectServiceOwnership; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -217,6 +217,9 @@ struct QuantBotConfig {
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.
         bool capacityMcvRunway;
+        /// Light-raider tactical orders leave repair and carryall-pickup ownership intact.
+        /// Independent candidate; off until same-build mechanics/outcome acceptance.
+        bool respectServiceOwnership;
     };
     ForceSettings force;
 

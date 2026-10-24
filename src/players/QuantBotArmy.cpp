@@ -3636,6 +3636,12 @@ void QuantBot::retreatAllUnits() {
             if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive()
                 && QuantBotBuildPolicy::isLightRaider(pUnit->getItemID())) {
+                // Repair reservations and promised pickups keep their owner:
+                // periodic raider micro must not cancel a service the damage
+                // callback already leaves alone.
+                if (config.force.respectServiceOwnership
+                    && (unitRole(pUnit, {UnitRole::Repair}) != UnitRole::Free
+                        || static_cast<const GroundUnit*>(pUnit)->isAwaitingPickup())) continue;
                 if (const UnitBase* tank = findThreateningTank(pUnit)) {
                     // A short dodge does not release an offensive slot. Keep
                     // custom hunters in their wave just like artillery kiting.

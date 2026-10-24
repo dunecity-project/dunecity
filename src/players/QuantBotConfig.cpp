@@ -324,6 +324,7 @@ QuantBotConfig::QuantBotConfig() {
     force.openingCombatBudget = false;
     force.campaignCombatBudget = false;
     force.capacityMcvRunway = false;
+    force.respectServiceOwnership = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -613,6 +614,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
+        iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -716,6 +718,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
+    force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1192,6 +1195,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
+    addNamed("respectServiceOwnership", force.respectServiceOwnership);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
