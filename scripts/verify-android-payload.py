@@ -21,7 +21,8 @@ def main():
     root = args.root.resolve()
     tracked = {}
     for entry in subprocess.check_output(
-            ["git", "-C", str(root), "ls-tree", "-rz", "HEAD", "data", "config", "mods"]).split(b"\0"):
+            ["git", "-C", str(root), "ls-tree", "-rz", "HEAD",
+             "data", "config", "mods", "imported_sprites"]).split(b"\0"):
         if entry:
             meta, name = entry.split(b"\t", 1)
             tracked[name.decode("utf-8")] = meta.split()[2].decode("ascii")
