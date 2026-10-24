@@ -979,6 +979,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
         set_tests_properties(quantbot_ffa_army_deploys PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # Restores the overdue Palace timer in the stalled minute-35 city fixture, checks
+        # that no Palace site exists, then requires other completed construction and no
+        # prolonged all-yard idle/storage-cap plateau. Disk saves reset this planning timer.
+        add_test(NAME quantbot_strategic_site_stall COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-strategic-site-stall.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategic-site-stall)
+        set_tests_properties(quantbot_strategic_site_stall PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # Mandatory for every AI/unit/game-loop change (Stefan, 2026-10-18): Stefan's 4P DuneCity
         # Brutal Random Skirmish map, 6 game minutes headless, one path thread; fails when the mean
         # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of

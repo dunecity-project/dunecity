@@ -254,6 +254,8 @@ parser.add_argument('--no-ai-telemetry', action='store_true',
                          'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
                          'Log = false')
 parser.add_argument('--factory-recovery-probe', action='store_true')
+parser.add_argument('--strategic-site-probe', action='store_true',
+                    help='Continue the stalled-city fixture with its overdue Palace timer restored')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
@@ -697,6 +699,7 @@ if args.duel_map_size:
         parser.error('--duel-sides must be house:shape,house:shape with known houses.')
 if args.launcher_kiting_probe: env['BALANCE_LAUNCHER_KITING_PROBE'] = '1'
 if args.factory_recovery_probe: env['BALANCE_FACTORY_RECOVERY_PROBE'] = '1'
+if args.strategic_site_probe: env['BALANCE_STRATEGIC_SITE_PROBE'] = '1'
 if args.starport_probe: env['BALANCE_STARPORT_PROBE'] = '1'
 if args.helper_economy_probe: env['BALANCE_HELPER_ECONOMY_PROBE'] = '1'
 if args.city_campaign_probe: env['BALANCE_CITY_CAMPAIGN_PROBE'] = '1'
