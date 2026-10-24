@@ -371,8 +371,8 @@ def command(args, binary, game, out):
             if path:
                 with Path(path).open() as handle:
                     options.read_file(handle)
-        out.mkdir(parents=True, exist_ok=True)
-        options_path = out / 'game-options.ini'
+        out.parent.mkdir(parents=True, exist_ok=True)
+        options_path = out.with_suffix('.game-options.ini')
         with options_path.open('w') as handle:
             options.write(handle)
     if options_path:
