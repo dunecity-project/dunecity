@@ -718,6 +718,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
+        # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
+        # and saved partner state through the live Harkonnen level-9 fixture.
+        foreach(pressure_mod IN ITEMS vanilla dunecity)
+            add_test(NAME quantbot_campaign_pressure_${pressure_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pressure-probe --repeatable
+                --house harkonnen --level 9 --mod ${pressure_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/campaign-pressure-${pressure_mod}-probe)
+            set_tests_properties(quantbot_campaign_pressure_${pressure_mod}
+                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        endforeach()
         # Read-only Stats window, observer house browsing and the sidebar squeeze,
         # on a real renderer at the smallest supported interface height and at
         # native 1080. Both sizes capture screenshots into their output directory.

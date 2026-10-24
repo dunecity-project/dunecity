@@ -59,7 +59,7 @@ def windows_probe_commands(build):
     compile_entry = next(e for e in database if ('/' + output(e)).endswith(main_object))
     link_entry = next(e for e in database if output(e).endswith('/dunecity.exe') and 'vs_link_exe' in e['command'])
     compile_command = windows_argv(compile_entry['command'])
-    if Path(compile_command[0]).name.lower().startswith('sccache'):
+    if Path(compile_command[0]).name.lower().startswith(('sccache', 'ccache')):
         compile_command = compile_command[1:]
     clang = os.environ.get('DUNECITY_CLANG_CL') or shutil.which('clang-cl')
     if not clang:

@@ -1,3 +1,12 @@
+## 2026-10-24 — Shared follow-up integration, not yet release accepted
+
+- Single staging checkout/build: `dunecity-feature-batch/build-int`; completed source handoffs retain their original commits and evidence below. No new version or install.
+- Combined protocol **102**, save **9873**: includes online observer completion plus the independent Natives team and reinforcement-worm summoner state. Protocol pins reconciled together.
+- Integrated Vuk UI fixes, online spectator completion, simultaneous-defeat ordering, Natives follow-up including byte-compatible visibility packing, exact FPS optimizations, twelve community maps and paired-score correction. Palace/IX integration is restricted to the placeable-site guards and its consumer regression, not the unaccepted FFA experiments.
+- `JoinAllyWaves`, `OpeningCombatBudget` and `CampaignCombatBudget` remain **off and unaccepted**. Sardaukar/Mercenary defaults unchanged. Unit-movement acceptance and community-mod review remain open.
+- Registered the missing live Harkonnen level-9 campaign-pressure cases for vanilla/DuneCity. Windows diagnostic compilation recognizes actual ccache and sccache launchers; no masquerading wrapper.
+- Combined build, legacy-save checks, new consumer probes, full cluster ctest and release acceptance are **pending**. Earlier branch test results below are not combined-build results.
+
 ## 2026-10-24 — Vuk's Classic Desert UI tested on 1.0.852 (branch `test/vuk-classic-ui`, worktree `~/Documents/projects/dunecity-vuk-test`, from staging 6fd861ae; UI-only, protocol 94 / save 9871 unchanged; no version bump)
 
 Agent VukTest. Evidence `~/Documents/projects/dunecity-results/vuk-test/` (gallery-final/ contact sheets, crest-before-after-*.png, perf/, windows/, qb-rename/).
