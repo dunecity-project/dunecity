@@ -575,10 +575,12 @@ bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candid
                static_cast<const UnitBase*>(&seeker), &candidate);
 }
 
-// 0 = normal, 1 = walls (slightly deprioritized), 2 = carryalls (heavily deprioritized)
+// 0 = normal, 1 = walls and city zones (slightly deprioritized), 2 = carryalls (heavily deprioritized).
+// City zones keep no house alive (House::isAlive), so an army picks a turret, building or unit
+// near it before the zones around them (docs/formations.md, "Free-for-all: finishing the game, 1.0.853").
 int getTargetDeprioritizationLevel(const ObjectBase& candidate) {
     if(isCarryallUnit(candidate.getItemID())) return 2;
-    if(candidate.getItemID() == Structure_Wall) return 1;
+    if(candidate.getItemID() == Structure_Wall || isZoneStructure(candidate.getItemID())) return 1;
     return 0;
 }
 

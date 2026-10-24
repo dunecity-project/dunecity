@@ -679,7 +679,9 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
     if (!structure->getOwner() || structure->getOwner()->getTeamID() == getHouse()->getTeamID()
         || structure->getHealth() <= 0) return false;
     switch (structure->getItemID()) {
+        // City zones keep no house alive (House::isAlive): no finishing objective or count.
         case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+        case Structure_ZoneResidential: case Structure_ZoneCommercial: case Structure_ZoneIndustrial:
             return false;
         default: break;
     }
