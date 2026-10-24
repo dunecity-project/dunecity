@@ -273,14 +273,31 @@ The saved full suite `20261024T104919-ctest-c7a6bb` is **108/109 passed**;
 only `quantbot_all_against_atreides` fails, on both machines. It is not a
 passing acceptance receipt.
 
-The long-game ladder remains in existing jobs
+The preserved long-game jobs have now completed, **720/720 games per arm**:
 `20261024T112050-um-ladder-before-0983dd` /
-`20261024T112050-um-ladder-after-fb033c`: 720 games per build, 144 per pair
-(QB/QH, QH/QM, QM/QE, QB/QM, QH/QE; eighteen seeds, both house assignments,
-128/160 vanilla/DuneCity, 75/90-minute caps). At recovery collection the
-control has 0/720 rows and candidate 24/720; no paired ladder verdict is
-available. Parent must collect those jobs and resolve the AAA blocker before
-claiming combined-build acceptance. Recovery made no new executable snapshot.
+`20261024T112050-um-ladder-after-fb033c`. Each pair has 144 games per arm,
+72 paired seed/map setups: eighteen seeds, both house assignments, 128/160
+vanilla/DuneCity and unchanged 75/90-minute caps. `ladder_paired.py
+ladder-before ladder-after` reproduces the paired seed/map bootstrap:
+
+| Stronger v weaker | Control stronger-house score [95% interval] | Fix score [95% interval] | Paired difference [95% interval] |
+|---|---|---|---|
+| Brutal v Hard | +0.604 [+0.457, +0.736] | +0.571 [+0.424, +0.705] | -0.033 [-0.122, +0.057] |
+| Hard v Medium | +0.512 [+0.387, +0.627] | +0.469 [+0.333, +0.599] | -0.043 [-0.123, +0.042] |
+| Medium v Easy | +0.929 [+0.875, +0.974] | +0.948 [+0.896, +0.991] | +0.019 [-0.017, +0.061] |
+| Brutal v Medium | +0.839 [+0.733, +0.931] | +0.866 [+0.778, +0.944] | +0.028 [-0.056, +0.122] |
+| Hard v Easy | +1.000 [+1.000, +1.000] | +0.983 [+0.957, +1.000] | -0.017 [-0.043, +0.000] |
+
+The aggregate difficulty order is positive in both arms. All paired differences
+are level by the existing classifier; that is **not noninferiority proof** and
+does not clear the mandatory AAA failure above.
+
+The parent has separately queued the unchanged six mandatory AAA seeds with
+the rule off/on in the current integrated source `e286003d100a`, including the
+Palace/IX correctness fix: jobs `20261024T214127-integrated-aaa-off-4b4f86`
+and `20261024T214128-integrated-aaa-on-29db8b`. These new same-build results
+must not be pooled with the older source's sixty-seed cohort. No current
+integrated on-arm pass or combined-build acceptance is claimed here.
 
 ## Verification
 

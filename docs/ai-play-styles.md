@@ -1007,9 +1007,9 @@ Candidate percentages, ten-slot order of 8.8 (Deviator always 0 in vanilla):
 | Mercenary conservative Sonic refinement (`t8-merc-sonic`) | 15,27,25,2,14,0,11,2,2,2 |
 
 The two refinements keep much more of the configured opening's artillery than the failed `t8-cost`
-candidate (8.10), while raising Sonic from approximately 2% to 14%. They are test-only hypotheses, not
-measured winners or the outcome of a completed refinement tournament. Each sums to 100, stays within
-2-50% for all nine vanilla-buildable slots, and leaves learning on.
+candidate (8.10), while raising Sonic from approximately 2% to 14%. They remain
+test-only hypotheses, not accepted winners of a position-balanced confirmation.
+Each sums to 100, stays within 2-50% for all nine vanilla-buildable slots, and leaves learning on.
 
 **Preserved fresh-seed jobs (`c9`).** `20261024T132117-sm-c9-26c010-{1..5}` are Sardaukar, `{6..10}`
 Mercenary; each house faces Atreides, Harkonnen, Ordos, Fremen, then the other revisited house. Each shard
@@ -1018,12 +1018,24 @@ are `default@t8-sard-sonic#Tuned-Swarm` or `default@t8-merc-sonic#Tuned-Swarm`, 
 `default#Tuned-Swarm`. Each style sets only its target house's top mix; the opponent's shipped mix is
 therefore identical in both arms. Source snapshot `6fd861ae958d-edc7d444`.
 
-At the recovery evidence handoff **all 840 games were pending**, so both houses have n=0 complete
-pairs and **no estimate or interval**. More importantly, even a completed `c9` gives only **210
-candidate-on-house games per house** (420 total games), and the target house is always first in map
-order. Swapping labels does not swap positions. These jobs are explicitly **exploratory and inadequate
-for the original acceptance**, regardless of any eventual interval. Keep them and their rows; a
-properly sized, position-balanced confirmation belongs on the parent's shared integrated build.
+At the recovery handoff all 840 games were pending. They have now completed; the
+canonical `--paired HOUSE` reports were refreshed from the preserved CSVs, without
+replaying games. These are target-house placement-score differences, not the
+all-house or least-squares columns in the exploratory report:
+
+| Target house | Completed games | Complete pairs / candidate-on-house games | Paired gain [95% interval] |
+|---|---:|---:|---|
+| Sardaukar | 420 | 210 | -0.006 [-0.15, +0.12] |
+| Mercenary | 420 | 210 | +0.114 [-0.02, +0.25] |
+
+Neither overall interval excludes zero. Both candidates improve against Ordos
+in these 42-pair subgroups, but that does not establish an overall improvement.
+The target house is always first in map order: swapping labels does not swap
+positions. Thus `c9` is **exploratory and inadequate for the original acceptance**:
+210, not 420, candidate-on-house games per house and no second map position.
+Do not pool the candidate-selection `x8`/`x9` rows into confirmation. A properly
+sized, position-balanced confirmation belongs on the shared integrated build,
+after its movement rules have passed acceptance. Both configured openings stay unchanged.
 
 **Analysis correction.** `ratio-analysis.py --arms A:B --paired HOUSE` matches tag, difficulty, map,
 seed, opponent and ordered houses, then bootstraps complete pairs of HOUSE's placement score as A
