@@ -479,6 +479,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/maps/check-community-maps.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-maps-startup)
         set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # Exact reviewed payloads, real five-minute AI production from two bare yards,
+        # and matching final digests across two runs of every community mod.
+        add_test(NAME community_mods_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mods/check-community-mods.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-mods-startup)
+        set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.

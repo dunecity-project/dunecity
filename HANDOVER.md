@@ -1,3 +1,53 @@
+## 2026-10-24 — community mod catalogue reviewed; three optional revisions bundled (source-only `feat/community-maps`)
+
+Agent CommunityMods; continues completed map tip ba3799a1 in the existing
+`~/Documents/projects/dunecity-community-maps` lane. No new tree/build/profile, version bump or publication.
+Review evidence: `~/Documents/projects/dunecity-results/community-mods-20261024/`
+(`catalogue-listing.json`, `shipped-copy-classification.json`, `custom-rule-review.json`, `file-audit.json`,
+`path-audit.json`); downloads and reproducible fetch script remain in `/tmp/cm-mods`.
+
+- Obtained all 167 revisions / 163 items, sequential delayed requests, reusing only length/SHA-verified files:
+  2,197 unique file hashes verified. Every manifest passed path/case/device-name/collision/size checks; custom
+  PNGs passed integrity parsing; no executable/script content imported or executed.
+- Shipped-copy counts corrected to **154**: Dune City 73, Vanilla 65, Dune2R 13, Tornie 3. One uploaded item named
+  Vanilla is genuinely modified (infantry/harvester speeds and ambient-aircraft Heavy Factory builders), not a
+  historical shipped snapshot. All other ObjectData/QuantBot variants match committed source history.
+- Exact catalogue files bundled (1,544 files / 10,736,436 bytes), with excluded Workshop identity sidecars and
+  per-file provenance in `mods/community-mods.json`:
+  - deo-t v1, item `9d5e59ad54d0d3b9c65623634a99aba2`, revision
+    `93d3ab43ccc64ade50a3f8a75e934949611e5f36cf0979b5f4a96c43dcf22e57`,
+    folder `community-93d3ab43ccc64ade`: shipped Tornie with Sandworm disabled.
+  - TornUge v1, item `8b03ca1bcb2795f9414b5020bb4870c1`, revision
+    `c8baed9d35d533150d088e304e674a372579c8c6efbaf95850d529fbc51e6a28`,
+    folder `community-c8baed9d35d53315`: Tornie with concrete required and instant build off.
+  - new - modded v4, item `8d0b4fe19f7b1383b6a19c0f937778b8`, revision
+    `4a2905f3b397951725fc937185d3ad6cbcc0018f60c02db81aefd44031385bf7`, folder `new` (required to preserve
+    its empty-Base-Mod catalogue identity): turret reload 70, QuantBot turret/wall targets 1/2/0, older defaults.
+    Its obsolete Structures Degrade On Concrete key is ignored by the current engine.
+- `docs/community-mods.md` reviews all eight named customs plus the hidden modified Vanilla. Rejected:
+  aa placeholder, aaaa cheat Sonic Tank (99,000 HP / price 1 / damage 5,000), C&C on Arrakis (explicit local-copy
+  copyrighted C&C sprites without redistribution grant), Dune City Tornie (no actual hybrid; Advanced Windtrap
+  still Builder=Invalid), GMD-8 (metadata-only duplicate of new - modded), misleading experimental Vanilla.
+- Scattered War's sidecar now selects exact authored `new` dependency; map bytes unchanged. Its old Vanilla
+  digest is explicitly `previous_validation`, not evidence for the new association. Wezowe Pola's provenance
+  is corrected (published with experimental Vanilla, retained with current Vanilla). SONOB reconsidered:
+  time-zero MCV reinforcements do exist, but four recognised slots plus unknown Corruptique cannot satisfy
+  its nine-player title; TornUge's two options do not repair that. It remains rejected, unchanged.
+- Minimal generic ModManager seeding installs missing extra bundled mod folders, never replaces an existing
+  user folder or changes the default. Native/Android already copy the whole mods tree; web now preloads it
+  too. New paths alone are `-text` for cross-platform catalogue byte identity. Shipped mod files untouched.
+- Existing approved list/tokens, per-active-mod checksums and multiplayer content fingerprints are unchanged
+  by these extra folders. Selecting a community mod uses its own catalogue identity/rules and authored-mod
+  lobby/transfer flow; no auto-approval, protocol or save-format change.
+- New `community_mods_startup` checks bytes and plays each mod twice for five game minutes, real GameOptions,
+  hard AI, seed 4242, bare yards on separated rock/spice islands: requires factory/power/combat-vehicle
+  production and equal final digests. Existing `menu_navigation_probe` actually selects each choice, checks
+  catalogue fingerprint and non-approval, then restores the prior selection. Map startup covers Scattered War
+  under the corrected mod. These are load/production/determinism checks, NOT balance certification.
+- **Runtime acceptance pending the parent's single shared build / cluster CTest.** No child build, game/menu
+  run, test, linter or formatter was run for this batch. The old map-only 110/110 receipt predates these mods.
+  Parent owns integration, full combined acceptance and updating the pending runtime status in the provenance/docs.
+
 ## 2026-10-24 — community catalogue maps bundled (branch `feat/community-maps`, worktree `~/Documents/projects/dunecity-community-maps`, from staging 6fd861ae = local 1.0.852)
 
 Agent CommunityMaps. Stefan: "look at the metaserver new multiplayer maps and add them to the build". Evidence (downloads,

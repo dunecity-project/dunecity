@@ -481,6 +481,20 @@ void ModManager::initialize() {
         seedDune2RFromDefaults();
     }
 
+    // Extra installer payloads are selectable, not approved/default mods.
+    // Seed only missing folders; never replace a player's existing authored mod.
+    const auto bundledMods = findBundledModPath(TORNIE_MOD_NAME).parent_path();
+    if(!bundledMods.empty() && std::filesystem::is_directory(bundledMods)) {
+        for(const auto& entry : std::filesystem::directory_iterator(bundledMods)) {
+            const auto name = entry.path().filename().string();
+            if(!entry.is_directory() || !isValidModName(name) || modExists(name)
+               || !std::filesystem::is_regular_file(entry.path() / MOD_INI_FILE)) continue;
+            const auto destination = std::filesystem::path(getModPath(name));
+            if(!isSameDirectoryTree(entry.path(), destination))
+                refreshManagedMod(name, destination, entry.path());
+        }
+    }
+
     // Load active mod from file
     loadActiveMod();
 

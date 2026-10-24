@@ -47,8 +47,11 @@ downloaded and reduced to genuinely new maps: dropped were copies of bundled map
 (same bytes, same content ignoring header/author fields, or same terrain), maps
 named like a bundled map, auto-generated `Random ... T<n> <seed>` maps, RWRK
 campaign scenarios, placeholders/tests, and maps whose slots or starts do not
-match their name. Each accepted map is the latest revision of its item, played as
-two identical two-minute all-AI games in its mod with equal final digests.
+match their name. Each accepted map is the latest revision of its item. The initial
+import played two identical two-minute all-AI games per map (equal final digests);
+Scattered War initially used Vanilla and is now associated with its exact bundled
+`new - modded` dependency. See [the mod reviews](community-mods.md) for that change,
+the corrected Wezowe Pola provenance, rejected mods and the current validation status.
 
 The files are the exact catalogue bytes. The catalogue has no author field, so
 `data/maps/community-maps.json` records each map's catalogue item ID, version,
@@ -72,7 +75,7 @@ filter). `ctest -R community_maps_startup` checks every entry.
 | 5P - 128x128 - Fremen Homebase | Vanilla | Dune lover | `148fbc36…` v2 |
 | 6P - 128x128 - Alla Map | Dune2R | Mmed | `59de4d55…` v1 |
 | 6P - 512x448 - No Win | Dune2R | cYN | `93133d16…` v1 |
-| 8P - 256x256 - Scattered War | Vanilla (published with the custom mod "new - modded") | TijnAG07 | `92791220…` v4 |
+| 8P - 256x256 - Scattered War | new - modded (exact original dependency; folder `new`) | TijnAG07 | `92791220…` v4 |
 
 Big Border also places Fremen and Neutral fortresses without lobby slots; Fremen
 Homebase is a four-against-one scenario whose Fremen slot starts with a large army.

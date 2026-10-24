@@ -120,7 +120,7 @@
       "sha256": "66cfaa19957bb4c20ddf82facb220e02c76e40456d1699b53de81757a28cd73c",
       "catalogue_mod": "Vanilla",
       "catalogue_mod_revision": "3d771f0a53d332d7b195e034bca47a8a604c798d06b89a7aca110a6dec8ac297",
-      "catalogue_mod_note": "shipped Vanilla snapshot of an earlier release (content-derived id; rules files differ from 1.0.852)",
+      "catalogue_mod_note": "The pinned catalogue mod is an experimentally modified snapshot labelled Vanilla (faster infantry/harvesters, ambient aircraft factory builders), not a shipped snapshot. The map uses standard units and remains bundled/tested with current Vanilla; the unlabelled mod is not imported. See docs/community-mods.md.",
       "validation": {
         "game_minutes": 2,
         "seed": 4242,
@@ -282,7 +282,7 @@
       "name": "8P - 256x256 - Scattered War",
       "file": "8P - 256x256 - Scattered War.ini",
       "directory": "multiplayer",
-      "mod": "vanilla",
+      "mod": "new",
       "players": 8,
       "width": 256,
       "height": 256,
@@ -295,8 +295,12 @@
       "sha256": "739f55cfda77d9fd008dd51769e37c0415992906d460c07b70ba7d34ee52bd5b",
       "catalogue_mod": "new - modded",
       "catalogue_mod_revision": "4a2905f3b397951725fc937185d3ad6cbcc0018f60c02db81aefd44031385bf7",
-      "catalogue_mod_note": "authored for custom mod 'new - modded' (base 'new'); bundled under Vanilla (uses only Vanilla units and buildings)",
+      "catalogue_mod_note": "Exact authored dependency is now bundled: new - modded v4, installed folder new. Map bytes are unchanged; the workshop sidecar selects its original rules.",
       "validation": {
+        "status": "pending shared-batch community_maps_startup in new - modded"
+      },
+      "previous_validation": {
+        "mod": "vanilla",
         "game_minutes": 2,
         "seed": 4242,
         "final_digest": "7fb644f51dd405ec",
