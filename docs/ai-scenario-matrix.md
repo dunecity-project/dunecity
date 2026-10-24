@@ -464,3 +464,27 @@ reciprocal carrier targets come from normal engine APIs; ownership flags are
 not manufactured. The probe passes; no completed rescue or strategic-outcome
 claim is made. The switch remains off pending the unchanged outcome gates.
 
+The completed same-native-build comparison contains36 games (18 per arm),
+with matched inputs, unchanged limits and zero game errors. Corrected movement is
+on in both; only the independent service-ownership style differs. Native binaries
+were retained across reporting-only sources `78eaa25ebef0` and `d9d8788c918d`,
+verified on all four hosts.
+
+| Mandatory vanilla seed | Service off, game minutes | Service on, game minutes |
+|---|---:|---:|
+|1756374161|38.34|36.20|
+|906213928|time limit41|35.26|
+|41562270|34.36|32.60|
+|1841712204|38.11|35.72|
+|1430976924|33.90|time limit41|
+|1804669015|33.64|36.44|
+
+Both arms meet the original all-four-enemies/40-minute condition in5/6 cases.
+The previous failed seed now passes, but another fails: this is **not** movement
+acceptance. DuneCity wins and the reverse Medium-versus-four-Hard expected
+defeats each remain6/6 in both arms at their original60-minute caps.
+`RespectServiceOwnership` remains off and unaccepted; the genuine booking
+regression is fixed only when explicitly enabled, not claimed shipped by default.
+Raw inputs, all36 outcomes and actual host coverage:
+`~/Documents/projects/dunecity-results/unit-movement/serviceownership-78eaa25e/`.
+
