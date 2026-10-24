@@ -65,8 +65,8 @@ EIGHT_BUDGETS = {'cpu_p99': 3.0, 'frame_cpu_p99': 9.0, 'mainloop_frame_p99': 8.0
 def build_eight_house_fixture(scratch):
     """The 8-house save and a profile whose Workshop store holds the two revisions it pins (the
     "Dune City" mod 746bae13, the 384x384 map 76deda62), rebuilt from tests/performance/data/
-    eight-house-384: the save and both manifests are stored there (gzip), with the three files
-    this tree does not have; the mod revision's other files are this tree's dunecity
+    eight-house-384: the save and both manifests are stored there (gzip), with original
+    files no longer present in the production tree; the other files are this tree's dunecity
     graphics skins and config/ ini files. Every file is checked against its manifest hash, so a
     changed skin fails here by name rather than as a load error. Returns (save, profile)."""
     out = scratch / 'eight-house'

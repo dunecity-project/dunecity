@@ -157,8 +157,16 @@ int runSkinProbe() {
                     const int picture = overlay == ZoneStructure::CivicOverlay::Hospital
                         ? ObjPic_Hospital : ObjPic_Church;
                     const SDL_Rect destination{200, 200, 64, 64};
-                    skinRequire(pGFXManager->drawDuneCityBuilding(
-                                    item, house, 0, destination, picture),
+                    // The real atlas cache decodes asynchronously. Retry on the
+                    // render thread just as consecutive game frames do.
+                    const Uint32 started = SDL_GetTicks();
+                    bool drawn = false;
+                    do {
+                        drawn = pGFXManager->drawDuneCityBuilding(
+                            item, house, 0, destination, picture);
+                        if(!drawn) SDL_Delay(10);
+                    } while(!drawn && SDL_GetTicks() - started < 3000);
+                    skinRequire(drawn,
                                 "Civic overlay failed to select its high-detail house picture");
                     pGFXManager->setDuneCityHouseGraphicsSkin(house, false);
                     skinRequire(!pGFXManager->drawDuneCityBuilding(

@@ -36,6 +36,11 @@ renderer fix, tests and this documentation belong in the game repository.
 Local validation: exactly 31 skin PNGs changed, with every other skin file
 byte-identical to 1.0.853. All new dimensions match the intended 4× canvas.
 Eight packaging tests and nine browser payload verification tests pass.
+The saved eight-house benchmark pins the previous artwork. Its 31 replaced PNGs
+are retained by SHA-256 in the immutable test fixture, outside production assets.
+Reconstruction checks the save, both revision manifests and every payload byte;
+it passes without substituting new art or weakening the benchmark.
+
 Hosted platform/render validation is pending; no 1.0.854 release is published.
 
 This batch does not author the seven missing special buildings or the 32
