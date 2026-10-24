@@ -5,7 +5,10 @@
 - Integrated Vuk UI fixes, online spectator completion, simultaneous-defeat ordering, Natives follow-up including byte-compatible visibility packing, exact FPS optimizations, twelve community maps and paired-score correction. Palace/IX integration is restricted to the placeable-site guards and its consumer regression, not the unaccepted FFA experiments.
 - `JoinAllyWaves`, `OpeningCombatBudget` and `CampaignCombatBudget` remain **off and unaccepted**. Sardaukar/Mercenary defaults unchanged. Unit-movement acceptance and community-mod review remain open.
 - Registered the missing live Harkonnen level-9 campaign-pressure cases for vanilla/DuneCity. Windows diagnostic compilation recognizes actual ccache and sccache launchers; no masquerading wrapper.
-- Combined build, legacy-save checks, new consumer probes, full cluster ctest and release acceptance are **pending**. Earlier branch test results below are not combined-build results.
+- Combined source **b617a9d3** built successfully in shared `build-int`; dependency checks passed before/after. Actual combined gallery winner plate inspected; observer completion, Natives interactions and all six previous visibility/legacy-layout failures passed.
+- Cluster job `20261024T143241-combined-b617a9d3-da3ff9`: **113/117 passed** before its CLI watcher timed out at 3600 s. The durable job continues independently. Both new campaign-pressure cases failed on an obsolete worker-limit fixture assumption; Palace-site case failed its no-site precondition after load. Corrections are source handoffs, not yet verified. Scenario-matrix coverage is still pending; this is **not a green full suite**.
+- Six legacy save fixtures (1.0.842/847/850/public 851) loaded, advanced 600 cycles, re-saved as 9873 and reloaded; Natives remained on team 10. Performance fallback ran on the **mini, not the offline Pro**: eight-house CPU p99 ratio 0.909/1.600, modeled frame 3.210/5.500, main-loop frame 5.016/8.000; all budgets passed.
+- Release acceptance remains **pending**. Earlier branch receipts below are not substitutes for the final combined suite.
 
 ## 2026-10-24 — Vuk's Classic Desert UI tested on 1.0.852 (branch `test/vuk-classic-ui`, worktree `~/Documents/projects/dunecity-vuk-test`, from staging 6fd861ae; UI-only, protocol 94 / save 9871 unchanged; no version bump)
 
