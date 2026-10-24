@@ -82,7 +82,7 @@ def source_fingerprint(source):
 
 
 def injected_main(source):
-    main = (source / 'src/main.cpp').read_text()
+    main = (source / 'src/main.cpp').read_text(encoding='utf-8')
     needle = 'int menuResult = MainMenu().showMenu();'
     if main.count(needle) != 1:
         raise RuntimeError('Main menu entry changed; update the test injection point.')
@@ -103,7 +103,7 @@ def injected_main(source):
 
 def injected_game(source):
     """Observe actual production verdict/plate calls in a private diagnostic object only."""
-    code = (source / 'src/Game.cpp').read_text()
+    code = (source / 'src/Game.cpp').read_text(encoding='utf-8')
     for method in ('setGameWon', 'setGameLost', 'setWatchedGameOver'):
         start = code.index('void Game::' + method + '(')
         end = code.index('\n}\n', start) + 2
@@ -276,7 +276,7 @@ def native_worker(request):
         source, build = tree / 'src', tree / 'build'
         # Reuse the real MSVC/clang-cl command parser WITHOUT importing its argument parser/run.
         helper = source / 'tests/ai/run-campaign-balance.py'
-        parsed = ast.parse(helper.read_text())
+        parsed = ast.parse(helper.read_text(encoding='utf-8'))
         names = {'windows_argv', 'windows_probe_commands'}
         selected = ast.Module(body=[n for n in parsed.body if isinstance(n, ast.FunctionDef)
                                    and n.name in names], type_ignores=[])
