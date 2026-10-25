@@ -1,3 +1,35 @@
+## 2026-10-25 — 1.0.855 release publication
+
+PR #108 merged at 4f434241ee4a507dddf255703d5bf342705741ab. Stable tag
+v1.0.855 remains pinned there; v1.0.854 stays unchanged and unpublished.
+Stable workflow 40148134610 passed all platforms, all 16 Linux sanitizer CTests,
+five Mac UI/performance/AI CTests, the real SDL portrait/cache probe, Developer ID
+signing/notarization and signed desktop update feeds. GitHub desktop 1.0.855 and
+Android 0.2.32 / 1000552 are public. Android retains the existing upgrade signer;
+its 3,574 canonical payload files include all 902 accepted DuneCity skin files.
+Its application source matches the release; the later commits changed tests/CI
+and handover only. No Android device was connected for an on-device test.
+
+Public APK SHA256: 6992a2db0909258ff1160b482f833e658268a7ffae51bbcb868bb71f5ee7b2ce.
+Downloaded public APK matches the locally signed/verified candidate. All eight
+desktop downloads pass public size/SHA256 checks; three update-feed signatures
+and both legacy repository redirects pass. Windows ZIP, Linux tarball and signed
+Mac ZIP each contain all 902 skin files byte-identical to release source.
+
+SourceForge workflow 40149610944 passed: seven packages read back and verified,
+source branch/tag updated and Windows/Mac/Linux defaults confirmed. Website
+commit 3da2821 packages the exact successful stable-run Emscripten artifact,
+updates release copy and APK links, and records the matching signaling source.
+All 902 skin files, 12 maps, 11 map sidecars and 769 Tornie files verified against
+canonical source bytes. Local Windows map line endings are not payload changes.
+Browser security and staged Git-blob hashes pass. Redundant browser rebuild
+40149610896 was cancelled in favor of this exact-tag artifact. Website deployment
+40150464807 succeeded. Both live release pages show engine 1.0.855 and Android
+0.2.32; play/build.json identifies the exact tagged source. All eight listed
+browser artifacts were downloaded over HTTPS and matched their manifest SHA256,
+including the complete 76,337,451-byte data payload. Public APK SHA256 and desktop
+latest selection were rechecked after Android publication. Publication complete.
+
 ## 2026-10-24 — Hold unpublished 1.0.854; complete civic portrait integration
 
 The new pixel test exposed a second issue: switching from vanilla constructed
