@@ -7,6 +7,15 @@ house skin/portrait caches and their flags together with the object pictures.
 The probe starts from vanilla, so its 16 authored civic pixel comparisons cover
 this real menu transition rather than only a DuneCity startup profile.
 
+Native Mac renderer/performance checks and Windows/Linux/browser/Android builds
+passed at d7c82fff. The full Linux sanitizer run found one obsolete source-text
+assertion requiring civic portraits to remain excluded; remove that assertion
+in favor of the new real-renderer coverage. All other 1,138 unit cases and the
+other 15 CTests passed. Keep [skirmish] in its dedicated CTest and exclude it
+from the general suite, eliminating duplicate generator matrices without losing
+coverage. Stop CI at the first failed CTest. These follow-ups change tests and
+CI only; the verified application source and 902 artwork files are unchanged.
+
 Final source inspection found Hospital/Church icons were bundled but not mapped
 to sidebar portrait IDs; civic properties deliberately retained the old map
 preview. Held/canceled stable run 40140428626 and redundant main run 40140382198
