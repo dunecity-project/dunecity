@@ -578,6 +578,12 @@ void runMenus() {
         captureWindow(menu, "menu-random-skirmish-spectate");
         menu.spectateBox.setChecked(false);
         menu.onSpectateChanged();
+        // DuneCity shows the City rows and the City skin choice.
+        for(int i = 0; i < menu.modBox.getNumEntries(); ++i)
+            if(menu.availableMods[menu.modBox.getEntryIntData(i)].name == "dunecity") menu.modBox.setSelectedItem(i);
+        menu.onModChanged();
+        require(menu.skinBox.isVisible(), "Random Skirmish shows no City skin choice for DuneCity");
+        captureWindow(menu, "menu-random-skirmish-dunecity");
     });
     screen("menu-custom-game", [] { CustomGameMenu menu(false, false); captureWindow(menu, "menu-custom-game"); });
     screen("menu-custom-game-players", [] {
