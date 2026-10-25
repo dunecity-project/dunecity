@@ -787,7 +787,9 @@ void Game::applyDuneCityGraphicsSkins() {
         return;
     }
 
-    if(gameInitSettings.getGameType() == GameType::Campaign) {
+    // Campaign and single-mission Skirmish pick one skin for every house (house-choice and
+    // Skirmish screens); custom and co-op games choose per row.
+    if(gameInitSettings.getGameType() == GameType::Campaign || gameInitSettings.getGameType() == GameType::Skirmish) {
         const bool useDune2 = gameInitSettings.getCampaignGraphicsSkin()
             == GameInitSettings::GraphicsSkin::Dune2;
         for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
@@ -796,7 +798,11 @@ void Game::applyDuneCityGraphicsSkins() {
         return;
     }
 
-    for(const GameInitSettings::HouseInfo& houseInfo : gameInitSettings.getHouseInfoList()) {
+    // A Random row has no house until the map loader resolves it; houseInfoListSetup holds the
+    // resolved rows (with their skins) once a map or save is loaded. Before that, only the rows
+    // that name a house can be applied.
+    const auto& rows = houseInfoListSetup.empty() ? gameInitSettings.getHouseInfoList() : houseInfoListSetup;
+    for(const GameInitSettings::HouseInfo& houseInfo : rows) {
         pGFXManager->setDuneCityHouseGraphicsSkin(
             static_cast<int>(houseInfo.houseID),
             houseInfo.graphicsSkin == GameInitSettings::GraphicsSkin::Dune2);
@@ -915,6 +921,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
                     static_cast<int>(gameInitSettings.getGameType()),
                     gameInitSettings.getMission(), e.what());
             }
+            // Random rows are only now bound to houses; apply their chosen skins to them.
+            applyDuneCityGraphicsSkins();
 
             // Sandworms belong to nobody who plays: the unit factory already hands every new
             // worm to the Natives house; this catches any other path a map takes.
