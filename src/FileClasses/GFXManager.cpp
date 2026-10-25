@@ -2038,6 +2038,9 @@ GFXManager::GFXManager() {
         auto airTex = makeStructDetailPic(ObjPic_Airport, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
         if (airTex) smallDetailPicTex[Picture_Airport] = std::move(airTex);
         else        smallDetailPicTex[Picture_Airport] = extractSmallDetailPic("STARPORT.WSA");
+
+        smallDetailPicTex[Picture_Hospital] = makeStructDetailPic(ObjPic_Hospital, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
+        smallDetailPicTex[Picture_Church] = makeStructDetailPic(ObjPic_Church, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
     }
 
     // Per-house DuneCity Dune2 portraits. Until an authored Icon Sprite is
@@ -2097,7 +2100,9 @@ GFXManager::GFXManager() {
                     const int picture = name == "NuclearPlant" ? Picture_NuclearPlant
                         : (name == "PoliceStation" ? Picture_PoliceStation
                         : (name == "Stadium" ? Picture_Stadium
-                        : (name == "Airport" ? Picture_Airport : -1)));
+                        : (name == "Airport" ? Picture_Airport
+                        : (name == "Hospital" ? Picture_Hospital
+                        : (name == "Church" ? Picture_Church : -1)))));
                     rememberIcon(entry.path(), picture, house);
                 }
             }
@@ -2165,7 +2170,7 @@ GFXManager::GFXManager() {
             ObjPic_ZoneResidential, ObjPic_ZoneCommercial, ObjPic_ZoneIndustrial};
         static const std::array<int, 6> buildingPictures{
             Picture_NuclearPlant, Picture_PoliceStation, Picture_Stadium,
-            Picture_Airport, -1, -1};
+            Picture_Airport, Picture_Hospital, Picture_Church};
         // Player houses only: the Natives house never owns a zone or civic building.
         for(int house = 0; house < NUM_PLAYER_HOUSES; ++house) {
             for(std::size_t zone = 0; zone < zonePictures.size(); ++zone) {
@@ -5503,6 +5508,15 @@ void GFXManager::reloadAllObjectGraphicsForActiveMod() {
     scoutpostBaseGraphics = std::move(refreshedGraphics.scoutpostBaseGraphics);
     chaosFactoryBaseGraphics = std::move(refreshedGraphics.chaosFactoryBaseGraphics);
     hdObjPicOverrides = std::move(refreshedGraphics.hdObjPicOverrides);
+    // The replacement manager also owns the active mod's house skins. Retaining
+    // the old caches here made a vanilla -> DuneCity switch keep native sidebar
+    // portraits, even though the new map sprites had loaded successfully.
+    duneCitySimCityZonePic = std::move(refreshedGraphics.duneCitySimCityZonePic);
+    duneCityDune2ZonePic = std::move(refreshedGraphics.duneCityDune2ZonePic);
+    duneCitySimCityBuildingPic = std::move(refreshedGraphics.duneCitySimCityBuildingPic);
+    duneCityDune2BuildingPic = std::move(refreshedGraphics.duneCityDune2BuildingPic);
+    duneCityDune2DetailPicTex = std::move(refreshedGraphics.duneCityDune2DetailPicTex);
+    duneCityHouseUsesDune2 = refreshedGraphics.duneCityHouseUsesDune2;
 
     // Editor previews and runtime portraits depend on the freshly installed
     // object surfaces, so rebuild only those mod-sensitive UI caches.
@@ -7407,6 +7421,15 @@ void GFXManager::loadDuneCityBuildingManifests() {
         if(name == "Airport") return static_cast<int>(Structure_Airport);
         return -1;
     };
+    const auto pictureForName = [](const std::string& name) {
+        if(name == "NuclearPlant") return static_cast<int>(ObjPic_NuclearPlant);
+        if(name == "PoliceStation") return static_cast<int>(ObjPic_PoliceStation);
+        if(name == "Stadium") return static_cast<int>(ObjPic_Stadium);
+        if(name == "Airport") return static_cast<int>(ObjPic_Airport);
+        if(name == "Hospital") return static_cast<int>(ObjPic_Hospital);
+        if(name == "Church") return static_cast<int>(ObjPic_Church);
+        return -1;
+    };
 
     for(const auto& entry : std::filesystem::directory_iterator(buildingsRoot)) {
         const auto manifestPath = entry.path() / "building.ini";
@@ -7416,14 +7439,15 @@ void GFXManager::loadDuneCityBuildingManifests() {
         try {
             INIFile manifest(manifestPath.string());
             DuneCityBuildingDefinition definition;
-            definition.itemID = itemForObjPic(
-                manifest.getStringValue("Building", "ObjPic", ""));
+            const std::string pictureName = manifest.getStringValue("Building", "ObjPic", "");
+            definition.itemID = itemForObjPic(pictureName);
+            definition.pictureID = pictureForName(pictureName);
             definition.houseID = manifest.getIntValue("Building", "HouseID", -1);
             definition.sourceUnit = manifest.getStringValue(
                 "Building", "SourceUnit", entry.path().filename().string());
             const int frameCount = std::clamp(
                 manifest.getIntValue("Building", "Frames", 0), 0, 64);
-            if(definition.itemID < 0 || definition.houseID < 0
+            if(definition.pictureID < 0 || definition.houseID < 0
                || definition.houseID >= static_cast<int>(NUM_HOUSES)
                || frameCount <= 0) {
                 continue;
@@ -7966,7 +7990,7 @@ bool GFXManager::drawDuneCityZone(int itemID, int house, unsigned int z,
 }
 
 bool GFXManager::drawDuneCityBuilding(int itemID, int house, int frame,
-                                      const SDL_Rect& destination) {
+                                      const SDL_Rect& destination, int pictureID) {
     if(destination.w <= 0 || destination.h <= 0
        || !isDuneCityHouseUsingDune2(house)) {
         return false;
@@ -7974,7 +7998,13 @@ bool GFXManager::drawDuneCityBuilding(int itemID, int house, int frame,
     loadDuneCityBuildingManifests();
     DuneCityBuildingDefinition* selected = nullptr;
     for(auto& definition : duneCityBuildingDefinitions) {
-        if(definition.itemID == itemID && definition.houseID == house) {
+        // Hospitals/Churches are overlays on a Residential zone, not separate
+        // structure item IDs. Select their authored picture rather than the
+        // underlying zone, retaining the already-computed native destination.
+        const bool civic = pictureID == ObjPic_Hospital || pictureID == ObjPic_Church;
+        const bool matches = civic ? definition.pictureID == pictureID
+            : definition.itemID >= 0 && definition.itemID == itemID;
+        if(matches && definition.houseID == house) {
             selected = &definition;
             break;
         }

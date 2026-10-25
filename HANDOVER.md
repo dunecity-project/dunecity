@@ -695,6 +695,164 @@ links, changelog.html with the 1.0.850 notes), New-in prose 54dba60 on index.htm
 succeeded; live pages show "New in 1.0.850", v1.0.850 DMG links and `#v1.0.850` on changelog.html. **Sync SourceForge
 release** 39694353449 succeeded. **Publish browser build** 39694353427 pushed 133735b; live `play/build.json` is
 1.0.850 (sourceCommit b5b83abf), dunecity.wasm 200.
+## 2026-10-25 — 1.0.855 release publication
+
+PR #108 merged at 4f434241ee4a507dddf255703d5bf342705741ab. Stable tag
+v1.0.855 remains pinned there; v1.0.854 stays unchanged and unpublished.
+Stable workflow 40148134610 passed all platforms, all 16 Linux sanitizer CTests,
+five Mac UI/performance/AI CTests, the real SDL portrait/cache probe, Developer ID
+signing/notarization and signed desktop update feeds. GitHub desktop 1.0.855 and
+Android 0.2.32 / 1000552 are public. Android retains the existing upgrade signer;
+its 3,574 canonical payload files include all 902 accepted DuneCity skin files.
+Its application source matches the release; the later commits changed tests/CI
+and handover only. No Android device was connected for an on-device test.
+
+Public APK SHA256: 6992a2db0909258ff1160b482f833e658268a7ffae51bbcb868bb71f5ee7b2ce.
+Downloaded public APK matches the locally signed/verified candidate. All eight
+desktop downloads pass public size/SHA256 checks; three update-feed signatures
+and both legacy repository redirects pass. Windows ZIP, Linux tarball and signed
+Mac ZIP each contain all 902 skin files byte-identical to release source.
+
+SourceForge workflow 40149610944 passed: seven packages read back and verified,
+source branch/tag updated and Windows/Mac/Linux defaults confirmed. Website
+commit 3da2821 packages the exact successful stable-run Emscripten artifact,
+updates release copy and APK links, and records the matching signaling source.
+All 902 skin files, 12 maps, 11 map sidecars and 769 Tornie files verified against
+canonical source bytes. Local Windows map line endings are not payload changes.
+Browser security and staged Git-blob hashes pass. Redundant browser rebuild
+40149610896 was cancelled in favor of this exact-tag artifact. Website deployment
+40150464807 succeeded. Both live release pages show engine 1.0.855 and Android
+0.2.32; play/build.json identifies the exact tagged source. All eight listed
+browser artifacts were downloaded over HTTPS and matched their manifest SHA256,
+including the complete 76,337,451-byte data payload. Public APK SHA256 and desktop
+latest selection were rechecked after Android publication. Publication complete.
+
+## 2026-10-24 — Hold unpublished 1.0.854; complete civic portrait integration
+
+The new pixel test exposed a second issue: switching from vanilla constructed
+the correct active-mod skin caches in a temporary GFXManager, then discarded
+them while moving only object pictures into the live manager. Move the five
+house skin/portrait caches and their flags together with the object pictures.
+The probe starts from vanilla, so its 16 authored civic pixel comparisons cover
+this real menu transition rather than only a DuneCity startup profile.
+
+Native Mac renderer/performance checks and Windows/Linux/browser/Android builds
+passed at d7c82fff. The full Linux sanitizer run found one obsolete source-text
+assertion requiring civic portraits to remain excluded; remove that assertion
+in favor of the new real-renderer coverage. All other 1,138 unit cases and the
+other 15 CTests passed. Keep [skirmish] in its dedicated CTest and exclude it
+from the general suite, eliminating duplicate generator matrices without losing
+coverage. Stop CI at the first failed CTest. These follow-ups change tests and
+CI only; the verified application source and 902 artwork files are unchanged.
+
+Final source inspection found Hospital/Church icons were bundled but not mapped
+to sidebar portrait IDs; civic properties deliberately retained the old map
+preview. Held/canceled stable run 40140428626 and redundant main run 40140382198
+before publication. Keep v1.0.854 immutable and unpublished; public remains 853.
+Complete this as 1.0.855, with the same unpublished Android 0.2.32 / 1000552.
+The Android draft is still engine 854 and MUST be replaced with the rebuilt,
+re-signed engine-855 APK before publishing; its tag has not been published.
+
+Append two presentation-only portrait IDs without renumbering existing IDs,
+register Hospital/Church authored/fallback textures, and refresh selected-zone
+portraits on civic and skin changes. SimCity retains its live preview. No saves,
+simulation or network changes. Extend the real SDL probe to compare all 16 civic
+portrait images against authored PNGs and exercise overlay/skin transitions.
+Previous PR #107, Mac probe and Android build passed; new source needs fresh
+hosted verification and publication under the user's existing authorization.
+No local native compilation. Original engine-854 APK and logs retained locally.
+
+## 2026-10-24 — 1.0.854 publication and Android 0.2.32 authorized
+
+User approved the completed asset candidate and explicitly requested publication
+across desktop, browser, Android, releases and website. This supersedes the local
+play-test hold below. origin/main has no intervening game changes; website-only
+hourly download statistics are preserved. Engine version remains the candidate's
+1.0.854; Android advances to 0.2.32 / 1000552 using the same engine and payload.
+Proceed through PR validation/merge and the signed stable-tag release workflow.
+Use the hosted Android lane, then locally re-sign with the existing upgrade
+identity without uploading signing material. No local native compilation.
+Publication, cross-platform asset hashes and live website/browser checks pending.
+
+## 2026-10-24 — Special portraits and seven missing building variants
+
+Continued the approved DuneCity skin pass with 39 new 182×110 balanced portraits
+and seven missing map-building variants (four Hospitals, three Nuclear Plants).
+The resulting coverage is 48/48 special-building variants and 72/72 dedicated
+portraits across the 72 R/C/I/special packages. See
+docs/dunecity-special-portraits-854.md for scope, dimensions and validation.
+All 849 files from the preceding Compact candidate remain byte-identical.
+Only 46 PNGs and seven building INIs are added to the production skin payload;
+private sources/authoring metadata are excluded. No engine or Dune2R changes.
+Reviewed results were also posted to the authorized asset processor channel.
+The local portable test copy is refreshed with verified artwork, using the
+existing validated 1.0.854 executable; this is not a new native CI build.
+Keep this on assets/dunecity-special-compacts for play-testing. Do not publish,
+tag, merge main, or update the website automatically. Public remains 1.0.853.
+
+## 2026-10-24 — Special-building Compacts / 1.0.854 candidate
+
+User authorized the next skin improvement pass after the current asset audit.
+Recompacted 31 native-resolution special-building stills from existing HQ sources
+at 4× native canvas / balanced. Exact scope and dimensions are recorded in
+docs/dunecity-special-compacts-854.md. No other skin PNG/manifest changed; original
+Compacts and authoring records were snapshotted before promotion, and versioned
+new source Compacts are now selected so future exports retain this pass.
+
+Found/fixed a necessary renderer gap: Hospital/Church civic overlays were omitted
+from direct high-detail registration/selection. Pass the active picture ID while
+retaining native destinations and per-house/SimCity/fog/fallback behavior. Added
+civic selection/isolation/fallback assertions to the existing real SDL skin probe
+and wired it into Mac candidate validation. Local packaging/browser audit suites
+pass (8 + 9 tests). Run 40118068387 passed Windows/Linux/browser builds and all
+16 Linux sanitizer CTests. Its Mac benchmark pinned the old PNGs; 31 exact
+hash-named archives now preserve that immutable test fixture outside game assets,
+and its reconstruction test passes. The old headless probe was updated to use
+software rendering and wait for asynchronous texture loads. Mac-only validation
+40120124758 passed the build, all five UI/performance/AI gates, civic/SimCity/
+missing-house checks, and cache recovery. Native code and active art are unchanged
+between runs; only the harness/fixture/CI changed. No local native compilation.
+Verified the 31 PNGs inside the Windows portable; it excludes test archives.
+All 41 existing special packages now use 4× native canvases, adding 4.14 MiB.
+An isolated-profile play-test launcher and comparison sheets are retained under
+build-windows-candidate/skin-review-20261024. Source branch is
+assets/dunecity-special-compacts; it is committed/pushed for review, not merged
+or released. Current public release remains 1.0.853 with
+Android 0.2.31 / engine 1.0.853. Do not tag/publish this candidate automatically.
+
+## 2026-10-24 — Matching Android 0.2.31 authorized
+
+User opted into an Android update so multiplayer engine versions match desktop
+and browser 1.0.852. Incremented Android metadata to 0.2.31 / 1000551. Added
+android_package_probe to the existing build workflow: a hosted Windows runner
+builds native ARM64/APK with two compiler jobs, pinned NDK 28.2/JDK 17 and binary
+dependency caching, then verifies packaged payload bytes against source.
+Other build/publication jobs are skipped in this manual candidate lane.
+
+No private signing key is uploaded. The hosted debug signer is temporary: the
+downloaded candidate must be re-signed locally with the existing upgrade identity,
+then verified before release. Local signing can use a bounded JVM; no local
+native compilation is needed. Keep Android publication latest=false so the
+desktop updater's latest release remains the desktop stable tag. Build,
+upgrade-signature verification, metadata merge and publication are pending.
+Hosted Android run: 40078874839, source 7908e9a5. Six payload-checker unit cases
+passed locally after dispatch; the running job uses the same verifier/native
+source, while its later unit-test invocation/docs are verification-only changes.
+
+Final desktop PR #104 run: 40077059573 at 1f722fdc. Windows, Linux and browser
+builds plus relay/signaling checks passed; the capped sanitizer build succeeded
+and its CTest suite is still running. Await full checks before merging/tagging.
+## 2026-10-24 — Hold unpublished 1.0.852; normalize cross-platform payloads
+
+Final Android audit found 65 DuneCity manifests whose packaged bytes differed
+from Git blobs only by CRLF. Installer content hashes include these raw bytes,
+so matching engine versions alone would not ensure cross-platform compatibility.
+Canceled tag run 40080702866 and duplicate main run 40080668028 before release.
+The pushed v1.0.852 tag remains immutable; no 1.0.852 release was published.
+Proceed as 1.0.853 with automatic text detection and LF checkout policy, preserving
+binary assets. A real Git clone regression covers both core.autocrlf settings and
+binary preservation. User authorized Android 0.2.31 using a hosted runner too;
+retarget that unpublished APK to engine 1.0.853 and recheck canonical Git bytes.
 ## 2026-10-24 — 1.0.852 publication authorized
 
 User authorized publishing the verified Linux audio fix, updating repository,
@@ -15519,3 +15677,49 @@ permanent obstruction, disconnected nearby rock and first-yard cases pass.
 The focused unit/opening-economy tests also pass in all three modes. No full
 match win/loss claim is made by these regression fixtures.
 No push, release or installation over the running Air game.
+## 2026-10-24 — Android 0.2.31 / engine 1.0.853 candidate verified
+
+Hosted run 40081778884 at 6c54ff0b passed ARM64 compilation, dependency checks,
+seven payload-checker unit cases and canonical Git verification of 3,521 files.
+Public candidate uses the existing Android upgrade certificate, SHA-256
+a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60.
+APK SHA-256: 391a44d646f9b91bcaefc5c077fa619ac7b16a1966c6d1b8abfe25a0c35f5a28;
+size: 65,066,127 bytes. v1/v2/v3 signature verification and 16 KiB ZIP alignment
+passed. Re-signing preserved every non-signature payload entry. Native library
+contains engine 1.0.853. All 849 DuneCity files match Windows ZIP, Linux TGZ
+and browser data byte-for-byte. On-device gameplay remains unverified.
+Publish only after matching desktop 1.0.853 is public; Android must not become
+the repository's latest desktop release. Metadata/workflow-only integration can
+reuse this hosted verification; no native game code is changed by that PR.
+
+## 2026-10-24 — 1.0.853 and Android 0.2.31 published
+
+PRs #105 and #106 are merged; main and native tag v1.0.853 contain
+3885e06773af0920b712607ab83e527afffcac78. The earlier v1.0.852 tag remains
+immutable and unpublished. Stable run 40083619720 passed all platform builds,
+16 Linux CTest entries under ASAN/UBSAN, five Mac regression entries and nine
+Linux audio startup checks (raw executable, TGZ and AppImage). Mac app/DMG
+signing and Apple notarization passed. All 13 release assets are public.
+
+Public audit verified all eight desktop package downloads by size/SHA-256,
+all three Ed25519 update-feed signatures using the committed public key, legacy
+feed redirects, and both appcast enclosures. Latest remains v1.0.853.
+
+Android 0.2.31 / 1000551 (engine 1.0.853) is public with latest=false at
+android-v0.2.31, tagged at the actual hosted build source 6c54ff0b. The public
+APK read-back matches SHA-256
+391a44d646f9b91bcaefc5c077fa619ac7b16a1966c6d1b8abfe25a0c35f5a28
+and 65,066,127 bytes. Upgrade signing identity and package ID are preserved;
+on-device gameplay is unverified. All 849 DuneCity files match byte-for-byte
+across Windows, Linux, notarized Mac, browser candidate and Android packages.
+
+SourceForge run 40085457098 succeeded: seven packages plus notes/checksums,
+all upload checksums read back, source tag/branch at 3885e067, and Windows,
+Mac and Linux defaults confirmed. Website copy and Android links are deployed
+from 95ee0a8 via run 40085650230; both live pages show 1.0.853 and Android
+0.2.31 / engine 1.0.853. Browser publication run 40085457071 succeeded and
+website commit a108e55 deployed successfully in run 40086096589. Live build.json
+reports engine 1.0.853 from 3885e067; all eight served artifact hashes passed
+download verification. Core engine hashes match the website repository; the
+delivery-layer loading-progress helper matches its canonical Git source.
+

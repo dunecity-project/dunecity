@@ -369,7 +369,8 @@ TEST_CASE("ZoneStructure: selected Dune2 zones use the house icon",
     REQUIRE(src.find("isDuneCityHouseUsingDune2(pZone->getOwner()->getHouseID())") != std::string::npos);
     REQUIRE(src.find("objPicture.setVisible(showSkinIcon)") != std::string::npos);
     REQUIRE(src.find("zonePreview.setVisible(!showSkinIcon)") != std::string::npos);
-    REQUIRE(src.find("getCivicOverlay() == ZoneStructure::CivicOverlay::None") != std::string::npos);
+    // Civic overlays now have authored portraits too. Their actual rendered
+    // pixels and live overlay/skin transitions are checked by skin-probe.inc.
 }
 
 TEST_CASE("ZoneStructure: GFXManager creates zone placeholder graphics",

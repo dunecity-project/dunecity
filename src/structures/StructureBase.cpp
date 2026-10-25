@@ -313,7 +313,7 @@ void StructureBase::blitToScreen() {
         // without changing placement, collision, footprint, or animation
         // state selection.
         enhancedDrawn = pGFXManager->drawDuneCityBuilding(
-            itemID, owner->getHouseID(), index, dest);
+            itemID, owner->getHouseID(), index, dest, graphicID);
     }
     if(!enhancedDrawn && !fogged && dune2rBlend > 0 && owner != nullptr) {
         const Uint32 nowMs = currentGame->getGameTime();
