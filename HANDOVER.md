@@ -1,3 +1,17 @@
+## 2026-10-25 — 1.0.856 published (staging + Vuk's public 1.0.853–1.0.855)
+
+- **Published at Stefan's request:** PR #109 (`integrate/1.0.856`, head 8970b0d4, all PR checks green) merged
+  with `--admin` as **05d1f75e**; annotated tag **v1.0.856** pushed. Build Dune Legacy run 40185057225 succeeded
+  (verify-version, tests, Windows/Linux/macOS/Emscripten, signed updates, release). GitHub release published
+  2026-10-25 10:55 UTC with EXE, Windows ZIP, DMG, macOS update ZIP, AppImage, DEB, RPM, tar.gz and the three update
+  feeds (macOS feed reads 1.0.856). Sync SourceForge release 40186769344 succeeded; SourceForge defaults are
+  1.0.856 for all three OSes. Publish browser build 40186769313 succeeded; live `play/build.json` is 1.0.856 from
+  05d1f75e. Website: release job 12eefb2 and browser 008d839, then **4443231** rewrote "New in 1.0.856" on
+  index/dune-city (Android line kept at 0.2.32 on engine 1.0.855); all Deploy to Droplet runs succeeded and the live
+  pages show 1.0.856. Notes: `releases/desktop/1.0.856.md`. Android not rebuilt.
+- The MBA has the locally built 1.0.856 (same source, before the notes commit), installed 21:07 by the
+  wait-until-closed watcher; backup before-1.0.856-20261025-210734.
+
 ## 2026-10-25 — local 1.0.856 (staging + Vuk's public 1.0.853–1.0.855) verified and installed on the MBA
 
 - Vuk published v1.0.853 (portable payload identity), v1.0.854 (unpublished) and v1.0.855 (special-building Compacts,
