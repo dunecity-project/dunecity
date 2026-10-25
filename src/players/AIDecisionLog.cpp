@@ -10,18 +10,30 @@
 
 namespace AITelemetry {
 std::string Record::quote(const std::string& value) {
-    std::string result = "\"";
+    // Runs of plain characters are copied whole; only '"', '\\' and control characters
+    // are rewritten, as they always were.
+    std::string result;
+    result.reserve(value.size() + 2);
+    result += '"';
     constexpr char hex[] = "0123456789abcdef";
-    for (unsigned char c : value) {
-        if (c == '"' || c == '\\') { result += '\\'; result += c; }
-        else if (c < 32) { result += "\\u00"; result += hex[c >> 4]; result += hex[c & 15]; }
-        else result += c;
+    size_t plain = 0;
+    for (size_t i = 0; i < value.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(value[i]);
+        if (c != '"' && c != '\\' && c >= 32) continue;
+        result.append(value, plain, i - plain);
+        plain = i + 1;
+        if (c == '"' || c == '\\') { result += '\\'; result += static_cast<char>(c); }
+        else { result += "\\u00"; result += hex[c >> 4]; result += hex[c & 15]; }
     }
-    return result + "\"";
+    result.append(value, plain, std::string::npos);
+    result += '"';
+    return result;
 }
 void Record::add(const std::string& key, const std::string& encoded) {
     if (!fields.empty()) fields += ',';
-    fields += quote(key) + ':' + encoded;
+    fields += quote(key);
+    fields += ':';
+    fields += encoded;
 }
 Record& Record::set(const std::string& key, int64_t value) { add(key, std::to_string(value)); return *this; }
 Record& Record::set(const std::string& key, const std::string& value) { add(key, quote(value)); return *this; }

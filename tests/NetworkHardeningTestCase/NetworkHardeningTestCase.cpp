@@ -1143,6 +1143,12 @@ TEST_CASE("Command authorization: a player may only act on objects of its own ho
         REQUIRE(decide(harkonnen, enemyTank) == Decision::Allow);
     }
 
+    SECTION("Natives objects (worms, crime troopers) obey nobody") {
+        REQUIRE(decide(atreides, objectOf(HOUSE_NATIVES)) == Decision::NotOwner);
+        // Not even a player registered in the Natives house, which the game never creates.
+        REQUIRE(decide(playerOf(HOUSE_NATIVES), objectOf(HOUSE_NATIVES)) == Decision::NotOwner);
+    }
+
     SECTION("a destroyed or unknown object id is a no-op, not an error") {
         FixtureObject destroyed = objectOf(HOUSE_ATREIDES);
         destroyed.exists = false;
@@ -1814,9 +1820,23 @@ TEST_CASE("Received game info: game type and house enums must be known",
 
     REQUIRE(GameInitSettingsPolicy::isKnownHouse(HOUSE_HARKONNEN));
     REQUIRE(GameInitSettingsPolicy::isKnownHouse(HOUSE_INVALID));
-    REQUIRE(GameInitSettingsPolicy::isKnownHouse(static_cast<HOUSETYPE>(NUM_HOUSES - 1)));
+    REQUIRE(GameInitSettingsPolicy::isKnownHouse(static_cast<HOUSETYPE>(NUM_PLAYER_HOUSES - 1)));
+    // The Natives house (worms, crime troopers) is never a lobby row.
+    REQUIRE_FALSE(GameInitSettingsPolicy::isKnownHouse(HOUSE_NATIVES));
     REQUIRE_FALSE(GameInitSettingsPolicy::isKnownHouse(static_cast<HOUSETYPE>(NUM_HOUSES)));
     REQUIRE_FALSE(GameInitSettingsPolicy::isKnownHouse(static_cast<HOUSETYPE>(-99)));
+}
+
+TEST_CASE("Received game info: no house may take the Natives' colour",
+          "[network][security][gameinfo][natives]") {
+    std::string reason;
+    GameInitSettings settings = plausibleReceivedSettings();
+    GameInitSettings::HouseInfo brown(HOUSE_ORDOS, 3);
+    brown.colorOfHouse = HOUSECOLOR_NATIVES;
+    brown.addPlayerInfo(GameInitSettings::PlayerInfo("mallory", "HumanPlayer"));
+    settings.addHouseInfo(brown);
+    REQUIRE_FALSE(accepts(settings, reason));
+    REQUIRE(reason == "reserved house colour");
 }
 
 TEST_CASE("Command batches: aggregate bounds are far below the product of the per-list bounds",

@@ -103,6 +103,10 @@ python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/p
 # category/cell/mod), --ladder-seeds 9 (72 long ladder games per pair), --list (print the plan)
 # report over any number of results directories (e.g. the four shards)
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
+# A/B of a candidate config switch: the same games with every QuantBot playing a play style
+# (tests/ai/play-styles/<style>.ini, e.g. allyjoin = [Force Concentration] JoinAllyWaves=true);
+# compare per game id with a run without --style
+python3 tests/ai/scenario-matrix.py --tier full --categories team --style allyjoin --results DIR
 ```
 
 Split across the four machines with `--shard K/N` (every N-th game from the K-th), each into its own
@@ -332,3 +336,155 @@ mirror (144 games, both houses of every seed, each side keeping its start) Harko
 draws: no Harkonnen advantage overall. The start decides more than the house (the same start won both games of
 a seed in 41 of 72 pairs, the same house in 27); the one house effect is Habbanya-Penny, Atreides 25-10 from
 either start. Every ladder seed is now played with both houses (`#swap`).
+
+## Ladder and campaign candidates (protocol 98, default off)
+
+These candidates are hashed `[Force Concentration]` settings, not environment-variable gameplay
+switches. They do not become defaults until their paired score difference clears the 95% rule.
+Use `--compare CONTROL CANDIDATE` on matching game ids; bootstrap clusters keep both starting sides
+of a ladder/team seed together. Campaign house/mission identities remain separate even if their
+numeric seed happens to be equal. Campaign time-outs use the same −0.25 duel draw as other games.
+
+### Team games
+
+`JoinAllyWaves` (`--style allyjoin`) lets Custom Hard/Brutal join an allied QuantBot's whole-army
+wave launched in the last 30 seconds, keeping its objective and the viable-wave minimum.
+The completed 2v2 extension contains **96 games per arm** (24 seeds per mod, both sets of starts),
+reusing the first 48 rather than replaying them: paired Δ is +0.06 [−0.06,+0.18],
+with 4 control versus 6 candidate time-outs. The 3v3 comparison remains 48 per arm,
+Δ +0.04 [−0.17,+0.25]. Neither clears the default rule. In 54 bundled multiplayer-map
+games per arm, both configurations beat AI Player Hard in all 20 such games;
+total time-outs are 8 off and 7 on. No accepted team default yet.
+
+### First-wave funding
+
+Saved telemetry for the 96×96 DuneCity Hard-v-Medium loss on seed 65829 shows the Hard heavy factory
+buying four harvesters and three MCVs, but no combat units, between minutes 8 and 16. Medium's heavy
+factory produces seven launchers in that interval. Capping the fleet only until factory construction
+(HeavyFactoryFirst), or until the remembered enemy army leads (ArmyBeforeFleet), did not establish
+a paired improvement and those candidates were removed.
+
+`OpeningCombatBudget` (`--style openingcombat`) instead keeps a Custom Hard/Brutal start's
+four-worker economy until its first **actual full wave dispatch**, and defers optional extra
+construction capacity in that window. Recovering a lost yard and opening new rock when the base
+cannot grow still take precedence. The first-wave readiness is 100%; subsequent waves and normal
+fleet limits resume at dispatch. A starting heavy factory makes the rule inert, preserving the
+medium-base long ladder; Easy/Medium and campaigns are unchanged.
+
+`CampaignCombatBudget` (`--style campcombat`) applies that four-worker first-dispatch budget only
+to a human's Hard/Brutal campaign partner that started without a heavy factory. It does not alter
+enemy controllers, Easy/Medium partners, resources, production costs, fog or combat strength.
+Completion uses the existing saved campaign-wave launch marker. This differs from the rejected
+CampaignFactoryFirst rule, which released the fleet as soon as the factory stood.
+
+Both first-wave funding switches remain **off and rejected for default use**.
+The shared-build comparisons from source `06bda05bd9f8` completed without
+relaxing deadlines or reusing a mismatched physics arm:
+
+| Comparison | Games per arm | Control score | Candidate score | Paired difference [95% interval] |
+|---|---:|---:|---:|---|
+| Short-map Brutal versus Hard, opening budget | 72 | +0.22 | +0.14 | -0.08 [-0.30, +0.14] |
+| Short-map Hard versus Medium, opening budget | 72 | +0.23 | -0.49 | -0.71 [-0.99, -0.44] |
+| All standard Hard campaign partners, campaign budget | 192 | +0.95 | +0.91 | -0.04 [-0.10, +0.01] |
+
+The opening rule significantly worsens the Hard/Medium comparison. The campaign
+rule does not establish improvement: Vanilla's 96 cases move from +0.94 to +0.85,
+while Dune City's 96 remain +0.96. Atreides mission 20 seeds 74708 and 75717
+still lose; mission 22 gains one Vanilla seed but loses another. The Dune City
+Harkonnen mission 22 loss at 95897 has an identical on/off final digest.
+Passing the opening/campaign-pressure consumer probes is not balance acceptance.
+
+Evidence: `~/Documents/projects/dunecity-results/ladder-campaign/`,
+`shared-{opening,campaign}-{off,on}/`, `shared-{opening,campaign}-comparison.txt`
+and `shared-campaign-critical-cases.json`. Jobs are
+`20261024T232452-opening-{off-902203,on-e7b0c8}` and
+`20261024T232453-campaign-{off-f544e9,on-8f53d6}`. The 672 total games use
+the shared build's default movement flag off. Team play and the unresolved
+named losses are not declared fixed by these results.
+
+### Optional construction-capacity runway (candidate, default off)
+
+`CapacityMcvRunway` (`--style mcvrunway`) keeps optional MCV expansion behind the
+existing four-minute production forecast and cash reserve. It subtracts only
+newly accepted optional MCV purchases from that headroom; ordinary unit and zone
+orders are already forecast and must not be charged twice. Actual loss of the
+last yard, existing rock-expansion and colonisation recovery remain exempt.
+Shared combat upgrades, worker targets and first-wave readiness are unchanged.
+The style does not enable either rejected first-wave budget above.
+
+The retained `sdc` trace at cycle 52,325 bought a 900-credit MCV with projected
+cash −406, after forecasting 13,071 income/cash against 13,477 continuing-production
+cost. The new same-engine queue regression reproduces the off-arm purchase,
+requires on-arm rejection **and affordable combat fallthrough**, and retains
+funded MCV expansion, real lost-yard recovery and shared technology progression.
+All three shared-spending mod probes pass at `1d0a93be`.
+
+This forecast includes existing idle/held production capacity, not only unpaid
+orders. It is a conservative capacity rule; passing queue boundaries does not
+establish campaign, team or ladder improvement. The completed source `64c370dc04c7`
+comparison contains **876 games**, with matched inputs and zero game errors:
+
+| Comparison | Games per arm | Control score | Candidate score | Paired difference [95% interval] |
+|---|---:|---:|---:|---|
+| Short-map Brutal versus Hard | 72 | +0.22 | +0.19 | −0.03 [−0.08,0.00] |
+| Short-map Hard versus Medium | 72 | +0.23 | +0.23 | 0.00 [−0.06,+0.06] |
+| Standard Hard campaign partners | 192 | +0.95 | +0.95 | 0.00 [0.00,0.00] |
+| Hard versus Medium, 2v2 teams | 48 | +0.57 | +0.50 | −0.07 [−0.24,+0.09] |
+| Hard versus Medium, 3v3 teams | 48 | +0.29 | +0.35 | +0.06 [−0.22,+0.33] |
+
+No group establishes paired improvement. All five named campaign losses remain
+losses; nine campaign final digests change, so unchanged scores are not evidence
+that every campaign was inert. With corrected movement on, the mandatory six-seed
+AAA comparison is 5/6 within 40 minutes in both MCV states, with all six paired
+digests identical. Seed906213928 still times out at41; this rule does not fix it.
+`CapacityMcvRunway` stays off and is rejected for default use.
+
+Raw data, reports, matching-input coverage and named losses:
+`~/Documents/projects/dunecity-results/ladder-campaign/mcv-runway-64c370dc/`.
+
+### Light-raider service ownership (candidate, default off)
+
+`RespectServiceOwnership` (`--style serviceownership`) keeps the periodic
+light-raider scan from replacing an existing repair reservation or promised
+carryall pickup with an evade/prey order. It uses the existing repair role and
+pickup ownership checks already respected by hunting-launcher reactions.
+It does not change movement, firing, carrier selection, rescue timing or the
+three rejected funding/team policies.
+
+The actual corrected-movement battle at source `64c370dc04c7` records Quad3190
+repairing and awaiting pickup at cycle98,053. At98,104, periodic raider micro
+changes its mode, releases pickup/repair ownership and selects a retreat.
+The unit dies at98,139, but the trace lacks the original carrier/arrival history:
+preserving that service is **not** established to save it or fix AAA.
+
+The existing real kiting probe at `c22c9455` now checks eight matched off/on
+cases: repair-only reservation, healthy pickup-only booking, combined repair
+and pickup, and an unreserved raider that must still evade. Repair requests and
+reciprocal carrier targets come from normal engine APIs; ownership flags are
+not manufactured. The probe passes; no completed rescue or strategic-outcome
+claim is made. The switch remains off pending the unchanged outcome gates.
+
+The completed same-native-build comparison contains36 games (18 per arm),
+with matched inputs, unchanged limits and zero game errors. Corrected movement is
+on in both; only the independent service-ownership style differs. Native binaries
+were retained across reporting-only sources `78eaa25ebef0` and `d9d8788c918d`,
+verified on all four hosts.
+
+| Mandatory vanilla seed | Service off, game minutes | Service on, game minutes |
+|---|---:|---:|
+|1756374161|38.34|36.20|
+|906213928|time limit41|35.26|
+|41562270|34.36|32.60|
+|1841712204|38.11|35.72|
+|1430976924|33.90|time limit41|
+|1804669015|33.64|36.44|
+
+Both arms meet the original all-four-enemies/40-minute condition in5/6 cases.
+The previous failed seed now passes, but another fails: this is **not** movement
+acceptance. DuneCity wins and the reverse Medium-versus-four-Hard expected
+defeats each remain6/6 in both arms at their original60-minute caps.
+`RespectServiceOwnership` remains off and unaccepted; the genuine booking
+regression is fixed only when explicitly enabled, not claimed shipped by default.
+Raw inputs, all36 outcomes and actual host coverage:
+`~/Documents/projects/dunecity-results/unit-movement/serviceownership-78eaa25e/`.
+

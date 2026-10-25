@@ -306,7 +306,7 @@ TEST_CASE("Shipped Micropolis aircraft art has every original frame", "[city][ai
 
     Sheet airplane("city_airplane");
     REQUIRE(airplane.w == 8 * 48);
-    REQUIRE(airplane.h == 4 * 48);
+    REQUIRE(airplane.h == kAirplaneSheetRows * 48);
 
     std::set<std::vector<unsigned char>> cruiseFrames;
     for (int angle = 0; angle < 8; ++angle) {
@@ -316,10 +316,30 @@ TEST_CASE("Shipped Micropolis aircraft art has every original frame", "[city][ai
     }
     CHECK(cruiseFrames.size() == 8);
 
-    // Rows 1..3 are take-off frames 9, 10 and 11: real, distinct artwork, and
+    // Row 1: the eight in-between headings, each rotated from an axis-aligned
+    // original frame (east, north, west, south) and made of its colours only.
+    const int inBetweenSource[8] = {0, 2, 2, 4, 4, 6, 6, 0};
+    const auto colours = [](const std::vector<unsigned char>& rgba) {
+        std::set<std::vector<unsigned char>> found;
+        for (size_t i = 0; i + 3 < rgba.size(); i += 4)
+            if (rgba[i + 3] != 0) found.insert({rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]});
+        return found;
+    };
+    for (int angle = 0; angle < 8; ++angle) {
+        INFO("airplane in-between heading " << angle);
+        const auto cell = airplane.cell(angle, 1, 48);
+        CHECK(airplane.opaquePixels(angle, 1, 48));
+        cruiseFrames.insert(cell);
+        const auto source = colours(airplane.cell(inBetweenSource[angle], 0, 48));
+        for (const auto& colour : colours(cell)) CHECK(source.count(colour) == 1);
+    }
+    CHECK(cruiseFrames.size() == kAirplaneHeadingFrames);   // sixteen distinct headings
+
+    // Rows 2..4 are take-off frames 9, 10 and 11: real, distinct artwork, and
     // repeated across the columns so angle indexing is harmless.
     std::set<std::vector<unsigned char>> takeoffFrames;
-    for (int row = 1; row <= 3; ++row) {
+    for (int frame = kAirplaneLastTakeoffFrame; frame <= kAirplaneFirstTakeoffFrame; ++frame) {
+        const int row = airplaneTakeoffRow(frame);
         const auto reference = airplane.cell(0, row, 48);
         CHECK(airplane.opaquePixels(0, row, 48));
         takeoffFrames.insert(reference);
@@ -334,6 +354,93 @@ TEST_CASE("Shipped Micropolis aircraft art has every original frame", "[city][ai
     CHECK(airplane.h * 3 <= 2048);
 }
 
+TEST_CASE("Airplane steering turns onto the bearing and then holds it", "[city][aircraft]") {
+    const FixPoint tolerance = airplaneAimTolerance();
+    // Far from the waypoint with no cross-track allowance: pure aiming.
+    const auto steer = [](FixPoint heading, FixPoint bearing) {
+        return airplaneSteer(heading, bearing, FixPoint(100000), FixPoint(0));
+    };
+    // Within the original 45-degree step it turns exactly onto the bearing...
+    CHECK(steer(FixPoint(0), FixPoint(1) / 2) == FixPoint(1) / 2);
+    CHECK(steer(FixPoint(0), FixPoint(15) / 2) == FixPoint(15) / 2);   // across east, right
+    // ...and beyond it, turns one step towards it, the shorter way round.
+    CHECK(steer(FixPoint(0), FixPoint(3)) == FixPoint(1));
+    CHECK(steer(FixPoint(1), FixPoint(6)) == FixPoint(0));
+    CHECK(steer(FixPoint(7), FixPoint(2)) == FixPoint(0));
+    // Straight behind: left, deterministically.
+    CHECK(steer(FixPoint(0), FixPoint(4)) == FixPoint(1));
+    // On course (rounding noise along a straight leg) it does not turn at all.
+    CHECK(steer(FixPoint(2), FixPoint(2) + tolerance) == FixPoint(2));
+    CHECK(steer(FixPoint(2), FixPoint(2) - tolerance) == FixPoint(2));
+    CHECK(steer(FixPoint(0), FixPoint(8) - tolerance / 2) == FixPoint(0));
+
+    // Near the waypoint it holds a course that already passes close enough:
+    // 0.2 eighths (9 degrees) off at 200 world units misses by ~31 units.
+    const FixPoint off = FixPoint(1) / 5;
+    CHECK(airplaneSteer(FixPoint(0), off, FixPoint(200), FixPoint(100)) == FixPoint(0));
+    CHECK(airplaneSteer(FixPoint(0), FixPoint(8) - off, FixPoint(200), FixPoint(100)) == FixPoint(0));
+    // ...but not one that misses by more, and never a waypoint abeam or behind.
+    CHECK(airplaneSteer(FixPoint(0), off, FixPoint(2000), FixPoint(100)) == off);
+    CHECK(airplaneSteer(FixPoint(0), FixPoint(2), FixPoint(10), FixPoint(100)) == FixPoint(1));
+    CHECK(airplaneSteer(FixPoint(0), FixPoint(5), FixPoint(10), FixPoint(100)) == FixPoint(7));
+
+    // Every bearing on a fine grid from every heading: never overshoots, never
+    // turns more than the original step, and arrives within the tolerance.
+    for (int h = 0; h < 64; ++h) {
+        for (int b = 0; b < 64; ++b) {
+            FixPoint heading = FixPoint(h) / 8;
+            const FixPoint bearing = FixPoint(b) / 8;
+            int steps = 0;
+            int lastSign = 0;
+            for (; steps < 8; ++steps) {
+                const FixPoint next = steer(heading, bearing);
+                if (next == heading) break;
+                FixPoint turn = next - heading;
+                while (turn > 4) turn -= 8;
+                while (turn <= -4) turn += 8;
+                CHECK(FixPoint::abs(turn) <= kAirplaneMaxTurn);
+                const int sign = turn > 0 ? 1 : -1;
+                if (lastSign != 0) CHECK(sign == lastSign);   // no left-right
+                lastSign = sign;
+                CHECK(next >= 0);
+                CHECK(next < 8);
+                heading = next;
+            }
+            CHECK(steps <= 4);
+            FixPoint error = bearing - heading;
+            while (error > 4) error -= 8;
+            while (error <= -4) error += 8;
+            CHECK(FixPoint::abs(error) <= tolerance);
+        }
+    }
+}
+
+TEST_CASE("Airplane is drawn on sixteen headings at the original speeds", "[city][aircraft]") {
+    for (int frame = 0; frame < kAirplaneHeadingFrames; ++frame) {
+        const FixPoint heading = FixPoint(frame) / 2;
+        CHECK(airplaneHeadingFrame(heading) == frame);
+        // Within a quarter of an eighth either way it is still the same frame.
+        CHECK(airplaneHeadingFrame(heading + FixPoint(1) / 5) == frame);
+        CHECK(airplaneHeadingFrame(heading - FixPoint(1) / 5 + (frame == 0 ? 8 : 0)) == frame);
+        CHECK(airplaneCruiseColumn(frame) == frame / 2);
+        CHECK(airplaneCruiseRow(frame) == frame % 2);
+    }
+    CHECK(airplaneHeadingFrame(FixPoint(8) - FixPoint(1) / 8) == 0);   // wraps to east
+    CHECK(airplaneTakeoffRow(9) == 2);
+    CHECK(airplaneTakeoffRow(10) == 3);
+    CHECK(airplaneTakeoffRow(11) == 4);
+
+    // The eight original headings keep the original table speeds.
+    const FixPoint axis = FixPoint(10240) / 1000;
+    for (int angle = 0; angle < 8; ++angle)
+        CHECK(airplaneHeadingSpeed(axis, 2 * angle)
+              == headingSpeed(axis, angle, kAirplaneStep, kAirplaneDiagonalStep));
+    // In between, the mean of the axis and diagonal magnitudes.
+    const FixPoint diagonal = headingSpeed(axis, RIGHTUP, kAirplaneStep, kAirplaneDiagonalStep);
+    CHECK(airplaneHeadingSpeed(axis, 1) == (axis + diagonal) / 2);
+    CHECK(airplaneHeadingSpeed(axis, 15) == (axis + diagonal) / 2);
+}
+
 TEST_CASE("Aircraft art provenance records the original XPM sources", "[city][aircraft][assets]") {
     const std::string manifest = manifestText();
     // Every original frame file has to be named, so a silently redrawn sheet
@@ -342,6 +449,9 @@ TEST_CASE("Aircraft art provenance records the original XPM sources", "[city][ai
         CHECK(manifest.find("obj2-" + std::to_string(index) + ".xpm") != std::string::npos);
     for (int index = 0; index <= 10; ++index)
         CHECK(manifest.find("obj3-" + std::to_string(index) + ".xpm") != std::string::npos);
+    // The in-between headings say what they were rotated from and how.
+    CHECK(manifest.find("rotated_degrees_ccw") != std::string::npos);
+    CHECK(manifest.find("Scale2x x3, nearest rotation, centre sample") != std::string::npos);
     CHECK(manifest.find("scripts/import-micropolis-aircraft.py") != std::string::npos);
     CHECK(manifest.find("GPL-3.0-or-later") != std::string::npos);
 }

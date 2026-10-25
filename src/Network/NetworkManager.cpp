@@ -1315,8 +1315,14 @@ std::uint32_t NetworkManager::relayHostPeerId() const {
     }
     for(const RoomSessionTransport::Peer& peer : pRelayClient->peers()) {
         if(peer.isHost()) {
+            knownRelayHostPeerId = peer.id;
             return peer.id;
         }
+    }
+    // A host that has just left is still found (findPeer) until its departure is handled, so
+    // what it sent before leaving is still accepted as the host's.
+    if(const auto* departed = pRelayClient->findPeer(knownRelayHostPeerId); departed && departed->isHost()) {
+        return knownRelayHostPeerId;
     }
     return 0;
 }
@@ -2450,7 +2456,7 @@ std::unique_ptr<GameInitSettings> NetworkManager::takeCoopMission() {
 }
 
 void NetworkManager::beginSimulation(Uint32 seed) {
-    if(bIsServer) { observerTransfers.clear(); observerHistory.clear(); observerHistoryBytes=0; }
+    if(bIsServer) { observerTransfers.clear(); observerHistory.clear(); observerHistoryBytes=0; observerEndCycle=0; }
     if(joinLoading) {
         seed=resumeSeed; joinLoading=false;
         if(!joinName.empty() && !isSpectating()) {

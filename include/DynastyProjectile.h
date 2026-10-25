@@ -8,6 +8,13 @@
 #include <data.h>
 namespace DynastyProjectile {
 inline constexpr int deathHandDamage = 200;
+/// Dynasty's seventeen Death Hand blast centres around the impact, in world units
+/// (256 -> 64 coordinates). Bullet::detonateDeathHand() damages around each.
+inline constexpr int deathHandBlastCentres = 17;
+inline constexpr int deathHandBlastX[deathHandBlastCentres] =
+    {0, 0, 50, 64, 50, 0, -50, -64, -50, 0, 100, 128, 100, 0, -100, -128, -100};
+inline constexpr int deathHandBlastY[deathHandBlastCentres] =
+    {0, -64, -50, 0, 50, 64, 50, 0, -50, -128, -100, 0, 100, 128, 100, 0, -100};
 struct Parameters { int step, turn, delay; };
 inline Parameters parameters(int id) {
     switch(id) {

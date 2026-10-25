@@ -191,6 +191,21 @@ public:
     }
 
     /**
+        The Natives house (HOUSE_NATIVES), created the first time a sandworm or a crime trooper
+        needs an owner: NATIVES_TEAM, no players, no credits, the map's default unit limit. Every
+        peer creates it at the same simulation point, so lockstep is unaffected.
+    */
+    House* getOrCreateNativesHouse();
+
+    /**
+        Gives every sandworm that is not yet owned by the Natives house to it (owner and
+        original house, with the unit counts moved and no loss booked). Run when a game starts
+        and after loading a save from before SAVEGAMEVERSION 9871.
+        \return the number of worms re-tagged
+    */
+    int retagSandwormsToNatives();
+
+    /**
         The current game is finished and the local house has won
     */
     void setGameWon();
@@ -199,6 +214,39 @@ public:
         The current game is finished and the local house has lost
     */
     void setGameLost();
+
+    /**
+        Ends the game for a local view that has no side in it any more - an observer (offline
+        Spectate or a network spectator), or a player whose whole team is out on a map that lets
+        it keep watching - once the match is decided for everybody: one team is left (or none)
+        under the map's elimination rules. Called after every house defeat. Campaign missions
+        and players who still have a side keep the original win/lose rules. A defeat during a game
+        cycle is decided at the end of that cycle, so every house whose last object fell in it
+        (one blast can take several) counts as out. Reads only state every peer simulates
+        identically, so all of them end at the same cycle.
+    */
+    void checkWatchedGameDecided();
+
+    /**
+        A watched game is over: \a winningTeam won it, or nobody did (0). The local view
+        shows the winner instead of "You have won/lost" and then leaves through the usual
+        end-of-game flow. \a timeUp marks the map's time limit as the reason.
+    */
+    void setWatchedGameOver(int winningTeam, bool timeUp = false);
+
+    /// The one team with a house still alive, 0 when two or more teams remain or none does.
+    int soleSurvivingTeam() const;
+
+    /// An observer, or a player whose whole team is out of the game: nothing local can win or lose.
+    bool watchesWithoutSide() const;
+
+    /// After a watched game is over: the team that won it, 0 for nobody; -1 otherwise.
+    int getWatchedWinnerTeam() const { return watchedWinnerTeam; }
+
+    /// The end-of-game line for a watched game ("House Atreides has won", ...) and the winner's
+    /// colour (\a shade as getHouseColorRGB; white without a winner).
+    std::string watchedResultText() const;
+    Uint32 watchedResultColor(int shade = 3) const;
 
     /**
         Draws the cursor.
@@ -1222,6 +1270,13 @@ private:
     bool    won = false;                        ///< If the game is finished, is it won or lost
     Uint32  finishedLevelCycle = 0;             ///< MULTIPLAYER FIX (Issue #9): Cycle-based (was finishedLevelTime)
     bool    finishedLevel = false;              ///< Set, when the game is really finished and the end message was shown
+    /// Runtime only, never saved or sent: see setWatchedGameOver(). -1 while no watched game is over.
+    int     watchedWinnerTeam = -1;
+    bool    watchedTimeUp = false;
+    /// Runtime only: updateGameState() is running a cycle, and a house defeat during it asks for
+    /// checkWatchedGameDecided() at the cycle's end.
+    bool    inGameCycle = false;
+    bool    watchedDecisionPending = false;
 
     std::unique_ptr<GameInterface>          pInterface;                             ///< This is the whole interface (top bar and side bar)
     std::unique_ptr<Window>                 pInGameMenu;                            ///< This is the menu that is opened by the option button
@@ -1407,6 +1462,12 @@ private:
     void loadObserverRuntime(const std::string& bytes);
     void prepareObserverStreams();
     bool observerCyclePrepared = false;
+    // A spectator whose host has left plays the cycles it already received (all of them, when the
+    // host ended its streams), then ends: normally if the game was decided, otherwise with a message.
+    bool observerHostLeft = false;
+    Uint32 observerEndAtTicks = 0;  ///< a decided game's end plate, timed on the clock once no cycles remain
+    /// Called when the host has left and no received cycle is left to play.
+    void endObservationWithoutHost();
     TextProgressBar observerProgress;
 
     /**

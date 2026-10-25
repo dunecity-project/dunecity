@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "mod": {
+    "id": "Tornie",
+    "displayName": "Tornie",
+    "version": "1.0.524-23",
+    "gameVersion": "1.0.530",
+    "author": "Tornie_Panther"
+  },
+  "source": {
+    "upstream": "Torneko/dunecity-tornie",
+    "tag": "tornie-v1.0.524-23",
+    "commit": "f7eb26269c6832f06aa9412bc752e93e997550fb",
+    "integrationTarget": "VR48/dunecity",
+    "integrationBaseCommit": "e7a5a1b"
+  },
+  "customHouse": {
+    "slot": 8,
+    "displayName": "Corruptique",
+    "scenarioLetter": "C",
+    "regionPrefix": "COR",
+    "paletteIndex": 192,
+    "fallbackHouse": 2
+  },
+  "contentRoots": [
+    "campaign",
+    "data",
+    "source-audio",
+    "source-sprites"
+  ],
+  "engineDependencies": [
+    {
+      "name": "generic-ninth-house",
+      "status": "integrated-and-regression-gated"
+    },
+    {
+      "name": "generic-mod-scoped-mentat-api",
+      "status": "integrated-and-mod-scoped"
+    },
+    {
+      "name": "love-factory-delivery-building",
+      "status": "integrated-and-mod-scoped"
+    },
+    {
+      "name": "chemical-units-and-post-upgrades",
+      "status": "integrated-and-mod-scoped"
+    },
+    {
+      "name": "guest-house-identities",
+      "status": "available-only-when-Tornie-is-active"
+    }
+  ],
+  "isolation": {
+    "contentRootIsolated": true,
+    "root": "mods/Tornie",
+    "externalOverrides": [],
+    "activationKey": "Tornie",
+    "switchingAwayRemovesTornieSearchPath": true,
+    "engineCapabilitiesAreExactModGated": true
+  },
+  "compatibility": {
+    "saveFormatChangedByThisContent": true,
+    "networkPacketLayoutChangedByThisContent": false,
+    "networkChecksumIncludesEngineCapability": true,
+    "fullPayloadTransferSupported": true
+  },
+  "filenameCase": "exact",
+  "checksums": "checksums.sha256",
+  "provenance": "PROVENANCE.md",
+  "changelog": "CHANGELOG.md",
+  "integrationStatus": "audited Tornie 1.0.524-23 integration for DuneCity 1.0.530"
+}

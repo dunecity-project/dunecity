@@ -13,10 +13,11 @@ and map differences cancel within the pair.
 Modes:
   --pairs x:y        1v1 on every --maps entry and seed (house pair cycled by seed, or
                      --all-houses), both label assignments.
-  --ffa x,y          four-player free-for-all on the 4P --maps: Harkonnen, Atreides, Ordos and
-                     Sardaukar, two houses per label, all six partitions per seed.
-  --ffa a,b,c,d      the same with four labels, one house each, the four rotations per seed.
-  --ffa x            the same with one label for all four houses: one game per map and seed.
+  --ffa x,y          free-for-all: half the houses per label, every balanced assignment per seed.
+  --ffa a,b,c,d      one label per house: rotations so each label plays every house.
+  --ffa x            one label for every house: one self-play game per map and seed.
+  --houses H [...]   with --ffa: these playing houses, in slot order (default Harkonnen, Atreides,
+                     Ordos, Sardaukar). All six houses give genuine six-player self-play.
   --tech N [N ...]   1v1 at each of these tech levels: a copy of every map with [BASIC] TechLevel=N
                      (the lobby starts a map at its own tech level; games.csv names it <map>@t<N>).
 
@@ -83,7 +84,7 @@ DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed'
                      'siege_holds', 'assault_holds', 'assault_waves', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS + ('start_mix',)
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
-                 'kill_value', 'loss_value', 'alive')
+                 'kill_value', 'loss_value', 'alive', 'crush_kills')
 MIX_FIELDS = ('minute', 'final', 'built', 'lost', 'army', 'reward')
 MIX_ROW_FIELDS = KEY + ('house', 'label') + MIX_FIELDS
 SAMPLE_ROW_FIELDS = KEY + ('house', 'label') + SAMPLE_FIELDS
@@ -188,27 +189,28 @@ def schedule(args):
     games = []
     if args.ffa:
         labels = args.ffa.split(',')
+        houses = tuple(args.houses) if args.houses else FFA_HOUSES
         if len(labels) == 1:
             # One label for every house: one game per map and seed.
             for seed in args.seeds:
                 for name in args.maps:
                     games.append((args.tag, args.difficulty, name, str(seed),
-                                  '|'.join(f'{h}:{labels[0]}' for h in FFA_HOUSES)))
+                                  '|'.join(f'{h}:{labels[0]}' for h in houses)))
             return games
-        if len(labels) == 4:
-            # Four labels, one per house: the four rotations, so every label plays every house.
+        if len(labels) == len(houses):
+            # One label per house: rotate all assignments, keeping every seed/start paired.
             for seed in args.seeds:
                 for name in args.maps:
-                    for shift in range(4):
-                        sides = '|'.join(f'{h}:{labels[(i + shift) % 4]}' for i, h in enumerate(FFA_HOUSES))
+                    for shift in range(len(houses)):
+                        sides = '|'.join(f'{h}:{labels[(i + shift) % len(houses)]}' for i, h in enumerate(houses))
                         games.append((args.tag, args.difficulty, name, str(seed), sides))
             return games
         first, second = labels
-        partitions = [group for group in itertools.combinations(FFA_HOUSES, 2)]
+        partitions = list(itertools.combinations(houses, len(houses) // 2))
         for seed in args.seeds:
             for name in args.maps:
                 for group in partitions:
-                    sides = '|'.join(f'{h}:{first if h in group else second}' for h in FFA_HOUSES)
+                    sides = '|'.join(f'{h}:{first if h in group else second}' for h in houses)
                     games.append((args.tag, args.difficulty, name, str(seed), sides))
         return games
     pairs = list(itertools.combinations(args.houses, 2)) if args.houses else HOUSE_PAIRS
@@ -802,7 +804,8 @@ parser.add_argument('--tech', nargs='+', type=int, choices=range(1, 10), metavar
                          'games.csv names the map <map>@t<N>; tests/ai/tech-bands.py lists where the bands change)')
 parser.add_argument('--seeds', nargs='+', type=int, default=[8101, 8202, 8303, 8404, 8505, 8606])
 parser.add_argument('--pairs', help='1v1 label pairs x:y,x:y (each played with both assignments)')
-parser.add_argument('--ffa', help='Four-player free-for-all: labels x (all houses), x,y (two houses each) or a,b,c,d')
+parser.add_argument('--ffa', help='Free-for-all: one label for self-play, two labels split evenly, or one per house '
+                    '(four houses by default; use --houses for six)')
 parser.add_argument('--game-options', type=Path,
                     help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
                          'tests/performance/data/stefan-game-options.ini)')
@@ -815,8 +818,9 @@ parser.add_argument('--baseline', help='1v1 report: also pair each first label w
                                        'opponent in the same setups (e.g. the old default, for a candidate v none)')
 parser.add_argument('--all-houses', action='store_true', help='1v1: every seed with all house pairs (see --houses)')
 parser.add_argument('--houses', nargs='+', choices=sorted(HOUSE_NUMBERS),
-                    help='1v1: the house pairs are every pair of these houses (default Atreides/Harkonnen/Ordos '
-                         'pairs), e.g. all six for Fremen, Sardaukar and Mercenary')
+                    help='1v1: every pair of these houses (default Atreides/Harkonnen/Ordos). '
+                         'FFA: playing houses in slot order (default Harkonnen/Atreides/Ordos/Sardaukar); '
+                         'list all six for six-player self-play')
 parser.add_argument('--house-offset', type=int, default=0,
                     help='1v1: the house pair of the first seed (the pair cycles with the seed\'s position plus this), '
                          'so a run split by seed across machines plays the pairs the whole list would')
@@ -835,6 +839,15 @@ match_score.add_arguments(parser)
 args = parser.parse_args()
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')
+if args.ffa:
+    houses = args.houses or FFA_HOUSES
+    labels = args.ffa.split(',')
+    if len(houses) < 3 or len(set(houses)) != len(houses):
+        parser.error('FFA needs at least three distinct houses.')
+    if len(labels) not in (1, 2, len(houses)) or any(not label for label in labels):
+        parser.error('FFA needs one label, two balanced labels, or one label per house.')
+    if len(labels) == 2 and len(houses) % 2:
+        parser.error('Two-label FFA needs an even number of houses.')
 if args.report:
     report(args)
 else:

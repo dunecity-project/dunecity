@@ -20,6 +20,7 @@
 
 #include "ObjectInterface.h"
 
+#include <GUI/Label.h>
 #include <GUI/PictureLabel.h>
 
 #include <globals.h>
@@ -41,8 +42,13 @@ public:
     static DefaultObjectInterface* create(int objectID) {
         DefaultObjectInterface* tmp = new DefaultObjectInterface(objectID);
         tmp->pAllocated = true;
+        tmp->showOwnerName();
         return tmp;
     }
+
+    /// The owner line of the plain inspect panel (another house's object): its house name,
+    /// e.g. "Natives" for a sandworm or a crime trooper. Empty until showOwnerName().
+    const std::string& getOwnerName() const { return ownerLabel.getText(); }
 
 protected:
     explicit DefaultObjectInterface(int objectID) : ObjectInterface() {
@@ -90,6 +96,28 @@ protected:
     }
 
     /**
+        Names the inspected object's owner in the panel's top strip, in the owner's colour. Only
+        the plain inspect panel (create()) calls this: the owner panels of derived interfaces put
+        their own buttons in that strip.
+    */
+    void showOwnerName() {
+        const ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
+        const House* pOwner = pObject ? pObject->getOwner() : nullptr;
+        if(pOwner == nullptr) return;
+        std::string name;
+        try {
+            name = getHouseNameByNumber(static_cast<HOUSETYPE>(pOwner->getHouseID()));
+        } catch(const std::exception&) {
+            return;     // a house slot without a name in this mod: no owner line
+        }
+        ownerLabel.setText(name);
+        ownerLabel.setTextColor(ownerAccentColor());
+        ownerLabel.setTextFontSize(12);
+        ownerLabel.setAlignment(Alignment_HCenter);
+        topBox.addWidget(&ownerLabel, Point(0, 2), Point(SIDEBARWIDTH - 25, 18));
+    }
+
+    /**
         This method updates the object interface.
         If the object doesn't exists anymore then update returns false.
         \return true = everything ok, false = the object container should be removed
@@ -107,6 +135,7 @@ protected:
     HBox            topBoxHBox;
     HBox            mainHBox;
     PictureLabel    objPicture;
+    Label           ownerLabel;
 };
 
 #endif // DEFAULTOBJECTINTERFACE_H

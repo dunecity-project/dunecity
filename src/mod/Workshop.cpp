@@ -1,8 +1,10 @@
 #include <mod/Workshop.h>
+#include <mod/WorkshopDuplicates.h>
 #include <mod/ModManager.h>
 #include <mod/Dune2RAssetManager.h>
 #include <mod/ModTransferValidation.h>
 #include <FileClasses/INIFile.h>
+#include <config.h>
 #include <misc/fnkdat.h>
 #include <misc/WebRuntime.h>
 #include <fstream>
@@ -60,6 +62,9 @@ std::string mapID(const std::string& name,const std::string& data) {
     // Old maps have no identity. Keep their named author lineage until first editor save.
     return hashBytes("legacy-map/"+store().owner()+"/"+name+"/"+ini.getStringValue("BASIC","Author","")).substr(0,32);
 }
+bool bundledMod(const std::string& modName) {
+    return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R";
+}
 }
 Store& store() { static Store value(userPath("workshop")); return value; }
 Revision saveMod(const std::string& modName) {
@@ -78,7 +83,7 @@ Revision saveMod(const std::string& modName) {
     }
     auto info=manager.getModInfo(modName);
     auto id=meta.getStringValue("Workshop","ID","");
-    const bool bundled=modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R";
+    const bool bundled=bundledMod(modName);
     if(bundled) id.clear(); // Derive from complete content, including optional asset packs.
     else if(id.empty()) id=newID();
     // Materialize the effective rules rather than depending on a mutable vanilla fallback.
@@ -95,6 +100,60 @@ Revision saveMod(const std::string& modName) {
     // integrity-checked installer payloads such as Tornie.
     if(!bundled) pointer(metadata,r);
     return r;
+}
+bool bundledModMatchesRevisionAtGameVersion(const std::string& modName,const std::string& gameVersion,
+                                           const std::string& revisionHash) {
+    auto& manager=ModManager::instance();
+    if(gameVersion.empty()||revisionHash.empty()||!bundledMod(modName)||!manager.modExists(modName)) return false;
+    const fs::path path=manager.getModPath(modName), metadataPath=path/"mod.ini";
+    if(!fs::is_regular_file(metadataPath)) return false;
+    // Only a stamp this release wrote (Vanilla, Dune City; Tornie and Dune2R ship their own) is
+    // one an earlier release wrote differently.
+    if(INIFile(metadataPath.string()).getStringValue("Mod","Game Version")!=VERSION) return false;
+    const auto info=manager.getModInfo(modName);
+    const ShippedMod mod{modName,info.displayName,manager.getContentBase(modName),path};
+    if(gameVersion!=VERSION && stampedModHash(mod,gameVersion)==revisionHash) return true;
+    if(legacyBundledModHash(mod,gameVersion)==revisionHash) return true;
+    // A save from before a shipped art update pins the art it was saved with. Art only: the
+    // rules and metadata are verified exactly, as above, and every changed file is checked.
+    for(const auto& earlier:earlierShippedPayloads(modName)) {
+        if(gameVersion!=VERSION && stampedModHash(mod,gameVersion,earlier)==revisionHash) return true;
+        if(legacyBundledModHash(mod,gameVersion,earlier)==revisionHash) return true;
+    }
+    return false;
+}
+void pruneShippedModCopiesOnce() {
+    auto& manager=ModManager::instance();
+    fs::path mods(manager.getModsBasePath());
+    if(!mods.has_filename()) mods=mods.parent_path();
+    const fs::path marker=mods/".shipped-copies-pruned";
+    std::error_code e;
+    if(fs::exists(marker,e)) return;
+    try {
+        // The mods resolveMod() runs as shipped: the approved ones, installed with their payload.
+        std::vector<ShippedMod> shipped;
+        for(const char* name:{"vanilla","dunecity","Tornie","Dune2R"}) {
+            if(!manager.modExists(name)||manager.installerContentHash(name).empty()) continue;
+            const auto info=manager.getModInfo(name);
+            shipped.push_back({name,info.displayName,manager.getContentBase(name),manager.getModPath(name)});
+        }
+        const fs::path profile=mods.parent_path();
+        const auto pins=readProfilePins({profile/"save",profile/"mpsave"},{profile/"replay"});
+        // A copy whose revision the store holds intact comes back by itself (installMod) when needed.
+        const auto inStore=[](const std::string& hash) {
+            try { store().get(hash); return true; } catch(const std::exception&) { return false; }
+        };
+        const auto report=pruneShippedModCopies(mods,shipped,pins,manager.getActiveModName(),VERSION,inStore);
+        SDL_Log("Workshop: shipped-mod copies: %zu removed, %zu kept (%zu saves and replays checked)",
+                report.removed.size(),report.kept.size(),pins.pins.size());
+        // One pass is enough unless something that may change later held a copy back.
+        if(report.complete) {
+            std::ofstream(marker)<<VERSION<<"\n";
+        }
+        WebRuntime::syncPersistentFiles();
+    } catch(const std::exception& error) {
+        SDL_Log("Workshop: duplicate shipped-mod copies not checked: %s",error.what());
+    }
 }
 Revision saveMapData(const std::string& name,const std::string& data,const std::string& modHash) {
     if(data.empty()||data.size()>1024*1024) throw std::runtime_error("Map content is empty or too large.");

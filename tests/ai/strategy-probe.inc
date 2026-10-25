@@ -516,9 +516,11 @@ struct GameResult {
 };
 
 /// Plays a Fortress 1v1 at \a techLevel to \a endCycle, each house with \a strategies (none = the global
-/// config), checking every production pass against the prior.
+/// config), checking every production pass against the prior. With \a mayEndEarly the game may be won
+/// before \a endCycle (the tech-4 game: decided before minute 12 on 9 of 12 seeds on 1.0.852, 11 of 12
+/// with the protocol 95 movement fix); its checks only need the production passes it played.
 inline GameResult playProduction(int first, int second, const std::map<int, QuantBotStrategy::Settings>& strategies,
-                                 Uint32 mapSeed, Uint32 seed, Uint32 endCycle, int techLevel = 9) {
+                                 Uint32 mapSeed, Uint32 seed, Uint32 endCycle, int techLevel = 9, bool mayEndEarly = false) {
     const auto wall = Clock::now();
     auto game = start(fortressInit(first, second, mapSeed, seed, techLevel));
     GameResult result;
@@ -581,7 +583,7 @@ inline GameResult playProduction(int first, int second, const std::map<int, Quan
             }
         }
     }
-    require(game->getGameCycleCount() == endCycle, "A production game ended before its time");
+    require(mayEndEarly || game->getGameCycleCount() == endCycle, "A production game ended before its time");
     for (const int house : {first, second}) {
         const QuantBot* bot = botOf(*game, house);
         Production& production = result.houses[house];
@@ -640,14 +642,15 @@ inline std::vector<size_t> leadSlots(Mix mix, const Production& p) {
 /// siege 2440 vs 836, TankMass tanks 3456 vs 2467, TrikeSwarm trikes 996 vs 574, Specials 2406 vs 346,
 /// Counter (its first counter's lead) 1920 vs 940, Tuned (Harkonnen 45% tanks) 3196 vs 2467; Air is
 /// checked by its ornithopters and Bounded by its passes (checkMix). Artillery leads with siege only:
-/// the Atreides configured mix already has 35% launchers. A fixed margin is not asserted: one
-/// 12-minute game per mix is one trajectory of the whole fight, and over six seeds (486409243, 11,
-/// 22, 33, 44, 55), with and without the perimeter hold (V), the margins ranged +88..+2974 (mean
-/// ~+1250), and the 500-bps margin this check used to require failed 3 of 36 checks with the hold
-/// and 5 of 36 without it, spread over all six mixes (docs/formations.md, "Free-for-all: finishing
-/// the game"). The largest-share slot is not asserted either: Starport ornithopters and the mobile
-/// anti-air floor's launchers are bought outside the mix and can outweigh a lead slot.
-constexpr int kLeadMarginBps = 1;
+/// the Atreides configured mix already has 35% launchers. The largest-share slot is not asserted:
+/// Starport ornithopters and the mobile anti-air floor's launchers are bought outside the mix and can
+/// outweigh a lead slot.
+/// One 12-minute game per mix is one trajectory of the whole fight, so the probe only logs each
+/// margin (check=lead_margin) and run-campaign-balance.py requires the mean over three seeds to be
+/// positive (--strategy-margin-seeds). Over twelve seeds (486409243, 11, 22, ... 122) a single game's
+/// margin was below 1 bps in 6 of 84 checks on 1.0.852 and 4 of 84 with the protocol 95 movement fix,
+/// so a one-seed check failed on 5 and 3 of the 12 seeds; the three-seed mean failed in 5 and 8 of
+/// 220 seed triples, with every mix's twelve-seed mean +534..+1482 bps (HANDOVER, "Unit movement").
 
 /// Section 3's checks for one house playing Fixed:<mix>,Base, against the Learned game.
 inline void checkMix(Mix mix, const Production& p, const Production& learned, long long wallMs) {
@@ -662,6 +665,14 @@ inline void checkMix(Mix mix, const Production& p, const Production& learned, lo
     logProduction("mix_production", p, &learned, wallMs, " lead_slots=" + (leadText.empty() ? std::string("-") : leadText)
         + " lead_value_bps=" + std::to_string(leadBps) + " learned_lead_value_bps=" + std::to_string(learnedLeadBps));
     const std::string name = QuantBotStrategy::name(mix);
+    // --strategy-margin-seeds runs: only the lead margin, which run-campaign-balance.py averages over
+    // the seeds; every other check is the main seed's.
+    if (std::getenv("BALANCE_STRATEGY_MARGIN_ONLY")) {
+        if (mix != Mix::Air && mix != Mix::Infantry && mix != Mix::Bounded)
+            SDL_Log("STRATEGY_PROBE: check=lead_margin mix=%s lead_value_bps=%d learned_lead_value_bps=%d margin_bps=%d",
+                    name.c_str(), leadBps, learnedLeadBps, leadBps - learnedLeadBps);
+        return;
+    }
     require(p.strategy == Choice{mix, Tempo::Base} && !p.inert, name + ": the house did not play its fixed strategy");
     // Before combat evidence every pass is the prior, exactly, and within the starting-mix bounds.
     require(p.priorPasses > 0 && p.priorMatches == p.priorPasses, name + ": a pass before combat evidence was not the prior");
@@ -683,7 +694,6 @@ inline void checkMix(Mix mix, const Production& p, const Production& learned, lo
     }
     if (mix == Mix::Counter)
         require(p.counterPasses > 0 && p.firstCounterMix != learned.firstPriorMix, "Counter: the counter of the seen enemy was never played");
-    // What was built leads with the prior's lead slots, and more so than the Learned game did.
     if (mix == Mix::Air) {
         // Every house buys Starport ornithopters (Learned's first minutes are 51% ornithopter value),
         // so the share hardly separates them. The Air strategy upgrades its Hi-Tech Factory to make
@@ -696,7 +706,10 @@ inline void checkMix(Mix mix, const Production& p, const Production& learned, lo
         require(p.built[air] > learned.built[air], "Air: no more ornithopters than the Learned game");
         return;
     }
-    require(leadBps >= learnedLeadBps + kLeadMarginBps, name + ": the lead slots got no larger share of the built value than in the Learned game");
+    // What was built leads with the prior's lead slots, and more so than the Learned game did: logged
+    // here, required of the mean over seeds by run-campaign-balance.py (see the note above checkMix).
+    SDL_Log("STRATEGY_PROBE: check=lead_margin mix=%s lead_value_bps=%d learned_lead_value_bps=%d margin_bps=%d",
+            name.c_str(), leadBps, learnedLeadBps, leadBps - learnedLeadBps);
 }
 
 } // namespace StrategyProbe
@@ -831,7 +844,7 @@ int runQuantBotStrategyProbe() {
         // mix (QuantBotConfig: 50% tanks, the rest light units), not the top mix renormalised, and its
         // production passes play it until the learning has evidence.
         const int atreides = HOUSE_ATREIDES, ordos = HOUSE_ORDOS;
-        const GameResult played = playProduction(atreides, ordos, {}, 7, seed, MILLI2CYCLES(12 * 60000), 4);
+        const GameResult played = playProduction(atreides, ordos, {}, 7, seed, MILLI2CYCLES(12 * 60000), 4, true);
         for (const int house : {atreides, ordos}) {
             const Production& p = played.houses.at(house);
             const auto& band = getQuantBotConfig().getTunedRatios(house, 4);

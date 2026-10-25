@@ -34,6 +34,7 @@ summary table. Games already in games.csv are skipped; each game's run directory
 soon as its rows are written. Scores are tests/ai/match_score.py placement scores.
 """
 import argparse
+import configparser
 import csv
 import re
 import shutil
@@ -65,18 +66,21 @@ CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBr
            'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp')
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error')
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn', 'start')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
 # Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
 # swapped, so 18 seeds on the four long maps give 144 games per pair (and 72 on the short maps).
 LADDER_SEEDS = 18
+# Full-tier seeds per team cell (2v2 and 3v3 Hard v Medium, two mods, every seed played from both
+# sets of starts): 12 seeds give 48 games per format.
+TEAM_SEEDS = 12
 lock = threading.Lock()
 
 
@@ -90,15 +94,17 @@ def mp_map(name):
 
 
 def match(category, name, mod, slots, *, skirmish=None, path=None, houses=None, minutes=60, options=None,
-          expect=None, smoke=0, full=4, rotate=True, repeat=False, both_sides=False):
+          expect=None, smoke=0, full=4, rotate=True, repeat=False, both_sides=False, swap_teams=False):
     """A match cell. slots: [(class code, team)] in slot order; houses: fixed houses (map-named),
     else the first len(slots) of HOUSES, rotated by the seed's index so every code plays every house.
     expect: ('wins', team[, within minutes]) or ('loses', team): that team must win / another must.
     both_sides (full tier): every seed is played a second time ('#swap') with the houses rotated by
-    one more; the slots keep their order, so in a 1v1 each side keeps its start and swaps its house."""
+    one more; the slots keep their order, so in a 1v1 each side keeps its start and swaps its house.
+    swap_teams (full tier): every seed is played a second time ('#swap') with the two teams' controllers
+    exchanged, so each team plays from the other's starts (expect: the same controllers must win)."""
     return dict(category=category, name=name, kind='match', mod=mod, slots=slots, skirmish=skirmish, path=path,
                 houses=houses, minutes=minutes, options=options, expect=expect, smoke=smoke, full=full,
-                rotate=rotate, repeat=repeat, both_sides=both_sides)
+                rotate=rotate, repeat=repeat, both_sides=both_sides, swap_teams=swap_teams)
 
 
 def team_slots(*teams):
@@ -114,7 +120,7 @@ def skirmish_spec(size, base, army, **extra):
     return ','.join([f'size={size}', f'base={base}', f'army={army}'] + [f'{k}={v}' for k, v in extra.items()])
 
 
-def matrix(ladder_seeds=LADDER_SEEDS):
+def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
     cells = []
     # 1. Random Skirmish, mixed: players, teams, bases, armies (kArmyBudgets index: 0 none, 2 = 2,500
     # small, 5 = 20,000 large), mods, QuantBot difficulties and the AI Player.
@@ -205,6 +211,15 @@ def matrix(ladder_seeds=LADDER_SEEDS):
         if players > 1 and not big:
             cells.append(match('mp', f'{size}-{short}-qh-v-ah', mod, team_slots(['QH'] * players, ['AH'] * players),
                                path=mp_map(name), houses=named, expect=('wins', 1), full=4))
+    # 7. Team games, Hard v Medium (the Hard team must win): 2v2 on 128x128 and 3v3 on 160x160 Random
+    # Skirmish maps, medium bases and small armies (the 3v3 cell of the skirmish category), vanilla and
+    # DuneCity, every seed from both sets of starts.
+    for players, size, minutes in ((2, 128, 75), (3, 160, 90)):
+        for mod in ('vanilla', 'dunecity'):
+            cells.append(match('team', f'{players}v{players}-qh-v-qm-rs{size}', mod,
+                               team_slots(['QH'] * players, ['QM'] * players),
+                               skirmish=skirmish_spec(size, 'medium', 2), minutes=minutes, expect=('wins', 1),
+                               full=team_seeds, swap_teams=True))
     return cells
 
 
@@ -220,14 +235,19 @@ def campaign_missions(first_only):
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
 
 
+def aaa_seeds(count):
+    """All against Atreides: the six fixed seeds of the mandatory test, then generated ones."""
+    return list(AAA_SEEDS[:count]) + seeds_for('aaa', 'extra', max(0, count - len(AAA_SEEDS)))
+
+
 def schedule(args):
     games = []
-    for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS)):
+    for cell in matrix(getattr(args, 'ladder_seeds', LADDER_SEEDS), getattr(args, 'team_seeds', TEAM_SEEDS)):
         if args.categories and cell['category'] not in args.categories:
             continue
         if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
@@ -235,6 +255,8 @@ def schedule(args):
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
+        if cell['category'] == 'aaa' and getattr(args, 'aaa_seeds', None) and args.tier == 'full':
+            count = args.aaa_seeds
         if count <= 0:
             continue
         if cell['kind'] == 'campaign':
@@ -243,13 +265,15 @@ def schedule(args):
                     for seed in seeds_for('campaign', f'{house}{mission}', count):
                         games.append(campaign_game(cell, house, level, mission, seed))
             continue
-        seeds = list(AAA_SEEDS[:count]) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
+        seeds = aaa_seeds(count) if cell['category'] == 'aaa' else seeds_for(cell['category'], cell['name'], count)
         for index, seed in enumerate(seeds):
             games.append(match_game(cell, index, seed))
             if cell['repeat'] and index == 0 and args.tier == 'smoke':
                 games.append(dict(match_game(cell, index, seed), id=match_game(cell, index, seed)['id'] + '#replay'))
             if cell['both_sides'] and args.tier == 'full':
                 games.append(match_game(cell, index + 1, seed, '#swap'))
+            if cell['swap_teams'] and args.tier == 'full':
+                games.append(match_game(cell, index, seed, '#swap'))
     for cell in smoke_campaigns() if args.tier == 'smoke' and (not args.categories or 'campaign' in args.categories) else ():
         games.append(cell)
     if args.shard:
@@ -273,11 +297,18 @@ def match_game(cell, index, seed, suffix=''):
     if cell['rotate']:
         shift = index % n
         houses = houses[shift:] + houses[:shift]
-    sides = [(house, team, code) for house, (code, team) in zip(houses, cell['slots'])]
+    slots, expect = cell['slots'], cell['expect']
+    if cell.get('swap_teams') and suffix == '#swap':
+        # Team 1's controllers take team 2's slots (starts) and the other way round.
+        codes = {team: [code for code, t in slots if t == team] for team in (1, 2)}
+        slots = [(codes[3 - team][i], team) for team in (1, 2) for i in range(len(codes[team]))]
+        if expect and expect[0] == 'wins':
+            expect = ('wins', 3 - expect[1]) + tuple(expect[2:])
+    sides = [(house, team, code) for house, (code, team) in zip(houses, slots)]
     where = f'skirmish:{cell["skirmish"]},seed={seed}' if cell['skirmish'] else Path(cell['path']).stem
     return dict(id=f'{cell["category"]}/{cell["name"]}/{cell["mod"]}/{seed}{suffix}', category=cell['category'],
                 cell=f'{cell["name"]}/{cell["mod"]}', kind='match', seed=seed, mod=cell['mod'], map=where,
-                sides=sides, minutes=cell['minutes'], options=cell['options'], expect=cell['expect'],
+                sides=sides, minutes=cell['minutes'], options=cell['options'], expect=expect,
                 skirmish=f'{cell["skirmish"]},seed={seed}' if cell['skirmish'] else None, path=cell['path'])
 
 
@@ -330,6 +361,22 @@ def command(args, binary, game, out):
            '--prebuilt-probe', str(binary), '--output-dir', str(out), '--scenario', '--mod', game['mod'],
            '--seed', str(game['seed']), '--minutes', str(game['minutes']), '--capture-mib', '256',
            '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--no-ai-telemetry']
+    if getattr(args, 'style', None):
+        cmd += ['--scenario-style', args.style]
+    options_path = game.get('options')
+    if getattr(args, 'game_options', None):
+        options = configparser.ConfigParser(strict=False, interpolation=None)
+        options.optionxform = str
+        for path in (options_path, args.game_options):
+            if path:
+                with Path(path).open() as handle:
+                    options.read_file(handle)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        options_path = out.with_suffix('.game-options.ini')
+        with options_path.open('w') as handle:
+            options.write(handle)
+    if options_path:
+        cmd += ['--game-options', str(options_path)]
     if game['kind'] == 'campaign':
         cmd += ['--house', game['house'], '--level', str(game['level']), '--mission', str(game['mission']),
                 '--partner-difficulty', game['partner'], '--enemy-difficulty', 'easy', '--enemy-ai', game['enemy_ai']]
@@ -337,8 +384,6 @@ def command(args, binary, game, out):
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
     cmd += ['--skirmish', game['skirmish']] if game['skirmish'] else ['--custom-map', str(game['path'])]
-    if game['options']:
-        cmd += ['--game-options', str(game['options'])]
     return cmd
 
 
@@ -402,7 +447,8 @@ def play(args, scratch, binary, game):
                            'army_value': h['army_value'], 'army_units': h['army_units'], 'away_peak': h['away_peak'],
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
-                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', '')})
+                           'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
+                           'crush_kills': h.get('crush_kills', '')})
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)
@@ -522,7 +568,8 @@ def load(dirs):
     # Expectations as the matrix defines them now (a row keeps the one it was played with).
     current = {}
     for tier in ('smoke', 'full'):
-        plan = argparse.Namespace(tier=tier, categories=None, seeds_per_cell=None, shard=None, ladder_seeds=LADDER_SEEDS)
+        plan = argparse.Namespace(tier=tier, categories=None, seeds_per_cell=None, shard=None, ladder_seeds=LADDER_SEEDS,
+                                  team_seeds=TEAM_SEEDS)
         current.update({g['id']: ':'.join(str(x) for x in g['expect']) if g['expect'] else '' for g in schedule(plan)})
     for gid, row in games.items():
         row['expect'] = current.get(gid, row['expect'])
@@ -629,10 +676,12 @@ def report(args):
                   f'{expect.replace(":", " ") or "-"} | {check} | '
                   f'{", ".join(f"{f} {c}" for f, c in sorted(game_flags.items())) or "-"} |')
         print()
-        if category in ('skirmish', 'cy', 'mp'):
+        if category in ('skirmish', 'cy', 'mp', 'team'):
             class_table(rows, houses)
         if category == 'ladder':
             ladder_table(rows, houses, problems)
+        if category == 'team':
+            team_table(rows, houses, problems)
     print('## Problems\n')
     for p in problems or ['none']:
         print(f'- {p}')
@@ -697,6 +746,103 @@ def ladder_table(rows, houses, problems):
         print(f'| {pair} | {map_name} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} '
               f'| {length} | {sides} |')
     print()
+
+
+def team_table(rows, houses, problems):
+    print('Team games (the Hard team\'s placement score; the interval resamples seeds: the two games of a seed, '
+          'one from each set of starts, count as one mean):\n')
+    print('| Format | Games | Hard W-L-T | Hard score [95% CI] | Order | Mean minutes |')
+    print('|---|---|---|---|---|---|')
+    groups = defaultdict(list)
+    for g in rows:
+        if g['error']:
+            continue
+        name, mod = g['cell'].split('/')
+        fmt = name.split('-')[0]
+        groups[(fmt, mod)].append(g)
+        groups[(fmt, 'all')].append(g)
+    for (fmt, mod), gs in sorted(groups.items()):
+        per_seed = defaultdict(list)
+        w = t = 0
+        for g in gs:
+            hard = [h for h in houses.get(g['id'], []) if h['code'] == 'QH']
+            if not hard:
+                continue
+            per_seed[(g['cell'], g['seed'])].append(float(hard[0]['score']))
+            w += g['winner_team'] == hard[0]['team']
+            t += g['winner_team'] == '0'
+        scores = [statistics.mean(s) for s in per_seed.values()]
+        if not scores:
+            continue
+        low, _ = match_score.bootstrap(scores, 1)
+        holds = 'holds' if low > 0 else 'INVERTED' if statistics.mean(scores) < 0 else 'not shown'
+        if mod == 'all' and holds != 'holds':
+            problems.append(f'team {fmt}: Hard team {holds} against Medium (score {fmt_ci(scores)})')
+        minutes = [float(g['minutes']) for g in gs if g['minutes']]
+        print(f'| {fmt} {mod} | {len(gs)} | {w}-{len(gs) - w - t}-{t} | {fmt_ci(scores)} | {holds} '
+              f'| {statistics.mean(minutes) if minutes else 0:.1f} |')
+    print()
+
+
+def subject_score(game, houses, draw_score=match_score.DRAW_SCORE):
+    """The A/B subject's score: the stronger ladder side, the team category's Hard team,
+    or the campaign partner (mission win/loss and the same negative draw as other duels)."""
+    if game['error']:
+        return None
+    if game['category'] == 'campaign':
+        return match_score.duel(game['outcome'] == 'won', game['outcome'] == 'lost', draw_score)[0].score
+    name = game['cell'].split('/')[0]
+    code = name.split('-')[0] if game['category'] == 'ladder' else 'QH' if game['category'] == 'team' else None
+    scores = [float(h['score']) for h in houses if h['code'] == code and h['score'] != '']
+    return scores[0] if code and scores else None
+
+
+def compare(args):
+    """Paired A/B (AGENTS.md "AI test games"): the same game ids in a control and a candidate run
+    (e.g. --style); each seed's games (both sides or both sets of starts) count as one mean, and the
+    candidate is better where the 95% interval of the paired difference is above 0."""
+    control, candidate = (load([d]) for d in args.compare_dirs)
+    groups = defaultdict(lambda: defaultdict(lambda: [[], []]))
+    timeouts = defaultdict(lambda: [0, 0])
+    for gid, game in candidate[0].items():
+        if gid not in control[0]:
+            continue
+        a = subject_score(control[0][gid], control[1].get(gid, []), args.draw_score)
+        b = subject_score(game, candidate[1].get(gid, []), args.draw_score)
+        if a is None or b is None:
+            continue
+        name, mod = game['cell'].split('/')
+        if game['category'] == 'ladder':
+            strong, _, weak, map_name = name.split('-', 3)
+            pair = f'{strong} v {weak}'
+            labels = (f'ladder {pair} {map_name} {mod}',
+                      f'ladder {pair} {"long" if map_name.startswith("long-") else "short"} maps')
+        elif game['category'] == 'team':
+            labels = (f'team {name.split("-")[0]} {mod}', f'team {name.split("-")[0]}')
+        else:
+            labels = (f'{game["category"]} {mod}', game['category'])
+        # Campaign seeds can repeat across different houses and missions; those are independent
+        # games, not the two starting sides of one seed as in the ladder/team categories.
+        seed_key = (game['cell'], game['seed'], game['map'] if game['category'] == 'campaign' else '')
+        for label in labels:
+            groups[label][seed_key][0].append(a)
+            groups[label][seed_key][1].append(b)
+            timeouts[label][0] += control[0][gid]['outcome'] == 'time_limit'
+            timeouts[label][1] += game['outcome'] == 'time_limit'
+    print(f'# Paired A/B: control {args.compare_dirs[0]}, candidate {args.compare_dirs[1]}\n')
+    print('| Group | Games | Seeds | Control | Candidate | Difference [95% CI] | Verdict | Time-outs control / candidate |')
+    print('|---|---|---|---|---|---|---|---|')
+    for label in sorted(groups):
+        seeds = groups[label]
+        ctl = [statistics.mean(v[0]) for v in seeds.values()]
+        cnd = [statistics.mean(v[1]) for v in seeds.values()]
+        diff = [b - a for a, b in zip(ctl, cnd)]
+        low, high = match_score.bootstrap(diff, 1)
+        verdict = 'better' if low > 0 else 'worse' if high < 0 else 'not shown'
+        games = sum(len(v[0]) for v in seeds.values())
+        print(f'| {label} | {games} | {len(seeds)} | {statistics.mean(ctl):+.2f} | {statistics.mean(cnd):+.2f} | '
+              f'{statistics.mean(diff):+.2f} [{low:+.2f}, {high:+.2f}] | {verdict} | '
+              f'{timeouts[label][0]} / {timeouts[label][1]} |')
 
 
 def campaign_report(rows, houses, problems):
@@ -765,9 +911,17 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
+parser.add_argument('--game-options', type=Path,
+                    help='Overlay this INI after each cell\'s own game options; use a distinct results '
+                         'directory for each comparison arm')
 parser.add_argument('--ladder-seeds', type=int, default=LADDER_SEEDS,
                     help='Full tier: seeds per long ladder cell (4 long maps, both houses; 18 = 144 games per '
                          'pair; the short maps get half)')
+parser.add_argument('--team-seeds', type=int, default=TEAM_SEEDS,
+                    help='Full tier: seeds per team cell (2v2/3v3 Hard v Medium, two mods, both sets of starts; '
+                         '12 = 48 games per format)')
+parser.add_argument('--aaa-seeds', type=int,
+                    help='Full tier: seeds per All against Atreides cell (the mandatory six, then generated ones)')
 parser.add_argument('--shard', type=shard, help='K/N: play every N-th scheduled game starting with the K-th')
 parser.add_argument('--jobs', type=int, default=3, help='Games played in parallel')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Wall seconds per game')
@@ -776,8 +930,15 @@ parser.add_argument('--list', action='store_true', help='Print the scheduled gam
 parser.add_argument('--report', dest='report_dirs', nargs='+', metavar='RESULTS',
                     help='Print the summary table of these results directories')
 parser.add_argument('--draw-score', type=match_score.check_draw_score, default=match_score.DRAW_SCORE)
+parser.add_argument('--style', help='A play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by: the on '
+                                    'arm of a candidate config switch; compare with a run without it (same seeds)')
+parser.add_argument('--compare', dest='compare_dirs', nargs=2, metavar=('CONTROL', 'CANDIDATE'),
+                    help='Paired A/B of two results directories over their common game ids (ladder: the stronger '
+                         'side; team: the Hard team; campaign: the Hard partner won)')
 args = parser.parse_args()
-if args.report_dirs:
+if args.compare_dirs:
+    compare(args)
+elif args.report_dirs:
     report(args)
 elif args.list:
     plan = schedule(args)

@@ -112,7 +112,8 @@ FeedbackWindow::FeedbackWindow(Submit send) : Window(0, 0, 560, 440), send(std::
         + " / Scenario: " + std::to_string(init.getMission());
     context += "\nAI players:";
     bool hasAI = false;
-    for(int houseId = 0; houseId < NUM_HOUSES; ++houseId) {
+    // Player houses only; the Natives house has no players and is not part of the match setup.
+    for(int houseId = 0; houseId < NUM_PLAYER_HOUSES; ++houseId) {
         const auto* house = currentGame->getHouse(houseId);
         if(!house) continue;
         for(const auto& player : house->getPlayerList()) {

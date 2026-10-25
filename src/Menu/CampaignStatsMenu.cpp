@@ -490,7 +490,9 @@ void CampaignStatsMenu::calculateScore(int level)
     const int localTeam = pLocalHouse->getTeamID();
     for(int i=0; i < NUM_HOUSES; i++) {
         House* pHouse = currentGame->getHouse(i);
-        if(pHouse != nullptr) {
+        // The Natives (worms, crime troopers) are neither side: their kills and losses are no
+        // house's statistics.
+        if(pHouse != nullptr && !pHouse->isNatives()) {
             if(pHouse->getTeamID() != localTeam) {
                 unitsDestroyedByAI += pHouse->getNumDestroyedUnits();
                 structuresDestroyedByAI += pHouse->getNumDestroyedStructures();

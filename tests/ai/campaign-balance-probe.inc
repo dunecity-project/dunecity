@@ -35,6 +35,7 @@
 #include "custom-attack-probe.inc"
 #include "custom-city-cap-probe.inc"
 #include "factory-recovery-probe.inc"
+#include "strategic-site-probe.inc"
 #include "radar-power-probe.inc"
 #include "campaign-stats-probe.inc"
 #include "campaign-pressure-probe.inc"
@@ -392,6 +393,18 @@ int runCampaignBalanceProbe() {
     if (std::getenv("BALANCE_HELPER_ECONOMY_PROBE")) {
         runCampaignHelperEconomyProbe(*game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    // Same-build config comparisons, including the strategic-site regression's negative control.
+    if (scenario || std::getenv("BALANCE_STRATEGIC_SITE_PROBE"))
+        if (const char* style = std::getenv("BALANCE_SCENARIO_STYLE"); style && *style)
+            for (int h = 0; h < NUM_HOUSES; ++h)
+                if (House* house = game->getHouse(h))
+                    for (const auto& player : house->getPlayerList())
+                        if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    if (std::getenv("BALANCE_STRATEGIC_SITE_PROBE")) {
+        runStrategicSiteProbe(*game);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_FACTORY_RECOVERY_PROBE")) {

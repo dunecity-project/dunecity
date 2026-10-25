@@ -181,6 +181,15 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     windowWidget.addWidget(&coopNetworkDropDown, Point(coopX, coopY+32), Point(180, 24));
     windowWidget.addWidget(&loadCoopButton, Point(coopX, coopY+64), Point(180, 24));
     windowWidget.addWidget(&loadSharedSaveButton, Point(coopX, coopY+96), Point(180, 24));
+    // DuneCity city-building art for this mission, the same choice as the campaign's.
+    skinLabel.setText(_("DuneCity skin"));
+    skinLabel.setTextFontSize(12);
+    windowWidget.addWidget(&skinLabel, Point(coopX, coopY+126), Point(180, 18));
+    skinDropDown.addEntry(_("SimCity"), 0);
+    skinDropDown.addEntry(_("Dune2"), 1);
+    skinDropDown.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
+    skinDropDown.setEnabled(ModManager::instance().isCityModeActive());
+    windowWidget.addWidget(&skinDropDown, Point(coopX, coopY+146), Point(180, 24));
 
     // set up house choice
 
@@ -308,6 +317,7 @@ void SinglePlayerSkirmishMenu::onStart()
     const char* enemyAIClass = kEnemyAIClasses[enemyAIIndex];
 
     GameInitSettings init(houseChoice, mission, currentGameOptions);
+    init.setCampaignGraphicsSkin(GameInitSettings::sanitizeGraphicsSkin(skinDropDown.getSelectedEntryIntData()));
     if(supportSelected) {
         init.setMultiplePlayersPerHouse(true);
     }

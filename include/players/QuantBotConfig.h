@@ -138,8 +138,8 @@ struct QuantBotConfig {
     /// force"). INI: [Force Concentration] FocusFire, Converge, WaveReadinessPercent, Bundle,
     /// LaunchFromBundle, PerimeterTurrets, SizedDefence, OpeningReadiness, TurretPriority, PressOn,
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
-    /// FinishWhenLeading;
-    /// optional keys, the code defaults
+    /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
+    /// RespectServiceOwnership; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -202,6 +202,24 @@ struct QuantBotConfig {
         /// remembered army sends its ground waves at the weakest known house (FinishWeakest's
         /// choice) instead of the nearest.
         bool finishWhenLeading;
+        /// Team play (Hard/Brutal): an allied QuantBot's whole-army wave launched within the last
+        /// 30 s is joined by whatever viable wave we have, whatever our own readiness, at that
+        /// wave's objective (docs/ai-scenario-matrix.md, "Team games"). Inert without allies.
+        bool joinAllyWaves;
+        /// Custom Hard/Brutal starts without a heavy factory establish a four-worker economy,
+        /// then fund their first full combat wave before optional fleet/yard expansion. Initial
+        /// heavy-factory starts, Easy/Medium and campaign games are unchanged.
+        bool openingCombatBudget;
+        /// The equivalent four-worker first-wave budget for a Hard/Brutal campaign partner of a
+        /// human that started without a heavy factory. Enemy controllers and Easy/Medium stay as-is.
+        bool campaignCombatBudget;
+        /// Optional capacity MCVs retain the forecast costs of existing production plus its
+        /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
+        /// Independent candidate, off until same-build outcome acceptance.
+        bool capacityMcvRunway;
+        /// Light-raider tactical orders leave repair and carryall-pickup ownership intact.
+        /// Independent candidate; off until same-build mechanics/outcome acceptance.
+        bool respectServiceOwnership;
     };
     ForceSettings force;
 
@@ -233,6 +251,9 @@ struct QuantBotConfig {
     int attackTimerMs;              // Time between attack checks (milliseconds)
     float attackThresholdPercent;   // Don't attack until military reaches this % of limit (0.0-1.0)
     int minMoneyForProduction;      // Minimum money needed to queue production
+    /// [General Behavior] StrategicSiteGuards: IX/Palace selections require a real site.
+    /// Off reproduces the old overdue-order starvation for same-build comparisons. Hashed.
+    bool strategicSiteGuards;
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
     /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
     /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into

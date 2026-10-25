@@ -17,6 +17,7 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapGenerator.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/MapMirror.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/WorkshopStore.cpp
+        ${CMAKE_SOURCE_DIR}/src/mod/WorkshopDuplicates.cpp
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
         CoopGameSettingsTestCase.cpp
@@ -90,6 +91,8 @@ target_sources(dunelegacy_tests
         ZonePowerTestCase/ZonePowerTestCase.cpp
         CityEffectsTestCase/CityEffectsTestCase.cpp
         ../src/fixmath/fix32.c
+        ../src/fixmath/fix32_trig.c
+        ../src/fixmath/fix32_sqrt.c
         ValueModelTestCase/ValueModelTestCase.cpp
         PoliceStationTestCase/PoliceStationTestCase.cpp
         SaveCompatTestCase/SaveCompatTestCase.cpp
@@ -441,6 +444,9 @@ endif()
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/test_match_score.py)
+        set_tests_properties(quantbot_match_score PROPERTIES TIMEOUT 30)
         add_test(NAME save_scenario_export COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/scenarios/export-save-scenario.py
             --build-dir ${CMAKE_BINARY_DIR} --work-dir ${CMAKE_BINARY_DIR}/scenario-export-regression
@@ -472,6 +478,19 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
         set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        # Every catalogue map in data/maps/community-maps.json is the recorded revision, has the
+        # slots and size its name advertises, a start for every slot, and loads and plays for a
+        # game minute in its mod with every lobby house still holding its start.
+        add_test(NAME community_maps_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/maps/check-community-maps.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-maps-startup)
+        set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # Exact reviewed payloads, real five-minute AI production from two bare yards,
+        # and matching final digests across two runs of every community mod.
+        add_test(NAME community_mods_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mods/check-community-mods.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-mods-startup)
+        set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.
@@ -489,6 +508,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
+        # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
+        # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
+        # spectated end plate fits the map in every house colour, chat clears the city readouts,
+        # a skin round trip leaves the in-game sidebar pixel-identical, new and 1.0.850 profiles
+        # get Classic. The full 3 skins x 7 sizes gallery: run-ui-gallery-probe.py without --skins/--cases.
+        add_test(NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/menu/run-ui-gallery-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ui-gallery-probe
+            --skins 0 2 --cases 640x480 1440x900-hd)
+        set_tests_properties(ui_gallery_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Random Skirmish on the real engine: the screen (house cap, persistence, Save map,
         # screenshots), the hosted Random map (Custom Game's button, open Player starts saved and
         # chosen, lobby with host, guest, AI and teams, the guest's wire-format copy, both peers'
@@ -546,6 +575,43 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/spectator-setup-probe)
         set_tests_properties(local_spectator_setup_probe PROPERTIES TIMEOUT 400 RUN_SERIAL TRUE)
+        # Stefan: "when there is a winner and player is spectating the game should end." Real
+        # matches end for a view without a side: spectated Random Skirmish FFA and 2v2 in both
+        # mods, a player out on a WinFlags=1 map, quota and time-limit rules, and a spectator
+        # beside two networked players (same end cycle and state digest as the winning player);
+        # the winner is named in its colour in the game and the statistics; played games unchanged.
+        add_test(NAME spectator_game_end_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/spectator/run-game-end-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-game-end-probe)
+        set_tests_properties(spectator_game_end_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # The same end online: host, partner and a mid-game spectator as three processes over the
+        # local signaling service (PHP) and WebRTC, each in the real main loop. The spectator ends
+        # on the host's last cycle and digest with the winner on its plate and statistics when the
+        # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
+        # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP.
+        add_test(NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
+            --cases end,decision,lag-end,lag-decision,slow,natives
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
+        set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        # Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house".
+        # Worms on bundled maps, a Random Skirmish, a campaign mission and a 9868 save are the
+        # Natives'; crime troopers are, and QuantBot's threat estimate ignores them; Natives is in
+        # no house list or statistics; win/lose ignores it; the inspect panel and radar show it.
+        # 1.0.852 interactions: Natives kills and a shot-down plane's crash deciding spectated,
+        # played and campaign games (a crash taking two last teams at once names nobody), the
+        # analytics roster, and host/guest/spectator lockstep digests with all of it in play.
+        add_test(NAME natives_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/natives/run-natives-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/natives-probe)
+        set_tests_properties(natives_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Saves 1.0.842, 1.0.847, 1.0.850 and the public 1.0.851 wrote (vanilla FFA, DuneCity 1v1,
+        # mid-game with worms) load in a fresh profile, run 600 cycles, re-save as the current
+        # savegame version and load again, every worm the Natives'.
+        add_test(NAME save_roundtrip_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/saves/run-save-roundtrip-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/save-roundtrip-probe)
+        set_tests_properties(save_roundtrip_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         add_test(NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
@@ -627,6 +693,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-rts-controls-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/rts-controls-probe)
         set_tests_properties(rts_controls_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Smooth unit motion at 2 ms game speed through the real main loop and frame pacing:
+        # simulated (and drawn) units never stand still mid-step, keep justStoppedMoving on a
+        # chained step or jump a tile, per cycle and per rendered frame, and a unit whose carryall
+        # wait was cancelled drives on at its speed.
+        add_test(NAME unit_motion_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-motion-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-motion-probe)
+        set_tests_properties(unit_motion_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         add_test(NAME deviation_reward_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward
@@ -652,6 +726,16 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     --output-dir ${CMAKE_BINARY_DIR}/${ai_probe}-${ai_mod}-probe)
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
+        endforeach()
+        # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
+        # and saved partner state through the live Harkonnen level-9 fixture.
+        foreach(pressure_mod IN ITEMS vanilla dunecity)
+            add_test(NAME quantbot_campaign_pressure_${pressure_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pressure-probe --repeatable
+                --house harkonnen --level 9 --mod ${pressure_mod} --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/campaign-pressure-${pressure_mod}-probe)
+            set_tests_properties(quantbot_campaign_pressure_${pressure_mod}
+                PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         endforeach()
         # Read-only Stats window, observer house browsing and the sidebar squeeze,
         # on a real renderer at the smallest supported interface height and at
@@ -865,7 +949,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # two peers of the same four-house vanilla game pick the same seeded strategies and stay
         # in lockstep; the pick survives save/load (byte-identical blocks, a 9864 block re-picks
         # it, the checkpoint load continues to the host's digest); every mix strategy's production
-        # passes play its prior before combat evidence, favour its lead slots and still learn;
+        # passes play its prior before combat evidence and still learn, and its lead slots get a
+        # larger share of the built value than the Learned game's on the mean over three seeds
+        # (486409243 and --strategy-margin-seeds 11,22: one game per mix is one trajectory);
         # Learned/Base plays exactly the configured default's game.
         add_test(NAME quantbot_strategy COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strategy-probe --repeatable
@@ -903,15 +989,24 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-against-atreides)
         set_tests_properties(quantbot_all_against_atreides PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): four QuantBot Brutal
-        # houses in a generated 4P 160x160 DuneCity free-for-all (Fortress starts, 20,000-credit
-        # armies, 40,000 cities, Stefan's game options). Fails when no wave of 30+ units has left
-        # by minute 8, a house keeps its idle reserve 80%+ inside its own base for more than 6
-        # minutes in a row, or nobody is eliminated by minute 30 - 1.0.847 summed every enemy into
-        # "outnumbered" and never attacked. docs/formations.md, "Free-for-all: the army deploys".
+        # houses in generated 4P 160x160 DuneCity free-for-alls (Fortress starts, 20,000-credit
+        # armies, 40,000 cities, Stefan's game options), seeds 9101, 9103, 9105 three at a time.
+        # Fails when, on 9101, no wave of 30+ units has left by minute 8 or a house keeps its idle
+        # reserve 80%+ inside its own base for more than 6 minutes in a row, or when no seed has a
+        # house eliminated by minute 30 - 1.0.847 summed every enemy into "outnumbered" and never
+        # attacked. One seed's elimination time is chance (12-seed sweep, run-ffa-army-deploys.py).
+        # docs/formations.md, "Free-for-all: the army deploys".
         add_test(NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-ffa-army-deploys.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ffa-army-deploys)
         set_tests_properties(quantbot_ffa_army_deploys PROPERTIES TIMEOUT 1500 RUN_SERIAL TRUE)
+        # Restores the overdue Palace timer in the stalled minute-35 city fixture, checks
+        # that no Palace site exists, then requires other completed construction and no
+        # prolonged all-yard idle/storage-cap plateau. Disk saves reset this planning timer.
+        add_test(NAME quantbot_strategic_site_stall COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-strategic-site-stall.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strategic-site-stall)
+        set_tests_properties(quantbot_strategic_site_stall PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
         # Mandatory for every AI/unit/game-loop change (Stefan, 2026-10-18): Stefan's 4P DuneCity
         # Brutal Random Skirmish map, 6 game minutes headless, one path thread; fails when the mean
         # simulation CPU per cycle or the worst house update exceeds its budget, each a multiple of

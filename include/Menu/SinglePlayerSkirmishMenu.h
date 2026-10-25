@@ -96,6 +96,8 @@ private:
     TextButton loadCoopButton;
     TextButton loadSharedSaveButton;
     DropDownBox coopNetworkDropDown;
+    Label skinLabel;            ///< "DuneCity skin": the city-building art every house uses
+    DropDownBox skinDropDown;   ///< SimCity or Dune2; enabled only while the DuneCity mod is active
     TextButton      startButton;
     DropDownBox     supportBotDropDown;
     DropDownBox     enemyAIDropDown;

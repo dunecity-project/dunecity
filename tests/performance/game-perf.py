@@ -58,8 +58,10 @@ EIGHT_HOUSE = DATA / 'eight-house-384'
 # Where the 8-house mod revision's other files live in this tree (found by their SHA-256).
 EIGHT_HOUSE_SOURCES = ('mods/dunecity/graphics_skins', 'config')
 # perf_regression budgets of the 8-house case, as multiples of the calibration loop (see
-# docs/game-performance.md "perf_regression: eight houses on 384x384").
-EIGHT_BUDGETS = {'cpu_p99': 3.0, 'frame_cpu_p99': 9.0, 'mainloop_frame_p99': 8.0}
+# docs/game-performance.md "perf_regression: eight houses on 384x384"). The p99 cycle of this
+# save is a QuantBot build pass (8 houses x one per 100 cycles = 8% of cycles): 1.0.852 measured
+# 2.2-2.9 (mini) and 1.86 (Pro) there, perf/fps-round3 1.1-1.5 (mini), so 1.6 fails 1.0.852.
+EIGHT_BUDGETS = {'cpu_p99': 1.6, 'frame_cpu_p99': 5.5, 'mainloop_frame_p99': 8.0}
 
 
 def build_eight_house_fixture(scratch):
@@ -353,6 +355,8 @@ def run_one(args, scratch, index):
     env.setdefault('BALANCE_DIGEST_CYCLES', '750')
     if args.render_every: env['BALANCE_PERF_RENDER_EVERY'] = str(args.render_every)
     if args.csv: env['BALANCE_PERF_CSV'] = str(Path(args.csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
+    if args.motion_csv:
+        env['BALANCE_PERF_MOTION_CSV'] = str(Path(args.motion_csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
     if args.dump_map: env['BALANCE_PERF_DUMP_MAP'] = str(Path(args.dump_map).resolve())
     if args.mainloop or args.rendered: env['BALANCE_PERF_MAINLOOP'] = '1'
     if args.rendered and "'--real-video'" in (source / 'tests/ai/run-campaign-balance.py').read_text():
@@ -469,6 +473,8 @@ def main():
     parser.add_argument('--label', default='run')
     parser.add_argument('--results', type=Path)
     parser.add_argument('--csv', help='Per-cycle CSV output path')
+    parser.add_argument('--motion-csv', help='Unit motion trace: positions and movement state of every unit that moved, '
+                        'per cycle (stepped) or per rendered frame (--mainloop/--rendered); game-perf.inc MotionTrace')
     parser.add_argument('--dump-map', help='Write the map text the match was started from (e.g. a save\'s)')
     parser.add_argument('--wall-timeout', type=int, default=3600)
     parser.add_argument('--scratch')

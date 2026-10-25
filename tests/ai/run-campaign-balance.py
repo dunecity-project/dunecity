@@ -16,6 +16,7 @@ import atexit
 import ctypes
 import gzip
 import configparser
+from collections import defaultdict
 import hashlib
 import json
 import os
@@ -59,7 +60,7 @@ def windows_probe_commands(build):
     compile_entry = next(e for e in database if ('/' + output(e)).endswith(main_object))
     link_entry = next(e for e in database if output(e).endswith('/dunecity.exe') and 'vs_link_exe' in e['command'])
     compile_command = windows_argv(compile_entry['command'])
-    if Path(compile_command[0]).name.lower().startswith('sccache'):
+    if Path(compile_command[0]).name.lower().startswith(('sccache', 'ccache')):
         compile_command = compile_command[1:]
     clang = os.environ.get('DUNECITY_CLANG_CL') or shutil.which('clang-cl')
     if not clang:
@@ -127,7 +128,7 @@ parser.add_argument('--free-for-all', action='store_true', help='Give each custo
 parser.add_argument('--capture-mib', type=int, default=1024, help='Diagnostic capture allowance; shipped default is unchanged')
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Maximum wall seconds for the simulation')
 parser.add_argument('--level', type=int, choices=range(1,10), default=4)
-parser.add_argument('--mod', choices=('vanilla','dunecity','Dune2R','Tornie'), default='vanilla')
+parser.add_argument('--mod', default='vanilla', help='Installed mod folder (validated by the real ModManager)')
 parser.add_argument('--house', choices=tuple(h for h in house_names if h!='neutral'), default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
 parser.add_argument('--local-spectator', action='store_true',
@@ -230,6 +231,9 @@ parser.add_argument('--force-probe', action='store_true',
 parser.add_argument('--strategy-probe', action='store_true',
                     help='Verify QuantBot strategies: peers and reloads agree on the pick, mixes follow their priors '
                          '(needs --custom-map, a multi-house map, for the lockstep and save/load checks)')
+parser.add_argument('--strategy-margin-seeds', default='11,22',
+                    help='Strategy probe: further seeds whose mix-production section (3) is played too; each fixed '
+                         'mix\'s lead-slot margin over the Learned game must be positive on the mean over --seed and these')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -254,6 +258,8 @@ parser.add_argument('--no-ai-telemetry', action='store_true',
                          'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
                          'Log = false')
 parser.add_argument('--factory-recovery-probe', action='store_true')
+parser.add_argument('--strategic-site-probe', action='store_true',
+                    help='Continue the stalled-city fixture with its overdue Palace timer restored')
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
@@ -268,6 +274,9 @@ parser.add_argument('--skirmish',
                     help='Scenario match on a generated Random Skirmish multiplayer map, one start per side: '
                          'key=value,... (size, base none|cy|outpost|small|medium|large|fortress, army, city, seed, '
                          'tech, rock, spice, credits, symmetric; scenario-match.inc)')
+parser.add_argument('--scenario-style',
+                    help='Scenario game or strategic-site probe: a play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
+                         'e.g. a candidate config switch (test-only: not saved or hashed)')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
 parser.add_argument('--seed', type=int, default=486409243)
@@ -697,6 +706,7 @@ if args.duel_map_size:
         parser.error('--duel-sides must be house:shape,house:shape with known houses.')
 if args.launcher_kiting_probe: env['BALANCE_LAUNCHER_KITING_PROBE'] = '1'
 if args.factory_recovery_probe: env['BALANCE_FACTORY_RECOVERY_PROBE'] = '1'
+if args.strategic_site_probe: env['BALANCE_STRATEGIC_SITE_PROBE'] = '1'
 if args.starport_probe: env['BALANCE_STARPORT_PROBE'] = '1'
 if args.helper_economy_probe: env['BALANCE_HELPER_ECONOMY_PROBE'] = '1'
 if args.city_campaign_probe: env['BALANCE_CITY_CAMPAIGN_PROBE'] = '1'
@@ -715,6 +725,7 @@ if args.scenario:
                                                  for house, team, player_class in scenario_sides)
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
+if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 with (out/'run.log').open('w') as log:
@@ -747,6 +758,39 @@ summary = {'result':results[0],'sourceCommit':source_commit,
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
+
+if args.strategy_probe:
+    # Mix production (section 3) on further seeds: one 12-minute game per mix is one trajectory, so a
+    # fixed mix's lead-slot margin over the Learned game is required on the mean over the seeds
+    # (tests/ai/strategy-probe.inc, the note above checkMix).
+    margins = defaultdict(list)
+    def read_margins(log_path):
+        for line in log_path.read_text(errors='replace').splitlines():
+            if 'STRATEGY_PROBE: check=lead_margin' in line:
+                fields = dict(part.split('=', 1) for part in line.split('check=lead_margin', 1)[1].split() if '=' in part)
+                margins[fields['mix']].append(int(fields['margin_bps']))
+    read_margins(out/'run.log')
+    for extra in [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]:
+        profile = out/f'profile-seed{extra}'
+        atexit.register(discard_profile_assets, profile)
+        extra_log = out/f'run-seed{extra}.log'
+        with extra_log.open('w') as log:
+            subprocess.run([str(binary),'--window','--showlog'],cwd=out,
+                           env=dict(env,DUNECITY_USERDIR=str(profile),BALANCE_SEED=str(extra),BALANCE_STRATEGY_SECTIONS='3',
+                                    BALANCE_STRATEGY_MARGIN_ONLY='1'),
+                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
+        read_margins(extra_log)
+    seeds = 1 + len([seed for seed in args.strategy_margin_seeds.split(',') if seed.strip()])
+    weak = []
+    for mix, values in sorted(margins.items()):
+        mean = sum(values) / len(values)
+        print(f'STRATEGY_LEAD_MARGIN: mix={mix} seeds={len(values)} mean_bps={mean:+.0f} '
+              + ' '.join(f'{v:+d}' for v in values))
+        if len(values) != seeds or mean < 1:
+            weak.append(mix)
+    if not margins or weak:
+        raise RuntimeError('Strategy probe: the lead slots got no larger share of the built value than in the Learned game '
+                           'on the mean over the seeds: ' + (', '.join(weak) or 'no margins logged'))
 
 if args.require_win and 'outcome=won' not in results[0]:
     raise RuntimeError('Full-match acceptance requires victory: ' + results[0])

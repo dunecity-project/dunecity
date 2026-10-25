@@ -107,6 +107,9 @@ int QuantBot::waveReadinessPercent() const {
     if (!autonomousCustomArmy()) return 100;
     if (forceVariantOverride != kNoForceOverride)
         return (forceVariantOverride & kForceBigWaves) ? 150 : (forceVariantOverride & kForceSmallWaves) ? 60 : 100;
+    // A small start buys one full wave before its tempo starts splitting production into raids.
+    // This ends only when that wave actually launches, not when its first heavy factory stands.
+    if (openingCombatBudgetActive()) return 100;
     // The tempo of the strategy (docs/ai-play-styles.md, "Strategies"); Base keeps the config's.
     const auto* tempo = strategyTempo();
     if (tempo && tempo->readinessPercent > 0) return std::clamp(tempo->readinessPercent, 10, 300);
@@ -143,10 +146,12 @@ int QuantBot::launchReadinessPercent() {
 
 namespace {
 
-/// A mobile ground fighter (what the army comparisons count), alive and on the map.
+/// A mobile ground fighter (what the army comparisons count), alive and on the map. Only the
+/// army and threat aggregations call this, so units of the Natives (crime troopers) are left
+/// out here: they are no team's army. Local targeting does not use it and still fights them.
 bool groundFighter(const UnitBase* unit) {
-    return unit->getOwner() && unit->getHealth() > 0 && unit->isActive() && unit->isAGroundUnit()
-        && unit->canAttack() && mobileCombatItem(unit->getItemID());
+    return unit->getOwner() && !unit->getOwner()->isNatives() && unit->getHealth() > 0 && unit->isActive()
+        && unit->isAGroundUnit() && unit->canAttack() && mobileCombatItem(unit->getItemID());
 }
 
 int64_t healthValue(const UnitBase* unit) {
@@ -182,7 +187,9 @@ void QuantBot::updateEnemySightings() {
     const Uint32 memory = Uint32(MILLI2CYCLES(Force::kSightingMemoryMs));
     for (auto it = enemySightings.begin(); it != enemySightings.end();) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(it->first));
+        // A unit now owned by the Natives (never sighted as one) is no enemy army either.
         const bool gone = !unit || unit->getHealth() <= 0 || !unit->getOwner() || unit->getOwner()->getTeamID() == myTeam
+            || unit->getOwner()->isNatives()
             || ArmyPosturePolicy::elapsed(now, it->second.cycle) > memory;
         it = gone ? enemySightings.erase(it) : std::next(it);
     }
@@ -217,6 +224,31 @@ int64_t QuantBot::teamGroundArmyValue() const {
     for (const auto* unit : getUnitList())
         if (groundFighter(unit) && unit->getOwner()->getTeamID() == myTeam) team += healthValue(unit);
     return team;
+}
+
+const ObjectBase* QuantBot::allyWaveObjective() const {
+    if (!botConfig().force.joinAllyWaves || difficulty < Difficulty::Hard || !autonomousCustomArmy()) return nullptr;
+    const Uint32 now = getGameCycleCount();
+    const Uint32 window = MILLI2CYCLES(kAllyWaveJoinMs);
+    // Our own wave that left inside the window is the one being joined, never a reason to join
+    // again (two allies would otherwise drip minimum waves after each other).
+    if (customWave.launched != 0 && ArmyPosturePolicy::elapsed(now, customWave.launched) <= window) return nullptr;
+    const int myTeam = getHouse()->getTeamID();
+    // House id order, then player order: the same answer on every peer.
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* house = getHouse(h);
+        if (!house || house == getHouse() || house->isNatives() || !house->isAlive() || house->getTeamID() != myTeam)
+            continue;
+        for (const auto& player : house->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if (!bot || bot->customWave.launched == 0 || ArmyPosturePolicy::elapsed(now, bot->customWave.launched) > window)
+                continue;
+            const ObjectBase* front = getObject(bot->customWave.front);
+            if (front && front->getHealth() > 0 && front->getOwner() && !front->getOwner()->isNatives()
+                && front->getOwner()->getTeamID() != myTeam) return front;
+        }
+    }
+    return nullptr;
 }
 
 bool QuantBot::outnumberedByEstimate() const {

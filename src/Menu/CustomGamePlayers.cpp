@@ -217,6 +217,10 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     mainVBox.addWidget(VSpacer::create(8));
     if(setup) {
         captionLabel.setText(_("Custom Game"));
+        // Desert skins draw the original background's house crests (53x54, 11 px in) in the top
+        // corners beside this row: keep the row's ends clear of them.
+        const int crestGap = MenuTheme::isDesertUISkin() ? 11 + 53 + 6 - 24 : 0;
+        if(crestGap > 0) setupMapRow.addWidget(HSpacer::create(crestGap));
         setupMapRow.addWidget(Label::create(_("Map")), 40);
         for(size_t i = 0; i < setup->maps.size(); ++i)
             setupMap.addEntry(getBasename(setup->maps[i], true), static_cast<int>(i));
@@ -238,6 +242,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             rebuildSetup(false);
         });
         setupMapRow.addWidget(&setupMod, 155);
+        if(crestGap > 0) setupMapRow.addWidget(HSpacer::create(crestGap));
         mainVBox.addWidget(&setupMapRow, 28);
         setupConnection.addEntry(_("Offline"), 0);
         setupConnection.addEntry(_("Online"), 1);
@@ -404,7 +409,9 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 
     mainVBox.addWidget(&buttonHBox, 0.32);
 
-    buttonHBox.addWidget(HSpacer::create(getRendererWidth() >= 1000 ? 70 : 8));
+    // Desert skins: Back keeps clear of the background's bottom-left crest (53x54, 11 px in).
+    buttonHBox.addWidget(HSpacer::create(std::max(getRendererWidth() >= 1000 ? 70 : 8,
+                                                  MenuTheme::isDesertUISkin() ? 11 + 53 + 6 - 24 : 0)));
 
     backButtonVBox.addWidget(Spacer::create());
     backButton.setText(_("Back"));

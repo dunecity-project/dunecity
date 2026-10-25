@@ -46,9 +46,10 @@ SkirmishGenerator::Mode modeForMod(const std::string& modName);
 SkirmishGenerator::Catalogue loadCatalogue(SkirmishGenerator::Mode mode);
 /// The CustomGame start: the generated map text plus the generated roster. With
 /// @a params.spectate the player's seat goes to @a params.spectateClass and the start is a local
-/// spectator one (Custom Game's offline Spectate).
+/// spectator one (Custom Game's offline Spectate). Every house draws DuneCity buildings in @a skin.
 GameInitSettings makeInit(const SkirmishGenerator::Result& result, const SettingsClass::GameOptionsClass& rules,
-                          const SkirmishGenerator::Params& params);
+                          const SkirmishGenerator::Params& params,
+                          GameInitSettings::GraphicsSkin skin = GameInitSettings::GraphicsSkin::SimCity);
 /// Write the map into the user multiplayer maps directory; returns the path or "" on failure.
 std::string saveMap(const SkirmishGenerator::Result& result);
 }
@@ -122,6 +123,7 @@ private:
     Label* startCityCaption = nullptr;
     Label* playerHeader = nullptr;           ///< "You start with", or "Your house starts with" while watching
     Label* spectateAICaption = nullptr;      ///< "Your house AI", shown only while spectating
+    Label* skinCaption = nullptr;            ///< "City skin", shown only for a city-sim mod
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.
     Slider sizeBox, rockBox, spiceBox;
@@ -139,6 +141,7 @@ private:
     Checkbox enemiesAlliedBox;
     Checkbox spectateBox;                    ///< single player: watch an all-AI match (Custom Game's Spectate)
     DropDownBox spectateAIBox;               ///< the AI that plays the player's house while watching
+    DropDownBox skinBox;                     ///< single player: SimCity or Dune2 city-building art for every house
 
     DropDownBox partnerBox, allyAIBox, enemyAIBox;
     Slider playerBaseBox, playerArmyBox, playerCityBox;

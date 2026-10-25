@@ -21,6 +21,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <misc/GameActivity.h>
+#include <misc/WatchedResultLayout.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -642,7 +643,8 @@ Game::~Game() {
     finishMatchAnalytics();
     if (AITelemetry::log().enabled()) {
         AITelemetry::Record roster;
-        for (int h = 0; h < NUM_HOUSES; ++h) if (house[h]) {
+        // The Natives house is no participant: match reports list the houses that play.
+        for (int h = 0; h < NUM_HOUSES; ++h) if (house[h] && !house[h]->isNatives()) {
             for (const auto& player : house[h]->getPlayerList()) player->finishTelemetry();
             AITelemetry::Record actual, built, lost;
             for (int item = ItemID_FirstID; item <= ItemID_LastID; ++item) {
@@ -657,7 +659,8 @@ Game::~Game() {
                 .set("deviation_rewards", house[h]->deviationRewardStats()));
         }
         AITelemetry::log().write(gameCycleCount, -1, -1, "game_summary", AITelemetry::Record()
-            .set("local_result", finished ? (won ? "victory" : "defeat") : "ended_without_result")
+            .set("local_result", finished ? (watchedWinnerTeam >= 0 ? "watched_to_end" : won ? "victory" : "defeat") : "ended_without_result")
+            .set("winner_team", watchedWinnerTeam)
             .set("local_house", pLocalHouse ? pLocalHouse->getHouseID() : -1).set("houses", roster));
     }
     AITelemetry::log().stop();
@@ -784,7 +787,9 @@ void Game::applyDuneCityGraphicsSkins() {
         return;
     }
 
-    if(gameInitSettings.getGameType() == GameType::Campaign) {
+    // Campaign and single-mission Skirmish pick one skin for every house (house-choice and
+    // Skirmish screens); custom and co-op games choose per row.
+    if(gameInitSettings.getGameType() == GameType::Campaign || gameInitSettings.getGameType() == GameType::Skirmish) {
         const bool useDune2 = gameInitSettings.getCampaignGraphicsSkin()
             == GameInitSettings::GraphicsSkin::Dune2;
         for(int house = 0; house < static_cast<int>(NUM_HOUSES); ++house) {
@@ -793,7 +798,11 @@ void Game::applyDuneCityGraphicsSkins() {
         return;
     }
 
-    for(const GameInitSettings::HouseInfo& houseInfo : gameInitSettings.getHouseInfoList()) {
+    // A Random row has no house until the map loader resolves it; houseInfoListSetup holds the
+    // resolved rows (with their skins) once a map or save is loaded. Before that, only the rows
+    // that name a house can be applied.
+    const auto& rows = houseInfoListSetup.empty() ? gameInitSettings.getHouseInfoList() : houseInfoListSetup;
+    for(const GameInitSettings::HouseInfo& houseInfo : rows) {
         pGFXManager->setDuneCityHouseGraphicsSkin(
             static_cast<int>(houseInfo.houseID),
             houseInfo.graphicsSkin == GameInitSettings::GraphicsSkin::Dune2);
@@ -912,6 +921,12 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
                     static_cast<int>(gameInitSettings.getGameType()),
                     gameInitSettings.getMission(), e.what());
             }
+            // Random rows are only now bound to houses; apply their chosen skins to them.
+            applyDuneCityGraphicsSkins();
+
+            // Sandworms belong to nobody who plays: the unit factory already hands every new
+            // worm to the Natives house; this catches any other path a map takes.
+            if(currentGameMap != nullptr) retagSandwormsToNatives();
 
             // Do not carry per-map city timing state into the next mission.
             if (citySimEnabled_ && currentGameMap != nullptr) {
@@ -955,6 +970,38 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
         .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
     startMatchAnalytics();
+}
+
+House* Game::getOrCreateNativesHouse() {
+    if(house[HOUSE_NATIVES]) return house[HOUSE_NATIVES].get();
+    // The map-size unit limit every house of a map without its own MaxUnits gets
+    // (INIMapLoader::getOrCreateHouse); it bounds how many crime troopers may be out at once.
+    int maxUnits = gameInitSettings.getGameOptions().maximumNumberOfUnitsOverride;
+    if(maxUnits < 0) {
+        const int mapsize = currentGameMap ? currentGameMap->getSizeX() * currentGameMap->getSizeY() : 0;
+        maxUnits = mapsize <= 1024 ? objectData.unitLimitSmallMap
+                 : mapsize < 4096  ? objectData.unitLimitMediumMap
+                 : mapsize < 16384 ? objectData.unitLimitLargeMap
+                 : objectData.unitLimitHugeMap;
+    }
+    // NATIVES_TEAM is nobody else's team: hostile to every house, the anonymous team-0 houses a
+    // custom map creates included. isAlive() is always true and every win/lose check skips the
+    // house by name, so it is never a survivor or a blocker.
+    house[HOUSE_NATIVES] = std::make_unique<House>(HOUSE_NATIVES, 0, maxUnits, 0, NATIVES_TEAM, 0);
+    setHouseVisualHouse(HOUSE_NATIVES, HOUSECOLOR_NATIVES);
+    return house[HOUSE_NATIVES].get();
+}
+
+int Game::retagSandwormsToNatives() {
+    int retagged = 0;
+    for(UnitBase* unit : unitList) {
+        if(unit->getItemID() != Unit_Sandworm) continue;
+        if(unit->getOwner()->isNatives() && unit->getOriginalHouseID() == HOUSE_NATIVES) continue;
+        unit->transferOwnership(getOrCreateNativesHouse());
+        ++retagged;
+    }
+    if(retagged > 0) SDL_Log("Game: %d sandworm(s) re-tagged to the Natives house", retagged);
+    return retagged;
 }
 
 void Game::startMatchAnalytics() {
@@ -1013,7 +1060,8 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
     if (finishedMatch) {
         std::set<int> survivingTeams;
         for (const auto& currentHouse : house) {
-            if (currentHouse && currentHouse->getTeamID() != 0 && currentHouse->isAlive()) {
+            // The Natives house (NATIVES_TEAM) is never a survivor (see survivingTeams below).
+            if (currentHouse && currentHouse->getTeamID() != 0 && !currentHouse->isNatives() && currentHouse->isAlive()) {
                 survivingTeams.insert(currentHouse->getTeamID());
             }
         }
@@ -2415,6 +2463,9 @@ void Game::applyPendingBudgetChanges() {
 
 void Game::drawScreen()
 {
+    // Default movement rule (continuous ground steps off): chained Dynasty steps are drawn where
+    // the step puts them, not where checkPos holds them. A no-op with the rule on.
+    UnitBase::DrawnStepScope drawnSteps;
     const int presentationScale = ModManager::instance().usesDune2RRemasterPresentation()
         && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
     screenborder->setPresentationScale(presentationScale);
@@ -2932,14 +2983,31 @@ void Game::drawScreen()
     if(finished) {
         std::string message;
 
-        if(won) {
+        if(watchedWinnerTeam >= 0) {
+            // Nobody here had a side left: name the winner instead.
+            message = watchedResultText();
+        } else if(won) {
             message = _("You Have Completed Your Mission.");
         } else {
             message = _("You Have Failed Your Mission.");
         }
 
-        sdl2::texture_ptr pFinishMessageTexture = pFontManager->createTextureWithText(message.c_str(), COLOR_WHITE, 28);
+        // A long team line ("Team 3 has won: Kleshmersh, Wildspade and Tharpique") is wider than
+        // the map beside a 640/854-pixel sidebar at 28 pt: step down until it and its plate fit.
+        const int finishFontSize = watchedResultFontSize(message, sideBarPos.x);
+        sdl2::texture_ptr pFinishMessageTexture = pFontManager->createTextureWithText(message.c_str(), COLOR_WHITE, finishFontSize);
         SDL_Rect drawLocation = calcDrawingRect(pFinishMessageTexture.get(), sideBarPos.x/2, topBarPos.h + (getRendererHeight()-topBarPos.h)/2, HAlign::Center, VAlign::Center);
+        if(watchedWinnerTeam > 0) {
+            // On a plate framed in the winner's colour: some house colours (Rebels' greys)
+            // are too dark to read as text on the map.
+            SDL_Rect plate{drawLocation.x - 18, drawLocation.y - 10, drawLocation.w + 36, drawLocation.h + 20};
+            renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 176));
+            const Uint32 frame = watchedResultColor(1);
+            for(int i = 0; i < 3; ++i) {
+                SDL_Rect border{plate.x + i, plate.y + i, plate.w - 2 * i, plate.h - 2 * i};
+                renderDrawRect(renderer, &border, frame);
+            }
+        }
         SDL_RenderCopy(renderer, pFinishMessageTexture.get(), nullptr, &drawLocation);
     }
 
@@ -3708,7 +3776,10 @@ void Game::runMainLoop() {
             return !catchUpBudgetSpent;
         };
 
+        // No cycle runs once the end message has run out (finishedLevel): every peer then leaves
+        // on the same cycle, however many cycles its last frame would have caught up.
         while(((frameTime > getGameSpeed()) || (!finished && (gameCycleCount < skipToGameCycle)))
+              && !finishedLevel && !bQuitGame
               && cyclesExecuted < kMaxCyclesPerFrame && mayRunAnotherCycle()) {
             loopIterations++;
             
@@ -4008,6 +4079,21 @@ void Game::runMainLoop() {
         yieldFrameToBrowser();
 
     } while (!bQuitGame && !finishedLevel);
+
+    // The host's game has run its last cycle (won, lost, or quit). Spectators that are behind get
+    // the rest of it now, past their replay window, and acknowledge the end; the host waits for
+    // that, at most a few seconds, before anything can close the session. A spectator then plays
+    // to the same last cycle after the host has gone. Not when a checkpoint replaces this Game.
+    if(pNetworkManager && pNetworkManager->isServer() && !pNetworkManager->lateJoinReady()) {
+        pNetworkManager->endObserverStreams(gameCycleCount);
+        const Uint32 until = SDL_GetTicks() + 3000;
+        while(!pNetworkManager->observerStreamsDelivered() && !SDL_TICKS_PASSED(SDL_GetTicks(), until)) {
+            pNetworkManager->update();
+            SDL_Delay(5);
+        }
+        if(!pNetworkManager->observerStreamsDelivered())
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Not every spectator confirmed the end of the game");
+    }
 }
 
 void Game::initializeGameLoop() {
@@ -4138,6 +4224,8 @@ void Game::updateGameState() {
         pNetworkManager->publishObserverCycle(gameCycleCount,std::string(frame.getData(),frame.getDataLength()));
     }
     observerCyclePrepared=false;
+    // Defeats during this cycle are decided at its end (checkWatchedGameDecided).
+    inGameCycle = true;
     pInterface->getRadarView().update();
     cmdManager.executeCommands(gameCycleCount);
 
@@ -4226,6 +4314,12 @@ void Game::updateGameState() {
         if(++indicatorFrame > 2) {
             indicatorFrame = NONE_ID;
         }
+    }
+
+    inGameCycle = false;
+    if(watchedDecisionPending) {
+        watchedDecisionPending = false;
+        checkWatchedGameDecided();
     }
 
     gameCycleCount++;
@@ -4870,6 +4964,10 @@ int Game::whatNext()
         case GameType::Skirmish: {
             if(bQuitGame == true) {
                 return GAME_RETURN_TO_MENU;
+            } else if(watchedWinnerTeam >= 0) {
+                // Watched to the end: the winner's statistics, not this side's debriefing.
+                whatNextParam = GAME_RETURN_TO_MENU;
+                return GAME_CUSTOM_GAME_STATS;
             } else if(won == true) {
                 whatNextParam = GAME_RETURN_TO_MENU;
                 return GAME_DEBRIEFING_WIN;
@@ -4980,6 +5078,7 @@ bool Game::loadSaveGame(InputStream& stream) {
     // read gameInitSettings
     logLoadStage("game settings");
     gameInitSettings = GameInitSettings(stream);
+    gameInitSettings.setSavedGameVersion(savedGameVersionOf(duneVersion));
     if(lateJoinLoad && !expectedModRevision.empty() && gameInitSettings.getModRevisionHash() != expectedModRevision)
         THROW(std::runtime_error, "The checkpoint requires a different mod revision from the advertised game.");
     // MOD4 identifies the complete immutable package. Older saves retain their legacy
@@ -5101,8 +5200,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     //   "dunelegacy*"               → 41 items (original Dune Legacy 0.99.x)
     //   "dunecity1.0.0"–"1.0.7"    → 48 items
     //   "dunecity1.0.8"–"1.0.10"   → 52 items
-    const int savedHouseCount = savegameVersion >= 9823
-        ? NUM_HOUSES
+    const int savedHouseCount = savegameVersion >= SAVEGAMEVERSION_NATIVES ? NUM_HOUSES
+        : savegameVersion >= 9823 ? NUM_PLAYER_HOUSES
         : (savegameVersion >= 9821 ? NUM_CAMPAIGN_HOUSES : NUM_LEGACY_HOUSES);
     int savedItemCount = determineLegacySavedItemCount(savegameVersion, duneVersion);
     if(savedItemCount != 0) {
@@ -5110,6 +5209,19 @@ bool Game::loadSaveGame(InputStream& stream) {
                 savegameVersion, duneVersion.c_str(), savedItemCount, Num_ItemID);
     }
     objectData.load(stream, savedItemCount, savedHouseCount);
+    if(savedHouseCount <= HOUSE_NATIVES) {
+        // A save from before the Natives house has no stats for it. Natives takes the plain
+        // (unsuffixed) values of the active ObjectData.ini, exactly as a new game would; every
+        // peer of a loaded multiplayer game runs the same mod, so they all read the same file.
+        try {
+            auto fresh = std::make_unique<ObjectData>();
+            fresh->loadFromINIFile(ModManager::instance().getActiveObjectDataPath(), false);
+            for(int item = 0; item < Num_ItemID; ++item) objectData.data[item][HOUSE_NATIVES] = fresh->data[item][HOUSE_NATIVES];
+        } catch(const std::exception& e) {
+            SDL_Log("Game::loadSaveGame(): no ObjectData.ini for the Natives house (%s); using Harkonnen's saved stats", e.what());
+            for(int item = 0; item < Num_ItemID; ++item) objectData.data[item][HOUSE_NATIVES] = objectData.data[item][HOUSE_HARKONNEN];
+        }
+    }
 
     //load the house(s) info
     logLoadStage("houses and players");
@@ -5236,6 +5348,9 @@ bool Game::loadSaveGame(InputStream& stream) {
     //load the structures and units
     logLoadStage("objects");
     objectManager.load(stream);
+    // Sandworms of a save from before the Natives house still belong to the houses its map
+    // named; they become Natives' now. (Newer saves already store them as Natives'.)
+    if(savegameVersion < SAVEGAMEVERSION_NATIVES) retagSandwormsToNatives();
 
     // Reconstruct saved generation totals (including older constant-output windtraps)
     // from the loaded generators using current rules, without changing demand.
@@ -5386,6 +5501,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     }
     logLoadStage("complete");
     finished = false;
+    watchedWinnerTeam = -1;
+    watchedTimeUp = false;
 
     return true;
     } catch(const InputStream::exception& e) {
@@ -5705,8 +5822,24 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
     
     // If host disconnected, the game cannot continue - end it
     if(bHost) {
-        if(isSpectating() && pNetworkManager && pNetworkManager->joinFailure().empty())
-            pNetworkManager->failObserver("The connection to the host was interrupted.\nPlease try joining again.");
+        // A spectator plays on through the cycles the host sent before it left - every one of
+        // them when the host's game had ended (NetworkManager::endObserverStreams) - and ends
+        // once they run out (endObservationWithoutHost): normally if the game was decided by then.
+        if(isSpectating() && pNetworkManager && pNetworkManager->joinFailure().empty()) {
+            if(!observerHostLeft) {
+                observerHostLeft = true;
+                SDL_Log("Host '%s' left at spectator cycle %u (host's game ended at %u) - playing the received cycles",
+                        name.c_str(), gameCycleCount, pNetworkManager->observerFinalCycle());
+            }
+            return;
+        }
+        // The players leave once their match is decided; a player whose game has already ended
+        // ends normally instead of reporting a lost connection.
+        if(finished) {
+            SDL_Log("Host '%s' left after the game was decided - ending normally", name.c_str());
+            finishedLevel = true;
+            return;
+        }
         SDL_Log("Host '%s' disconnected - ending game", name.c_str());
         pInterface->getChatManager().addInfoMessage("Host disconnected! Game ending...");
         
@@ -5730,8 +5863,34 @@ void Game::onPeerDisconnected(const std::string& name, bool bHost, int cause) {
     }
 }
 
+void Game::endObservationWithoutHost() {
+    if(finished) {
+        // Decided: the end plate runs out its usual time on the clock, since no cycles are left
+        // to count it (the host may have quit at the decision), then the statistics follow.
+        if(observerEndAtTicks == 0) {
+            const Uint32 shown = gameCycleCount - finishedLevelCycle;
+            const Uint32 total = MILLI2CYCLES(END_WAIT_TIME);
+            observerEndAtTicks = SDL_GetTicks() + (shown < total ? (total - shown) * getGameSpeed() : 0);
+            SDL_Log("Spectator played every received cycle (%u, decided at %u); the game ends normally",
+                    gameCycleCount, finishedLevelCycle);
+        }
+        if(SDL_TICKS_PASSED(SDL_GetTicks(), observerEndAtTicks)) finishedLevel = true;
+        return;
+    }
+    const Uint32 hostEnd = pNetworkManager->observerFinalCycle();
+    SDL_Log("Spectator stopped at cycle %u after the host left (host's game ended at %u)", gameCycleCount, hostEnd);
+    // All of the host's game was received and played, and nobody had won: the host quit.
+    // Otherwise cycles are missing: the connection was lost.
+    pNetworkManager->failObserver(hostEnd != 0 && gameCycleCount >= hostEnd
+        ? "The host left before the game was decided."
+        : "The connection to the host was interrupted.\nPlease try joining again.");
+    pInterface->getChatManager().addInfoMessage("Host disconnected! Game ending...");
+    bQuitGame = true;
+}
+
 void Game::setGameWon() {
-    // An observer takes no side and keeps watching when its view house wins or loses.
+    // An observer takes no side: its view house winning or losing is not the end of its game.
+    // It ends once the whole match is decided (checkWatchedGameDecided, setWatchedGameOver).
     if(isObserving()) return;
     if(!bQuitGame && !finished) {
         won = true;
@@ -5750,6 +5909,87 @@ void Game::setGameLost() {
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
         soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
     }
+}
+
+namespace {
+/// Teams with a house still alive: the houses House::lose() counts (team 0 never dies). The
+/// Natives house (worms, crime troopers, NATIVES_TEAM) is skipped by name, so its units never
+/// keep a decided match running or count as the winner.
+std::set<int> survivingTeams(const std::array<std::unique_ptr<House>, NUM_HOUSES>& houses) {
+    std::set<int> teams;
+    for(const auto& h : houses) if(h && h->getTeamID() != 0 && !h->isNatives() && h->isAlive()) teams.insert(h->getTeamID());
+    return teams;
+}
+}
+
+int Game::soleSurvivingTeam() const {
+    const auto teams = survivingTeams(house);
+    return teams.size() == 1 ? *teams.begin() : 0;
+}
+
+bool Game::watchesWithoutSide() const {
+    // A campaign mission ends on its own rules; a network co-op spectator follows the host into
+    // the next mission instead.
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return false;
+    if(isObserving()) return true;
+    // A player whose team is still in the game keeps the original rules.
+    if(pLocalHouse == nullptr) return false;
+    for(const auto& h : house)
+        if(h && h->isAlive() && h->getTeamID() == pLocalHouse->getTeamID()) return false;
+    return true;
+}
+
+void Game::checkWatchedGameDecided() {
+    // One blast (a Death Hand, a shot-down plane's crash) can take the last buildings of several
+    // houses in one cycle, each removed in its own update. Deciding at the first House::lose()
+    // would name a house as winner whose last building already fell in the same cycle.
+    if(inGameCycle) {
+        watchedDecisionPending = true;
+        return;
+    }
+    if(finished || bQuitGame || gameState != GameState::Running) return;
+    if((winFlags & (WINLOSEFLAGS_AI_NO_BUILDINGS | WINLOSEFLAGS_HUMAN_HAS_BUILDINGS)) == 0) return;
+    if(!watchesWithoutSide()) return;
+    const auto teams = survivingTeams(house);
+    if(teams.size() > 1) return;
+    setWatchedGameOver(teams.empty() ? 0 : *teams.begin());
+}
+
+void Game::setWatchedGameOver(int winningTeam, bool timeUp) {
+    if(bQuitGame || finished || !watchesWithoutSide()) return;
+    won = false;
+    finished = true;
+    finishedLevelCycle = gameCycleCount;
+    watchedWinnerTeam = std::max(0, winningTeam);
+    watchedTimeUp = timeUp;
+    SDL_Log("Game over for the local view at cycle %u: %s", gameCycleCount, watchedResultText().c_str());
+}
+
+std::string Game::watchedResultText() const {
+    if(watchedWinnerTeam <= 0) return watchedTimeUp ? _("Time is up - no winner") : _("No house is left standing");
+    // The houses that took part (a player each); a map's spare houses only as a fallback.
+    std::vector<int> members;
+    for(int pass = 0; pass < 2 && members.empty(); ++pass)
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(house[h] && house[h]->getTeamID() == watchedWinnerTeam && (pass == 1 || !house[h]->getPlayerList().empty()))
+                members.push_back(h);
+    if(members.size() == 1)
+        return fmt::sprintf(_("House %s has won"), getHouseNameByNumber(static_cast<HOUSETYPE>(members.front())));
+    std::string names;
+    for(size_t i = 0; i < members.size(); ++i) {
+        if(i > 0) names += (i + 1 == members.size()) ? _(" and ") : std::string(", ");
+        names += getHouseNameByNumber(static_cast<HOUSETYPE>(members[i]));
+    }
+    return fmt::sprintf(_("Team %d has won: %s"), watchedWinnerTeam, names);
+}
+
+Uint32 Game::watchedResultColor(int shade) const {
+    // The first winning house's colour; shade 3 is how its row in the statistics draws it.
+    for(int pass = 0; watchedWinnerTeam > 0 && pass < 2; ++pass)
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            if(house[h] && house[h]->getTeamID() == watchedWinnerTeam && (pass == 1 || !house[h]->getPlayerList().empty()))
+                return getHouseColorRGB(getHouseVisualHouse(h), shade);
+    return COLOR_WHITE;
 }
 
 
@@ -7667,6 +7907,8 @@ bool Game::handleNetworkUpdates() {
         bQuitGame=true; return true;
     }
     if(pNetworkManager->lateJoinPaused()) {
+        // A fresh checkpoint the host left in the middle of will never be complete.
+        if(observerHostLeft) { endObservationWithoutHost(); return true; }
         startWaitingForOtherPlayersTime=0; pWaitingForOtherPlayers.reset();
         // During a checkpoint transfer, doInput() only accepts progress-window events.
         // Replace any open menu so the visible controls remain usable.
@@ -7681,10 +7923,16 @@ bool Game::handleNetworkUpdates() {
 
     if(pNetworkManager->isServer()) prepareObserverStreams();
     if(isSpectating()) {
-        if(pNetworkManager->observerResyncWaiting()) return true;
+        if(pNetworkManager->observerResyncWaiting()) {
+            if(observerHostLeft) endObservationWithoutHost();
+            return true;
+        }
         if(observerCyclePrepared) return false;
         std::string bytes;
-        if(!pNetworkManager->takeObserverCycle(gameCycleCount,bytes)) return true;
+        if(!pNetworkManager->takeObserverCycle(gameCycleCount,bytes)) {
+            if(observerHostLeft) endObservationWithoutHost();
+            return true;
+        }
         try {
             IMemoryStream frame(bytes.data(),bytes.size());
             const auto budget=frame.readUint32(); const auto fingerprint=frame.readString();

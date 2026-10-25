@@ -166,6 +166,11 @@ public:
     /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
     /// in a custom game the house plays itself; 0 elsewhere (no ceiling from the config).
     int configuredCustomHarvesterLimit() const;
+    /// OpeningCombatBudget: reserve a small start's first full combat wave before growing the fleet
+    /// and optional yard capacity. Uses saved start counts and the existing first-wave marker.
+    bool openingCombatBudgetActive() const;
+    /// CampaignCombatBudget: the human's Hard/Brutal partner funds its first wave before fleet growth.
+    bool campaignCombatBudgetActive() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
@@ -373,6 +378,8 @@ private:
     /// raid stays a district response and a real assault reaches the army.
     static constexpr int kEmergencyBandMin = 12;
     static constexpr int kEmergencyBandMax = 40;
+    /// JoinAllyWaves: how long after an allied QuantBot's wave left our ready troops still join it.
+    static constexpr int kAllyWaveJoinMs = 30000;
     static int emergencyResponseRadius(int threatValue);
 
     /// Does this house answer a real attack on a building it owns with its whole
@@ -1109,6 +1116,9 @@ private:
     /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
     /// alone in a free-for-all or a 1v1).
     int64_t teamGroundArmyValue() const;
+    /// JoinAllyWaves (Custom Hard/Brutal team play): the objective of an allied QuantBot's
+    /// whole-army wave launched within the last kAllyWaveJoinMs, or nullptr.
+    const ObjectBase* allyWaveObjective() const;
     /// FinishWhenLeading: our team's ground army is worth more than the strongest enemy team's
     /// remembered army (enemyThreatEstimate) - the leader of a free-for-all.
     bool finishLeading() const { return teamGroundArmyValue() > enemyThreatEstimate(); }

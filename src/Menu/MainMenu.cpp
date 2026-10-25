@@ -234,17 +234,20 @@ MainMenu::MainMenu()
         ? Alignment_HCenter
         : static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter));
     refreshModVersionLabel();
+    // Desert skins draw the original background's house crest (53x54 at 11 px) in the
+    // bottom-left corner: start the version label beside it.
+    const int versionX = MenuTheme::isDesertUISkin() ? 11 + 53 + 6 : 12;
     if(enlargedStartMenus) {
         windowWidget.addWidget(&modVersionLabel, Point(24, getSize().y - 30), Point(getSize().x - 48, 24));
     } else {
-        windowWidget.addWidget(&modVersionLabel, Point(12, getSize().y - 58), Point(220, 50));
+        windowWidget.addWidget(&modVersionLabel, Point(versionX, getSize().y - 58), Point(220, 50));
     }
 #if defined(DUNECITY_DESKTOP_UPDATER)
     updateButton.setKeyboardFocusVisible(false);
     updateButton.setText(_("Check for updates"));
     updateButton.setOnClick([this]() { onUpdate(); });
     windowWidget.addWidget(&updateButton, Point(getSize().x-232, getSize().y-38), Point(220,28));
-    windowWidget.setWidgetGeometry(&modVersionLabel, Point(12,getSize().y-38), Point(180,28));
+    windowWidget.setWidgetGeometry(&modVersionLabel, Point(versionX,getSize().y-38), Point(180,28));
     modVersionLabel.setAlignment(Alignment_Left);
 #endif
     if(canContinue) continueButton.setActive();
@@ -484,14 +487,21 @@ void MainMenu::refreshContextButtons()
     const int x = (getSize().x-width)/2;
     const int top = std::max(132, (getSize().y-340)/2);
     planetPicture.setFitToSize(true);
-    windowWidget.setWidgetGeometry(&planetPicture, Point((getSize().x-176)/2,top-122), Point(176,80));
-    activeModLabel.setTextFontSize(16);
-    windowWidget.setWidgetGeometry(&activeModLabel, Point(x-30,top-40), Point(width+60,30));
+    // Called every frame (update()): setWidgetGeometry resizes, and a resize throws away the
+    // widget's rendered texture. Only move what moved, or every button and the banner are
+    // re-rendered each frame (17-33 ms a frame with the Classic Desert pixel lettering).
+    const auto place = [this](Widget* widget, Point position, Point size) {
+        if(windowWidget.getWidgetPosition(widget) == position && widget->getSize() == size) return;
+        windowWidget.setWidgetGeometry(widget, position, size);
+    };
+    place(&planetPicture, Point((getSize().x-176)/2,top-122), Point(176,80));
+    if(activeModLabel.getTextFontSize() != 16) activeModLabel.setTextFontSize(16);
+    place(&activeModLabel, Point(x-30,top-40), Point(width+60,30));
     buttonBorder.setVisible(false);
     const int gap = 5;
     const int height = std::min(36, (getSize().y-top-48)/static_cast<int>(buttons.size())-gap);
     for(size_t i=0; i<buttons.size(); ++i) {
-        windowWidget.setWidgetGeometry(buttons[i], Point(x,top+static_cast<int>(i)*(height+gap)), Point(width,height));
+        place(buttons[i], Point(x,top+static_cast<int>(i)*(height+gap)), Point(width,height));
     }
 }
 

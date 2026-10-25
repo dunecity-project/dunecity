@@ -318,11 +318,19 @@ QuantBotConfig::QuantBotConfig() {
     // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
     // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
     force.finishWhenLeading = true;
+    // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
+    // ally's fresh wave.
+    force.joinAllyWaves = false;
+    force.openingCombatBudget = false;
+    force.campaignCombatBudget = false;
+    force.capacityMcvRunway = false;
+    force.respectServiceOwnership = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
+    strategicSiteGuards = true;
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
     waveFormation = kWaveFormationNone;
@@ -582,6 +590,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent);
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
+        iniFile.setBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
 
         // === FORCE CONCENTRATION ===
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
@@ -601,6 +610,11 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
         iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
         iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+        iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+        iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
+        iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+        iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
+        iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -675,6 +689,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     attackTimerMs = iniFile.getIntValue("General Behavior", "AttackTimerMs", attackTimerMs);
     attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
     minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
+    strategicSiteGuards = iniFile.getBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
     {
         const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         const int parsed = parseWaveFormation(shape, INT_MIN);
@@ -699,6 +714,11 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
     force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
     force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+    force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+    force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
+    force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+    force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
+    force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -995,6 +1015,7 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("AttackThresholdPercent: %.2f", attackThresholdPercent);
     SDL_Log("MinMoneyForProduction: %d", minMoneyForProduction);
     SDL_Log("WaveFormation: %s", waveFormationName(waveFormation));
+    SDL_Log("StrategicSiteGuards: %d", int(strategicSiteGuards));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -1130,6 +1151,7 @@ std::string QuantBotConfig::getConfigHash() const {
     auto addNamed = [&](const char* name, long long value) {
         configStr += '|'; configStr += name; configStr += '='; configStr += std::to_string(value);
     };
+    addNamed("strategicSiteGuards", strategicSiteGuards);
     configStr += "|REC";
     addNamed("enabled", recovery.enabled);
     addNamed("windowMs", recovery.attritionWindowMs);
@@ -1169,6 +1191,11 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("siegeStandoff", force.siegeStandoff);
     addNamed("massAssault", force.massAssault);
     addNamed("finishWhenLeading", force.finishWhenLeading);
+    addNamed("joinAllyWaves", force.joinAllyWaves);
+    addNamed("openingCombatBudget", force.openingCombatBudget);
+    addNamed("campaignCombatBudget", force.campaignCombatBudget);
+    addNamed("capacityMcvRunway", force.capacityMcvRunway);
+    addNamed("respectServiceOwnership", force.respectServiceOwnership);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

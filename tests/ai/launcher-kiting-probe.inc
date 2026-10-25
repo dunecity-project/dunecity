@@ -24,8 +24,15 @@
 //   5. With the production force rules on (focus fire, converge): a launcher with a too-close
 //      enemy gets the escape step and no focus-fire order; standing off, it takes the focus
 //      target (the damaged fighter in its range) and actually hits it from its position.
+//   6. The independent RespectServiceOwnership candidate preserves repair-only,
+//      pickup-only and combined light-raider service through a real periodic scan;
+//      its off arm reproduces cancellation, and free raiders still evade in both arms.
+//      Booking preservation is not a claim of completed rescue or AAA improvement.
 #include <Bullet.h>
 #include <units/AirUnit.h>
+#include <units/Carryall.h>
+#include <units/GroundUnit.h>
+#include <structures/RepairYard.h>
 
 void runLauncherKitingProbe(Game& game) {
     auto require=[](bool ok,const char* why){
@@ -55,6 +62,7 @@ void runLauncherKitingProbe(Game& game) {
     // prefers the focus target (checked below).
     bot->forceVariantOverride=QuantBot::kNoForceOverride;
     getQuantBotConfig().recovery.enabled=true;
+    const bool savedServiceOwnership=getQuantBotConfig().force.respectServiceOwnership;
 
     // ---- Free ground, large enough for a stand-off and a real retreat -------
     Coord origin=Coord::Invalid();
@@ -808,9 +816,129 @@ void runLauncherKitingProbe(Game& game) {
 
             retire(raider); retire(prey);
         }
+
+        // ---- Light-raider periodic micro respects its service owner ----------
+        // Use normal repair classification and real pickup request APIs. No role,
+        // awaiting-pickup or reciprocal-target flags are manufactured by the fixture.
+        require(place(owner,Structure_RepairYard,Coord(14,2)),
+            "Service ownership fixture needs an unbooked repair yard");
+        bot->manualUnitOrders.clear();
+        bot->defenceAssignments.clear();
+        bot->customWave.members.clear();
+        roster.clear();
+        publish();
+        enum class ServiceCase { Repair, Pickup, RepairAndPickup, Free };
+        {
+            const int item=Unit_Quad;
+            Coord pocket=Coord::Invalid();
+            for(int y=8;y<26 && pocket.isInvalid();++y)
+                for(int x=4;x<35 && pocket.isInvalid();++x) {
+                    bool clear=true;
+                    for(int dy=-2;dy<=2 && clear;++dy)
+                        for(int dx=-3;dx<=3 && clear;++dx) {
+                            const auto* tile=currentGameMap->getTile(origin+Coord(x+dx,y+dy));
+                            if(tile->hasAGroundObject() || tile->isMountain()) clear=false;
+                        }
+                    if(clear) pocket=Coord(x,y);
+                }
+            require(pocket.isValid(),"Service ownership fixture needs a clear local pocket");
+            auto* light=static_cast<GroundUnit*>(spawn(owner,item,pocket));
+            auto* threat=spawn(enemy,Unit_Tank,pocket+Coord(2,0));
+            auto* carrier=static_cast<Carryall*>(spawn(owner,Unit_Carryall,pocket+Coord(-1,0)));
+            auto* otherPassenger=static_cast<GroundUnit*>(spawn(owner,Unit_Tank,pocket+Coord(-3,2)));
+            publish();
+            require(carrier->isOwnedCarrier() && !carrier->isDropOfferer() && !carrier->hasCargo(),
+                "Service ownership fixture did not create an ordinary empty owned carrier");
+            for(const bool enabled:{false,true}) {
+                getQuantBotConfig().force.respectServiceOwnership=enabled;
+                for(const auto service:{ServiceCase::Repair,ServiceCase::Pickup,
+                                        ServiceCase::RepairAndPickup,ServiceCase::Free}) {
+                    light->cancelCarryallPickup();
+                    otherPassenger->cancelCarryallPickup();
+                    carrier->setTarget(nullptr);
+                    light->setLocation(origin+pocket);
+                    light->doMove2Pos(light->getX(),light->getY(),false);
+                    light->doSetAttackMode(AREAGUARD);
+                    const bool wantsRepair=service==ServiceCase::Repair
+                        || service==ServiceCase::RepairAndPickup;
+                    const bool wantsPickup=service==ServiceCase::Pickup
+                        || service==ServiceCase::RepairAndPickup;
+                    light->setHealth(wantsRepair ? light->getMaxHealth()/3 : light->getMaxHealth());
+                    otherPassenger->doMove2Pos(otherPassenger->getX(),otherPassenger->getY(),false);
+                    threat->doSetAttackMode(AREAGUARD);
+                    threat->doAttackObject(light,true);
+                    game.invalidateCarryallCandidateIds();
+                    if(service==ServiceCase::Repair) {
+                        // An actual other passenger owns the only live carrier,
+                        // so a real repair request has no pickup booking available.
+                        const Coord drop=origin+pocket+Coord(-2,-2);
+                        otherPassenger->doRequestCarryallDrop(drop.x,drop.y);
+                        require(otherPassenger->getCarrier()==carrier
+                                && carrier->getTarget()==otherPassenger,
+                            "Repair-only fixture failed to book the carrier to its other passenger");
+                    }
+                    if(wantsRepair) light->doRepair();
+                    else if(wantsPickup) {
+                        const Coord drop=origin+pocket+Coord(-3,-2);
+                        light->doRequestCarryallDrop(drop.x,drop.y);
+                    }
+                    require(bot->reserveDamagedUnitForRepair(light)==wantsRepair,
+                        "Light raider did not acquire its ordinary repair reservation");
+                    require(light->isAwaitingPickup()==wantsPickup,
+                        "Light raider did not acquire the requested real pickup state");
+                    if(wantsPickup) require(light->getCarrier()==carrier
+                            && carrier->getTarget()==light && carrier->isBooked(),
+                        "Light raider pickup lacks reciprocal carrier ownership");
+                    auto* repair=wantsRepair ? dynamic_cast<RepairYard*>(light->getTarget()) : nullptr;
+                    require(!wantsRepair || (repair && repair->getNumBookings()>0),
+                        "Damaged light raider did not book a real repair yard");
+                    const int yardBookings=repair ? repair->getNumBookings() : 0;
+                    const auto* serviceTarget=light->getTarget();
+                    const Coord serviceDestination=light->getDestination();
+                    const auto serviceMode=light->getAttackMode();
+                    const int before=gap(light,threat);
+                    require(bot->findThreateningTank(light)==threat && threat->isInWeaponRange(light),
+                        "Service ownership fixture has no actual threatening tank");
+
+                    bot->checkAllUnits();
+
+                    const bool preserve=enabled && service!=ServiceCase::Free;
+                    if(preserve) {
+                        require(light->getTarget()==serviceTarget
+                                && light->getDestination()==serviceDestination
+                                && light->getAttackMode()==serviceMode,
+                            "Periodic raider micro replaced an owned service order");
+                        if(wantsRepair) require(repair->getNumBookings()==yardBookings,
+                            "Periodic raider micro released the repair-yard booking");
+                        if(wantsPickup) require(light->isAwaitingPickup()
+                                && light->getCarrier()==carrier && carrier->getTarget()==light,
+                            "Periodic raider micro released a promised pickup");
+                    } else {
+                        require(light->wasForced() && light->getDestination().isValid()
+                                && blockDistance(light->getDestination(),threat->getLocation()).lround()>before,
+                            "The off-arm or unreserved light raider did not take its ordinary escape");
+                        if(wantsRepair) require(light->getTarget()!=serviceTarget
+                                && repair->getNumBookings()==yardBookings-1,
+                            "The off arm did not reproduce the repair-target cancellation");
+                        if(wantsPickup) require(!light->isAwaitingPickup()
+                                && light->getCarrier()==nullptr && carrier->getTarget()!=light,
+                            "The off arm did not reproduce reciprocal pickup cancellation");
+                    }
+                    SDL_Log("SERVICE_OWNERSHIP_DIAG: item=%d enabled=%d service=%d preserved=%d",
+                        item,int(enabled),int(service),int(preserve));
+                }
+            }
+            light->cancelCarryallPickup();
+            light->doMove2Pos(light->getX(),light->getY(),false);
+            otherPassenger->cancelCarryallPickup();
+            carrier->setTarget(nullptr);
+            retire(light); retire(threat); retire(carrier); retire(otherPassenger);
+        }
     } catch(...) {
+        getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
         cleanupStructures(); unitList=savedUnits; throw;
     }
+    getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
     cleanupStructures();
     unitList=savedUnits;
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=launcher_kiting outcome=passed");

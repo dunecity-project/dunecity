@@ -23,6 +23,7 @@
 #include <House.h>
 #include <mod/ModManager.h>
 #include <SoundPlayer.h>
+#include <units/AmbientAirplane.h>
 
 Trooper::Trooper(House* newOwner) : InfantryBase(newOwner) {
     Trooper::init();
@@ -55,7 +56,8 @@ Trooper::~Trooper() = default;
 bool Trooper::canAttack(const ObjectBase* object) const {
     if ((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || (object->getItemID() == Unit_Sandworm))
-        && object->isVisible(getOwner()->getTeamID()))
+        && object->isVisible(getOwner()->getTeamID())
+        && !AmbientAirplane::crashEndangers(*this, *object))
     {
         return true;
     }

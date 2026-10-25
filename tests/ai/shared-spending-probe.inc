@@ -1,4 +1,5 @@
 #include <players/CityPlacementPolicy.h>
+#include <players/QuantBotBuildPolicy.h>
 
 // Real queues, market, placement, power and household accounting in both mods.
 void runSharedSpendingProbe(Game& game) {
@@ -62,7 +63,7 @@ void runSharedSpendingProbe(Game& game) {
         constructionYard->curUpgradeLev=constructionYard->getMaxUpgradeLevel();
         constructionYard->updateBuildList();
     }
-    const auto saved=structureList;
+    auto saved=structureList;
     auto reset=[&](int credits,int spice) {
         for(auto* builder:{yard,heavy,secondYard}) {
             while(builder->getProductionQueueSize())builder->doCancelItem(builder->getCurrentProducedItem());
@@ -334,6 +335,78 @@ void runSharedSpendingProbe(Game& game) {
             } catch (...) {house->numItem[Structure_HighTechFactory]=highTechCount;throw;}
             house->numItem[Structure_HighTechFactory]=highTechCount;
             SDL_Log("CITY_CAPACITY_PASS: upgrade, save MCV, parallel zoning, additional transport");
+        }
+        if (game.isCitySimEnabled()) {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            config->force.openingCombatBudget=false;
+            config->force.campaignCombatBudget=false;
+            bot->configOverride=config;
+            try {
+                auto& hs=game.getCitySimulation()->houseState_[HOUSE_HARKONNEN];
+                hs.resValve=2000;hs.comValve=hs.indValve=1500;hs.taxBaseEighths=0;
+                const int mcvPrice=game.objectData.data[Unit_MCV][HOUSE_HARKONNEN].price;
+                // The shared combat-tech upgrade must still run with the
+                // optional-capacity guard enabled.
+                config->force.capacityMcvRunway=true;
+                reset(700,1000000);
+                structureList.remove(yard);
+                heavy->curUpgradeLev=0;heavy->updateBuildList();
+                bot->harvesterLimit=8;
+                bot->build(10000);
+                require(heavy->isUpgrading(),"Optional MCV runway blocked shared combat technology");
+
+                // A real busy yard and idle heavy line spend more than this
+                // no-income treasury can sustain. The off arm must actually
+                // queue the optional MCV, not merely report that it could.
+                for (bool enabled:{false,true}) {
+                    config->force.capacityMcvRunway=enabled;
+                    reset(5000,0);
+                    heavy->curUpgradeLev=heavy->getMaxUpgradeLevel();heavy->updateBuildList();
+                    yard->doProduceItem(Structure_ZoneResidential);
+                    require(count(yard,Structure_ZoneResidential)==1,"Runway fixture needs a real busy yard");
+                    bot->build(10000);
+                    if (!enabled) {
+                        require(count(heavy,Unit_MCV)==1,"Control did not reproduce the unfunded optional MCV");
+                    } else {
+                        require(count(heavy,Unit_MCV)==0,"Optional MCV consumed existing production runway");
+                        const bool combat=std::any_of(heavy->currentProductionQueue.begin(),heavy->currentProductionQueue.end(),
+                            [](const auto& order){return QuantBotBuildPolicy::militaryItem(order.itemID);});
+                        require(combat,"Rejected optional MCV swallowed affordable combat production");
+                    }
+                }
+                // Genuine spare funding keeps the same demanded capacity
+                // purchase available; the guard is not another opening cap.
+                reset(100000,0);
+                yard->doProduceItem(Structure_ZoneResidential);
+                bot->build(10000);
+                require(count(heavy,Unit_MCV)==1,"Positive runway failed to fund optional construction capacity");
+
+                // Remove actual objects, not just their planner-list entries:
+                // recovery is defined by the house's real yard count. This is
+                // last because the destroyed fixture objects cannot be restored.
+                reset(mcvPrice+1500,0);
+                std::vector<StructureBase*> recoveryLosses;
+                for (auto* structure:saved) if (structure->getOwner()==house
+                    && (structure->getItemID()==Structure_ConstructionYard
+                        || structure->getItemID()==Structure_StarPort)) recoveryLosses.push_back(structure);
+                for (auto* structure:recoveryLosses) {
+                    saved.remove(structure);
+                    structure->setVisible(VIS_ALL,false);
+                    structure->destroy();
+                }
+                require(house->getNumItems(Structure_ConstructionYard)==0
+                    && house->getNumItems(Structure_StarPort)==0,"Recovery fixture retained a real yard or port");
+                require(house->getNumLostItems(Structure_ConstructionYard)>0,"Recovery fixture did not lose a real yard");
+                require(house->getNumItems(Unit_MCV)==0,"Recovery fixture already owns a replacement MCV");
+                bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();
+                structureList.clear();structureList.push_back(heavy);structureList.push_back(refinery);
+                house->storedCredits=0;house->cityCredits=0;house->startingCredits=mcvPrice+1500;
+                bot->build(10000);
+                require(count(heavy,Unit_MCV)==1,"Negative runway blocked actual lost-yard recovery");
+                SDL_Log("CAPACITY_MCV_RUNWAY_PASS: real off/on queues, combat fallthrough, funded capacity, lost-yard recovery, shared technology");
+            } catch (...) {bot->configOverride=savedConfig;throw;}
+            bot->configOverride=savedConfig;
         }
         SDL_Log("SHARED_SPENDING_PASS: exact worker reserve, simultaneous construction, depletion, scarce credits (%s)",game.isCitySimEnabled()?"city":"vanilla");
     }catch(...){structureList=saved;throw;}

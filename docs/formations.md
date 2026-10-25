@@ -883,9 +883,11 @@ house, 20,000-credit armies, 40,000 cities, Rock High, Spice Medium, his game op
 label, one game per seed), `army.csv` and an army-deployment report table.
 
 **Regression test** `quantbot_ffa_army_deploys` (`tests/ai/run-ffa-army-deploys.py`, mandatory, AGENTS.md):
-rs160-dunecity seed 9101, four QuantBot Brutal; fails without a 30+ unit wave by minute 8, with a
-house's idle reserve 80%+ inside its base for more than 6 minutes in a row, or with nobody eliminated
-by minute 30. Fixed code (60-minute calibration run): first wave at minute 1.3 (66 units by minute 8),
+rs160-dunecity, four QuantBot Brutal; fails without a 30+ unit wave by minute 8 or with a house's idle
+reserve 80%+ inside its base for more than 6 minutes in a row (both on seed 9101), or when none of seeds
+9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 30. Since 2026-10-22 the
+elimination check spans three seeds: one seed finishing by minute 30 is chance (a 12-seed sweep: 6/12 v
+5/12 before/after the city-airplane change, which moved 9101 itself from 26.9 to none). Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
 longest inside stretch 1 minute, eliminations at 22.3 and 27.4 minutes, ~10 minutes wall for 60
 game minutes. Probe `quantbot_force_concentration` section 7 adds: two enemy houses' two tanks each on
 different teams do not outnumber our two (sum 1,200 v strongest team 600), allied they do; city
@@ -1109,6 +1111,176 @@ first elimination 6 minutes sooner) and makes both mandatory 1.0.848 tests pass.
 1.0.848 release fix on that basis (Main, 2026-10-19: "a behaviour fix, not a looser threshold"); the
 draw-rate gain is a direction over 24 seeds, not yet significant. Still open: the 6P DuneCity FFA cell
 (0/4 decided), and 4P DuneCity self-play still times out in 13 of 24.
+
+### Free-for-all: finishing the game, 1.0.852 investigation (branch `fix/ffa-finish`, protocol 97, save 9871)
+
+Evidence: `~/Documents/projects/dunecity-results/ffa-finish/`. The reference is local 1.0.852,
+6fd861ae, not the older 1.0.848 trajectory above. `base-*` has only observational harness changes;
+`pal-*` adds the Palace/IX site gate alone; `c1-*` excludes zones from elimination; `c3-*` combines
+that rule, zone target deprioritization and the site gate. These names describe experiments,
+**not accepted defaults**. The final selection must follow the paired measurements below.
+
+**What was diagnosed.** In the reference seed 9101 (`diag-c1-9101`, also reproduced in
+`base-self4`), the winning army has not simply stayed home. New dispatches of 33–41k at minutes
+41–58 join 14–52k of previously committed survivors: the new-wave percentage alone omits that
+existing commitment. Its finishing teams progress from Sardaukar to Harkonnen to Ordos, rather
+than changing away from the crippled house on each attack. At minute 60 its ground-army sample
+has no stuck value, no defence assignment, 25,650 in waves and 32,660 free (only 6,400 inside its
+base). These observations rule out the original all-army-at-home bug for this match; they do not
+claim that every unit is attacking continuously.
+
+The surviving cities in the first six reference games are not zones-only remnants: they retain
+71–256 turrets, 25–80 other base structures and armies. In seed 9101 the losing Sardaukar house
+has no army at minute 45 and is eliminated at 46.7; Harkonnen has 1,050 at minute 50 and is
+eliminated at 52.7. Unit-v-unit combat remains substantial. Mapping the diagnostic's lethal-damage
+attacker object IDs back to their built item types attributes 164 of Atreides' 487 hostile unit
+deaths at minutes 30–40, and 151 of 285 at minutes 40–50, to known turrets; initial/unknown shooter
+IDs remain unclassified. Turrets matter, but they are not the only source of attrition.
+
+**An actual construction starvation bug.** The leading Atreides city stops completing structures
+around minute 35 and stays at the same 299 zones, 119 turrets and 41 base structures through
+minute 60, while holding about 48k credits at storage capacity. Its build diagnostics report a
+funded heavy-factory backlog (six busy heavy factories, target 18). The later `palaceOverdue`
+override replaces an earlier construction choice with a Palace **without checking for a site**.
+Final placement rejects it (`no_site`), discarding that earlier choice again on the next pass.
+The normal Palace selection and the analogous IX override have the same missing precondition.
+The strategic cash reserve already rejects unsiteable projects; the final selection must do so too.
+
+The site-gate fix checks `findPlaceLocation(...).isValid()` in all four IX/Palace selection rules,
+including their overdue overrides. When no site exists, the previous choice survives and later
+rules can still run. A future pass tries the strategic structure again using ordinary placement
+invalidation; there is no extra retry timer or changed building price, target or military cap.
+This is a planner correctness fix, not a new aggressive doctrine.
+
+`[General Behavior] StrategicSiteGuards` in QuantBot Config is on by default, saved and hashed for
+multiplayer. Turning it off restores the four old IX/Palace selection rules for same-build
+comparisons; the pre-existing strategic cash-reserve checks are unchanged. The test-only
+`strategic-sites-on` and `strategic-sites-off` styles differ only in that key.
+
+**Zones and elimination are separate questions.** The shipped `House::isAlive` excludes walls and
+non-combat transports/workers/ambient aircraft, but counts residential/commercial/industrial
+structures. Roads and power lines are tile infrastructure, not a growing population of actual
+buildings that independently keeps a house alive. Zones occupy real 2x2 structure footprints:
+ordinary ground passability rejects their occupied tiles, just like other buildings. Their city
+density/population growth is not resurrection of destroyed structure objects; replacement lots
+are new construction orders. A targeting change that ignores zones is therefore not equivalent
+to removing a cosmetic tile: it can change which obstacles the army clears and must earn its
+own acceptance. Merely omitting zones from the defeat count has not established a draw-rate gain.
+
+**Regression test and the old false-positive.** `quantbot_strategic_site_stall` continues the
+preserved minute-35 seed-9101 save and restores its already-overdue Palace timer explicitly. To
+make no-siting deterministic after a disk load rebuilds placement plans, bare rock/slab tiles on
+every third row become sand. Roads, mountains, spice, existing buildings and city lots are left
+untouched. The test verifies the actual no-Palace-site precondition rather than faking placement
+cache answers, then bounds all-yard idling and storage-cap plateaus over six game minutes.
+Normal disk saves rebuild these planning timers; only observer runtime checkpoints carry them.
+The first continuation-only attempt passed with and without the fix and was discarded.
+
+The permanent driver now runs matched on/off styles in the same shared build. The guarded arm must
+pass. The legacy arm must fail specifically with the yard-starvation diagnostic and report
+`site_guards=0`; a precondition, compiler, crash or other failure cannot count as the negative control.
+Only newly created run logs are eligible. Source `5e96cf13` passed this paired CTest in 42.29 s:
+
+| Six-minute continuation | Guards on | Guards off |
+|---|---:|---:|
+| Completed structures | 13 | 1 |
+| Longest all-yard idle plateau, minutes | 0 | 4 |
+| Longest storage-cap plateau, minutes | 0 | 6 |
+
+Evidence is under `build-int/strategic-site-stall/strategic-sites-{on,off}/continuation/`.
+This proves the construction-starvation regression, not a cure for long FFA time-outs.
+
+**Coverage distinction.** Existing `*-6p` arms are the mixed scenario-matrix cell
+`6p-ffa-small-smallarmy` (QB/QH/QM/QE/AH/AM), not six identical bots. True six-player self-play now
+uses the existing `vanilla-match.py --houses` list with `--ffa default`, for example
+`--houses harkonnen atreides ordos sardaukar fremen mercenary --maps rs192-dunecity`.
+Each house still has its own team; the four-house default and balanced head-to-head assignments
+are unchanged. These genuine six-house and separate Fortress, `/weak`, CY and long-game
+ladder checks have now completed; their receipts are below, not inferred from the mixed cell.
+
+**Final-cycle scoring defect.** `FormationWaveMeasure::run` tests `game.finished` before its
+callback. When `House::lose` decides a match in the last update, `VanillaMatch::tick` never observes
+the final death. The 24-game 4P reference has nine winning games with a missing final-loser
+`eliminated_s`; the Palace-only arm has eight. A **direct** `match_score.score_game` call treating
+those raw blanks as survivors incorrectly labels every game as drawn. Raw `houses.csv` elimination
+timestamps and `place` values are therefore defective. The existing standard `--report` path is
+**not affected**: `vanilla-match.py::placings` already imputes missing nonwinner deaths at game
+end before scoring. Prior standard FFA/RatioSM report estimates must not be declared invalid on
+this evidence. The initial recovery calculation that bypassed `placings` was corrected.
+The harness now calls an idempotent `recordEliminations` once after the loop as well as in each
+tick, without running another game update or repeating sample/save hooks. An absent house is
+unknown, not evidence of defeat; Natives are not entrants.
+
+Original CSVs remain immutable. Recovered comparisons use each live `alive` flag and label an
+`alive=0` house with a missing elimination time as **imputed final-tick death at the actual game
+end**; this is a reconstruction, not an originally logged timestamp. Alive matrix houses use
+`eliminated_s=-1`, which must not be interpreted as an elimination. The reconstruction changes
+18 reference and 16 Palace-only house-score/drawn rows relative to a naive raw-data calculation,
+not relative to the existing standard report. Palace-only remains level: recovered
+4P mean-house paired score difference 0.000 (95% -0.0156..+0.0156), mixed 6P -0.0122
+(-0.0330..+0.0052); time-outs are 15 -> 16 of 24 and 16 -> 17 of 24, respectively. A confirmed
+planner correctness bug is not evidence that this fix cures FFA draw rates.
+
+**Preserved verification.** Cluster ctest 20261024T122735-ctest-c4ed92 tested source 3b8fefec:
+109/109 passed (mini 88, Pro 21). That receipt predates the new siting probe and six-house harness
+extension. It is not a receipt for the final accepted behavior combination.
+
+**Completed same-build site-guard acceptance (shared staging).** Genuine six-house self-play used
+source `e1a44eb0`, all six playable houses as Brutal QuantBots on their own teams, rs192 DuneCity,
+seeds 9101–9124 and the unchanged **120-game-minute** limit. Jobs
+`20261024T201752-ffa6p-sites-on-ab3d19` / `20261024T201752-ffa6p-sites-off-e09f93`
+completed all 24 games per arm. Both styles use the same lifecycle and differ only in
+`StrategicSiteGuards`; no zone/elimination experiment is included.
+
+| Genuine 6P measurement | Guards off | Guards on |
+|---|---:|---:|
+| Decided games | 4/24 | 3/24 |
+| Games reaching the 120-minute limit | 20/24 | 21/24 |
+| Eliminated houses | 91 | 90 |
+| Mean per-game house placement score | -0.0851 | -0.0885 |
+| Army value outside base in drawn-game samples from minute 105 onward | 53.2% | 51.8% |
+| Drawn games with increasing kill value after minute 105 | 20/20 | 21/21 |
+
+Paired per-game mean placement difference, on minus off: **-0.00347
+[-0.01736, +0.00694]**, 24 paired seeds, level. This self-play score measures
+decisiveness/draw penalties, not superiority against another controller. No armed house-minute
+in the late draw window was classified as garrisoned (793 off / 819 on observations).
+The draws remain real endgame/strategy limitations; these measurements do not show an
+all-army-at-home freeze or justify changing the victory rule to force a winner.
+
+All six house rows per game were checked, including raw timestamps for every defeated house:
+no final-death fallback was needed. For example, on-rule seed 9101 records Mercenary's last defeat
+at **5198.4 s**, the actual end time, with Fremen the sole survivor. This exercises the
+post-loop `recordEliminations` fix in a naturally deciding six-house game.
+
+The additional source-`09441f0b` acceptance jobs also completed:
+`20261024T204426-sites-duel-645243`, `20261024T204427-sites-cy-8385ed`,
+`20261024T204427-sites-ladder-on-ba8688` / `20261024T204427-sites-ladder-off-4bc400`.
+
+| Check | Completed games | Reported score difference, on minus off [95% interval] |
+|---|---:|---|
+| Fortress head-to-head, 128/160/192, eight seeds, both assignments | 48 | +0.000 [-0.58, +0.54] |
+| `/weak` versus `none`, matched against the guards-off `/weak` | 48 per arm | +0.000 [+0.00, +0.00] |
+| CY starts, five maps, five seeds, both assignments | 50 | +0.000 [-0.48, +0.56] |
+| Long-map Brutal versus Hard | 48 per arm | +0.00 [-0.05, +0.05] |
+| Long-map Hard versus Medium | 48 per arm | -0.03 [-0.08, +0.00] |
+| Long-map Medium versus Easy | 48 per arm | +0.00 [+0.00, +0.00] |
+
+Fortress/CY use the canonical head-to-head own-minus-opponent score contrast; `/weak` and ladder
+rows compare the same side in matched on/off setups. `/weak` is a test style, not a difficulty.
+The three long-map difficulty orders remain positive in both arms; guards-on stronger-side
+intervals are Brutal/Hard +0.51 [+0.23, +0.76], Hard/Medium +0.61 [+0.43, +0.80],
+Medium/Easy +0.93 [+0.83, +1.00]. These are six seeds per long-map cell, not the separate
+eighteen-seed full-tier release comparison. Level differences do not prove noninferiority.
+
+Exact reports and derived activity/raw-elimination receipts are in
+`ffa-finish/sites-acceptance/{duel,cy,ladder}-completed-report.txt`,
+`ladder-{on,off}-completed-report.txt`, `six-player-completed-summary.json` and
+`six-player-late-activity.json`; original CSVs and failed-attempt logs remain preserved.
+The combined current game source subsequently passed 118/118 CTests at `e286003d100a`,
+including the permanent positive/negative siting regression. Keep the site guards as a
+construction-correctness fix, **not a claimed FFA draw-rate cure**. `FinishWhenLeading`
+stays on; the unaccepted zone experiments remain excluded.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

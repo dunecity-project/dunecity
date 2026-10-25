@@ -1,3 +1,743 @@
+## 2026-10-25 — local 1.0.856 (staging + Vuk's public 1.0.853–1.0.855) verified and installed on the MBA
+
+- Vuk published v1.0.853 (portable payload identity), v1.0.854 (unpublished) and v1.0.855 (special-building Compacts,
+  Hospitals/Nuclear Plants, 39 sidebar portraits, house skin caches) plus Android 0.2.31/0.2.32. Staging merged
+  origin/main 897996b3 (c9e60ec6): HANDOVER both kept; GFXManager keeps Vuk's Hospital/Church portraits with the
+  portrait loop limited to player houses (Natives own no civic building). Version **1.0.856** (370183c6). Protocol
+  103 / save 9874 unchanged (Vuk changed neither). `fix/civic-portraits-855` and `assets/dunecity-special-compacts`
+  are contained in main; `fix/portable-content-853` and `android-0.2.31-engine852` are not merged (Android-only/held).
+- **Blocker found and fixed (e1da6556):** Vuk's art replaced 31 and added 53 Dune City skin files, so every
+  DuneCity save from 1.0.842–1.0.853 (and local 1.0.852 fixtures) no longer matched the shipped mod and asked for a
+  Workshop download (save_roundtrip_probe 842/847/850/851pub-dunecity failed; quantbot_strategic_site_stall hung at
+  the download dialog until its 900 s timeout). `Workshop::earlierShippedPayloads` (src/mod/DuneCityPayload853.inc,
+  generated from git 028d7c53 vs 897996b3) lets load acceptance and the shipped-copy pruning mirror describe the
+  installed mod as that earlier art: each listed file must be exactly the 1.0.855 bytes and is recorded as before;
+  rules/metadata stay byte-exact. A future art change needs another such table. New unit test in
+  WorkshopStoreTestCase (changed/added/removed art; edited rule or edited art fails).
+- Cluster ctest: first run 20261025T172326-v856-93d4f5 116/118 (the two above); after the fix targeted
+  20261025T174610-v856-savefix-274fa9 10/10 and full **20261025T174751-v856-full-df2141 118/118** at e1da6556
+  (mini 68, air 33, pc 16, pro 1).
+- Package: `cmake --install build-int --prefix /tmp/dc856-stage` (BundleUtilities, ad-hoc signature), no
+  Homebrew/local links, Righteous bundled, verify-macos-runtime passed; executable SHA256
+  7e12a1ffb13c9f06a4da7ce2471a3da0b19dcac3a6e51a5611084119e808029e. Installed on the MBA 2026-10-25 18:28 AEDT by
+  `/tmp/push-dunecity-1.0.856.sh`; 1.0.852 copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.856-20261025-182854/`.
+  Not pushed or published.
+- FFA: Palace/IX `StrategicSiteGuards` acceptance finished (six-player same-bot 24 seeds on 3/24 vs off 4/24 decided;
+  ladder 144+144, CY 50, Fortress 48, /weak 48 all level). Correctness fix kept; FFA draw rate still unsolved.
+- **Dune2 skin not showing (Stefan, Custom Game; Skirmish had no option) — fixed (a9f4f04e, probe 83261539):**
+  `Game::applyDuneCityGraphicsSkins` ran before the map loader, so a Dune2 choice on a Random Custom Game row (the
+  default) went to house -1 and never showed; it now re-applies from the resolved `houseInfoListSetup` after the map
+  loads. Single-mission Skirmish now has a "DuneCity skin" dropdown (left column, DuneCity only) applied to every
+  house, like the campaign. `graphics_skin_probe` now starts a real Custom Game with Random rows (Dune2/SimCity) and
+  checks the Skirmish selector; cluster 20261025T190506-v856-skin2-21a015 pass, full
+  **20261025T190557-v856-full2-29fd4f 118/118** at 83261539. Reinstalled on the MBA 19:14 (SHA256
+  314c41cc04eb6c0d96cf0dfa0f8336aca0144bfc48884b367367d7a86f4c6a6b; backup before-1.0.856-20261025-191409).
+- **Random Skirmish skin (Stefan: "skirmish menu has no skin selection" — the main menu's Random Skirmish, d3b1b325):**
+  single-player Random Skirmish gets a "City skin" row (SimCity/Dune2, right column under Enemies' City, shown only
+  for a city-sim mod); `RandomSkirmish::makeInit` takes the skin for every generated house, and the choice is saved as
+  `General/DuneCity Campaign Skin`, shared with the campaign/Skirmish selectors. `graphics_skin_probe` starts a real
+  Random Skirmish from the menu with Dune2 and checks every house; `ui_gallery_probe` captures
+  `menu-random-skirmish-dunecity` (414ac3f9; 640x480 and 1440x900 fit). Cluster 20261025T192206-v856-skin3-eb8da2 5/5,
+  gallery 20261025T192952-v856-gallery-da75ec, full **20261025T193236-v856-full3-fcb69f 118/118**. Package SHA256
+  64c5c0f790c126c84ae57dbd46b7055832d60cfc6aeacaa02990cda312cb3d06; MBA install waits until DuneCity is closed there.
+
+## 2026-10-24 — Shared follow-up integration, not yet release accepted
+
+- Single staging checkout/build: `dunecity-feature-batch/build-int`; completed source handoffs retain their original commits and evidence below. No new version or install.
+- Combined protocol **103**, save **9874**: online observer completion, the independent Natives team/reinforcement-worm summoner state, and the hashed MOD9 movement rule. Older settings retain movement off; protocol pins reconciled together.
+- Integrated Vuk UI fixes, online spectator completion, simultaneous-defeat ordering, Natives follow-up including byte-compatible visibility packing, exact FPS optimizations, twelve community maps and paired-score correction. Palace/IX integration is restricted to the placeable-site guards and its consumer regression, not the unaccepted FFA experiments.
+- `JoinAllyWaves`, `OpeningCombatBudget`, `CampaignCombatBudget`, `CapacityMcvRunway`, `RespectServiceOwnership` and `Continuous Ground Steps` remain **off and unaccepted**. Sardaukar/Mercenary defaults unchanged. Three reviewed community mods passed their content/production/determinism and actual chooser checks; precise receipts are in docs/community-mods.md.
+- Registered the missing live Harkonnen level-9 campaign-pressure cases for vanilla/DuneCity. Windows diagnostic compilation recognizes actual ccache and sccache launchers; no masquerading wrapper.
+- Combined source **b617a9d3** built successfully in shared `build-int`; dependency checks passed before/after. Actual combined gallery winner plate inspected; observer completion, Natives interactions and all six previous visibility/legacy-layout failures passed.
+- Superseded cluster job `20261024T143241-combined-b617a9d3-da3ff9` reached **114/117 passed**. Its three failed fixture cases and pending retries were preserved, not counted as green. Their corrected consumer checks subsequently passed; receipts below.
+- Six legacy save fixtures (1.0.842/847/850/public 851) loaded, advanced 600 cycles, re-saved as 9873 and reloaded; Natives remained on team 10. Performance fallback ran on the **mini, not the offline Pro**: eight-house CPU p99 ratio 0.909/1.600, modeled frame 3.210/5.500, main-loop frame 5.016/8.000; all budgets passed.
+- Combined source **cdf9b101** built successfully in shared `build-int` (116.68 s, dependency checks before/after). Cluster job `20261024T162952-combined-cdf9b101-e51206` reached **113/118 passed**, with chooser, Natives, two pressure and Palace cases failing; superseded retries were cancelled with evidence intact. Those five cases were corrected and individually verified before the subsequent green combined suite below.
+- MacBook Air activated for **4 concurrent CTest slots within its existing 7-game capacity**; guarded scheduler reload preserved active attempts and the Air completed real probes. Battery, thermal, active-app/game and manual-pause protections remain. Pro has rejoined and the PC is active; the Air correctly pauses while Stefan is playing. Mini still reserves interactive capacity.
+- Palace fixture follow-up **84989383** changes only bare rock/slab, retaining mountains, roads and spice. **d7e12172** adds saved/hashed `StrategicSiteGuards` (default on) and a same-build off arm, without changing the earlier cash-reserve checks. Shared build and full `dunelegacy_tests` passed; **5e96cf13**'s permanent matched on/off consumer CTest passed in 42.29 s. Both arms use the same style lifecycle; the off arm must hit the specific yard-starvation failure, never an unrelated error or stale log. Actual measurements and paths: docs/formations.md, “Regression test and the old false-positive”. This is construction-correctness evidence, not long-game FFA acceptance.
+- **09441f0b:** shared menu probe passed (355.48 s), all three 640-wide community-mod frames inspected; Natives behavioral round-trip/interactions passed (42.08 s). Removed the incidental equality between the current save version and the Natives feature's introduction version, rather than re-pinning it.
+- **c3996d1d:** both campaign-pressure probes passed (vanilla 19.00 s, DuneCity 3.94 s). The fixture now runs normal controller startup before mutating the world, preserving authored construction permissions. Mandatory-power checks require an idle capable yard and a real site, and inspect queued generation after any foundations; optional-power Vanilla is not forced to build a Windtrap. No production AI balance rule was changed to pass these cases.
+- **6e4be738:** merged Vuk's origin/main **459ae9d9** (PR #104) and rebuilt the same `build-int`. Real Mac audio startup passed dummy, forced-unavailable-backend recovery and default CoreAudio; five audio-checker unit tests passed. Upstream Linux package/backend evidence is separate. No local install, publication, Android branch integration or version bump.
+- **e286003d100a:** combined cluster job `20261024T213618-combined-vuk-final-3ee6bc` passed **118/118**, 31m29s from submission. Air 54, mini 46, PC 16, Pro 2; no failed tests. This includes both pressure cases, chooser, Natives, the permanent matched Palace on/off regression, save round-trip, actual on-rule unit-motion probe and spectator end. Performance regression passed on the Pro (108.3 s). No need to redo the earlier failed fixtures or completed handoffs.
+- **45417259:** corrected the matrix overlay launcher, not game code: write the merged options beside the launcher-owned output directory, not inside it. The failed `e286` on-arm starts raised `FileExistsError` and ran no simulations. Actual shared-build smoke played the first unchanged seed; `20261024T221200-integrated-aaa-on-fixed-7d5372` played only the remaining five. Final off/on result is **6/6 versus 5/6 wins within 40 minutes**: on-rule seed `906213928` still times out at the unchanged 41-minute cap. The other five win; this reproduces the earlier movement acceptance blocker, not a green on-arm result. No seed, deadline or assertion was weakened.
+- Completed Palace-site comparisons: all **482** Fortress/`/weak`/CY/long-ladder games plus **48** genuine six-Brutal self-play games, with original sources and limits preserved. Six-player 120-minute time-outs were **20/24 off versus 21/24 on**, paired mean-house score -0.00347 [-0.01736, +0.00694], level. Every draw still recorded kills after minute 105; raw final-loser timestamps are now present in naturally deciding matches. The site guard remains a proven construction fix, not a draw-rate cure; all three adjacent long-map difficulty orders remain positive. Reports and full limitations are in docs/formations.md; no zone experiment or forced victory rule was adopted.
+- Original historical regression coverage is complete: **1,643 direct games per release**, all paired without input mismatches; the long ladder now has eighteen seeds. This is a historical 850/local-852 comparison, not current combined-source acceptance. Full reports are in `dunecity-results/regression-852/REPORT.md`.
+- Balanced Sardaukar/Mercenary confirmation completed; neither candidate earns a default change. The 672-game opening/campaign budget comparisons also completed: the opening rule significantly worsens Hard/Medium, and the campaign rule shows no overall gain. Both stay off; detailed reports are linked from docs/ai-play-styles.md and docs/ai-scenario-matrix.md.
+- **18e64e8f:** shared build and dependency checks passed; `workshop_store_tests` passed. Both actual MBA saves now load, advance 600 cycles, re-save and reload in fresh profiles without copying the MBA's mods/store. Compatibility recognizes only captured builtin metadata layouts after a full unchanged-payload hash proof; exact revision checks remain enforced. Evidence and boundaries: docs/workshop.md.
+- **b301f24645af:** combined cluster job `20261025T015356-portable-combined-b096ee` passed **118/118**, 11m54s from submission: PC 16, Pro 39, Air 4, mini 59. Performance passed on the Pro (106.3 s). This includes the corrected MSVC test constructor overload; no failed test is counted green.
+- Adopted only Vuk's one-line LF checkout policy from **ddebf461**, retaining exact-byte community-mod overrides; no 1.0.853 version/CI branch merge. The attributes-only transition initially left 1,309 CRLF files in an existing Windows tree. The node's selective repair now passes real Git regressions on Mac and Windows; actual source **a8d2af502fdd**, PC tree `w2`, matches all **5,000** source/content inputs byte-for-byte, without hash normalization. Rollback, native proof and the deferred-candidate merge boundary are preserved under `~/.local/state/dunecity-queue/canonical-checkout-20261025/`. No native-key scheduler activation.
+- The two actual feature-combination cases pass locally at **b301f246**: crime troops retain their saved orders, genuinely shoot down the plane, and its crash decides the match; all actual result plates/statistics and causal stall/departure checks pass. The played partner is compared at the exact final authoritative host tick, not a later buffered post-verdict tick; the viewer still ends at the host's exact final cycle/state. Evidence: `outputs/crossplay-local-b301f246/`.
+- **5c858b3345df:** actual Mac-host/native-Windows feature crossplay passed **4/4** cases: normal completion and host departure at decision, each with Windows Partner winning and losing while a separate Windows Viewer spectates. Real crime troops preserve checkpoint orders, shoot down the airplane and its genuine crash decides the match. The viewer finishes at the exact authoritative host cycle/state (1936 normally, 1562 on departure); the played peer matches at that same tick despite later buffered ticks. Actual player victory/defeat and both house-coloured spectator plates were inspected. Statistics, Natives exclusion, causal stall/departure and strict raw-content identity checks passed. Evidence: `outputs/crossplay-win-5c858b33-{partner-wins,host-wins}/`.
+- Native diagnostic preparation now reads source explicitly as UTF-8 and includes WinSock before removing the SDK's `near`/`far` aliases. These fix observed diagnostic compilation failures; neither changes shipped gameplay or weakens fingerprints/guest guards.
+- **2a4e7e40 / 1d0a93be:** built the independent optional-MCV runway correction in the same `build-int`; all three real shared-spending mod probes pass. The new matched queue case rejects the previously purchased unfunded MCV and still produces affordable combat; funded growth, genuine last-yard destruction/recovery and shared combat upgrades remain valid. It charges only incremental optional MCVs, not ordinary forecast production. Default off; `mcvrunway` is independent of both rejected first-wave budgets. Completed team extension is now fully reported: 2v2 96 games/arm, Δ +0.06 [−0.06,+0.18], no accepted default. Outcomes are not inferred from these mechanics probes.
+- **64c370dc04c7:** full combined cluster job `20261025T035915-mcv-runway-combined-63cc99` passed **118/118**, 10m37s from submission: Air 12, mini 62, PC 14, Pro 30. Performance passed on the Pro (89.9 s); both actual MBA saves again loaded, advanced 600 cycles, re-saved and reloaded in fresh profiles after the config addition. This is default/off coverage, not promotion of the MCV candidate.
+- The current mandatory physics-on MCV off/on comparison completed six seeds per arm: **5/6 within 40 minutes in both**, with all six final digests identical across arms. Seed `906213928` still times out at the unchanged 41-minute cap; the optional-MCV rule is not a remedy for that battle.
+- Fixed a separate distributed input defect after real Air/Pro failures: external `--game-options` paths were only readable on the submitting mini. The queue now snapshots exact overlay bytes per job and each node restores them in its owned unit directory, leaving source/native build identity unchanged. All four nodes received the atomic update; the existing idle scheduler worker was reloaded, not the native-key candidate. Five already-completed AAA games were preserved and only the missing games resumed; all remaining AAA units completed on Air/Pro. Native Windows running-input SHA256 matches the frozen submission. Rollback, input smoke and resumed-job receipts: `~/.local/state/dunecity-queue/argument-transport-20261025/`.
+- The independent MCV outcome batch completed **876 games**, matched inputs and zero game errors. No short-map, campaign or team group establishes paired improvement; all five named campaign losses remain losses. It stays off and rejected for default use; reports and coverage are in `ladder-campaign/mcv-runway-64c370dc/` and docs/ai-scenario-matrix.md. The separately observed light-raider repair/pickup cancellation now has an independent service-ownership candidate, not a claimed rescue or AAA victory.
+- **c22c9455:** shared `build-int` rebuilt successfully and the actual `quantbot_launcher_kiting` probe passed (18.99 s), including eight matched service-ownership off/on cases. Genuine repair bookings and reciprocal pickup targets survive periodic raider micro only with `RespectServiceOwnership` enabled; unreserved raiders still evade. This addresses the captured controller handoff, not a proven rescue or AAA outcome. The candidate remains off; unchanged strategic gates are still pending.
+- **78eaa25ebef0:** current main regression partition passed **116/116** in7m03s: Air26, mini63, PC14, Pro13; performance passed on Pro (90.7s). The two long surface checks (`menu_navigation_probe`, `spectator_online_end_probe`) are deliberately reserved for the second same-native-build partition, not omitted or counted passed.
+- All18 physics-on/service-off AAA controls completed without game errors: mandatory vanilla5/6 within40 minutes (seed906213928 still capped at41), DuneCity6/6, and reverse Medium-versus-four-Hard6/6 expected defeats. Candidate on-arm results remain pending; no movement acceptance is claimed.
+- Native-key v2 activation and strict all-four-host warm proof are complete. Reporting-only sources `78eaa25ebef0` -> `d9d8788c918d` used the same native key and each host's same managed tree; executables, main objects, Ninja files/logs and config stayed unchanged while exact source and per-sid probes/parity refreshed. No cache was cleared or uncached-build/speedup claim made. Durable code/config/rollback and full-receipt pointers: `~/.local/state/dunecity-queue/cache-20261024/warm-proof-20261025.json`.
+- Combined current consumer coverage is **118/118** across the two disjoint same-native-build partitions: the remaining menu-navigation and online-spectator checks passed on Pro (400.3s/486.6s). Total host coverage: Air26, mini63, PC14, Pro15. Air also completed12 real AAA games across the two arms; it is demonstrably in the active pool, not merely configured.
+- Service-ownership outcome comparison completed all36 games without errors: mandatory vanilla remains **5/6 in both arms**. Enabling it changes seed906213928 from41-minute cap to35.26-minute win, but seed1430976924 now caps at41 instead of winning at33.90. DuneCity and reverse groups stay6/6 each in both arms. Neither switch is promoted; mechanics correctness is not six-seed strategic acceptance.
+- Ladder/team/campaign validation and the documented rejection decision are complete; failed funding/team experiments remain off. The five unchanged campaign losses are not claimed fixed, and no unsupported default revision is adopted.
+- Release acceptance remains **pending**: corrected movement still lacks the unchanged all-six-seed gate. No install, publication or version bump.
+
+## 2026-10-24 — Vuk's Classic Desert UI tested on 1.0.852 (branch `test/vuk-classic-ui`, worktree `~/Documents/projects/dunecity-vuk-test`, from staging 6fd861ae; UI-only, protocol 94 / save 9871 unchanged; no version bump)
+
+Agent VukTest. Evidence `~/Documents/projects/dunecity-results/vuk-test/` (gallery-final/ contact sheets, crest-before-after-*.png, perf/, windows/, qb-rename/).
+
+- **New `ui_gallery_probe`** (`tests/menu/run-ui-gallery-probe.py`, docs/ui-skins.md last section): 3 skins x 7 display cases x ~47 real screens incl. a DuneCity game, linted; full matrix 23/23 at f55ebe55.
+- **Fixed (UI-only, each asserted by the probe):** Classic idle main menu re-rendered every button each frame (`MainMenu::refreshContextButtons`; mini CPU 28.2 -> 0.50 ms/frame, Modern 0.52); desert-skin menus covered the background's corner crests at every size (Stefan: keep crests, move menus; Modern unchanged); spectated end plate wider than the map at 640/854 for team lines (font steps down, `misc/WatchedResultLayout.h`); city chat overwrote the Pop/RCI readouts (all skins).
+- **Checked fine:** skin persists/Apply/Back, new and 1.0.850 profiles get Classic, saved choices kept, skin round trip leaves the in-game sidebar pixel-identical, Natives owner line, plate in all 12 colour slots, QuantBot rename bit-identical (14 cluster games, same digests), Windows MSVC build + 16/16 ctest + classic-skin probe 3x6 with --hud (at 6fd861ae), Linux CI green (run 39923696260).
+- **Reported, not fixed:** Lapis 'All Maps'/'Next' 9 pt at 640 Custom Game; 'Zoom 1x' clipped under the drop-down arrow (all skins); Custom Game 'Skin' header raised (all skins); in-game Classic p95 +4 ms on the loaded mini only (Air equal).
+- **Tests:** `dunecity-queue ctest` job 20261024T112123-ctest-b6167a at f55ebe55: 110/110 (mini 88, pro 22; the PC took none). Not pushed.
+## 2026-10-24 — Online spectating ends with the game, between real machines (branch `fix/spectator-online`, worktree `~/Documents/projects/dunecity-spectator-online`, from staging 6fd861ae = 1.0.852; protocol 100, save 9871 unchanged)
+
+Agent SpectatorNet. Evidence `~/Documents/projects/dunecity-results/spectator-online/`. `fix/spectator-game-end` was only
+tested in-process; the online paths were never exercised.
+
+- **New test** `spectator_online_end_probe` (`tests/network/run-spectator-end-probe.py` + `spectator-end-probe.inc`): Host,
+  Partner and a Viewer that asks to spectate mid-game (cycle 120) as three processes over the local PHP signaling service and
+  WebRTC, each in the real `Game::runMainLoop`; ten hunting tanks against three troopers on Habbanya-Autumn, so the
+  simulation decides the match (cycle 2491; Dune City with Natives worms 4881). Checks: same decision cycle and digest on
+  every peer, the viewer ends normally on the host's last cycle and digest, winner on its plate and in the statistics
+  (text and colour). Cases end, decision (host quits at it), lag-end (viewer hangs 20 s), lag-decision (25 s), slow (viewer
+  at under half speed: 2,190 cycles = 35 s behind when the host left), natives. `--remote ROLE=SSHHOST` runs roles on other
+  Macs (probe app rsynced, service through `ssh -R`, rendezvous files relayed); `--baseline` only reports.
+- **Before (6fd861ae), same matrix:** end/natives/lag-end ended normally but 76-373 cycles short of the host (the viewer cut its
+  end at the host's departure); decision, lag-decision and slow showed "The connection to the host was interrupted" (slow
+  also needed a fresh checkpoint: history 1,500 cycles). Real 3-Mac baseline (host Pro, partner Air, viewer mini): the same.
+- **Causes:** (1) the host streams at most 64 unacknowledged cycles (`ObserverStreamPolicy::replayWindow`) and nothing more
+  once it left, so a spectator behind the host never got the decision; `Game::onPeerDisconnected` then failed it (or cut a
+  decided game short). (2) `DirectRoomTransport` dropped a link's queued messages with the connection, and erased the peer
+  before the game read the payloads queued ahead of its PeerLeft (`handleRelayGamePayload` found no sender), so whatever the
+  host sent last was lost. (3) the main loop could run more cycles after `finishedLevel` in the same frame (partner ended a
+  cycle after the host).
+- **Fix:** host: at the end of its `runMainLoop`, `NetworkManager::endObserverStreams` sends every ready spectator the rest
+  past the window (JOIN_SYNC 18 batches) and an end marker (19, JOIN_ACK 19), waiting at most 3 s for the acks
+  (`observerStreamsDelivered`); ended streams don't expire; history 8,192 cycles (4 MiB kept). Spectator: host departure
+  sets `observerHostLeft`; it plays the received cycles, then `endObservationWithoutHost`: decided -> normal end (plate
+  finishes on the clock), all cycles played -> "The host left before the game was decided.", else "connection interrupted".
+  A player whose game had finished also ends normally. Transport: `deliverQueuedValues` before dropping a closed/departed
+  link, `departing_` peers stay findable until their PeerLeft is taken, `relayHostPeerId` remembers the departing host.
+  Main loop: no cycle after `finishedLevel`/quit. Router accepts 18/19. Protocol 100 (a 94 spectator refuses 18/19).
+- **Real machines** (fixed build d1718c60): host MacBook Pro, partner MacBook Air (headless, no dunecity running), viewer
+  mini: all six cases pass; viewer on the Pro, host mini, partner Air, host winning: end, lag-end, slow pass. Not done: a
+  Windows peer (probe is macOS/Ninja-only) and the dunelegacy.com service/relay (would publish a production room); ENet
+  direct has no spectators (observer streams need the direct room transport).
+- **Tests:** `dunecity-queue ctest` job 20261024T110745-ctest-4af3ea at d1718c60: 110/110 passed (mini 37, pro 73;
+  PC offline), incl. `spectator_online_end_probe` 719 s on the mini (six cases, ~2 min each; skipped with code 77 without PHP).
+## 2026-10-24 — Natives follow-up: own team, reinforcement worms spare their summoner, ws-copy prune; old-save crime troopers proven unmarkable (branch `fix/natives-followup`, worktree `~/Documents/projects/dunecity-natives-followup`, from staging 6fd861ae = 1.0.852; protocol 101, save 9873; not released)
+
+Agent NativesFollowup. Evidence `~/Documents/projects/dunecity-results/natives-followup/`.
+
+- **Old-save crime troopers (left as they are, proven):** before 9871 `raiseCrimeTroopers` gave troopers to an
+  existing opposing house *with structures* via `House::createUnit(Unit_Trooper)` and kept only an AITelemetry
+  `crime_unrest` line (not saved). Every persisted field is shared with a house's own troopers: originalHouse =
+  owner, `byScenario` false (as factory, police, palace-Fremen and reinforcement troopers), guard point / HUNT /
+  forced target (also set by QuantBot waves and player orders, and cleared once the target dies). The city keeps no
+  per-trooper list (only `crimeUnrestProgress_` timers); `numItemBuilt` is not saved and `numBuiltUnits` is one
+  total over all types. "Owner never had a WOR/Barracks" is no marker either: troopers also come from police stations
+  (`PoliceStation`, trike/trooper patrols), Palace Fremen, starport, reinforcements, and a sold WOR records no loss
+  (`demolishedByOwner_` -> `decrementStructures(..., recordLoss=false)`). So no conversion; only worms convert.
+- **Custom-map team-0 houses:** the Natives house now plays on `NATIVES_TEAM` (10; `NUM_TEAM_SLOTS` 11; lobby teams
+  are 1-9, anonymous map houses stay on 0). Natives and anonymous houses fight each other; `House::isAlive()` is
+  always true for Natives; `House::lose`'s AI-no-buildings check and `ReinforcementTrigger`'s Enemybase choice skip
+  Natives by name (team 0 no longer did it). Win/lose is otherwise unchanged: team 0 still never blocks or wins.
+  Saves: each object stores the 11th visibility bit as the spare third bit of its teams-8/9 byte (record size
+  unchanged, so `formation_movement_probe`, `deviation_reward_probe` and `structure_degradation_*`, which splice
+  current records into pre-9849/9859 ones, stay byte-exact; a separate byte broke all six in ctest
+  20261024T130056-ctest-39f8f0); a 9871/older save copies it from team 0's and moves the Natives house to
+  `NATIVES_TEAM` on load (`House(InputStream&)`).
+- **Worm reinforcements:** none in Tornie or the bundled mods; 109 `[REINFORCEMENTS]` worm lines in bundled maps
+  (multiplayer Player1-6 at Homebase/Air, e.g. Gamma Sector 40, Wormhole, Rocking Fields; Mercenary on many 4P/5P
+  maps; singleplayer Sardaukar Base; OPENSD2 SCENF011-015 Sardaukar/Mercenary at Enemybase). Correction to the
+  feat/natives-house risk note: worms never checked teams (`Sandworm::canAttack`'s team test is commented out since
+  Dune Legacy), so a house's own worm always ate its units. Now: the worm stays the Natives', `ReinforcementTrigger`
+  records the house as its summoner (`Sandworm::setSummoner`, saved from 9873) and it never targets or bites that
+  house's team (`Sandworm::spares`, also in `Map::damage`'s Bullet_Sandworm branch) for its lifetime. Kills stay
+  credited to Natives; the summoner's units may still shoot it (as before). Old saves: no summoner (eats all, as before).
+- **Shipped-mod copies (`ws-<hash>`):** `Workshop::pruneShippedModCopiesOnce()` after `ModManager::initialize()`
+  (`src/mod/WorkshopDuplicates.cpp`), before anything loads. For every `mods/ws-<hash>` holding a revision built on a
+  shipped mod, except the active mod: removed when the local Workshop store holds that revision intact
+  (`store().get`; Stefan approved, 2026-10-24: `resolveMod` -> `installMod` reinstalls it whenever a save needs it);
+  otherwise removed only when it is the shipped mod with just mod.ini's Game Version changed (`stampedModHash`, own
+  files re-hashed) and no `save/`, `mpsave/` or `replay/` file loads through it (mirrors `resolveMod`; a newer
+  release's save blocks this). Copies built on no shipped mod are never touched. Renames to `.ws-*.removing` first,
+  logs each removal and kept copy, store revisions stay, marker `mods/.shipped-copies-pruned` once complete.
+  **Stefan's MBA profile (fresh copy on the mini, real one untouched):** all 14 removed (626 MB; 13 were older
+  revisions, 2-185 files different, only `ws-980624ac` was stamp-only); then `test1/2/3.dls` (saved by 1.0.833
+  running as `ws-980624ac`) each loaded through the store (copy reinstalled), 510/674/1221 units, 100 cycles
+  (`natives_probe` diagnostic case `loadsave`; logs `air-copy-*.log` in the evidence dir).
+- **Probe (`natives_probe`, new case `followup`):** unfixed 1.0.852 build-int: Natives and an anonymous Mercenary house
+  both team 0, neither can fire, no damage in 2 game minutes; a worm's bite kills the reinforcing house's trooper.
+  Fixed: teams 10/0, both fire, hit at cycle 7; summoned worm targets enemy only, bite spares Ordos and kills the enemy
+  trooper; summoner survives save/reload (9873); played win on the last enemy with anonymous and Natives units alive.
+  New `[workshop][duplicates]` unit cases; protocol/save pins 101/9873, `NUM_TEAM_SLOTS` 11.
+## 2026-10-24 — 8-house FPS round 3: build-pass and city-growth spikes, exact (branch `perf/fps-round3`, worktree `~/Documents/projects/dunecity-fps-round3`, from staging 6fd861ae = 1.0.852; protocol 94, save 9871 unchanged)
+
+Agent FpsFix3. Details/tables: `docs/game-performance.md`, "Third pass". Evidence
+`~/Documents/projects/dunecity-results/fps-round3` (results.jsonl, scratch.jsonl, trace-*.log, sample-*.txt,
+rendered-mini.jsonl, rendered-air.jsonl).
+
+- **Cause:** 1.0.852's worst QuantBot build passes (18-22 ms thread CPU) were 6-8 `findPlaceLocation` calls
+  of ~2 ms, each mostly the whole-map pass 1/2 origin loop, plus enemy clearance, rock survey, anchor field
+  and city service search. City growth's 16-18 ms was the decision log's 96-day `city_map_snapshot`
+  (telemetry only); otherwise a row-major tile walk and the traffic BFS.
+- **Fix (exact):** block-skipped build-range gate in placement; vectorised `DuneCity::chessboardPasses` for
+  enemy clearance and the rock survey; leaner `RockExpansionPolicy::choose`; service candidates by 2D
+  difference array; dense id table in `ObjectManager::getObject`; growth origins from `structureList`;
+  memoised traffic road/role tests; cheaper telemetry quoting and snapshot. New unit tests: clearance vs the
+  old raster loop (400 random maps), placement pass counts.
+- **Numbers:** 21 PROBE_DIGESTs over 15,000 cycles identical to 1.0.852. Stepped (mini): cpu p99 14.3 -> 8.4 ms,
+  frame p99 35.6 -> 29.3 ms, frames > 33 ms 29 -> 8 of 1,500, build total 7.3 -> 3.5 s, worst pass 18-22 ->
+  10-13 ms CPU, growth worst 16 -> 9 ms. Rendered 1440x900 (his [Video]): Air battery + LPM fps 41-43 -> 46-49,
+  p99 49-66 -> 37-50 ms, > 33 ms 7.3-11.9 % -> 2.5-6.6 %; mini pairs noisy (load 7-14), 4 of 5 pairs better.
+- **perf_regression:** 8-house budgets cpu_p99 3.0 -> 1.6 (1.0.852 Pro 1.807 fails), frame_cpu_p99 9.0 -> 5.5.
+- Measurement-only: the vuk-perf tree's `--video` game-perf option was applied temporarily (not committed);
+  probe builds wrote `balance-probe-cache/` entries into staging's build-int. Air copies removed, PAUSE removed.
+## 2026-10-24 — community mod catalogue reviewed; three optional revisions bundled (source-only `feat/community-maps`)
+
+Agent CommunityMods; continues completed map tip ba3799a1 in the existing
+`~/Documents/projects/dunecity-community-maps` lane. No new tree/build/profile, version bump or publication.
+Review evidence: `~/Documents/projects/dunecity-results/community-mods-20261024/`
+(`catalogue-listing.json`, `shipped-copy-classification.json`, `custom-rule-review.json`, `file-audit.json`,
+`path-audit.json`); downloads and reproducible fetch script remain in `/tmp/cm-mods`.
+
+- Obtained all 167 revisions / 163 items, sequential delayed requests, reusing only length/SHA-verified files:
+  2,197 unique file hashes verified. Every manifest passed path/case/device-name/collision/size checks; custom
+  PNGs passed integrity parsing; no executable/script content imported or executed.
+- Shipped-copy counts corrected to **154**: Dune City 73, Vanilla 65, Dune2R 13, Tornie 3. One uploaded item named
+  Vanilla is genuinely modified (infantry/harvester speeds and ambient-aircraft Heavy Factory builders), not a
+  historical shipped snapshot. All other ObjectData/QuantBot variants match committed source history.
+- Exact catalogue files bundled (1,544 files / 10,736,436 bytes), with excluded Workshop identity sidecars and
+  per-file provenance in `mods/community-mods.json`:
+  - deo-t v1, item `9d5e59ad54d0d3b9c65623634a99aba2`, revision
+    `93d3ab43ccc64ade50a3f8a75e934949611e5f36cf0979b5f4a96c43dcf22e57`,
+    folder `community-93d3ab43ccc64ade`: shipped Tornie with Sandworm disabled.
+  - TornUge v1, item `8b03ca1bcb2795f9414b5020bb4870c1`, revision
+    `c8baed9d35d533150d088e304e674a372579c8c6efbaf95850d529fbc51e6a28`,
+    folder `community-c8baed9d35d53315`: Tornie with concrete required and instant build off.
+  - new - modded v4, item `8d0b4fe19f7b1383b6a19c0f937778b8`, revision
+    `4a2905f3b397951725fc937185d3ad6cbcc0018f60c02db81aefd44031385bf7`, folder `new` (required to preserve
+    its empty-Base-Mod catalogue identity): turret reload 70, QuantBot turret/wall targets 1/2/0, older defaults.
+    Its obsolete Structures Degrade On Concrete key is ignored by the current engine.
+- `docs/community-mods.md` reviews all eight named customs plus the hidden modified Vanilla. Rejected:
+  aa placeholder, aaaa cheat Sonic Tank (99,000 HP / price 1 / damage 5,000), C&C on Arrakis (explicit local-copy
+  copyrighted C&C sprites without redistribution grant), Dune City Tornie (no actual hybrid; Advanced Windtrap
+  still Builder=Invalid), GMD-8 (metadata-only duplicate of new - modded), misleading experimental Vanilla.
+- Scattered War's sidecar now selects exact authored `new` dependency; map bytes unchanged. Its old Vanilla
+  digest is explicitly `previous_validation`, not evidence for the new association. Wezowe Pola's provenance
+  is corrected (published with experimental Vanilla, retained with current Vanilla). SONOB reconsidered:
+  time-zero MCV reinforcements do exist, but four recognised slots plus unknown Corruptique cannot satisfy
+  its nine-player title; TornUge's two options do not repair that. It remains rejected, unchanged.
+- Minimal generic ModManager seeding installs missing extra bundled mod folders, never replaces an existing
+  user folder or changes the default. Native/Android already copy the whole mods tree; web now preloads it
+  too. New paths alone are `-text` for cross-platform catalogue byte identity. Shipped mod files untouched.
+- Existing approved list/tokens, per-active-mod checksums and multiplayer content fingerprints are unchanged
+  by these extra folders. Selecting a community mod uses its own catalogue identity/rules and authored-mod
+  lobby/transfer flow; no auto-approval, protocol or save-format change.
+- New `community_mods_startup` checks bytes and plays each mod twice for five game minutes, real GameOptions,
+  hard AI, seed 4242, bare yards on separated rock/spice islands: requires factory/power/combat-vehicle
+  production and equal final digests. Existing `menu_navigation_probe` actually selects each choice, checks
+  catalogue fingerprint and non-approval, then restores the prior selection. Map startup covers Scattered War
+  under the corrected mod. These are load/production/determinism checks, NOT balance certification.
+- **Runtime acceptance pending the parent's single shared build / cluster CTest.** No child build, game/menu
+  run, test, linter or formatter was run for this batch. The old map-only 110/110 receipt predates these mods.
+  Parent owns integration, full combined acceptance and updating the pending runtime status in the provenance/docs.
+## 2026-10-24 — community catalogue maps bundled (branch `feat/community-maps`, worktree `~/Documents/projects/dunecity-community-maps`, from staging 6fd861ae = local 1.0.852)
+
+Agent CommunityMaps. Stefan: "look at the metaserver new multiplayer maps and add them to the build". Evidence (downloads,
+selection.json, validate-results.json, minimap montage) in `~/Documents/projects/dunecity-results/community-maps-20261024/`.
+
+- Downloaded every map revision from `https://dunelegacy.com/p2p/v1/content/` (1,267 revisions, 1,102 items,
+  sequential with delays) plus the 167 mod revisions they reference. Latest revision per item, then dropped: same name
+  as a bundled map 858 (two of them differ: `4P - 384x384 - new beginning` and `8P - 256x256 - Colonists` edits, 99%/97%
+  of the bundled terrain), auto-generated Random 166, RWRK 21, placeholders 19, copies of bundled maps by bytes/content/
+  terrain 11. 27 candidates; 12 accepted.
+- Mod association from the map's catalogue mod revision: the Python port of `Workshop::contentHash` reproduces the
+  installed vanilla revision (0be9deed…), and `bundledModHashAtGameVersion`'s restamp matches 265 catalogue map
+  revisions to the shipped Vanilla/Dune City of 1.0.829–1.0.842 and Tornie 1.0.852; older shipped snapshots are recognised by their
+  content-derived IDs. Nine maps used custom mods; only Scattered War (custom "new - modded", Vanilla units only) is
+  bundled, under Vanilla.
+- Added, exact catalogue bytes + `.workshop.ini` sidecars (clean name, item ID, mod, version), provenance in
+  `data/maps/community-maps.json`, docs in `docs/workshop.md` "Bundled community maps": multiplayer/ 2P Habbanya-Penny
+  Revised and Deserted Revised (Tornie), 2P Kleiner Lvl, 3P Oli5, 3P Wezowe Pola, 4P Big Border, 5P Fremen Homebase,
+  8P Scattered War (Vanilla), 4P Habbanya-Froiud AA, 6P Alla Map, 6P No Win (Dune2R); singleplayer/ 4P No Mercy
+  (Dune City, also added to `scripts/check-web-mods.py` CITY_MAPS).
+- Rejected: 17 - Death Ruler, 9 - VS (no starts); 9P SONOB (custom TornUge, 4 slots, no slot starts); 8P Luke, Luke bb,
+  Luke2 (4 slots); 8P Joe 1983 (Rebels slot has no start); Itzik New Map (placeholder, 2 slots empty); fOSTALIGA,
+  CYR's Map, fastgleich (one-sided starts); Sihaya Leona Revised (99.2% the bundled map's terrain); Random Map 1/3
+  (unnamed generator output); No Mercy aa (copy of No Mercy).
+- Validation: every accepted map played twice for 2 game minutes (all-AI hard, seed 4242) in its mod with equal final
+  digests, no crash, every lobby house holding its yard/MCV. New ctest `community_maps_startup`
+  (`tests/maps/check-community-maps.py`): recorded bytes, sidecar, name vs size/slots, a start per slot, chooser skip
+  rules, then a one-minute game per map (about 1 minute wall).
+- Cluster ctest at 9094ba38 (job 20261024T102855-ctest-2b57e1): 110/110 passed, including `community_maps_startup`.
+- No mod checksum, multiplayer content hash, protocol (94) or save (9871) change: maps are outside `mods/`, which is all
+  the mod fingerprints and approved-mod tokens hash; a hosted game sends the map bytes. Not version-bumped or pushed.
+## 2026-10-24 — Sardaukar/Mercenary top-band research recovery: no default change
+
+**Integration update:** the preserved `c9` jobs completed and remained exploratory.
+The subsequent shared-source `c10` confirmation also completed, with the required
+420 paired candidate-on-house games per house, balanced positions and unchanged
+opponents. Neither overall 95% interval is positive; both defaults remain unchanged.
+Current evidence and the full decision are in `docs/ai-play-styles.md` §8.11.
+The queued/n=0 statements below describe the original recovery handoff only.
+
+Branch `feat/ratio-sardaukar-mercenary`, source-only worktree
+`/Users/stefan/Documents/projects/dunecity-ratio-sm` on the mini. Preserves `42635523`; base `6fd861ae`
+(local 1.0.852, protocol 94, save 9871). Full research/design/evidence caveats: `docs/ai-play-styles.md` 8.11.
+
+- **Decision:** both configured openings remain unchanged. No accepted mix, no protocol 99 consumption,
+  no saved-state change, no edits to `QuantBotConfig.cpp`, bundled config or mod/map files.
+- **Exploration:** `sm-x9-c3d0b9-{1..18}` cancelled after 82 full-length CY games; only 40 random-side
+  Sardaukar games and 3 Mercenary games. Too small/unbalanced for reliable regression. Derived candidates
+  and Sonic cost-effectiveness informed test-only conservative Sonic refinements (not measured winners):
+  Sardaukar `4,32,32,2,14,0,10,2,2,2`; Mercenary `15,27,25,2,14,0,11,2,2,2`.
+- **Queued evidence preserved:** `20261024T132117-sm-c9-26c010-{1..10}`, source
+  `6fd861ae958d-edc7d444`, all 840 games pending at recovery handoff; n=0 complete pairs per house,
+  estimates/intervals unavailable. Shards 1-5 Sardaukar, 6-10 Mercenary; each 84 games against one
+  opponent. Neither cancel nor restart them. Their full completion would still give only 210
+  candidate-on-house games per house, not 420; target house is always first. Label swaps are not
+  position swaps. **Exploratory only, never acceptance evidence for a default change.**
+- **Analysis fix:** `ratio-analysis.py --paired HOUSE` now computes HOUSE's actual placement-score gain
+  between matched games, +1/-1/-0.25 for win/loss/draw. `42635523` incorrectly subtracted within-game
+  house-minus-opponent contrasts, doubling the win/loss scale and cancelling draw penalties. Matches
+  preserve house order and opponent; incomplete pairs excluded; no pairs reports interval unavailable.
+  Two consumer-visible regression cases added to existing `tests/test_match_score.py`; registered
+  `quantbot_match_score` in CTest (30 s).
+- **Evidence:** `/Users/stefan/Documents/projects/dunecity-results/ratio-sm/x9/` raw CSVs,
+  `analysis-report.txt`, compact `analysis/*.csv`; `c9-{sard,merc}/paired-report.txt`. Those paired
+  reports reflect the n=0 handoff, not future job completion. Rerun analysis over preserved rows, never
+  replay completed games. Learning and the 2-50% bounds are unchanged.
+- **Acceptance handoff:** no new local build, test run or cluster snapshot. Parent explicitly owns
+  combined `build-int`/cluster acceptance: full ctest including `quantbot_match_score`,
+  `quantbot_strategy`, all-against-Atreides and the ladder. No fresh 6/6 or non-regression claim.
+  Any accepted default later needs a positive 95% paired interval and at least 420 fresh
+  candidate-on-house games per house with both positions and identical opponent mixes.
+## 2026-10-24 — Ladder, team play and campaign partner: measured candidates (branch `fix/ladder-campaign`, worktree `~/Documents/projects/dunecity-ladder-campaign`; protocol 98, save 9871; no default changed; INCOMPLETE)
+
+Agent LadderCampaign2 (continues LadderCampaign, below). Results `~/Documents/projects/dunecity-results/ladder-campaign/`.
+Every candidate is a hashed `[Force Concentration]` switch; `scenario-matrix.py --style <play-style>` runs the on arm
+(every QuantBot plays `tests/ai/play-styles/<style>.ini`), `--compare CONTROL CANDIDATE` prints the paired A/B by game id.
+
+- **Controls are 852:** the switch-off build gives the same final digest as 1.0.852 on every common game (16 ladder/FFA/
+  team games, 96 campaign games v `regression-852/sm-full-852`), so the 852 runs `team-before` and `short-before` are the controls.
+- **Team (JoinAllyWaves, = variant 8; default off):** the "1/4" premise does not reproduce at 852: the Hard team already
+  wins 2v2 38-9-1 (+0.60 [+0.35,+0.81]) and 3v3 35-13 (+0.46 [+0.21,+0.71]) of 48 each. Paired A/B, 48 games/format:
+  2v2 +0.14 [-0.01,+0.33] (41-5-2), 3v3 +0.04 [-0.17,+0.25] (36-12): not above 0, so not a default. 2v2 extended to 96
+  games/arm (jobs 20261024T124128-lc-team2-off-b5a2a8 / -lc-team2-allyjoin-abbee4, same dirs): re-run `--compare
+  team-before team-allyjoin`; accept only if the 2v2 interval is above 0 (3v3 is not). Not worse elsewhere by construction:
+  inert without allies; 1v1 ladder and FFA games are digest-identical on/off (ident-off/ident-allyjoin, 26 games).
+  mp category on/off (54 each) running: 20261024T124350-lc-mp-off-9d7643 / -lc-mp-allyjoin-54282b.
+- **Variants 12 (4+8) and 14 (2+4+8)** (local, 12 games/cell): 2v2 9-3 / 8-4, 3v3 8-4 / 6-6 - no better than 8; not ported.
+- **Short ladder (not fixed):** HeavyFactoryFirst (Medium's fleet until the first heavy factory; was variant 512) was inert
+  (QB v QH 72 games -0.02 [-0.14,+0.11]; QH v QM 32 games +0.02); ArmyBeforeFleet (small starts keep Medium's fleet and the
+  configured 60% readiness instead of Swarm's 35% while not leading; inert from medium bases, so the long ladder is unchanged)
+  144 games: QB v QH +0.04 [-0.17,+0.26], QH v QM +0.03 [-0.19,+0.27]. Both removed. Control at 852: QB v QH +0.22, QH v QM
+  +0.23 (72 each); worst cell QH v QM rs-dunecity -0.18: Hard buys MCVs for a third yard (city_yard_target 3 v 2) and has
+  half Medium's army at minute 16; Hard always plays Fixed:Tuned,Swarm, Medium the 60% Base readiness. Next candidate: hold
+  the extra city yard / Swarm tempo on small starts.
+- **Campaign (not fixed):** Hard-partner campaign at 852, 192 games: 5 losses - vanilla Atreides m20 74708/75717, vanilla
+  Atreides m22 77735, DuneCity Atreides m22 76726, DuneCity Harkonnen m22 95897 (the task's "Harkonnen m22 95897" is the
+  DuneCity game; vanilla m17 80762 and vanilla Harkonnen m22 95897 win). m20 vanilla: the partner starts with a yard and
+  2,000 credits against two fortified Easy houses (16 rocket turrets, launchers, devastators); its 17 harvesters strip the
+  near spice by minute 18 (map 109k -> 43k), after which every safe field's route crosses enemy reach and the harvesters
+  disperse with no income; Medium and Brutal partners lose it too (DuneCity m20 wins both seeds). m22: two Death Hands
+  destroy the yard/refineries at minute 10-20. Measured: CampaignFactoryFirst (<= 4 harvesters until the first heavy factory)
+  -0.02 [-0.06,+0.03] (won m22 77735 and DuneCity Atreides m22, lost vanilla m18 81771, Atreides m22 76726, DuneCity Ordos
+  m22, a time-out) - removed. Local only, still lost m20: harvester safety off, readiness against the strongest enemy from
+  the start, 2x army limit, Palace priority.
+- **Tests:** cluster ctest 20261024T124335-ctest-ca3b9b at 6665f84c (protocol test expects 98) - read with `dunecity-queue report`.
+
+## 2026-10-24 — Ladder, team play and campaign partner: diagnosis + team harness (branch `fix/ladder-campaign`, worktree `~/Documents/projects/dunecity-ladder-campaign`, from staging 6fd861ae = 1.0.852; protocol 94 and save 9871 unchanged; INCOMPLETE)
+
+Agent LadderCampaign, stopped at the request budget. Only the measurement harness is on this branch; the candidate AI
+changes are on `exp/ladder-campaign-variants` (env switch `LC_VARIANT`, test-only, must not be merged as is).
+
+- **Harness:** `scenario-matrix.py` category `team`: 2v2 Random Skirmish 128x128 (75 min) and 3v3 160x160 (90 min),
+  medium bases, small armies, vanilla and DuneCity, QH team v QM team, every seed also `#swap` (controllers exchange
+  starts and houses); `--team-seeds 12` = 48 games per format; report prints the Hard team's seed-resampled score.
+- **3v3 cause (decision logs, 3v3 vanilla 86197 both sides):** the house set decides more than difficulty (team
+  S/F/M won both games). Hard's teamReady rule (opening over once the TEAM army reaches ONE house threshold) plus the
+  Swarm tempo (35% readiness) makes each Hard ally send 4-6k waves at minute 6.5 that die alone, while the three
+  Medium houses (60% readiness, FinishWhenLeading) converge on the weakest Hard house at minute 15-17.
+- **Short-map cause (telemetry, 24 QH v QM + 24 QB v QH games):** Hard/Brutal reach the heavy factory ~1.5-2 min after
+  Medium (DuneCity: 7 refineries by minute 10 v 6, HF 9.2 v 7.6 min; CY vanilla 9.0 v 7.5), because the larger
+  configured harvester limit (40/100 v 15) drives the opening refinery/worker push; in losses Hard never launches a
+  wave before Medium's 10-14k wave at minute 16-18. Brutal additionally launches its 2,500 starting army at 6 min
+  (opening cap 6,250 x 35% < starting army, so no opening hold).
+- **Campaign (852):** m17 80762 and Harkonnen m22 95897 now win (sm-full-852); new loss Atreides m22 77735 (partner starts
+  with 800 credits, builds four refineries and no factory in 9 minutes, dies at 19.9). Atreides m20 both seeds: a
+  Mercenary/Ordos front of 14 rocket turrets + Palace (Death Hand destroys IX/HF/refinery every 10 min), the partner's
+  harvesters disperse from minute 12, its first wave (8-14k) dies in mid-field, later waves trickle 1-4k.
+- **Local A/B so far (24 games each, vanilla team cells, not significant):** base 2v2 8-4 / 3v3 7-5; v2 (team opening
+  needs team army >= houses x threshold, Hard/Brutal) 7-5 / 7-5; v4 (defend allies' buildings within 64 tiles) 8-4 /
+  7-5; **v8 (join an ally's wave launched in the last 30 s, same objective) 11-1 / 8-4** - the candidate to measure on 48
+  games/format. Campaign m20 with v64 (partner army limit 2x strongest enemy incl. turrets, readiness from the start),
+  v128 (no trickle), v256 (Palace priority) and combinations: still lost 0/2 each.
+- **Remaining:** measure v8 (and v12/v14 results in `/tmp/lc-local/team-v*`) on the cluster (48/format), measure v512
+  (HF-first opening: Medium's harvester ceiling and no Brutal economy step until the first heavy factory) on the short
+  ladder (local baseline `/tmp/lc-local/short-base`: QB v QH +0.22 [-0.03,+0.44], QH v QM +0.23 [-0.05,+0.49]); turn
+  accepted variants into real code with protocol 98; m20/m22-77735 still need a fix; scenario-matrix before/after.
+  Cluster baselines submitted: jobs 20261024T095456-lc-team-before-3a471a, 20261024T101417-lc-short-before-27c8f8
+  (results `~/Documents/projects/dunecity-results/ladder-campaign/`). No ctest run.
+
+## 2026-10-24 — FFA finish, in progress (branch `fix/ffa-finish`, worktree `~/Documents/projects/dunecity-ffa-finish`, from staging 6fd861ae; protocol 97, save 9871 unchanged; NOT accepted yet)
+
+Agent FfaFinish. Evidence `~/Documents/projects/dunecity-results/ffa-finish/` (`base-*` = 1.0.852, `c1-*`, `c3-*`,
+`pal-*`, decision logs `diag-c1-9101`, `diag-c2-9101`, save `fixture/ffa-9101-c1-m35.dls`).
+
+- **Diagnosis (4P DuneCity Brutal, seed 9101 decision log, partial baseline samples):** the diagnosed survivors
+  are not zones-only remnants. They retain turrets, base structures and armies; in seed 9101 the last few
+  minutes of clearing follow the army's collapse. Known turrets account for 164/487 and 151/285 of Atreides'
+  hostile unit deaths during minutes 30–40 and 40–50; other/unknown shooters remain classified separately.
+  New waves join previously committed survivors, so new-dispatch percentages alone understate commitment.
+  This does not mean every unit is always attacking. See docs/formations.md for exact sample boundaries.
+  **Bug found:** from minute ~32 the leader's Construction Yard built nothing for 28 minutes: the Palace became
+  "overdue", `palaceOverdue` replaced every earlier choice (heavy factories for a funded backlog, zones, turrets)
+  with an unsiteable Palace, rejected each pass (no site); credits sat at the 48k storage cap. Baseline leaders
+  bank 36-63k at the limit.
+- **Commits:** 21f73a28 city zones keep no house alive (walls-like), a defeated house's zones are demolished,
+  defeat reported once; 0b3bd9cf automatic targeting ranks zones with walls, finishing objective ignores zones;
+  3b8fefec IX/Palace rules (and their overdue overrides) only choose a placeable site; harness: structure kinds,
+  capacity and completed structures per sample, `BALANCE_SAVE_AT_MINUTE`/`BALANCE_SAVE_PATH`,
+  `scenario-matrix.py --cell-seeds`. `exp/ffa-palace-only` f9b11643 = staging + the site gate alone (arm only).
+- **Measured so far:** baseline 4P self-play 13/21 time-outs, 6P cell 16/24; zones rule alone level (12 paired
+  4P seeds 9 v 9; 6P 17/24). Seed 9101 with the zone targeting: eliminations 37.0/41.3 min (baseline 46.7/52.7).
+- **Preserved acceptance:** cluster ctest 20261024T122735-ctest-c4ed92 at 3b8fefec completed **109/109**
+  (mini 88, Pro 21). Do not rerun it to confirm. This receipt predates the recovered regression below.
+- **Recovery source (no new builds/snapshots):** c38750c2 adds `quantbot_strategic_site_stall` with the existing
+  minute-35 fixture, restores its overdue timer at runtime and checks completed construction plus <=2-minute
+  all-yard idle/storage-cap plateaus. Shared staged execution exposed a real fixture precondition failure:
+  after load, a Palace site exists. The corrected fixture physically fragments only unoccupied ground into
+  at most two consecutive rock rows, retaining existing structures and smaller build sites, then keeps the
+  no-Palace-site assertion. Main must prove the corrected consumer and gate-removal negative control.
+  The original continuation-only test passed with and without the fix and is not accepted evidence.
+  71a4cf3d extends existing `--houses` for genuine
+  six-player self-play while preserving the four-player default and balanced assignments.
+- **Still collecting original jobs:** `pal-self4`/`pal-6p`, `c3-self4`/`c3-6p`, `c3-self4-nofl`, `c3-h2h`,
+  `c1-self4-120`; no resubmissions. The `*-6p` scenario arms are mixed QB/QH/QM/QE/AH/AM, not same-bot self-play.
+- **Open acceptance:** measured zones/FinishWhenLeading decision; actual six-house 24-seed same-bot arms;
+  Fortress, `/weak`, CY and the long-game ladder for the final siting fix. Zones elimination and targeting
+  remain explicitly unaccepted, not release defaults. Clean integration without them: use existing pure
+  site-gate commit f9b11643 plus c38750c2 and 71a4cf3d; parent reconciles protocol/history once.
+- **Completed Palace-only arms:** 4P self-play 15 -> 16/24 time-outs, mixed 6P 16 -> 17/24; no evidenced draw
+  cure. Corrected mean-house paired score deltas are 0.000 (-0.0156..+0.0156) and -0.0122
+  (-0.0330..+0.0052), respectively. These comparisons label missing final-tick deaths as imputed at actual end.
+- **Scoring harness correction:** the wave loop exits on `game.finished` before its callback sees the final
+  death. Reference/Palace-only 4P arms omit 9/8 final-loser timestamps, changing 18/16 score/drawn rows.
+  `VanillaMatch::recordEliminations` now observes the final state once after the loop; no extra simulation
+  tick, sample or save. Absent houses remain unknown, Natives excluded. Raw evidence stays unchanged.
+  Scope correction: standard `vanilla-match.py::placings` already imputes missing nonwinner deaths before
+  `--report` scoring. Only raw timestamp/place fields and direct consumers that omit that recovery are
+  wrong; existing standard FFA/RatioSM reports are not invalidated. The 18/16 changed score rows compare
+  recovered inputs against a naive raw-data calculation, not against the existing standard report.
+## 2026-10-24 — Movement correction made a same-build comparison rule (not accepted)
+
+- Parent Codex continued the paused `UnitMovement2` edits in this existing source-only lane; history and prior measurements are retained. No new worktree or private build.
+- `[Game Options] Continuous Ground Steps` / `continuousGroundSteps` is hashed and persisted in MOD9 settings. Off retains the 1.0.852 simulation plus its draw-only scope; on selects both stale-stop-flag and missed-route-tick fixes. Default remains **off** until original AAA acceptance is resolved.
+- Save **9874**, protocol **103**, app version unchanged. Older MOD8 settings retain the off behavior; an announced but truncated MOD9 extension fails closed.
+- `scenario-matrix.py --game-options` now overlays each cell's own INI rather than replacing the mandatory AAA setup. Relative on inputs are `tests/ai/continuous-ground-steps-on.ini` (matrix) and `tests/ai/continuous-ground-steps-ffa-on.ini` (frozen FFA setup). Use separate results directories for off/on.
+- Contract coverage concerns match identity, save round-trip, legacy boundaries and truncation; copy-forwarding/default-literal assertions were removed rather than re-pinned.
+- Mod-key parsing is included beside `Plan Building Sites`, with the existing player-choice precedence. Shared integration still must reconcile the combined protocol/save constants, build only shared `build-int`, exercise actual off/on paths and run unchanged acceptance. No new build, test or game run has been claimed for these edits.
+
+## 2026-10-24 — Unit movement: chained steps fixed in the simulation (branch `fix/unit-movement`, worktree `~/Documents/projects/dunecity-unit-movement`, from staging 6fd861ae = 1.0.852; protocol 95, save 9871; IN PROGRESS, not merged)
+
+Agents UnitMovement / UnitMovement2. Stefan: "i want the unit movement bug fixed". Evidence `~/Documents/projects/dunecity-results/unit-movement/`
+(`trace-summary.json`, `effects-*`, `crush-*`, `motion-probe-*`, `aaa-*`, `ffa-*`, `strategy-cluster-*-logs`, paired-analysis scripts beside them).
+
+- **Sim fix (9f4f492b):** `UnitBase::moveDynastyStep` clears `justStoppedMoving` (a step chained on the cycle the
+  previous one ended kept it: snapped to the tile centre every cycle, still then a whole-tile jump); `UnitBase::navigate`
+  resyncs a route tick more than one tick old (missed during a carryall wait) to its cadence. One step-start site
+  (`navigate`); every Dynasty ground step moves through `moveDynastyStep` (UnitBase/InfantryBase::move): plain steps,
+  formations, carryall drops, harvesters, infantry. `UnitBase::DrawnStepScope` removed (dead: the sim is what is drawn).
+- **skipping.dls** (3,750 cycles from 85,728, stepped, simulated positions): half-tile-or-more jumps per cycle 132 -> 8
+  (harvesters leaving refineries, a trike leaving its factory, the first traced cycle), mid-step holds 121 -> 0 (Tanks 101 -> 0).
+- **unit_motion_probe** now checks the simulation alone (plus `held_mid_step` and the restored carryall-wait tank): fix 0
+  violations; old sim 135 cycle violations, 226 stalls, 6,803 held cycles, 118 frame tile jumps.
+- **Speed:** 12-tile routes, 14 types x straight/diagonal x sand/rock x 16 legs: identical cycles in all 56 groups
+  (`tests/units/run-movement-effects.py`).
+- **Crushing:** controlled arena (tracked vehicles through enemy infantry, 10 game minutes, no weapon deaths): rock 63 -> 66,
+  sand 49 -> 49 kills (3,393 / 19,513 held cycles before, 0 after). Real games (new harness column `crush_kills`): All
+  against Atreides about 1 crush per game either way. Not a factor.
+- **Carryall-wait catch-up:** after a 400-cycle wait ending without a lift, before: Tank 24 tiles in 60 cycles (64 world
+  units per cycle); after: 1 tile, at most 2.3 units per cycle.
+- **All against Atreides, completed 60-seed cluster comparison:** 1.0.852 game code (13c29c5d, harness-only additions)
+  versus movement fix (9f4f492b / 666c53bf; no AI change). Wins within 40 min: **57/60 -> 52/60**;
+  median winning time **35.4 -> 34.8 min**. Paired win-rate difference -0.083, 95% bootstrap [-0.167, 0.000];
+  Atreides placement-score difference -0.113 [-0.237, +0.008] (`match_score`, draw -0.25). The scoring rule calls
+  this level; it does **not** establish noninferiority. Fixed six: 6/6 -> 5/6; 906213928 still times out.
+  Jobs `20261024T111817-um-aaa-before60-aabee5` / `20261024T111809-um-aaa-after60-093f8c` added 36 games to each
+  original 24. All per-seed outcomes are in `aaa-before` / `aaa-after`, reproduced by `aaa_paired.py`.
+- **Saved failure diagnosis (no rerun):** 906213928's retained `events.jsonl` first differs in learned production
+  weights at minute 9.994; combat-kiting decisions differ by 10.014. Enemy army is already 69.9k versus the old
+  game's 46.4k at minute 20. The 137 base-scramble records start only at 23.35, stop at 33.44, include 69 with
+  zero new responders, and total 466 responder assignments (not 137 army recalls). Finish waves still launch at
+  36.20 / 38.92, with 94 / 69 units and no launchers held by defence. Enemy structures keep falling, 931 at
+  minute 34 -> 671 at 41 (includes walls/concrete). No persistent stale-defence lock is demonstrated.
+- **12-seed FFA, completed:** rs160-dunecity, four Brutal QuantBots, 45-min limit: decided 2/12 -> 4/12, mean end
+  43.6 -> 42.1 min. Game-mean placement-score paired difference +0.026 [-0.052, +0.099], level. The final defeated
+  house can lack its elimination event; `ffa_paired.py` uses `vanilla-match.placings`' end-time fallback.
+- **quantbot_strategy, cluster:** current three-seed test passes on both builds. Twelve individual main-seed
+  probes plus twelve margin-only probes per build: baseline job `20261024T111949-ctest-bdc04e` 11/25 passed;
+  fix job `20261024T111937-ctest-40f2d0` 14/25 passed. Single-seed full probes pass 3/12 -> 4/12; saved failures
+  are Bounded not drawn (both seeds 11/99), Air availability/quantity, Infantry quantity, or single-seed margins.
+  All seven mixes' twelve-seed mean lead margins are positive; three-seed mean fails 5/220 -> 8/220 seed triples.
+  Details in `docs/unit-route-comparison.md`; saved run logs and `strategy_cluster.py` retain each diagnosis.
+- **Acceptance remains blocked:** full cluster ctest `20261024T104919-ctest-c7a6bb` is **108/109**, only
+  `quantbot_all_against_atreides` fails (both machines). Its six-of-six criterion and 40-min limit are unchanged.
+  The proposed five-of-six plus median criterion was not adopted: the interval crossing zero is not evidence
+  that the fix is no worse. Parent will decide acceptance in the one shared integration build.
+- **Long-game ladder still queued:** existing jobs `20261024T112050-um-ladder-before-0983dd` /
+  `20261024T112050-um-ladder-after-fb033c`, 720 games each (144 per pair; 18 seeds x both houses x four long maps).
+  At recovery collection: 0/720 baseline, 24/720 fix; no full ladder verdict. No resubmission or local build.
+
+## 2026-10-24 — local 1.0.852 (local 1.0.851 + main with Vuk's public 1.0.851) verified and installed on the MBA
+
+main had moved to 6b269b55: Vuk published **v1.0.851** (PR #102, Classic Desert pixel UI default, Lapis Enamel and
+Modern selectable; no simulation/protocol/save change; Windows near-macro rename in QuantBotBlob/QuantBotForce;
+Mac release gated on UI/perf/AI tests) and Android 0.2.30; website: New-in 1.0.851 prose (0f54191), Android links
+(2aa0134), .gitattributes for browser hashes (13aeaa3). Our local 1.0.851 (protocol 94, save 9871) shares that
+version number but not its code, so staging merged origin/main (88125d5a, HANDOVER-only conflict: both histories kept)
+and bumped to 1.0.852 (1d87654c). Cluster ctest job 20261024T091821-ctest-4ddc77: 109/109 (mini 65, pro 30, pc 14).
+Package: executable SHA256 553c8a6701efe54d9a2a334dce0454126cdb3919812cd7cf088eff48b2b612db, no Homebrew/local links,
+Righteous font bundled, signature and runtime check passed. Installed on the MBA 2026-10-24 09:27 AEDT by
+`/tmp/push-dunecity-1.0.852.sh`; previous app copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.852-20261024-092710/`.
+Not pushed or published.
+
+## 2026-10-23 — local 1.0.851 verified and installed on the MBA
+
+1.0.850 + `integrate/851-trial` 092fdc60 (feat/natives-house incl. fix/spectator-game-end, fix/city-airplane,
+fix/unit-jitter render-only squash) + version bump 4f96921e + `fix/natives-probe-851` 58a507ef (earlier releases'
+Vanilla/Dune City saves load as the shipped mod; the mod.ini version stamp changed their fingerprint). Protocol 94,
+save 9871. Cluster ctest at 58a507ef (job 20261022T234702-ctest-dbb27f): 108/108. Package from build-int at 78bc0061:
+executable SHA256 048778cc4e591f5ef20288dd8b34754a8db0dfa5fb84f40fe6a972d17372715a, no Homebrew/local links,
+signature and runtime check passed; zip `/tmp/dunecity-1.0.851-macos.zip`, installer `/tmp/push-dunecity-1.0.851.sh`.
+Not merged: fix/dynasty-step-stale-stop (sim fix, changes outcomes), fix/turret-air-range (Stefan kept the 3x). Not pushed.
+Installed on the MBA 2026-10-23 18:53 AEDT by `/tmp/push-dunecity-1.0.851.sh` (same SHA256, signature and runtime
+check passed); 1.0.850 copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.851-20261023-185357/`.
+
+## 2026-10-22 — 1.0.851 release blocker: natives_probe save9868 hung loading the 1.0.850 fixture (branch `fix/natives-probe-851`, worktree `~/Documents/projects/dunecity-natives-851`, from staging 4f96921e = 1.0.851; protocol 94, save 9871 unchanged)
+
+Agent NativesProbeFix. Evidence `~/Documents/projects/dunecity-results/natives-851/`.
+
+- **Cause (game, not probe):** Vanilla and Dune City stamp the running game version into their `mod.ini`
+  (`ModManager::writeModInfo`, rewritten on every release by `vanillaNeedsReseed`/`dunecityNeedsReseed`), and that
+  file is part of the Workshop revision a save pins. After 1.0.850 -> 1.0.851 the fixture's pinned vanilla revision
+  `0eb2188e` no longer matched the installed one (`c670c2d2`; identical files except `Game Version`), so
+  `WorkshopGameContent::resolveMod` found no store copy in the fresh profile and called
+  `Workshop::downloadWithProgress`: a modal menu, failing because approved mods are never uploaded, waiting for
+  "Back". Backtrace at the hang: `MenuBase::showMenu <- Workshop::downloadWithProgress <- resolveMod <-
+  Game::loadSaveGame <- Game::initGame <- runNativesProbe`. 092fdc60's build (1.0.850) passes the same case in 5 s.
+- **Players:** every release did this to Vanilla/Dune City saves. With the old revision in their own store they
+  loaded under a duplicate `ws-<hash>` copy (Stefan's MBA: 14 copies); without it (save from another machine,
+  cleared cache) the load ended in a failed download dialog and "The exact mod version ... could not be loaded".
+- **Fix:** `GameInitSettings` records the saving release (save header; runtime only, never serialized or sent).
+  `Workshop::bundledModHashAtGameVersion` hashes the installed shipped mod with its `mod.ini` stamp changed back in
+  place (`Workshop::contentHash` = capture's hash without storing). `resolveMod` runs the shipped mod when that is
+  the pinned hash and re-pins the game to the current stamp; otherwise store, same-bytes mods, download as before.
+- **Real save:** MBA `skipping.dls` (released 1.0.850, Dune City, 425 units) in the 1.0.851 build headlessly with
+  the MBA's `mods/dunecity` and no Workshop store: loads as shipped `dunecity`, 600 cycles, re-saved 9871 reloads;
+  the unfixed build hangs in the download there, and with the store loads as `ws-827b6ce8...`. Not fixed: a fresh
+  profile writes `mod.ini` in another layout than the MBA's legacy one, so that save still needs its revision.
+- **Tests:** `dunecity-queue ctest` job 20261022T234702-ctest-dbb27f at 58a507ef: 108/108 passed (mini 61, pro 34,
+  pc 13), natives_probe 13.8 s. New `[workshop]` contentHash case; readSaveSetup records the saving release.
+
+## 2026-10-22 — 1.0.851 integration trial: Natives house + city airplane + unit jitter (branch `integrate/851-trial`, worktree `~/Documents/projects/dunecity-int-851`, from staging afb2315c = 1.0.850; protocol 94, save 9871; no version bump yet)
+
+Agent Integrate851. Evidence `~/Documents/projects/dunecity-results/int-851/`.
+
+- **Merged in order:** `feat/natives-house` d23806d9 (with `fix/spectator-game-end` 9d16268e), `fix/city-airplane`
+  831b1060, then `fix/unit-jitter` edbc0121 as a squash of its net diff from afb2315c: that branch sits on
+  `fix/dynasty-step-stale-stop` 036776cb (sim fix, protocol 92, not accepted) and takes its simulation changes back,
+  so a true merge would have marked the excluded branch as merged. Not merged: `fix/dynasty-step-stale-stop`,
+  `fix/turret-air-range`.
+- **Conflicts:** HANDOVER (all entries kept), `NetworkPacketTypes.h` and `NetworkManagerTestCase` (93 v 90) resolved
+  to one protocol **94** with history for 89 (spectator end, no bump), 90, 93 and 94. Save 9871 (Natives) unchanged.
+- **Cross-branch:** a shot-down plane's Death Hand hits Natives worms and troopers exactly as a Palace Death Hand on
+  the same spot (worms 1000 -> 780/994 in reach, troopers in reach destroyed, out of reach untouched) and every
+  kill is credited to the house that shot the plane down (Natives itself when a crime trooper does it). The
+  anti-air hold-fire guard (`AmbientAirplane::crashWouldHit`) now never counts Natives objects as own side: before,
+  a team-0 shooter (a crime trooper, or a custom map's anonymous team-0 house) held fire over Natives worms/troopers.
+  New `city_aircraft_probe` phases `crash_natives`, `anti_air_natives`.
+- **Tests:** `dunecity-queue ctest` job 20261022T223709-ctest-573408 at fbba9ef2: 108/108 passed (mini 55, pro 38,
+  pc 15), incl. natives_probe, unit_motion_probe, city_aircraft_probe, spectator_game_end_probe, perf_regression,
+  quantbot_ffa_army_deploys, quantbot_scenario_matrix (smoke PASS). `run-menu-probe.py --size 1024x768 --size
+  640x480` passed locally (build `build/`, check-build-deps before/after).
+
+## 2026-10-22 — The Natives house: every sandworm and every city-crime trooper belongs to a hidden non-player house (branch `feat/natives-house`, worktree `~/Documents/projects/dunecity-natives`, from staging afb2315c = 1.0.850 + merged `fix/spectator-game-end` 9d16268e; protocol 93, save 9871; not released)
+
+Stefan: "make any spawned troopers due to crime and make all worms belong to 'natives' house - a new house that isn't
+selected. when the game is starting change the tagging of all sand worms to 'natives' - to stop worms showing up as being
+owned by players". Agents NativesHouse (killed by the omp restart, work uncommitted) and NativesHouse2.
+
+- **The house:** `HOUSE_NATIVES = 12` (`NUM_HOUSES` 13, `NUM_PLAYER_HOUSES` 12 = the houses a player can hold;
+  `isPlayerHouseID`, `House::isNatives`). Created on first need by `Game::getOrCreateNativesHouse()` (team 0 = the
+  engine's non-participant team: hostile to every lobby team 1-9, always "alive", ignored by every win/lose check; no
+  players, no AI, no credits, no base, the map-size unit limit). Name "Natives", own colour slot `HOUSECOLOR_NATIVES`
+  (leather-brown private ramp, radar `ff548cc4`), ObjectData suffix '?' (plain `[Unit]` values). Not selectable or
+  listed: `isHouseAvailable`/`isCustomGameHouseAvailable` false, `getHouseByName("Natives")` invalid (maps cannot name
+  it), `GameInitSettingsPolicy::isKnownHouse` and the reserved colour refuse it in lobby packets, `CommandAuthorization`
+  refuses every command on its objects, observed-house selector/Stats/City budget never browse to it, Custom Game and
+  campaign statistics, FeedbackWindow, analytics roster, skirmish generator starts, Chaos Factory catalogue and
+  special-bloom rewards skip it. The inspect panel of another house's object now names the owner ("Natives").
+- **Conversion points:** `ObjectBase::createObject(Unit_Sandworm)` always builds the worm for Natives (maps,
+  reinforcements, mods, any house); `INIMapLoader::loadUnits` places worms through Natives (no anonymous house is
+  created for the house a worm line names); `Game::initGame` runs `retagSandwormsToNatives()` after every map load
+  (campaign, skirmish, Random Skirmish, custom, multiplayer, map-editor test); `Game::loadSaveGame` runs it for saves
+  before 9871 (`UnitBase::transferOwnership`: owner + original house, counts moved without a loss or build);
+  `CitySimulation::raiseCrimeTroopers` (the crime effects scan) raises troopers for Natives only, still only while
+  the city has an opposing house with a base.
+- **Save 9871 / protocol 93:** object data, house table and each tile's explored/last-seen state carry the
+  thirteenth house; a 9868 save loads its twelve, Natives' stats come from the active ObjectData.ini, its worms convert.
+  City per-house state stays at twelve slots (`kMaxCityHouses = NUM_PLAYER_HOUSES`, layout unchanged).
+- **AI:** QuantBot/AIPlayer/CampaignAIPlayer/Mentat ignore Natives in enemy sightings and threat estimate (FFA strongest
+  team, outnumbered gate), weakest-house finish target, team army, survey/fronts/hunt-party contact and superiority,
+  base-strike/house choices, Brutal coalition count, spice competitors, campaign required army and "human attacked"
+  triggers; local targeting (Hunt, guard, turrets) still fights worms and troopers. The QuantBot update ring stays at
+  twelve slots (decision cycles unchanged). Worms no longer count toward any unit cap (`House::is*UnitLimitReached`),
+  so a worm-heavy map does not stop crime troopers.
+- **Win/lose:** the merged spectator end (`survivingTeams`) and the analytics winner skip Natives explicitly as well as
+  team 0; House::lose never runs for it.
+- **Tests:** new `natives_probe` (`tests/natives/`, fixture `data/worms-9868.dls.gz` written by the probe's `--baseline`
+  make-save case on afb2315c): worms Natives' on vanilla Equilibrium (135, written as a played house's), DuneCity
+  Habbanya-Penny (no Fremen house conjured), a Random Skirmish INI worm, a worm a player house spawns, campaign
+  Atreides mission 5, and the 9868 save (47, Harkonnen- and Mercenary-owned there) and its 9871 re-save; crime troopers
+  Natives', hunting the unrest building, absent from QuantBot's threat estimate, still rising above a worm-filled unit
+  limit, kept through save/reload, fought off within seconds; hidden from house lists/selector/statistics; a played
+  game won and a spectated game ended on the last real team with Natives units alive; inspect panel says "Natives",
+  radar draws its colour. Unit tests pinned to protocol 93 / save 9871 / 13 houses, Natives lobby colour and command
+  authorization cases; `stats-ui-probe.inc` no longer picks the unbrowsable Natives house.
+  Cluster ctest at a9ec4cc3 (`dunecity-queue` job 20261022T211117-ctest-0919c1): 104/107 passed including
+  perf_regression, all_against_atreides, ffa_army_deploys, scenario_matrix, menu_navigation_probe, both bundled
+  startups, spectator_game_end_probe, skirmish_generator_probe, campaign tests; the three stats_ui tests hung on the
+  Natives house (probe loop, fixed after) and pass at HEAD.
+- **Open risks:** troopers an older save's crime raised cannot be told from a house's own and keep their owner (only
+  worms convert); a mod or map that relied on owning worms (e.g. worm reinforcements for a house) now gets Natives
+  worms, which also eat that house's units; anonymous team-0 houses a custom map creates for unlisted unit owners share
+  team 0 with Natives (they and Natives do not fight); Tornie's houses (Rebels 7, guests 9-11) are unchanged and
+  Natives draws through its own private colour ramp, not a Custom_IBM.PAL slot (Rebels' 192-199 untouched); crime
+  troopers no longer trigger a campaign AI's full-scale attack.
+
+## 2026-10-22 — Spectated games end when decided (branch `fix/spectator-game-end`, from staging afb2315c = 1.0.850; protocol 88, save 9868 unchanged; not released)
+
+Stefan: "when there is a winner and player is spectating the game should end." Agent SpectatorEnd, worktree
+`~/Documents/projects/dunecity-spectator-end`. Write-up: `docs/skirmish-generator.md`, Spectate, "The end". Evidence
+`~/Documents/projects/dunecity-results/spectator-game-end/` (baseline and fixed probe summaries, screenshots, ctest.log).
+
+- **Cause:** `Game::setGameWon/Lost` return for an observer (1.0.817 "keeps watching"), and House::lose() judges the
+  game only relative to pLocalHouse's team (for an observer a view anchor). A spectated match, offline or network,
+  therefore never ended; nor did a player's whose house was out on a map without WinFlags 2 (Equilibrium, WinFlags=1).
+  Quota counted pLocalHouse only; the time limit called the no-op setters.
+- **Fix:** a view without a side (`Game::watchesWithoutSide`: observer, or the local team all dead; never Campaign /
+  CampaignCoop) ends through `Game::setWatchedGameOver(team)`: after every House::lose()
+  (`checkWatchedGameDecided`: one team or none left among team != 0, with an elimination WinFlag), any house's quota
+  (observers), or the time limit (draw unless one team is alone). Shows "House X has won" / "Team N has won: A and B"
+  / "Time is up - no winner" on a plate framed in the winner's colour instead of "You Have Completed/Failed Your
+  Mission.", the usual six-second end, then Custom Game statistics with the same line in the winner's colour (also for
+  skirmish-type games instead of a debriefing), then the menu. A decided spectator whose host then leaves ends
+  normally (no "connection interrupted"). Telemetry `game_summary.local_result` = `watched_to_end`, `winner_team`.
+  Players' rules unchanged. Runtime-only state; `finished` is local, nothing simulated changes: no protocol or save bump.
+- **Reproduced** (`run-game-end-probe.py --baseline` on afb2315c): every spectated case still running 3,750 cycles
+  after the last enemy went out (vanilla/DuneCity FFA and 2v2, quota, time limit, the eliminated Equilibrium player,
+  the observer beside two players) and a natural Brutal-vs-Easy spectated 1v1 decided at 3.8 minutes never ended.
+- **Tests** (Release `build`, check-build-deps before/after): new `spectator_game_end_probe` (cases above + played
+  control: win on the last enemy, loss on its own house, own-quota rule, digests identical to baseline; multiplayer:
+  host loses at 212, guest wins at 273, spectator ends at 273, one state digest for all three); `ctest -j3` of
+  dunelegacy_tests, formation_planner_tests, formation_movement_probe, game_command_regressions, rts_controls_probe,
+  preplace_queue_probe, skirmish_generator_tests, skirmish_generator_probe, save_scenario_export,
+  network_wire_harness, menu_navigation_probe, all 35 quantbot_* (incl. all_against_atreides, ffa_army_deploys,
+  scenario_matrix), local_spectator_* (5), observed_startup_unplaceable_unit, spectator_game_end_probe: 53/53 passed
+  (855 s); perf_regression alone passed (89 s).
+- Not exercised: a real two-process network spectator over WebRTC (`tests/network/run-late-join-probe.py` needs the
+  local PHP service); the in-process probe uses the same `isObserving()` path. A spectator lagging more than the
+  six-second end behind a host that leaves still gets the old "connection interrupted" message.
+
+## 2026-10-22 — City airplane: straight legs, 16 headings, shot down = Death Hand (branch `fix/city-airplane`, from 1.0.850 afb2315c; protocol 90, save 9868; not released)
+
+Agent AirplaneFix2 (continuing the interrupted AirplaneFix work). Stefan: "stop the plane from turning eratically ...
+also when the plane gets shot down it should make the equivalent of a nuclear missile attack".
+
+- **Cause of the zig-zag:** the plane steered with Micropolis `turnTo(getDir())`. `getDir`'s table never answers due
+  east/west (`dispY * 2 < dispY` never holds), so for any waypoint under ~63 degrees off the horizontal it flipped
+  between NE and SE (NW/SW) as each 45-degree step crossed the line: 45-degree legs ~2.5 tiles long.
+- **Steering:** `CityAircraft::airplaneSteer` (CityAircraftPolicy.h) keeps a continuous FixPoint heading, turns at most
+  the original 45 degrees per turn step, lands exactly on the bearing, ignores <2.8-degree noise and holds course
+  while the straight course already passes within half the arrival distance of the waypoint. Speeds on the 8 original
+  headings are unchanged; the in-between ones use the mean axis/diagonal magnitude.
+- **Art:** `city_airplane.png` is 8x5 cells: row 1 holds 8 in-between headings rotated 22.5 degrees from the original
+  axis frames by `scripts/import-micropolis-aircraft.py` (Scale2x x3 + nearest rotation, only original colours,
+  `--check` reproducible); take-off rows moved to 2..4 (`airplaneTakeoffRow`). Drawn on the nearest of 16 headings.
+- **Crash:** `AmbientAirplane::handleDamage` -> `crash()` -> `Bullet::detonateDeathHand` (the Palace missile's own
+  impact, factored out of `Bullet::destroy`: 17 centres, radius 2 tiles, damage 200, explosions, shake), credited to
+  the shooter, friendly fire as for the Death Hand. Leaving the map / landing never reaches it.
+- **AI risk (checked):** turrets and launchers target planes automatically, and planes fly random waypoints across
+  the whole map, so without a guard every plane crossing a defended base would be shot down onto it (a Death Hand on
+  your own turrets: 200 damage on every structure under a blast centre, units within 2 tiles of one). Guard:
+  `AmbientAirplane::crashEndangers` in the canAttack of RocketTurret, Launcher, EliteLauncher, Trooper, Scoutpost -
+  hold fire while the crash, here or anywhere along the course a turret rocket would need to reach it, would hit its
+  own team (exact Map::damage rules: centre on a structure footprint, unit within the radius). Re-checked every cycle
+  (UnitBase/TurretBase drop a target that fails canAttack), so a plane flying onto the base is released; a rocket
+  already in flight cannot be recalled (that is what the lead covers). QuantBot's air defence assigns only via canAttack.
+- **Probe** (`city_aircraft_probe`, new phases; `--phases` to select): straight legs before -> after: 48 fixed legs
+  0.181 -> 0.017 heading changes per tile, reversals 327 -> 0 (legs with a reversal 42 -> 0); natural flight 0.374 ->
+  0.023 changes per tile, 18 -> 0 left-right oscillations. Crash: every witness's HP equals a Death Hand on the same
+  spot, same kills (+ the plane), 17 explosions; departure: no blast, no damage, no kill; anti-air: open ground fire,
+  own wall 3 tiles off fire, 2 tiles off hold, owner's side fire, inbound hold, outbound fire.
+- **Frame strips:** `tests/units/city-airplane-frame-strip.py` renders a probe trace (`flight-path-*.csv`,
+  `straight-legs-*.csv`). Before/after PNGs, probe CSVs and the FFA sweep are in
+  `~/Documents/projects/dunecity-results/city-airplane/`.
+- **quantbot_ffa_army_deploys reworked (Main's call):** on this branch seed 9101 had nobody eliminated by minute 45
+  (it was 26.9 with only the steering change). A 12-seed sweep (9101-9112, 45-minute cap; control = planes shot
+  down as before, no blast, no hold-fire) found the same rate: eliminated by minute 30 in 6/12 control v 5/12 final,
+  0-2 planes shot down per game. So it was chance, not a regression. The deploy checks (30+ wave by minute 8, reserve
+  not >6 minutes at home) still run on 9101. The elimination check now passes when at least one of 9101, 9103,
+  9105 (three games in parallel inside the test) has a house eliminated by minute 30. 1.0.847's stuck army still
+  fails, because its waves never leave. Rationale is in the runner docstring, the CMake comment and docs/formations.md.
+- Crashes log `City airplane of house H shot down at x,y by house S (cycle C): Death Hand impact`.
+- **Tests** (c56ba0b0): `dunecity-queue ctest` job 20261022T215443-ctest-5f17fe, 105/105 passed (pro/pc/mini),
+  incl. dunelegacy_tests, city_aircraft_probe, perf_regression, quantbot_ffa_army_deploys (9101 none, 9103 21.3,
+  9105 25.8 min) and every quantbot_*. `import-micropolis-aircraft.py --check` reproduces the sheet.
+- `platform/web/package-lock.json` (git+ssh URL from a local npm run) is left uncommitted on purpose.
+
+## 2026-10-22 — Unit jitter: chained Dynasty steps drawn moving (branch `fix/unit-jitter`, worktree `~/Documents/projects/dunecity-unit-jitter`, from 1.0.850 afb2315c; protocol 88, save 9868, simulation unchanged; not released)
+
+Agents UnitJitter (killed by the omp restart) and UnitJitter2. Stefan: "occasionally some units jump from one tile to
+the next instead of showing the animations" (`skipping.dls`, 1.0.850, 2 ms game speed). Write-up:
+`docs/unit-route-comparison.md`, "Drawing chained steps". Evidence `~/Documents/projects/dunecity-results/unit-jitter2/`
+(save traces, `trace-summary.json`, probe runs); the save's mod revisions are in `../unit-jitter/save-profile`.
+
+- **Cause:** a Dynasty step that starts on the cycle the previous one ended keeps `justStoppedMoving`, so
+  `GroundUnit::checkPos` holds the unit on its tile centre every cycle of the step: drawn as simulated it stands still
+  for half a step, jumps a whole tile, stands still again. In the save: Tanks driving diagonally over rock, every tile.
+- **Fix (render only, Main's decision):** `Game::drawScreen` holds `UnitBase::DrawnStepScope`, which draws such units
+  at their step's interpolation and restores the simulated position afterwards. Stepped save trace and digests are
+  identical to 1.0.850 (digest cf73fa59e7d63c5b at 89477).
+- **Save traces** (3,750 cycles from 85,728; ground units, moves under 200 world units): drawn whole-tile moves per
+  rendered frame (main loop, 8.3 cycles/frame) 127 -> 9; held units 118 -> 0, Tanks 104 -> 0. The 9 left are
+  harvesters/a raider trike reappearing from a structure.
+- **unit_motion_probe** (new ctest): 2 ms main loop with frame pacing (5 cycles/frame, 1-10), phase-aligned shuttles
+  so steps chain; checks drawn positions per cycle and per frame. Render fix: 0 violations, 113 chained steps, 6,782
+  held cycles drawn moving, max 3.44 px per frame. Drawn as simulated (1.0.850, plus a carryall-wait case since
+  removed): 136 cycle violations, 227 mid-step stalls, 118 whole-tile frame jumps.
+- **Not fixed here:** a unit whose carryall wait ends (missed route ticks) moves a tile per cycle until caught up (once
+  in the save). Sim fix for both faults: branch `fix/dynasty-step-stale-stop` 036776cb (protocol 92) - shifts
+  trajectories (`quantbot_all_against_atreides` 4/6, `ffa_army_deploys`, `strategy` fail; the route part alone also
+  flips the same two seeds). Effective speed is the same with and without it (chained Launcher/Sonic/Deviator: 1,804
+  cycles per 29 sand tiles both ways); extra crushing not measured. For Stefan to decide.
+
+## 2026-10-22 — 1.0.850 published to production
+
+PR #101 (`agent/release-1.0.850` = staging 5ea7ad44, notes `releases/desktop/1.0.850.md` covering 1.0.843-1.0.850)
+passed CI and was merged with `--admin` as main b5b83abf; tag v1.0.850. **Build Dune Legacy** 39689107720 succeeded:
+GitHub release v1.0.850 (latest, 13 assets: EXE, Windows ZIP, DMG, macOS ZIP, AppImage, DEB, RPM, tar.gz, three
+updates-*.txt feeds and two appcasts; the macOS feed names 1.0.850). Website: release job commit 9c9eb29 (download
+links, changelog.html with the 1.0.850 notes), New-in prose 54dba60 on index.html and dune-city.html, Deploy to Droplet
+succeeded; live pages show "New in 1.0.850", v1.0.850 DMG links and `#v1.0.850` on changelog.html. **Sync SourceForge
+release** 39694353449 succeeded. **Publish browser build** 39694353427 pushed 133735b; live `play/build.json` is
+1.0.850 (sourceCommit b5b83abf), dunecity.wasm 200.
 ## 2026-10-25 — 1.0.855 release publication
 
 PR #108 merged at 4f434241ee4a507dddf255703d5bf342705741ab. Stable tag
@@ -156,7 +896,6 @@ Proceed as 1.0.853 with automatic text detection and LF checkout policy, preserv
 binary assets. A real Git clone regression covers both core.autocrlf settings and
 binary preservation. User authorized Android 0.2.31 using a hosted runner too;
 retarget that unpublished APK to engine 1.0.853 and recheck canonical Git bytes.
-
 ## 2026-10-24 — 1.0.852 publication authorized
 
 User authorized publishing the verified Linux audio fix, updating repository,

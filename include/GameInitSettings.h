@@ -251,6 +251,11 @@ public:
         mapRevisionHash = hash; mapRevisionVersion = version; mapRevisionManifest = manifest;
     }
     void setModIdentity(const std::string& name, const std::string& checksum) { modName = name; modChecksum = checksum; }
+    /// VERSION of the build that wrote the save these settings were read from; empty for a new
+    /// game. A shipped mod's pinned revision carries that release's stamp in its mod.ini (see
+    /// WorkshopGameContent::resolveMod). Like localSpectator: never serialized, never transmitted.
+    const std::string& getSavedGameVersion() const { return savedGameVersion; }
+    void setSavedGameVersion(const std::string& version) { savedGameVersion = version; }
     inline void setGameSpeed(int gameSpeed) { gameOptions.gameSpeed = gameSpeed; };
     inline void setImmortalHumanPlayer(bool immortal) { gameOptions.immortalHumanPlayer = immortal; };
 
@@ -304,6 +309,7 @@ private:
 
     std::string modRevisionHash, mapRevisionHash, mapRevisionManifest;
     Uint32 modRevisionVersion = 0, mapRevisionVersion = 0;
+    std::string     savedGameVersion;          ///< Local-only; see getSavedGameVersion().
     HouseInfoList   houseInfoList;
 };
 

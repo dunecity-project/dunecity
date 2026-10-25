@@ -52,6 +52,19 @@ public:
     void update();
     void destroy(Uint32 interceptedAirUnit = NONE_ID);
 
+    /// Damage radius around each of the Death Hand's blast centres.
+    static constexpr int deathHandBlastRadius = 2*TILESIZE;
+    /**
+        The Death Hand impact at `impact` (world coordinates): Dynasty's seventeen
+        blast centres (DynastyProjectile::deathHandBlast*), each damaging
+        deathHandBlastRadius around it on behalf of `shooterID`/`owner`, with the large
+        explosions, sound and screen shake. The Palace's missile lands through here
+        (Bullet_LargeRocket), and so does a city airplane that is shot down
+        (AmbientAirplane::crash), so the two cannot drift apart.
+    */
+    static void detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
+                                  const DeviationReward::Provenance& provenance);
+
     inline int getBulletID() const { return bulletID; }
     inline FixPoint getRealX() const { return realX; }
     inline FixPoint getRealY() const { return realY; }

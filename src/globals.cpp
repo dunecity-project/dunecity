@@ -90,7 +90,8 @@ std::array<int, NUM_HOUSES> houseToVisualHouse = {
     HOUSE_CUSTOM,
     HOUSECOLOR_GUEST_1,
     HOUSECOLOR_GUEST_2,
-    HOUSECOLOR_GUEST_3
+    HOUSECOLOR_GUEST_3,
+    HOUSECOLOR_NATIVES
 };
 
 namespace {
@@ -119,6 +120,13 @@ const std::array<SDL_Color, 8> tharpiqueRamp{{
 const std::array<SDL_Color, 8> darkGreyRamp{{
     {82, 82, 82, 255}, {72, 72, 72, 255}, {62, 62, 62, 255}, {52, 52, 52, 255},
     {42, 42, 42, 255}, {34, 34, 34, 255}, {27, 27, 27, 255}, {20, 20, 20, 255}
+}};
+// Natives: weathered leather brown. No vanilla, DuneCity or Tornie house is brown at this
+// lightness (Tornie's 'Brown' bonus colour is darker and greyer), and it stays readable both on
+// sand and on the subdued DuneCity radar terrain.
+const std::array<SDL_Color, 8> nativesRamp{{
+    {196, 140, 84, 255}, {176, 124, 72, 255}, {156, 108, 60, 255}, {136, 92, 52, 255},
+    {116, 78, 44, 255}, {96, 64, 36, 255}, {76, 50, 28, 255}, {56, 36, 20, 255}
 }};
 
 }
@@ -150,6 +158,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "City Effects", options.cityEffects);
     config.setBoolValue(section, "Original Unit Damage", options.originalUnitDamage);
     config.setBoolValue(section, "Plan Building Sites", options.planBuildingSites);
+    config.setBoolValue(section, "Continuous Ground Steps", options.continuousGroundSteps);
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -179,6 +188,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("City Effects", options.cityEffects);
     readBool("Original Unit Damage", options.originalUnitDamage);
     readBool("Plan Building Sites", options.planBuildingSites);
+    readBool("Continuous Ground Steps", options.continuousGroundSteps);
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {
@@ -290,6 +300,10 @@ SDL_Color getHouseColorSDL(int colorSlot, int shadeOffset) {
         return SDL_Color{ 0, 0, 0, 255 };
     }
 
+    if(colorSlot == HOUSECOLOR_NATIVES) {
+        return nativesRamp[shadeOffset];
+    }
+
     if(isDuneCityHouseColorSlot(colorSlot)) {
         return DuneCity::houseColorShade(colorSlot, shadeOffset);
     }
@@ -393,7 +407,7 @@ bool isCustomGameHouseAvailable(HOUSETYPE house) {
 }
 
 int getNumCustomGameHouses() {
-    return tornieGuestHousesActive() ? NUM_HOUSES : getNumAvailableHouses();
+    return tornieGuestHousesActive() ? NUM_PLAYER_HOUSES : getNumAvailableHouses();
 }
 
 HOUSETYPE getHouseFactionIdentity(HOUSETYPE house) {
@@ -409,6 +423,9 @@ bool isHouseFaction(HOUSETYPE house, HOUSETYPE identity) {
 }
 
 int getDefaultHouseColorSlot(HOUSETYPE house) {
+    if(house == HOUSE_NATIVES) {
+        return HOUSECOLOR_NATIVES;
+    }
     if(tornieGuestHousesActive()
        && house >= HOUSE_WILDSPADE && house <= HOUSE_THARPIQUE) {
         return HOUSECOLOR_GUEST_1 + (house - HOUSE_WILDSPADE);
@@ -484,6 +501,8 @@ HOUSETYPE getHouseFallbackHouse(HOUSETYPE house) {
     if(identity == HOUSE_WILDSPADE) return tornieGuestHousesActive() ? HOUSE_NEUTRAL : HOUSE_HARKONNEN;
     if(identity == HOUSE_KLESHMERSH) return tornieGuestHousesActive() ? HOUSE_REBELS : HOUSE_HARKONNEN;
     if(identity == HOUSE_THARPIQUE && !tornieGuestHousesActive()) return HOUSE_HARKONNEN;
+    // Natives has no faction content of its own (voices, mentat, palace); it never uses them.
+    if(identity == HOUSE_NATIVES) return HOUSE_HARKONNEN;
     return identity;
 }
 

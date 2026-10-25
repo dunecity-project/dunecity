@@ -16,12 +16,20 @@ void runCampaignPressureProbe(Game& game) {
         }
     require(enemies.size()>=2,"Pressure probe needs two campaign enemy houses");
     require(partner && !partner->isCampaignEnemy(),"Human partner inherited enemy restrictions");
+    // Capture the authored campaign permissions through the normal controller entry point,
+    // before synthetic armies and the controlled structure list change the world.
+    for (auto* bot:enemies) bot->update();
+    partner->update();
     // The engine ceiling follows controller difficulty, including a human's
     // shared house. Switching back restores the authored limit; workers stay capped.
     // No explicit unit-count override is selected here, which is what keeps Hard and
     // Brutal unlimited; explicit override cases have their own registered fixture.
+    // The engine worker ceiling is only a lobby-selected harvester override (unchecked
+    // or 0 is unlimited, see GameOptions::harvesterCeiling), so the fixture selects one.
     const auto savedUnitOverride=game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride;
+    const auto savedHarvesterOverride=game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride;
     game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=-1;
+    game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=5;
     for (auto* bot : {partner,enemies[0]}) {
         auto* house=const_cast<House*>(bot->getHouse());
         const auto savedDifficulty=bot->difficulty;
@@ -41,12 +49,14 @@ void runCampaignPressureProbe(Game& game) {
             require(house->isHarvesterLimitReached(),"Removing unit ceiling removed the worker ceiling");
             if(tier==QuantBot::Difficulty::Brutal) {
                 if(bot==partner) require(bot->harvesterCountCeiling()==0,"Shared helper inherited enemy worker cap");
-                else require(house->getMaxHarvesters()<=7,"Brutal enemy engine worker cap exceeds seven");
+                else require(bot->harvesterCountCeiling()>0 && bot->harvesterCountCeiling()<=7,
+                    "Brutal enemy worker cap missing or exceeds seven");
             }
         }
         house->maxUnits=savedLimit;house->numItem[Unit_Harvester]=savedWorkers;bot->difficulty=savedDifficulty;
     }
     game.gameInitSettings.gameOptions.maximumNumberOfUnitsOverride=savedUnitOverride;
+    game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=savedHarvesterOverride;
     // Earliest offensive trigger, excluding earlier home and worker deliveries.
     auto savedTriggers=std::move(game.getTriggerManager().triggers);
     game.getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(enemies[0]->getHouse()->getHouseID(),Unit_Tank,Drop_Homebase,false,100));
@@ -287,19 +297,95 @@ void runCampaignPressureProbe(Game& game) {
     for (auto* bot : {first,second,partner}) {
         bot->difficulty=bot==second ? QuantBot::Difficulty::Medium : QuantBot::Difficulty::Easy;
         auto* house=const_cast<House*>(bot->getHouse());
+        // Optional-power Vanilla makes an economic investment decision, not mandatory recovery.
+        if (!house->isPowerRequired()) continue;
         BuilderBase* yard=nullptr;
         for (auto* building : structureList)
             if (building->getOwner()==house && building->getItemID()==Structure_ConstructionYard)
                 {yard=dynamic_cast<BuilderBase*>(building);break;}
         require(yard,"Power fixture needs construction yard");
+        while (yard->getProductionQueueSize()) yard->doCancelItem(yard->getCurrentProducedItem());
+        yard->upgrading=false;
+        yard->updateBuildList();
+        require(bot->campaignAvailableToBuild(yard,Structure_WindTrap),
+            "Power fixture cannot build an authored campaign Windtrap");
+        const auto previousPlanner=bot->planningBuilder;
+        bot->planningBuilder=yard->getObjectID();
+        bot->clearPlacementCache();
+        const Coord powerSite=bot->findPlaceLocation(Structure_WindTrap);
+        bot->planningBuilder=previousPlanner;
+        bot->clearPlacementCache();
+        require(powerSite.isValid(),"Power fixture has no Windtrap site");
         const int oldPower=house->powerRequirement;
         house->powerRequirement=house->getProducedPower()+300;
         house->addCredits(10000);bot->lastCalculatedSpice=100000;
         auto structures=structureList; structureList.clear();structureList.push_back(yard);
         try {bot->build(0);}catch(...){structureList=structures;throw;}
         structureList=structures;
-        require(yard->getCurrentProducedItem()==Structure_WindTrap,"Easy/Medium did not queue power deficit Windtrap");
+        const auto& orders=yard->getProductionQueue();
+        require(std::any_of(orders.begin(),orders.end(),[&](const auto& order) {
+            return game.objectData.data[order.itemID][house->getHouseID()].power<0;
+        }),"Easy/Medium did not fund generation for a required power deficit");
         house->powerRequirement=oldPower;
+    }
+    // A human partner's first-wave funding must release on actual dispatch, survive a save, and
+    // never apply the small opening ceiling to Easy/Medium or to an enemy controller.
+    {
+        const auto savedConfig=partner->configOverride;
+        const auto savedTier=partner->difficulty;
+        const int savedTech=game.techLevel;
+        const Uint32 savedCycle=game.gameCycleCount;
+        auto config=std::make_shared<QuantBotConfig>(partner->botConfig());
+        config->force.campaignCombatBudget=true;
+        partner->configOverride=config;
+        partner->initialMilitaryValue=0;
+        partner->initialItemCount[Structure_HeavyFactory]=0;
+        partner->campaignWave={};
+        game.techLevel=8;
+        auto updateFleet=[&](QuantBot::Difficulty tier) {
+            partner->difficulty=tier;
+            partner->lastCalculatedSpice=1300000;
+            partner->attackTimer=INT32_MAX;
+            partner->buildTimer=INT32_MAX;
+            game.gameCycleCount=150; // Harkonnen's update cadence, not the 500-cycle spice scan.
+            partner->update();
+            return partner->harvesterLimit;
+        };
+        require(updateFleet(QuantBot::Difficulty::Easy)>4,
+            "Campaign combat budget restricted an Easy partner");
+        require(updateFleet(QuantBot::Difficulty::Medium)>4,
+            "Campaign combat budget restricted a Medium partner");
+        require(updateFleet(QuantBot::Difficulty::Hard)==4,
+            "Hard partner did not reserve its first combat wave before fleet expansion");
+        int spawned=0;
+        auto* house=const_cast<House*>(partner->getHouse());
+        for(int y=1;y<currentGameMap->getSizeY()-1 && spawned<12;++y)
+            for(int x=1;x<currentGameMap->getSizeX()-1 && spawned<12;++x)
+                if(!currentGameMap->getTile(x,y)->hasAGroundObject()
+                    && !currentGameMap->getTile(x,y)->hasAStructure()
+                    && !currentGameMap->getTile(x,y)->isMountain()) {
+                    auto* unit=house->createUnit(Unit_Tank);
+                    require(unit!=nullptr,"Partner combat tank creation failed");
+                    unit->deploy(Coord(x,y));++spawned;
+                }
+        require(spawned==12,"No space for partner combat fixture");
+        partner->launchGroundHunt();
+        require(partner->campaignWave.launched!=0,"Partner combat dispatch did not release its opening");
+        require(updateFleet(QuantBot::Difficulty::Hard)>4,
+            "Partner fleet stayed restricted after its first combat dispatch");
+        OMemoryStream partnerSave;partnerSave.open();partner->save(partnerSave);
+        IMemoryStream partnerInput(partnerSave.getData(),partnerSave.getDataLength());
+        game.loadedSavegameVersion=SAVEGAMEVERSION;
+        {QuantBot restored(partnerInput,house);
+            require(restored.campaignWave.launched==partner->campaignWave.launched,
+                "Partner save lost its completed combat opening");
+        }
+        game.loadedSavegameVersion=previousVersion;
+        partner->configOverride=savedConfig;
+        partner->difficulty=savedTier;
+        game.techLevel=savedTech;game.gameCycleCount=savedCycle;
+        SDL_Log("CAMPAIGN_COMBAT_BUDGET_PASS: Easy/Medium unchanged, Hard four-worker first-wave "
+            "budget, actual dispatch releases fleet growth, saved completion");
     }
     HouseChoiceMenu menu;
     menu.setCurrentPosition(0,0,640,480);

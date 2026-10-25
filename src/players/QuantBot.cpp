@@ -204,7 +204,27 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
     if (mapsize <= 4096) return 0;
     const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
-    return mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    const int configured = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    return openingCombatBudgetActive() ? std::min(configured, 4) : configured;
+}
+
+bool QuantBot::openingCombatBudgetActive() const {
+    if (!botConfig().force.openingCombatBudget || difficulty < Difficulty::Hard || supportMode
+        || gameMode != GameMode::Custom || !currentGame || !currentGameMap
+        || isCampaignGameType(currentGame->gameType) || initialMilitaryValue < 0
+        || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
+        || currentGameMap->getSizeX() * currentGameMap->getSizeY() <= 4096) return false;
+    const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
+    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+}
+
+bool QuantBot::campaignCombatBudgetActive() const {
+    if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || supportMode
+        || !currentGame || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
+        || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
+        || campaignWave.launched != 0) return false;
+    const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
+    return factory.enabled && factory.techLevel <= currentGame->techLevel;
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
@@ -592,6 +612,7 @@ void QuantBot::update() {
 	int oldLimit = harvesterLimit;
 	harvesterLimit = std::min(baseHarvesterLimit, std::max(1, maxHarvestersForSpice));
     if (campaignCityEconomy()) harvesterLimit=std::min(harvesterLimit,campaignHarvesterTarget());
+    if (campaignCombatBudgetActive()) harvesterLimit=std::min(harvesterLimit,4);
 
 	// Log when the limit changes
 	if (oldLimit != harvesterLimit) {
@@ -623,10 +644,12 @@ void QuantBot::update() {
     const Uint32 scheduleCycle = getGameCycleCount();
     bool phasedBuildDue = false;
     if (phased) {
+        // Player houses only: the Natives house has no AI, and the twelve-slot ring keeps every
+        // house's decision cycle where it was before the Natives slot existed.
         const bool unitDue = QuantBotSchedulePolicy::unitPhaseDue(
-            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_PLAYER_HOUSES);
         const bool buildDue = QuantBotSchedulePolicy::buildPhaseDue(
-            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_HOUSES);
+            scheduleCycle, scheduleHouse, AIUPDATEINTERVAL, NUM_PLAYER_HOUSES);
         if (!unitDue && !buildDue) return;
         phasedBuildDue = buildDue;
     } else if (!QuantBotSchedulePolicy::legacyDue(scheduleCycle, scheduleHouse, AIUPDATEINTERVAL)) {
@@ -804,7 +827,9 @@ void QuantBot::onIncrementUnitKills(int itemID) {
 }
 
 void QuantBot::onHostileUnitKilled(Uint32 itemID, Uint32 originalHouseID) {
-    if (!currentGame || originalHouseID >= NUM_HOUSES || !mobileCombatItem(itemID)) return;
+    // A worm or crime trooper (the Natives) is no trade with an opposing army.
+    if (!currentGame || originalHouseID >= NUM_HOUSES || isNativesHouse(int(originalHouseID))
+        || !mobileCombatItem(itemID)) return;
     attrition.killCost += std::max(0, currentGame->objectData.data[itemID][originalHouseID].price);
 }
 
@@ -827,7 +852,9 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     // If the human has attacked us then its time to start fighting back... unless its an attack on a special unit
     // Don't trigger with fremen or saboteur
     bool bPossiblyOwnFremen = (pObject->getOwner()->getHouseID() == HOUSE_ATREIDES) && (pObject->getItemID() == Unit_Trooper) && (currentGame->techLevel > 7);
-    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
+    // A worm or a crime trooper (the Natives) is no player opening hostilities.
+    if(gameMode == GameMode::Campaign && !pDamager->getOwner()->isAI() && !pDamager->getOwner()->isNatives()
+        && !campaignAIAttackFlag && !bPossiblyOwnFremen && (pObject->getItemID() != Unit_Saboteur)) {
         campaignAIAttackFlag = true;
     }
     // A confirmed hit on a building or worker we own makes the attacker a legal
@@ -1068,7 +1095,7 @@ void QuantBot::refreshTacticalDanger() {
 
 const std::vector<int>& QuantBot::factoryClearance() const {
     if (factoryEnemyClearanceStale) {
-        factoryEnemyClearance = TacticalSafetyPolicy::enemyClearance(tacticalDanger, getMap().getSizeX(), getMap().getSizeY());
+        TacticalSafetyPolicy::enemyClearanceInto(tacticalDanger, getMap().getSizeX(), getMap().getSizeY(), factoryEnemyClearance);
         factoryEnemyClearanceStale = false;
     }
     return factoryEnemyClearance;

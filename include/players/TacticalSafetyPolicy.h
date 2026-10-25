@@ -6,6 +6,7 @@
 #include <utility>
 #include <data.h>
 #include <players/CityPlacementPolicy.h>
+#include <dunecity/SpatialFields.h>
 
 namespace TacticalSafetyPolicy {
 inline bool needsRefineryRefuge(bool returning,bool full,bool hasCargo,bool safeField) {
@@ -24,22 +25,16 @@ inline bool productionFactory(int type) {
 // Distance beyond known weapon reach (including the construction safety buffer).
 // Two deterministic passes cost O(map area), shared by every candidate. Beyond
 // twelve clear tiles, normal placement preferences decide rather than map edges.
-inline std::vector<int> enemyClearance(const std::vector<int>& danger, int w, int h) {
+// `result` is reused (every element is written).
+inline void enemyClearanceInto(const std::vector<int>& danger, int w, int h, std::vector<int>& result) {
     constexpr int sufficient = 12;
-    std::vector<int> result(w*h, sufficient);
-    for (int y=0; y<h; ++y) for (int x=0; x<w; ++x) {
-        auto& distance=result[y*w+x];
-        if (danger[y*w+x]>0) { distance=0; continue; }
-        if (x>0) distance=std::min(distance,result[y*w+x-1]+1);
-        if (y>0) for (int dx=-1; dx<=1; ++dx)
-            if (x+dx>=0 && x+dx<w) distance=std::min(distance,result[(y-1)*w+x+dx]+1);
-    }
-    for (int y=h-1; y>=0; --y) for (int x=w-1; x>=0; --x) {
-        auto& distance=result[y*w+x];
-        if (x+1<w) distance=std::min(distance,result[y*w+x+1]+1);
-        if (y+1<h) for (int dx=-1; dx<=1; ++dx)
-            if (x+dx>=0 && x+dx<w) distance=std::min(distance,result[(y+1)*w+x+dx]+1);
-    }
+    result.resize(static_cast<size_t>(w)*h);
+    for (size_t i=0; i<result.size(); ++i) result[i] = danger[i] > 0 ? 0 : sufficient;
+    DuneCity::chessboardPasses(result, w, h);
+}
+inline std::vector<int> enemyClearance(const std::vector<int>& danger, int w, int h) {
+    std::vector<int> result;
+    enemyClearanceInto(danger, w, h, result);
     return result;
 }
 inline int footprintClearance(const std::vector<int>& clearance, int w, int h,

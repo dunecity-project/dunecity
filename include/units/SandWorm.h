@@ -85,6 +85,17 @@ public:
 
     bool isEating() const { return (drawnFrame != INVALID); }
 
+    /**
+        The house whose reinforcement brought this worm (a map's [REINFORCEMENTS] line such as
+        "Player1,Sandworm,Homebase,5"), or HOUSE_INVALID. The worm stays the Natives' and eats
+        anyone else, but never a unit of that house's team for its lifetime: the map gave the
+        worm to that side. Saved from SAVEGAMEVERSION 9873.
+    */
+    void setSummoner(int houseID) { summonerHouseID = houseID; }
+    int getSummoner() const { return summonerHouseID; }
+    /// True when this worm leaves `object` alone because it belongs to the summoner's team.
+    bool spares(const ObjectBase& object) const;
+
 protected:
     const ObjectBase* findTarget() const override;
     void engageTarget() override;
@@ -101,6 +112,8 @@ private:
     // drawing information
     Sint32 shimmerOffsetIndex;
     Coord lastLocs[SANDWORM_SEGMENTS];    ///< Last locations of the sandworm
+
+    Sint32 summonerHouseID = HOUSE_INVALID; ///< See setSummoner().
 };
 
 #endif // SANDWORM_H

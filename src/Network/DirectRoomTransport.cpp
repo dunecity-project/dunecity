@@ -545,6 +545,11 @@ void DirectRoomTransport::handlePollResult(const BoundedHttpClient::Result& resu
             // is built to survive.
             continue;
         }
+        // A departed peer's channel may still hold what it sent before leaving.
+        deliverQueuedValues(departed, now());
+        if(status_ != Status::Joined) {
+            return;
+        }
         dropLink(departed, std::string());
     }
 
@@ -816,6 +821,18 @@ void DirectRoomTransport::pumpConnections(std::uint32_t nowMs) {
         // closed fresh browser connections immediately. Signed deadline comparison also wraps.
         const bool deadlineMissed = !link->connected
             && SDL_TICKS_PASSED(nowMs, link->startedMs + kConnectDeadlineMs);
+        if(state == DirectPeerConnection::State::Closed && link->connected) {
+            // The peer closed the channel in order; what it sent before goes in front of the
+            // departure. A failed channel has already discarded its queue.
+            deliverQueuedValues(peerId, nowMs);
+            link = findLink(peerId);
+            if(link == nullptr) {
+                continue;
+            }
+            if(status_ == Status::Closed) {
+                return;
+            }
+        }
         if(state == DirectPeerConnection::State::Failed
            || state == DirectPeerConnection::State::Closed || deadlineMissed) {
             const Peer* peer = findPeer(peerId);
@@ -1376,6 +1393,23 @@ void DirectRoomTransport::refuse(Link& link, const char* reason) {
     }
 }
 
+void DirectRoomTransport::deliverQueuedValues(std::uint32_t peerId, std::uint32_t nowMs) {
+    // Everything a peer sent before it left (a host's last cycles for a spectator that is behind,
+    // for one) is delivered before its departure, not dropped with the connection.
+    Link* link = findLink(peerId);
+    std::string value;
+    std::size_t delivered = 0;
+    while(link != nullptr && link->connected && link->connection && status_ != Status::Closed
+          && link->connection->pollValue(value)) {
+        handleReceivedValue(*link, value, nowMs);
+        ++delivered;
+        link = findLink(peerId);
+    }
+    if(delivered > 0) {
+        SDL_Log("Direct link %u closing: %zu queued messages delivered first", static_cast<unsigned>(peerId), delivered);
+    }
+}
+
 void DirectRoomTransport::dropLink(std::uint32_t peerId, const std::string& reason) {
     if(peerId <= 65535) retiredPeerIds_.set(peerId);
     const bool observer=isSpectatorPeer(peerId);
@@ -1387,6 +1421,7 @@ void DirectRoomTransport::dropLink(std::uint32_t peerId, const std::string& reas
         name = peer->name;
         role = peer->role;
     }
+    bool announcedDeparture = false;
 
     for(std::size_t i = 0; i < links_.size(); ++i) {
         if(links_[i]->peerId != peerId) {
@@ -1400,6 +1435,7 @@ void DirectRoomTransport::dropLink(std::uint32_t peerId, const std::string& reas
         links_.erase(links_.begin() + static_cast<std::ptrdiff_t>(i));
 
         if(wasAnnounced || wasConnected) {
+            announcedDeparture = true;
             Event event;
             event.type    = Event::Type::PeerLeft;
             event.peerId  = peerId;
@@ -1423,6 +1459,8 @@ void DirectRoomTransport::dropLink(std::uint32_t peerId, const std::string& reas
 
     for(std::size_t i = 0; i < peers_.size(); ++i) {
         if(peers_[i].id == peerId) {
+            // Payloads it sent before leaving are queued ahead of its PeerLeft event.
+            if(announcedDeparture) departing_.push_back(peers_[i]);
             peers_.erase(peers_.begin() + static_cast<std::ptrdiff_t>(i));
             break;
         }
@@ -1520,6 +1558,7 @@ void DirectRoomTransport::pushEvent(Event&& event) {
         || eventBytes_ + cost > kMaxQueuedEventBytes/2)) return;
     if(events_.size() >= kMaxQueuedEvents || eventBytes_ + cost > kMaxQueuedEventBytes) {
         events_.clear();
+        departing_.clear();
         eventBytes_ = 0;
         Event closed;
         closed.type    = Event::Type::Closed;
@@ -1543,6 +1582,11 @@ bool DirectRoomTransport::pollEvent(Event& event) {
     }
     event = std::move(events_.front());
     events_.pop_front();
+    if(event.type == Event::Type::PeerLeft) {
+        departing_.erase(std::remove_if(departing_.begin(), departing_.end(),
+                                        [&](const Peer& peer) { return peer.id == event.peerId; }),
+                         departing_.end());
+    }
     const std::size_t cost = event.payload.size() + event.message.size() + event.name.size() + 128;
     eventBytes_ = eventBytes_ > cost ? eventBytes_ - cost : 0;
     return true;
@@ -1567,13 +1611,24 @@ RoomSessionTransport::Peer* DirectRoomTransport::mutablePeer(std::uint32_t peerI
 }
 
 RoomSessionTransport::Peer* DirectRoomTransport::findPeer(std::uint32_t peerId) {
-    return mutablePeer(peerId);
+    if(Peer* peer = mutablePeer(peerId)) {
+        return peer;
+    }
+    for(Peer& peer : departing_) {
+        if(peer.id == peerId) {
+            return &peer;
+        }
+    }
+    return nullptr;
 }
 
 const RoomSessionTransport::Peer* DirectRoomTransport::findPeer(std::uint32_t peerId) const {
-    for(const Peer& peer : peers_) {
-        if(peer.id == peerId) {
-            return &peer;
+    // A departing peer is still found until its PeerLeft event is taken (departing_).
+    for(const auto* list : {&peers_, &departing_}) {
+        for(const Peer& peer : *list) {
+            if(peer.id == peerId) {
+                return &peer;
+            }
         }
     }
     return nullptr;

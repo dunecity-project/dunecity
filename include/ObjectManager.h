@@ -22,8 +22,10 @@
 #include <misc/OutputStream.h>
 #include <misc/SDL2pp.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
+#include <vector>
 
 // forward declarations
 class ObjectBase;
@@ -71,6 +73,13 @@ public:
         \return Pointer to this object (nullptr if not found)
     */
     inline ObjectBase* getObject(Uint32 objectID) const {
+        // The dense table mirrors objectMap for every id below kDenseIDs (see setDense).
+        if(objectID < kDenseIDs) {
+            return objectID < byID.size() ? byID[objectID] : nullptr;
+        }
+        if(largeIDs == 0) {
+            return nullptr;
+        }
         ObjectMap::const_iterator iter = objectMap.find(objectID);
 
         if(iter == objectMap.end()) {
@@ -86,7 +95,11 @@ public:
         \return false if there was no object with this ObjectID, true if it could be removed
     */
     bool removeObject(Uint32 objectID) {
-        return (objectMap.erase(objectID) != 0);
+        if(objectMap.erase(objectID) == 0) {
+            return false;
+        }
+        setDense(objectID, nullptr);
+        return true;
     }
 
     /**
@@ -107,8 +120,26 @@ public:
     std::size_t getObjectCount() const { return objectMap.size(); }
 
 private:
+    /// Ids below this are also held in byID, indexed by id, so getObject() is one array read
+    /// instead of a tree search. Ids are handed out in sequence; a (corrupt) save with larger
+    /// ids still works through objectMap alone.
+    static constexpr Uint32 kDenseIDs = 1u << 22;
+    void setDense(Uint32 objectID, ObjectBase* pObject) {
+        if(objectID >= kDenseIDs) {
+            if(pObject) ++largeIDs; else --largeIDs;
+            return;
+        }
+        if(objectID >= byID.size()) {
+            if(!pObject) return;
+            byID.resize(std::min<size_t>(kDenseIDs, std::max<size_t>(objectID + 1, byID.size() * 2)), nullptr);
+        }
+        byID[objectID] = pObject;
+    }
+
     Uint32 nextFreeObjectID;
     ObjectMap objectMap;
+    std::vector<ObjectBase*> byID;
+    size_t largeIDs = 0;
 };
 
 #endif //OBJECTMANAGER_H

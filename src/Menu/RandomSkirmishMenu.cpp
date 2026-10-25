@@ -27,6 +27,7 @@
 #include <mod/ModManager.h>
 #include <players/PlayerFactory.h>
 #include <misc/WebRuntime.h>
+#include <misc/MenuPalette.h>
 #include <misc/fnkdat.h>
 #include <globals.h>
 #include <main.h>
@@ -60,7 +61,8 @@ Catalogue loadCatalogue(Mode mode) {
     return makeCatalogue(*data, mode == Mode::DuneCity);
 }
 
-GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules, const Params& params) {
+GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules, const Params& params,
+                          GameInitSettings::GraphicsSkin skin) {
     // A partner AI shares the player's house, as a Custom Game's second player slot does.
     bool sharedHouse = false;
     for(const HouseSetup& house : result.houses)
@@ -71,6 +73,7 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
     init.setLocalSpectator(params.spectate);
     for(const HouseSetup& house : result.houses) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(house.house), house.team);
+        info.graphicsSkin = skin;
         const std::string houseName = getHouseNameByNumber(static_cast<HOUSETYPE>(house.house));
         if(house.role == Role::Human) {
             if(params.spectate) {
@@ -261,6 +264,10 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         spectateBox.setOnClick([this]() { onSpectateChanged(); });
         fillAI(spectateAIBox);
         spectateAIBox.setTooltipText(_("The AI that plays your house while you spectate."));
+        // The DuneCity skin, one choice for every house as in the campaign; shared with it.
+        skinBox.addEntry(_("SimCity"), 0);
+        skinBox.addEntry(_("Dune2"), 1);
+        skinBox.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
 
         fillAI(allyAIBox);
         fillAI(enemyAIBox);
@@ -305,6 +312,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
         addRow(1, row++, _("City"), &enemyCityBox);
         enemyCityCaption = &captions[usedCaptions - 1];
+        addRow(1, row++, _("City skin"), &skinBox);
+        skinCaption = &captions[usedCaptions - 1];
     }
 
     // The seed field shares its row with the "New" button.
@@ -318,11 +327,14 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
 
     statusLabel.setTextFontSize(12);
     statusLabel.setAlignment(Alignment_HCenter);
-    windowWidget.addWidget(&statusLabel, Point(16, height - 66), Point(width - 32, 22));
+    // Desert skins draw the original background's house crest (53x54, 11 px in) in the
+    // bottom-left corner: the status line and the button row keep clear of it, centred.
+    const int crestInset = MenuTheme::isDesertUISkin() ? std::max(0, 11 + 53 + 6 - columnX(width, 0)) : 0;
+    windowWidget.addWidget(&statusLabel, Point(16 + crestInset, height - 66), Point(width - 32 - 2 * crestInset, 22));
 
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { onCancel(); });
-    const int left = columnX(width, 0), span = contentWidth(width);
+    const int left = columnX(width, 0) + crestInset, span = contentWidth(width) - 2 * crestInset;
     const int buttonWidth = std::min(160, (span - 3 * 16) / 4);
     const int gap = (span - 4 * buttonWidth) / 3;
     if(multiplayer) {
@@ -370,8 +382,11 @@ void RandomSkirmishMenu::addHeader(int column, int row, const std::string& capti
     label.setText(caption);
     label.setTextFontSize(16);
     const int columnWidth = columnSpan(getSize().x);
-    windowWidget.addWidget(&label, Point(columnX(getSize().x, column), 44 + row * rowPitch),
-                           Point(columnWidth, rowPitch - kRowGap));
+    const int y = 44 + row * rowPitch;
+    int x = columnX(getSize().x, column);
+    // Desert skins: the first header sits beside the background's top-left crest (53x54, 11 px in).
+    if(MenuTheme::isDesertUISkin() && column == 0 && y < 11 + 54) x = std::max(x, 11 + 53 + 6);
+    windowWidget.addWidget(&label, Point(x, y), Point(columnWidth - (x - columnX(getSize().x, column)), rowPitch - kRowGap));
 }
 
 void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption, Widget* control) {
@@ -475,6 +490,12 @@ void RandomSkirmishMenu::onModChanged() {
     for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox, &startCityBox,
                                                         allyCityCaption, enemyCityCaption, playerCityCaption, startCityCaption})
         if(widget != nullptr) widget->setVisible(city);
+    // The skin row exists only in single player (a hosted game's rows choose skins in the lobby).
+    if(skinCaption != nullptr) {
+        skinBox.setVisible(city);
+        skinBox.setEnabled(city);
+        skinCaption->setVisible(city);
+    }
     allyCityBox.setEnabled(city && alliesBox.getSelectedEntryIntData() > 0);
     enemyCityBox.setEnabled(city);
     playerCityBox.setEnabled(city);
@@ -584,7 +605,15 @@ bool RandomSkirmishMenu::prepareStart(GameInitSettings& init) {
     Params params;
     Result result;
     if(!generate(params, result)) return false;
-    init = RandomSkirmish::makeInit(result, matchRules(), params);
+    const int skin = skinBox.getSelectedEntryIntData() == 1 ? 1 : 0;
+    if(!multiplayer && settings.general.duneCityCampaignSkin != skin) {
+        // Remember the choice with the campaign's, so every DuneCity screen offers it next time.
+        settings.general.duneCityCampaignSkin = skin;
+        INIFile config(getConfigFilepath());
+        config.setIntValue("General", "DuneCity Campaign Skin", skin);
+        if(config.saveChangesTo(getConfigFilepath())) WebRuntime::syncPersistentFiles();
+    }
+    init = RandomSkirmish::makeInit(result, matchRules(), params, GameInitSettings::sanitizeGraphicsSkin(skin));
     if(!params.fixedSeed) {
         // The next visit offers a new map; this one stays reproducible from its name.
         params.seed = freshSeed();

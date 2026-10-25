@@ -30,17 +30,23 @@ TrafficSimulation::TrafficSimulation() = default;
 
 void TrafficSimulation::init(CitySimulation*) {
     routeFinder_.clear();
+    const size_t tiles = currentGameMap ? static_cast<size_t>(currentGameMap->getSizeX()) * currentGameMap->getSizeY() : 0;
+    roadMemo_.assign(tiles, -1);
+    roleMemo_.assign(tiles, 0);
 }
 
 bool TrafficSimulation::isRoad(int x, int y) const {
     if (!currentGameMap) return false;
     if (!currentGameMap->tileExists(x, y)) return false;
-    return currentGameMap->getTile(x, y)->isRoadConnection();
+    const size_t index = static_cast<size_t>(y) * currentGameMap->getSizeX() + x;
+    if (index >= roadMemo_.size()) return currentGameMap->getTile(x, y)->isRoadConnection();
+    if (roadMemo_[index] < 0) roadMemo_[index] = currentGameMap->getTile(x, y)->isRoadConnection() ? 1 : 0;
+    return roadMemo_[index] != 0;
 }
 
-bool TrafficSimulation::driveDone(int x, int y, ZoneType destZone) const {
-    if (!currentGameMap) return false;
-    // Check 4 adjacent tiles for a structure matching the destination role
+// Bit 1/2/4: a Residential/Commercial/Industrial structure on one of the 4 adjacent tiles.
+uint8_t TrafficSimulation::neighbourRoles(int x, int y) const {
+    uint8_t roles = 0;
     for (int d = 0; d < 4; ++d) {
         const int nx = x + DX[d];
         const int ny = y + DY[d];
@@ -51,17 +57,30 @@ bool TrafficSimulation::driveDone(int x, int y, ZoneType destZone) const {
         if (!pObj || !pObj->isAStructure()) continue;
         const StructureBase* pStruct = static_cast<const StructureBase*>(pObj);
 
-        CityRole role = getStructureCityRole(pStruct->getItemID());
-        bool match = false;
-        switch (destZone) {
-            case ZoneType::Residential: match = (role == CityRole::Residential); break;
-            case ZoneType::Commercial:  match = (role == CityRole::Commercial);  break;
-            case ZoneType::Industrial:  match = (role == CityRole::Industrial);  break;
+        switch (getStructureCityRole(pStruct->getItemID())) {
+            case CityRole::Residential: roles |= 1; break;
+            case CityRole::Commercial:  roles |= 2; break;
+            case CityRole::Industrial:  roles |= 4; break;
             default: break;
         }
-        if (match) return true;
     }
-    return false;
+    return roles;
+}
+
+bool TrafficSimulation::driveDone(int x, int y, ZoneType destZone) const {
+    if (!currentGameMap) return false;
+    // Check 4 adjacent tiles for a structure matching the destination role
+    uint8_t wanted = 0;
+    switch (destZone) {
+        case ZoneType::Residential: wanted = 1; break;
+        case ZoneType::Commercial:  wanted = 2; break;
+        case ZoneType::Industrial:  wanted = 4; break;
+        default: return false;
+    }
+    const size_t index = static_cast<size_t>(y) * currentGameMap->getSizeX() + x;
+    if (!currentGameMap->tileExists(x, y) || index >= roleMemo_.size()) return (neighbourRoles(x, y) & wanted) != 0;
+    if (!(roleMemo_[index] & 0x80)) roleMemo_[index] = neighbourRoles(x, y) | 0x80;
+    return (roleMemo_[index] & wanted) != 0;
 }
 
 bool TrafficSimulation::findPerimeterRoad(int zoneX, int zoneY,

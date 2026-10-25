@@ -207,8 +207,8 @@ void QuantBot::build(int militaryValue) {
     // Under city sim this is exactly mapSpiceHarvesterTarget below, because
     // vanillaEconomy is false there; the city divisor is also the stricter one.
     int spiceCompetitors = 0;
-    for (int h = 0; h < NUM_HOUSES; ++h)
-        if (getHouse(h) && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
+    for (int h = 0; h < NUM_HOUSES; ++h)  // the Natives harvest nothing
+        if (getHouse(h) && !getHouse(h)->isNatives() && getHouse(h)->getNumStructures() > 0) ++spiceCompetitors;
     const int citySpiceWorkerTarget = QuantBotBuildPolicy::desiredSpiceHarvesters(
         lastCalculatedSpice, spiceCompetitors, harvesterLimit);
     // Space is reserved on the same terms as cash. A house whose field supports
@@ -553,7 +553,8 @@ void QuantBot::build(int militaryValue) {
     int ownTeamHouses = 0, enemyHouses = 0;
     if (!brutalCityEconomy && difficulty == Difficulty::Brutal)
         for (int i = 0; i < NUM_HOUSES; ++i)
-            if (const House* other = currentGame->getHouse(i); other && other->isAlive())
+            // The Natives are always "alive" but are no enemy house.
+            if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
         && !supportMode && !isCampaignGameType(currentGame->gameType)
@@ -665,6 +666,11 @@ void QuantBot::build(int militaryValue) {
     // the yard target rather than through it, so production capacity is still
     // governed by that target alone.
     const bool colonisationNeeded = colonisationMcvDue(itemCount[Unit_MCV],yardLimit);
+    // Optional construction capacity must not occupy the first heavy factory while a small start
+    // is funding its first combat wave. A lost yard or exhausted home rock can still buy an MCV.
+    const bool postponeCapacityMcv = (openingCombatBudgetActive() || campaignCombatBudgetActive())
+        && itemCount[Structure_ConstructionYard] > 0 && !rockExpansionNeeded && !colonisationNeeded;
+    if (postponeCapacityMcv) cityYardTarget = std::min(cityYardTarget, cityConstructionCapacity);
 
     // Custom-game city size ceiling for this bot, including shared-house
     // helpers. Campaign games keep their own separate gates.
@@ -1314,7 +1320,7 @@ void QuantBot::build(int militaryValue) {
         AITelemetry::Record opponents;
         for (int h = 0; h < NUM_HOUSES; ++h) {
             const auto* house = currentGame->getHouse(h);
-            if (!house) continue;
+            if (!house || house->isNatives()) continue;  // no opponent: worms and crime troopers only
             int survivingMilitary = 0;
             for (Uint32 type=Unit_FirstID; type<=Unit_LastID; ++type)
                 if (type != Unit_Carryall && type != Unit_Harvester && type != Unit_MCV && type != Unit_Sandworm)
@@ -1750,6 +1756,16 @@ void QuantBot::build(int militaryValue) {
     const int cashBuffer=std::max(1000,citySimEnabled ? cityWorkingReserve : economyReserve);
     const auto cashFlow=QuantBotSpendingPolicy::cashFlow(getHouse()->getCredits(),money,forecastNetIncome,
         continuedMilitaryCost+continuedConstructionCost,existingMilitaryCapacity+constructionCapacity,cashBuffer);
+    // Optional yards need cash beyond the existing production forecast. Real
+    // construction/space recovery keeps its existing priority and budget.
+    const bool capacityMcvRunway = botConfig().force.capacityMcvRunway
+        && getHouse()->getNumItems(Structure_ConstructionYard)>0
+        && !rockExpansionNeeded && !colonisationNeeded;
+    int capacityMcvOrderedCost=0;
+    auto canFundCapacityMcv = [&](int price) {
+        return !capacityMcvRunway || int64_t(cashFlow.projectedCash)-capacityMcvOrderedCost
+            >= int64_t(price)+cashBuffer;
+    };
     // Cash-funded vanilla openings use the established parallel MCV/factory
     // policy. Use actual runway, not a fixed wealth cutoff: as the base grows,
     // the same cash must cover more production as well as its economy pipeline.
@@ -2359,7 +2375,7 @@ void QuantBot::build(int militaryValue) {
         }
         if (ready && building==Structure_HeavyFactory && campaignAvailableToBuild(builder,Unit_MCV)
             && !getHouse()->isGroundUnitLimitReached() && itemCount[Unit_MCV]==0
-            && gameMode==GameMode::Custom && !openingWorkersNeeded()) {
+            && gameMode==GameMode::Custom && !openingWorkersNeeded() && !postponeCapacityMcv) {
             CapitalCandidate mcv;
             mcv.builder=builder->getObjectID();mcv.item=Unit_MCV;mcv.kind="construction";
             mcv.price=data[Unit_MCV][houseID].price;mcv.cost=mcv.price;
@@ -2376,8 +2392,11 @@ void QuantBot::build(int militaryValue) {
                 actualHarvesters,itemCount[Structure_ConstructionYard],itemCount[Unit_MCV],mcv.price);
             if (!(cityNeed || colonyNeed || vanillaNeed)) mcv.reason="construction_capacity_available";
             else if (forecastFunding<mcv.cost+std::max(1000,cityWorkingReserve)) mcv.reason="income_bottleneck";
+            else if (!canFundCapacityMcv(mcv.price)) mcv.reason="existing_production_runway";
             else {
-                mcv.capacity=forecastFunding-mcv.cost-cityWorkingReserve;
+                mcv.capacity=capacityMcvRunway
+                    ? std::max(0,cashFlow.projectedCash-mcv.cost-cashBuffer)
+                    : forecastFunding-mcv.cost-cityWorkingReserve;
                 // Establish demanded city throughput before filling the entire
                 // transport ratio. The first Carryall still ranks above this.
                 mcv.score=(cityNeed || colonyNeed) ? 5000 : 4500;
@@ -2652,7 +2671,8 @@ void QuantBot::build(int militaryValue) {
 
 						for (int i = 0; i < NUM_HOUSES; i++) {
 							if (getHouse(i) != nullptr) {
-								if (getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
+								// The Natives have no base to strike.
+								if (!getHouse(i)->isNatives() && getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
 									enemyHouseBuildingCount = getHouse(i)->getNumStructures();
 									enemyHouseID = i;
 								}
@@ -2727,6 +2747,14 @@ void QuantBot::build(int militaryValue) {
                     if(itemID == Unit_MCV && yardLimit > 0
                        && itemCount[Structure_ConstructionYard] + itemCount[Unit_MCV] >= yardLimit) return false;
                     const int quotedPrice=purchasePrice(pBuilder,itemID);
+                    if (itemID==Unit_MCV && !canFundCapacityMcv(quotedPrice)) {
+                        traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",capitalDecision)
+                            .set("builder",pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
+                            .set("price",quotedPrice).set("projected_cash",cashFlow.projectedCash)
+                            .set("capacity_mcv_ordered_cost",capacityMcvOrderedCost).set("cash_buffer",cashBuffer)
+                            .set("reason","existing_production_runway"));
+                        return false;
+                    }
                     // Enforce reactive infantry and its funded quota at queue acceptance,
                     // including callers outside the WOR selection branch.
                     if (cityInfantryItem(itemID) && (!cityAntiAirInfantryDemand
@@ -2783,6 +2811,9 @@ void QuantBot::build(int militaryValue) {
                             cityStorageCapacityIncludingQueued+=std::max(0,data[itemID][houseID].capacity);
                         money-=quotedPrice;
                         capitalOrderedCost+=quotedPrice;
+                        // Ordinary unit/zone orders are already forecast above;
+                        // only new optional MCV capital consumes this headroom.
+                        if (capacityMcvRunway && itemID==Unit_MCV) capacityMcvOrderedCost+=quotedPrice;
                         if (AITelemetry::log().enabled()) capitalOrders.set(std::to_string(pBuilder->getObjectID())+":"+std::to_string(before),
                             AITelemetry::Record().set("item",itemID).set("price",quotedPrice).set("rule",rule));
                     }
@@ -3237,7 +3268,7 @@ void QuantBot::build(int militaryValue) {
                 const CapitalCandidate* localUnitChoice=nullptr;
                 // A rich opening can fund its MCV now. Do not repeatedly buy
                 // workers before the factory gets to unlock that construction.
-                const bool unlockingVanillaMcv=vanillaEconomy && gameMode==GameMode::Custom
+                const bool unlockingVanillaMcv=!postponeCapacityMcv && vanillaEconomy && gameMode==GameMode::Custom
                     && pBuilder->getItemID()==Structure_HeavyFactory
                     && !campaignAvailableToBuild(pBuilder,Unit_MCV)
                     && pBuilder->getCurrentUpgradeLevel()<pBuilder->getMaxUpgradeLevel()
@@ -3467,7 +3498,7 @@ void QuantBot::build(int militaryValue) {
                     if(expansionProducer && !pBuilder->isUpgrading() && pBuilder->getProductionQueueSize()==0
                         && money < (campaignAvailableToBuild(pBuilder,Unit_MCV)
                             ? data[Unit_MCV][houseID].price : pBuilder->getUpgradeCost())) break;
-                    const bool prioritizeCityMcv = citySimEnabled && gameMode == GameMode::Custom
+                    const bool prioritizeCityMcv = !postponeCapacityMcv && citySimEnabled && gameMode == GameMode::Custom
                         && (fundedCityProduction || !openingWorkersNeeded() || rockExpansionNeeded)
                         && !getHouse()->isGroundUnitLimitReached()
                         && (expansionProducer || QuantBotBuildPolicy::canFundCityYard(cityMcvCash, data[Unit_MCV][houseID].price,
@@ -3477,7 +3508,7 @@ void QuantBot::build(int militaryValue) {
                     const int styleYardShortfall = vanillaEconomy && gameMode == GameMode::Custom
                         && itemCount[Structure_HeavyFactory] > 0
                         ? style().minYards - itemCount[Structure_ConstructionYard] - itemCount[Unit_MCV] : 0;
-                    const bool prioritizeMcv = prioritizeCityMcv || (vanillaEconomy && gameMode == GameMode::Custom
+                    const bool prioritizeMcv = prioritizeCityMcv || (!postponeCapacityMcv && vanillaEconomy && gameMode == GameMode::Custom
                         && !getHouse()->isGroundUnitLimitReached()
                         && (DuneCity::prioritizeVanillaMcv(money, getHouse()->getNumItems(Unit_Harvester),
                             itemCount[Structure_ConstructionYard], itemCount[Unit_MCV], data[Unit_MCV][houseID].price)
@@ -3509,7 +3540,8 @@ void QuantBot::build(int militaryValue) {
 							&& !getHouse()->isGroundUnitLimitReached()) {
 							if (produceItemWithLogging(Unit_MCV, __LINE__)) itemCount[Unit_MCV]++;
 						}
-                        else if (prioritizeMcv && campaignAvailableToBuild(pBuilder,Unit_MCV)) {
+                        else if (prioritizeMcv && campaignAvailableToBuild(pBuilder,Unit_MCV)
+                            && (!capacityMcvRunway || canFundCapacityMcv(purchasePrice(pBuilder,Unit_MCV)))) {
                             if (produceItemWithLogging(Unit_MCV, __LINE__,
                                     citySimEnabled ? "city_cash_construction_capacity" : "cash_construction_capacity")) {
                                 ++itemCount[Unit_MCV];
@@ -3559,6 +3591,7 @@ void QuantBot::build(int militaryValue) {
 						else if (gameMode == GameMode::Custom && !vanillaEconomy && !citySimEnabled
 							&& campaignAvailableToBuild(pBuilder,Unit_MCV)
 							&& !getHouse()->isGroundUnitLimitReached()
+							&& (!capacityMcvRunway || canFundCapacityMcv(purchasePrice(pBuilder,Unit_MCV)))
 							&& itemCount[Structure_ConstructionYard] + itemCount[Unit_MCV] < std::min(8, money / 4000)) {
                             if (produceItemWithLogging(Unit_MCV, __LINE__, "construction_capacity")) {
                                 itemCount[Unit_MCV]++;
@@ -5269,13 +5302,17 @@ void QuantBot::build(int militaryValue) {
 						&& findPlaceLocation(Structure_StarPort).isValid();
 				};
 				// 11. House IX (after essential production buildings)
+				//     Neither IX rule may choose an IX that has no site: the overdue rule replaces the
+				//     choice of every rule above it, and an unplaceable IX was then rejected each pass
+				//     (no_site) and nothing at all was built. The Palace below likewise.
 				if (itemID == NONE_ID && !skipRemainingStructureLogic
 					&& itemCount[Structure_IX] == 0
 					&& itemCount[Structure_HeavyFactory] > 0
 					&& itemCount[Structure_HighTechFactory] > 0
 					&& itemCount[Structure_RepairYard] > 0
 					&& campaignAvailableToBuild(pBuilder,Structure_IX)
-					&& money > 1000) {
+					&& money > 1000
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 					logDebug("Build IX... money: %d", money);
 				}
@@ -5286,7 +5323,8 @@ void QuantBot::build(int militaryValue) {
 					&& campaignAvailableToBuild(pBuilder,Structure_IX)
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
-					&& itemID != Structure_NuclearPlant) {
+					&& itemID != Structure_NuclearPlant
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_IX).isValid())) {
 					itemID = Structure_IX; structureRule = "advanced_tech";
 				}
                 // Missing prerequisites never start the IX overdue timer.
@@ -5378,7 +5416,8 @@ void QuantBot::build(int militaryValue) {
 									&& campaignAvailableToBuild(pBuilder,Structure_Palace)
 									&& palaceAllowed
 									&& itemCount[Structure_HeavyFactory] > 0
-									&& itemCount[Structure_LightFactory] > 0) {
+									&& itemCount[Structure_LightFactory] > 0
+									&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
 								itemID = Structure_Palace; structureRule = "palace_strategy";
 							}
 				if (palaceOverdue && !skipRemainingStructureLogic
@@ -5391,7 +5430,8 @@ void QuantBot::build(int militaryValue) {
 					&& itemID != Structure_Palace
 					&& itemID != Structure_IX
 					&& itemID != Structure_WindTrap
-					&& itemID != Structure_NuclearPlant) {
+					&& itemID != Structure_NuclearPlant
+					&& (!botConfig().strategicSiteGuards || findPlaceLocation(Structure_Palace).isValid())) {
 					itemID = Structure_Palace; structureRule = "palace_strategy";
 				}
 				// Same demand as the palace rules above, for a map whose Palace

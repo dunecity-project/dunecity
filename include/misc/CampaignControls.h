@@ -11,9 +11,10 @@ inline int firstMission(int level) {
     return level == 1 ? 1 : (level == 9 ? 22 : (level - 1) * 3 - 1);
 }
 
+// Only a player house can be the campaign's house; the Natives house never issues a skip.
 inline bool maySkip(GameType type, int campaignHouse, int issuerHouse, bool human) {
-    return isCampaignGameType(type) && human && campaignHouse >= 0
-        && campaignHouse < NUM_HOUSES && issuerHouse == campaignHouse;
+    return isCampaignGameType(type) && human && isPlayerHouseID(campaignHouse)
+        && issuerHouse == campaignHouse;
 }
 }
 #endif

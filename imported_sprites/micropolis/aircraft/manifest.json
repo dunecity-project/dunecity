@@ -71,10 +71,90 @@
           "source": "obj3-3.xpm"
         },
         {
+          "angle": "RIGHT+22.5",
+          "column": 0,
+          "micropolis_frame": 3,
+          "rotated_degrees_ccw": 22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "cef4b72474b5182435e2ebcbbd75781e525e0b953334478eadf666d8f842e0a4",
+          "source": "obj3-2.xpm"
+        },
+        {
+          "angle": "UP-22.5",
+          "column": 1,
+          "micropolis_frame": 1,
+          "rotated_degrees_ccw": -22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "17645ee05ff6a1f78353c1ce53dd38b2bf08bd6a7c3f1f3d76527cfe75e27d66",
+          "source": "obj3-0.xpm"
+        },
+        {
+          "angle": "UP+22.5",
+          "column": 2,
+          "micropolis_frame": 1,
+          "rotated_degrees_ccw": 22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "3abcd36a7724e7676c3cf83c37f17309d95ee491d116a018d8b1560878c5c194",
+          "source": "obj3-0.xpm"
+        },
+        {
+          "angle": "LEFT-22.5",
+          "column": 3,
+          "micropolis_frame": 7,
+          "rotated_degrees_ccw": -22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "f555900b63f64f270d1938e14c89b96e4ea06abf56472260bdceff001c2d4b4e",
+          "source": "obj3-6.xpm"
+        },
+        {
+          "angle": "LEFT+22.5",
+          "column": 4,
+          "micropolis_frame": 7,
+          "rotated_degrees_ccw": 22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "21fe2ce98377421279370c7110dd3893b9c67f0eb513139f397000dd16caa2ed",
+          "source": "obj3-6.xpm"
+        },
+        {
+          "angle": "DOWN-22.5",
+          "column": 5,
+          "micropolis_frame": 5,
+          "rotated_degrees_ccw": -22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "a36ba14b6e8f8ed1fb71f8b27f662240d02b1a9e02f64c07d1a37122a30a8a65",
+          "source": "obj3-4.xpm"
+        },
+        {
+          "angle": "DOWN+22.5",
+          "column": 6,
+          "micropolis_frame": 5,
+          "rotated_degrees_ccw": 22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "6e909552f227f5d2b452f2bd977a38063f332e70ddc0286b47b80bea680cfb64",
+          "source": "obj3-4.xpm"
+        },
+        {
+          "angle": "RIGHT-22.5",
+          "column": 7,
+          "micropolis_frame": 3,
+          "rotated_degrees_ccw": -22.5,
+          "rotation": "Scale2x x3, nearest rotation, centre sample",
+          "row": 1,
+          "sha256": "081611e04dedd42facc04aed983fe518104855e74f9350cbe95a66bd5b495a2b",
+          "source": "obj3-2.xpm"
+        },
+        {
           "angle": "takeoff",
           "column": null,
           "micropolis_frame": 9,
-          "row": 1,
+          "row": 2,
           "sha256": "b19d3d6bca8770571626d0228eb8e7122a029298daabc0b2d3481233ce0bd92a",
           "source": "obj3-8.xpm"
         },
@@ -82,7 +162,7 @@
           "angle": "takeoff",
           "column": null,
           "micropolis_frame": 10,
-          "row": 2,
+          "row": 3,
           "sha256": "cdd2220ce43bc71cd8fcbb2b3524d32b9dd75653cb2bf534888ed771f3165f85",
           "source": "obj3-9.xpm"
         },
@@ -90,19 +170,20 @@
           "angle": "takeoff",
           "column": null,
           "micropolis_frame": 11,
-          "row": 3,
+          "row": 4,
           "sha256": "47ae3a8507d12e23845b5abbd23f6030a5ba218220332e9bd965cd7b0335c6f8",
           "source": "obj3-10.xpm"
         }
       ],
-      "rows": 4,
+      "rows": 5,
       "rows_meaning": [
         "cruise headings",
+        "in-between cruise headings (+22.5 degrees)",
         "take-off frame 9",
         "take-off frame 10",
         "take-off frame 11"
       ],
-      "sha256": "d2944d5b3922f261d01d95bc08e8b64f1100614f4bef6919bf40c0b890fad1be"
+      "sha256": "ec1e01be05a3ef3de96a50977c2cb1a8a6a863e3567525fab566406dfea5981b"
     },
     "city_helicopter.png": {
       "cell": 32,

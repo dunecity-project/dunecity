@@ -288,7 +288,8 @@ public:
            startWithExploredMap(false), instantBuild(false), onlyOnePalace(false), rocketTurretsNeedPower(false),
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
-           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true)  {
+           immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
+           continuousGroundSteps(false)  {
         }
 
 
@@ -309,7 +310,8 @@ public:
                     && (immortalHumanPlayer == goc.immortalHumanPlayer)
                     && (cityEffects == goc.cityEffects)
                     && (originalUnitDamage == goc.originalUnitDamage)
-                    && (planBuildingSites == goc.planBuildingSites);
+                    && (planBuildingSites == goc.planBuildingSites)
+                    && (continuousGroundSteps == goc.continuousGroundSteps);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -339,6 +341,7 @@ public:
             optStr += "/yards=" + std::to_string(maximumNumberOfConstructionYardsOverride);
             optStr += "/originalDamage=" + std::to_string(originalUnitDamage);
             optStr += "/planSites=" + std::to_string(planBuildingSites);
+            optStr += "/groundSteps=" + std::to_string(continuousGroundSteps);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -378,6 +381,13 @@ public:
         /// yard places it there when finished. Off = build, then place. Match-wide (every peer
         /// runs the same rule; the command executor refuses reservations when off).
         bool        planBuildingSites;
+        /// Unit movement fix (docs/unit-route-comparison.md, "Chained steps"), a match rule for
+        /// every ground unit, human or AI. On: a Dynasty ground step chained onto the previous one
+        /// on the cycle that ended it clears justStoppedMoving (UnitBase::moveDynastyStep), and a
+        /// unit that missed route ticks during a carryall wait resumes at its cadence's next tick
+        /// (UnitBase::navigate). Off (default until its A/B is accepted): the 1.0.760-1.0.852
+        /// simulation, drawn through UnitBase::DrawnStepScope as in 1.0.851-1.0.852.
+        bool        continuousGroundSteps;
 
         /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
         /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.
@@ -406,13 +416,24 @@ typedef enum : int
     HOUSE_WILDSPADE  = 9,
     HOUSE_KLESHMERSH = 10,
     HOUSE_THARPIQUE  = 11,
+    /// 'Natives': the non-player house that owns every sandworm and every trooper raised by
+    /// city crime. Never selectable or listed, has no players, no base and no city, and plays
+    /// on its own team NATIVES_TEAM (hostile to every other house, anonymous team-0 houses
+    /// included; ignored by win/lose). Created on first use by Game::getOrCreateNativesHouse().
+    HOUSE_NATIVES    = 12,
     NUM_HOUSES
 } HOUSETYPE;
 
 constexpr int NUM_LEGACY_HOUSES = 8;
 constexpr int NUM_CAMPAIGN_HOUSES = HOUSE_CUSTOM + 1;
+/// Houses a player can hold. Saves before SAVEGAMEVERSION 9871 stored exactly this many.
+constexpr int NUM_PLAYER_HOUSES = HOUSE_NATIVES;
 constexpr int MAX_CUSTOM_GAME_PLAYERS = 9;
 constexpr int NUM_BASE_HOUSE_COLOR_SLOTS = NUM_CAMPAIGN_HOUSES;
+
+constexpr bool isNativesHouse(int house) noexcept { return house == HOUSE_NATIVES; }
+/// A house id a player, a lobby row, a map section or a command may name.
+constexpr bool isPlayerHouseID(int house) noexcept { return house >= HOUSE_HARKONNEN && house < NUM_PLAYER_HOUSES; }
 
 constexpr int HOUSECOLOR_CUSTOM_DARK_VIOLET   = NUM_BASE_HOUSE_COLOR_SLOTS;
 constexpr int HOUSECOLOR_CUSTOM_FUCHSIA       = NUM_BASE_HOUSE_COLOR_SLOTS + 1;
@@ -424,6 +445,8 @@ constexpr int NUM_CUSTOM_HOUSE_COLORS         = 6;
 constexpr int HOUSECOLOR_GUEST_1               = NUM_BASE_HOUSE_COLOR_SLOTS + NUM_CUSTOM_HOUSE_COLORS;
 constexpr int HOUSECOLOR_GUEST_2               = HOUSECOLOR_GUEST_1 + 1;
 constexpr int HOUSECOLOR_GUEST_3               = HOUSECOLOR_GUEST_1 + 2;
+/// The Natives' own colour (a private leather-brown ramp). Never offered in a lobby.
+constexpr int HOUSECOLOR_NATIVES               = HOUSECOLOR_GUEST_3 + 1;
 
 constexpr int migrateLegacyHouseColorSlot(int colorSlot) noexcept {
     return (colorSlot >= NUM_LEGACY_HOUSES
@@ -431,7 +454,7 @@ constexpr int migrateLegacyHouseColorSlot(int colorSlot) noexcept {
         ? colorSlot + 1
         : colorSlot;
 }
-constexpr int NUM_HOUSE_COLOR_SLOTS           = HOUSECOLOR_GUEST_3 + 1;
+constexpr int NUM_HOUSE_COLOR_SLOTS           = HOUSECOLOR_NATIVES + 1;
 
 typedef enum {
     RIGHT,

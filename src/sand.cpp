@@ -553,6 +553,7 @@ HOUSETYPE getHouseByName(const std::string& name) {
     \return the name of the house (e.g. "Atreides").
 */
 std::string getHouseNameByNumber(HOUSETYPE house) {
+    if(house == HOUSE_NATIVES) return "Natives";
     if(house == HOUSE_CUSTOM) {
         if(isHouseAvailable(house)) return ModManager::instance().getActiveCustomHouseInfo().displayName;
         return "Custom";

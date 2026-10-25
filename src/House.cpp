@@ -100,6 +100,8 @@ House::House(InputStream& stream) : choam(this) {
 
     houseID = stream.readUint8();
     teamID = stream.readUint8();
+    // A save from before 9873 has the Natives house on team 0, with the anonymous houses.
+    if(houseID == HOUSE_NATIVES) teamID = NATIVES_TEAM;
     autoRepairEnabled = currentGame && currentGame->getLoadedSavegameVersion() >= 9824
         ? stream.readBool() : false;
 
@@ -458,9 +460,15 @@ void House::setSpiceIncomeMultiplier(Uint32 multiplier) {
 // taxes share that store (getEarnedCreditRoom) and taxes fill it first, so a quota counted on
 // spice alone could never be met (Harkonnen m3, Ordos m1: 80 minutes, docs/ai-scenario-matrix.md).
 static void checkQuotaWin(House& house) {
-    if(&house != pLocalHouse || (currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
+    if((currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
+    // A player only ends on its own house's quota (original rule). An observer has no house:
+    // any house that meets its quota wins the match for its team.
+    const bool observing = currentGame->isObserving();
+    if(&house != pLocalHouse && !observing) return;
     const FixPoint banked = currentGame->isCitySimEnabled() ? house.getEarnedCredits() : house.getStoredCredits();
-    if(banked >= house.getQuota()) house.win();
+    if(banked < house.getQuota()) return;
+    if(observing) currentGame->setWatchedGameOver(house.getTeamID());
+    else house.win();
 }
 
 void House::addCredits(FixPoint newCredits, bool wasRefined) {
@@ -1048,7 +1056,7 @@ void House::lose(bool bSilent) {
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
                 finished = false;
                 break;
             }
@@ -1065,6 +1073,9 @@ void House::lose(bool bSilent) {
             }
         }
     }
+    // An observer, or a player whose team is already out, has no side for the checks above:
+    // its game ends once the match is decided for everybody.
+    currentGame->checkWatchedGameDecided();
 }
 
 

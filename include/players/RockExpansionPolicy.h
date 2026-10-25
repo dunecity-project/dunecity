@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 #include <limits>
+#include <dunecity/SpatialFields.h>
 namespace RockExpansionPolicy {
 struct Tile { bool rock=false, free=false, walkable=false, owned=false, unsafe=false; };
 struct Site { int x=-1,y=-1,room=0,clearance=0,distance=0,baseDistance=0; bool valid() const { return x>=0; } };
@@ -24,42 +25,49 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
                    const std::vector<int>& reserved, int mainBase=-1) {
     const int n=w*h;
     std::vector<int> component(n,-1),distance(n,-1),freeCount;
-    std::vector<bool> occupied;
+    std::vector<char> occupied;
     std::vector<int> queue; queue.reserve(n);
     // Formations are edge-connected rock: a building needs contiguous ground.
-    auto neighbours=[&](int i,auto visit) {
-        if(i%w) visit(i-1); if(i%w+1<w) visit(i+1);
-        if(i>=w) visit(i-w); if(i+w<n) visit(i+w);
-    };
+    for(int i=0;i<n;++i) if(tiles[i].rock && component[i]<0) {
+        const int id=int(freeCount.size());
+        queue.clear();queue.push_back(i);component[i]=id;
+        int freeTiles=0; bool owned=false;
+        auto visit=[&](int next) {if(tiles[next].rock&&component[next]<0){component[next]=id;queue.push_back(next);}};
+        for(size_t j=0;j<queue.size();++j) {
+            const int at=queue[j],x=at%w;
+            freeTiles+=tiles[at].free;
+            owned=owned||tiles[at].owned;
+            if(x>0) visit(at-1);
+            if(x+1<w) visit(at+1);
+            if(at>=w) visit(at-w);
+            if(at+w<n) visit(at+w);
+        }
+        freeCount.push_back(freeTiles);occupied.push_back(owned);
+    }
     // Ground units drive in eight directions and the engine's path search has
     // no corner rule, so a vehicle squeezes diagonally between two buildings.
     // Reachability has to match, or an MCV boxed in on its four sides reads as
     // stranded and is never sent anywhere while its diagonal is open.
-    auto driveNeighbours=[&](int i,auto visit) {
-        const int x=i%w,y=i/w;
-        for(int dy=-1;dy<=1;++dy) for(int dx=-1;dx<=1;++dx)
-            if((dx||dy)&&x+dx>=0&&x+dx<w&&y+dy>=0&&y+dy<h) visit(i+dy*w+dx);
-    };
-    for(int i=0;i<n;++i) if(tiles[i].rock && component[i]<0) {
-        const int id=int(freeCount.size()); freeCount.push_back(0);occupied.push_back(false);
-        queue.clear();queue.push_back(i);component[i]=id;
-        for(size_t j=0;j<queue.size();++j) {
-            const int at=queue[j];freeCount[id]+=tiles[at].free;
-            occupied[id]=occupied[id]||tiles[at].owned;
-            neighbours(at,[&](int next) {if(tiles[next].rock&&component[next]<0){component[next]=id;queue.push_back(next);}});
+    std::vector<char> drivable(n);
+    for(int i=0;i<n;++i) drivable[i]=tiles[i].walkable&&!tiles[i].unsafe;
+    queue.clear();
+    for(int i:starts) if(i>=0&&i<n&&drivable[i]&&distance[i]<0){distance[i]=0;queue.push_back(i);}
+    for(size_t j=0;j<queue.size();++j) {
+        const int at=queue[j],x=at%w,y=at/w,next=distance[at]+1;
+        const int dx0=x>0?-1:0,dx1=x+1<w?1:0,dy0=y>0?-1:0,dy1=y+1<h?1:0;
+        for(int dy=dy0;dy<=dy1;++dy) for(int dx=dx0;dx<=dx1;++dx) {
+            const int k=at+dy*w+dx;
+            if((dx||dy)&&drivable[k]&&distance[k]<0){distance[k]=next;queue.push_back(k);}
         }
     }
-    queue.clear();
-    for(int i:starts) if(i>=0&&i<n&&tiles[i].walkable&&!tiles[i].unsafe&&distance[i]<0){distance[i]=0;queue.push_back(i);}
-    for(size_t j=0;j<queue.size();++j) {
-        const int at=queue[j];
-        driveNeighbours(at,[&](int next){if(tiles[next].walkable&&!tiles[next].unsafe&&distance[next]<0){distance[next]=distance[at]+1;queue.push_back(next);}});
-    }
     std::vector<int> sum((w+1)*(h+1));
-    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
-        const int i=y*w+x;
-        sum[(y+1)*(w+1)+x+1]=sum[y*(w+1)+x+1]+sum[(y+1)*(w+1)+x]-sum[y*(w+1)+x]
-            +int(tiles[i].rock&&tiles[i].free&&!tiles[i].unsafe);
+    for(int y=0;y<h;++y) {
+        int run=0;
+        for(int x=0;x<w;++x) {
+            const int i=y*w+x;
+            run+=int(tiles[i].rock&&tiles[i].free&&!tiles[i].unsafe);
+            sum[(y+1)*(w+1)+x+1]=sum[y*(w+1)+x+1]+run;
+        }
     }
     // One MCV per new formation. A reserved tile blocks exactly the formation
     // it lies in, so flagging that formation once answers the per-candidate
@@ -69,11 +77,11 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
     // Chebyshev distance to the nearest enemy, capped at w+h (the clearance of
     // a map without enemies), replacing a min over every enemy per candidate.
     // The forward pass relays from left/up-left/up/up-right, the backward pass
-    // from the mirror. Together they are exact for the chessboard metric:
-    // every tile has a shortest king path from its nearest enemy made of a
-    // diagonal/vertical leg and a straight run along a row, and those legs can
-    // always be ordered forward steps first, backward steps second. Every
-    // in-map distance is below w+h, so the result is
+    // from the mirror (DuneCity::chessboardPasses). Together they are exact for
+    // the chessboard metric: every tile has a shortest king path from its
+    // nearest enemy made of a diagonal/vertical leg and a straight run along a
+    // row, and those legs can always be ordered forward steps first, backward
+    // steps second. Every in-map distance is below w+h, so the result is
     // the old min(w+h, distance to each enemy) tile by tile.
     // An enemy index is decoded as before, (e%w, e/w); one that decodes off the
     // map (an aircraft beyond the edge) cannot seed the field and is measured
@@ -85,26 +93,7 @@ inline Site choose(int w,int h,const std::vector<Tile>& tiles,
         if(ex>=0&&ey>=0&&ey<h) enemyDistance[ey*w+ex]=0;
         else offMapEnemies.emplace_back(ex,ey);
     }
-    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
-        int& d=enemyDistance[y*w+x];
-        if(x>0) d=std::min(d,enemyDistance[y*w+x-1]+1);
-        if(y>0) {
-            const int up=(y-1)*w+x;
-            if(x>0) d=std::min(d,enemyDistance[up-1]+1);
-            d=std::min(d,enemyDistance[up]+1);
-            if(x+1<w) d=std::min(d,enemyDistance[up+1]+1);
-        }
-    }
-    for(int y=h-1;y>=0;--y) for(int x=w-1;x>=0;--x) {
-        int& d=enemyDistance[y*w+x];
-        if(x+1<w) d=std::min(d,enemyDistance[y*w+x+1]+1);
-        if(y+1<h) {
-            const int down=(y+1)*w+x;
-            if(x+1<w) d=std::min(d,enemyDistance[down+1]+1);
-            d=std::min(d,enemyDistance[down]+1);
-            if(x>0) d=std::min(d,enemyDistance[down-1]+1);
-        }
-    }
+    DuneCity::chessboardPasses(enemyDistance,w,h);
     Site best;
     for(int y=0;y<h-1;++y) for(int x=0;x<w-1;++x) {
         const int i=y*w+x,c=component[i];

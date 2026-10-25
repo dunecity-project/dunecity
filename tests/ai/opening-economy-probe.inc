@@ -931,6 +931,61 @@ void runOpeningEconomyProbe(Game& game) {
         SDL_Log("VANILLA_PROGRESSION_PASS: core and IX before repeated cover, storage before tech, "
             "worker-led refining, pending bay capacity, genuine turret power");
     }
+    // OpeningCombatBudget is a first-wave funding decision, not a permanent worker cap or a
+    // later-tech unlock. Exercise its real whole-army launcher and resulting fleet ceiling.
+    {
+        const auto savedConfig = bot->configOverride;
+        const auto savedDifficulty = bot->difficulty;
+        const int savedInitialFactory = bot->initialItemCount[Structure_HeavyFactory];
+        auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
+        config->force.openingCombatBudget = true;
+        config->force.bundle = false;
+        config->force.launchFromBundle = false;
+        config->recovery.enabled = false;
+        bot->configOverride = config;
+        bot->difficulty = QuantBot::Difficulty::Hard;
+        bot->initialItemCount[Structure_HeavyFactory] = 0;
+        bot->initialMilitaryValue = 2500;
+        bot->militaryValueLimit = 20000;
+        bot->customWave = {};
+        for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
+            bot->difficulty=tier;
+            require(bot->configuredCustomHarvesterLimit()>4,
+                "Combat opening changed an Easy/Medium fleet ceiling");
+        }
+        bot->difficulty=QuantBot::Difficulty::Hard;
+        bot->initialItemCount[Structure_HeavyFactory]=1;
+        require(bot->configuredCustomHarvesterLimit()>4,
+            "Combat opening changed a medium-base/long-ladder start");
+        bot->initialItemCount[Structure_HeavyFactory]=0;
+        require(bot->configuredCustomHarvesterLimit() == 4,
+            "A small start released its opening fleet ceiling when the factory stood");
+        int spawned = 0;
+        for(int y=1;y<currentGameMap->getSizeY()-1 && spawned<40;++y)
+            for(int x=1;x<currentGameMap->getSizeX()-1 && spawned<40;++x)
+                if(!currentGameMap->getTile(x,y)->hasAGroundObject()
+                    && !currentGameMap->getTile(x,y)->hasAStructure()
+                    && !currentGameMap->getTile(x,y)->isMountain()) {
+                    auto* unit=house->createUnit(Unit_Tank);
+                    require(unit!=nullptr,"Opening combat tank creation failed");
+                    unit->deploy(Coord(x,y));
+                    ++spawned;
+                }
+        require(spawned==40,"No space for opening combat fixture");
+        bot->launchGroundHunt();
+        require(bot->customWave.launched!=0 && !bot->customWave.members.empty(),
+            "Funded opening combat wave did not dispatch");
+        const auto& settings=config->getSettings(static_cast<int>(bot->difficulty));
+        const int normalLimit=currentGameMap->getSizeX()*currentGameMap->getSizeY()<=16384
+            ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+        require(bot->configuredCustomHarvesterLimit()==normalLimit,
+            "First combat dispatch did not release the normal fleet ceiling");
+        bot->configOverride=savedConfig;
+        bot->difficulty=savedDifficulty;
+        bot->initialItemCount[Structure_HeavyFactory]=savedInitialFactory;
+        SDL_Log("OPENING_COMBAT_BUDGET_PASS: standing factory retains four-worker opening; "
+            "real wave dispatch releases the normal fleet ceiling");
+    }
     SDL_Log("OPENING_ECONOMY_PASS: rich factory opening, poor economy opening, absent/sold-out/disabled markets, default/100/unlimited caps");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=0 seed=0 attack_percent=0 partner=brutal enemy=hard cycle=%u outcome=opening_economy_pass",game.getGameCycleCount());
 }

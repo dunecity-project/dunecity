@@ -247,7 +247,9 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
         const ObjectBase* pDamager = getObject(damagerID);
         // Only trigger for actual enemies (not allies) - check team IDs to respect alliances
         if(pDamager && pDamager->getOwner() && (pObject->getOwner()->getTeamID() != pDamager->getOwner()->getTeamID())) {
-            triggerFullScaleAttack();
+            // Defenders answer any intruder, but crime troopers are no opposing house: they
+            // must not start this house's campaign-wide offensive.
+            if(!pDamager->getOwner()->isNatives()) triggerFullScaleAttack();
             scrambleUnitsAndDefend(pDamager);
         }
         return;
@@ -269,8 +271,9 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
         return;
     }
     
-    // Unit has been engaged by an enemy – allow attack waves to launch
-    attackTriggered = true;
+    // Unit has been engaged by an enemy – allow attack waves to launch. A worm or a crime
+    // trooper (the Natives) is no enemy house and does not open the offensive.
+    if(!pDamager->getOwner()->isNatives()) attackTriggered = true;
 
     // Guard harvesters aggressively (Original AI behaviour tweak)
     if(pObject->getItemID() == Unit_Harvester) {
@@ -342,7 +345,8 @@ void CampaignAIPlayer::updateStructures() {
                     const House* pBestHouse = nullptr;
                     for(int i = 0; i < NUM_HOUSES; i++) {
                         const House* pHouse = getHouse(i);
-                        if(!pHouse || pHouse->getTeamID() == getHouse()->getTeamID()) {
+                        // The Natives have no base to strike.
+                        if(!pHouse || pHouse->isNatives() || pHouse->getTeamID() == getHouse()->getTeamID()) {
                             continue;
                         }
                         if(!pBestHouse || pHouse->getNumStructures() > pBestHouse->getNumStructures()) {
@@ -607,7 +611,8 @@ void CampaignAIPlayer::updateUnits() {
         considerTarget(pCandidate);
     }
     for(const UnitBase* pCandidate : getUnitList()) {
-        if(!pCandidate || pCandidate->getOwner() == getHouse()) continue;
+        // Waves go for an opposing house, never a worm or a crime trooper (the Natives).
+        if(!pCandidate || pCandidate->getOwner() == getHouse() || pCandidate->getOwner()->isNatives()) continue;
         considerTarget(pCandidate);
     }
     

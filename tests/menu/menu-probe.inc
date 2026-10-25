@@ -2462,6 +2462,31 @@ int runMenuProbe() {
         menuRequire(!menu.getGameOptions().concreteRequired,"Concrete checkbox did not disable requirements");
         menuRequire(menu.getGameOptions().maximumNumberOfConstructionYardsOverride == 2, "Yard limit UI did not save selection");
     }
+    {
+        auto& mods = ModManager::instance();
+        const auto previousActive = mods.getActiveModName();
+        CustomGameMenu browser(false, false, &setup);
+        const int previousChoice = browser.modDropDown.getSelectedIndex();
+        const std::pair<const char*, const char*> community[] = {
+            {"community-93d3ab43ccc64ade", "93d3ab43ccc64ade50a3f8a75e934949611e5f36cf0979b5f4a96c43dcf22e57"},
+            {"community-c8baed9d35d53315", "c8baed9d35d533150d088e304e674a372579c8c6efbaf95850d529fbc51e6a28"},
+            {"new", "4a2905f3b397951725fc937185d3ad6cbcc0018f60c02db81aefd44031385bf7"}
+        };
+        for(const auto& [name, revision] : community) {
+            int choice = -1;
+            for(size_t i = 0; i < browser.availableMods.size(); ++i)
+                if(browser.availableMods[i].name == name) choice = static_cast<int>(i);
+            menuRequire(choice >= 0, "Bundled community mod is missing from the game mod chooser");
+            browser.modDropDown.setSelectedItem(choice, true);
+            menuRequire(mods.getActiveModName() == name, "Community mod choice did not activate its rules/assets");
+            menuRequire(!OnlineModPolicy::approved(name), "Community upload acquired built-in approval");
+            menuRequire(OnlineModPolicy::fingerprint() == revision, "Community mod lost its exact catalogue identity");
+            menuCapture(browser, "community-mod-" + std::string(name));
+            SDL_Log("COMMUNITY_MOD_MENU_PASS: %s revision=%s", name, revision);
+        }
+        if(previousChoice >= 0) browser.modDropDown.setSelectedItem(previousChoice, true);
+        menuRequire(mods.setActiveMod(previousActive), "Community chooser could not restore the previous active mod");
+    }
     SDL_Log("MENU_PROBE_PASS: home, campaign retry, mission ranges, custom roster, online transition, settings validation and rendering");
     return MENU_QUIT_DEFAULT;
 }

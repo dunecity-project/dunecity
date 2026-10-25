@@ -531,7 +531,9 @@ void QuantBot::attack(int militaryValue) {
     // raises it to 100% while the house is outnumbered).
     if (const int percent=launchReadinessPercent(); percent!=100)
         requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,percent));
-    if (militaryValue < requiredMilitary) {
+    // JoinAllyWaves (team play): an allied QuantBot's wave that has just left is joined by
+    // whatever viable wave we have, whatever our own readiness.
+    if (militaryValue < requiredMilitary && !allyWaveObjective()) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
         if (campaign || (vanillaCustom && difficulty == Difficulty::Brutal))
             attackTimer = std::min(attackTimer, static_cast<int>(MILLI2CYCLES(15000)));
@@ -780,6 +782,8 @@ void QuantBot::launchGroundHunt() {
     // target or a move order may hold a troop back. Hunters already in the
     // field are not reset; they are tracked with the army that joins them.
     const bool wholeArmy=!limited && autonomousCustomArmy();
+    // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
+    const ObjectBase* allyFront=wholeArmy ? allyWaveObjective() : nullptr;
     std::vector<Uint32> existingHunters;
     std::vector<SimpleArmyPolicy::Responder> candidates;
     // Launcher accounting for the dispatch audit. launchGroundHunt() has never
@@ -937,7 +941,7 @@ void QuantBot::launchGroundHunt() {
             // A viable main wave, not a patrol: the established minimum is six
             // units and three thousand credits of value (a test-only play style may change it).
             const bool viable=availableUnits>=minWaveUnits() && availableValue>=minWaveValue();
-            if (availableValue<requiredReady || !viable) {
+            if ((availableValue<requiredReady && !allyFront) || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
                 bundleGateSince=0;
@@ -1015,7 +1019,7 @@ void QuantBot::launchGroundHunt() {
             }
             // Launch from the bundle (W, on by default): a ready wave leaves once most of it
             // stands in the bundle - only while there is one and bundling owns the reserve.
-            if (forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
+            if (!allyFront && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
                 && (bundlePoint.isValid() || bundleCentre.isValid())) {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
@@ -1075,6 +1079,8 @@ void QuantBot::launchGroundHunt() {
         campaignWave.lastActive=getGameCycleCount();
         campaignWave.members.insert(selected.begin(),selected.end());
     }
+    if (campaignCombatBudgetActive() && !selected.empty())
+        campaignWave.launched=getGameCycleCount();
     // Custom Hard/Brutal tracks which troops it has committed, so a withdrawal
     // can recall them and so they are distinguishable from the reserve held at
     // home. Tracking is accounting only: the attackers themselves hunt, and
@@ -1095,7 +1101,7 @@ void QuantBot::launchGroundHunt() {
             const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
             if (unit && (!lead || (lead->isInfantry() && !unit->isInfantry()))) lead=unit;
         }
-        observedFront=customWaveObjective(lead);
+        observedFront=allyFront ? allyFront : customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
         if (recoveryActive() && gate.defer) {
@@ -1207,6 +1213,8 @@ void QuantBot::launchGroundHunt() {
                     if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
                 objective=observedFront ? observedFront : customWaveObjective(lead);
                 if (!objective) objective=lead->findClosestTarget();
+                // A worm or crime trooper (the Natives) is no wave objective: plain Hunt then.
+                if (objective && objective->getOwner() && objective->getOwner()->isNatives()) objective=nullptr;
             }
             if (objective) {
                 const Coord goal=objective->getClosestPoint(centre);
@@ -1256,7 +1264,7 @@ void QuantBot::launchGroundHunt() {
         const UnitBase* lead=nullptr;
         for (const auto* unit : finishers) if (!lead || (lead->isInfantry() && !unit->isInfantry())) lead=unit;
         finishTeam=finishTargetTeam();
-        const ObjectBase* objective=finishObjective(lead,finishTeam);
+        const ObjectBase* objective=allyFront ? allyFront : finishObjective(lead,finishTeam);
         if (!objective && massAssault) objective=observedFront;
         const Coord point=objective ? objective->getClosestPoint(lead->getLocation()) : Coord::Invalid();
         for (const auto* unit : finishers) {
@@ -1408,7 +1416,8 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
         // A visible army is sufficient intelligence even when its base is
         // still hidden. Never require a building sighting to notice that force.
         for (const auto* unit : getUnitList()) {
-            if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam
+            // Crime troopers (the Natives) are no enemy army to face.
+            if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam || unit->getOwner()->isNatives()
                 || !unit->isActive() || unit->getHealth()<=0 || !unit->canAttack()
                 || !mobileCombatItem(unit->getItemID()) || !unit->isVisible(myTeam)) continue;
             const int d=base.isValid() ? blockDistance(base,unit->getLocation()).lround() : 0;
@@ -1478,11 +1487,14 @@ QuantBot::ArmySurvey QuantBot::surveyArmy(const ObjectBase* plannedFront) {
             // never a neutral worm or ambient aircraft.
             if (!combat || !unit->isActive() || !unit->isVisible(myTeam)) continue;
             const Coord at = unit->getLocation();
-            if (survey.frontObserved && blockDistance(survey.frontAnchor, at).lround() <= kFrontRadius) {
+            // Crime troopers (the Natives) are no enemy front or army to weigh a wave against;
+            // only their raid on a core asset below still counts, as base defence.
+            const bool natives = unit->getOwner()->isNatives();
+            if (!natives && survey.frontObserved && blockDistance(survey.frontAnchor, at).lround() <= kFrontRadius) {
                 if (flying) survey.hostileFront.addAir(power, canHitAir);
                 else survey.hostileFront.addGround(power, canHitAir);
             }
-            if (squadCentre.isValid() && blockDistance(squadCentre, at).lround() <= kSquadRadius) {
+            if (!natives && squadCentre.isValid() && blockDistance(squadCentre, at).lround() <= kSquadRadius) {
                 if (flying) survey.squadHostile.addAir(power, canHitAir);
                 else survey.squadHostile.addGround(power, canHitAir);
             }
@@ -2813,7 +2825,8 @@ Coord QuantBot::findSquadRallyLocation() {
     int distance=std::numeric_limits<int>::max();
     for (const auto* unit:getUnitList()) {
         if (!unit->isActive() || !unit->canAttack() || unit->isAFlyingUnit()
-            || unit->getOwner()->getTeamID()==getHouse()->getTeamID()
+            // Worms and crime troopers (the Natives) are not the side the enemy comes from.
+            || unit->getOwner()->getTeamID()==getHouse()->getTeamID() || unit->getOwner()->isNatives()
             || !unit->isVisible(getHouse()->getTeamID())) continue;
         const int d=blockDistance(centre,unit->getLocation()).lround();
         if (d<distance) { distance=d; closest=unit; }
@@ -2859,7 +2872,7 @@ Coord QuantBot::openingForwardOffset(Coord anchor) const {
     int closest=std::numeric_limits<int>::max();
     auto consider=[&](const ObjectBase* object) {
         if (!object || !object->getOwner() || !object->isActive()
-            || object->getItemID()==Unit_Sandworm
+            || object->getItemID()==Unit_Sandworm || object->getOwner()->isNatives()
             || object->getOwner()->getTeamID()==getHouse()->getTeamID()
             || !object->isVisible(getHouse()->getTeamID()) || object->getLocation().isInvalid()) return;
         const int d=blockDistance(anchor,object->getLocation()).lround();
@@ -3623,6 +3636,12 @@ void QuantBot::retreatAllUnits() {
             if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive()
                 && QuantBotBuildPolicy::isLightRaider(pUnit->getItemID())) {
+                // Repair reservations and promised pickups keep their owner:
+                // periodic raider micro must not cancel a service the damage
+                // callback already leaves alone.
+                if (config.force.respectServiceOwnership
+                    && (unitRole(pUnit, {UnitRole::Repair}) != UnitRole::Free
+                        || static_cast<const GroundUnit*>(pUnit)->isAwaitingPickup())) continue;
                 if (const UnitBase* tank = findThreateningTank(pUnit)) {
                     // A short dodge does not release an offensive slot. Keep
                     // custom hunters in their wave just like artillery kiting.

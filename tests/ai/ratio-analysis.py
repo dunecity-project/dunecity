@@ -18,6 +18,10 @@ composition per unit-mix slot every 10 game minutes and at the end) and prints:
                      per-type cost-effectiveness (combat reward per value built, survival), and the
                      candidate tuned mixes derived from them (--candidates DIR writes them as play
                      styles with [Unit Ratios Tuned] keys)
+  --paired HOUSE     with --arms: HOUSE's placement score as A minus its score as B in the matched
+                     game (same map, seed, opponent and house order). Opponents must play identical
+                     mixes in both arms; bootstrap complete pairs only. This is a between-game gain,
+                     not the within-game house-minus-opponent contrast printed by --arms.
 
   --csv DIR          also writes the compact CSV tables (per-house records, slot tables, candidates)
   --tech N           only the games played at tech level N (vanilla-match.py --tech: maps named
@@ -403,6 +407,51 @@ def report_arms(args, games, houses, out_rows=None):
                 print(f'| {x} v {y} | {name} | {fmt_delta(values)} |')
 
 
+def report_paired(args, games, houses, out_rows=None):
+    """HOUSE's placement-score gain between matched games, bootstrapped over complete pairs.
+    The two labels must differ only on HOUSE (e.g. a style setting only its top band). Keep house
+    order in the key: swapping labels does not swap map positions. Draws keep their -0.25 score."""
+    house = args.paired
+    for pair in args.arms.split(','):
+        x, y = pair.split(':')
+        played = defaultdict(dict)
+        for key, game in games.items():
+            if game['players'] != '2':
+                continue
+            rows = houses[key]
+            if house not in rows or len(rows) != 2:
+                continue
+            mine = rows[house]
+            theirs = next(r for h, r in rows.items() if h != house)
+            if {mine['label'], theirs['label']} != {x, y}:
+                continue
+            a, _ = match_score.duel(game['winner_label'] == mine['label'], game['winner_label'] == theirs['label'])
+            order = '|'.join(h for h, _ in sides(game))
+            twin = (game['tag'], game['difficulty'], game['map'], game['seed'], order, theirs['house'])
+            played[twin][mine['label']] = a.score
+        gains = defaultdict(list)
+        for twin, by_label in played.items():
+            if x in by_label and y in by_label:
+                gain = by_label[x] - by_label[y]
+                gains['all'].append(gain)
+                gains[twin[-1]].append(gain)
+                gains['first' if twin[4].startswith(house + '|') else 'second'].append(gain)
+        print(f'\n### Paired gain of {house.capitalize()} as {x} over {y} (same map, seed, opponent and position; '
+              'house placement score as A - as B)\n')
+        print('| Pairs | Gain (95% CI) n |')
+        print('|---|---|')
+        if not gains['all']:
+            print('| all | No complete pairs; interval unavailable |')
+        for name in ['all', 'first', 'second'] + [h for h in HOUSES if h != house]:
+            if gains[name]:
+                print(f'| {name} | {fmt_delta(gains[name])} |')
+                if out_rows is not None:
+                    low, high = bootstrap(gains[name])
+                    out_rows['paired'].append({'arm': f'{x} v {y}', 'house': house, 'pairs': name,
+                                               'gain': f'{statistics.mean(gains[name]):.3f}', 'low': f'{low:.3f}',
+                                               'high': f'{high:.3f}', 'n': len(gains[name])})
+
+
 def fieldable_of(recs):
     out = {}
     for house in HOUSES:
@@ -591,6 +640,9 @@ def main():
     parser.add_argument('--arms')
     parser.add_argument('--by-map', action='store_true')
     parser.add_argument('--random')
+    parser.add_argument('--paired', choices=HOUSES,
+                        help='With --arms: the paired gain of playing A instead of B as this house (runs where only '
+                             'its side differs between the labels)')
     parser.add_argument('--candidates', help='Write the candidates as play styles into this directory')
     parser.add_argument('--csv', help='Write the compact tables into this directory')
     args = parser.parse_args()
@@ -598,6 +650,8 @@ def main():
     out_rows = defaultdict(list)
     if args.arms:
         report_arms(args, games, houses, out_rows)
+        if args.paired:
+            report_paired(args, games, houses, out_rows)
     if args.random:
         candidates, fieldable = report_random(args, games, houses, mixes, out_rows)
         if args.candidates:

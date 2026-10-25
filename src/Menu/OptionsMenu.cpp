@@ -73,11 +73,16 @@ OptionsMenu::OptionsMenu() : MenuBase()
     title.setAlignment(Alignment_HCenter);
     windowWidget.addWidget(&title, Point(left, 18), Point(540, 30));
     const char* tabNames[] = {"General", "Graphics", "Audio", "Controls", "Advanced"};
+    // Desert skins draw the original background's house crests (53x54, 11 px in) in the top
+    // corners: on a narrow screen the tab row narrows to stay between them.
+    const int crestClear = MenuTheme::isDesertUISkin() ? 11 + 53 + 6 : 0;
+    const int tabPitch = std::min(108, (getSize().x - 2 * crestClear) / 5);
+    const int tabLeft = tabPitch == 108 ? left : (getSize().x - 5 * tabPitch + 4) / 2;
     for(int page = 0; page < 5; ++page) {
         pageButtons[page].setText(_(tabNames[page]));
         pageButtons[page].setToggleButton(true);
         pageButtons[page].setOnClick([this, page] { showPage(page); });
-        windowWidget.addWidget(&pageButtons[page], Point(left + page * 108, 58), Point(104, 36));
+        windowWidget.addWidget(&pageButtons[page], Point(tabLeft + page * tabPitch, 58), Point(tabPitch - 4, 36));
         windowWidget.addWidget(&pages[page], Point(left, 110), Point(540, getSize().y - 192));
     }
     auto optionLabel = [](const std::string& text) {
@@ -814,6 +819,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Game Options","Maximum Number of Construction Yards Override",settings.gameOptions.maximumNumberOfConstructionYardsOverride);
     myINIFile.setBoolValue("Game Options", "Original Unit Damage", settings.gameOptions.originalUnitDamage);
     myINIFile.setBoolValue("Game Options", "Plan Building Sites", settings.gameOptions.planBuildingSites);
+    myINIFile.setBoolValue("Game Options", "Continuous Ground Steps", settings.gameOptions.continuousGroundSteps);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);

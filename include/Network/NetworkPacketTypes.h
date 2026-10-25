@@ -290,7 +290,35 @@
 //     overwrote it with the spice budget), and a custom Brutal house keeps its opening worker floor
 //     and equal army capital per worker in vanilla games too (DuneCity only in 87). An 87 peer would
 //     build and attack differently and desync. No saved state change; save 9868.
-#define NETWORK_PROTOCOL_VERSION            88
+// 89: Spectated games end when decided (fix/spectator-game-end): runtime-only, nothing simulated
+//     changes, so no bump was taken; the number stays unused.
+// 90: City airplane (fix/city-airplane, unreleased on its own): the plane flies straight legs on a
+//     continuous heading (CityAircraft::airplaneSteer replaces turnTo(getDir()), which zig-zagged)
+//     and moves at the sixteen-heading speeds; a plane shot down crashes with a Death Hand impact
+//     credited to its shooter (AmbientAirplane::crash -> Bullet::detonateDeathHand); RocketTurret,
+//     Launcher, EliteLauncher, Trooper and Scoutpost hold fire while that blast would land on their
+//     own team (AmbientAirplane::crashEndangers). No saved state change.
+// 93: The Natives house (feat/natives-house, unreleased on its own): a new house slot,
+//     HOUSE_NATIVES = 12 (NUM_HOUSES 13, team 0, no players), owns every sandworm and every city
+//     crime trooper; worms no longer count for or are controlled by the house a map names, crime
+//     troopers no longer join an enemy player's army, and the AI ignores Natives as a house.
+//     Save 9871; older saves load and their worms convert.
+// 94: Release 1.0.851 combines 90 and 93 (and the render-only unit-jitter fix, which changes no
+//     simulation): a crashing plane's Death Hand also hits Natives worms and troopers, and anti-air
+//     never treats Natives as its own team. An 88, 90 or 93 peer would desync. Save 9871.
+// 100: Online spectating to the end (fix/spectator-online): JOIN_SYNC 18 sends the remaining
+//     cycles and operation 19 marks/acknowledges the host's final cycle. Save 9871 unchanged.
+// 101: Natives follow-up: team NATIVES_TEAM (10) is hostile to anonymous team-0 houses,
+//     and reinforcement worms spare their summoner's team. Save 9873.
+// 102: Combined follow-up batch includes the observer end-stream protocol and Natives team /
+//     reinforcement-worm rules. Older peers cannot interpret the same match state. Save 9873.
+// 103: Adds the continuous-ground-steps match rule to the combined follow-up batch:
+//     GameOptionsClass::continuousGroundSteps is hashed and streamed in MOD9 (save 9874).
+//     On: chained Dynasty ground steps clear justStoppedMoving, and a unit that missed
+//     route ticks while awaiting a carryall resumes at its cadence instead of in the past.
+//     Off (default): retains the old movement and render-only UnitBase::DrawnStepScope.
+//     A 102 peer cannot read the MOD9 settings stream.
+#define NETWORK_PROTOCOL_VERSION            103
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size
