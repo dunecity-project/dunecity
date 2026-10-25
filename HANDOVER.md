@@ -1,3 +1,30 @@
+## 2026-10-25 — local 1.0.856 (staging + Vuk's public 1.0.853–1.0.855) verified and installed on the MBA
+
+- Vuk published v1.0.853 (portable payload identity), v1.0.854 (unpublished) and v1.0.855 (special-building Compacts,
+  Hospitals/Nuclear Plants, 39 sidebar portraits, house skin caches) plus Android 0.2.31/0.2.32. Staging merged
+  origin/main 897996b3 (c9e60ec6): HANDOVER both kept; GFXManager keeps Vuk's Hospital/Church portraits with the
+  portrait loop limited to player houses (Natives own no civic building). Version **1.0.856** (370183c6). Protocol
+  103 / save 9874 unchanged (Vuk changed neither). `fix/civic-portraits-855` and `assets/dunecity-special-compacts`
+  are contained in main; `fix/portable-content-853` and `android-0.2.31-engine852` are not merged (Android-only/held).
+- **Blocker found and fixed (e1da6556):** Vuk's art replaced 31 and added 53 Dune City skin files, so every
+  DuneCity save from 1.0.842–1.0.853 (and local 1.0.852 fixtures) no longer matched the shipped mod and asked for a
+  Workshop download (save_roundtrip_probe 842/847/850/851pub-dunecity failed; quantbot_strategic_site_stall hung at
+  the download dialog until its 900 s timeout). `Workshop::earlierShippedPayloads` (src/mod/DuneCityPayload853.inc,
+  generated from git 028d7c53 vs 897996b3) lets load acceptance and the shipped-copy pruning mirror describe the
+  installed mod as that earlier art: each listed file must be exactly the 1.0.855 bytes and is recorded as before;
+  rules/metadata stay byte-exact. A future art change needs another such table. New unit test in
+  WorkshopStoreTestCase (changed/added/removed art; edited rule or edited art fails).
+- Cluster ctest: first run 20261025T172326-v856-93d4f5 116/118 (the two above); after the fix targeted
+  20261025T174610-v856-savefix-274fa9 10/10 and full **20261025T174751-v856-full-df2141 118/118** at e1da6556
+  (mini 68, air 33, pc 16, pro 1).
+- Package: `cmake --install build-int --prefix /tmp/dc856-stage` (BundleUtilities, ad-hoc signature), no
+  Homebrew/local links, Righteous bundled, verify-macos-runtime passed; executable SHA256
+  7e12a1ffb13c9f06a4da7ce2471a3da0b19dcac3a6e51a5611084119e808029e. Installed on the MBA 2026-10-25 18:28 AEDT by
+  `/tmp/push-dunecity-1.0.856.sh`; 1.0.852 copied to `~/Library/Application Support/DuneCity App Backups/before-1.0.856-20261025-182854/`.
+  Not pushed or published.
+- FFA: Palace/IX `StrategicSiteGuards` acceptance finished (six-player same-bot 24 seeds on 3/24 vs off 4/24 decided;
+  ladder 144+144, CY 50, Fortress 48, /weak 48 all level). Correctness fix kept; FFA draw rate still unsolved.
+
 ## 2026-10-24 — Shared follow-up integration, not yet release accepted
 
 - Single staging checkout/build: `dunecity-feature-batch/build-int`; completed source handoffs retain their original commits and evidence below. No new version or install.
