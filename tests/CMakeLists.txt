@@ -193,7 +193,9 @@ target_compile_options(dunelegacy_tests
 )
 
 # Add test
-add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests)
+# The dedicated skirmish_generator_tests below runs every [skirmish] case.
+# Exclude that group here to avoid repeating its expensive generator matrices.
+add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]")
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
 add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")

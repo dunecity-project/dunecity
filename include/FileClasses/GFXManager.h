@@ -252,6 +252,8 @@ typedef enum {
     Picture_Flamepost,             ///< Tornie: Flamepost portrait
     Picture_Chemipost,             ///< Tornie: Chemipost portrait
     Picture_ChaosFactory,          ///< Tornie: Chaos Factory portrait
+    Picture_Hospital,              ///< DuneCity: auto-placed civic Hospital portrait
+    Picture_Church,                ///< DuneCity: auto-placed civic Church portrait
     NUM_SMALLDETAILPICS
 } SmallDetailPics_Enum;
 
