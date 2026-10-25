@@ -1,6 +1,8 @@
 #ifndef DUNECITY_WORKSHOP_DUPLICATES_H
 #define DUNECITY_WORKSHOP_DUPLICATES_H
 
+#include <mod/Workshop.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -48,14 +50,21 @@ struct ShippedModCopy {
     The revision hash saveMod() gives `mod` with its mod.ini's Game Version value changed to
     `gameVersion` in place (every other byte kept; the mod's own files are only read). An empty
     `gameVersion`, or the one mod.ini already says, hashes the files as they are. Empty when a
-    different stamp is asked of a mod.ini without one.
+    different stamp is asked of a mod.ini without one. `earlier` hashes an earlier shipped payload
+    instead (empty when the installed files are not the payload it was recorded against).
 */
-std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion);
+std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion,
+                           const std::vector<PayloadChange>& earlier = {});
 
 /// Hash the current payload with the known older builtin metadata layout and saved Game Version.
 /// Empty for custom mods or metadata with changed gameplay semantics/unknown fields. Acceptance
 /// still requires equality with the save's complete cryptographic revision; no hash alias exists.
-std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion);
+std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion,
+                                 const std::vector<PayloadChange>& earlier = {});
+
+/// Earlier presentation payloads of a shipped mod that saves may still pin (Dune City's art up to
+/// 1.0.853). Each lists only changed art files; rules and metadata are never in one.
+std::vector<std::vector<PayloadChange>> earlierShippedPayloads(const std::string& modName);
 
 /// Every `ws-<hash>` folder in `modsDir` that is an intact copy (its own files hash to <hash>) of
 /// one of `shipped` apart from the Game Version value.

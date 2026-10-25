@@ -41,8 +41,8 @@ uint64_t folderBytes(const fs::path& folder) {
     return total;
 }
 
-std::string hashStampedMetadata(const ShippedMod& mod, INIFile& metadata,
-                                size_t metadataSize, const std::string& gameVersion) {
+std::string hashStampedMetadata(const ShippedMod& mod, INIFile& metadata, size_t metadataSize,
+                                const std::string& gameVersion, const std::vector<PayloadChange>& earlier) {
     if(!metadata.hasKey("Mod", "Game Version")) return {};
     metadata.setStringValue("Mod", "Game Version", gameVersion);
     std::map<std::string, std::string> replaced;
@@ -53,22 +53,36 @@ std::string hashStampedMetadata(const ShippedMod& mod, INIFile& metadata,
     const auto size = SDL_RWtell(rw.get());
     if(size < 0) return {};
     bytes.resize(static_cast<size_t>(size));
-    return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, replaced);
+    return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, replaced, earlier);
 }
+
+// Dune City's graphics_skins as every release up to 1.0.853 shipped them, against the 1.0.855
+// payload (Vuk's special-building Compacts, Hospitals/Nuclear Plants and sidebar portraits).
+const PayloadChange dunecityPayload853[] = {
+#include "DuneCityPayload853.inc"
+};
 
 }
 
-std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion) {
+std::vector<std::vector<PayloadChange>> earlierShippedPayloads(const std::string& modName) {
+    if(modName == "dunecity")
+        return {std::vector<PayloadChange>(std::begin(dunecityPayload853), std::end(dunecityPayload853))};
+    return {};
+}
+
+std::string stampedModHash(const ShippedMod& mod, const std::string& gameVersion,
+                           const std::vector<PayloadChange>& earlier) {
     const fs::path ini = mod.path / "mod.ini";
     if(gameVersion.empty() || gameVersion == stampOf(mod.path))
-        return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path);
+        return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, {}, earlier);
     if(!fs::is_regular_file(ini)) return {};
     // Keep every other byte, including comments and historical duplicate metadata keys.
     INIFile metadata(ini.string());
-    return hashStampedMetadata(mod, metadata, fs::file_size(ini), gameVersion);
+    return hashStampedMetadata(mod, metadata, fs::file_size(ini), gameVersion, earlier);
 }
 
-std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion) {
+std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameVersion,
+                                 const std::vector<PayloadChange>& earlier) {
     // Older builtin profiles retained a blank Version plus a later Version/Base Mod entry.
     // Reconstruct that observed layout, never accept a hash alias or discard payload differences.
     static constexpr std::string_view vanilla =
@@ -106,7 +120,7 @@ std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameV
        || current.getBoolValue("Mod", "Enables City Mode", false)
             != metadata.getBoolValue("Mod", "Enables City Mode", false)) return {};
     // All rules/assets remain the installed bytes. A changed payload cannot recreate the pin.
-    return hashStampedMetadata(mod, metadata, legacy.size(), gameVersion);
+    return hashStampedMetadata(mod, metadata, legacy.size(), gameVersion, earlier);
 }
 
 namespace {
@@ -188,10 +202,14 @@ bool pinNeedsCopy(const ModPin& pin, const ShippedModCopy& copy, const std::vect
         if(mod.name != pin.modName) continue;
         if(stampedModHash(mod, {}) == copy.hash) return false;
         // Mirror resolveMod's recognised metadata variants, including an old layout re-saved
-        // by this release. Other payload changes still need their archived revision.
-        if(!pin.gameVersion.empty() && stampOf(mod.path) == currentVersion
-           && ((pin.gameVersion != currentVersion && stampedModHash(mod, pin.gameVersion) == copy.hash)
-               || legacyBundledModHash(mod, pin.gameVersion) == copy.hash)) return false;
+        // by this release, and its recognised earlier art payloads. Other payload changes still
+        // need their archived revision.
+        if(pin.gameVersion.empty() || stampOf(mod.path) != currentVersion) continue;
+        std::vector<std::vector<PayloadChange>> payloads{{}};
+        for(auto& earlier : earlierShippedPayloads(mod.name)) payloads.push_back(std::move(earlier));
+        for(const auto& earlier : payloads)
+            if((pin.gameVersion != currentVersion && stampedModHash(mod, pin.gameVersion, earlier) == copy.hash)
+               || legacyBundledModHash(mod, pin.gameVersion, earlier) == copy.hash) return false;
     }
     return true;
 }

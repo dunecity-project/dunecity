@@ -113,7 +113,14 @@ bool bundledModMatchesRevisionAtGameVersion(const std::string& modName,const std
     const auto info=manager.getModInfo(modName);
     const ShippedMod mod{modName,info.displayName,manager.getContentBase(modName),path};
     if(gameVersion!=VERSION && stampedModHash(mod,gameVersion)==revisionHash) return true;
-    return legacyBundledModHash(mod,gameVersion)==revisionHash;
+    if(legacyBundledModHash(mod,gameVersion)==revisionHash) return true;
+    // A save from before a shipped art update pins the art it was saved with. Art only: the
+    // rules and metadata are verified exactly, as above, and every changed file is checked.
+    for(const auto& earlier:earlierShippedPayloads(modName)) {
+        if(gameVersion!=VERSION && stampedModHash(mod,gameVersion,earlier)==revisionHash) return true;
+        if(legacyBundledModHash(mod,gameVersion,earlier)==revisionHash) return true;
+    }
+    return false;
 }
 void pruneShippedModCopiesOnce() {
     auto& manager=ModManager::instance();

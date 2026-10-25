@@ -112,9 +112,11 @@ std::string serialize(const Revision& r) {
     return s;
 }
 // The revision capture() records for `source`: every file's path, size and SHA-256, with a
-// bundled snapshot's ID derived from that content. `replaced` gives some files other bytes.
+// bundled snapshot's ID derived from that content. `replaced` gives some files other bytes;
+// `earlier` (checked against the current entries) records some files as an earlier payload had them.
 Revision describe(const std::string& kind,const std::string& id,const std::string& name,const std::string& base,
-                  const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced) {
+                  const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced,
+                  const std::vector<PayloadChange>& earlier) {
     Revision r; r.kind=kind;r.id=id;r.name=name;r.base=base;r.modHash=modHash;
     for(const auto& e:fs::recursive_directory_iterator(source)) {
         auto path=e.path().lexically_relative(source);
@@ -125,6 +127,15 @@ Revision describe(const std::string& kind,const std::string& id,const std::strin
         const auto other=replaced.find(relative);
         if(other==replaced.end()) r.files.push_back({relative,Dune2RAssetManager::sha256File(e.path().string()),e.file_size()});
         else r.files.push_back({relative,hashBytes(other->second),other->second.size()});
+    }
+    for(const auto& change:earlier) {
+        const auto current=std::find_if(r.files.begin(),r.files.end(),[&](const File& f){return f.path==change.path;});
+        const std::string now=change.nowHash, then=change.thenHash;
+        require(now.empty() ? current==r.files.end()
+                            : current!=r.files.end() && current->hash==now && current->size==change.nowSize,
+                "The installed payload is not the one this earlier payload was recorded against.");
+        if(current!=r.files.end()) r.files.erase(current);
+        if(!then.empty()) r.files.push_back({change.path,then,change.thenSize});
     }
     std::sort(r.files.begin(),r.files.end(),[](const File& a,const File& b){return a.path<b.path;});
     // Unowned bundled snapshots derive identity from their complete immutable content.
@@ -270,12 +281,15 @@ Revision Store::importRevision(const std::string& manifest,const std::string& ex
 Revision Store::capture(const std::string& kind,const std::string& id,const std::string& name,
                         const std::string& base,const std::string& modHash,const fs::path& source) {
     std::lock_guard<std::recursive_mutex> lock(storeMutex);
-    auto manifest=serialize(describe(kind,id,name,base,modHash,source,{}));
+    auto manifest=serialize(describe(kind,id,name,base,modHash,source,{},{}));
     return importRevision(manifest,hashBytes(manifest),0,source);
 }
 std::string contentHash(const std::string& kind,const std::string& id,const std::string& name,const std::string& base,
-                        const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced) {
-    return hashBytes(serialize(describe(kind,id,name,base,modHash,source,replaced)));
+                        const std::string& modHash,const fs::path& source,const std::map<std::string,std::string>& replaced,
+                        const std::vector<PayloadChange>& earlier) {
+    if(earlier.empty()) return hashBytes(serialize(describe(kind,id,name,base,modHash,source,replaced,earlier)));
+    try { return hashBytes(serialize(describe(kind,id,name,base,modHash,source,replaced,earlier))); }
+    catch(const std::exception&) { return {}; }   // Not that earlier payload: no reconstruction.
 }
 void Store::verifyDirectory(const Revision& revision,const fs::path& directory) const {
     std::lock_guard<std::recursive_mutex> lock(storeMutex);

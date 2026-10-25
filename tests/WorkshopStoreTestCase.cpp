@@ -49,6 +49,30 @@ TEST_CASE("Workshop content hash is the captured hash, with substituted bytes an
     f.write("mod.ini",restamped);REQUIRE(f.save("").hash==other);
     REQUIRE(Workshop::contentHash("mod",std::string(32,'a'),"Test","vanilla","",f.source)==f.save().hash);
 }
+TEST_CASE("Workshop content hash recreates an earlier art payload only from the exact current art","[workshop]") {
+    // Saves made before a shipped art update pin the old art; the current art is checked file by
+    // file and recorded as the earlier payload had it (changed, added and removed files).
+    Fixture f;f.write("graphics/old.png","old pixels");f.write("graphics/changed.png","before");
+    const auto before=f.save("").hash;
+    std::filesystem::remove(f.source/"graphics/old.png");
+    f.write("graphics/changed.png","after!");f.write("graphics/new.png","new pixels");
+    const std::string changedNow=Workshop::hashBytes("after!"),changedThen=Workshop::hashBytes("before");
+    const std::string added=Workshop::hashBytes("new pixels"),removed=Workshop::hashBytes("old pixels");
+    const std::vector<Workshop::PayloadChange> earlier{
+        {"graphics/changed.png",changedNow.c_str(),6,changedThen.c_str(),6},
+        {"graphics/new.png",added.c_str(),10,"",0},
+        {"graphics/old.png","",0,removed.c_str(),10}};
+    REQUIRE(Workshop::contentHash("mod","","Test","vanilla","",f.source,{},earlier)==before);
+    REQUIRE(Workshop::contentHash("mod","","Test","vanilla","",f.source)!=before);
+    // Any other difference, including an edited rule, still fails: nothing aliases the pin.
+    f.write("ObjectData.ini","[Tank]\nPrice = 600\n");
+    REQUIRE(Workshop::contentHash("mod","","Test","vanilla","",f.source,{},earlier)!=before);
+    f.write("ObjectData.ini","[Tank]\nPrice = 500\n");
+    // Art that is not the payload the change was recorded against gives no reconstruction.
+    f.write("graphics/changed.png","edited");
+    REQUIRE(Workshop::contentHash("mod","","Test","vanilla","",f.source,{},earlier).empty());
+    REQUIRE(f.store.list().size()==1);
+}
 TEST_CASE("Workshop downloaded bytes must match manifest and corrupt cache can be repaired","[workshop]") {
     Fixture f;auto r=f.save();Workshop::Store other(f.root/"download");
     f.write("ObjectData.ini","bad");REQUIRE_THROWS(other.importRevision(r.manifest,r.hash,1,f.source));REQUIRE(other.list().empty());
