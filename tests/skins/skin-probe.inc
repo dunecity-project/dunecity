@@ -287,13 +287,15 @@ int runSkinProbe() {
         menu.skinDropDown.setSelectedItem(1);
         skinRequire(GameInitSettings::sanitizeGraphicsSkin(menu.skinDropDown.getSelectedEntryIntData())
                     == GameInitSettings::GraphicsSkin::Dune2, "Skirmish skin selector lost Dune2");
+        // A real Skirmish start opens the modal mission briefing, so apply the start's skin step
+        // to the settings the menu builds (Game::initGame calls the same function).
         auto skirmish = std::make_unique<Game>(); currentGame = skirmish.get();
         GameInitSettings skirmishInit(HOUSE_ATREIDES, 1, rules);
-        skirmishInit.setCampaignGraphicsSkin(GameInitSettings::GraphicsSkin::Dune2);
-        GameInitSettings::HouseInfo human(HOUSE_ATREIDES, 1);
-        human.addPlayerInfo({"Skin tester", "HumanPlayer"});
-        skirmishInit.addHouseInfo(human);
-        skirmish->initGame(skirmishInit);
+        skirmishInit.setCampaignGraphicsSkin(
+            GameInitSettings::sanitizeGraphicsSkin(menu.skinDropDown.getSelectedEntryIntData()));
+        skirmish->gameInitSettings = skirmishInit;
+        skirmish->citySimEnabled_ = true;
+        skirmish->applyDuneCityGraphicsSkins();
         for(const int house : {HOUSE_ATREIDES, HOUSE_HARKONNEN, HOUSE_ORDOS})
             skinRequire(pGFXManager->isDuneCityHouseUsingDune2(house), "Skirmish Dune2 skin did not reach every house");
         skirmish.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
