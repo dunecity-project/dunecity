@@ -24,6 +24,14 @@
   Not pushed or published.
 - FFA: Palace/IX `StrategicSiteGuards` acceptance finished (six-player same-bot 24 seeds on 3/24 vs off 4/24 decided;
   ladder 144+144, CY 50, Fortress 48, /weak 48 all level). Correctness fix kept; FFA draw rate still unsolved.
+- **Dune2 skin not showing (Stefan, Custom Game; Skirmish had no option) — fixed (a9f4f04e, probe 83261539):**
+  `Game::applyDuneCityGraphicsSkins` ran before the map loader, so a Dune2 choice on a Random Custom Game row (the
+  default) went to house -1 and never showed; it now re-applies from the resolved `houseInfoListSetup` after the map
+  loads. Single-mission Skirmish now has a "DuneCity skin" dropdown (left column, DuneCity only) applied to every
+  house, like the campaign. `graphics_skin_probe` now starts a real Custom Game with Random rows (Dune2/SimCity) and
+  checks the Skirmish selector; cluster 20261025T190506-v856-skin2-21a015 pass, full
+  **20261025T190557-v856-full2-29fd4f 118/118** at 83261539. Reinstalled on the MBA 19:14 (SHA256
+  314c41cc04eb6c0d96cf0dfa0f8336aca0144bfc48884b367367d7a86f4c6a6b; backup before-1.0.856-20261025-191409).
 
 ## 2026-10-24 — Shared follow-up integration, not yet release accepted
 
