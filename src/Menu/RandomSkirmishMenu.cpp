@@ -61,7 +61,8 @@ Catalogue loadCatalogue(Mode mode) {
     return makeCatalogue(*data, mode == Mode::DuneCity);
 }
 
-GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules, const Params& params) {
+GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptionsClass& rules, const Params& params,
+                          GameInitSettings::GraphicsSkin skin) {
     // A partner AI shares the player's house, as a Custom Game's second player slot does.
     bool sharedHouse = false;
     for(const HouseSetup& house : result.houses)
@@ -72,6 +73,7 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
     init.setLocalSpectator(params.spectate);
     for(const HouseSetup& house : result.houses) {
         GameInitSettings::HouseInfo info(static_cast<HOUSETYPE>(house.house), house.team);
+        info.graphicsSkin = skin;
         const std::string houseName = getHouseNameByNumber(static_cast<HOUSETYPE>(house.house));
         if(house.role == Role::Human) {
             if(params.spectate) {
@@ -262,6 +264,10 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         spectateBox.setOnClick([this]() { onSpectateChanged(); });
         fillAI(spectateAIBox);
         spectateAIBox.setTooltipText(_("The AI that plays your house while you spectate."));
+        // The DuneCity skin, one choice for every house as in the campaign; shared with it.
+        skinBox.addEntry(_("SimCity"), 0);
+        skinBox.addEntry(_("Dune2"), 1);
+        skinBox.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
 
         fillAI(allyAIBox);
         fillAI(enemyAIBox);
@@ -306,6 +312,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
         addRow(1, row++, _("City"), &enemyCityBox);
         enemyCityCaption = &captions[usedCaptions - 1];
+        addRow(1, row++, _("City skin"), &skinBox);
+        skinCaption = &captions[usedCaptions - 1];
     }
 
     // The seed field shares its row with the "New" button.
@@ -482,6 +490,12 @@ void RandomSkirmishMenu::onModChanged() {
     for(Widget* widget : std::initializer_list<Widget*>{&allyCityBox, &enemyCityBox, &playerCityBox, &startCityBox,
                                                         allyCityCaption, enemyCityCaption, playerCityCaption, startCityCaption})
         if(widget != nullptr) widget->setVisible(city);
+    // The skin row exists only in single player (a hosted game's rows choose skins in the lobby).
+    if(skinCaption != nullptr) {
+        skinBox.setVisible(city);
+        skinBox.setEnabled(city);
+        skinCaption->setVisible(city);
+    }
     allyCityBox.setEnabled(city && alliesBox.getSelectedEntryIntData() > 0);
     enemyCityBox.setEnabled(city);
     playerCityBox.setEnabled(city);
@@ -591,7 +605,15 @@ bool RandomSkirmishMenu::prepareStart(GameInitSettings& init) {
     Params params;
     Result result;
     if(!generate(params, result)) return false;
-    init = RandomSkirmish::makeInit(result, matchRules(), params);
+    const int skin = skinBox.getSelectedEntryIntData() == 1 ? 1 : 0;
+    if(!multiplayer && settings.general.duneCityCampaignSkin != skin) {
+        // Remember the choice with the campaign's, so every DuneCity screen offers it next time.
+        settings.general.duneCityCampaignSkin = skin;
+        INIFile config(getConfigFilepath());
+        config.setIntValue("General", "DuneCity Campaign Skin", skin);
+        if(config.saveChangesTo(getConfigFilepath())) WebRuntime::syncPersistentFiles();
+    }
+    init = RandomSkirmish::makeInit(result, matchRules(), params, GameInitSettings::sanitizeGraphicsSkin(skin));
     if(!params.fixedSeed) {
         // The next visit offers a new map; this one stays reproducible from its name.
         params.seed = freshSeed();

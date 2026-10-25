@@ -16,6 +16,7 @@
 #include <chrono>
 #include <Menu/OptionsMenu.h>
 #include <Menu/SinglePlayerSkirmishMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
 #include <cstring>
 
 void skinRequire(bool condition, const char* message) {
@@ -300,6 +301,28 @@ int runSkinProbe() {
             skinRequire(pGFXManager->isDuneCityHouseUsingDune2(house), "Skirmish Dune2 skin did not reach every house");
         skirmish.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
     }
-    SDL_Log("SKIN_PROBE_PASS: all 16 authored civic portraits; six selected zone portraits; live skin/overlay switches; fixed footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks; Random Custom Game rows; Skirmish skin");
+    // The main menu's Random Skirmish: a "City skin" row for a city-sim mod, and a real game
+    // start from it draws every house in that skin.
+    {
+        RandomSkirmishMenu menu;
+        for(int i = 0; i < menu.modBox.getNumEntries(); ++i)
+            if(menu.availableMods[menu.modBox.getEntryIntData(i)].name == "dunecity") menu.modBox.setSelectedItem(i);
+        menu.onModChanged();
+        skinRequire(menu.skinCaption != nullptr && menu.skinBox.isVisible() && menu.skinBox.isEnabled()
+                    && menu.skinCaption->isVisible(), "Random Skirmish has no City skin choice for DuneCity");
+        menu.skinBox.setSelectedItem(1);
+        GameInitSettings started;
+        skinRequire(menu.prepareStart(started), "Random Skirmish could not prepare its start");
+        for(const auto& row : started.getHouseInfoList())
+            skinRequire(row.graphicsSkin == GameInitSettings::GraphicsSkin::Dune2, "Random Skirmish row lost the Dune2 skin");
+        auto random = std::make_unique<Game>(); currentGame = random.get();
+        random->initGame(started);
+        skinRequire(!random->houseInfoListSetup.empty(), "Random Skirmish game has no houses");
+        for(const auto& row : random->houseInfoListSetup)
+            skinRequire(pGFXManager->isDuneCityHouseUsingDune2(row.houseID), "Random Skirmish house not drawn in Dune2");
+        random.reset(); currentGame=nullptr; pLocalPlayer=nullptr;
+        skinRequire(settings.general.duneCityCampaignSkin == 1, "Random Skirmish did not remember the skin");
+    }
+    SDL_Log("SKIN_PROBE_PASS: all 16 authored civic portraits; six selected zone portraits; live skin/overlay switches; fixed footprints; high-detail civic pictures; SimCity isolation; missing-house/cell fallbacks; Random Custom Game rows; Skirmish and Random Skirmish skins");
     return MENU_QUIT_DEFAULT;
 }
