@@ -32,6 +32,14 @@
   checks the Skirmish selector; cluster 20261025T190506-v856-skin2-21a015 pass, full
   **20261025T190557-v856-full2-29fd4f 118/118** at 83261539. Reinstalled on the MBA 19:14 (SHA256
   314c41cc04eb6c0d96cf0dfa0f8336aca0144bfc48884b367367d7a86f4c6a6b; backup before-1.0.856-20261025-191409).
+- **Random Skirmish skin (Stefan: "skirmish menu has no skin selection" — the main menu's Random Skirmish, d3b1b325):**
+  single-player Random Skirmish gets a "City skin" row (SimCity/Dune2, right column under Enemies' City, shown only
+  for a city-sim mod); `RandomSkirmish::makeInit` takes the skin for every generated house, and the choice is saved as
+  `General/DuneCity Campaign Skin`, shared with the campaign/Skirmish selectors. `graphics_skin_probe` starts a real
+  Random Skirmish from the menu with Dune2 and checks every house; `ui_gallery_probe` captures
+  `menu-random-skirmish-dunecity` (414ac3f9; 640x480 and 1440x900 fit). Cluster 20261025T192206-v856-skin3-eb8da2 5/5,
+  gallery 20261025T192952-v856-gallery-da75ec, full **20261025T193236-v856-full3-fcb69f 118/118**. Package SHA256
+  64c5c0f790c126c84ae57dbd46b7055832d60cfc6aeacaa02990cda312cb3d06; MBA install waits until DuneCity is closed there.
 
 ## 2026-10-24 — Shared follow-up integration, not yet release accepted
 
