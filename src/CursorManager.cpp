@@ -24,6 +24,7 @@
 #include <structures/StructureBase.h>
 #include <structures/Palace.h>
 #include <misc/CursorAppearance.h>
+#include <misc/MobilePlatform.h>
 #include <map>
 #include <memory>
 
@@ -31,7 +32,7 @@
 
 namespace {
 
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
 bool autoCursorHasPhysicalMouse = false;
 #else
 bool autoCursorHasPhysicalMouse = true;
@@ -95,7 +96,7 @@ void presentWithCursor(int mode, bool contextual) {
 }
 
 void updateCursorVisibilityForInput(const SDL_Event& event) {
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     if (settings.video.cursorVisibility != 0) {
         // SDL's Android activity and pointer-icon handling may change cursor
         // visibility during focus and view transitions. Forced modes are

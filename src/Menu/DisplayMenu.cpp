@@ -7,6 +7,7 @@
 #include <main.h>
 #include <GUI/MsgBox.h>
 #include <misc/MenuLayout.h>
+#include <misc/MobilePlatform.h>
 #include <misc/WebRuntime.h>
 
 DisplayMenu::DisplayMenu()
@@ -22,7 +23,7 @@ DisplayMenu::DisplayMenu()
     setBackground(pGFXManager->getUIGraphic(UI_MenuBackground));
     resize(getRendererWidth(), getRendererHeight());
     setWindowWidget(&content);
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+#if defined(DUNECITY_MOBILE) || defined(__EMSCRIPTEN__)
     const bool showAspect = true;
 #else
     // On desktop the interface takes the shape of the window, so there is no
@@ -76,8 +77,8 @@ DisplayMenu::DisplayMenu()
             content.addWidget(&choices[i], Point(left + (i - 3) * 224, top + 256 + aspectSection), Point(216, 38));
         }
     }
-#ifdef __ANDROID__
-    // Android keeps a fixed logical interface across surface changes.
+#ifdef DUNECITY_MOBILE
+    // Phones and tablets keep a fixed logical interface across surface changes.
     for(int i = 3; i < 5; ++i) {
         choices[i].setVisible(false);
         choices[i].setEnabled(false);
@@ -115,7 +116,7 @@ void DisplayMenu::apply() {
 #ifdef __EMSCRIPTEN__
     const int physicalWidth = interfaceWidthForHeight(settings.video.physicalHeight, selectedWidescreen);
     const bool widthChanged = physicalWidth != settings.video.physicalWidth;
-#elif defined(__ANDROID__)
+#elif defined(DUNECITY_MOBILE)
     const bool widthChanged = selectedHeight > 0 && selectedWidth != settings.video.width;
 #else
     const bool widthChanged = false; // the width follows the window shape

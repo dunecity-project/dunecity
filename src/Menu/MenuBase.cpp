@@ -32,6 +32,7 @@
 
 #include <sand.h>
 #include <main.h>
+#include <misc/MobilePlatform.h>
 
 
 MenuBase::MenuBase() : Window(0,0,0,0) {
@@ -58,7 +59,7 @@ int MenuBase::showMenu() {
     while(!quiting) {
         int frameStart = SDL_GetTicks();
 
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         // Android may reset pointer visibility when SDL views or windows
         // transition. Keep Auto/Hidden/Visible effective in every menu,
         // including Mentat and briefing screens.

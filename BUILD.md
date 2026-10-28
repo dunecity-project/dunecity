@@ -6,6 +6,9 @@ For the verified PREDATOR laptop workflow, including the current Dune2R Windows
 ZIP, Android APK, warm-cache strategy, and exFAT workarounds, see
 [`LOCAL_BUILD_GUIDE.md`](LOCAL_BUILD_GUIDE.md).
 
+iPhone and iPad builds (simulator and device) are described in
+[`IOS_PORT.md`](IOS_PORT.md).
+
 ## Quick Start
 
 ### Prerequisites
