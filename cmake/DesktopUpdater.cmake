@@ -1,7 +1,7 @@
-# Updaters are deliberately absent from Android and browser packages.
+# Updaters are deliberately absent from Android, iOS and browser packages.
 option(DUNECITY_ENABLE_UPDATER "Build signed desktop update support" ON)
 target_sources(dunecity PRIVATE ${CMAKE_SOURCE_DIR}/src/misc/DesktopUpdater.cpp)
-if(NOT DUNECITY_ENABLE_UPDATER OR EMSCRIPTEN OR ANDROID)
+if(NOT DUNECITY_ENABLE_UPDATER OR EMSCRIPTEN OR ANDROID OR IOS)
     return()
 endif()
 

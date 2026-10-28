@@ -1,4 +1,5 @@
 #include <misc/TouchInput.h>
+#include <misc/MobilePlatform.h>
 
 #include <GameInitSettings.h>
 #include <globals.h>
@@ -135,7 +136,7 @@ bool translateTouchEvent(SDL_Event& event) {
         return false;
     }
 
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     if(event.type == SDL_FINGERDOWN) {
         if(!state.primaryActive) {
             state.primaryActive = true;

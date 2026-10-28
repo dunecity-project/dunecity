@@ -43,6 +43,7 @@
 #include <misc/format.h>
 #include <misc/MenuPalette.h>
 #include <misc/MenuLayout.h>
+#include <misc/MobilePlatform.h>
 
 #include <algorithm>
 
@@ -194,7 +195,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     pages[4].addWidget(VSpacer::create(6));
 
     resolutionHBox.addWidget(Spacer::create(), 0.5);
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     resolutionHBox.addWidget(optionLabel(_("Interface Resolution")), 190);
 #else
     resolutionHBox.addWidget(optionLabel(_("Video Resolution")), 190);
@@ -205,7 +206,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
         // Interface Size controls enlargement independently of resolution.
         resolutionDropDownBox.addEntry(fmt::sprintf("%d x %d", coord.x, coord.y), i);
         if(
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
             coord.x == settings.video.width && coord.y == settings.video.interfaceHeight
 #else
             coord.x == settings.video.physicalWidth && coord.y == settings.video.physicalHeight
@@ -332,8 +333,8 @@ OptionsMenu::OptionsMenu() : MenuBase()
     const char* sizes[] = {"Large", "Medium", "Small", "Automatic", "Native (1:1)"};
     const int heights[] = {480, 600, 768, 0, INTERFACE_HEIGHT_NATIVE};
     for(int size = 0; size < 5; ++size) {
-#ifdef __ANDROID__
-        // Android needs a fixed logical interface across surface changes.
+#ifdef DUNECITY_MOBILE
+        // Phones and tablets need a fixed logical interface across surface changes.
         if(size >= 3) continue;
 #endif
         interfaceSizeDropDownBox.addEntry(_(sizes[size]), heights[size]);
@@ -349,7 +350,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
     aspectDropDownBox.setSelectedItem(settings.video.width * 3 > settings.video.height * 4 ? 1 : 0);
 #endif
     aspectDropDownBox.setOnSelectionChange(std::bind(&OptionsMenu::onChangeOption, this, std::placeholders::_1));
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+#if defined(DUNECITY_MOBILE) || defined(__EMSCRIPTEN__)
     interfaceHBox.addWidget(optionLabel(_("Shape")), 80);
     interfaceHBox.addWidget(&aspectDropDownBox, 80);
 #else
@@ -483,7 +484,7 @@ OptionsMenu::OptionsMenu() : MenuBase()
 
     windowWidget.addWidget(&backButton, Point(left + 30, getSize().y - 64), Point(220, 40));
     windowWidget.addWidget(&acceptButton, Point(left + 290, getSize().y - 64), Point(220, 40));
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     fullScreenCheckbox.setEnabled(false);
 #endif
     showPage(lastPage);
@@ -532,7 +533,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= settings.general.diagnosticLogs != diagnosticLogsCheckbox.isChecked();
     bChanged |= settings.general.aiDecisionLog != aiDecisionLogCheckbox.isChecked();
     bChanged |= settings.video.interfaceHeight != interfaceSizeDropDownBox.getSelectedEntryIntData();
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+#if defined(DUNECITY_MOBILE) || defined(__EMSCRIPTEN__)
     bChanged |= (settings.video.width * 3 > settings.video.height * 4) != (aspectDropDownBox.getSelectedEntryIntData() == 1);
 #endif
     bChanged |= (settings.general.playIntro != introCheckbox.isChecked());
@@ -542,7 +543,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
 
     int selectedResolution = resolutionDropDownBox.getSelectedEntryIntData();
     if(selectedResolution >= 0) {
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         bChanged |= settings.video.width != availScreenRes[selectedResolution].x;
         bChanged |= settings.video.interfaceHeight != availScreenRes[selectedResolution].y;
 #else
@@ -615,7 +616,7 @@ void OptionsMenu::onOptionsOK() {
     settings.ai.campaignAI = ((pPlayerData != nullptr) ? pPlayerData->getPlayerClass() : DEFAULTAIPLAYERCLASS);
 
     int selectedResolution = resolutionDropDownBox.getSelectedEntryIntData();
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     if(selectedResolution >= 0) {
         settings.video.width = availScreenRes[selectedResolution].x;
         settings.video.height = availScreenRes[selectedResolution].y;
@@ -634,7 +635,7 @@ void OptionsMenu::onOptionsOK() {
     
     settings.video.interfaceHeight = interfaceSizeDropDownBox.getSelectedEntryIntData();
 
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+#if defined(DUNECITY_MOBILE) || defined(__EMSCRIPTEN__)
     const bool widescreen = aspectDropDownBox.getSelectedEntryIntData() == 1;
 #ifdef __EMSCRIPTEN__
     // The backing surface takes the chosen shape before the interface size is
@@ -643,7 +644,7 @@ void OptionsMenu::onOptionsOK() {
 #endif
 #endif
 
-#ifndef __ANDROID__
+#ifndef DUNECITY_MOBILE
     // The interface size decides how much the chosen resolution is enlarged:
     // Native keeps it 1:1, Automatic applies the enlargement factor, a preset
     // takes the shape of the window. setVideoMode() derives the same size from
@@ -657,7 +658,7 @@ void OptionsMenu::onOptionsOK() {
     }
 #endif
 
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+#if defined(DUNECITY_MOBILE) || defined(__EMSCRIPTEN__)
     // A fixed preset keeps its exact 4:3 or 16:9 width on the platforms where
     // the player chooses the screen shape.
     if(settings.video.interfaceHeight > 0) {
@@ -846,7 +847,7 @@ void OptionsMenu::determineAvailableScreenResolutions() {
     }
     return;
 #endif
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
     availScreenRes.emplace_back(640, 480);
     availScreenRes.emplace_back(854, 480);
     availScreenRes.emplace_back(800, 600);
