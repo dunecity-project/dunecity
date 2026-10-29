@@ -112,6 +112,10 @@ cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
     -DDUNECITY_BUILD_TESTS=OFF \
     "${LAUNCHERS[@]}"
 
+# The POST_BUILD copies only add files: an uploaded bundle must not carry
+# files left over from earlier builds, so App Store builds relink into an
+# empty bundle.
+[[ -z "$APP_STORE" ]] || rm -rf "$BUILD_DIR/bin/dunecity.app"
 nice -n 10 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
 APP="$BUILD_DIR/bin/dunecity.app"
