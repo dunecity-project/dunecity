@@ -3395,8 +3395,12 @@ case CursorMode_Heal: {
                     bQuitGame = true;
                 } break;
 
-                default:
-                    break;
+                default: {
+                    TouchInput::MapGesture gesture;
+                    if(TouchInput::decodeMapGesture(event, gesture)) {
+                        handleMapGesture(gesture);
+                    }
+                } break;
             }
         }
     }
@@ -4803,6 +4807,46 @@ void Game::applyDune2RZoom(int zoomLevel) {
                          : currentZoomlevel == 1 ? "Tactical"
                          : "Strategic";
     addToNewsTicker(fmt::sprintf("Dune2R view: %s (%dx)", viewName, currentZoomlevel + 1));
+}
+
+void Game::handleMapGesture(const TouchInput::MapGesture& gesture) {
+    switch(gesture.kind) {
+        case TouchInput::MapGestureKind::Pan: {
+            // The map point that was under the fingers stays under them.
+            const Coord before(screenborder->screen2worldX(gesture.x - gesture.dx), screenborder->screen2worldY(gesture.y - gesture.dy));
+            const Coord after(screenborder->screen2worldX(gesture.x), screenborder->screen2worldY(gesture.y));
+            screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + before - after);
+        } break;
+
+        case TouchInput::MapGestureKind::ZoomIn: {
+            zoomAround(currentZoomlevel + 1, gesture.x, gesture.y);
+        } break;
+
+        case TouchInput::MapGestureKind::ZoomOut: {
+            zoomAround(currentZoomlevel - 1, gesture.x, gesture.y);
+        } break;
+    }
+}
+
+void Game::zoomAround(int zoomLevel, int screenX, int screenY) {
+    zoomLevel = std::max(0, std::min(2, zoomLevel));
+    if(zoomLevel == currentZoomlevel) {
+        return;
+    }
+
+    const Coord anchor(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    const bool dune2R = ModManager::instance().isInitialized()
+        && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Dune2R";
+    if(dune2R) {
+        applyDune2RZoom(zoomLevel);
+    } else {
+        const Coord oldCenterCoord = screenborder->getCurrentCenter();
+        currentZoomlevel = zoomLevel;
+        screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
+        screenborder->setNewScreenCenter(oldCenterCoord);
+    }
+    const Coord moved(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
 }
 
 

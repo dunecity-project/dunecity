@@ -8,24 +8,39 @@ both phones is gated by `DUNECITY_MOBILE`, iOS-only code by `DUNECITY_IOS`,
 both defined in `include/misc/MobilePlatform.h`. Android-only services (the
 Back button, app storage paths, the certificate path) keep `__ANDROID__`.
 
-## Controls
+## Touch controls
 
-Identical to Android; `src/misc/TouchInput.cpp` turns touches into mouse
-events before normal UI and game handling:
+Shared with Android. `src/misc/TouchInput.cpp` feeds finger events to
+`TouchGestures` (`src/misc/TouchGestures.cpp`), which decides what they mean
+and hands the game ordinary mouse events, plus pan and zoom for the map:
 
 ```text
-single tap                            -> left click (select, press buttons, place)
-single drag                           -> left drag (box-select units)
+tap                                   -> left click (select, press buttons, place)
+drag                                  -> left drag (box-select, minimap)
+two fingers moved together            -> scroll the map
+two fingers spread / pinched          -> zoom in / out one level (1x, 2x, 3x)
+two-finger tap                        -> right click between the fingers
 hold one finger + tap a second finger -> right click at the first finger
 ```
+
+A press waits until the finger moves or lifts. A second finger within 150 ms
+makes it a two-finger gesture, and by then no click may have happened: it would
+have started a selection box, or issued an Attack or Move cursor's order. That
+is why `main.cpp` turns SDL's own touch-to-mouse events off on mobile. Leaving
+the foreground mid-touch resets the gesture.
+
+On phones "Left-click orders" (Options) is on by default: with units
+selected, a tap on an enemy attacks it and a tap on the ground moves there. A
+tap on one of your own units selects it, and a two-finger tap clears the
+selection or cancels an Attack/Move cursor. The sidebar order icons are 36 px,
+three per row; the unit panels drop the unit picture to make room. Tooltips
+stay hidden while the pointer is a finger, since a lifted finger would leave
+one open over the map.
 
 iOS has no Back button: a tap skips the intro and other cutscenes, and the
 in-game Options button or the Mentat reach the menus. A connected keyboard,
 mouse or trackpad (iPad) works as on the desktop; the pointer appears when a
 physical mouse is used (Video options `Cursor`: Auto, Hidden, Visible).
-
-Without a second finger, orders also work through the sidebar: select a unit,
-tap Move (or Attack, Capture...) and then tap the destination.
 
 ## Display
 
@@ -133,7 +148,5 @@ a different identifier.
 
 ## Remaining work
 
-1. Touch camera panning (shared with Android): a two-finger drag would conflict
-   with the current two-finger right click, so it needs a gesture decision.
-2. App Store or TestFlight distribution: asset catalog icons, export
+1. App Store or TestFlight distribution: asset catalog icons, export
    compliance for the bundled OpenSSL, and the Dune II data licensing question.

@@ -1,25 +1,30 @@
 #include <misc/TouchInput.h>
 #include <misc/MobilePlatform.h>
+#include <misc/TouchGestures.h>
 
-#include <GameInitSettings.h>
 #include <globals.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace {
 
-struct TouchState {
-    bool primaryActive = false;
-    SDL_FingerID primaryFinger = 0;
-    bool secondaryActive = false;
-    SDL_FingerID secondaryFinger = 0;
-    bool hasMousePosition = false;
-    int lastX = 0;
-    int lastY = 0;
-};
+Uint32 mapGestureEventType = 0;     ///< SDL user event type, registered with the first gesture
 
-TouchState state;
+void unpackPair(const void* packed, int& a, int& b) {
+    const auto value = static_cast<uint32_t>(reinterpret_cast<intptr_t>(packed));
+    a = static_cast<int16_t>(value >> 16);
+    b = static_cast<int16_t>(value & 0xFFFF);
+}
+
+#ifdef DUNECITY_MOBILE
+
+intptr_t packPair(int a, int b) {
+    return static_cast<intptr_t>((static_cast<uint32_t>(static_cast<uint16_t>(a)) << 16) | static_cast<uint16_t>(b));
+}
+
+TouchGestures gestures;
 
 Uint32 getGameWindowId() {
     return window != nullptr ? SDL_GetWindowID(window) : 0;
@@ -28,12 +33,6 @@ Uint32 getGameWindowId() {
 void touchToScreen(float x, float y, int& screenX, int& screenY) {
     screenX = std::clamp(static_cast<int>(std::lround(x * settings.video.width)), 0, settings.video.width - 1);
     screenY = std::clamp(static_cast<int>(std::lround(y * settings.video.height)), 0, settings.video.height - 1);
-}
-
-void updateMousePosition(int x, int y) {
-    state.hasMousePosition = true;
-    state.lastX = std::clamp(x, 0, settings.video.width - 1);
-    state.lastY = std::clamp(y, 0, settings.video.height - 1);
 }
 
 void logicalToWindowCoordinates(int logicalX, int logicalY, int& windowX, int& windowY) {
@@ -86,26 +85,45 @@ void pushMouseButton(Uint8 button, bool pressed, int logicalX, int logicalY) {
     SDL_PushEvent(&mouse);
 }
 
-void pushMouseClick(Uint8 button, int x, int y) {
-    pushMouseMotion(x, y);
-    pushMouseButton(button, true, x, y);
-    pushMouseButton(button, false, x, y);
-}
-
-void resetTouchFingers() {
-    state = TouchState{};
-}
-
-void updateFromFingerIfNeeded(const SDL_TouchFingerEvent& finger) {
-    if(state.hasMousePosition) {
-        return;
+void pushMapGesture(TouchInput::MapGestureKind kind, const TouchGestures::Action& action) {
+    if(mapGestureEventType == 0) {
+        const Uint32 type = SDL_RegisterEvents(1);
+        if(type == static_cast<Uint32>(-1)) {
+            return;
+        }
+        mapGestureEventType = type;
     }
 
-    int x = 0;
-    int y = 0;
-    touchToScreen(finger.x, finger.y, x, y);
-    updateMousePosition(x, y);
+    SDL_Event gesture{};
+    gesture.type = mapGestureEventType;
+    gesture.user.type = mapGestureEventType;
+    gesture.user.timestamp = SDL_GetTicks();
+    gesture.user.windowID = getGameWindowId();
+    gesture.user.code = static_cast<Sint32>(kind);
+    gesture.user.data1 = reinterpret_cast<void*>(packPair(action.x, action.y));
+    gesture.user.data2 = reinterpret_cast<void*>(packPair(action.dx, action.dy));
+    SDL_PushEvent(&gesture);
 }
+
+void pushActions(const TouchGestures::Actions& actions) {
+    using Kind = TouchGestures::Kind;
+    for(const auto& action : actions) {
+        switch(action.kind) {
+            case Kind::Motion:      pushMouseMotion(action.x, action.y); break;
+            case Kind::LeftDown:    pushMouseButton(SDL_BUTTON_LEFT, true, action.x, action.y); break;
+            case Kind::LeftUp:      pushMouseButton(SDL_BUTTON_LEFT, false, action.x, action.y); break;
+            case Kind::RightClick: {
+                pushMouseButton(SDL_BUTTON_RIGHT, true, action.x, action.y);
+                pushMouseButton(SDL_BUTTON_RIGHT, false, action.x, action.y);
+            } break;
+            case Kind::Pan:         pushMapGesture(TouchInput::MapGestureKind::Pan, action); break;
+            case Kind::ZoomIn:      pushMapGesture(TouchInput::MapGestureKind::ZoomIn, action); break;
+            case Kind::ZoomOut:     pushMapGesture(TouchInput::MapGestureKind::ZoomOut, action); break;
+        }
+    }
+}
+
+#endif
 
 }
 
@@ -121,56 +139,48 @@ bool translateTouchEvent(SDL_Event& event) {
     }
 #endif
 
-    if(event.type == SDL_MOUSEMOTION && event.motion.which == SDL_TOUCH_MOUSEID) {
-        updateMousePosition(event.motion.x, event.motion.y);
+#ifdef DUNECITY_MOBILE
+    if(event.type == SDL_APP_WILLENTERBACKGROUND
+       || (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)) {
+        // Fingers on the screen now may never report their FINGERUP.
+        gestures.reset();
         return false;
     }
-
-    if((event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) &&
-       event.button.which == SDL_TOUCH_MOUSEID) {
-        updateMousePosition(event.button.x, event.button.y);
-        return false;
-    }
+#endif
 
     if(event.type != SDL_FINGERDOWN && event.type != SDL_FINGERMOTION && event.type != SDL_FINGERUP) {
         return false;
     }
 
 #ifdef DUNECITY_MOBILE
+    // main.cpp turns off SDL's own touch-to-mouse events on mobile: every pointer event
+    // a finger causes comes from here.
+    int x = 0;
+    int y = 0;
+    touchToScreen(event.tfinger.x, event.tfinger.y, x, y);
+    const SDL_FingerID finger = event.tfinger.fingerId;
+    const Uint32 ms = event.tfinger.timestamp;
     if(event.type == SDL_FINGERDOWN) {
-        if(!state.primaryActive) {
-            state.primaryActive = true;
-            state.primaryFinger = event.tfinger.fingerId;
-            updateFromFingerIfNeeded(event.tfinger);
-        } else if(event.tfinger.fingerId != state.primaryFinger) {
-            state.secondaryActive = true;
-            state.secondaryFinger = event.tfinger.fingerId;
-            updateFromFingerIfNeeded(event.tfinger);
-            pushMouseClick(SDL_BUTTON_RIGHT, state.lastX, state.lastY);
-        }
-        return true;
+        pushActions(gestures.fingerDown(finger, x, y, ms));
+    } else if(event.type == SDL_FINGERMOTION) {
+        pushActions(gestures.fingerMotion(finger, x, y, ms));
+    } else {
+        pushActions(gestures.fingerUp(finger, x, y, ms));
     }
-
-    if(event.type == SDL_FINGERMOTION && state.primaryActive && event.tfinger.fingerId == state.primaryFinger) {
-        updateFromFingerIfNeeded(event.tfinger);
-        return true;
-    }
-
-    if(event.type == SDL_FINGERUP && state.primaryActive && event.tfinger.fingerId == state.primaryFinger) {
-        resetTouchFingers();
-        return true;
-    }
-
-    if(event.type == SDL_FINGERUP && state.secondaryActive && event.tfinger.fingerId == state.secondaryFinger) {
-        state.secondaryActive = false;
-        state.secondaryFinger = 0;
-        return true;
-    }
-
     return true;
 #else
     return false;
 #endif
+}
+
+bool decodeMapGesture(const SDL_Event& event, MapGesture& gesture) {
+    if(mapGestureEventType == 0 || event.type != mapGestureEventType) {
+        return false;
+    }
+    gesture.kind = static_cast<MapGestureKind>(event.user.code);
+    unpackPair(event.user.data1, gesture.x, gesture.y);
+    unpackPair(event.user.data2, gesture.dx, gesture.dy);
+    return true;
 }
 
 }

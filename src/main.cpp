@@ -956,10 +956,14 @@ int main(int argc, char *argv[]) {
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_WARN);
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
 #ifdef DUNECITY_MOBILE
+    // TouchInput makes the mouse events itself, so a press can wait to see whether a
+    // second finger turns it into a pan or pinch (misc/TouchGestures.h).
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#else
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
 #endif
 #ifdef __ANDROID__
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
@@ -1203,7 +1207,13 @@ int main(int argc, char *argv[]) {
             settings.general.language = myINIFile.getStringValue("General","Language","en");
             settings.general.scrollSpeed = myINIFile.getIntValue("General","Scroll Speed",50);
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
-            settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
+#ifdef DUNECITY_MOBILE
+            // Without a right mouse button, a tap on an enemy attacks and a tap on the ground moves.
+            constexpr bool defaultLeftClickOrders = true;
+#else
+            constexpr bool defaultLeftClickOrders = false;
+#endif
+            settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",defaultLeftClickOrders);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
             settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
             settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(

@@ -67,6 +67,10 @@ void applyCursorVisibilitySetting() {
     SDL_ShowCursor(shouldShowCursor() ? SDL_ENABLE : SDL_DISABLE);
 }
 
+bool pointerIsTouch() {
+    return !autoCursorHasPhysicalMouse;
+}
+
 void presentWithCursor(int mode, bool contextual) {
     if(pGFXManager && shouldShowCursor()) {
         using Action = CursorAppearance::Action;

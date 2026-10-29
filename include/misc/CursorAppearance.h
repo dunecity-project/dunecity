@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <misc/MobilePlatform.h>
 
 namespace CursorAppearance {
 enum class Action { Pointer, Move, Attack, Capture, Drop, Heal, Repair, Return, Deploy, Destruct, Paths, Patrol };
@@ -112,13 +113,21 @@ inline SDL_Surface* create(Action action, float scale, bool targeting = true) {
     }
     return surface;
 }
-// A compact version of the same geometry fits the existing 26px sidebar rows.
-inline SDL_Surface* createIcon(Action action) {
-    SDL_Surface* source = create(action,1.0f);
+// A compact version of the same geometry for the sidebar action buttons: 20px in the 26px
+// desktop buttons, 28px in the finger-sized 36px ones on mobile (UnitActionBar.h).
+#ifdef DUNECITY_MOBILE
+constexpr float kIconScale = 1.4f;
+#else
+constexpr float kIconScale = 1.0f;
+#endif
+inline SDL_Surface* createIcon(Action action, float scale = kIconScale) {
+    SDL_Surface* source = create(action,scale);
     if(!source) return nullptr;
-    SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormat(0,20,20,32,SDL_PIXELFORMAT_RGBA32);
+    const int size = static_cast<int>(std::lround(20*scale));
+    SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormat(0,size,size,32,SDL_PIXELFORMAT_RGBA32);
     if(icon) {
-        const SDL_Rect crop{1,1,20,20};
+        const int margin = static_cast<int>(std::lround(scale));
+        const SDL_Rect crop{margin,margin,size,size};
         SDL_SetSurfaceBlendMode(source,SDL_BLENDMODE_NONE);
         SDL_BlitSurface(source,&crop,icon,nullptr);
         for(int y=0;y<icon->h;++y) for(int x=0;x<icon->w;++x) {

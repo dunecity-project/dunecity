@@ -27,6 +27,7 @@
 #include <globals.h>
 #include <CursorManager.h>
 #include <misc/MobilePlatform.h>
+#include <misc/TouchInput.h>
 #include <sand.h>
 
 CutScene::CutScene()
@@ -58,6 +59,9 @@ void CutScene::run()
 
         while(SDL_PollEvent(&event)) {
             updateCursorVisibilityForInput(event);
+            if(TouchInput::translateTouchEvent(event)) {
+                continue;
+            }
 
             //check the events
             switch (event.type)

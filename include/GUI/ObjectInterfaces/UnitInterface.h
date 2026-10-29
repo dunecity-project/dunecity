@@ -52,6 +52,13 @@ protected:
     explicit UnitInterface(int objectID) : DefaultObjectInterface(objectID) {
         const int buttonGap = getRendererHeight() < 540 ? 2 : 6;
         Uint32 color = ownerAccentColor();
+        if(UnitActionBar::kPanelTop != 80) {
+            // The unit picture's rows go to the larger action icons (UnitActionBar.h).
+            topBoxHBox.setVisible(false);
+            setWidgetGeometry(&topBox, Point(0,0), Point(SIDEBARWIDTH - 25,UnitActionBar::kPanelTop));
+            setWidgetGeometry(&mainHBox, Point(0,UnitActionBar::kPanelTop),
+                              Point(SIDEBARWIDTH - 25,getRendererHeight() - UnitActionBar::kPanelTop - 148));
+        }
 
         mainHBox.addWidget(HSpacer::create(4));
 

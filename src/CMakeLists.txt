@@ -432,6 +432,7 @@ target_sources(dunecity
         misc/sound_util.cpp
         misc/string_util.cpp
         misc/Scaler.cpp
+        misc/TouchGestures.cpp
         misc/TouchInput.cpp
         misc/WebRuntime.cpp
 )

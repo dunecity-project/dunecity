@@ -69,6 +69,7 @@ class ObjectManager;
 class House;
 class Explosion;
 class SpatialGrid;
+namespace TouchInput { struct MapGesture; }
 class UnitBase;
 class Carryall;
 class ConstructionYard;
@@ -722,6 +723,12 @@ private:
     std::string buildMatchAnalyticsPayload(bool finishedMatch) const;
 
     void applyDune2RZoom(int zoomLevel);
+
+    /// Two-finger pan and pinch over the game view on phones and tablets.
+    void handleMapGesture(const TouchInput::MapGesture& gesture);
+
+    /// Changes the zoom level, keeping the map point under (screenX, screenY) in place.
+    void zoomAround(int zoomLevel, int screenX, int screenY);
 
     /**
         Checks whether the cursor is on the radar view
