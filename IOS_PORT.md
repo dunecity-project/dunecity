@@ -156,24 +156,47 @@ device by building any app for it with `xcodebuild -allowProvisioningUpdates
 -allowProvisioningDeviceRegistration`. Development builds run until the
 profile expires (one year).
 
-## Distribution (not yet possible)
+## Distribution
 
 Phones other than the developer's own need one of:
 
 | Route | Who can install | Needs |
 |---|---|---|
-| TestFlight, internal | up to 100 App Store Connect users of the team | app record in App Store Connect, App Store upload (below); no review |
-| TestFlight, external | anyone with the public link, up to 10,000 | the same plus Beta App Review |
+| TestFlight, internal | up to 100 App Store Connect users of the team | an upload; no review |
+| TestFlight, public link | anyone with the link, up to 10,000 | an upload, test information, Beta App Review |
 | Ad Hoc | up to 100 registered devices a year | each tester's UDID, an Ad Hoc profile, an install page serving an `itms-services` manifest over HTTPS |
 | App Store | everyone | full App Review |
 
-An App Store or TestFlight upload additionally needs: an `Assets.car` asset
-catalog with `CFBundleIconName` and a 1024 px icon, `ITSAppUsesNonExemptEncryption`
-(the bundled OpenSSL is used for TLS and DTLS), a `PrivacyInfo.xcprivacy`
-declaring the required-reason APIs used (file timestamps, system boot time,
-user defaults), the Xcode build metadata keys (`DTPlatformName`, `DTSDKName`,
-`DTXcode`...) that CMake/Ninja bundles lack, an Apple Distribution certificate
-and an App Store provisioning profile. The bundle ships the original Dune II
-PAK and VOC files; App Review (and external TestFlight review) will judge them
-under the intellectual-property guideline, so public distribution first needs
-a decision on the game data, as for Android (`ANDROID_PORT.md`).
+Upload a build to App Store Connect (TestFlight) from the Mac that has the
+team's Apple ID signed into Xcode:
+
+```sh
+scripts/build-ios.sh --testflight           # build, sign for distribution, upload
+scripts/build-ios.sh --ipa                  # same, but only write build-ios-device/appstore/Dune City.ipa
+```
+
+The CMake/Ninja bundle is not an Xcode product, so the script wraps it in an
+`.xcarchive` with the Xcode build keys App Store Connect checks (`DTXcode`,
+`DTSDKName`, `DTPlatformVersion`...), then `xcodebuild -exportArchive
+-allowProvisioningUpdates` signs it with the team's cloud-managed Apple
+Distribution certificate and the "iOS Team Store Provisioning Profile:
+net.dunecity.DuneCity" (both created by Xcode on first use, no local
+certificate needed) and uploads it. Each upload needs a new `CFBundleVersion`;
+it defaults to the UTC time (`20261029.0917`), `--build-number` overrides it.
+
+App Store requirements already in the bundle: the icon is compiled from
+`IDE/iOS/Assets.xcassets` (1024 px source) by actool into `Assets.car`,
+`IDE/iOS/PrivacyInfo.xcprivacy` declares the required-reason APIs the binary
+imports (`stat`/`fstat`, `mach_absolute_time`, `NSUserDefaults`) and the
+match report (gameplay content, not linked to the player, no tracking), and
+`ITSAppUsesNonExemptEncryption` is `NO`: the only encryption is OpenSSL TLS and
+DTLS, standard algorithms that need no documentation for TestFlight. An App
+Store release in France needs Apple's French encryption declaration. The
+privacy policy is https://dunelegacy.com/privacy.html.
+
+App Store Connect itself needs an app record for `net.dunecity.DuneCity`
+(created in the web console; the API cannot create apps) before the first
+upload. Public TestFlight also needs the beta description, feedback email and
+review contact, an external group with a public link, and a passed Beta App
+Review. The bundle ships the original Dune II PAK and VOC files and the "Dune"
+name; reviewers judge both under the intellectual-property guideline.
