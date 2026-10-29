@@ -63,6 +63,7 @@ std::mutex Game::performanceLogMutex;
 #include <misc/DiscordManager.h>
 #include <misc/SaveCompat.h>
 #include <misc/TouchInput.h>
+#include <misc/MobilePlatform.h>
 #include <CursorManager.h>
 #include <misc/CursorAppearance.h>
 
@@ -1196,8 +1197,12 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
     payload << "{\"schema_version\":3"
 #ifdef __EMSCRIPTEN__
             << ",\"client_runtime\":\"browser\""
+#elif defined(DUNECITY_IOS)
+            << ",\"client_runtime\":\"ios\""       // iPhone and iPad
+#elif defined(__ANDROID__)
+            << ",\"client_runtime\":\"android\""
 #else
-            << ",\"client_runtime\":\"native\""
+            << ",\"client_runtime\":\"native\""    // desktop
 #endif
             << ",\"game_type\":" << AITelemetry::Record::quote(analyticsGameType(gameInitSettings.getGameType()))
             << ",\"game_version\":" << AITelemetry::Record::quote(VERSION)
