@@ -773,12 +773,24 @@ if(APPLE)
     # iOS bundles are flat, so the same payload goes to the bundle root.
     if(IOS)
         set(BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_DIR:dunecity>")
-        file(GLOB DUNECITY_IOS_ICONS "${CMAKE_SOURCE_DIR}/IDE/iOS/AppIcon*.png")
+        # actool writes Assets.car plus the AppIcon60x60/76x76 PNGs older iOS
+        # versions read; IDE/iOS/Info.plist carries the matching icon keys.
+        file(GLOB_RECURSE DUNECITY_IOS_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/IDE/iOS/Assets.xcassets/*")
+        set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${DUNECITY_IOS_ASSETS}
+            "${CMAKE_SOURCE_DIR}/IDE/iOS/PrivacyInfo.xcprivacy")
+        string(TOLOWER "${DUNECITY_IOS_PLATFORM}" DUNECITY_IOS_ACTOOL_PLATFORM)
         add_custom_command(
             TARGET dunecity
             POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy ${DUNECITY_IOS_ICONS} "${BUNDLE_RESOURCES_DIR}/"
-            COMMENT "Copying iOS app icons"
+            COMMAND xcrun actool --compile "${BUNDLE_RESOURCES_DIR}"
+                --platform ${DUNECITY_IOS_ACTOOL_PLATFORM}
+                --minimum-deployment-target ${CMAKE_OSX_DEPLOYMENT_TARGET}
+                --app-icon AppIcon --target-device iphone --target-device ipad
+                --output-partial-info-plist "${CMAKE_CURRENT_BINARY_DIR}/ios-assets-partial.plist"
+                --output-format human-readable-text --errors --warnings
+                "${CMAKE_SOURCE_DIR}/IDE/iOS/Assets.xcassets"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/IDE/iOS/PrivacyInfo.xcprivacy" "${BUNDLE_RESOURCES_DIR}/"
+            COMMENT "Compiling iOS app icons and copying the privacy manifest"
         )
     else()
         set(BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:dunecity>/Resources")

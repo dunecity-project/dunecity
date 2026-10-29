@@ -20,6 +20,8 @@
 	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
 	<key>CFBundleVersion</key>
 	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+	<!-- Icons come from Assets.xcassets, compiled by actool (src/CMakeLists.txt);
+	     these keys match actool's partial Info.plist for that catalog. -->
 	<key>CFBundleIcons</key>
 	<dict>
 		<key>CFBundlePrimaryIcon</key>
@@ -28,6 +30,8 @@
 			<array>
 				<string>AppIcon60x60</string>
 			</array>
+			<key>CFBundleIconName</key>
+			<string>AppIcon</string>
 		</dict>
 	</dict>
 	<key>CFBundleIcons~ipad</key>
@@ -38,10 +42,16 @@
 			<array>
 				<string>AppIcon60x60</string>
 				<string>AppIcon76x76</string>
-				<string>AppIcon83.5x83.5</string>
 			</array>
+			<key>CFBundleIconName</key>
+			<string>AppIcon</string>
 		</dict>
 	</dict>
+	<!-- OpenSSL TLS/DTLS only: a standard algorithm, which needs no export
+	     documentation for TestFlight (App Store in France needs Apple's French
+	     encryption declaration). See IOS_PORT.md "Distribution". -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>${DUNECITY_IOS_PLATFORM}</string>

@@ -1,3 +1,18 @@
+## 2026-10-29 — iPhone/iPad public TestFlight beta (engine 1.0.857)
+
+- **At Stefan's request:** App Store packaging (asset-catalog icon, `PrivacyInfo.xcprivacy`,
+  `ITSAppUsesNonExemptEncryption` NO, `scripts/build-ios.sh --testflight/--ipa`) built on the mini and uploaded:
+  build 1.0.857 (20261029.1035) processed VALID and was submitted to Beta App Review (waiting for review at the
+  time of writing). App Store Connect app "Dune City" 6828374570; groups "Public" (external, link
+  https://testflight.apple.com/join/nsEVY7Eb, auto-notify) and "Team" (internal, Stefan's account invited).
+  Test information, review contact and "What to Test" were set through the App Store Connect API; the key,
+  issuer ID and contact are in 1Password Agent-Operator "App Store Connect API key". Details in `IOS_PORT.md`.
+- **Website:** privacy policy https://dunelegacy.com/privacy.html (a39f01b); iPhone & iPad card linking the
+  TestFlight beta on index and dune-city, hero/current-release lines updated (e2f7209); live after Deploy to
+  Droplet. The release workflow's version rewrites leave the iPhone text alone (simulated with 1.0.858).
+- **Open:** the Beta App Review result. If rejected (likely: bundled Dune II data or the "Dune" name), the
+  public link stays closed while the internal Team group keeps working.
+
 ## 2026-10-29 — 1.0.857 published (iOS port, phone touch controls, mobile usage stats)
 
 - **Published at Stefan's request:** PR #110 (`integrate/1.0.857`, head e3f8f601, all PR checks green; cluster
