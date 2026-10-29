@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
-project(DuneCity VERSION 1.0.856 LANGUAGES C CXX)
+project(DuneCity VERSION 1.0.857 LANGUAGES C CXX)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -24,7 +24,10 @@ endif()
 # Release build optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(APPLE)
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version" FORCE)
+        # iOS builds choose their own minimum through scripts/build-ios.sh.
+        if(NOT IOS)
+            set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version" FORCE)
+        endif()
         # Network/config validation and deterministic simulation share these flags.
         # Fast-math assumes finite inputs and can remove security checks; it also
         # changes arithmetic relative to the browser and other native builds.
@@ -215,7 +218,7 @@ endif()
 # before this and stays uninstrumented.
 set(DUNECITY_SANITIZE_DEFAULT "")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"
-   AND NOT WIN32 AND NOT ANDROID AND NOT EMSCRIPTEN)
+   AND NOT WIN32 AND NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN)
     set(DUNECITY_SANITIZE_DEFAULT "address,undefined")
 endif()
 set(DUNECITY_SANITIZE "${DUNECITY_SANITIZE_DEFAULT}" CACHE STRING
@@ -272,8 +275,9 @@ endif()
 
 
 # Browser builds are copied directly into the website by package-web.ps1 and
-# do not use the native install or CPack rules below.
-if(NOT EMSCRIPTEN)
+# iOS builds are packaged by scripts/build-ios.sh; neither uses the native
+# install or CPack rules below.
+if(NOT EMSCRIPTEN AND NOT IOS)
 
 # Platform-specific install configuration
 if(WIN32)

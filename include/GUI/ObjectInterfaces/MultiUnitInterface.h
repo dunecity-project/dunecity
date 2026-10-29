@@ -58,15 +58,16 @@ protected:
         const int buttonGap = getRendererHeight() < 540 ? 2 : 6;
         Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
 
-        addWidget(&topBox,Point(0,0),Point(SIDEBARWIDTH - 25,80));
+        addWidget(&topBox,Point(0,0),Point(SIDEBARWIDTH - 25,UnitActionBar::kPanelTop));
 
-        addWidget(&mainHBox,Point(0,80),Point(SIDEBARWIDTH - 25,getRendererHeight() - 80 - 148));
+        addWidget(&mainHBox,Point(0,UnitActionBar::kPanelTop),Point(SIDEBARWIDTH - 25,getRendererHeight() - UnitActionBar::kPanelTop - 148));
 
         topBox.addWidget(&topBoxHBox,Point(0,22),Point(SIDEBARWIDTH - 25,58));
 
         topBoxHBox.addWidget(Spacer::create());
         topBoxHBox.addWidget(VSpacer::create(56));
         topBoxHBox.addWidget(Spacer::create());
+        topBoxHBox.setVisible(UnitActionBar::kPanelTop > 22);
 
         mainHBox.addWidget(HSpacer::create(4));
 

@@ -16,7 +16,27 @@ configure_file(
 )
 
 # Main executable
-if(APPLE)
+if(IOS)
+    # Flat iOS application bundle: the executable, Info.plist, icons and the
+    # game payload all sit in the bundle root, which SDL_GetBasePath() returns.
+    add_executable(dunecity MACOSX_BUNDLE)
+    if(CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        set(DUNECITY_IOS_PLATFORM "iPhoneSimulator")
+    else()
+        set(DUNECITY_IOS_PLATFORM "iPhoneOS")
+    endif()
+    # A personal or team provisioning profile may require its own identifier.
+    set(DUNECITY_IOS_BUNDLE_ID "net.dunecity.DuneCity" CACHE STRING "iOS bundle identifier")
+    set_target_properties(dunecity PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Dune City"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${DUNECITY_IOS_BUNDLE_ID}"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/IDE/iOS/Info.plist"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${DUNECITY_IOS_BUNDLE_ID}"
+    )
+elseif(APPLE)
     # Create macOS application bundle
     add_executable(dunecity MACOSX_BUNDLE)
     
@@ -412,6 +432,7 @@ target_sources(dunecity
         misc/sound_util.cpp
         misc/string_util.cpp
         misc/Scaler.cpp
+        misc/TouchGestures.cpp
         misc/TouchInput.cpp
         misc/WebRuntime.cpp
 )
@@ -456,6 +477,11 @@ if(APPLE)
         PROPERTIES
             COMPILE_FLAGS "-fobjc-arc"
     )
+endif()
+if(IOS)
+    target_sources(dunecity PRIVATE ${CMAKE_SOURCE_DIR}/src/misc/IOSScene.m)
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/misc/IOSScene.m
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
 # Source groups for better organization in IDEs
@@ -674,8 +700,15 @@ if(WIN32)
     )
 endif()
 
-# macOS-specific frameworks
-if(APPLE)
+# Apple frameworks used by the Objective-C glue. SDL's own UIKit, Metal and
+# audio frameworks come with its static iOS target.
+if(IOS)
+    target_link_libraries(dunecity
+        PRIVATE
+            "-framework Foundation"
+            "-framework UIKit"
+    )
+elseif(APPLE)
     target_link_libraries(dunecity
         PRIVATE
             "-framework Cocoa"
@@ -736,8 +769,20 @@ set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS ${DUNECITY_BUNDLED_MAP
 
 if(APPLE)
     # For macOS bundle, copy data files directly to Resources/ (not Resources/data/)
-    # This matches the Xcode project structure where .PAK files are in Resources root
-    set(BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:dunecity>/Resources")
+    # This matches the Xcode project structure where .PAK files are in Resources root.
+    # iOS bundles are flat, so the same payload goes to the bundle root.
+    if(IOS)
+        set(BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_DIR:dunecity>")
+        file(GLOB DUNECITY_IOS_ICONS "${CMAKE_SOURCE_DIR}/IDE/iOS/AppIcon*.png")
+        add_custom_command(
+            TARGET dunecity
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy ${DUNECITY_IOS_ICONS} "${BUNDLE_RESOURCES_DIR}/"
+            COMMENT "Copying iOS app icons"
+        )
+    else()
+        set(BUNDLE_RESOURCES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:dunecity>/Resources")
+    endif()
     add_custom_command(
         TARGET dunecity
         POST_BUILD
@@ -832,8 +877,9 @@ elseif(NOT EMSCRIPTEN)
 endif()
 
 # Install data directory
-# For macOS bundles, data files are already inside the .app via POST_BUILD commands
-if(NOT EMSCRIPTEN)
+# For macOS bundles, data files are already inside the .app via POST_BUILD commands.
+# iOS bundles are packaged by scripts/build-ios.sh, not by install rules.
+if(NOT EMSCRIPTEN AND NOT IOS)
 if(WIN32)
     # Windows: install PAK files and data to share/DuneLegacy where game expects them
     # Use data directory which has all PAK files

@@ -91,6 +91,8 @@
     #include <unistd.h>
 #endif
 
+#include <misc/MobilePlatform.h>
+
 #ifdef __APPLE__
 #include <misc/MacFunctions.h>
 #include <mach-o/dyld.h>
@@ -176,7 +178,7 @@ void setVideoMode(int displayIndex)
     int videoFlags = 0;
     const int requestedInterfaceHeight = validatedInterfaceHeight(
         settings.video.interfaceHeight,
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         true
 #else
         false
@@ -251,9 +253,9 @@ void setVideoMode(int displayIndex)
         settings.video.height = logical.y;
     }
 
-#ifdef __ANDROID__
-    // Keep the game UI stable while Android replaces the physical surface
-    // during fold, unfold, rotation, DeX, and multi-window transitions.
+#ifdef DUNECITY_MOBILE
+    // Keep the game UI stable while the mobile OS replaces the physical surface
+    // during fold, unfold, rotation, DeX, split-screen and Stage Manager changes.
     settings.video.interfaceHeight = requestedInterfaceHeight;
     settings.video.width = requestedInterfaceWidth;
     settings.video.height = requestedInterfaceHeight;
@@ -272,7 +274,7 @@ void setVideoMode(int displayIndex)
 
     int windowWidth = settings.video.physicalWidth;
     int windowHeight = settings.video.physicalHeight;
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#if !defined(DUNECITY_MOBILE) && !defined(__EMSCRIPTEN__)
     if(!settings.video.fullscreen) {
         clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
     }
@@ -308,17 +310,17 @@ void setVideoMode(int displayIndex)
                 pixelWidth, pixelHeight);
     }
 
-#ifdef __ANDROID__
-    // The Android display mode can describe the complete panel while the SDL
+#ifdef DUNECITY_MOBILE
+    // The mobile display mode can describe the complete panel while the SDL
     // surface is a foldable, split-screen, or desktop-mode window. The renderer
-    // output is the authoritative size after SDLActivity creates that surface.
+    // output is the authoritative size after the platform creates that surface.
     int outputWidth = 0;
     int outputHeight = 0;
     if(SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0 &&
        outputWidth > 0 && outputHeight > 0) {
         settings.video.physicalWidth = outputWidth;
         settings.video.physicalHeight = outputHeight;
-        SDL_Log("Android SDL window: %dx%d physical, %dx%d fixed logical",
+        SDL_Log("Mobile SDL window: %dx%d physical, %dx%d fixed logical",
                 settings.video.physicalWidth, settings.video.physicalHeight,
                 settings.video.width, settings.video.height);
     }
@@ -339,7 +341,7 @@ void setVideoMode(int displayIndex)
 #endif
     if(settings.video.interfaceHeight > 0) {
         settings.video.height = settings.video.interfaceHeight;
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         settings.video.width = validatedInterfaceWidth(requestedInterfaceWidth, settings.video.height);
 #else
         // Only the height is a preset; the width follows the shape of the
@@ -954,11 +956,22 @@ int main(int argc, char *argv[]) {
     SDL_LogSetAllPriority(SDL_LOG_PRIORITY_WARN);
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+#ifdef DUNECITY_MOBILE
+    // TouchInput makes the mouse events itself, so a press can wait to see whether a
+    // second finger turns it into a pan or pinch (misc/TouchGestures.h).
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#else
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
+#endif
 #ifdef __ANDROID__
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
-    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
+#ifdef DUNECITY_IOS
+    // Hide the home indicator and require a second swipe for system gestures,
+    // so drags along the bottom edge reach the game instead of leaving it.
+    SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
 #endif
 
     // v1.0.512: build-stamp log so Stefan can verify the binary on disk
@@ -1194,7 +1207,13 @@ int main(int argc, char *argv[]) {
             settings.general.language = myINIFile.getStringValue("General","Language","en");
             settings.general.scrollSpeed = myINIFile.getIntValue("General","Scroll Speed",50);
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
-            settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",false);
+#ifdef DUNECITY_MOBILE
+            // Without a right mouse button, a tap on an enemy attacks and a tap on the ground moves.
+            constexpr bool defaultLeftClickOrders = true;
+#else
+            constexpr bool defaultLeftClickOrders = false;
+#endif
+            settings.general.leftClickOrders = myINIFile.getBoolValue("General","Left Click Orders",defaultLeftClickOrders);
             settings.general.showMovementPaths = myINIFile.getBoolValue("General","Movement Paths",true);
             settings.general.formationMoves = myINIFile.getBoolValue("General","Formation Moves",true);
             settings.general.formationShape = static_cast<int>(FormationPlanner::shapeFromId(
@@ -1220,7 +1239,7 @@ int main(int argc, char *argv[]) {
             settings.video.height = myINIFile.getIntValue("Video","Height",480);
             settings.video.interfaceHeight = validatedInterfaceHeight(
                 myINIFile.getIntValue("Video", "Interface Height", 0),
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
                 true
 #else
                 false
@@ -1446,7 +1465,15 @@ int main(int argc, char *argv[]) {
 
 #endif
 
-#ifdef __ANDROID__
+#ifdef DUNECITY_IOS
+            if(bFirstInit == true && bFirstGamestart == true) {
+                // Every iPhone since the X is wider than 16:9, so a first
+                // start chooses the widescreen interface; its side bars also
+                // keep the sensor housing clear of the game.
+                settings.video.width = interfaceWidthForHeight(settings.video.interfaceHeight, true);
+            }
+#endif
+#ifdef DUNECITY_MOBILE
             if(bFirstInit == true) {
                 SDL_DisplayMode displayMode;
                 SDL_GetDesktopDisplayMode(currentDisplayIndex, &displayMode);
@@ -1459,7 +1486,7 @@ int main(int argc, char *argv[]) {
                 settings.video.width = validatedInterfaceWidth(settings.video.width, settings.video.height);
                 settings.video.fullscreen = true;
 
-                SDL_Log("Android display config updated to %dx%d physical, %dx%d fixed logical",
+                SDL_Log("Mobile display config updated to %dx%d physical, %dx%d fixed logical",
                         settings.video.physicalWidth, settings.video.physicalHeight,
                         settings.video.width, settings.video.height);
 

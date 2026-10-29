@@ -15,22 +15,14 @@ Known external references:
 
 ## Touch Mapping
 
-The game remains mouse-driven internally. `TouchInput` translates touch events
-into mouse events before normal UI/game handling:
+The game remains mouse-driven internally. `TouchInput` turns finger events
+into mouse events and map pan/zoom before normal UI/game handling; the
+gestures (tap, drag, two-finger scroll and pinch zoom, two-finger right click)
+are described once for both phones in `IOS_PORT.md` "Touch controls". Android
+adds:
 
 ```text
-single tap                            -> left click
-single drag                           -> left mouse drag
-hold one finger + tap a second finger -> right click at the first finger
 Android Back button                   -> Escape
-```
-
-This gives Android the existing desktop semantics:
-
-```text
-left click / tap      select, press UI buttons, place buildings
-left drag             box-select units
-right click / press   action command, move/attack/cancel contextual cursor
 ```
 
 External mice use Android's native system cursor rather than SDL color
@@ -53,9 +45,6 @@ TV's Leanback launcher. It declares touchscreen, gamepad, Bluetooth, USB host,
 and Leanback support as optional, includes a 320x180 TV banner, and remains
 locked to landscape. This makes the app discoverable from launchers such as
 Nvidia Shield Home while preserving phone and tablet installation.
-
-The next control layer should add explicit map panning. A safe default is
-two-finger drag for camera pan, leaving one-finger drag for selection boxes.
 
 ## Foldables And Resizable Windows
 

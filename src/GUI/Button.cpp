@@ -18,6 +18,7 @@
 #include <GUI/Button.h>
 
 #include <globals.h>
+#include <CursorManager.h>
 
 #include <SoundPlayer.h>
 
@@ -164,6 +165,9 @@ void Button::draw(Point position) {
 
 void Button::drawOverlay(Point position) {
     if(!isVisible() || !isEnabled() || bHover != true || !tooltipTexture) return;
+
+    // A finger leaves the pointer where it lifted: the tooltip would stay up over the map.
+    if(pointerIsTouch()) return;
 
     if(SDL_GetTicks() - tooltipLastMouseMotion <= 750) return;
 

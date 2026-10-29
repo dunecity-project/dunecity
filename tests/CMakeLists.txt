@@ -37,6 +37,8 @@ target_sources(dunelegacy_tests
         ForceConcentrationPolicyTestCase.cpp
         FormationPlannerTestCase.cpp
         FramePacingTestCase.cpp
+        TouchGesturesTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/misc/TouchGestures.cpp
         ${CMAKE_SOURCE_DIR}/src/FormationPlanner.cpp
         # The army-recovery test asserts that every new behavioural config field
         # reaches the multiplayer hash, so it drives the real QuantBotConfig.

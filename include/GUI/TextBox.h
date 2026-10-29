@@ -22,6 +22,7 @@
 #include <misc/draw_util.h>
 #include <misc/string_util.h>
 #include <misc/SDL2pp.h>
+#include <misc/MobilePlatform.h>
 #include <string>
 
 #include <stdio.h>
@@ -45,7 +46,7 @@ public:
 
     /// destructor
     virtual ~TextBox() {
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         if(isActive() && SDL_IsTextInputActive()) {
             SDL_StopTextInput();
         }
@@ -374,7 +375,7 @@ protected:
 
 private:
     static void startPlatformTextInput() {
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         if(!SDL_IsTextInputActive()) {
             SDL_StartTextInput();
         }
@@ -382,7 +383,7 @@ private:
     }
 
     static void stopPlatformTextInput() {
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         if(SDL_IsTextInputActive()) {
             SDL_StopTextInput();
         }

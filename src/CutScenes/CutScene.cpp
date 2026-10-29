@@ -26,6 +26,8 @@
 
 #include <globals.h>
 #include <CursorManager.h>
+#include <misc/MobilePlatform.h>
+#include <misc/TouchInput.h>
 #include <sand.h>
 
 CutScene::CutScene()
@@ -49,7 +51,7 @@ void CutScene::run()
     {
         const int frameStart = SDL_GetTicks();
 
-#ifdef __ANDROID__
+#ifdef DUNECITY_MOBILE
         applyCursorVisibilitySetting();
 #endif
 
@@ -57,6 +59,9 @@ void CutScene::run()
 
         while(SDL_PollEvent(&event)) {
             updateCursorVisibilityForInput(event);
+            if(TouchInput::translateTouchEvent(event)) {
+                continue;
+            }
 
             //check the events
             switch (event.type)
@@ -70,7 +75,20 @@ void CutScene::run()
                         presentWithCursor();
                         quiting = true;
                     }
+                    break;
                 }
+#ifdef DUNECITY_IOS
+                // iOS has no Back key to stand in for Escape, so a tap skips.
+                case (SDL_MOUSEBUTTONUP): {
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                    SDL_RenderClear(renderer);
+                    presentWithCursor();
+                    quiting = true;
+                    break;
+                }
+#endif
+                default:
+                    break;
             }
         }
 

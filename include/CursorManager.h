@@ -46,6 +46,9 @@ void releaseCursorResources();
  */
 void updateCursorVisibilityForInput(const SDL_Event& event);
 
+/** True while the last pointer input was a finger, so nothing hovers (no tooltips). */
+bool pointerIsTouch();
+
 /** Present the frame and update the single SDL cursor on desktop and web. */
 void presentWithCursor(int mode = 0, bool contextual = false);
 

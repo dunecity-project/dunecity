@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "dunecity",
-  "version": "1.0.856",
+  "version": "1.0.857",
   "description": "Dune City - A modern OpenSource Dune 2 engine with city simulation",
   "homepage": "https://dunelegacy.sourceforge.net",
   "dependencies": [
@@ -32,7 +32,10 @@
     "openssl",
     "zlib",
     "miniupnpc",
-    "discord-rpc"
+    {
+      "name": "discord-rpc",
+      "platform": "!ios"
+    }
   ],
   "builtin-baseline": "0804e3b55b7e435c593707071052363fa876f170",
   "overrides": [
