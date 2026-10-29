@@ -99,6 +99,10 @@ if command -v ccache >/dev/null 2>&1; then
                -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
 fi
 
+# The POST_BUILD copies only add files: an uploaded bundle must not carry
+# files left over from earlier builds, so App Store builds start from an empty
+# bundle. Configure runs afterwards because it writes the bundle's Info.plist.
+[[ -z "$APP_STORE" ]] || rm -rf "$BUILD_DIR/bin/dunecity.app"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_SYSTEM_NAME=iOS \
@@ -111,11 +115,6 @@ cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
     -DDUNECITY_IOS_BUNDLE_ID="$BUNDLE_ID" \
     -DDUNECITY_BUILD_TESTS=OFF \
     "${LAUNCHERS[@]}"
-
-# The POST_BUILD copies only add files: an uploaded bundle must not carry
-# files left over from earlier builds, so App Store builds relink into an
-# empty bundle.
-[[ -z "$APP_STORE" ]] || rm -rf "$BUILD_DIR/bin/dunecity.app"
 nice -n 10 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
 APP="$BUILD_DIR/bin/dunecity.app"
