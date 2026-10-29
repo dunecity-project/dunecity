@@ -1,3 +1,22 @@
+## 2026-10-29 — 1.0.857 published (iOS port, phone touch controls, mobile usage stats)
+
+- **Published at Stefan's request:** PR #110 (`integrate/1.0.857`, head e3f8f601, all PR checks green; cluster
+  ctest 118/118 on 94309641, the same source minus the analytics string) merged with `--admin` as **fe1469cd**;
+  annotated tag **v1.0.857** pushed. Build Dune Legacy run 40840611307 succeeded (verify-version, tests,
+  Windows/Linux/macOS/Emscripten, signed updates, release). GitHub release published 2026-10-29 08:41 UTC with all
+  ten packages and three feeds (macOS feed reads 1.0.857). Sync SourceForge release 40843960456 verified checksums
+  and set all three OS defaults to 1.0.857. Publish browser build 40843960522 succeeded; live `play/build.json`
+  reads 1.0.857. Website: release job 63892d7, browser 898ee1b, "New in 1.0.857" prose 057e262; Deploy to Droplet
+  succeeded. Notes: `releases/desktop/1.0.857.md`. Desktop/browser behaviour unchanged; Android not rebuilt
+  (still 0.2.32 on engine 1.0.855), so the touch controls reach Android players only with its next build.
+- **Usage stats:** phones now report `client_runtime` `android`/`ios` (Game.cpp). Website 5048c0b + 1790b07
+  accept both in `analytics.php`/`analytics_store.py`, count them in `usage_stats.py`, and usage.html shows
+  Android and iPhone & iPad cards, columns and chart colours; verified live after deploy. Older Android builds
+  still report `native` (Desktop).
+- **iOS:** installed on Stefan's iPhone 17 Pro with an Apple Development certificate (2TYKMTDSN8) and Xcode's
+  wildcard team profile; no App Store/TestFlight distribution yet. Requirements are in `IOS_PORT.md`
+  "Distribution".
+
 ## 2026-10-25 — 1.0.856 published (staging + Vuk's public 1.0.853–1.0.855)
 
 - **Published at Stefan's request:** PR #109 (`integrate/1.0.856`, head 8970b0d4, all PR checks green) merged

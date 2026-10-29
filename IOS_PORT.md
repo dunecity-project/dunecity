@@ -143,10 +143,37 @@ scripts/build-ios.sh --device \
 ```
 
 The script embeds the profile, signs with the profile's entitlements and
-installs with `devicectl`. Pass `--bundle-id` when the profile was issued for
-a different identifier.
+installs with `devicectl`, then launches the app (unlock the phone first).
+Pass `--bundle-id` when the profile was issued for a different identifier.
+Xcode's wildcard "iOS Team Provisioning Profile: *" works: the script signs
+with the app's own identifier.
 
-## Remaining work
+First-time setup for a phone, as done for 1.0.857 on team 34X7AYJZ93: turn on
+Settings → Privacy & Security → Developer Mode on the phone, add the Apple ID
+in Xcode → Settings → Accounts, accept any pending Program License Agreement
+at developer.apple.com, then let Xcode create the certificate and register the
+device by building any app for it with `xcodebuild -allowProvisioningUpdates
+-allowProvisioningDeviceRegistration`. Development builds run until the
+profile expires (one year).
 
-1. App Store or TestFlight distribution: asset catalog icons, export
-   compliance for the bundled OpenSSL, and the Dune II data licensing question.
+## Distribution (not yet possible)
+
+Phones other than the developer's own need one of:
+
+| Route | Who can install | Needs |
+|---|---|---|
+| TestFlight, internal | up to 100 App Store Connect users of the team | app record in App Store Connect, App Store upload (below); no review |
+| TestFlight, external | anyone with the public link, up to 10,000 | the same plus Beta App Review |
+| Ad Hoc | up to 100 registered devices a year | each tester's UDID, an Ad Hoc profile, an install page serving an `itms-services` manifest over HTTPS |
+| App Store | everyone | full App Review |
+
+An App Store or TestFlight upload additionally needs: an `Assets.car` asset
+catalog with `CFBundleIconName` and a 1024 px icon, `ITSAppUsesNonExemptEncryption`
+(the bundled OpenSSL is used for TLS and DTLS), a `PrivacyInfo.xcprivacy`
+declaring the required-reason APIs used (file timestamps, system boot time,
+user defaults), the Xcode build metadata keys (`DTPlatformName`, `DTSDKName`,
+`DTXcode`...) that CMake/Ninja bundles lack, an Apple Distribution certificate
+and an App Store provisioning profile. The bundle ships the original Dune II
+PAK and VOC files; App Review (and external TestFlight review) will judge them
+under the intellectual-property guideline, so public distribution first needs
+a decision on the game data, as for Android (`ANDROID_PORT.md`).
