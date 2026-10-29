@@ -9,6 +9,14 @@
 #       --profile ~/Downloads/DuneCity.mobileprovision \
 #       [--bundle-id com.example.dunecity] [--install DEVICE]
 #                                              ...signed, optionally installed with devicectl
+#   scripts/build-ios.sh --testflight [--build-number N]
+#                                              Device build uploaded to App Store Connect
+#   scripts/build-ios.sh --ipa [--build-number N]
+#                                              Same, but writes build-ios-device/appstore/*.ipa
+#
+# --testflight and --ipa sign with the team's cloud-managed Apple Distribution
+# certificate through the Apple ID signed into Xcode (team 34X7AYJZ93 by
+# default, TEAM_ID overrides). The build number defaults to a UTC timestamp.
 #
 # Needs full Xcode (not only the Command Line Tools), CMake, Ninja, ccache and a
 # vcpkg checkout (VCPKG_ROOT, default ~/vcpkg). See IOS_PORT.md.
@@ -21,11 +29,13 @@ IDENTITY=""
 PROFILE=""
 BUNDLE_ID="net.dunecity.DuneCity"
 INSTALL_DEVICE=""
+APP_STORE=""
+BUILD_NUMBER=""
 JOBS=${JOBS:-4}
 DEPLOYMENT_TARGET=15.0
 SIMULATOR_NAME="Dune City iPhone"
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -36,6 +46,9 @@ while [[ $# -gt 0 ]]; do
         --profile) PROFILE=${2:?}; shift ;;
         --bundle-id) BUNDLE_ID=${2:?}; shift ;;
         --install) INSTALL_DEVICE=${2:?}; shift ;;
+        --testflight) MODE=device; APP_STORE=upload ;;
+        --ipa) MODE=device; APP_STORE=export ;;
+        --build-number) BUILD_NUMBER=${2:?}; shift ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
@@ -104,6 +117,74 @@ nice -n 10 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 APP="$BUILD_DIR/bin/dunecity.app"
 [[ -x "$APP/dunecity" ]] || { echo "Build produced no $APP" >&2; exit 1; }
 
+if [[ -n "$APP_STORE" ]]; then
+    # Xcode archives carry build metadata (DT* keys) that App Store Connect
+    # requires and CMake/Ninja bundles lack; wrap the app as Xcode would and
+    # let -exportArchive sign it for distribution and upload it.
+    ARCHIVE="$BUILD_DIR/appstore/DuneCity.xcarchive"
+    rm -rf "$BUILD_DIR/appstore"
+    mkdir -p "$ARCHIVE/Products/Applications" "$ARCHIVE/dSYMs"
+    ditto "$APP" "$ARCHIVE/Products/Applications/dunecity.app"
+    ARCHIVED_APP="$ARCHIVE/Products/Applications/dunecity.app"
+    PLIST="$ARCHIVED_APP/Info.plist"
+    VERSION_STRING=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+    BUILD_NUMBER=${BUILD_NUMBER:-$(date -u +%Y%m%d.%H%M)}
+    SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+    SDK_BUILD=$(xcrun --sdk iphoneos --show-sdk-build-version)
+    XCODE_VERSION=$(xcodebuild -version | awk '/^Xcode/ {print $2}')
+    XCODE_BUILD=$(xcodebuild -version | awk '/^Build version/ {print $3}')
+    IFS=. read -r XC_MAJOR XC_MINOR XC_PATCH <<< "$XCODE_VERSION"
+    set_key() { /usr/libexec/PlistBuddy -c "Delete :$1" "$PLIST" 2>/dev/null || true
+                /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$PLIST"; }
+    set_key CFBundleVersion "$BUILD_NUMBER"
+    set_key DTPlatformName iphoneos
+    set_key DTPlatformVersion "$SDK_VERSION"
+    set_key DTPlatformBuild "$SDK_BUILD"
+    set_key DTSDKName "iphoneos$SDK_VERSION"
+    set_key DTSDKBuild "$SDK_BUILD"
+    set_key DTXcode "$(printf '%02d%d%d' "$XC_MAJOR" "${XC_MINOR:-0}" "${XC_PATCH:-0}")"
+    set_key DTXcodeBuild "$XCODE_BUILD"
+    set_key DTCompiler com.apple.compilers.llvm.clang.1_0
+    set_key BuildMachineOSBuild "$(sw_vers -buildVersion)"
+    codesign --force --sign - --timestamp=none "$ARCHIVED_APP"
+    TEAM_ID=${TEAM_ID:-34X7AYJZ93}
+    cat > "$ARCHIVE/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+	<key>ApplicationProperties</key><dict>
+		<key>ApplicationPath</key><string>Applications/dunecity.app</string>
+		<key>Architectures</key><array><string>arm64</string></array>
+		<key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+		<key>CFBundleShortVersionString</key><string>$VERSION_STRING</string>
+		<key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
+		<key>Team</key><string>$TEAM_ID</string>
+	</dict>
+	<key>ArchiveVersion</key><integer>2</integer>
+	<key>CreationDate</key><date>$(date -u +%Y-%m-%dT%H:%M:%SZ)</date>
+	<key>Name</key><string>Dune City</string>
+	<key>SchemeName</key><string>dunecity</string>
+</dict></plist>
+EOF
+    cat > "$BUILD_DIR/appstore/ExportOptions.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+	<key>method</key><string>app-store-connect</string>
+	<key>destination</key><string>$APP_STORE</string>
+	<key>teamID</key><string>$TEAM_ID</string>
+	<key>signingStyle</key><string>automatic</string>
+	<key>manageAppVersionAndBuildNumber</key><false/>
+	<key>uploadSymbols</key><false/>
+	<key>testFlightInternalTestingOnly</key><false/>
+</dict></plist>
+EOF
+    xcodebuild -exportArchive -archivePath "$ARCHIVE" \
+        -exportOptionsPlist "$BUILD_DIR/appstore/ExportOptions.plist" \
+        -exportPath "$BUILD_DIR/appstore" -allowProvisioningUpdates
+    echo "App Store build $VERSION_STRING ($BUILD_NUMBER): $APP_STORE done"
+    exit 0
+fi
 if [[ "$MODE" == device && -z "$IDENTITY" ]]; then
     echo "Unsigned device build: $APP (pass --identity and --profile to sign and install)"
     exit 0

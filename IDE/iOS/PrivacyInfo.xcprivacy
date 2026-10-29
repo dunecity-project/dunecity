@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- App Store privacy manifest. Required-reason APIs are the ones the linked
+     binary imports (nm -u): stat/fstat, mach_absolute_time and NSUserDefaults
+     (the last two through SDL). Collected data is the end-of-match report sent
+     to dunelegacy.com (Game.cpp buildMatchAnalyticsPayload): game settings,
+     results and in-game player names, with no device or account identifier. -->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeGameplayContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- Saves, maps, mods and settings inside the app container. -->
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- Frame and game timers. -->
+				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- SDL's own settings, read and written only by this app. -->
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
