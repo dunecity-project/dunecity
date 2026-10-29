@@ -194,9 +194,16 @@ DTLS, standard algorithms that need no documentation for TestFlight. An App
 Store release in France needs Apple's French encryption declaration. The
 privacy policy is https://dunelegacy.com/privacy.html.
 
-App Store Connect itself needs an app record for `net.dunecity.DuneCity`
-(created in the web console; the API cannot create apps) before the first
-upload. Public TestFlight also needs the beta description, feedback email and
-review contact, an external group with a public link, and a passed Beta App
-Review. The bundle ships the original Dune II PAK and VOC files and the "Dune"
-name; reviewers judge both under the intellectual-property guideline.
+App Store Connect (set up 29 Oct 2026): app "Dune City", Apple ID 6828374570,
+SKU `dunecity-ios`, primary language en-US. TestFlight groups: "Public"
+(external, public link https://testflight.apple.com/join/nsEVY7Eb, open to
+anyone, no limit) and "Team" (internal, all builds, no review). The beta
+description, feedback email, privacy URL and review contact are filled in;
+each new build needs a "What to Test" text, the Public group and, for its first
+build of a new version, a Beta App Review submission. An App Manager API key
+for scripting this is in 1Password (Agent-Operator, "App Store Connect API
+key": key ID, issuer ID, `.p8` file and the review contact).
+
+The first build, 1.0.857 (20261029.1035), was submitted to Beta App Review on
+29 Oct 2026. The bundle ships the original Dune II PAK and VOC files and the
+"Dune" name; reviewers judge both under the intellectual-property guideline.
