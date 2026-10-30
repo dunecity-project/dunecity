@@ -80,6 +80,20 @@ TEST_CASE("On an offscreen zoom board, screen pixels map to the world point draw
     CHECK_FALSE(border.isScreenCoordInsideMap(area.x + area.w + 5, 300));   // sidebar
     CHECK_FALSE(border.isScreenCoordInsideMap(300, area.y - 5));            // top bar
 
+    // Dune2R's remaster presentation draws the world 3x larger onto the same board.
+    border.setPresentationScale(3);
+    for(const int offset : {-300, 0, 300}) {
+        const int worldX = 4096 + offset;
+        const int worldY = 4096 - offset / 2;
+        const int screenX = area.x + border.world2screenX(worldX) * area.w / render->boardWidth;
+        const int screenY = area.y + border.world2screenY(worldY) * area.h / render->boardHeight;
+        INFO(worldX << "," << worldY << " at screen " << screenX << "," << screenY);
+        CHECK(border.isScreenCoordInsideMap(screenX, screenY));
+        CHECK(std::abs(border.screen2worldX(screenX) - worldX) <= 2);
+        CHECK(std::abs(border.screen2worldY(screenY) - worldY) <= 2);
+    }
+    border.setPresentationScale(1);
+
     border.setDrawingBoardSize(area.w, area.h);
     CHECK_FALSE(border.drawsOffscreen());
     CHECK(border.getDrawingRect().y == area.y);

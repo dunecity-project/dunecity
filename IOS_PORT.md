@@ -18,7 +18,7 @@ and hands the game ordinary mouse events, plus pan and zoom for the map:
 tap                                   -> left click (select, press buttons, place)
 drag                                  -> left drag (box-select, minimap)
 two fingers moved together            -> scroll the map
-two fingers spread / pinched          -> zoom in / out one level (1x, 2x, 3x)
+two fingers spread / pinched          -> zoom in / out one step (75% to 400%)
 two-finger tap                        -> right click between the fingers
 hold one finger + tap a second finger -> right click at the first finger
 ```
@@ -28,6 +28,12 @@ makes it a two-finger gesture, and by then no click may have happened: it would
 have started a selection box, or issued an Attack or Move cursor's order. That
 is why `main.cpp` turns SDL's own touch-to-mouse events off on mobile. Leaving
 the foreground mid-touch resets the gesture.
+
+Each 1.2x change in finger distance is one zoom step, the same steps as the
+`-` and `+` buttons at the top right of the map (`include/misc/ZoomSteps.h`).
+Steps between the three sprite sizes (100%, 200%, 300%) draw the map with the
+next larger sprites onto an offscreen board scaled to fit, so taps still land
+on what is drawn.
 
 On phones "Left-click orders" (Options) is on by default: with units
 selected, a tap on an enemy attacks it and a tap on the ground moves there. A
