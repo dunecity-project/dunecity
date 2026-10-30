@@ -35,6 +35,7 @@
 #include <misc/draw_util.h>
 #include <misc/SDL2pp.h>
 #include <misc/format.h>
+#include <misc/MobilePlatform.h>
 
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityBudget.h>
@@ -164,6 +165,28 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Dune2R";
     dune2rZoomButton.setVisible(showViewControls);
     dune2rVisualButton.setVisible(showViewControls);
+
+    // Zoom out and in (misc/ZoomSteps.h) in every mode, left of the Dune2R view controls.
+    zoomOutButton.setText("-");
+    zoomOutButton.setTooltipText(_("Zoom out"));
+    zoomOutButton.setOnClick(std::bind(&Game::zoomOut, currentGame));
+    zoomInButton.setText("+");
+    zoomInButton.setTooltipText(_("Zoom in"));
+    zoomInButton.setOnClick(std::bind(&Game::zoomIn, currentGame));
+#ifdef DUNECITY_MOBILE
+    const int zoomButtonSize = std::max(44, viewButtonHeight);   // a fingertip
+#else
+    const int zoomButtonSize = viewButtonHeight;
+#endif
+    const int zoomControlsRight = showViewControls
+        ? viewControlsRight - 2 * viewButtonWidth - 2 * viewButtonGap
+        : viewControlsRight;
+    windowWidget.addWidget(&zoomOutButton,
+        Point(zoomControlsRight - 2 * zoomButtonSize - 6, viewControlsY),
+        Point(zoomButtonSize, zoomButtonSize));
+    windowWidget.addWidget(&zoomInButton,
+        Point(zoomControlsRight - zoomButtonSize, viewControlsY),
+        Point(zoomButtonSize, zoomButtonSize));
 
     // A persistent map-screen notice, clear of the population and view controls.
     joinRequestButton.setText("Waiting for join requests");

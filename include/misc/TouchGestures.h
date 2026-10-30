@@ -15,8 +15,9 @@
       or issue the order of an Attack/Move cursor). Moving past kTapSlop presses at the
       start point and drags (selection box, minimap).
     - Two fingers placed together: moving them pans, spreading or pinching them zooms one
-      level per kZoomStep change in their distance, and lifting them quickly without
-      either is a right click at their midpoint.
+      step (misc/ZoomSteps.h) per kZoomStep change in their distance, about the ratio
+      between neighbouring steps, and lifting them quickly without either is a right
+      click at their midpoint.
     - Holding one finger and then tapping a second is a right click at the first finger.
 */
 class TouchGestures {
@@ -45,7 +46,7 @@ public:
     static constexpr int kTapSlop = 10;
     static constexpr int kPanSlop = 12;
     static constexpr float kPinchSlop = 1.15f;
-    static constexpr float kZoomStep = 1.35f;
+    static constexpr float kZoomStep = 1.2f;
 
     Actions fingerDown(int64_t finger, int x, int y, uint32_t ms);
     Actions fingerMotion(int64_t finger, int x, int y, uint32_t ms);

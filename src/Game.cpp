@@ -116,6 +116,7 @@ std::mutex Game::performanceLogMutex;
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <structures/Airport.h>
+#include <misc/ZoomSteps.h>
 
 #include <algorithm>
 #include <exception>
@@ -125,6 +126,11 @@ std::mutex Game::performanceLogMutex;
 namespace {
 
 constexpr Uint32 SAVE_SETUP_COLOR_MARKER = 0x53434F4C; // "SCOL"
+
+bool dune2RContentActive() {
+    return ModManager::instance().isInitialized()
+        && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Dune2R";
+}
 
 std::string analyticsGameType(GameType type) {
     switch (type) {
@@ -293,8 +299,6 @@ bool getTornieStructurePlacementPreview(int itemID, StructurePlacementPreview& p
 } // namespace
 
 Game::Game() {
-    currentZoomlevel = settings.video.preferredZoomLevel;
-
     localPlayerName = settings.general.playerName;
 
     // City-sim features are gated by the active mod. A savegame load may
@@ -317,6 +321,8 @@ Game::Game() {
     //////////////////////////////////////////////////////////////////////////
     SDL_Rect gameBoardRect = { 0, topBarPos.h, sideBarPos.x, getRendererHeight() - topBarPos.h };
     screenborder = new ScreenBorder(gameBoardRect);
+    // The Settings choice is one of the three sprite levels, which always fits.
+    applyZoomStepView(ZoomSteps::stepForLevel(settings.video.preferredZoomLevel));
 }
 
 void Game::initializeSpatialGrid(int mapWidth, int mapHeight) {
@@ -2475,6 +2481,15 @@ void Game::drawScreen()
         && pGFXManager->isDune2RVisualsEnabled() ? 3 : 1;
     screenborder->setPresentationScale(presentationScale);
     Dune2RWorldDrawingScope worldDrawing(presentationScale);
+    // Zoom steps between the sprite levels draw the map onto an offscreen board,
+    // scaled onto the map area before the interface is drawn over it.
+    SDL_Texture* const screenTarget = SDL_GetRenderTarget(renderer);
+    const bool offscreenBoard = screenborder->drawsOffscreen() && zoomBoardTexture;
+    if(offscreenBoard) {
+        SDL_SetRenderTarget(renderer, zoomBoardTexture.get());
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+    }
     Coord TopLeftTile = screenborder->getTopLeftTile();
     Coord BottomRightTile = screenborder->getBottomRightTile();
 
@@ -2907,6 +2922,8 @@ void Game::drawScreen()
         }
 
         // draw the mouse selection rectangle
+        finalMouseX = screenborder->screenToBoardX(finalMouseX);
+        finalMouseY = screenborder->screenToBoardY(finalMouseY);
         renderDrawRect( renderer,
                         screenborder->world2screenX(selectionRect.x),
                         screenborder->world2screenY(selectionRect.y),
@@ -2939,6 +2956,10 @@ void Game::drawScreen()
 
 
 ///////////draw game bar
+    if(offscreenBoard) {
+        SDL_SetRenderTarget(renderer, screenTarget);
+        SDL_RenderCopy(renderer, zoomBoardTexture.get(), nullptr, &screenborder->getScreenRect());
+    }
     worldDrawing.reset(); // Sidebar, menus, text and cursor stay at their original UI scale.
     pInterface->draw(Point(0,0));
     drawCityPlacementHint();
@@ -3126,8 +3147,9 @@ void Game::doInput()
                     if (event.wheel.y != 0) {
                         const bool wheelHandled = pInterface->handleMouseWheel(
                             drawnMouseX, drawnMouseY, event.wheel.y > 0);
-                        if(!wheelHandled) {
-                            applyDune2RZoom(currentZoomlevel + (event.wheel.y > 0 ? 1 : -1));
+                        // The wheel zooms only in Dune2R; elsewhere it stays free for lists.
+                        if(!wheelHandled && dune2RContentActive()) {
+                            setZoomStep(zoomStep + (event.wheel.y > 0 ? 1 : -1), drawnMouseX, drawnMouseY, true);
                         }
                     }
                 } break;
@@ -3304,8 +3326,8 @@ case CursorMode_Heal: {
                     if(selectionMode && mouse->button==SDL_BUTTON_LEFT && settings.general.leftClickOrders
                         && !isObserving()
                         && currentCursorMode==CursorMode_Normal && !(SDL_GetModState() & KMOD_SHIFT)
-                        && std::abs(mouse->x-screenborder->world2screenX(selectionRect.x))<=4
-                        && std::abs(mouse->y-screenborder->world2screenY(selectionRect.y))<=4
+                        && std::abs(screenborder->screenToBoardX(mouse->x)-screenborder->world2screenX(selectionRect.x))<=4
+                        && std::abs(screenborder->screenToBoardY(mouse->y)-screenborder->world2screenY(selectionRect.y))<=4
                         && screenborder->isScreenCoordInsideMap(mouse->x,mouse->y)) {
                         const Coord target(screenborder->screen2MapX(mouse->x),screenborder->screen2MapY(mouse->y));
                         const auto* tile=currentGameMap->getTile(target);
@@ -3349,8 +3371,8 @@ case CursorMode_Heal: {
                         // Double-click on an own unit: every own unit of that type on screen, or with
                         // Ctrl on the whole map - the same selection as T / Ctrl+T.
                         if(mouse->clicks >= 2 && !isObserving()
-                           && std::abs(mouse->x-screenborder->world2screenX(selectionRect.x))<=4
-                           && std::abs(mouse->y-screenborder->world2screenY(selectionRect.y))<=4) {
+                           && std::abs(screenborder->screenToBoardX(mouse->x)-screenborder->world2screenX(selectionRect.x))<=4
+                           && std::abs(screenborder->screenToBoardY(mouse->y)-screenborder->world2screenY(selectionRect.y))<=4) {
                             selectSameUnitTypes((SDL_GetModState() & KMOD_CTRL) != 0);
                         }
 
@@ -4766,22 +4788,36 @@ void Game::onJoinRequests() {
 }
 
 void Game::cycleDune2RZoom() {
-    if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
+    if(!dune2RContentActive()) {
         return;
     }
 
-    // Action uses the closest existing renderer level; each press pulls back
-    // through Tactical and Strategic before returning to Action.
-    const int nextZoomLevel = currentZoomlevel == 2 ? 1
-                            : currentZoomlevel == 1 ? 0
-                            : 2;
-    applyDune2RZoom(nextZoomLevel);
+    // Each press pulls back from Action (3x) through Tactical (2x) and Strategic (1x),
+    // then returns to Action; from an in-between step it goes to the next view out.
+    const int views[] = {ZoomSteps::stepForLevel(2), ZoomSteps::stepForLevel(1), ZoomSteps::stepForLevel(0)};
+    int next = views[0];
+    for(const int view : views) {
+        if(view < zoomStep) {
+            next = view;
+            break;
+        }
+    }
+    const SDL_Rect& area = screenborder->getScreenRect();
+    setZoomStep(next, area.x + area.w / 2, area.y + area.h / 2, true);
+}
+
+void Game::zoomIn() {
+    const SDL_Rect& area = screenborder->getScreenRect();
+    setZoomStep(zoomStep + 1, area.x + area.w / 2, area.y + area.h / 2, true);
+}
+
+void Game::zoomOut() {
+    const SDL_Rect& area = screenborder->getScreenRect();
+    setZoomStep(zoomStep - 1, area.x + area.w / 2, area.y + area.h / 2, true);
 }
 
 void Game::toggleDune2RVisuals() {
-    if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
+    if(!dune2RContentActive()) {
         return;
     }
     pGFXManager->toggleDune2RVisuals();
@@ -4790,28 +4826,6 @@ void Game::toggleDune2RVisuals() {
     addToNewsTicker(pGFXManager->isDune2RVisualsEnabled()
         ? "Dune2R visuals enabled"
         : "Classic visuals enabled");
-}
-
-void Game::applyDune2RZoom(int zoomLevel) {
-    if(!ModManager::instance().isInitialized()
-       || ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) != "Dune2R") {
-        return;
-    }
-
-    const int clampedZoomLevel = std::max(0, std::min(2, zoomLevel));
-    if(clampedZoomLevel == currentZoomlevel) {
-        return;
-    }
-
-    const Coord oldCenterCoord = screenborder->getCurrentCenter();
-    currentZoomlevel = clampedZoomLevel;
-    screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
-    screenborder->setNewScreenCenter(oldCenterCoord);
-
-    const char* viewName = currentZoomlevel == 2 ? "Action"
-                         : currentZoomlevel == 1 ? "Tactical"
-                         : "Strategic";
-    addToNewsTicker(fmt::sprintf("Dune2R view: %s (%dx)", viewName, currentZoomlevel + 1));
 }
 
 void Game::handleMapGesture(const TouchInput::MapGesture& gesture) {
@@ -4824,34 +4838,86 @@ void Game::handleMapGesture(const TouchInput::MapGesture& gesture) {
         } break;
 
         case TouchInput::MapGestureKind::ZoomIn: {
-            zoomAround(currentZoomlevel + 1, gesture.x, gesture.y);
+            setZoomStep(zoomStep + 1, gesture.x, gesture.y, false);
         } break;
 
         case TouchInput::MapGestureKind::ZoomOut: {
-            zoomAround(currentZoomlevel - 1, gesture.x, gesture.y);
+            setZoomStep(zoomStep - 1, gesture.x, gesture.y, false);
         } break;
     }
 }
 
-void Game::zoomAround(int zoomLevel, int screenX, int screenY) {
-    zoomLevel = std::max(0, std::min(2, zoomLevel));
-    if(zoomLevel == currentZoomlevel) {
-        return;
+bool Game::applyZoomStepView(int step) {
+    const SDL_Rect& area = screenborder->getScreenRect();
+    int maxTextureSize = 8192;
+    SDL_RendererInfo info;
+    if(SDL_GetRendererInfo(renderer, &info) == 0) {
+        if(info.max_texture_width > 0) maxTextureSize = std::min(maxTextureSize, info.max_texture_width);
+        if(info.max_texture_height > 0) maxTextureSize = std::min(maxTextureSize, info.max_texture_height);
+    }
+    const std::optional<ZoomSteps::Render> render = ZoomSteps::renderFor(step, area.w, area.h, maxTextureSize);
+    if(!render) {
+        return false;
     }
 
-    const Coord anchor(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
-    const bool dune2R = ModManager::instance().isInitialized()
-        && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Dune2R";
-    if(dune2R) {
-        applyDune2RZoom(zoomLevel);
+    const bool offscreen = render->boardWidth != area.w || render->boardHeight != area.h;
+    if(offscreen) {
+        int width = 0;
+        int height = 0;
+        if(zoomBoardTexture) SDL_QueryTexture(zoomBoardTexture.get(), nullptr, nullptr, &width, &height);
+        if(width != render->boardWidth || height != render->boardHeight) {
+            sdl2::texture_ptr texture{SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_TARGET,
+                                                        render->boardWidth, render->boardHeight)};
+            if(!texture) {
+                SDL_Log("Game: zoom %d%% unavailable: %s", ZoomSteps::percent(step), SDL_GetError());
+                return false;
+            }
+            SDL_SetTextureBlendMode(texture.get(), SDL_BLENDMODE_NONE);
+            SDL_SetTextureScaleMode(texture.get(), SDL_ScaleModeLinear);
+            zoomBoardTexture = std::move(texture);
+        }
     } else {
-        const Coord oldCenterCoord = screenborder->getCurrentCenter();
-        currentZoomlevel = zoomLevel;
-        screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
-        screenborder->setNewScreenCenter(oldCenterCoord);
+        zoomBoardTexture.reset();
     }
+
+    zoomStep = step;
+    currentZoomlevel = render->spriteLevel;
+    screenborder->setDrawingBoardSize(render->boardWidth, render->boardHeight);
+    return true;
+}
+
+bool Game::setZoomStep(int step, int screenX, int screenY, bool announce) {
+    if(step < 0 || step >= ZoomSteps::kCount || step == zoomStep || currentGameMap == nullptr) {
+        return false;
+    }
+
+    if(!screenborder->isScreenCoordInsideMap(screenX, screenY)) {
+        const SDL_Rect& area = screenborder->getScreenRect();
+        screenX = area.x + area.w / 2;
+        screenY = area.y + area.h / 2;
+    }
+    const Coord anchor(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    const Coord oldCenterCoord = screenborder->getCurrentCenter();
+    if(!applyZoomStepView(step)) {
+        return false;
+    }
+    screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
+    screenborder->setNewScreenCenter(oldCenterCoord);
     const Coord moved(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
     screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
+
+    if(announce) {
+        const float scale = ZoomSteps::kScales[zoomStep];
+        if(dune2RContentActive() && scale == static_cast<float>(currentZoomlevel + 1)) {
+            const char* viewName = currentZoomlevel == 2 ? "Action"
+                                 : currentZoomlevel == 1 ? "Tactical"
+                                 : "Strategic";
+            addToNewsTicker(fmt::sprintf("Dune2R view: %s (%dx)", viewName, currentZoomlevel + 1));
+        } else {
+            addToNewsTicker(fmt::sprintf(_("Zoom %d%%"), ZoomSteps::percent(zoomStep)));
+        }
+    }
+    return true;
 }
 
 
@@ -6406,25 +6472,12 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             }
         } break;
 
-        case SDLK_F1: {
-            Coord oldCenterCoord = screenborder->getCurrentCenter();
-            currentZoomlevel = 0;
-            screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
-            screenborder->setNewScreenCenter(oldCenterCoord);
-        } break;
-
-        case SDLK_F2: {
-            Coord oldCenterCoord = screenborder->getCurrentCenter();
-            currentZoomlevel = 1;
-            screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
-            screenborder->setNewScreenCenter(oldCenterCoord);
-        } break;
-
+        case SDLK_F1:
+        case SDLK_F2:
         case SDLK_F3: {
-            Coord oldCenterCoord = screenborder->getCurrentCenter();
-            currentZoomlevel = 2;
-            screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
-            screenborder->setNewScreenCenter(oldCenterCoord);
+            const int level = keyboardEvent.keysym.sym == SDLK_F1 ? 0 : (keyboardEvent.keysym.sym == SDLK_F2 ? 1 : 2);
+            const SDL_Rect& area = screenborder->getScreenRect();
+            setZoomStep(ZoomSteps::stepForLevel(level), area.x + area.w / 2, area.y + area.h / 2, false);
         } break;
 
         case SDLK_F4: {
@@ -7220,7 +7273,7 @@ void Game::drawQueuedOrders() {
     SDL_Rect previousClip{};
     const bool clipped=SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer,&previousClip);
-    SDL_Rect field{0,topBarPos.h,sideBarPos.x,getRendererHeight()-topBarPos.h};
+    SDL_Rect field=screenborder->getDrawingRect();
     if(clipped)SDL_IntersectRect(&field,&previousClip,&field);
     SDL_RenderSetClipRect(renderer,&field);
     Uint8 r,g,b,a; SDL_GetRenderDrawColor(renderer,&r,&g,&b,&a);
@@ -8284,7 +8337,7 @@ void Game::drawMovementPaths() {
     SDL_Rect previousClip{};
     const bool clipped=SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer,&previousClip);
-    SDL_Rect field{0,topBarPos.h,sideBarPos.x,getRendererHeight()-topBarPos.h};
+    SDL_Rect field=screenborder->getDrawingRect();
     if(clipped)SDL_IntersectRect(&field,&previousClip,&field);
     SDL_RenderSetClipRect(renderer,&field);
     Uint8 r,g,b,a; SDL_GetRenderDrawColor(renderer,&r,&g,&b,&a);

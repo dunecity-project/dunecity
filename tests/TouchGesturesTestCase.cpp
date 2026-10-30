@@ -79,17 +79,17 @@ TEST_CASE("Two fingers moved together pan by their midpoint and never click", "[
     CHECK(only(seen, Kind::Pan).back().y == 130);
 }
 
-TEST_CASE("Spreading two fingers zooms in one level per step, pinching zooms out", "[touch]") {
+TEST_CASE("Spreading two fingers zooms in one step per 1.2x, pinching zooms out", "[touch]") {
     TouchGestures g;
     std::vector<Seen> seen;
     add(seen, g.fingerDown(1, 300, 200, 0));
     add(seen, g.fingerDown(2, 340, 200, 20));      // 40 px apart
-    add(seen, g.fingerMotion(2, 350, 200, 40));    // 50: below one step
+    add(seen, g.fingerMotion(2, 347, 200, 40));    // 47: 1.175x, below one step
     CHECK(only(seen, Kind::ZoomIn).empty());
-    add(seen, g.fingerMotion(2, 355, 200, 60));    // 55: 1.375x
-    add(seen, g.fingerMotion(2, 375, 200, 80));    // 75: 1.36x the last step
+    add(seen, g.fingerMotion(2, 349, 200, 60));    // 49: 1.225x
+    add(seen, g.fingerMotion(2, 359, 200, 80));    // 59: 1.2x the last step
     CHECK(only(seen, Kind::ZoomIn).size() == 2);
-    add(seen, g.fingerMotion(2, 330, 200, 100));   // 30: pinched to 0.4x
+    add(seen, g.fingerMotion(2, 330, 200, 100));   // 30: pinched to 0.5x
     CHECK(only(seen, Kind::ZoomOut).size() == 1);
     CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::RightClick}));
 }

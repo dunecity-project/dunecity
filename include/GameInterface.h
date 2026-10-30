@@ -139,6 +139,8 @@ private:
     TextButton          budgetButton;           ///< City sim mode only: opens the budget mini-window
     TextButton          dune2rZoomButton;       ///< Dune2R only: cycles local presentation zoom
     TextButton          dune2rVisualButton;     ///< Dune2R only: crossfades classic/enhanced visuals
+    TextButton          zoomOutButton;          ///< One zoom step out (Game::zoomOut)
+    TextButton          zoomInButton;           ///< One zoom step in (Game::zoomIn)
     PictureLabel        topBar;                 ///< The background of the top bar
 
     PictureLabel        sideBar;                ///< The background of the side bar

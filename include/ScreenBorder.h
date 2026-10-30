@@ -43,6 +43,7 @@ public:
      : mapSizeX(0), mapSizeY(0) {
 
         this->gameBoardRect = gameBoardRect;
+        screenRect = gameBoardRect;
 
         bottomRightCorner.x = gameBoardRect.w;
         bottomRightCorner.y = gameBoardRect.h;
@@ -296,6 +297,7 @@ public:
     */
     inline int screen2worldX(int x) const
     {
+        x = screenToBoardX(x);
         if(presentationScale != 1) return scaledScreenToWorld(x, topLeftCorner.x, shakingOffset.x, presentationRect.x);
         return zoomedWorld2world(x) - topLeftCornerOnScreen.x + topLeftCorner.x + shakingOffset.x;
     }
@@ -307,6 +309,7 @@ public:
     */
     inline int screen2worldY(int y) const
     {
+        y = screenToBoardY(y);
         if(presentationScale != 1) return scaledScreenToWorld(y, topLeftCorner.y, shakingOffset.y, presentationRect.y);
         return zoomedWorld2world(y) - topLeftCornerOnScreen.y + topLeftCorner.y + shakingOffset.y;
     }
@@ -338,10 +341,38 @@ public:
         \return true, if inside, false otherwise
     */
     inline bool isScreenCoordInsideMap(int x, int y) const {
+        x = screenToBoardX(x);
+        y = screenToBoardY(y);
         if(presentationScale != 1) return x >= presentationRect.x && x < presentationRect.x + presentationRect.w
             && y >= presentationRect.y && y < presentationRect.y + presentationRect.h;
         return (zoomedWorld2world(x) >= topLeftCornerOnScreen.x  && zoomedWorld2world(x) < bottomRightCornerOnScreen.x
                 && zoomedWorld2world(y) >= topLeftCornerOnScreen.y  && zoomedWorld2world(y) < bottomRightCornerOnScreen.y);
+    }
+
+    /**
+        Zoom steps between the sprite levels (misc/ZoomSteps.h) draw the map onto an
+        offscreen board of this size, which Game::drawScreen scales onto the map area.
+        While it differs from the map area, world2screen* return board pixels (origin
+        0,0) and screen2world*, isScreenCoordInsideMap take real screen pixels.
+        Call adjustScreenBorderToMapsize afterwards.
+    */
+    void setDrawingBoardSize(int width, int height) {
+        gameBoardRect = (width == screenRect.w && height == screenRect.h) ? screenRect : SDL_Rect{0, 0, width, height};
+    }
+    bool drawsOffscreen() const { return gameBoardRect.w != screenRect.w || gameBoardRect.h != screenRect.h; }
+    /// The map area on the screen.
+    const SDL_Rect& getScreenRect() const { return screenRect; }
+    /// Where map drawing goes: the map area, or the offscreen board while drawsOffscreen().
+    const SDL_Rect& getDrawingRect() const { return gameBoardRect; }
+
+    /// Screen pixel to drawing-board pixel.
+    int screenToBoardX(int x) const {
+        if(!drawsOffscreen()) return x;
+        return static_cast<int>(std::floor((x - screenRect.x) * static_cast<double>(gameBoardRect.w) / screenRect.w));
+    }
+    int screenToBoardY(int y) const {
+        if(!drawsOffscreen()) return y;
+        return static_cast<int>(std::floor((y - screenRect.y) * static_cast<double>(gameBoardRect.h) / screenRect.h));
     }
 
     /**
@@ -385,7 +416,8 @@ private:
     }
     int presentationScale = 1;
     SDL_Rect presentationRect{};
-    SDL_Rect gameBoardRect;         ///< the complete game board rectangle
+    SDL_Rect gameBoardRect;         ///< where the map is drawn: screenRect, or the offscreen board (see setDrawingBoardSize)
+    SDL_Rect screenRect;            ///< the map area on the screen
 
     int mapSizeX;                   ///< The number of tiles in x direction
     int mapSizeY;                   ///< The number of tiles in y direction
