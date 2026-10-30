@@ -64,7 +64,7 @@ TEST_CASE("On an offscreen zoom board, screen pixels map to the world point draw
     CHECK(border.getRight() - border.getLeft() == 800 * TILESIZE / 16 * 4 / 5);
 
     for(const int worldX : {3000, 4096, 5100}) {
-        const int worldY = worldX - 200;
+        const int worldY = 4096 + (worldX - 4096) / 2;   // the view spans y 3136..5056
         // Where the drawing board puts the point, then where that lands on the screen.
         const int boardX = border.world2screenX(worldX);
         const int boardY = border.world2screenY(worldY);
