@@ -1943,17 +1943,14 @@ void QuantBot::planCityBootstrap(BuildPass& pass) {
     for (Uint32 item = Structure_FirstID; item <= Structure_LastID; ++item)
         pass.cityStorageCapacityIncludingQueued += std::max(0,
             pass.itemCount[item] - getHouse()->getNumItems(item)) * std::max(0, data[item][houseID].capacity);
-    // City-match Construction Yards store 1000 credits (1.0.862). That banks the
-    // opening's tax, but it is not where a city keeps its money: once storage that
-    // comes only from yards is 80% full, the house buys real storage (the Refinery,
-    // which also unlocks the Silo) exactly as it did when yards stored nothing.
-    if (pass.citySimEnabled) {
-        const int yardStorage = std::max(0, pass.itemCount[Structure_ConstructionYard])
-            * std::max(0, data[Structure_ConstructionYard][houseID].capacity);
-        if (pass.cityStorageCapacityIncludingQueued <= yardStorage
-            && getHouse()->getEarnedCredits() >= FixPoint(pass.cityStorageCapacityIncludingQueued) * 0.80_fix)
-            pass.cityStorageCapacityIncludingQueued = 0;
-    }
+    // City-match Construction Yards store 1000 credits (1.0.862), a buffer for the
+    // player's opening. The AI still buys its first real storage (the Refinery,
+    // which also unlocks the Silo and on a cramped base extends its build range)
+    // exactly as when yards stored nothing: storage from yards alone is "missing".
+    if (pass.citySimEnabled
+        && pass.cityStorageCapacityIncludingQueued <= std::max(0, pass.itemCount[Structure_ConstructionYard])
+            * std::max(0, data[Structure_ConstructionYard][houseID].capacity))
+        pass.cityStorageCapacityIncludingQueued = 0;
     pass.cityStorageItem = NONE_ID;
     pass.cityStorageCost = 0;
     if (pass.citySimEnabled
