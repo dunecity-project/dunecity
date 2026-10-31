@@ -124,7 +124,6 @@ private:
     Label* playerCityCaption = nullptr;
     Label* startCityCaption = nullptr;
     Label* playerHeader = nullptr;           ///< "You start with", or "Your house starts with" while watching
-    Label* spectateAICaption = nullptr;      ///< "Your house AI", shown only while spectating
     Label* skinCaption = nullptr;            ///< "City skin", shown only for a city-sim mod
 
     // Settings that run from low to high are sliders; choices without an order are drop-downs.

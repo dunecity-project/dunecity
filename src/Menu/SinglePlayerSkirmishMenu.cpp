@@ -91,8 +91,9 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     windowWidget.addWidget(&buttonBorder, dest2);
 
     // set up menu buttons
-    // Grown from 166 px for the partner's Role row; every row keeps its minimum height.
-    windowWidget.addWidget(&menuButtonsVBox,Point((getRendererWidth() - 160)/2,getRendererHeight()/2 + 64), Point(160,176));
+    // 180 x 176 (was 160 x 166): the AI drop-downs sit two to a row and the partner has a Role row.
+    // At 640 px it still clears the co-op column, which ends 100 px left of the centre.
+    windowWidget.addWidget(&menuButtonsVBox,Point((getRendererWidth() - 180)/2,getRendererHeight()/2 + 64), Point(180,176));
 
     startButton.setText(campaignCoop ? _("Host Campaign Co-op") : _("Start"));
     startButton.setOnClick(std::bind(&SinglePlayerSkirmishMenu::onStart, this));
@@ -132,8 +133,9 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     enemySelector.setShowRole(false);
     enemySelector.setFamilies({"QuantBot", "Campaign AI"});
     enemySelector.selectPlayerClass("qBotEasy");
-    enemyRow.addWidget(&enemySelector.aiBox);
-    enemyRow.addWidget(&enemySelector.difficultyBox);
+    // "Campaign AI" is the longest AI name; its difficulty is only "-".
+    enemyRow.addWidget(&enemySelector.aiBox, 3.0);
+    enemyRow.addWidget(&enemySelector.difficultyBox, 2.0);
     menuButtonsVBox.addWidget(&enemyRow);
 
     menuButtonsVBox.addWidget(VSpacer::create(6));

@@ -14,6 +14,7 @@
 #include <Menu/MainMenu.h>
 #include <Menu/SinglePlayerMenu.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/SinglePlayerSkirmishMenu.h>
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/CustomGameStatsMenu.h>
@@ -570,6 +571,16 @@ void runMenus() {
                 "An idle main-menu frame re-rendered the buttons or the banner");
     });
     screen("menu-single-player", [] { SinglePlayerMenu menu; captureWindow(menu, "menu-single-player"); });
+    screen("menu-skirmish", [] {
+        SinglePlayerSkirmishMenu menu;
+        // A partner with every box showing text: AI, Difficulty and Role.
+        require(menu.partnerSelector.selectPlayerClass("qBotFighterHard"), "Quick skirmish offers no Fighter partner");
+        menu.updatePartnerLabel();
+        captureWindow(menu, "menu-skirmish");
+        // The longest enemy AI name.
+        require(menu.enemySelector.selectPlayerClass("CampaignAIPlayer"), "Quick skirmish offers no Campaign AI enemy");
+        captureWindow(menu, "menu-skirmish-campaign-ai");
+    });
     screen("menu-random-skirmish", [] {
         RandomSkirmishMenu menu;
         captureWindow(menu, "menu-random-skirmish");

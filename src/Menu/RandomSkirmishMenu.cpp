@@ -113,7 +113,7 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (5) + You start with (5)
+constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (6) + You start with (4)
 constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
@@ -260,8 +260,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         enemiesAlliedBox.setText(_("Enemies are allied"));
         // Custom Game's offline Spectate: an AI takes the player's seat and the player watches.
         spectateBox.setText(_("Spectate"));
-        spectateBox.setTooltipText(_("Watch an AI-vs-AI match. Your house is played by the AI you choose in "
-                                     "\"Your house AI\" (shown while this is ticked), with its partner, base, "
+        spectateBox.setTooltipText(_("Watch an AI-vs-AI match. Your house is played by the AI you choose "
+                                     "beside this box (shown while it is ticked), with its partner, base, "
                                      "army and city as set; you get the whole map and can inspect any "
                                      "building, but give no orders."));
         spectateBox.setOnClick([this]() { onSpectateChanged(); });
@@ -282,18 +282,17 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         // A partner shares the player's house: a QuantBot that builds, fights, or does both.
         partnerAI.addSpecial(_("None"), kNoPartner);
         partnerAI.setFamilies({"QuantBot"});
-        // AI, Difficulty and Role share the partner's row; the role labels are the longest.
-        partnerBox.addWidget(&partnerAI.aiBox, 1.0);
-        partnerBox.addWidget(&partnerAI.difficultyBox, 1.0);
-        partnerBox.addWidget(&partnerAI.roleBox, 1.5);
+        partnerBox.addWidget(&partnerAI.aiBox);
+        partnerBox.addWidget(&partnerAI.difficultyBox);
 
         addRow(0, row++, _("Mod"), &modBox);
         addRow(0, row++, _("Your house"), &houseBox);
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
+        addRow(0, row++, _("City skin"), &skinBox);
+        skinCaption = &captions[usedCaptions - 1];
         addHeader(0, row++, _("You start with"));
         playerHeader = &captions[usedCaptions - 1];
-        addRow(0, row++, _("AI partner"), &partnerBox);
         addRow(0, row++, _("Base"), &playerBaseBox);
         addRow(0, row++, _("Army (credits)"), &playerArmyBox);
         addRow(0, row++, _("City"), &playerCityBox);
@@ -304,9 +303,15 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, _("Allies"), &alliesBox);
         addRow(1, row++, _("Enemies"), &enemiesBox);
         addRow(1, row++, "", &enemiesAlliedBox);
-        addRow(1, row++, "", &spectateBox);
-        addRow(1, row++, _("Your house AI"), &spectateAIBox);
-        spectateAICaption = &captions[usedCaptions - 1];
+        // Spectate sits in the caption column of the watched house's AI row: that AI is chosen
+        // only while watching.
+        addRow(1, row, "", &spectateAIBox);
+        windowWidget.addWidget(&spectateBox, Point(columnX(width, 1) + 8, 44 + row * rowPitch),
+                               Point(columnSpan(width) * 2 / 5 - 8, rowPitch - kRowGap));
+        ++row;
+        // The partner shares the player's house; its AI and Difficulty are as wide as the Allies' and Enemies'.
+        addRow(1, row++, _("AI partner"), &partnerBox);
+        addRow(1, row++, _("Partner role"), &partnerAI.roleBox);
         addHeader(1, row++, _("Allies start with"));
         addRow(1, row++, _("AI"), &allyAIBox);
         addRow(1, row++, _("Base"), &allyBaseBox);
@@ -319,8 +324,6 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(1, row++, _("Army (credits)"), &enemyArmyBox);
         addRow(1, row++, _("City"), &enemyCityBox);
         enemyCityCaption = &captions[usedCaptions - 1];
-        addRow(1, row++, _("City skin"), &skinBox);
-        skinCaption = &captions[usedCaptions - 1];
     }
 
     // The seed field shares its row with the "New" button.
@@ -514,7 +517,6 @@ void RandomSkirmishMenu::onSpectateChanged() {
     // a drop-down has no disabled look.
     spectateAIBox.setVisible(watch);
     spectateAI.setEnabled(watch);
-    if(spectateAICaption != nullptr) spectateAICaption->setVisible(watch);
     if(playerHeader != nullptr) playerHeader->setText(watch ? _("Your house starts with") : _("You start with"));
 }
 
