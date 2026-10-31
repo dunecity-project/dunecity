@@ -144,10 +144,11 @@ OptionsMenu::OptionsMenu() : MenuBase()
         if(playerData == nullptr) {
             continue;
         }
-        const std::string& playerClass = playerData->getPlayerClass();
-        if(playerClass.rfind("qBotSupport", 0) == 0) {
+        // The campaign AI owns its house: Builders and Fighters only help another player.
+        if(playerData->getRole() != AIRole::Both) {
             continue;
         }
+        const std::string& playerClass = playerData->getPlayerClass();
         aiDropDownBox.addEntry(playerData->getName(), i);
         if(playerClass == settings.ai.campaignAI) {
             selectedVisibleIndex = visibleIndex;

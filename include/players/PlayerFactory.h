@@ -19,18 +19,28 @@
 #define PLAYERFACTORY_H
 
 #include <players/Player.h>
+#include <players/AIRole.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 class PlayerFactory {
 public:
     class PlayerData {
     public:
+        /**
+            \param family       the AI the menus offer ("QuantBot"); empty for the human player
+            \param difficulty   the difficulty label within the family; empty if it has none
+            \param role         what the AI does for its house (docs/ai-roles.md)
+        */
         PlayerData( const std::string& playerclass, const std::string& name,
                     const std::function<std::unique_ptr<Player> (House*, const std::string&)>& pCreate,
-                    const std::function<std::unique_ptr<Player> (InputStream&, House*)>& pLoad)
-         : playerclass(playerclass), name(name), pCreate(pCreate), pLoad(pLoad) {
+                    const std::function<std::unique_ptr<Player> (InputStream&, House*)>& pLoad,
+                    const std::string& family = "", const std::string& difficulty = "", AIRole role = AIRole::Both)
+         : playerclass(playerclass), name(name), family(family), difficulty(difficulty), role(role), pCreate(pCreate), pLoad(pLoad) {
         }
 
         const std::string& getPlayerClass() const {
@@ -40,6 +50,10 @@ public:
         const std::string& getName() const {
             return name;
         }
+
+        const std::string& getFamily() const { return family; }
+        const std::string& getDifficulty() const { return difficulty; }
+        AIRole getRole() const { return role; }
 
         std::unique_ptr<Player> create(House* associatedHouse, const std::string& playername) const {
             auto pPlayer = pCreate(associatedHouse, playername);
@@ -56,6 +70,9 @@ public:
     private:
         std::string playerclass;
         std::string name;
+        std::string family;
+        std::string difficulty;
+        AIRole role;
         std::function<std::unique_ptr<Player>(House*, const std::string&)> pCreate;
         std::function<std::unique_ptr<Player>(InputStream&, House*)> pLoad;
     };
@@ -105,6 +122,48 @@ public:
         }
 
         return -1;
+    }
+
+    /// The AI families in registration order. The human player is not one.
+    static std::vector<std::string> getAIFamilies() {
+        std::vector<std::string> families;
+        for(const auto& data : getList()) {
+            if(!data.getFamily().empty()
+               && std::find(families.begin(), families.end(), data.getFamily()) == families.end()) {
+                families.push_back(data.getFamily());
+            }
+        }
+        return families;
+    }
+
+    /// The difficulty labels of one family in registration order; a single "" if it has none.
+    static std::vector<std::string> getDifficulties(const std::string& family) {
+        std::vector<std::string> difficulties;
+        for(const auto& data : getList()) {
+            if(data.getFamily() == family
+               && std::find(difficulties.begin(), difficulties.end(), data.getDifficulty()) == difficulties.end()) {
+                difficulties.push_back(data.getDifficulty());
+            }
+        }
+        return difficulties;
+    }
+
+    /// The roles registered for one family and difficulty, Both first.
+    static std::vector<AIRole> getRoles(const std::string& family, const std::string& difficulty) {
+        std::vector<AIRole> roles;
+        for(AIRole role : {AIRole::Both, AIRole::Builder, AIRole::Fighter}) {
+            if(find(family, difficulty, role) != nullptr) roles.push_back(role);
+        }
+        return roles;
+    }
+
+    static const PlayerData* find(const std::string& family, const std::string& difficulty, AIRole role) {
+        for(const auto& data : getList()) {
+            if(!family.empty() && data.getFamily() == family && data.getDifficulty() == difficulty && data.getRole() == role) {
+                return &data;
+            }
+        }
+        return nullptr;
     }
 
 private:

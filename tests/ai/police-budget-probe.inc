@@ -16,7 +16,7 @@ void runPoliceBudgetProbe(Game& game) {
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
     require(bot && game.isCitySimEnabled(),"Police budget fixture needs a city QuantBot");
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;bot->difficulty=QuantBot::Difficulty::Hard;
+    bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Hard;
     game.gameCycleCount=MILLI2CYCLES(120000);
 
     // A settlement too wide for two emplacements to double-cover every refinery:
@@ -244,10 +244,10 @@ void runPoliceBudgetProbe(Game& game) {
     require(review(1000,poorTax,poorCost,campaignStart)==campaignStart,
         "AI rewrote campaign city funding");
     bot->gameMode=QuantBot::GameMode::Custom;game.gameType=GameType::CustomGame;
-    bot->supportMode=true;
+    bot->role=AIRole::Builder;
     require(review(1000,poorTax,poorCost,campaignStart)==campaignStart,
         "AI helper rewrote the human player's city funding");
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     require(review(1000,poorTax,poorCost,0)==earlyExpected,"Custom AI stopped managing its own funding");
     for(const auto& other:otherHouses)
         require(sim->houseState_[other.first].policeFundingPercent==other.second,

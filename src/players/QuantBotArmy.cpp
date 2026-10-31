@@ -40,7 +40,7 @@ bool mobileCombatItem(Uint32 item) {
 
 void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingSpice, const ObjectBase* protectedAsset) {
     AITelemetry::PerformanceScope perfScope("ai.scrambleUnitsAndDefend", getGameCycleCount(), getHouse()->getHouseID());
-    if (supportMode || !intruder || intruder->getHealth() <= 0
+    if (builderOnly() || !intruder || intruder->getHealth() <= 0
         || intruder->getOwner()->getTeamID() == getHouse()->getTeamID()) return;
     const Coord contact = intruder->getLocation();
     const auto* victim = intruder->isAUnit() ? static_cast<const UnitBase*>(intruder)->getTarget() : nullptr;
@@ -229,7 +229,7 @@ bool QuantBot::autonomousCustomArmy() const {
     // Medium joined Hard and Brutal (docs/ai-scenario-matrix.md, "Difficulty ladder"): its
     // 40% standing raid share traded evenly with Easy's home army for 60 minutes. Medium now
     // differs from Hard in its economy, limits and air raids, not in how its army attacks.
-    return !supportMode && currentGame!=nullptr && gameMode==GameMode::Custom
+    return !builderOnly() && currentGame!=nullptr && gameMode==GameMode::Custom
         && !isCampaignGameType(currentGame->gameType)
         && (difficulty==Difficulty::Medium || difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }
@@ -455,7 +455,7 @@ int customMapLimit(const QuantBotConfig::DifficultySettings& settings) {
 int QuantBot::reachableAttackThreshold(int required) const {
     // Custom games only (docs/ai-scenario-matrix.md, "Difficulty ladder"): campaign enemies keep
     // their scripted readiness and helpers do not launch waves.
-    if (supportMode || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
+    if (builderOnly() || currentGame == nullptr || isCampaignGameType(currentGame->gameType)) return required;
     required = SimpleArmyPolicy::reachableReadiness(required, militaryUnitValue(), getHouse()->getCredits(),
                                                     lastCalculatedSpice);
     // The opening of a whole-army house that started without an army able to launch a wave (a
@@ -487,7 +487,7 @@ bool QuantBot::bundleArmyReady() const {
 
 void QuantBot::attack(int militaryValue) {
     AITelemetry::PerformanceScope perfScope("ai.attack", getGameCycleCount(), getHouse()->getHouseID());
-	if (supportMode) {
+	if (builderOnly()) {
 		attackTimer = std::numeric_limits<Sint32>::max();
 		return;
 	}
@@ -546,7 +546,8 @@ void QuantBot::attack(int militaryValue) {
 
 	// Campaign attacks must remain possible after losing a repair yard, or on
     // scenarios where it cannot be built. Repair remains useful, not mandatory.
-	if (!campaign && !lightFirstOpening() && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
+    // A Fighter cannot build one, so it never waits for one either.
+	if (!campaign && !fighterOnly() && !lightFirstOpening() && (difficulty!=Difficulty::Medium || initialItemCount[Structure_RepairYard]>0) && getHouse()->getNumItems(Structure_RepairYard) == 0 && currentGame->techLevel > 4) {
 		traceDecision("attack_deferred", AITelemetry::Record().set("reason", "repair_prerequisite"));
 		logDebug("Don't attack. Wait until you have a repair yard.");
 		return;
@@ -759,7 +760,7 @@ int QuantBot::waveFormationShape() const {
 }
 
 void QuantBot::launchGroundHunt() {
-    if (supportMode) return;
+    if (builderOnly()) return;
     const bool limited = isCampaignEnemy();
     const bool custom = !isCampaignGameType(currentGame->gameType);
     if (limited && !campaignCanLaunch()) return;
@@ -2903,7 +2904,7 @@ void QuantBot::applyOpeningSpaceDispersal() {
     openingDispersalUntil=0;
     // Campaign missions keep their scripted opening, and a helper bot never
     // reorders the units its human is commanding.
-    if (supportMode || gameMode!=GameMode::Custom
+    if (builderOnly() || gameMode!=GameMode::Custom
         || (currentGame && isCampaignGameType(currentGame->gameType))) return;
     const Coord anchor=openingAnchor();
     if (anchor.isInvalid()) return;
@@ -3375,7 +3376,7 @@ void QuantBot::retreatAllUnits() {
         // The opening window is bounded: after it, ordinary regrouping owns
         // these units again.
         if (!openingDispersal.empty() && getGameCycleCount()>=openingDispersalUntil) openingDispersal.clear();
-        if (!supportMode) squadRallyLocation = findSquadRallyLocation();
+        if (!builderOnly()) squadRallyLocation = findSquadRallyLocation();
         const QuantBotConfig& config = botConfig();
         const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
         // Recheck active base attacks before regrouping, including units already
@@ -3541,7 +3542,7 @@ void QuantBot::retreatAllUnits() {
             if (getGameCycleCount()-it->second>MILLI2CYCLES(30000)) it=defenceResponseCycles.erase(it); else ++it;
         // Use rally location instead of squad center to avoid constant destination changes
         Coord squadCenterLocation = squadRallyLocation;
-        if(!supportMode) {
+        if(!builderOnly()) {
             tryLaunchOrnithopterStrike(diffSettings, config);
         }
 
@@ -3591,7 +3592,7 @@ void QuantBot::retreatAllUnits() {
                     traceDecision("captured_devastator_armed", AITelemetry::Record()
                         .set("unit", pUnit->getObjectID())
                         .set("original_house", pUnit->getOriginalHouseID())
-                        .set("support_mode", supportMode)
+                        .set("support_mode", builderOnly())
                         .set("health", pUnit->getHealth().lround()));
                 }
                 continue;
@@ -3615,7 +3616,7 @@ void QuantBot::retreatAllUnits() {
             if (pUnit->getOwner() == getHouse() && forceHeld(pUnit->getObjectID())) continue;
             // Combat spacing applies to defenders and escorts too, before their
             // strategic-role early return. Guard orders already leave targets alone.
-            if (!supportMode && pUnit->getOwner() == getHouse()
+            if (!builderOnly() && pUnit->getOwner() == getHouse()
                 && (pUnit->getItemID() == Unit_Launcher || pUnit->getItemID() == Unit_Deviator)) {
                 const auto* target = pUnit->getTarget();
                 const int range = currentGame->objectData.data[pUnit->getItemID()][getHouse()->getHouseID()].weaponrange;
@@ -3629,11 +3630,11 @@ void QuantBot::retreatAllUnits() {
 
             // Colonist escorts stay beside their MCV, ahead of rally, raids,
             // prey assignment and every other role below.
-            if (!supportMode && escortColonist(pUnit)) continue;
+            if (!builderOnly() && escortColonist(pUnit)) continue;
 
             if (campaignControlsUnit(pUnit)) continue;
 
-            if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
+            if (!builderOnly() && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive()
                 && QuantBotBuildPolicy::isLightRaider(pUnit->getItemID())) {
                 // Repair reservations and promised pickups keep their owner:
@@ -3672,7 +3673,7 @@ void QuantBot::retreatAllUnits() {
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
                 && pUnit->getAttackMode() != HUNT && pUnit->getAttackMode() != RETREAT
                 && bundleUnit(pUnit,bundleTiles,bundleWalkers)) continue;
-            if (!supportMode && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
+            if (!builderOnly() && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && pUnit->getItemID() != Unit_Harvester && pUnit->getItemID() != Unit_Saboteur
                 && unitRole(pUnit, {UnitRole::Repair}) == UnitRole::Free && !pUnit->hasATarget() && !pUnit->wasForced()
@@ -3690,7 +3691,8 @@ void QuantBot::retreatAllUnits() {
 		if (pUnit->getOwner() == getHouse()) {
                 switch (pUnit->getItemID()) {
                 case Unit_MCV: {
-                    if (!campaignPermitsStructure(Structure_ConstructionYard)) break;
+                    // A Fighter never deploys or relocates base vehicles.
+                    if (fighterOnly() || !campaignPermitsStructure(Structure_ConstructionYard)) break;
                     const MCV* pMCV = static_cast<const MCV*>(pUnit);
                     if (pMCV != nullptr) manageMcv(pMCV);
                     // doDeploy() inside manageMcv() places a construction yard
@@ -3704,6 +3706,8 @@ void QuantBot::retreatAllUnits() {
                     const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
                     if(pHarvester != nullptr && pHarvester->isActive()) {
                         if (manageHarvesterSafety(pHarvester,&spiceCache)) break;
+                        // A Fighter only keeps harvesters out of danger; their routine is the builder's.
+                        if (fighterOnly()) break;
                         // Existing check for early return with half spice
 						if(getHouse()->getNumItems(Structure_Refinery) < 4
 							&& getHouse()->getCredits() < 1000
@@ -3767,7 +3771,7 @@ void QuantBot::retreatAllUnits() {
                 } break;
 
                 default: {
-                    if (supportMode) {
+                    if (builderOnly()) {
                         break;
                     }
 

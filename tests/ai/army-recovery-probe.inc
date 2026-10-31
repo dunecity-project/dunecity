@@ -29,7 +29,7 @@ void runArmyRecoveryProbe(Game& game) {
     game.gameType=GameType::CustomGame;
     bot->difficulty=QuantBot::Difficulty::Brutal;
     bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     bot->manualUnitOrders.clear();
     bot->defenceAssignments.clear();
     bot->customWave.members.clear();
@@ -59,9 +59,9 @@ void runArmyRecoveryProbe(Game& game) {
         game.gameType=GameType::Campaign;
         require(!bot->recoveryActive(),"Recovery leaked into a campaign game");
         game.gameType=GameType::CustomGame;
-        bot->supportMode=true;
+        bot->role=AIRole::Builder;
         require(!bot->recoveryActive(),"Recovery leaked into support mode");
-        bot->supportMode=false;
+        bot->role=AIRole::Both;
         getQuantBotConfig().recovery.enabled=false;
         require(!bot->recoveryActive(),"Recovery ignored its configuration switch");
         getQuantBotConfig().recovery.enabled=true;

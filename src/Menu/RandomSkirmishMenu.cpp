@@ -39,6 +39,18 @@
 
 using namespace SkirmishGenerator;
 
+namespace {
+/// The role as the selector's Role box names it; the partner's player name uses it too.
+std::string roleLabel(AIRole role) {
+    switch(role) {
+        case AIRole::Builder: return _("Builder");
+        case AIRole::Fighter: return _("Fighter");
+        case AIRole::Both:
+        default:              return _("Builder + Fighter");
+    }
+}
+}
+
 namespace RandomSkirmish {
 
 bool activateMod(const std::string& modName) {
@@ -77,16 +89,16 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
         const std::string houseName = getHouseNameByNumber(static_cast<HOUSETYPE>(house.house));
         if(house.role == Role::Human) {
             if(params.spectate) {
-                // The house's own AI, as the Allies/Enemies AI boxes offer it: not a helper, not a human.
+                // The house's own AI, as the Allies/Enemies AI boxes offer it: Builder + Fighter, not a human.
                 const std::string& wanted = params.spectateClass;
-                const bool usable = PlayerFactory::getByPlayerClass(wanted) != nullptr && wanted != HUMANPLAYERCLASS
-                                    && wanted.find("Support") == std::string::npos;
+                const auto* data = PlayerFactory::getByPlayerClass(wanted);
+                const bool usable = data != nullptr && wanted != HUMANPLAYERCLASS && data->getRole() == AIRole::Both;
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, usable ? wanted : std::string(DEFAULTAIPLAYERCLASS)));
             } else {
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
             }
-            if(PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr)
-                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, house.partnerClass));
+            if(const auto* partner = PlayerFactory::getByPlayerClass(house.partnerClass))
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName + " (" + roleLabel(partner->getRole()) + ")", house.partnerClass));
         } else {
             const auto* player = PlayerFactory::getByPlayerClass(house.playerClass);
             info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, player ? house.playerClass : std::string(DEFAULTAIPLAYERCLASS)));
@@ -113,12 +125,10 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (5) + You start with (5)
+constexpr int kLeftColumnRows = 18;   ///< Map (7) + Game (5) + You start with (6)
 constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
 
-/// AI that may share the player's house: the co-op partner list of Custom Game.
-const char* const kPartnerClasses[] = {"qBotSupportEasy", "qBotSupportMedium", "qBotSupportHard", "qBotSupportBrutal",
-                                       "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend"};
+constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
 constexpr int kMaxContentWidth = 800;
 
 /// Two columns of label + control rows, centred and capped on wide screens.
@@ -151,13 +161,18 @@ void selectData(Box& box, int data) {
     if(box.getNumEntries() > 0 && box.getSelectedIndex() < 0) box.setSelectedItem(0);
 }
 
-void fillAI(DropDownBox& box) {
-    for(const auto& player : PlayerFactory::getList()) {
-        const std::string& playerClass = player.getPlayerClass();
-        // Helpers share a human's house; an allied side here is a house of its own.
-        if(playerClass == HUMANPLAYERCLASS || playerClass.find("Support") != std::string::npos) continue;
-        box.addEntry(player.getName(), PlayerFactory::getIndexByPlayerClass(playerClass));
-    }
+/// An AI of a house of its own (allies, enemies, the watched house): every AI, Builder + Fighter.
+/// Helpers share a human's house, so the role is not offered here.
+void fillAI(AIPlayerSelector& selector, HBox& row) {
+    selector.setShowRole(false);
+    selector.setFamilies();
+    row.addWidget(&selector.aiBox);
+    row.addWidget(&selector.difficultyBox);
+}
+
+/// Selects a saved class, else qBotMedium (an old or unlisted class).
+void selectAI(AIPlayerSelector& selector, const std::string& playerClass) {
+    if(!selector.selectPlayerClass(playerClass)) selector.selectPlayerClass("qBotMedium");
 }
 
 /// Low to high, left to right; "Random" is the rightmost step of Army and City.
@@ -262,23 +277,25 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
                                      "army and city as set; you get the whole map and can inspect any "
                                      "building, but give no orders."));
         spectateBox.setOnClick([this]() { onSpectateChanged(); });
-        fillAI(spectateAIBox);
-        spectateAIBox.setTooltipText(_("The AI that plays your house while you spectate."));
+        fillAI(spectateAI, spectateAIBox);
+        const std::string spectateAITip = _("The AI that plays your house while you spectate.");
+        spectateAI.aiBox.setTooltipText(spectateAITip);
+        spectateAI.difficultyBox.setTooltipText(spectateAITip);
         // The DuneCity skin, one choice for every house as in the campaign; shared with it.
         skinBox.addEntry(_("SimCity"), 0);
         skinBox.addEntry(_("Dune2"), 1);
         skinBox.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
 
-        fillAI(allyAIBox);
-        fillAI(enemyAIBox);
+        fillAI(allyAI, allyAIBox);
+        fillAI(enemyAI, enemyAIBox);
         fillSide(allyBaseBox, allyArmyBox, allyCityBox);
         fillSide(enemyBaseBox, enemyArmyBox, enemyCityBox);
         fillSide(playerBaseBox, playerArmyBox, playerCityBox);
-        partnerBox.addEntry(_("None"), -1);
-        for(const char* playerClass : kPartnerClasses) {
-            const int index = PlayerFactory::getIndexByPlayerClass(playerClass);
-            if(index >= 0) partnerBox.addEntry(PlayerFactory::getByIndex(index)->getName(), index);
-        }
+        // A partner shares the player's house: a QuantBot that builds, fights, or does both.
+        partnerAI.addSpecial(_("None"), kNoPartner);
+        partnerAI.setFamilies({"QuantBot"});
+        partnerBox.addWidget(&partnerAI.aiBox);
+        partnerBox.addWidget(&partnerAI.difficultyBox);
 
         addRow(0, row++, _("Mod"), &modBox);
         addRow(0, row++, _("Your house"), &houseBox);
@@ -287,6 +304,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addHeader(0, row++, _("You start with"));
         playerHeader = &captions[usedCaptions - 1];
         addRow(0, row++, _("AI partner"), &partnerBox);
+        addRow(0, row++, _("Partner role"), &partnerAI.roleBox);
         addRow(0, row++, _("Base"), &playerBaseBox);
         addRow(0, row++, _("Army (credits)"), &playerArmyBox);
         addRow(0, row++, _("City"), &playerCityBox);
@@ -422,25 +440,22 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     if(modIndex >= 0) modBox.setSelectedItem(modIndex);
     selectData(techBox, params.techLevel);
     enemiesAlliedBox.setChecked(params.enemiesAllied);
-    for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAIBox, &allyBaseBox, &allyArmyBox, &allyCityBox},
-                                             std::tuple{&params.enemySide, &enemyAIBox, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
-        selectData(*ai, PlayerFactory::getIndexByPlayerClass(side->playerClass));
-        if(ai->getSelectedIndex() < 0) selectData(*ai, PlayerFactory::getIndexByPlayerClass("qBotMedium"));
+    for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAI, &allyBaseBox, &allyArmyBox, &allyCityBox},
+                                             std::tuple{&params.enemySide, &enemyAI, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
+        selectAI(*ai, side->playerClass);
         selectData(*base, static_cast<int>(side->base));
         selectData(*army, side->army);
         selectData(*city, side->city);
     }
-    // The player's own start; "None" (-1) is selected when no partner is chosen or listed.
-    selectData(partnerBox, params.playerSide.playerClass.empty() ? -1 : PlayerFactory::getIndexByPlayerClass(params.playerSide.playerClass));
+    // The player's own start; "None" is selected when no partner is chosen or offered.
+    if(params.playerSide.playerClass.empty() || !partnerAI.selectPlayerClass(params.playerSide.playerClass))
+        partnerAI.selectSpecial(kNoPartner);
     selectData(playerBaseBox, static_cast<int>(params.playerSide.base));
     selectData(playerArmyBox, params.playerSide.army);
     selectData(playerCityBox, params.playerSide.city);
     spectateBox.setChecked(params.spectate);
-    // The watched house's AI; a class the box does not list (a helper, an old name) falls back to qBotMedium.
-    const int spectateAI = PlayerFactory::getIndexByPlayerClass(params.spectateClass);
-    bool listed = false;
-    for(int i = 0; i < spectateAIBox.getNumEntries(); ++i) listed = listed || spectateAIBox.getEntryIntData(i) == spectateAI;
-    selectData(spectateAIBox, listed ? spectateAI : PlayerFactory::getIndexByPlayerClass("qBotMedium"));
+    // The watched house's AI; a class it does not offer (a helper, an old name) falls back to qBotMedium.
+    selectAI(spectateAI, params.spectateClass);
     onSpectateChanged();
     // Multiplayer: the number of starts and what every one of them begins with.
     selectData(startsBox, params.starts);
@@ -473,7 +488,7 @@ void RandomSkirmishMenu::onPlayersChanged(bool alliesMoved) {
     const int allies = std::max(0, alliesBox.getSelectedEntryIntData());
     enemiesAlliedBox.setEnabled(enemiesBox.getSelectedEntryIntData() > 1);
     const bool anyAllies = allies > 0;
-    allyAIBox.setEnabled(anyAllies);
+    allyAI.setEnabled(anyAllies);
     for(Slider* box : {&allyBaseBox, &allyArmyBox}) box->setEnabled(anyAllies);
     onModChanged();
 }
@@ -509,7 +524,7 @@ void RandomSkirmishMenu::onSpectateChanged() {
     // Like the City rows of a non-city mod, a row that does not apply is hidden, not greyed:
     // a drop-down has no disabled look.
     spectateAIBox.setVisible(watch);
-    spectateAIBox.setEnabled(watch);
+    spectateAI.setEnabled(watch);
     if(spectateAICaption != nullptr) spectateAICaption->setVisible(watch);
     if(playerHeader != nullptr) playerHeader->setText(watch ? _("Your house starts with") : _("You start with"));
 }
@@ -547,22 +562,22 @@ Params RandomSkirmishMenu::readParams() const {
     params.allies = alliesBox.getSelectedEntryIntData();
     params.enemies = enemiesBox.getSelectedEntryIntData();
     params.enemiesAllied = enemiesAlliedBox.isChecked();
-    for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAIBox, &allyBaseBox, &allyArmyBox, &allyCityBox},
-                                             std::tuple{&params.enemySide, &enemyAIBox, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
-        const auto* player = PlayerFactory::getByIndex(ai->getSelectedEntryIntData());
-        side->playerClass = player ? player->getPlayerClass() : std::string(DEFAULTAIPLAYERCLASS);
+    for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAI, &allyBaseBox, &allyArmyBox, &allyCityBox},
+                                             std::tuple{&params.enemySide, &enemyAI, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
+        const std::string playerClass = ai->getPlayerClass();
+        side->playerClass = playerClass.empty() ? std::string(DEFAULTAIPLAYERCLASS) : playerClass;
         side->base = static_cast<BaseSize>(base->getSelectedEntryIntData());
         side->army = army->getSelectedEntryIntData();
         side->city = city->getSelectedEntryIntData();
     }
-    const auto* partner = PlayerFactory::getByIndex(partnerBox.getSelectedEntryIntData());
-    params.playerSide.playerClass = partnerBox.getSelectedEntryIntData() >= 0 && partner ? partner->getPlayerClass() : std::string();
+    // "None" leaves the class empty: no partner.
+    params.playerSide.playerClass = partnerAI.getPlayerClass();
     params.playerSide.base = static_cast<BaseSize>(playerBaseBox.getSelectedEntryIntData());
     params.playerSide.army = playerArmyBox.getSelectedEntryIntData();
     params.playerSide.city = playerCityBox.getSelectedEntryIntData();
     params.spectate = spectateBox.isChecked();
-    const auto* watchedAI = PlayerFactory::getByIndex(spectateAIBox.getSelectedEntryIntData());
-    if(watchedAI != nullptr) params.spectateClass = watchedAI->getPlayerClass();
+    const std::string watchedAI = spectateAI.getPlayerClass();
+    if(!watchedAI.empty()) params.spectateClass = watchedAI;
     params.clamp(houseCount);
     return params;
 }

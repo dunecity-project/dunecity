@@ -24,9 +24,11 @@
 #include <GUI/Label.h>
 #include <GUI/TextButton.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/HBox.h>
 #include <GUI/Slider.h>
 #include <GUI/Checkbox.h>
 #include <GUI/TextBox.h>
+#include <GUI/dune/AIPlayerSelector.h>
 
 #include <DataTypes.h>
 #include <GameInitSettings.h>
@@ -140,10 +142,14 @@ private:
     Slider alliesBox, enemiesBox;
     Checkbox enemiesAlliedBox;
     Checkbox spectateBox;                    ///< single player: watch an all-AI match (Custom Game's Spectate)
-    DropDownBox spectateAIBox;               ///< the AI that plays the player's house while watching
+    HBox spectateAIBox;                      ///< the AI that plays the player's house while watching (AI, Difficulty)
     DropDownBox skinBox;                     ///< single player: SimCity or Dune2 city-building art for every house
 
-    DropDownBox partnerBox, allyAIBox, enemyAIBox;
+    // Each AI row holds its selector's AI and Difficulty boxes; the partner's Role has its own row.
+    HBox partnerBox, allyAIBox, enemyAIBox;
+    AIPlayerSelector partnerAI;              ///< None or a QuantBot sharing the player's house, any role
+    AIPlayerSelector allyAI, enemyAI;        ///< their own houses: every AI, always Builder + Fighter
+    AIPlayerSelector spectateAI;             ///< the watched house's own AI, always Builder + Fighter
     Slider playerBaseBox, playerArmyBox, playerCityBox;
     Slider allyBaseBox, allyArmyBox, allyCityBox;
     Slider enemyBaseBox, enemyArmyBox, enemyCityBox;

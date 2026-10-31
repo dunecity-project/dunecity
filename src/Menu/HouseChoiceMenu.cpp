@@ -55,23 +55,6 @@ int getHouseChoiceCount() {
 int getMaxHouseScrollPos() {
     return getHouseChoiceCount() - kVisibleHouseButtons;
 }
-
-const char* const kSupportPlayerClasses[] = {
-    "",
-    "qBotSupportEasy",
-    "qBotSupportMedium",
-    "qBotSupportHard",
-    "qBotSupportBrutal",
-    "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend"
-};
-
-constexpr int kSupportOptionCount = sizeof(kSupportPlayerClasses) / sizeof(kSupportPlayerClasses[0]);
-
-const char* const kEnemyAIClasses[] = {
-    "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend", "CampaignAIPlayer"
-};
-
-constexpr int kEnemyAIOptionCount = sizeof(kEnemyAIClasses) / sizeof(kEnemyAIClasses[0]);
 }
 
 // Static member definitions
@@ -80,8 +63,8 @@ bool HouseChoiceMenu::s_online = true;
 bool HouseChoiceMenu::s_singleMission = false;
 bool HouseChoiceMenu::s_publicGame = true;
 int HouseChoiceMenu::s_startLevel = 1;
-int HouseChoiceMenu::s_supportBotIndex = 0;
-int HouseChoiceMenu::s_enemyAIIndex = 0;
+std::string HouseChoiceMenu::s_partnerClass;
+std::string HouseChoiceMenu::s_enemyClass = "qBotEasy";
 int HouseChoiceMenu::s_campaignSkin = 0;
 SettingsClass::GameOptionsClass HouseChoiceMenu::s_currentGameOptions;
 
@@ -201,49 +184,43 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     windowWidget.addWidget(&modDescription, Point(48, 411), Point(256, 38));
     updateModDescription();
 
+    // AI partner: AI over full width, then Difficulty and Role side by side.
     label("AI partner", 336, 294);
-    supportBotDropDown.addEntry(_("None"), 0);
-    supportBotDropDown.addEntry(_("AI Support (Easy)"), 1);
-    supportBotDropDown.addEntry(_("AI Support (Medium)"), 2);
-    supportBotDropDown.addEntry(_("AI Support (Hard)"), 3);
-    supportBotDropDown.addEntry(_("AI Support (Brutal)"), 4);
-    supportBotDropDown.addEntry(_("QuantBot Easy"), 5);
-    supportBotDropDown.addEntry(_("QuantBot Medium"), 6);
-    supportBotDropDown.addEntry(_("QuantBot Hard"), 7);
-    supportBotDropDown.addEntry(_("QuantBot Brutal"), 8);
-    supportBotDropDown.addEntry(_("QuantBot Defend"), 9);
-    supportBotDropDown.setSelectedItem(s_supportBotIndex);
-    supportBotDropDown.setOnSelectionChange(std::bind(&HouseChoiceMenu::onSupportBotSelectionChanged, this, std::placeholders::_1));
-    windowWidget.addWidget(&supportBotDropDown, Point(336, 315), Point(256, 22));
+    partnerSelector.addSpecial(_("None"), 0);
+    partnerSelector.setFamilies({"QuantBot"});
+    partnerSelector.setShowRole(true);
+    if(s_partnerClass.empty() || !partnerSelector.selectPlayerClass(s_partnerClass)) partnerSelector.selectSpecial(0);
+    partnerSelector.setOnChange(std::bind(&HouseChoiceMenu::onPartnerChanged, this, std::placeholders::_1));
+    windowWidget.addWidget(&partnerSelector.aiBox, Point(336, 313), Point(256, 22));
+    windowWidget.addWidget(&partnerSelector.difficultyBox, Point(336, 337), Point(124, 22));
+    windowWidget.addWidget(&partnerSelector.roleBox, Point(464, 337), Point(128, 22));
     supportDescription.setTextFontSize(10);
     supportDescription.setTextColor(COLOR_WHITE);
     supportDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&supportDescription, Point(336, 339), Point(256, 30));
-    onSupportBotSelectionChanged(false);
+    windowWidget.addWidget(&supportDescription, Point(336, 361), Point(256, 26));
+    onPartnerChanged(false);
 
-    label("Enemy AI", 336, 377);
-    enemyAIDropDown.addEntry(_("QuantBot Easy"), 0);
-    enemyAIDropDown.addEntry(_("QuantBot Medium"), 1);
-    enemyAIDropDown.addEntry(_("QuantBot Hard"), 2);
-    enemyAIDropDown.addEntry(_("QuantBot Brutal"), 3);
-    enemyAIDropDown.addEntry(_("QuantBot Defend"), 4);
-    enemyAIDropDown.addEntry(_("Campaign AI"), 5);
-    enemyAIDropDown.setSelectedItem(s_enemyAIIndex);
-    enemyAIDropDown.setOnSelectionChange(std::bind(&HouseChoiceMenu::onEnemyAISelectionChanged, this, std::placeholders::_1));
-    windowWidget.addWidget(&enemyAIDropDown, Point(336, 398), Point(256, 22));
+    // Enemy AI: AI and Difficulty on one row; opponents always build and fight.
+    label("Enemy AI", 336, 387);
+    enemySelector.setFamilies({"QuantBot", "Campaign AI"});
+    enemySelector.setShowRole(false);
+    if(!enemySelector.selectPlayerClass(s_enemyClass)) enemySelector.selectPlayerClass("qBotEasy");
+    enemySelector.setOnChange(std::bind(&HouseChoiceMenu::onEnemyChanged, this, std::placeholders::_1));
+    windowWidget.addWidget(&enemySelector.aiBox, Point(336, 405), Point(124, 22));
+    windowWidget.addWidget(&enemySelector.difficultyBox, Point(464, 405), Point(128, 22));
     enemyDescription.setTextFontSize(10);
     enemyDescription.setTextColor(COLOR_WHITE);
     enemyDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&enemyDescription, Point(336, 423), Point(256, 30));
-    onEnemyAISelectionChanged(false);
+    windowWidget.addWidget(&enemyDescription, Point(336, 429), Point(256, 26));
+    onEnemyChanged(false);
 
     gameOptionsButton.setText(_("Game Rules"));
     gameOptionsButton.setOnClick(std::bind(&HouseChoiceMenu::onGameOptions, this));
     windowWidget.addWidget(&gameOptionsButton, Point(184, 455), Point(128, 24));
     hostCoopButton.setOnClick([this]() {
         // Launch from the widgets, not only their last change notification.
-        onSupportBotSelectionChanged(false);
-        onEnemyAISelectionChanged(false);
+        onPartnerChanged(false);
+        onEnemyChanged(false);
         s_startLevel = startLevelDropDown.getSelectedEntryIntData();
         quit(s_house);
     });
@@ -272,36 +249,38 @@ void HouseChoiceMenu::onGameOptions() {
     openWindow(GameOptionsWindow::create(s_currentGameOptions));
 }
 
-void HouseChoiceMenu::onSupportBotSelectionChanged(bool /*interactive*/) {
-    int entry = supportBotDropDown.getSelectedEntryIntData();
-    s_supportBotIndex = (entry >= 0 && entry < kSupportOptionCount) ? entry : 0;
-    const char* descriptions[] = {
-        "You control economy, building and combat.",
-        "AI builds and manages your economy.\nYou command combat units.",
-        "AI builds and manages your economy.\nYou command combat units.",
-        "AI builds and manages your economy.\nYou command combat units.",
-        "AI builds and manages your economy.\nYou command combat units.",
-        "Full control: cautious attacks, home reserves.\nBuilds economy and covers power demand.",
-        "Full control: balanced attacks and repairs.\nBuilds economy and covers power demand.",
-        "Full control: larger armies and air raids.\nKeeps a small home reserve.",
-        "Full control: strongest army and air raids.\nCommits most troops to combat.",
-        "Builds your economy and defends your base."
-    };
-    supportDescription.setText(_(descriptions[s_supportBotIndex]));
+void HouseChoiceMenu::onPartnerChanged(bool /*interactive*/) {
+    s_partnerClass = partnerSelector.getPlayerClass();
+    const auto* partner = PlayerFactory::getByPlayerClass(s_partnerClass);
+    const char* description = "You control economy, building and combat.";
+    if(partner != nullptr) {
+        switch(partner->getRole()) {
+            case AIRole::Builder: description = "AI builds and manages your economy.\nYou command combat units."; break;
+            case AIRole::Fighter: description = "AI commands your army: attacks and defends.\nYou build."; break;
+            case AIRole::Both:
+            default:              description = partner->getDifficulty() == "Defend"
+                                      ? "Builds your economy and defends your base."
+                                      : "AI builds and fights alongside you."; break;
+        }
+    }
+    supportDescription.setText(_(description));
 }
 
-void HouseChoiceMenu::onEnemyAISelectionChanged(bool /*interactive*/) {
-    int entry = enemyAIDropDown.getSelectedEntryIntData();
-    s_enemyAIIndex = (entry >= 0 && entry < kEnemyAIOptionCount) ? entry : 0;
-    const char* descriptions[] = {
-        "Small waves, one enemy house at a time.\nLong recovery breaks; supplies its power.",
-        "Larger waves, one enemy house at a time.\nModerate breaks; supplies its power.",
-        "Two houses can attack together.\nFlanking, air raids and shorter breaks.",
-        "All enemy houses can attack together.\nLargest waves and shortest breaks.",
-        "Builds and defends without main assaults.",
-        "Uses the original campaign AI behaviour."
+void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
+    s_enemyClass = enemySelector.getPlayerClass();
+    const std::pair<const char*, const char*> descriptions[] = {
+        {"qBotEasy",         "Small waves, one enemy house at a time.\nLong recovery breaks; supplies its power."},
+        {"qBotMedium",       "Larger waves, one enemy house at a time.\nModerate breaks; supplies its power."},
+        {"qBotHard",         "Two houses can attack together.\nFlanking, air raids and shorter breaks."},
+        {"qBotBrutal",       "All enemy houses can attack together.\nLargest waves and shortest breaks."},
+        {"qBotDefend",       "Builds and defends without main assaults."},
+        {"CampaignAIPlayer", "Uses the original campaign AI behaviour."}
     };
-    enemyDescription.setText(_(descriptions[s_enemyAIIndex]));
+    std::string description;
+    for(const auto& [playerClass, text] : descriptions) {
+        if(s_enemyClass == playerClass) description = _(text);
+    }
+    enemyDescription.setText(description);
 }
 
 void HouseChoiceMenu::onHouseButton(int button) {
@@ -370,9 +349,9 @@ void HouseChoiceMenu::updateConnection() {
         onlineDescription.setText(_("New mods use a pregame lobby.\nPlayers must join before the game starts."));
     visibilityDropDown.setEnabled(s_online);
     visibilityDropDown.setVisible(s_online);
-    supportBotDropDown.setEnabled(!s_online || !lobby);
+    partnerSelector.setEnabled(!s_online || !lobby);
     if(s_online && lobby) supportDescription.setText(_("Choose your partner in the pregame lobby."));
-    else onSupportBotSelectionChanged(false);
+    else onPartnerChanged(false);
 }
 
 void HouseChoiceMenu::updateHouseChoice() {

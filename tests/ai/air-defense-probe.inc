@@ -11,7 +11,7 @@ void runAirDefenseProbe(Game& game) {
         if(auto* candidate=dynamic_cast<QuantBot*>(player.get()))bot=candidate;
     require(bot && enemy,"Air defence fixture missing houses or bot");
     game.gameType=GameType::CustomGame;
-    bot->gameMode=QuantBot::GameMode::Custom;bot->supportMode=false;
+    bot->gameMode=QuantBot::GameMode::Custom;bot->role=AIRole::Both;
     bot->manualUnitOrders.clear();
     Coord origin=Coord::Invalid();
     for(int y=2;y+24<currentGameMap->getSizeY() && origin.isInvalid();++y)
@@ -726,7 +726,7 @@ void runAirDefenseProbe(Game& game) {
         // therefore buys nothing - fails here.
         {
             bot->difficulty=QuantBot::Difficulty::Brutal;
-            bot->supportMode=false;
+            bot->role=AIRole::Both;
             game.gameType=GameType::CustomGame;
             bot->gameMode=QuantBot::GameMode::Custom;
             require(bot->autonomousCustomArmy(),
@@ -907,10 +907,10 @@ void runAirDefenseProbe(Game& game) {
             require(!bot->autonomousCustomArmy(),
                 "The anti-air floor leaked into a campaign game");
             game.gameType=GameType::CustomGame;
-            bot->supportMode=true;
+            bot->role=AIRole::Builder;
             require(!bot->autonomousCustomArmy(),
                 "The anti-air floor leaked into a human-helper support house");
-            bot->supportMode=false;
+            bot->role=AIRole::Both;
             bot->difficulty=QuantBot::Difficulty::Easy;
             require(!bot->autonomousCustomArmy(),"The anti-air floor leaked into Easy");
             bot->difficulty=QuantBot::Difficulty::Medium;
@@ -1016,7 +1016,7 @@ void runAirDefenseProbe(Game& game) {
             }
             currentGame->techLevel=8;
             bot->difficulty=QuantBot::Difficulty::Brutal;
-            bot->supportMode=false;
+            bot->role=AIRole::Both;
             game.gameType=GameType::CustomGame;
             bot->gameMode=QuantBot::GameMode::Custom;
             bot->militaryValueLimit=10000;
@@ -1154,10 +1154,10 @@ void runAirDefenseProbe(Game& game) {
             clearCityQueues();cityPass(roomyArmy);
             require(troopOrders()==0,"Easy raised city rocket infantry");
             bot->difficulty=QuantBot::Difficulty::Brutal;
-            bot->supportMode=true;
+            bot->role=AIRole::Builder;
             clearCityQueues();cityPass(roomyArmy);
             require(troopOrders()==0,"A support helper raised city rocket infantry");
-            bot->supportMode=false;
+            bot->role=AIRole::Both;
             game.gameType=GameType::Campaign;
             bot->gameMode=QuantBot::GameMode::Campaign;
             clearCityQueues();cityPass(roomyArmy);

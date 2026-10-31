@@ -19,6 +19,7 @@
 #define QuantBot_H
 
 #include <players/Player.h>
+#include <players/AIRole.h>
 #include <players/CityPlanningPolicy.h>
 #include <players/CityDistanceField.h>
 #include <players/CityServiceInvestmentPolicy.h>
@@ -67,7 +68,7 @@ public:
         Campaign = 5
     };
 
-    QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, bool supportModeEnabled = false);
+    QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, AIRole role = AIRole::Both);
     QuantBot(InputStream& stream, House* associatedHouse);
     void init();
     ~QuantBot();
@@ -174,6 +175,11 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
+    AIRole getRole() const { return role; }
+    /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
+    bool builderOnly() const { return role == AIRole::Builder; }
+    /// The Fighter role: commands units, attacks and defends; never builds, produces or repairs.
+    bool fighterOnly() const { return role == AIRole::Fighter; }
 
     // Only opposing QuantBots in Dune City campaigns use this policy.
     QuantBotCityCampaignPolicy::Limits campaignCityLimits() const;
@@ -321,7 +327,7 @@ private:
     Sint32 powerDemandSample = 0;
     Sint32 projectedPowerDemandGrowth = 0;
     Coord squadRetreatLocation = Coord::Invalid();
-    bool supportMode = false;
+    AIRole role = AIRole::Both;
     Uint32 lastStatsLogCycle = 0;
     Uint32 lastPoliceBudgetReviewCycle = 0;
     Uint32 lastTelemetrySnapshotCycle = 0;
@@ -1626,6 +1632,10 @@ private:
     void checkAllUnits();
     void retreatAllUnits();
     void build(int militaryValue);
+    /// Fires a ready palace weapon: summon/saboteur, or the Death Hand at the largest enemy base.
+    void firePalaceWeapon(const Palace* pPalace);
+    /// The Fighter role's build-phase work instead of build(): retreat point and palace weapons.
+    void fighterPass();
     void attack(int militaryValue);
     void manageCityBuilding();
     std::map<Uint32,Uint32> roadRedirectRetryCycle;

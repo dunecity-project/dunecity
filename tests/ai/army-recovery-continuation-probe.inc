@@ -32,7 +32,7 @@ void runArmyRecoveryContinuationProbe(std::unique_ptr<Game>& game) {
     require(freshBot,"Fresh continuation fixture missing bot");
     freshBot->difficulty=QuantBot::Difficulty::Brutal;
     freshBot->gameMode=QuantBot::GameMode::Custom;
-    freshBot->supportMode=false;
+    freshBot->role=AIRole::Both;
     freshBot->militaryValueLimit=80000;
     // A real, living cohort near its production base, with ordinary occupancy.
     const Coord base=freshBot->findBaseCentre(HOUSE_HARKONNEN);

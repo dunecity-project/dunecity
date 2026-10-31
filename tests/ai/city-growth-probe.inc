@@ -12,7 +12,7 @@ void runCityGrowthProbe(Game& game) {
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
     require(bot && game.isCitySimEnabled(),"City growth fixture needs a city QuantBot");
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;bot->difficulty=QuantBot::Difficulty::Hard;
+    bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Hard;
     game.gameCycleCount=MILLI2CYCLES(120000);
 
     // A settlement wide enough that no two emplacements can double-cover every

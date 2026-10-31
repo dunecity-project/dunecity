@@ -60,30 +60,24 @@ int getMaxHouseScrollPos() {
     return getHouseChoiceCount() - kVisibleHouseButtons;
 }
 
-const char* const kSupportPlayerClasses[] = {
-    "",
-    "qBotSupportEasy",
-    "qBotSupportMedium",
-    "qBotSupportHard",
-    "qBotSupportBrutal"
-};
+constexpr int kNoPartner = 0;
 
-constexpr int kSupportOptionCount = sizeof(kSupportPlayerClasses) / sizeof(kSupportPlayerClasses[0]);
-
-const char* const kEnemyAIClasses[] = {
-    "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend", "CampaignAIPlayer"
-};
-
-constexpr int kEnemyAIOptionCount = sizeof(kEnemyAIClasses) / sizeof(kEnemyAIClasses[0]);
+/// The role as the selector's Role box names it; the partner's player name uses it too.
+std::string roleLabel(AIRole role) {
+    switch(role) {
+        case AIRole::Builder: return _("Builder");
+        case AIRole::Fighter: return _("Fighter");
+        case AIRole::Both:
+        default:              return _("Builder + Fighter");
+    }
 }
+} // namespace
 
 SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase(), campaignCoop(campaignCoop)
 {
     currentHouseChoiceScrollPos = 0;
     selectedButton = 1;
     mission = 1;
-    supportBotIndex = 0;
-    enemyAIIndex = 0;  // Default to QuantBot Easy
     currentGameOptions = effectiveGameOptions;  // Use mod-aware effective options
 
     // set up window
@@ -107,32 +101,32 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     windowWidget.addWidget(&buttonBorder, dest2);
 
     // set up menu buttons
-    windowWidget.addWidget(&menuButtonsVBox,Point((getRendererWidth() - 160)/2,getRendererHeight()/2 + 64), Point(160,166));
+    // Grown from 166 px for the partner's Role row; every row keeps its minimum height.
+    windowWidget.addWidget(&menuButtonsVBox,Point((getRendererWidth() - 160)/2,getRendererHeight()/2 + 64), Point(160,176));
 
     startButton.setText(campaignCoop ? _("Host Campaign Co-op") : _("Start"));
     startButton.setOnClick(std::bind(&SinglePlayerSkirmishMenu::onStart, this));
     menuButtonsVBox.addWidget(&startButton);
     startButton.setActive();
 
-    menuButtonsVBox.addWidget(VSpacer::create(8));
+    menuButtonsVBox.addWidget(VSpacer::create(6));
 
-    // AI Support explanation
-    Label* supportLabel = Label::create(_("AI support: help you fight"));
-    supportLabel->setTextColor(COLOR_BLACK);
-    supportLabel->setTextFontSize(12);
-    supportLabel->setAlignment(Alignment_HCenter);
-    menuButtonsVBox.addWidget(supportLabel);
+    // AI partner: a QuantBot sharing the player's house; the label says what its role does.
+    partnerLabel.setTextColor(COLOR_BLACK);
+    partnerLabel.setTextFontSize(12);
+    partnerLabel.setAlignment(Alignment_HCenter);
+    menuButtonsVBox.addWidget(&partnerLabel);
     menuButtonsVBox.addWidget(VSpacer::create(2));
 
-    supportBotDropDown.addEntry(_("AI Support: None"), 0);
-    supportBotDropDown.addEntry(_("AI Support: Easy"), 1);
-    supportBotDropDown.addEntry(_("AI Support: Medium"), 2);
-    supportBotDropDown.addEntry(_("AI Support: Hard"), 3);
-    supportBotDropDown.addEntry(_("AI Support: Brutal"), 4);
-    supportBotDropDown.setSelectedItem(0);
-    supportBotDropDown.setOnSelectionChange(std::bind(&SinglePlayerSkirmishMenu::onSupportBotSelectionChanged, this, std::placeholders::_1));
-    menuButtonsVBox.addWidget(&supportBotDropDown);
-    updateSupportBotLabel();
+    partnerSelector.addSpecial(_("None"), kNoPartner);
+    partnerSelector.setFamilies({"QuantBot"});
+    partnerSelector.selectSpecial(kNoPartner);
+    partnerSelector.setOnChange([this](bool) { updatePartnerLabel(); });
+    partnerRow.addWidget(&partnerSelector.aiBox);
+    partnerRow.addWidget(&partnerSelector.difficultyBox);
+    menuButtonsVBox.addWidget(&partnerRow);
+    menuButtonsVBox.addWidget(&partnerSelector.roleBox);
+    updatePartnerLabel();
 
     menuButtonsVBox.addWidget(VSpacer::create(6));
 
@@ -144,15 +138,13 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     menuButtonsVBox.addWidget(enemyAILabel);
     menuButtonsVBox.addWidget(VSpacer::create(2));
 
-    enemyAIDropDown.addEntry(_("QuantBot Easy"), 0);
-    enemyAIDropDown.addEntry(_("QuantBot Medium"), 1);
-    enemyAIDropDown.addEntry(_("QuantBot Hard"), 2);
-    enemyAIDropDown.addEntry(_("QuantBot Brutal"), 3);
-    enemyAIDropDown.addEntry(_("QuantBot Defend"), 4);
-    enemyAIDropDown.addEntry(_("Campaign AI"), 5);
-    enemyAIDropDown.setSelectedItem(0);
-    enemyAIDropDown.setOnSelectionChange(std::bind(&SinglePlayerSkirmishMenu::onEnemyAISelectionChanged, this, std::placeholders::_1));
-    menuButtonsVBox.addWidget(&enemyAIDropDown);
+    // Opponents own their houses, so they always build and fight.
+    enemySelector.setShowRole(false);
+    enemySelector.setFamilies({"QuantBot", "Campaign AI"});
+    enemySelector.selectPlayerClass("qBotEasy");
+    enemyRow.addWidget(&enemySelector.aiBox);
+    enemyRow.addWidget(&enemySelector.difficultyBox);
+    menuButtonsVBox.addWidget(&enemyRow);
 
     menuButtonsVBox.addWidget(VSpacer::create(6));
 
@@ -302,23 +294,15 @@ void SinglePlayerSkirmishMenu::onStart()
 {
     HOUSETYPE houseChoice = static_cast<HOUSETYPE>(houseOrder[currentHouseChoiceScrollPos + selectedButton]);
 
-    supportBotIndex = supportBotDropDown.getSelectedEntryIntData();
-    if(supportBotIndex < 0 || supportBotIndex >= kSupportOptionCount) {
-        supportBotIndex = 0;
+    const auto* partner = PlayerFactory::getByPlayerClass(partnerSelector.getPlayerClass());
+    std::string enemyAIClass = enemySelector.getPlayerClass();
+    if(enemyAIClass.empty()) {
+        enemyAIClass = "qBotEasy";
     }
-
-    enemyAIIndex = enemyAIDropDown.getSelectedEntryIntData();
-    if(enemyAIIndex < 0 || enemyAIIndex >= kEnemyAIOptionCount) {
-        enemyAIIndex = 0;
-    }
-
-    const bool supportSelected = (supportBotIndex > 0);
-    const char* supportPlayerClass = supportSelected ? kSupportPlayerClasses[supportBotIndex] : nullptr;
-    const char* enemyAIClass = kEnemyAIClasses[enemyAIIndex];
 
     GameInitSettings init(houseChoice, mission, currentGameOptions);
     init.setCampaignGraphicsSkin(GameInitSettings::sanitizeGraphicsSkin(skinDropDown.getSelectedEntryIntData()));
-    if(supportSelected) {
+    if(partner != nullptr) {
         init.setMultiplePlayersPerHouse(true);
     }
 
@@ -330,9 +314,9 @@ void SinglePlayerSkirmishMenu::onStart()
             GameInitSettings::HouseInfo humanHouseInfo(static_cast<HOUSETYPE>(houseID), 1);
             humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
 
-            if(supportSelected && supportPlayerClass != nullptr && *supportPlayerClass != '\0') {
-                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " " + _("(AI Support)");
-                humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, supportPlayerClass));
+            if(partner != nullptr) {
+                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " (" + roleLabel(partner->getRole()) + ")";
+                humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partner->getPlayerClass()));
             }
 
             init.addHouseInfo(humanHouseInfo);
@@ -451,26 +435,19 @@ void SinglePlayerSkirmishMenu::onMissionDecrement()
     missionCounter.setCount(mission);
 }
 
-void SinglePlayerSkirmishMenu::updateSupportBotLabel()
+void SinglePlayerSkirmishMenu::updatePartnerLabel()
 {
-    if(supportBotIndex < 0 || supportBotIndex >= kSupportOptionCount) {
-        supportBotIndex = 0;
+    const auto* partner = PlayerFactory::getByPlayerClass(partnerSelector.getPlayerClass());
+    if(partner == nullptr) {
+        partnerLabel.setText(_("AI partner"));
+        return;
     }
-    if(supportBotDropDown.getNumEntries() > supportBotIndex) {
-        supportBotDropDown.setSelectedItem(supportBotIndex);
+    switch(partner->getRole()) {
+        case AIRole::Builder: partnerLabel.setText(_("AI partner: builds only")); break;
+        case AIRole::Fighter: partnerLabel.setText(_("AI partner: fights only")); break;
+        case AIRole::Both:
+        default:              partnerLabel.setText(_("AI partner: builds, fights")); break;
     }
-}
-
-void SinglePlayerSkirmishMenu::onSupportBotSelectionChanged(bool /*interactive*/)
-{
-    int entry = supportBotDropDown.getSelectedEntryIntData();
-    supportBotIndex = (entry >= 0 && entry < kSupportOptionCount) ? entry : 0;
-}
-
-void SinglePlayerSkirmishMenu::onEnemyAISelectionChanged(bool /*interactive*/)
-{
-    int entry = enemyAIDropDown.getSelectedEntryIntData();
-    enemyAIIndex = (entry >= 0 && entry < kEnemyAIOptionCount) ? entry : 0;
 }
 
 void SinglePlayerSkirmishMenu::onGameOptions()

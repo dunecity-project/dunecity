@@ -69,6 +69,7 @@ std::mutex Game::performanceLogMutex;
 
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
+#include <players/PlayerFactory.h>
 
 #include <CommandBufferPolicy.h>
 
@@ -1133,8 +1134,11 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                 << ",\"player_class\":" << AITelemetry::Record::quote(playerClass)
                 << ",\"shared_house_players\":" << players.size();
             if (std::string(controller) == "ai" || qbot) {
+                const auto* playerData = PlayerFactory::getByPlayerClass(playerClass);
+                const AIRole role = playerData != nullptr ? playerData->getRole() : AIRole::Both;
                 row << ",\"ai_type\":" << AITelemetry::Record::quote(aiType)
-                    << ",\"ai_support\":" << (playerClass.find("Support") != std::string::npos ? "true" : "false");
+                    << ",\"ai_support\":" << (role == AIRole::Builder ? "true" : "false")
+                    << ",\"ai_role\":" << AITelemetry::Record::quote(aiRoleName(role));
                 if (!aiDifficulty.empty())
                     row << ",\"ai_difficulty\":" << AITelemetry::Record::quote(aiDifficulty);
             }

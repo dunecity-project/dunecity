@@ -8,7 +8,7 @@ void runPolicePlacementProbe(Game& game) {
     QuantBot* bot=nullptr;
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
     require(bot && game.isCitySimEnabled(),"Police fixture needs city QuantBot");
-    game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;bot->supportMode=false;
+    game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;bot->role=AIRole::Both;
     Coord origin=Coord::Invalid();
     for(int y=currentGameMap->getSizeY()/3;y+24<currentGameMap->getSizeY() && origin.isInvalid();++y)
         for(int x=4;x+24<currentGameMap->getSizeX() && origin.isInvalid();++x) {

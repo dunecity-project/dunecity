@@ -582,7 +582,7 @@ void DeviationProbe::quantBotArming() {
     // the detonation order for the rest of its deviation.
     game->gameType = GameType::CustomGame;
     quant->gameMode = QuantBot::GameMode::Custom;
-    quant->supportMode = false;
+    quant->role = AIRole::Both;
     quant->squadRallyLocation = Coord(30, 15);
     auto* rallyCase = captured(Coord(20, 15));
     quant->checkAllUnits();
@@ -598,12 +598,12 @@ void DeviationProbe::quantBotArming() {
     note("quantbot", "rescan_does_not_restart_fuse");
 
     // Support mode used to block the order twice.
-    quant->supportMode = true;
+    quant->role = AIRole::Builder;
     auto* supportCase = captured(Coord(22, 17));
     quant->checkAllUnits();
     require(supportCase->devastateTimer > 0, "Support mode still blocked a captured Devastator");
     note("quantbot", "armed_in_support_mode");
-    quant->supportMode = false;
+    quant->role = AIRole::Both;
 
     // A campaign hold is also a role early return; arming must precede it.
     game->gameType = GameType::Campaign;

@@ -53,6 +53,7 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <iterator>
 
 
 #define PLAYER_HUMAN        0
@@ -63,6 +64,16 @@ namespace {
 
 int getCustomGameHouseCount() {
     return getNumCustomGameHouses();
+}
+
+/// The role as the seat's Role box names it; a partner AI's player name uses it too.
+std::string roleLabel(AIRole role) {
+    switch(role) {
+        case AIRole::Builder: return _("Builder");
+        case AIRole::Fighter: return _("Fighter");
+        case AIRole::Both:
+        default:              return _("Builder + Fighter");
+    }
 }
 
 bool isBonusColorSlot(int colorSlot) {
@@ -501,6 +512,58 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
         row.houseBox = 72; row.teamBox = 58; row.spiceBox = 40; row.skinBox = 56;
     }
 
+    // The controller seats. A seat box shows the seated human, or open / closed / an AI; an AI
+    // also gets its Difficulty and Role (AIPlayerSelector). Each box is as wide as the longest
+    // entry it offers: a drop-down draws 14 pt text from x=3 beside its 17 px arrow.
+    //
+    // A row with one controller keeps its seat on one line. A shared row puts both seats on one
+    // line when the window is wide enough; otherwise both seat boxes share the player line and
+    // both Difficulty + Role pairs a third line, each pair under its own seat, which takes no
+    // height while neither seat holds an AI.
+    const bool sharedHouses = gameInitSettings.isMultiplePlayersPerHouse();
+    const auto entryWidth = [](const std::string& text) {
+        return static_cast<int>(GUIStyle::getInstance().getTextWidth(text, 14)) + 3 + 17 + 1;
+    };
+    struct SeatWidths {
+        int arrow = 0, label = 68, box = 180, ai = 0, difficulty = 0, role = 0, gap = 8;
+        bool oneLine = true;    ///< Difficulty and Role beside their seat box, not on a line below
+    } seatCols;
+    seatCols.arrow = getTextureSize(pGFXManager->getUIGraphic(UI_CustomGamePlayersArrowNeutral)).x;
+    seatCols.ai = std::max(entryWidth(_("open")), entryWidth(_("closed")));
+    for(const std::string& family : PlayerFactory::getAIFamilies()) {
+        seatCols.ai = std::max(seatCols.ai, entryWidth(_(family)));
+        for(const std::string& difficulty : PlayerFactory::getDifficulties(family)) {
+            seatCols.difficulty = std::max(seatCols.difficulty,
+                                           entryWidth(difficulty.empty() ? std::string("-") : _(difficulty)));
+        }
+    }
+    for(const char* role : {"Builder + Fighter", "Builder", "Fighter"}) {
+        seatCols.role = std::max(seatCols.role, entryWidth(_(role)));
+    }
+    const auto seatWidth = [&] { return seatCols.label + seatCols.box + seatCols.difficulty + seatCols.role; };
+    if(sharedHouses) {
+        seatCols.oneLine = seatCols.arrow + 2 * seatWidth() + seatCols.gap <= rowBudget;
+        if(!seatCols.oneLine) {
+            seatCols.label = compactPlayers ? 24 : 68;
+            seatCols.box = compactPlayers ? 145 : 180;
+            const int spare = rowBudget - (seatCols.arrow + 2 * (seatCols.label + seatCols.box) + seatCols.gap);
+            seatCols.box += std::max(0, std::min(spare / 2, 180 - seatCols.box));
+            // Each pair sits under its seat's label and box, so it gets their width.
+            const int pair = seatCols.label + seatCols.box;
+            if(seatCols.difficulty + seatCols.role > pair) {
+                seatCols.role = std::max(pair / 2, pair - seatCols.difficulty);
+                seatCols.difficulty = pair - seatCols.role;
+            }
+        }
+    } else if(seatCols.arrow + seatWidth() > rowBudget) {
+        // One controller: drop the "Player" caption, then narrow the seat box to what it offers.
+        seatCols.label = 0;
+        seatCols.box = std::max(seatCols.ai, std::min(180, rowBudget - seatCols.arrow - seatCols.difficulty - seatCols.role));
+        if(seatCols.arrow + seatWidth() > rowBudget) {
+            seatCols.role = std::max(40, rowBudget - seatCols.arrow - seatCols.box - seatCols.difficulty);
+        }
+    }
+
     for(int i=0;i<numHouses;i++) {
         HouseInfo& curHouseInfo = houseInfo[i];
 
@@ -662,143 +725,97 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 
         curHouseInfo.houseInfoVBox.addWidget(&curHouseInfo.houseHBox);
 
-        // add 1. player
+        // add the controller seats
         curHouseInfo.player1ArrowLabel.setTexture(pGFXManager->getUIGraphic(UI_CustomGamePlayersArrowNeutral));
-        curHouseInfo.playerHBox.addWidget(&curHouseInfo.player1ArrowLabel);
-        curHouseInfo.player1Label.setText(gameInitSettings.isMultiplePlayersPerHouse() ? (compactPlayers ? _("P1") : _("Player 1")) : _("Player"));
+        curHouseInfo.player1Label.setText(sharedHouses ? (compactPlayers ? _("P1") : _("Player 1")) : _("Player"));
         curHouseInfo.player1Label.setTextFontSize(12);
-        curHouseInfo.playerHBox.addWidget(&curHouseInfo.player1Label, gameInitSettings.isMultiplePlayersPerHouse() && compactPlayers ? 24 : 68);
-
-        if(bLoadMultiplayer) {
-            if(i < (int) houseInfoListSetup.size()) {
-                GameInitSettings::HouseInfo gisHouseInfo = houseInfoListSetup.at(i);
-
-                if(gisHouseInfo.houseID == HOUSE_UNUSED) {
-                    curHouseInfo.player1DropDown.addEntry(_("closed"), PLAYER_CLOSED);
-                } else if(gisHouseInfo.playerInfoList.empty() == false) {
-                    GameInitSettings::PlayerInfo playerInfo = gisHouseInfo.playerInfoList.front();
-                    if(playerInfo.playerClass == HUMANPLAYERCLASS) {
-                        if(thisPlayerPlaced == false) {
-                            curHouseInfo.player1DropDown.addEntry(settings.general.playerName, PLAYER_HUMAN);
-                            curHouseInfo.player1DropDown.setSelectedItem(0);
-                            thisPlayerPlaced = true;
-                        } else {
-                            curHouseInfo.player1DropDown.addEntry(_("open"), PLAYER_OPEN);
-                            curHouseInfo.player1DropDown.setSelectedItem(0);
-                        }
-                    } else {
-                        const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByPlayerClass(playerInfo.playerClass);
-                        int index = PlayerFactory::getIndexByPlayerClass(playerInfo.playerClass);
-
-                        if(pPlayerData != nullptr) {
-                            curHouseInfo.player1DropDown.addEntry(pPlayerData->getName(), -(index+2));
-                            curHouseInfo.player1DropDown.setSelectedItem(0);
-                            curHouseInfo.player1DropDown.setEnabled(false);
-                            curHouseInfo.player1DropDown.setOnClickEnabled(false);
-                        }
-                    }
-                }
-
-            }
-
-        } else if(bServer && (thisPlayerPlaced == false)) {
-            curHouseInfo.player1DropDown.addEntry(settings.general.playerName, PLAYER_HUMAN);
-            curHouseInfo.player1DropDown.setSelectedItem(0);
-            curHouseInfo.player1DropDown.setEnabled(bServer);
-            thisPlayerPlaced = true;
-        } else {
-            curHouseInfo.player1DropDown.addEntry(_("open"), PLAYER_OPEN);
-            curHouseInfo.player1DropDown.setSelectedItem(0);
-            curHouseInfo.player1DropDown.addEntry(_("closed"), PLAYER_CLOSED);
-            for(unsigned int k = 1; k < PlayerFactory::getList().size(); k++) {
-                const PlayerFactory::PlayerData* playerData = PlayerFactory::getByIndex(k);
-                if(playerData == nullptr) {
-                    continue;
-                }
-                const std::string& playerClass = playerData->getPlayerClass();
-                if(playerClass.rfind("qBotSupport", 0) == 0 &&
-                   playerClass != "qBotSupportEasy" &&
-                   playerClass != "qBotSupportMedium" &&
-                   playerClass != "qBotSupportHard" &&
-                   playerClass != "qBotSupportBrutal") {
-                    continue;
-                }
-                curHouseInfo.player1DropDown.addEntry(playerData->getName(), k);
-            }
-            curHouseInfo.player1DropDown.setEnabled(bServer);
-        }
-        curHouseInfo.player1DropDown.setOnSelectionChange(std::bind(&CustomGamePlayers::onChangePlayerDropDownBoxes, this, std::placeholders::_1, 2*i));
-        curHouseInfo.player1DropDown.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, 2*i));
-        curHouseInfo.playerHBox.addWidget(&curHouseInfo.player1DropDown, gameInitSettings.isMultiplePlayersPerHouse() && compactPlayers ? 145 : 180);
-
-        if(gameInitSettings.isMultiplePlayersPerHouse()) curHouseInfo.playerHBox.addWidget(HSpacer::create(8));
-
-        // add 2. player
         curHouseInfo.player2Label.setText(compactPlayers ? _("P2") : _("Player 2"));
         curHouseInfo.player2Label.setTextFontSize(12);
-        if(gameInitSettings.isMultiplePlayersPerHouse()) curHouseInfo.playerHBox.addWidget(&curHouseInfo.player2Label, compactPlayers ? 24 : 68);
 
-        if(bLoadMultiplayer) {
-            if(i < (int) houseInfoListSetup.size()) {
-                GameInitSettings::HouseInfo gisHouseInfo = houseInfoListSetup.at(i);
+        for(int controller = 0; controller < 2; controller++) {
+            const int slot = 2*i + controller;
+            Seat& seat = curHouseInfo.seats[controller];
+            const Point seatSize(seatCols.box, seat.fixedBox.getMinimumSize().y);
+            seat.box.addWidget(&seat.fixedBox, Point(0, 0), seatSize);
+            seat.box.addWidget(&seat.selector.aiBox, Point(0, 0), seatSize);
+            seat.selector.aiBox.setVisible(false);     // until setSeatChoice() offers the choice
+            if(isCoopGameType(gameInitSettings.getGameType()) && slot == 1) {
+                // The co-op partner: a second human, or a QuantBot of any difficulty and role.
+                seat.selector.addSpecial(_("Open: human co-op"), PLAYER_OPEN);
+                seat.selector.setFamilies({"QuantBot"});
+            } else {
+                seat.selector.addSpecial(_("open"), PLAYER_OPEN);
+                seat.selector.addSpecial(_("closed"), PLAYER_CLOSED);
+                seat.selector.setFamilies();
+            }
+            seat.selector.setOnChange(std::bind(&CustomGamePlayers::onChangePlayerDropDownBoxes, this, std::placeholders::_1, slot));
+            seat.selector.aiBox.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, slot));
+            seat.fixedBox.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, slot));
 
-                if(gisHouseInfo.houseID == HOUSE_UNUSED) {
-                    curHouseInfo.player2DropDown.addEntry(_("closed"), PLAYER_CLOSED);
-                } else if(gisHouseInfo.playerInfoList.size() >= 2) {
-                    GameInitSettings::PlayerInfo playerInfo = *(++gisHouseInfo.playerInfoList.begin());
-                    if(playerInfo.playerClass == HUMANPLAYERCLASS) {
-                        if(thisPlayerPlaced == false) {
-                            curHouseInfo.player2DropDown.addEntry(settings.general.playerName, PLAYER_HUMAN);
-                            curHouseInfo.player2DropDown.setSelectedItem(0);
-                            thisPlayerPlaced = true;
-                        } else {
-                            curHouseInfo.player2DropDown.addEntry(_("open"), PLAYER_OPEN);
-                            curHouseInfo.player2DropDown.setSelectedItem(0);
-                        }
-                    } else {
-                        const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByPlayerClass(playerInfo.playerClass);
-                        int index = PlayerFactory::getIndexByPlayerClass(playerInfo.playerClass);
+            if(bLoadMultiplayer) {
+                // A loaded game keeps its players: the seat shows only what the save holds.
+                if(i < (int) houseInfoListSetup.size()) {
+                    const GameInitSettings::HouseInfo& gisHouseInfo = houseInfoListSetup.at(i);
 
-                        if(pPlayerData != nullptr) {
-                            curHouseInfo.player1DropDown.addEntry(pPlayerData->getName(), -(index+2));
-                            curHouseInfo.player1DropDown.setSelectedItem(0);
-                            curHouseInfo.player1DropDown.setEnabled(false);
-                            curHouseInfo.player1DropDown.setOnClickEnabled(false);
+                    if(gisHouseInfo.houseID == HOUSE_UNUSED) {
+                        setSeatFixed(slot, _("closed"), PLAYER_CLOSED);
+                    } else if(static_cast<int>(gisHouseInfo.playerInfoList.size()) > controller) {
+                        const GameInitSettings::PlayerInfo& playerInfo = *std::next(gisHouseInfo.playerInfoList.begin(), controller);
+                        if(playerInfo.playerClass == HUMANPLAYERCLASS) {
+                            if(thisPlayerPlaced == false) {
+                                setSeatFixed(slot, settings.general.playerName, PLAYER_HUMAN);
+                                thisPlayerPlaced = true;
+                            } else {
+                                setSeatFixed(slot, _("open"), PLAYER_OPEN);
+                            }
+                        } else if(const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByPlayerClass(playerInfo.playerClass)) {
+                            const int index = PlayerFactory::getIndexByPlayerClass(playerInfo.playerClass);
+                            setSeatFixed(slot, pPlayerData->getName(), -(index+2));
+                            setSeatEnabled(slot, false);
+                            setSeatOnClickEnabled(slot, false);
                         }
                     }
                 }
+            } else if(bServer && (thisPlayerPlaced == false)) {
+                setSeatFixed(slot, settings.general.playerName, PLAYER_HUMAN);
+                thisPlayerPlaced = true;
+            } else {
+                setSeatChoice(slot, PLAYER_OPEN);
+                setSeatEnabled(slot, bServer);
             }
-        } else if(bServer && (thisPlayerPlaced == false)) {
-            curHouseInfo.player2DropDown.addEntry(settings.general.playerName, PLAYER_HUMAN);
-            curHouseInfo.player2DropDown.setSelectedItem(0);
-            curHouseInfo.player2DropDown.setEnabled(bServer);
-            thisPlayerPlaced = true;
-        } else {
-            curHouseInfo.player2DropDown.addEntry(_("open"), PLAYER_OPEN);
-            curHouseInfo.player2DropDown.setSelectedItem(0);
-            curHouseInfo.player2DropDown.addEntry(_("closed"), PLAYER_CLOSED);
-            for(unsigned int k = 1; k < PlayerFactory::getList().size(); k++) {
-                const PlayerFactory::PlayerData* playerData = PlayerFactory::getByIndex(k);
-                if(playerData == nullptr) {
-                    continue;
-                }
-                const std::string& playerClass = playerData->getPlayerClass();
-                if(playerClass.rfind("qBotSupport", 0) == 0 &&
-                   playerClass != "qBotSupportEasy" &&
-                   playerClass != "qBotSupportMedium" &&
-                   playerClass != "qBotSupportHard" &&
-                   playerClass != "qBotSupportBrutal") {
-                    continue;
-                }
-                curHouseInfo.player2DropDown.addEntry(playerData->getName(), k);
-            }
-            curHouseInfo.player2DropDown.setEnabled(bServer);
         }
-        curHouseInfo.player2DropDown.setOnSelectionChange(std::bind(&CustomGamePlayers::onChangePlayerDropDownBoxes, this, std::placeholders::_1, 2*i + 1));
-        curHouseInfo.player2DropDown.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, 2*i + 1));
-        if(gameInitSettings.isMultiplePlayersPerHouse()) curHouseInfo.playerHBox.addWidget(&curHouseInfo.player2DropDown, compactPlayers ? 145 : 180);
+
+        Seat& seat1 = curHouseInfo.seats[0];
+        Seat& seat2 = curHouseInfo.seats[1];
+        curHouseInfo.playerHBox.addWidget(&curHouseInfo.player1ArrowLabel);
+        if(seatCols.label > 0) curHouseInfo.playerHBox.addWidget(&curHouseInfo.player1Label, seatCols.label);
+        curHouseInfo.playerHBox.addWidget(&seat1.box, seatCols.box);
+        if(seatCols.oneLine) {
+            curHouseInfo.playerHBox.addWidget(&seat1.selector.difficultyBox, seatCols.difficulty);
+            curHouseInfo.playerHBox.addWidget(&seat1.selector.roleBox, seatCols.role);
+        }
+        if(sharedHouses) {
+            curHouseInfo.playerHBox.addWidget(HSpacer::create(seatCols.gap));
+            curHouseInfo.playerHBox.addWidget(&curHouseInfo.player2Label, seatCols.label);
+            curHouseInfo.playerHBox.addWidget(&seat2.box, seatCols.box);
+            if(seatCols.oneLine) {
+                curHouseInfo.playerHBox.addWidget(&seat2.selector.difficultyBox, seatCols.difficulty);
+                curHouseInfo.playerHBox.addWidget(&seat2.selector.roleBox, seatCols.role);
+            }
+        }
 
         curHouseInfo.houseInfoVBox.addWidget(&curHouseInfo.playerHBox);
+
+        if(sharedHouses && !seatCols.oneLine) {
+            const int pairGap = seatCols.label + seatCols.box - seatCols.difficulty - seatCols.role;
+            curHouseInfo.aiHBox.addWidget(HSpacer::create(seatCols.arrow));
+            curHouseInfo.aiHBox.addWidget(&seat1.selector.difficultyBox, seatCols.difficulty);
+            curHouseInfo.aiHBox.addWidget(&seat1.selector.roleBox, seatCols.role);
+            curHouseInfo.aiHBox.addWidget(HSpacer::create(pairGap + seatCols.gap));
+            curHouseInfo.aiHBox.addWidget(&seat2.selector.difficultyBox, seatCols.difficulty);
+            curHouseInfo.aiHBox.addWidget(&seat2.selector.roleBox, seatCols.role);
+            curHouseInfo.houseInfoVBox.addWidget(&curHouseInfo.aiHBox);
+        }
 
         playerListVBox.addWidget(&curHouseInfo.houseInfoVBox, 0.01);
 
@@ -818,24 +835,14 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     }
 
     if(isCoopGameType(gameInitSettings.getGameType())) {
-        auto& shared = houseInfo[0];
-        shared.teamDropDown.setSelectedItem(0);
-        shared.player2DropDown.clearAllEntries();
-        shared.player2DropDown.addEntry(_("Open: human co-op"), PLAYER_OPEN);
-        for(const char* cls : {"qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend", "qBotSupportEasy", "qBotSupportMedium", "qBotSupportHard", "qBotSupportBrutal"}) {
-            const int index = PlayerFactory::getIndexByPlayerClass(cls);
-            if(index >= 0) shared.player2DropDown.addEntry(PlayerFactory::getByIndex(index)->getName(), index);
-        }
-        shared.player2DropDown.setSelectedItem(0);
+        houseInfo[0].teamDropDown.setSelectedItem(0);
+        setSeatChoice(1, PLAYER_OPEN);
     }
     if(this->startImmediately) {
         for(const auto& house : fixedCoopHouses) {
             if(house.houseID != gameInitSettings.getHouseID() || house.playerInfoList.size() < 2) continue;
             const auto& partner = *std::next(house.playerInfoList.begin());
-            const int index = PlayerFactory::getIndexByPlayerClass(partner.playerClass);
-            auto& choices = houseInfo[0].player2DropDown;
-            for(unsigned i = 0; i < choices.getNumEntries(); ++i)
-                if(choices.getEntryIntData(i) == index) choices.setSelectedItem(i);
+            selectSeatPlayer(1, PlayerFactory::getIndexByPlayerClass(partner.playerClass));
         }
     }
     onChangeHousesDropDownBoxes(false);
@@ -846,24 +853,22 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 
     // maybe there is a better fitting slot if we are loading a map in the old format with Brain=CPU and Brain=Human
     if(brainEqHumanSlot >= 0 && !spectating) {
-        DropDownBox& dropDownBox1 = houseInfo[brainEqHumanSlot].player1DropDown;
-        DropDownBox& dropDownBox2 = houseInfo[brainEqHumanSlot].player2DropDown;
+        const int slot1 = brainEqHumanSlot*2;
+        const int slot2 = brainEqHumanSlot*2 + 1;
 
-        if(dropDownBox1.getSelectedEntry() != settings.general.playerName && dropDownBox2.getSelectedEntry() != settings.general.playerName) {
-            if(dropDownBox1.getSelectedEntryIntData() == PLAYER_OPEN) {
-                setPlayer2Slot(settings.general.playerName, brainEqHumanSlot*2);
-            } else if((dropDownBox2.getSelectedEntryIntData() == PLAYER_OPEN) && gameInitSettings.isMultiplePlayersPerHouse()) {
-                setPlayer2Slot(settings.general.playerName, brainEqHumanSlot*2+1);
+        if(getSeatName(slot1) != settings.general.playerName && getSeatName(slot2) != settings.general.playerName) {
+            if(getSeatPlayer(slot1) == PLAYER_OPEN) {
+                setPlayer2Slot(settings.general.playerName, slot1);
+            } else if((getSeatPlayer(slot2) == PLAYER_OPEN) && gameInitSettings.isMultiplePlayersPerHouse()) {
+                setPlayer2Slot(settings.general.playerName, slot2);
             }
         }
     }
 
     if(setup && setup->players.changeEventList.empty() && !setup->online) {
         const int ai = PlayerFactory::getIndexByPlayerClass("qBotEasy");
-        for(int slot = 0; slot < numHouses; ++slot) {
-            auto& box = houseInfo[slot].player1DropDown;
-            if(box.getSelectedEntryIntData() == PLAYER_OPEN)
-                for(int i = 0; i < box.getNumEntries(); ++i) if(box.getEntryIntData(i) == ai) { box.setSelectedItem(i); break; }
+        for(int row = 0; row < numHouses; ++row) {
+            if(getSeatPlayer(2*row) == PLAYER_OPEN) selectSeatPlayer(2*row, ai);
         }
         checkPlayerBoxes();
     }
@@ -1052,9 +1057,9 @@ void CustomGamePlayers::update() {
 #endif
 
     if(isCoopGameType(gameInitSettings.getGameType()) && startGameTime == 0 && bServer && !bWaitingForModAcks) {
-        const int partner = houseInfo[0].player2DropDown.getSelectedEntryIntData();
+        const int partner = getSeatPlayer(1);
         const bool solo = partner == PLAYER_OPEN || partner == PLAYER_CLOSED;
-        nextButton.setEnabled(houseInfo[0].player1DropDown.getSelectedEntryIntData() == PLAYER_HUMAN);
+        nextButton.setEnabled(getSeatPlayer(0) == PLAYER_HUMAN);
         readinessLabel.setText(!installerApprovedForDisplay
             ? _("Players must join this lobby before you start. Hot joining is unavailable for new mods.")
             : solo ? _("Start now. Others can watch or ask to join while you play.") : _("Your co-op partner is ready."));
@@ -1112,15 +1117,11 @@ LobbyAuthorization::SeatSnapshot CustomGamePlayers::makeSeatSnapshot() const {
     const int slotCount = std::min(numHouses * 2,
                                    static_cast<int>(snapshot.slots.size()));
     for(int slot = 0; slot < slotCount; slot++) {
-        const HouseInfo& curHouseInfo = houseInfo[slot / 2];
-        const DropDownBox& dropDownBox = (slot % 2 == 0) ? curHouseInfo.player1DropDown
-                                                         : curHouseInfo.player2DropDown;
-
         LobbyAuthorization::SlotState& state = snapshot.slots[static_cast<std::size_t>(slot)];
-        const int entryData = dropDownBox.getSelectedEntryIntData();
+        const int entryData = getSeatPlayer(slot);
         if(entryData == PLAYER_HUMAN) {
             state.kind = LobbyAuthorization::SlotKind::Human;
-            state.name = dropDownBox.getSelectedEntry();
+            state.name = getSeatName(slot);
         } else if(entryData == PLAYER_OPEN) {
             state.kind = LobbyAuthorization::SlotKind::Open;
         } else if(entryData == PLAYER_CLOSED) {
@@ -1257,25 +1258,9 @@ void CustomGamePlayers::onReceiveChangeEventList(const std::string& senderName,
             } break;
 
             case ChangeEventList::ChangeEvent::EventType::ChangePlayer: {
-                int newPlayer = (int) changeEvent.newValue;
-
-                HouseInfo& curHouseInfo = houseInfo[changeEvent.slot/2];
-
-                if(changeEvent.slot % 2 == 0) {
-                    for(int i=0;i<curHouseInfo.player1DropDown.getNumEntries();i++) {
-                        if(curHouseInfo.player1DropDown.getEntryIntData(i) == newPlayer) {
-                            curHouseInfo.player1DropDown.setSelectedItem(i);
-                            break;
-                        }
-                    }
-                } else {
-                    for(int i=0;i<curHouseInfo.player2DropDown.getNumEntries();i++) {
-                        if(curHouseInfo.player2DropDown.getEntryIntData(i) == newPlayer) {
-                            curHouseInfo.player2DropDown.setSelectedItem(i);
-                            break;
-                        }
-                    }
-                }
+                // The value is a factory index (or a seat state), however the sender's
+                // AI / Difficulty / Role boxes composed it.
+                selectSeatPlayer(static_cast<int>(changeEvent.slot), static_cast<int>(changeEvent.newValue));
 
                 checkPlayerBoxes();
             } break;
@@ -1314,8 +1299,8 @@ ChangeEventList CustomGamePlayers::getChangeEventList()
         int houseID = curHouseInfo.houseDropDown.getSelectedEntryIntData();
         int team = curHouseInfo.teamDropDown.getSelectedEntryIntData();
         int color = curHouseInfo.colorDropDown.getSelectedEntryIntData();
-        int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-        int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+        int player1 = getSeatPlayer(2*i);
+        int player2 = getSeatPlayer(2*i+1);
 
         changeEventList.changeEventList.push_back(ChangeEventList::ChangeEvent(ChangeEventList::ChangeEvent::EventType::ChangeHouse, i, houseID));
         changeEventList.changeEventList.push_back(ChangeEventList::ChangeEvent(ChangeEventList::ChangeEvent::EventType::ChangeTeam, i, team));
@@ -1333,14 +1318,14 @@ ChangeEventList CustomGamePlayers::getChangeEventList()
             static_cast<Uint32>(curHouseInfo.spiceIncomeDropDown.getSelectedEntryIntData()));
 
         if(player1 == PLAYER_HUMAN) {
-            std::string playername = curHouseInfo.player1DropDown.getSelectedEntry();
+            std::string playername = getSeatName(2*i);
             changeEventList.changeEventList.push_back(ChangeEventList::ChangeEvent(2*i, playername));
         } else {
             changeEventList.changeEventList.push_back(ChangeEventList::ChangeEvent(ChangeEventList::ChangeEvent::EventType::ChangePlayer, 2*i, player1));
         }
 
         if(player2 == PLAYER_HUMAN) {
-            std::string playername = curHouseInfo.player2DropDown.getSelectedEntry();
+            std::string playername = getSeatName(2*i+1);
             changeEventList.changeEventList.emplace_back(2*i+1, playername);
         } else {
             changeEventList.changeEventList.emplace_back(ChangeEventList::ChangeEvent::EventType::ChangePlayer, 2*i+1, player2);
@@ -1360,8 +1345,7 @@ ChangeEventList CustomGamePlayers::getChangeEventListForNewPlayer(const std::str
 
     // look for an open left slot
     for(int i=0;i<numHouses;i++) {
-        HouseInfo& curHouseInfo = houseInfo[i];
-        int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
+        int player1 = getSeatPlayer(2*i);
 
         if(player1 == PLAYER_OPEN) {
             newPlayerSlot = 2*i;
@@ -1372,8 +1356,7 @@ ChangeEventList CustomGamePlayers::getChangeEventListForNewPlayer(const std::str
     // if multiple players per house look for an open right slot
     if((newPlayerSlot == INVALID) && gameInitSettings.isMultiplePlayersPerHouse()) {
         for(int i=0;i<numHouses;i++) {
-            HouseInfo& curHouseInfo = houseInfo[i];
-            int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+            int player2 = getSeatPlayer(2*i + 1);
 
             if(player2 == PLAYER_OPEN) {
                 newPlayerSlot = 2*i + 1;
@@ -1385,9 +1368,8 @@ ChangeEventList CustomGamePlayers::getChangeEventListForNewPlayer(const std::str
     // as a fallback look for any non-human slot
     if(newPlayerSlot == INVALID) {
         for(int i=0;i<numHouses;i++) {
-            HouseInfo& curHouseInfo = houseInfo[i];
-            int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-            int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+            int player1 = getSeatPlayer(2*i);
+            int player2 = getSeatPlayer(2*i + 1);
 
             if(player1 != PLAYER_HUMAN) {
                 newPlayerSlot = 2*i;
@@ -1824,8 +1806,8 @@ void CustomGamePlayers::updateDiscordGameStarting() {
         HouseInfo& curHouseInfo = houseInfo[i];
         
         int houseID = curHouseInfo.houseDropDown.getSelectedEntryIntData();
-        int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-        int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+        int player1 = getSeatPlayer(2*i);
+        int player2 = getSeatPlayer(2*i + 1);
         
         // Skip if no players in this house
         if((player1 == PLAYER_OPEN || player1 == PLAYER_CLOSED) && 
@@ -1845,13 +1827,13 @@ void CustomGamePlayers::updateDiscordGameStarting() {
         std::vector<std::string> players;
         
         if(player1 != PLAYER_OPEN && player1 != PLAYER_CLOSED) {
-            std::string name = curHouseInfo.player1DropDown.getSelectedEntry();
+            std::string name = getSeatName(2*i);
             players.push_back(name);
             playerCount++;
         }
         
         if(player2 != PLAYER_OPEN && player2 != PLAYER_CLOSED) {
-            std::string name = curHouseInfo.player2DropDown.getSelectedEntry();
+            std::string name = getSeatName(2*i + 1);
             players.push_back(name);
             playerCount++;
         }
@@ -1899,7 +1881,7 @@ void CustomGamePlayers::onNext()
         return;
     }
     if(isCoopGameType(gameInitSettings.getGameType())
-       && houseInfo[0].player1DropDown.getSelectedEntryIntData() != PLAYER_HUMAN) {
+       && getSeatPlayer(0) != PLAYER_HUMAN) {
         openWindow(MsgBox::create(_("Choose a human player to lead the campaign.")));
         return;
     }
@@ -1914,8 +1896,8 @@ void CustomGamePlayers::onNext()
     for(int i=0;i<numHouses;i++) {
         HouseInfo& curHouseInfo = houseInfo[i];
 
-        int currentPlayer1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-        int currentPlayer2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+        int currentPlayer1 = getSeatPlayer(2*i);
+        int currentPlayer2 = getSeatPlayer(2*i + 1);
         const bool bPlayer1Active = (currentPlayer1 != PLAYER_OPEN && currentPlayer1 != PLAYER_CLOSED);
         const bool bPlayer2Active = gameInitSettings.isMultiplePlayersPerHouse()
             && (currentPlayer2 != PLAYER_OPEN && currentPlayer2 != PLAYER_CLOSED);
@@ -1945,8 +1927,8 @@ void CustomGamePlayers::onNext()
             int currentTeam = curHouseInfo.teamDropDown.getSelectedEntryIntData();
             bool bTeamFound = false;
             for(int j=0;j<i;j++) {
-                int player1 = houseInfo[j].player1DropDown.getSelectedEntryIntData();
-                int player2 = houseInfo[j].player2DropDown.getSelectedEntryIntData();
+                int player1 = getSeatPlayer(2*j);
+                int player2 = getSeatPlayer(2*j + 1);
 
                 const bool bPreviousPlayer2Active = gameInitSettings.isMultiplePlayersPerHouse()
                     && (player2 != PLAYER_OPEN && player2 != PLAYER_CLOSED);
@@ -2086,10 +2068,10 @@ void CustomGamePlayers::addAllPlayersToGameInitSettings()
         int houseID = curHouseInfo.houseDropDown.getSelectedEntryIntData();
         int team = curHouseInfo.teamDropDown.getSelectedEntryIntData();
         int colorOfHouse = curHouseInfo.colorDropDown.getSelectedEntryIntData();
-        int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-        std::string player1name = curHouseInfo.player1DropDown.getSelectedEntry();
-        int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
-        std::string player2name = curHouseInfo.player2DropDown.getSelectedEntry();
+        int player1 = getSeatPlayer(2*i);
+        std::string player1name = getSeatName(2*i);
+        int player2 = getSeatPlayer(2*i + 1);
+        std::string player2name = getSeatName(2*i + 1);
 
         if(isCoopGameType(gameInitSettings.getGameType())) {
             houseID = gameInitSettings.getHouseID();
@@ -2150,7 +2132,15 @@ bool CustomGamePlayers::addPlayerToHouseInfo(GameInitSettings::HouseInfo& newHou
                 return false;
             }
 
-            playerName = (houseID == HOUSE_INVALID) ? pPlayerData->getName() : getHouseNameByNumber(houseID);
+            if(houseID == HOUSE_INVALID) {
+                playerName = pPlayerData->getName();
+            } else if(newHouseInfo.playerInfoList.empty()) {
+                playerName = getHouseNameByNumber(houseID);
+            } else {
+                // The house's second controller is its partner, named for its role like in the
+                // other menus that add one.
+                playerName = getHouseNameByNumber(houseID) + " (" + roleLabel(pPlayerData->getRole()) + ")";
+            }
             playerClass = pPlayerData->getPlayerClass();
 
         } break;
@@ -2384,9 +2374,13 @@ void CustomGamePlayers::onChangeHousesDropDownBoxes(bool bInteractive, int house
             curHouseInfo.teamDropDown.setColor(color);
             curHouseInfo.colorDropDown.setColor(color);
             curHouseInfo.player1Label.setTextColor(color);
-            curHouseInfo.player1DropDown.setColor(color);
             curHouseInfo.player2Label.setTextColor(color);
-            curHouseInfo.player2DropDown.setColor(color);
+            for(Seat& seat : curHouseInfo.seats) {
+                seat.fixedBox.setColor(color);
+                seat.selector.aiBox.setColor(color);
+                seat.selector.difficultyBox.setColor(color);
+                seat.selector.roleBox.setColor(color);
+            }
 
             if(house == HOUSE_INVALID) {
                 curHouseInfo.player1ArrowLabel.setTexture(pGFXManager->getUIGraphic(UI_CustomGamePlayersArrowNeutral));
@@ -2533,18 +2527,12 @@ void CustomGamePlayers::onChangePlayerDropDownBoxes(bool bInteractive, int boxnu
     if(bInteractive && pNetworkManager != nullptr
        && !LobbyAuthorization::mayConfigurePlayerSlot(editableSeats, settings.general.playerName,
                                                        static_cast<Uint32>(boxnum), bServer)) {
-        auto& box = boxnum % 2 == 0 ? houseInfo[boxnum / 2].player1DropDown
-                                   : houseInfo[boxnum / 2].player2DropDown;
-        const int previous = lastPlayerSelections[boxnum];
-        for(int i = 0; i < box.getNumEntries(); ++i) {
-            if(box.getEntryIntData(i) == previous) { box.setSelectedItem(i); break; }
-        }
+        selectSeatPlayer(boxnum, lastPlayerSelections[boxnum]);
         return;
     }
     if(bInteractive && boxnum >= 0 && pNetworkManager != nullptr) {
-        DropDownBox& dropDownBox = (boxnum % 2 == 0) ? houseInfo[boxnum / 2].player1DropDown : houseInfo[boxnum / 2].player2DropDown;
-
-        int selectedPlayer = dropDownBox.getSelectedEntryIntData();
+        // The same event as ever: the factory index of the class AI, Difficulty and Role compose.
+        const int selectedPlayer = getSeatPlayer(boxnum);
 
         ChangeEventList changeEventList;
         changeEventList.changeEventList.emplace_back(ChangeEventList::ChangeEvent::EventType::ChangePlayer, boxnum, selectedPlayer);
@@ -2560,9 +2548,8 @@ void CustomGamePlayers::onClickPlayerDropDownBox(int boxnum) {
     if(pNetworkManager != nullptr && LobbyAuthorization::authorizeClientEvent(
         makeSeatSnapshot(), settings.general.playerName,
         ChangeEventList::ChangeEvent(boxnum, settings.general.playerName)) != LobbyAuthorization::Decision::Allow) return;
-    DropDownBox& dropDownBox = (boxnum % 2 == 0) ? houseInfo[boxnum / 2].player1DropDown : houseInfo[boxnum / 2].player2DropDown;
 
-    if(dropDownBox.getSelectedEntryIntData() == PLAYER_CLOSED) {
+    if(getSeatPlayer(boxnum) == PLAYER_CLOSED) {
         return;
     }
 
@@ -2581,31 +2568,12 @@ void CustomGamePlayers::onPeerDisconnected(const std::string& playername, bool b
         quit(cause);
     } else {
         for(int i=0;i<numHouses*2;i++) {
-            DropDownBox& curDropDownBox = (i % 2 == 0) ? houseInfo[i / 2].player1DropDown : houseInfo[i / 2].player2DropDown;
-
-            if(curDropDownBox.getSelectedEntryIntData() == PLAYER_HUMAN && curDropDownBox.getSelectedEntry() == playername) {
-
-                curDropDownBox.clearAllEntries();
-                curDropDownBox.addEntry(_("open"), PLAYER_OPEN);
-                curDropDownBox.setSelectedItem(0);
-
-                if(gameInitSettings.getGameType() != GameType::LoadMultiplayer) {
-                    curDropDownBox.addEntry(_("closed"), PLAYER_CLOSED);
-                    for(unsigned int k = 1; k < PlayerFactory::getList().size(); k++) {
-                        const PlayerFactory::PlayerData* playerData = PlayerFactory::getByIndex(k);
-                        if(playerData == nullptr) {
-                            continue;
-                        }
-                        const std::string& playerClass = playerData->getPlayerClass();
-                        if(playerClass.rfind("qBotSupport", 0) == 0 &&
-                           playerClass != "qBotSupportEasy" &&
-                           playerClass != "qBotSupportMedium" &&
-                           playerClass != "qBotSupportHard" &&
-                           playerClass != "qBotSupportBrutal") {
-                            continue;
-                        }
-                        curDropDownBox.addEntry(playerData->getName(), k);
-                    }
+            if(getSeatPlayer(i) == PLAYER_HUMAN && getSeatName(i) == playername) {
+                // A loaded game's seat can only wait for a human again.
+                if(gameInitSettings.getGameType() == GameType::LoadMultiplayer) {
+                    setSeatFixed(i, _("open"), PLAYER_OPEN);
+                } else {
+                    setSeatChoice(i, PLAYER_OPEN);
                 }
 
                 break;
@@ -2615,20 +2583,14 @@ void CustomGamePlayers::onPeerDisconnected(const std::string& playername, bool b
         if(bServer == false) {
             for(int i=0;i<numHouses;i++) {
                 bool bIsThisPlayer = false;
-                if(houseInfo[i].player1DropDown.getSelectedEntryIntData() == PLAYER_HUMAN) {
-                    if(houseInfo[i].player1DropDown.getSelectedEntry() == settings.general.playerName) {
+                for(const int slot : {2*i, 2*i + 1}) {
+                    if(getSeatPlayer(slot) == PLAYER_HUMAN && getSeatName(slot) == settings.general.playerName) {
                         bIsThisPlayer = true;
                     }
                 }
 
-                if(houseInfo[i].player2DropDown.getSelectedEntryIntData() == PLAYER_HUMAN) {
-                    if(houseInfo[i].player2DropDown.getSelectedEntry() == settings.general.playerName) {
-                        bIsThisPlayer = true;
-                    }
-                }
-
-                houseInfo[i].player1DropDown.setEnabled(bIsThisPlayer);
-                houseInfo[i].player2DropDown.setEnabled(bIsThisPlayer);
+                setSeatEnabled(2*i, bIsThisPlayer);
+                setSeatEnabled(2*i + 1, bIsThisPlayer);
                 houseInfo[i].houseDropDown.setEnabled(bIsThisPlayer);
                 houseInfo[i].teamDropDown.setEnabled(bIsThisPlayer);
                 houseInfo[i].bonusColorCheckbox.setEnabled(false);
@@ -2669,82 +2631,44 @@ void CustomGamePlayers::setPlayer2Slot(const std::string& playername, int slot) 
     // human name is seated, so refusing here also covers a stale SetHumanPlayer event replayed
     // from a roster that was captured before Spectate was switched on.
     if(spectating) return;
-    DropDownBox& dropDownBox = (slot % 2 == 0) ? houseInfo[slot / 2].player1DropDown : houseInfo[slot / 2].player2DropDown;
 
     std::string oldPlayerName = "";
-    int oldPlayerType = dropDownBox.getSelectedEntryIntData();
+    int oldPlayerType = getSeatPlayer(slot);
     if(oldPlayerType == PLAYER_HUMAN) {
-        oldPlayerName = dropDownBox.getSelectedEntry();
+        oldPlayerName = getSeatName(slot);
     }
 
+    // The seat this human leaves gets what the new seat held: the other human, or its choice.
     for(int i=0;i<numHouses*2;i++) {
-        DropDownBox& curDropDownBox = (i % 2 == 0) ? houseInfo[i / 2].player1DropDown : houseInfo[i / 2].player2DropDown;
-
-        if(curDropDownBox.getSelectedEntryIntData() == PLAYER_HUMAN && curDropDownBox.getSelectedEntry() == playername) {
-
+        if(getSeatPlayer(i) == PLAYER_HUMAN && getSeatName(i) == playername) {
             if(oldPlayerType == PLAYER_HUMAN) {
-                curDropDownBox.clearAllEntries();
-                curDropDownBox.addEntry(oldPlayerName, PLAYER_HUMAN);
-                curDropDownBox.setSelectedItem(0);
+                setSeatFixed(i, oldPlayerName, PLAYER_HUMAN);
+            } else if(gameInitSettings.getGameType() == GameType::LoadMultiplayer) {
+                setSeatFixed(i, _("open"), PLAYER_OPEN);
             } else {
-                curDropDownBox.clearAllEntries();
-                curDropDownBox.addEntry(_("open"), PLAYER_OPEN);
-
-                if(gameInitSettings.getGameType() != GameType::LoadMultiplayer) {
-                    curDropDownBox.addEntry(_("closed"), PLAYER_CLOSED);
-                    for(unsigned int k = 1; k < PlayerFactory::getList().size(); k++) {
-                        const PlayerFactory::PlayerData* playerData = PlayerFactory::getByIndex(k);
-                        if(playerData == nullptr) {
-                            continue;
-                        }
-                        const std::string& playerClass = playerData->getPlayerClass();
-                        if(playerClass.rfind("qBotSupport", 0) == 0 &&
-                           playerClass != "qBotSupportEasy" &&
-                           playerClass != "qBotSupportMedium" &&
-                           playerClass != "qBotSupportHard" &&
-                           playerClass != "qBotSupportBrutal") {
-                            continue;
-                        }
-                        curDropDownBox.addEntry(playerData->getName(), k);
-                    }
-                }
-
-                for(int j = 0; j < curDropDownBox.getNumEntries(); j++) {
-                    if(curDropDownBox.getEntryIntData(j) == oldPlayerType) {
-                        curDropDownBox.setSelectedItem(j);
-                        break;
-                    }
-                }
+                setSeatChoice(i, oldPlayerType);
             }
 
             break;
         }
     }
 
-    dropDownBox.clearAllEntries();
-    dropDownBox.addEntry(playername, PLAYER_HUMAN);
-    dropDownBox.setSelectedItem(0);
+    setSeatFixed(slot, playername, PLAYER_HUMAN);
 
     if(bServer == false) {
         for(int i=0;i<numHouses;i++) {
             bool bIsThisPlayer = false;
 
             if(gameInitSettings.getGameType() != GameType::LoadMultiplayer) {
-                if(houseInfo[i].player1DropDown.getSelectedEntryIntData() == PLAYER_HUMAN) {
-                    if(houseInfo[i].player1DropDown.getSelectedEntry() == settings.general.playerName) {
-                        bIsThisPlayer = true;
-                    }
-                }
-
-                if(houseInfo[i].player2DropDown.getSelectedEntryIntData() == PLAYER_HUMAN) {
-                    if(houseInfo[i].player2DropDown.getSelectedEntry() == settings.general.playerName) {
+                for(const int seat : {2*i, 2*i + 1}) {
+                    if(getSeatPlayer(seat) == PLAYER_HUMAN && getSeatName(seat) == settings.general.playerName) {
                         bIsThisPlayer = true;
                     }
                 }
             }
 
-            houseInfo[i].player1DropDown.setEnabled(bIsThisPlayer);
-            houseInfo[i].player2DropDown.setEnabled(bIsThisPlayer);
+            setSeatEnabled(2*i, bIsThisPlayer);
+            setSeatEnabled(2*i + 1, bIsThisPlayer);
             houseInfo[i].houseDropDown.setEnabled(bIsThisPlayer);
             houseInfo[i].teamDropDown.setEnabled(bIsThisPlayer);
             houseInfo[i].bonusColorCheckbox.setEnabled(false);
@@ -2757,6 +2681,97 @@ void CustomGamePlayers::setPlayer2Slot(const std::string& playername, int slot) 
     }
 
     checkPlayerBoxes();
+}
+
+int CustomGamePlayers::getSeatPlayer(int slot) const {
+    const Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    if(seat.fixed) {
+        return seat.fixedBox.getSelectedEntryIntData();
+    }
+    return seat.selector.isSpecialSelected() ? seat.selector.getSpecial() : seat.selector.getPlayerClassIndex();
+}
+
+std::string CustomGamePlayers::getSeatName(int slot) const {
+    const Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    if(seat.fixed) {
+        return seat.fixedBox.getSelectedEntry();
+    }
+    const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByIndex(getSeatPlayer(slot));
+    return (pPlayerData != nullptr) ? pPlayerData->getName() : seat.selector.aiBox.getSelectedEntry();
+}
+
+void CustomGamePlayers::setSeatFixed(int slot, const std::string& text, int player) {
+    Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    seat.fixed = true;
+    seat.fixedBox.clearAllEntries();
+    seat.fixedBox.addEntry(text, player);
+    seat.fixedBox.setSelectedItem(0);
+    seat.fixedBox.setVisible(true);
+    seat.selector.aiBox.setVisible(false);
+}
+
+void CustomGamePlayers::setSeatChoice(int slot, int player) {
+    Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    seat.fixed = false;
+    seat.fixedBox.clearAllEntries();
+    seat.fixedBox.setVisible(false);
+    seat.selector.aiBox.setVisible(true);
+    if(!selectSeatPlayer(slot, player)) {
+        seat.selector.selectSpecial(PLAYER_OPEN);
+    }
+}
+
+bool CustomGamePlayers::selectSeatPlayer(int slot, int player) {
+    Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    if(seat.fixed) {
+        for(int i = 0; i < seat.fixedBox.getNumEntries(); i++) {
+            if(seat.fixedBox.getEntryIntData(i) == player) {
+                seat.fixedBox.setSelectedItem(i);
+                return true;
+            }
+        }
+        return false;
+    }
+    if(player == PLAYER_OPEN || player == PLAYER_CLOSED) {
+        // Only the seat states this seat offers: the co-op partner seat has no "closed".
+        seat.selector.selectSpecial(player);
+        return seat.selector.getSpecial(PLAYER_HUMAN) == player;
+    }
+    const PlayerFactory::PlayerData* pPlayerData = PlayerFactory::getByIndex(player);
+    return (pPlayerData != nullptr) && seat.selector.selectPlayerClass(pPlayerData->getPlayerClass());
+}
+
+void CustomGamePlayers::setSeatEnabled(int slot, bool enabled) {
+    Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    seat.fixedBox.setEnabled(enabled);
+    // Re-enabling refills Difficulty and Role, so only on a change.
+    if(seat.selector.aiBox.isEnabled() != enabled) {
+        seat.selector.setEnabled(enabled);
+    }
+}
+
+void CustomGamePlayers::setSeatOnClickEnabled(int slot, bool enabled) {
+    Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+    seat.fixedBox.setOnClickEnabled(enabled);
+    seat.selector.aiBox.setOnClickEnabled(enabled);
+}
+
+void CustomGamePlayers::updateSeatAIControls() {
+    for(int i=0;i<numHouses;i++) {
+        HouseInfo& curHouseInfo = houseInfo[i];
+        bool anyAI = false;
+        for(Seat& seat : curHouseInfo.seats) {
+            const bool ai = seat.box.isVisible() && !seat.fixed && !seat.selector.isSpecialSelected();
+            seat.selector.difficultyBox.setVisible(ai);
+            seat.selector.roleBox.setVisible(ai);
+            anyAI = anyAI || ai;
+        }
+        // Only shared rows narrower than both seats on one line have the third line.
+        if(curHouseInfo.aiHBox.getParent() != nullptr && curHouseInfo.aiHBox.isVisible() != anyAI) {
+            curHouseInfo.aiHBox.setVisible(anyAI);
+            curHouseInfo.aiHBox.resizeAll();
+        }
+    }
 }
 
 void CustomGamePlayers::checkPlayerBoxes() {
@@ -2773,8 +2788,9 @@ void CustomGamePlayers::checkPlayerBoxes() {
     for(int i=0;i<numHouses;i++) {
         HouseInfo& curHouseInfo = houseInfo[i];
 
-        int player1 = curHouseInfo.player1DropDown.getSelectedEntryIntData();
-        int player2 = curHouseInfo.player2DropDown.getSelectedEntryIntData();
+        int player1 = getSeatPlayer(2*i);
+        int player2 = getSeatPlayer(2*i + 1);
+        Seat& seat2 = curHouseInfo.seats[1];
 
         if(player1 != PLAYER_OPEN) {
             numPlayers++;
@@ -2784,32 +2800,33 @@ void CustomGamePlayers::checkPlayerBoxes() {
             numPlayers++;
         }
 
-        if((gameInitSettings.isMultiplePlayersPerHouse() == false) || (player1 == PLAYER_OPEN && player2 == PLAYER_OPEN) || (curHouseInfo.player2DropDown.getNumEntries() == 0)) {
-            curHouseInfo.player2DropDown.setVisible(false);
-            curHouseInfo.player2DropDown.setEnabled(false);
+        if((gameInitSettings.isMultiplePlayersPerHouse() == false) || (player1 == PLAYER_OPEN && player2 == PLAYER_OPEN)
+           || (seat2.fixed && seat2.fixedBox.getNumEntries() == 0)) {
+            seat2.box.setVisible(false);
+            setSeatEnabled(2*i + 1, false);
             curHouseInfo.player2Label.setVisible(false);
         } else {
-            curHouseInfo.player2DropDown.setVisible(true);
+            seat2.box.setVisible(true);
 
             bool bEnableDropDown2 = bServer;
             if(bServer == false) {
                 if(player1 == PLAYER_HUMAN) {
-                    if(curHouseInfo.player1DropDown.getSelectedEntry() == settings.general.playerName) {
+                    if(getSeatName(2*i) == settings.general.playerName) {
                         bEnableDropDown2 = true;
                     }
                 }
 
                 if(player2 == PLAYER_HUMAN) {
-                    if(curHouseInfo.player2DropDown.getSelectedEntry() == settings.general.playerName) {
+                    if(getSeatName(2*i + 1) == settings.general.playerName) {
                         bEnableDropDown2 = true;
                     }
                 }
             }
 
             if((gameInitSettings.getGameType() == GameType::LoadMultiplayer) && (player2 != PLAYER_OPEN) && (player2 != PLAYER_HUMAN)) {
-                curHouseInfo.player2DropDown.setEnabled(false);
+                setSeatEnabled(2*i + 1, false);
             } else {
-                curHouseInfo.player2DropDown.setEnabled(bEnableDropDown2);
+                setSeatEnabled(2*i + 1, bEnableDropDown2);
             }
             curHouseInfo.player2Label.setVisible(true);
         }
@@ -2817,22 +2834,23 @@ void CustomGamePlayers::checkPlayerBoxes() {
 
     editableSeats = makeSeatSnapshot();
     for(int slot = 0; slot < numHouses * 2; ++slot) {
-        auto& box = slot % 2 == 0 ? houseInfo[slot / 2].player1DropDown
-                                : houseInfo[slot / 2].player2DropDown;
-        lastPlayerSelections[slot] = box.getSelectedEntryIntData();
+        const Seat& seat = houseInfo[slot / 2].seats[slot % 2];
+        lastPlayerSelections[slot] = getSeatPlayer(slot);
         if(pNetworkManager != nullptr) {
             const bool editable = LobbyAuthorization::mayConfigurePlayerSlot(
                 editableSeats, settings.general.playerName, slot, bServer);
             const bool loadedBot = gameInitSettings.getGameType() == GameType::LoadMultiplayer
                 && editableSeats.slots[slot].kind == LobbyAuthorization::SlotKind::AI;
-            box.setEnabled(editable && !loadedBot && box.isVisible());
+            setSeatEnabled(slot, editable && !loadedBot && seat.box.isVisible());
             // Disabled dropdowns have a separate click-to-claim path. Protect that path too,
             // so clicking another player's support bot cannot silently move/swap the human.
-            box.setOnClickEnabled(LobbyAuthorization::authorizeClientEvent(editableSeats,
+            setSeatOnClickEnabled(slot, LobbyAuthorization::authorizeClientEvent(editableSeats,
                 settings.general.playerName, ChangeEventList::ChangeEvent(slot, settings.general.playerName))
                 == LobbyAuthorization::Decision::Allow);
         }
     }
+
+    updateSeatAIControls();
 
     if(pNetworkManager != nullptr) {
         if(bServer) {
@@ -2924,10 +2942,10 @@ void CustomGamePlayers::disableAllDropDownBoxes() {
         curHouseInfo.graphicsSkinDropDown.setOnClickEnabled(false);
         curHouseInfo.spiceIncomeDropDown.setEnabled(false);
         curHouseInfo.spiceIncomeDropDown.setOnClickEnabled(false);
-        curHouseInfo.player1DropDown.setEnabled(false);
-        curHouseInfo.player1DropDown.setOnClickEnabled(false);
-        curHouseInfo.player2DropDown.setEnabled(false);
-        curHouseInfo.player2DropDown.setOnClickEnabled(false);
+        for(const int slot : {2*i, 2*i + 1}) {
+            setSeatEnabled(slot, false);
+            setSeatOnClickEnabled(slot, false);
+        }
     }
 
     backButton.setEnabled(false);

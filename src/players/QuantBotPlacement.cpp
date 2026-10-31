@@ -1756,7 +1756,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     unsigned available = 0;
     const std::array<Uint32,2> serviceItems{Structure_PoliceStation,Structure_RocketTurret};
     bool coreReady=true;
-    if (gameMode==GameMode::Custom && !supportMode)
+    if (gameMode==GameMode::Custom && !builderOnly())
     for (Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard})
         if (prices[item][house].enabled && prices[item][house].techLevel<=currentGame->techLevel
             && getHouse()->getNumItems(item)==0) coreReady=false;
@@ -1787,7 +1787,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 // A lower service budget must not trigger a construction loop
                 // that buys replacement coverage with still more permanent bills.
                 // Grow income before adding another station to an underfunded city.
-                if (gameMode==GameMode::Custom && !supportMode && stationCommitted
+                if (gameMode==GameMode::Custom && !builderOnly() && stationCommitted
                     && hs.policeFundingPercent<100) continue;
                 const int annualTax=DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue);
                 const int annualPower=getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
@@ -1795,7 +1795,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 for (const auto& plan:reservedStructures)
                     if (plan.first!=planningBuilder)
                         committedCost+=DuneCity::getPoliceAnnualCost(plan.second.item).lround();
-                const bool overBudget=gameMode==GameMode::Custom && !supportMode
+                const bool overBudget=gameMode==GameMode::Custom && !builderOnly()
                     && committedCost+DuneCity::getPoliceAnnualCost(Structure_PoliceStation).lround()
                     > CityServiceInvestmentPolicy::policingAllowance(annualTax,annualPower,
                         CityServiceInvestmentPolicy::policingBudgetPercent(getHouse()->getCredits(),annualTax,annualPower,committedCost));

@@ -56,6 +56,40 @@ bool QuantBot::canAddRepairYard(int includingQueued) const {
         || includingQueued < initialItemCount[Structure_RepairYard];
 }
 
+void QuantBot::firePalaceWeapon(const Palace* pPalace) {
+    if (!pPalace->isSpecialWeaponReady()) return;
+    const int houseID = getHouse()->getHouseID();
+    if (houseID != HOUSE_HARKONNEN && houseID != HOUSE_SARDAUKAR) {
+        doSpecialWeapon(pPalace);
+        placementCache.clear(); // Palace summons can occupy previously free sites.
+        return;
+    }
+    int enemyHouseID = -1;
+    int enemyHouseBuildingCount = 0;
+    for (int i = 0; i < NUM_HOUSES; i++) {
+        // The Natives have no base to strike.
+        if (getHouse(i) != nullptr && !getHouse(i)->isNatives() && getHouse(i)->getTeamID() != getHouse()->getTeamID()
+            && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
+            enemyHouseBuildingCount = getHouse(i)->getNumStructures();
+            enemyHouseID = i;
+        }
+    }
+    if (enemyHouseID != -1) {
+        Coord target = findBestDeathHandTarget(enemyHouseID);
+        if (target.isValid()) doLaunchDeathhand(pPalace, target.x, target.y);
+    }
+}
+
+void QuantBot::fighterPass() {
+    // The Fighter's share of build(): the retreat point and the palace weapons. It never
+    // produces, places, repairs or cancels anything (docs/ai-roles.md).
+    if (squadRetreatLocation.isInvalid()) squadRetreatLocation = findSquadRetreatLocation();
+    for (const StructureBase* pStructure : getStructureList()) {
+        if (pStructure->getOwner() == getHouse() && pStructure->getItemID() == Structure_Palace)
+            firePalaceWeapon(static_cast<const Palace*>(pStructure));
+    }
+}
+
 void QuantBot::build(int militaryValue) {
     AITelemetry::PerformanceScope perfScope("ai.build", getGameCycleCount(), getHouse()->getHouseID());
     AITelemetry::PerformanceScope phaseScope("ai.build.evaluate",getGameCycleCount(),getHouse()->getHouseID());
@@ -297,7 +331,7 @@ void QuantBot::build(int militaryValue) {
     const bool turretPowerRequired = getGameInitSettings().getGameOptions().rocketTurretsNeedPower;
     const bool vanillaEconomy = !citySimEnabled && !powerRules;
     const bool campaignEconomyPush = vanillaEconomy && isCampaignGameType(currentGame->gameType)
-        && !supportMode && !isCampaignEnemy() && difficulty>=Difficulty::Hard;
+        && !builderOnly() && !isCampaignEnemy() && difficulty>=Difficulty::Hard;
     // Buildings pay gradually. Previously the same unspent cash funded more
     // orders every pass even though it was already committed to existing queues.
     const int clearanceCommitmentShortfall = std::max(0, queuedProductionCost - money);
@@ -326,7 +360,7 @@ void QuantBot::build(int militaryValue) {
 		}
 	}
 
-    if (citySimEnabled && !supportMode && gameMode == GameMode::Custom) {
+    if (citySimEnabled && !builderOnly() && gameMode == GameMode::Custom) {
         auto* sim = currentGame->getCitySimulation();
         const auto& hs = sim->getHouseState(houseID);
         const int recentLosses = std::count_if(recentStructureLosses.begin(),recentStructureLosses.end(),[&](const auto& loss) {
@@ -398,7 +432,7 @@ void QuantBot::build(int militaryValue) {
 		anyConstructionYardCanBuildPalace |= pConstructionYard->isAvailableToBuild(Structure_Palace);
 	}
 
-	const bool customStrategicPlanning = gameMode == GameMode::Custom && !supportMode;
+	const bool customStrategicPlanning = gameMode == GameMode::Custom && !builderOnly();
 	const bool stablePower = getHouse()->hasPower();
 	// itemCount already includes every queued and unplaced palace from all
 	// builders, so parallel construction yards cannot exceed the target.
@@ -557,7 +591,7 @@ void QuantBot::build(int militaryValue) {
             if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive())
                 ++(other->getTeamID() == getHouse()->getTeamID() ? ownTeamHouses : enemyHouses);
     const bool brutalEconomy = brutalCityEconomy || (gameMode == GameMode::Custom && difficulty == Difficulty::Brutal
-        && !supportMode && !isCampaignGameType(currentGame->gameType)
+        && !builderOnly() && !isCampaignGameType(currentGame->gameType)
         && enemyHouses <= ownTeamHouses && !outnumberedByEstimate());
     const bool openingWorkerFloor = (citySimEnabled && gameMode == GameMode::Custom) || brutalEconomy;
     auto openingFleetIncomplete = [&]() {
@@ -573,7 +607,7 @@ void QuantBot::build(int militaryValue) {
     // as soon as the fleet is funded rather than waiting for it to arrive.
     auto harvesterInvestmentReserve = [&]() {
         if (!isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
-            || gameMode != GameMode::Custom || supportMode || !(vanillaEconomy || citySimEnabled)
+            || gameMode != GameMode::Custom || builderOnly() || !(vanillaEconomy || citySimEnabled)
             || lastCalculatedSpice <= 0 || getHouse()->isGroundUnitLimitReached()
             || getHouse()->getNumItems(Structure_Refinery) == 0
             || (harvesterFactories.empty() && getHouse()->getNumItems(Structure_StarPort) == 0)) return 0;
@@ -1182,7 +1216,7 @@ void QuantBot::build(int militaryValue) {
 
 	bool emitStatsLog = false;
 
-    if (!supportMode && (militaryValue > 0 || getHouse()->getNumStructures() > 0)) {
+    if (!builderOnly() && (militaryValue > 0 || getHouse()->getNumStructures() > 0)) {
         const Uint32 currentCycle = getGameCycleCount();
         if(currentCycle - lastStatsLogCycle >= MILLI2CYCLES(30000)) {
 			emitStatsLog = true;
@@ -1337,7 +1371,7 @@ void QuantBot::build(int militaryValue) {
         }
         telemetryState = AITelemetry::log().write(getGameCycleCount(), getHouse()->getHouseID(), getPlayerID(), "state_snapshot",
             AITelemetry::Record().set("ai", "QuantBot").set("name", getPlayername())
-                .set("difficulty", static_cast<int>(difficulty)).set("support", supportMode)
+                .set("difficulty", static_cast<int>(difficulty)).set("support", builderOnly())
                 .set("house_name", getHouseNameByNumber(static_cast<HOUSETYPE>(getHouse()->getHouseID())))
                 .set("team", getHouse()->getTeamID())
                 .set("state", decisionState()).set("city_health", cityHealth).set("actual", actual).set("queued", queued)
@@ -1769,7 +1803,7 @@ void QuantBot::build(int militaryValue) {
     // Cash-funded vanilla openings use the established parallel MCV/factory
     // policy. Use actual runway, not a fixed wealth cutoff: as the base grows,
     // the same cash must cover more production as well as its economy pipeline.
-    const bool sharedSpending=!supportMode && (!vanillaEconomy || !cashFlow.fundsParallelProduction);
+    const bool sharedSpending=!builderOnly() && (!vanillaEconomy || !cashFlow.fundsParallelProduction);
     const int militaryFunding=std::max(0,forecastFunding-continuedConstructionCost
         + existingMilitaryCapacity-continuedMilitaryCost);
     std::sort(capitalBuilders.begin(),capitalBuilders.end(),[](const auto* a,const auto* b) {
@@ -2037,7 +2071,7 @@ void QuantBot::build(int militaryValue) {
     // adding cover against aircraft seen elsewhere on the map.
     Uint32 missingCoreInfrastructure=NONE_ID;
     bool coreInfrastructureReady=true;
-    if (gameMode==GameMode::Custom && !supportMode)
+    if (gameMode==GameMode::Custom && !builderOnly())
     for (Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard}) {
         if (!data[item][houseID].enabled || data[item][houseID].techLevel>currentGame->techLevel) continue;
         if (getHouse()->getNumItems(item)==0) coreInfrastructureReady=false;
@@ -2069,7 +2103,7 @@ void QuantBot::build(int militaryValue) {
     // owning, so a non-city base that can already order it finishes that step
     // before repeating optional cover. City coverage keeps its own established
     // core rule; this adds no new condition there.
-    const bool advancedTechPending=!citySimEnabled && gameMode==GameMode::Custom && !supportMode
+    const bool advancedTechPending=!citySimEnabled && gameMode==GameMode::Custom && !builderOnly()
         && itemCount[Structure_HeavyFactory]>0 && itemCount[Structure_IX]==0
         && anyConstructionYardCanBuildIX && findPlaceLocation(Structure_IX).isValid();
     // Keep unloading capacity ahead of optional additional cover as the worker
@@ -2534,7 +2568,7 @@ void QuantBot::build(int militaryValue) {
             !getHouse()->hasPower() || itemCount[Structure_ConstructionYard]==0) : 0;
     };
     uint64_t capitalDecision=0;
-    if (!supportMode && AITelemetry::log().enabled()) {
+    if (!builderOnly() && AITelemetry::log().enabled()) {
         AITelemetry::Record options;
         for (size_t i=0;i<capitalCandidates.size();++i) {
             const auto& c=capitalCandidates[i];
@@ -2656,37 +2690,8 @@ void QuantBot::build(int militaryValue) {
             }
 
 			// Special weapon launch logic (not for support AI)
-			if (pStructure->getItemID() == Structure_Palace && !supportMode) {
-
-				const Palace* pPalace = static_cast<const Palace*>(pStructure);
-				if (pPalace->isSpecialWeaponReady()) {
-
-					if (houseID != HOUSE_HARKONNEN && houseID != HOUSE_SARDAUKAR) {
-						doSpecialWeapon(pPalace);
-                        placementCache.clear(); // Palace summons can occupy previously free sites.
-					}
-					else {
-						int enemyHouseID = -1;
-						int enemyHouseBuildingCount = 0;
-
-						for (int i = 0; i < NUM_HOUSES; i++) {
-							if (getHouse(i) != nullptr) {
-								// The Natives have no base to strike.
-								if (!getHouse(i)->isNatives() && getHouse(i)->getTeamID() != getHouse()->getTeamID() && getHouse(i)->getNumStructures() > enemyHouseBuildingCount) {
-									enemyHouseBuildingCount = getHouse(i)->getNumStructures();
-									enemyHouseID = i;
-								}
-							}
-						}
-
-					if ((enemyHouseID != -1) && (houseID == HOUSE_HARKONNEN || houseID == HOUSE_SARDAUKAR)) {
-						Coord target = findBestDeathHandTarget(enemyHouseID);
-						if (target.isValid()) {
-							doLaunchDeathhand(pPalace, target.x, target.y);
-						}
-					}
-					}
-				}
+			if (pStructure->getItemID() == Structure_Palace && !builderOnly()) {
+				firePalaceWeapon(static_cast<const Palace*>(pStructure));
 			}
 
 			if (pStructure->isABuilder()) {
@@ -2704,7 +2709,7 @@ void QuantBot::build(int militaryValue) {
                 clearPlacementCache(false,true);
 
 				// Log all builder status for campaign AIs (not just CY)
-				if (gameMode == GameMode::Campaign && !supportMode && pStructure->getItemID() != Structure_ConstructionYard) {
+				if (gameMode == GameMode::Campaign && !builderOnly() && pStructure->getItemID() != Structure_ConstructionYard) {
 					logDebug("PRODUCTION: %s - Upgrading:%d Queue:%d Credits:%d", 
 						getItemNameByID(pStructure->getItemID()).c_str(),
 						pBuilder->isUpgrading(), pBuilder->getProductionQueueSize(), money);
@@ -2784,7 +2789,7 @@ void QuantBot::build(int militaryValue) {
                         return false;
                     }
 
-					if (gameMode == GameMode::Campaign && !supportMode && currentGame) {
+					if (gameMode == GameMode::Campaign && !builderOnly() && currentGame) {
 						std::string itemName = getItemNameByID(itemID);
 						logDebug("Queuing %s (ID:%d)", itemName.c_str(), itemID);
 					}
@@ -3022,7 +3027,7 @@ void QuantBot::build(int militaryValue) {
                 // untouched and still run ahead of this. Custom and legacy
                 // campaign games at every difficulty share the one gate.
                 auto economicGenerator = [&]() -> Uint32 {
-                    if (!vanillaEconomy || supportMode || defendingEconomy
+                    if (!vanillaEconomy || builderOnly() || defendingEconomy
                         || pBuilder->getItemID()!=Structure_ConstructionYard
                         || pBuilder->isUpgrading() || pBuilder->getProductionQueueSize()!=0) return NONE_ID;
                     // Income and whatever production core this tree actually
@@ -6353,7 +6358,7 @@ void QuantBot::build(int militaryValue) {
 		}
 	}
 
-    if (!supportMode && AITelemetry::log().enabled()) {
+    if (!builderOnly() && AITelemetry::log().enabled()) {
         traceDecision("capital_outcome",AITelemetry::Record().set("plan",capitalDecision)
             .set("priority_ordered",capitalConsumed).set("priority_pending",capitalPending())
             .set("orders",capitalOrders).set("ordered_cost",capitalOrderedCost).set("remaining_planning_cash",money));

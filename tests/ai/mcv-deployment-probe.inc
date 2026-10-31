@@ -35,7 +35,7 @@ void runMcvDeploymentProbe(Game& game) {
     }
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     require(game.isCitySimEnabled(),"MCV fixture needs the city simulation");
 
     // One clear rectangle, far from everything else on the map.
@@ -1164,10 +1164,10 @@ void runMcvDeploymentProbe(Game& game) {
         // A helper bot never reorders the units its human is commanding.
         for(auto* unit:squad) release(unit);
         bot->openingDispersal.clear();bot->openingDispersalUntil=0;
-        bot->supportMode=true;
+        bot->role=AIRole::Builder;
         bot->applyOpeningSpaceDispersal();
         require(bot->openingDispersal.empty(),"A support-mode helper issued opening orders");
-        bot->supportMode=false;
+        bot->role=AIRole::Both;
 
         // The real custom-game opening path, then the engine frames that must
         // actually clear the rock, and a regroup that may not undo them.

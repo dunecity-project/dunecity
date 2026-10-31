@@ -7,7 +7,7 @@ void runCustomAttackProbe(Game& game) {
         if(auto* candidate=dynamic_cast<QuantBot*>(player.get()))bot=candidate;
     require(bot,"Custom attack fixture missing bot");
     game.gameType=GameType::CustomGame;
-    bot->gameMode=QuantBot::GameMode::Custom;bot->supportMode=false;
+    bot->gameMode=QuantBot::GameMode::Custom;bot->role=AIRole::Both;
     bot->manualUnitOrders.clear();bot->defenceAssignments.clear();
     std::vector<UnitBase*> army;
     for(int y=1;y<currentGameMap->getSizeY()-1 && army.size()<76;++y)
@@ -84,9 +84,25 @@ void runCustomAttackProbe(Game& game) {
                 "A custom difficulty's harvester limit does not exceed the one below (or binds on a small map)");
             previousLimit=limit;
         }
-        bot->supportMode=true;
+        bot->role=AIRole::Builder;
         require(bot->configuredCustomHarvesterLimit()==0,"A support controller took the custom harvester limit");
-        bot->supportMode=false;
+        bot->role=AIRole::Both;
+        // A Fighter (docs/ai-roles.md) commands the army as Both does, but its wave readiness
+        // leaves out the units its human partner is ordering: those never join the wave.
+        bot->role=AIRole::Fighter;
+        reset(QuantBot::Difficulty::Medium);
+        require(bot->autonomousCustomArmy(),"A Fighter lost the autonomous custom army");
+        bot->role=AIRole::Both;
+        const int wholeArmy=bot->militaryUnitValue();
+        for(int i=0;i<4;++i)bot->onHumanUnitOrder(army[i]->getObjectID());
+        require(bot->militaryUnitValue()==wholeArmy,"Both stopped counting human-ordered units");
+        bot->role=AIRole::Fighter;
+        const int trooperPrice=game.objectData.data[Unit_Trooper][house->getHouseID()].price;
+        require(bot->militaryUnitValue()==wholeArmy-4*trooperPrice,
+            "A Fighter counted its human partner's ordered units as ready");
+        bot->manualUnitOrders.clear();
+        require(bot->militaryUnitValue()==wholeArmy,"A Fighter lost units its human released");
+        bot->role=AIRole::Both;
         reset(QuantBot::Difficulty::Easy);
         for(auto difficulty:{QuantBot::Difficulty::Easy}) {
             reset(difficulty);bot->launchGroundHunt();

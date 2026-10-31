@@ -19,7 +19,7 @@ void runNoSpiceCityProbe(Game& game) {
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
     require(bot && game.isCitySimEnabled(),"No-spice city fixture needs a city QuantBot");
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;bot->difficulty=QuantBot::Difficulty::Brutal;
+    bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Brutal;
     game.gameCycleCount=MILLI2CYCLES(60000);
 
     // The captured map's condition: not a low field, no field. Clearing the
@@ -217,7 +217,7 @@ void runNoSpiceCityProbe(Game& game) {
         currentGame->loadedSavegameVersion=savedVersion;
         require(restored.lastCalculatedSpice==bot->lastCalculatedSpice,
             "A reloaded bot lost the remaining-spice total the bootstrap reads");
-        restored.gameMode=QuantBot::GameMode::Custom;restored.supportMode=false;
+        restored.gameMode=QuantBot::GameMode::Custom;restored.role=AIRole::Both;
         restored.difficulty=QuantBot::Difficulty::Brutal;
         for(auto* structure:structureList)if(structure->getOwner()==house && structure->isABuilder()) {
             auto* builder=static_cast<BuilderBase*>(structure);

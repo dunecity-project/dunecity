@@ -616,7 +616,7 @@ int runOwnershipProbe() {
             click(40, 414);
             if(sent.size() != 1 || sent[0].at("title") != "Unit selection"
                 || sent[0].at("details") != "Cannot select units"
-                || sent[0].at("context").find("AI Support (Hard)") == std::string::npos
+                || sent[0].at("context").find("QuantBot Hard (Builder)") == std::string::npos
                 || sent[0].at("context").find("QuantBot Medium") == std::string::npos)
                 throw std::runtime_error("feedback text or AI context missing");
             result->response = "ERROR Temporary failure"; result->done.store(true); feedback.draw();
@@ -714,19 +714,36 @@ int runOwnershipProbe() {
         SDL_RenderSetLogicalSize(renderer, 640, 480);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
         HouseChoiceMenu menu;
-        menu.handleMouseLeft(400, 326, true); menu.handleMouseLeft(400, 326, false);
+        // Partner AI box (336,313 256x22): None -> QuantBot.
+        menu.handleMouseLeft(400, 320, true); menu.handleMouseLeft(400, 320, false);
         SDL_KeyboardEvent key{}; key.keysym.sym = SDLK_DOWN;
-        for(int choice=1; choice<=9; ++choice) {
+        menu.handleKeyPress(key);
+        if(HouseChoiceMenu::getPartnerClass() != "qBotEasy")
+            throw std::runtime_error("AI partner QuantBot missing");
+        key.keysym.sym = SDLK_SPACE; menu.handleKeyPress(key);
+        // Difficulty box (336,337 124x22): every QuantBot difficulty.
+        menu.handleMouseLeft(360, 345, true); menu.handleMouseLeft(360, 345, false);
+        key.keysym.sym = SDLK_DOWN;
+        for(const char* difficulty : {"Medium", "Hard", "Brutal", "Defend"}) {
             menu.handleKeyPress(key);
-            if(HouseChoiceMenu::getSupportBotIndex() != choice)
-                throw std::runtime_error("AI partner option missing");
+            if(HouseChoiceMenu::getPartnerClass() != std::string("qBot") + difficulty)
+                throw std::runtime_error("AI partner difficulty missing");
+        }
+        key.keysym.sym = SDLK_SPACE; menu.handleKeyPress(key);
+        // Role box (464,337 128x22): Builder + Fighter -> Builder -> Fighter.
+        menu.handleMouseLeft(500, 345, true); menu.handleMouseLeft(500, 345, false);
+        key.keysym.sym = SDLK_DOWN;
+        for(const char* role : {"qBotSupportDefend", "qBotFighterDefend"}) {
+            menu.handleKeyPress(key);
+            if(HouseChoiceMenu::getPartnerClass() != role)
+                throw std::runtime_error("AI partner role missing");
         }
         menu.draw();
         auto image = renderReadSurface(renderer); SavePNG(image.get(), "campaign-ai-options.png");
         key.keysym.sym = SDLK_SPACE; menu.handleKeyPress(key); SDL_RenderClear(renderer); menu.draw();
         image = renderReadSurface(renderer); SavePNG(image.get(), "campaign-ai-description.png");
         SDL_SetRenderTarget(renderer, nullptr);
-        SDL_Log("AI_PARTNER_PROBE_PASS: all support and full QuantBot difficulties selectable at 640x480");
+        SDL_Log("AI_PARTNER_PROBE_PASS: every QuantBot partner difficulty and role selectable at 640x480");
     }
     SDL_Log("FEEDBACK_EDITOR_PROBE_PASS: multiline input, Unicode deletion and selection replacement work");
     SDL_Log("CAMPAIGN_SKIP_PROBE_PASS: real commands win campaigns, advance levels, finish final mission and reject invalid issuers");

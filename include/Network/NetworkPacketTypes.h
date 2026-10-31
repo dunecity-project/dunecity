@@ -318,7 +318,10 @@
 //     route ticks while awaiting a carryall resumes at its cadence instead of in the past.
 //     Off (default): retains the old movement and render-only UnitBase::DrawnStepScope.
 //     A 102 peer cannot read the MOD9 settings stream.
-#define NETWORK_PROTOCOL_VERSION            103
+// 104: AI roles (docs/ai-roles.md): five qBotFighter* player classes appended to the
+//      PlayerFactory list the lobby indexes, and QuantBot's role byte (save 9875). A 103 peer
+//      cannot create a Fighter and would play it as another AI.
+#define NETWORK_PROTOCOL_VERSION            104
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

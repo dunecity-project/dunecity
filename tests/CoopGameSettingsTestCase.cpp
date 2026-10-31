@@ -19,7 +19,7 @@ char getHouseScenarioLetter(HOUSETYPE house) {
     return house == HOUSE_ATREIDES ? 'A' : (house == HOUSE_ORDOS ? 'O' : 'H');
 }
 
-static GameInitSettings makeCoop(bool campaign, bool bot) {
+static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& botClass = "qBotSupportBrutal") {
     GameInitSettings init(HOUSE_ATREIDES, 8, SettingsClass::GameOptionsClass{});
     init.enableCoop(campaign, "Test co-op");
     init.setCampaignGraphicsSkin(GameInitSettings::GraphicsSkin::Dune2);
@@ -27,7 +27,7 @@ static GameInitSettings makeCoop(bool campaign, bool bot) {
     GameInitSettings::HouseInfo human(HOUSE_ATREIDES, 1);
     human.graphicsSkin = GameInitSettings::GraphicsSkin::Dune2;
     human.addPlayerInfo({"Host", HUMANPLAYERCLASS});
-    human.addPlayerInfo({"Partner", bot ? "qBotSupportBrutal" : HUMANPLAYERCLASS});
+    human.addPlayerInfo({"Partner", bot ? botClass : std::string(HUMANPLAYERCLASS)});
     init.addHouseInfo(human);
     GameInitSettings::HouseInfo enemy(HOUSE_SARDAUKAR, 2);
     enemy.addPlayerInfo({"Sardaukar", "qBotHard"});
@@ -268,7 +268,9 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 TEST_CASE("Co-op settings preserve shared control, scenario identity and seed over the wire", "[coop][network]") {
     const bool campaign = GENERATE(false, true);
     const bool bot = GENERATE(false, true);
-    const auto host = makeCoop(campaign, bot);
+    // The partner travels as its class whatever its role: Builder, Fighter or Builder + Fighter.
+    const std::string botClass = GENERATE(as<std::string>{}, "qBotSupportBrutal", "qBotFighterBrutal", "qBotHard");
+    const auto host = makeCoop(campaign, bot, botClass);
     OMemoryStream out; out.open(); host.save(out);
     IMemoryStream in(out.getData(), out.getDataLength());
     GameInitSettings client(in);
@@ -286,7 +288,7 @@ TEST_CASE("Co-op settings preserve shared control, scenario identity and seed ov
     REQUIRE(client.getHouseInfoList().back().graphicsSkin == GameInitSettings::GraphicsSkin::SimCity);
     REQUIRE(client.getCampaignGraphicsSkin() == GameInitSettings::GraphicsSkin::Dune2);
     REQUIRE(shared.playerInfoList.size() == 2);
-    REQUIRE(shared.playerInfoList.back().playerClass == (bot ? "qBotSupportBrutal" : HUMANPLAYERCLASS));
+    REQUIRE(shared.playerInfoList.back().playerClass == (bot ? botClass : std::string(HUMANPLAYERCLASS)));
     REQUIRE(client.getHouseInfoList().back().houseID == HOUSE_SARDAUKAR);
     REQUIRE(client.getHouseInfoList().back().team == 2);
 }

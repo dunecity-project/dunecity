@@ -127,26 +127,12 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
     }
 
     // Get AI settings from HouseChoiceMenu static storage
-    int supportBotIndex = HouseChoiceMenu::getSupportBotIndex();
-    int enemyAIIndex = HouseChoiceMenu::getEnemyAIIndex();
+    const std::string& partnerClass = HouseChoiceMenu::getPartnerClass();
+    const std::string& enemyAIClass = HouseChoiceMenu::getEnemyClass();
     SettingsClass::GameOptionsClass gameOptions = HouseChoiceMenu::getGameOptions();
 
-    const char* const kSupportPlayerClasses[] = {
-        "",
-        "qBotSupportEasy",
-        "qBotSupportMedium",
-        "qBotSupportHard",
-        "qBotSupportBrutal",
-        "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend"
-    };
-
-    const char* const kEnemyAIClasses[] = {
-        "qBotEasy", "qBotMedium", "qBotHard", "qBotBrutal", "qBotDefend", "CampaignAIPlayer"
-    };
-
-    const bool supportSelected = (supportBotIndex > 0) && (!HouseChoiceMenu::isOnline() || (!showLobby && OnlineModPolicy::approved()));
-    const char* supportPlayerClass = supportSelected ? kSupportPlayerClasses[supportBotIndex] : nullptr;
-    const char* enemyAIClass = kEnemyAIClasses[enemyAIIndex];
+    const auto* partner = PlayerFactory::getByPlayerClass(partnerClass);
+    const bool supportSelected = (partner != nullptr) && (!HouseChoiceMenu::isOnline() || (!showLobby && OnlineModPolicy::approved()));
 
     GameInitSettings init = HouseChoiceMenu::isSingleMission()
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
@@ -166,9 +152,11 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
             humanHouseInfo.graphicsSkin = campaignSkin;
             humanHouseInfo.addPlayerInfo( GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS) );
 
-            if(supportSelected && supportPlayerClass != nullptr && *supportPlayerClass != '\0') {
-                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " " + (supportBotIndex >= 5 ? _("(QuantBot)") : _("(AI Support)"));
-                humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, supportPlayerClass));
+            if(supportSelected) {
+                const AIRole role = partner->getRole();
+                const char* roleLabel = role == AIRole::Builder ? "Builder" : role == AIRole::Fighter ? "Fighter" : "Builder + Fighter";
+                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " (" + _(roleLabel) + ")";
+                humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partnerClass));
             }
 
             init.addHouseInfo(humanHouseInfo);

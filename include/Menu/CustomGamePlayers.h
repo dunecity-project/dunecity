@@ -33,6 +33,7 @@
 #include <GUI/Checkbox.h>
 #include <GUI/TextView.h>
 #include <GUI/TextBox.h>
+#include <GUI/dune/AIPlayerSelector.h>
 
 #include <Network/ChangeEventList.h>
 
@@ -115,6 +116,25 @@ private:
 
     void setPlayer2Slot(const std::string& playername, int slot);
 
+    /**
+        The player in a seat (slot = 2*house + controller), as the change events carry it:
+        PLAYER_HUMAN, PLAYER_OPEN, PLAYER_CLOSED, the factory index of an AI class, or
+        -(index+2) for a loaded game's AI.
+    */
+    int getSeatPlayer(int slot) const;
+    /// What the seat shows: the seated human's name, the AI's name, "open" or "closed".
+    std::string getSeatName(int slot) const;
+    /// Shows only this entry in the seat: a seated human or a loaded game's fixed player.
+    void setSeatFixed(int slot, const std::string& text, int player);
+    /// Offers the seat's open / closed / AI choice and selects player in it.
+    void setSeatChoice(int slot, int player);
+    /// Selects player in the seat's current entries; false if the seat does not offer it.
+    bool selectSeatPlayer(int slot, int player);
+    void setSeatEnabled(int slot, bool enabled);
+    void setSeatOnClickEnabled(int slot, bool enabled);
+    /// Shows Difficulty and Role only beside a seat that holds an AI, and the line they share.
+    void updateSeatAIControls();
+
     void onChangeHousesDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
     void onChangeTeamDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
     void onChangeColorDropDownBoxes(bool bInteractive, int houseInfoNum = -1);
@@ -186,6 +206,31 @@ private:
     VBox            nextButtonVBox;
     TextButton      nextButton;
 
+    /**
+        A house row line that takes no height while hidden: a shared row only grows its
+        Difficulty + Role line while one of its seats holds an AI.
+    */
+    class CollapsibleHBox : public HBox {
+    public:
+        Point getMinimumSize() const override {
+            const Point size = HBox::getMinimumSize();
+            return isVisible() ? size : Point(size.x, 0);
+        }
+    };
+
+    /**
+        One controller seat. Its box shows either one fixed entry (a seated human, or a loaded
+        game's player) or the AI choice: the selector's AI box with the open and closed seat
+        states, beside its Difficulty and Role boxes.
+    */
+    class Seat {
+    public:
+        StaticContainer     box;            ///< fixedBox and selector.aiBox in the same place
+        DropDownBox         fixedBox;
+        AIPlayerSelector    selector;
+        bool                fixed = true;
+    };
+
     class HouseInfo {
     public:
         VBox            houseInfoVBox;
@@ -200,11 +245,11 @@ private:
         Label           spiceIncomeLabel;
         DropDownBox     spiceIncomeDropDown;
         HBox            playerHBox;
+        CollapsibleHBox aiHBox;             ///< shared rows too narrow for one line: Difficulty + Role
         PictureLabel    player1ArrowLabel;
         Label           player1Label;
-        DropDownBox     player1DropDown;
         Label           player2Label;
-        DropDownBox     player2DropDown;
+        Seat            seats[2];
     };
 
     LobbyAuthorization::SeatSnapshot editableSeats;

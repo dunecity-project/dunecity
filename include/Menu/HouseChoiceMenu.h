@@ -24,6 +24,7 @@
 #include <GUI/Label.h>
 #include <GUI/TextButton.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/dune/AIPlayerSelector.h>
 #include <GUI/PictureLabel.h>
 #include <GUI/PictureButton.h>
 #include <DataTypes.h>
@@ -42,8 +43,10 @@ public:
     static bool isSingleMission() { return s_singleMission; }
     static bool isPublicGame() { return s_publicGame; }
     static int getStartLevel() { return s_startLevel; }
-    static int getSupportBotIndex() { return s_supportBotIndex; }
-    static int getEnemyAIIndex() { return s_enemyAIIndex; }
+    /// The AI partner's player class sharing the human's house; empty for no partner.
+    static const std::string& getPartnerClass() { return s_partnerClass; }
+    /// The player class of every enemy house.
+    static const std::string& getEnemyClass() { return s_enemyClass; }
     static int getCampaignSkin() { return s_campaignSkin; }
     static const SettingsClass::GameOptionsClass& getGameOptions() { return s_currentGameOptions; }
 
@@ -59,8 +62,8 @@ private:
     void onHouseRight();
     
     void onGameOptions();
-    void onSupportBotSelectionChanged(bool interactive);
-    void onEnemyAISelectionChanged(bool interactive);
+    void onPartnerChanged(bool interactive);
+    void onEnemyChanged(bool interactive);
 
     StaticContainer windowWidget;
     VBox            optionsVBox;
@@ -85,8 +88,8 @@ private:
     TextButton      backButton;
     Label          supportDescription;
     Label          enemyDescription;
-    DropDownBox     supportBotDropDown;
-    DropDownBox     enemyAIDropDown;
+    AIPlayerSelector partnerSelector;
+    AIPlayerSelector enemySelector;
     TextButton hostCoopButton;
     TextButton      gameOptionsButton;
 
@@ -97,8 +100,8 @@ private:
     static int s_house;
     static bool s_online, s_singleMission, s_publicGame;
     static int s_startLevel;
-    static int s_supportBotIndex;
-    static int s_enemyAIIndex;
+    static std::string s_partnerClass;
+    static std::string s_enemyClass;
     static int s_campaignSkin;
     static SettingsClass::GameOptionsClass s_currentGameOptions;
 };

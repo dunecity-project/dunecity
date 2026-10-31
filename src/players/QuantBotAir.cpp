@@ -136,7 +136,7 @@ bool QuantBot::airAttackContinues(const UnitBase* defender, const ObjectBase* ai
     respected by regrouping; nothing new is stored.
 */
 void QuantBot::defendStructuresFromAircraft() {
-    if (supportMode || getHouse()==nullptr) return;
+    if (builderOnly() || getHouse()==nullptr) return;
     AITelemetry::PerformanceScope perfScope("ai.air_rescue",getGameCycleCount(),getHouse()->getHouseID());
     const int myTeam=getHouse()->getTeamID();
     struct AirAttack { const UnitBase* aircraft; const StructureBase* victim; };
@@ -662,14 +662,14 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
 
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
-        && !supportMode && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
+        && !builderOnly() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 bool QuantBot::autonomousAircraftRaids() const {
     // Offensive air hunts are a Hard and Brutal behaviour, by decision of the
     // project owner. The difficulty decides, not the configured flag: a copied
     // settings block must not be able to re-open unit raids on Easy or Medium.
-    return !supportMode
+    return !builderOnly()
         && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
 }
 

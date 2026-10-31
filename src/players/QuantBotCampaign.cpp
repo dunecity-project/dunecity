@@ -207,7 +207,7 @@ int QuantBot::campaignAllyHarvesterLimit() const {
 
 bool QuantBot::isCampaignEnemy() const {
     return currentGame && isCampaignGameType(currentGame->gameType)
-        && !supportMode && difficulty != Difficulty::Defend && !isAlliedWithHuman();
+        && !builderOnly() && difficulty != Difficulty::Defend && !isAlliedWithHuman();
 }
 
 CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
@@ -468,7 +468,7 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
     if (!isCampaignEnemy()) {
         // Only an already dispatched helper attacker can scout. Home guards,
         // economy-only support and manual orders keep their existing roles.
-        if (isCampaignGameType(currentGame->gameType) && !supportMode
+        if (isCampaignGameType(currentGame->gameType) && !builderOnly()
             && unit->isActive() && unit->isRespondable()
             && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()==HUNT
             && !unit->isMoving() && !unit->hasATarget()) {

@@ -29,7 +29,7 @@ void runPoliceReinforcementProbe(Game& game) {
     for(const auto& p:house->getPlayerList())if(auto* q=dynamic_cast<QuantBot*>(p.get()))bot=q;
     require(bot!=nullptr,"Police reinforcement fixture needs the shared human/AI house");
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
 
     // A clear rock pocket: the station's own ring search must find real deployment space,
     // so admission is the only thing that can refuse a patrol.

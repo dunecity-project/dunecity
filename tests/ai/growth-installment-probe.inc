@@ -54,7 +54,7 @@ void runGrowthInstallmentProbe(Game& game) {
     require(sim!=nullptr,"City simulation missing");
     const int houseID=static_cast<int>(house->getHouseID());
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;bot->difficulty=QuantBot::Difficulty::Brutal;
+    bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Brutal;
     game.gameCycleCount=MILLI2CYCLES(600000);
     require(!game.getGameInitSettings().getGameOptions().instantBuild,
         "Instant build would bypass the installment accounting under test");

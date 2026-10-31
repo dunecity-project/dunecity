@@ -230,37 +230,30 @@ Custom:
 
 ---
 
-## 4. QuantBot Support Mode
+## 4. QuantBot Roles: Builder, Fighter, Builder + Fighter
 
 ### Overview
-Special variant designed as a TEAMMATE AI. Handles base building and economy while the human focuses on combat.
+Menus choose an AI, a difficulty and a role (docs/ai-roles.md). Builder + Fighter is the standard
+QuantBot. The other two are teammate roles for an AI that shares the human's house.
 
-### Key Differences from Standard QuantBot
+**Builder** (formerly "AI Support", classes `qBotSupport<Difficulty>`): handles base building and
+economy while the human commands the army.
+- Attack timer set to infinity: never initiates attacks.
+- No coordinated ornithopter strikes, kiting, offensive repositioning or attack force calculations.
+- Same building placement, economic scaling, power buffer and unit production as the standard QuantBot.
 
-**Attack Behavior:**
-- Attack timer set to infinity - NEVER initiates attacks
-- Military units stay at base in AREAGUARD mode
+**Fighter** (classes `qBotFighter<Difficulty>`): commands units, launches attacks and defends while the
+human builds.
+- Never builds, produces, repairs, deploys MCVs or runs the harvester routine.
+- Still fires palace weapons and pulls harvesters out of danger.
+- Attacks without waiting for a Repair Yard; wave readiness leaves out units the human is ordering.
 
-**Disabled Features:**
-- No coordinated ornithopter strikes
-- No kiting or offensive repositioning
-- No attack force calculations
-
-**Same as Standard QuantBot:**
-- Sophisticated building placement
-- Economic scaling
-- Power buffer management
-- Counter-ornithopter turret construction
-- Adaptive unit production
-
-**Activation:**
-- Constructor flag `supportModeEnabled = true`
-- Or player class name starts with "qBotSupport"
+**Activation:** `QuantBot(house, name, difficulty, AIRole role)`; a `qBotSupport*` class from an old
+save still loads as Builder.
 
 **Use Cases:**
-- Co-op campaigns (human controls military)
-- Team games (teammate handles economy)
-- Practice with AI ally support
+- Co-op campaigns and skirmishes: pick the half of the game the AI should play.
+- Team games: a Builder and a Fighter AI can share one house.
 
 ---
 

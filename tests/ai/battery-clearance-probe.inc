@@ -49,7 +49,7 @@ void runBatteryClearanceProbe(Game& game) {
 
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Brutal;
     getQuantBotConfig().recovery.enabled=true;
     getQuantBotConfig().recovery.frontBatteriesEnabled=true;
@@ -329,10 +329,10 @@ void runBatteryClearanceProbe(Game& game) {
         bot->clearPlacementCache();
         require(!bot->findBatteryClearanceSite().isValid(),"Clearance leaked into Easy");
         bot->difficulty=QuantBot::Difficulty::Brutal;
-        bot->supportMode=true;
+        bot->role=AIRole::Builder;
         bot->clearPlacementCache();
         require(!bot->findBatteryClearanceSite().isValid(),"Clearance leaked into support mode");
-        bot->supportMode=false;
+        bot->role=AIRole::Both;
         getQuantBotConfig().recovery.frontBatteriesEnabled=false;
         bot->clearPlacementCache();
         require(!bot->findBatteryClearanceSite().isValid(),

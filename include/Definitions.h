@@ -193,11 +193,16 @@
 // 9874: Adds the continuous-ground-steps match rule to the Natives follow-up format.
 //       GameInitSettings writes marker MOD9 with its byte after MOD8's. MOD8 and older
 //       settings load with the rule off, preserving the movement they were played with.
-#define SAVEGAMEVERSION     9874
+// 9875: QuantBot saves its AI role (docs/ai-roles.md) as a byte where it stored the support
+//       flag: 0 Both, 1 Builder (the former support mode), 2 Fighter. An older save's flag
+//       loads as Builder or Both.
+#define SAVEGAMEVERSION     9875
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
 /// First save with NATIVES_TEAM's visibility slot and the sandworm's summoner.
 #define SAVEGAMEVERSION_NATIVES_TEAM 9873
+/// First save with QuantBot's AI role byte instead of the support flag.
+#define SAVEGAMEVERSION_AI_ROLE 9875
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

@@ -47,7 +47,7 @@ void runForceConcentrationProbe(Game& game) {
 
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Hard;
     bot->manualUnitOrders.clear();
     bot->defenceAssignments.clear();

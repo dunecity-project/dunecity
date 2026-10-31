@@ -22,6 +22,7 @@
 
 #include <GUI/StaticContainer.h>
 #include <GUI/VBox.h>
+#include <GUI/HBox.h>
 #include <GUI/Label.h>
 #include <GUI/TextButton.h>
 #include <GUI/DropDownBox.h>
@@ -30,6 +31,7 @@
 #include <GUI/Spacer.h>
 #include <GUI/PictureLabel.h>
 #include <GUI/dune/DigitsCounter.h>
+#include <GUI/dune/AIPlayerSelector.h>
 
 #include <misc/string_util.h>
 #include <DataTypes.h>
@@ -65,9 +67,7 @@ private:
     void onMissionDecrement();
 
     void updateHouseChoice();
-    void updateSupportBotLabel();
-    void onSupportBotSelectionChanged(bool interactive);
-    void onEnemyAISelectionChanged(bool interactive);
+    void updatePartnerLabel();
 
     InvisibleButton house1Button;
     PictureLabel    house1Picture;
@@ -99,8 +99,11 @@ private:
     Label skinLabel;            ///< "DuneCity skin": the city-building art every house uses
     DropDownBox skinDropDown;   ///< SimCity or Dune2; enabled only while the DuneCity mod is active
     TextButton      startButton;
-    DropDownBox     supportBotDropDown;
-    DropDownBox     enemyAIDropDown;
+    Label           partnerLabel;    ///< "AI partner", followed by what the chosen role does
+    HBox            partnerRow;      ///< the partner's AI and Difficulty side by side
+    HBox            enemyRow;        ///< the enemy's AI and Difficulty side by side
+    AIPlayerSelector partnerSelector; ///< None or a QuantBot sharing the player's house, any role
+    AIPlayerSelector enemySelector;   ///< the AI of every other house; always Builder + Fighter
     TextButton      gameOptionsButton;
     TextButton      backButton;
 
@@ -111,8 +114,6 @@ private:
     int currentHouseChoiceScrollPos;
     int selectedButton;
     int mission;
-    int supportBotIndex;
-    int enemyAIIndex;
     
     SettingsClass::GameOptionsClass currentGameOptions;
 };

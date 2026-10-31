@@ -54,11 +54,16 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
     }
 
     try {
-        supportMode = stream.readBool();
+        if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AI_ROLE) {
+            const Uint8 saved = stream.readUint8();
+            role = saved <= static_cast<Uint8>(AIRole::Fighter) ? static_cast<AIRole>(saved) : AIRole::Both;
+        } else {
+            role = stream.readBool() ? AIRole::Builder : AIRole::Both;
+        }
     } catch(const InputStream::eof&) {
-        supportMode = false;
+        role = AIRole::Both;
     } catch(const InputStream::error&) {
-        supportMode = false;
+        role = AIRole::Both;
     }
 
     if (currentGame->getLoadedSavegameVersion() >= 9827) {
@@ -226,7 +231,7 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
 
     // Preserve an older save's initialized opening: fired triggers have already
     // been removed from TriggerManager, so rescanning could delay it forever.
-    if (supportMode) {
+    if (builderOnly()) {
         gameMode = GameMode::Custom;
         attackTimer = std::numeric_limits<Sint32>::max();
     }
@@ -261,7 +266,7 @@ void QuantBot::save(OutputStream& stream) const {
         stream.writeSint32(placeLocation.y);
     }
 
-    stream.writeBool(supportMode);
+    stream.writeUint8(static_cast<Uint8>(role));
     stream.writeUint32(rallySelectedCycle);
     stream.writeUint32(nonServiceConstructionOrders);
     stream.writeUint32(powerDemandSampleCycle);

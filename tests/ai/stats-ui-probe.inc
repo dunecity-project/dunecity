@@ -370,7 +370,7 @@ void runStatsUiProbe(Game& game) {
         auto* candidate=game.getHouse(h);
         if(candidate==nullptr || candidate==pLocalHouse) continue;
         for(const auto& player : candidate->getPlayerList())
-            if(const auto* found=dynamic_cast<const QuantBot*>(player.get()); found && !found->supportMode) {
+            if(const auto* found=dynamic_cast<const QuantBot*>(player.get()); found && !found->builderOnly()) {
                 botHouse=candidate;bot=found;break;
             }
     }

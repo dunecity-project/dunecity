@@ -184,7 +184,7 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
     // Campaign missions keep the base the script gave them, whatever mode the
     // helper bot runs in. Colonisation is a custom-game rule only.
     demand.campaignGame=isCampaignGameType(currentGame->gameType);
-    demand.supportMode=supportMode;
+    demand.supportMode=builderOnly();
     demand.siteAvailable=colonySiteOpen();
     demand.productionRoomBlocked=baseProductionRoomBlocked;
     demand.freeFootprints=availableBaseFootprints;
@@ -692,7 +692,7 @@ int QuantBot::expansionTurretsMissing(const StructureBase* yard, bool planned) c
 }
 
 bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
-    if (gameMode != GameMode::Custom || !currentGame->isCitySimEnabled() || supportMode
+    if (gameMode != GameMode::Custom || !currentGame->isCitySimEnabled() || builderOnly()
         || getHouse()->getNumItems(Structure_ConstructionYard) == 0) return true;
     const auto& data = currentGame->objectData.data;
     const int house = getHouse()->getHouseID();
@@ -770,7 +770,7 @@ const std::map<Uint32,Uint32>& QuantBot::colonistEscorts() const {
     if (colonistEscortCycle == now) return colonistEscortSet;
     colonistEscortCycle = now;
     colonistEscortSet.clear();
-    if (currentGame == nullptr || supportMode || gameMode != GameMode::Custom
+    if (currentGame == nullptr || builderOnly() || gameMode != GameMode::Custom
         || !currentGame->isCitySimEnabled()) return colonistEscortSet;
     // A colonist is an MCV on its way to another formation: its saved site
     // says so. In id order, so every peer gives escorts out the same way.
@@ -866,7 +866,7 @@ bool QuantBot::escortColonist(const UnitBase* unit) {
 }
 
 void QuantBot::keepColonistEscortsInPlace() {
-    if (currentGame == nullptr || supportMode || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()) return;
+    if (currentGame == nullptr || builderOnly() || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()) return;
     // Only while an MCV with a site drives: the escort set is not even derived otherwise.
     bool driving = false;
     for (const auto& entry : mcvExpansionSites) {

@@ -937,7 +937,7 @@ void runSpectatorSetupProbe() {
         require(!menu->spectating, "A fresh Offline setup started out observing");
         require(menu->setupSpectate.isVisible(), "The Offline setup row has no Spectate checkbox");
         require(!menu->setupSpectate.isChecked(), "The Spectate checkbox started out checked");
-        require(menu->houseInfo[0].player1DropDown.getSelectedEntry() == settings.general.playerName,
+        require(menu->getSeatName(0) == settings.general.playerName,
                 "A fresh Offline setup did not seat the local player in the first row");
         capture(*menu, "custom-game-offline-not-spectating");
         // Configure the other rows, so the toggle can be shown to preserve them.
@@ -972,17 +972,17 @@ void runSpectatorSetupProbe() {
         require(menu->setupSpectate.isChecked(), "The rebuilt Spectate checkbox lost its state");
         int aiRows = 0;
         for(int row = 0; row < menu->numHouses; ++row) {
-            const auto& box = menu->houseInfo[row].player1DropDown;
-            require(box.getSelectedEntry() != settings.general.playerName,
+            const int slot = 2 * row;
+            require(menu->getSeatName(slot) != settings.general.playerName,
                     "A faction row was handed the local human while spectating");
-            require(box.getSelectedEntryIntData() != 0, "A row still reports a human controller");
-            if(box.getSelectedEntryIntData() > 0) ++aiRows;
+            require(menu->getSeatPlayer(slot) != 0, "A row still reports a human controller");
+            if(menu->getSeatPlayer(slot) > 0) ++aiRows;
         }
         require(aiRows >= 2, "Watching left fewer than two AI factions configured");
         require(!menu->setupShared.isEnabled(), "Shared house stayed editable while spectating");
         // The human is refused even if a stale seat event is replayed.
         menu->setPlayer2Slot(settings.general.playerName, 0);
-        require(menu->houseInfo[0].player1DropDown.getSelectedEntry() != settings.general.playerName,
+        require(menu->getSeatName(0) != settings.general.playerName,
                 "A replayed seat event seated a human while spectating");
         capture(*menu, "custom-game-offline-spectating");
         menu->addAllPlayersToGameInitSettings();
@@ -1021,18 +1021,19 @@ void runSpectatorSetupProbe() {
         setup.spectate = true;
         auto menu = build(setup);
         require(menu->spectating, "The setup did not return to Spectate for the toggle-off check");
-        menu->houseInfo[1].player1DropDown.setSelectedItem(
-            menu->houseInfo[1].player1DropDown.getNumEntries() - 1);
-        const std::string keptAI = menu->houseInfo[1].player1DropDown.getSelectedEntry();
+        // A Fighter, chosen through the seat's AI, Difficulty and Role boxes.
+        require(menu->selectSeatPlayer(2, PlayerFactory::getIndexByPlayerClass("qBotFighterHard")),
+                "The seat does not offer the QuantBot Hard Fighter");
+        const std::string keptAI = menu->getSeatName(2);
         menu->setupSpectate.setChecked(false);
         menu->setupSpectate.pOnClick();
         require(!setup.spectate, "Unchecking Spectate did not clear the choice");
 
         auto restored = build(setup);
         require(!restored->spectating, "The rebuilt setup is still observing");
-        require(restored->houseInfo[0].player1DropDown.getSelectedEntry() == settings.general.playerName,
+        require(restored->getSeatName(0) == settings.general.playerName,
                 "Turning Spectate off did not restore an ordinary human seat");
-        require(restored->houseInfo[1].player1DropDown.getSelectedEntry() == keptAI,
+        require(restored->getSeatName(2) == keptAI,
                 "Turning Spectate off discarded a configured AI row");
         capture(*restored, "custom-game-offline-spectate-off");
     }

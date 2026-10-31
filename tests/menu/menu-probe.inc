@@ -372,8 +372,11 @@ int runMenuProbe() {
     }
     {
         HouseChoiceMenu menu(false);
-        for(auto* dropdown : {&menu.modDropDown, &menu.enemyAIDropDown,
-                              &menu.supportBotDropDown, &menu.startLevelDropDown}) {
+        // A partner AI enables the Difficulty and Role boxes, so every list can open.
+        menuRequire(menu.partnerSelector.selectPlayerClass("qBotHard"), "Campaign partner cannot select QuantBot Hard");
+        for(auto* dropdown : {&menu.modDropDown, &menu.enemySelector.aiBox, &menu.enemySelector.difficultyBox,
+                              &menu.partnerSelector.aiBox, &menu.partnerSelector.difficultyBox,
+                              &menu.partnerSelector.roleBox, &menu.startLevelDropDown}) {
             dropdown->onOpenListBoxButton();
             menuCapture(menu, dropdown == &menu.modDropDown ? "campaign-mod-open" : "campaign-options-open");
             const auto* geometry = menu.windowWidget.getWidgetDataFromWidget(dropdown);
@@ -385,7 +388,7 @@ int runMenuProbe() {
         }
         // A long list must shrink to whole rows, expose its scrollbar, and
         // still accept a click on the last item after wheel scrolling.
-        auto& dropdown = menu.supportBotDropDown;
+        auto& dropdown = menu.partnerSelector.aiBox;
         dropdown.setNumVisibleEntries(40);
         for(int i = dropdown.getNumEntries(); i < 40; ++i)
             dropdown.addEntry("Extra partner " + std::to_string(i), i);
@@ -414,39 +417,62 @@ int runMenuProbe() {
     {
         HouseChoiceMenu menu(false);
         menuRequire(HouseChoiceMenu::isPublicGame(),"Campaign should default to public");
-        menu.supportBotDropDown.setSelectedItem(4);
-        menuRequire(HouseChoiceMenu::getSupportBotIndex()==4,"Support setup fixture failed");
-        auto& list=menu.supportBotDropDown.listBox;
+        menuRequire(HouseChoiceMenu::getPartnerClass().empty() && menu.partnerSelector.isSpecialSelected(),
+                    "Campaign partner should default to None");
+        menuRequire(!menu.partnerSelector.difficultyBox.isEnabled() && !menu.partnerSelector.roleBox.isEnabled(),
+                    "No partner left Difficulty or Role enabled");
+        menu.partnerSelector.aiBox.setSelectedItem(1);
+        menuRequire(HouseChoiceMenu::getPartnerClass()=="qBotEasy","Partner setup fixture failed");
+        auto& difficulty=menu.partnerSelector.difficultyBox;
+        auto& list=difficulty.listBox;
         // A rapid second selection must notify the campaign setup even when
         // it falls within the list widget's double-click interval.
-        list.scrollbar.setCurrentValue(3);
-        menu.supportBotDropDown.onOpenListBoxButton();
+        difficulty.onOpenListBoxButton();
         menuCapture(menu,"ai-partner-selection");
         list.lastClickTime=SDL_GetTicks();
-        const int row=8-list.firstVisibleElement;
+        const int row=3-list.firstVisibleElement;
         const int rowY=1+row*GUIStyle::getInstance().getListBoxEntryHeight()+2;
-        const int overlayY=rowY+(menu.supportBotDropDown.bListBoxAbove
-            ? -list.getSize().y : menu.supportBotDropDown.getSize().y);
-        menu.supportBotDropDown.handleMouseLeftOverlay(10,overlayY,true);
-        menuRequire(menu.supportBotDropDown.getSelectedEntryIntData()==8,"Full AI selection fixture missed its row");
-        menuRequire(HouseChoiceMenu::getSupportBotIndex()==8,"Full AI selection left campaign launch set to economy-only Support");
-        menuRequire(!menu.supportBotDropDown.bShowListBox,"AI dropdown did not close after selection");
-        for(int option=0;option<10;++option) {
-            menu.supportBotDropDown.setSelectedItem(option);
-            menuRequire(HouseChoiceMenu::getSupportBotIndex()==option,"AI partner choice mapping changed");
+        const int overlayY=rowY+(difficulty.bListBoxAbove
+            ? -list.getSize().y : difficulty.getSize().y);
+        difficulty.handleMouseLeftOverlay(10,overlayY,true);
+        menuRequire(difficulty.getSelectedIndex()==3,"Brutal selection fixture missed its row");
+        menuRequire(HouseChoiceMenu::getPartnerClass()=="qBotBrutal","Brutal selection left campaign launch on another AI");
+        menuRequire(!difficulty.bShowListBox,"Difficulty dropdown did not close after selection");
+        // Every QuantBot difficulty and role reaches the launch: Builder keeps the former AI Support classes.
+        const char* const difficulties[] = {"Easy","Medium","Hard","Brutal","Defend"};
+        const char* const rolePrefixes[] = {"qBot","qBotSupport","qBotFighter"};
+        for(int d=0;d<5;++d) {
+            difficulty.setSelectedItem(d);
+            for(int r=0;r<3;++r) {
+                menu.partnerSelector.roleBox.setSelectedItem(r);
+                menuRequire(HouseChoiceMenu::getPartnerClass()==std::string(rolePrefixes[r])+difficulties[d],
+                            "AI partner choice mapping changed");
+            }
         }
-        menu.supportBotDropDown.setSelectedItem(8);
-        menu.enemyAIDropDown.setSelectedItem(2);
+        menu.partnerSelector.aiBox.setSelectedItem(0);
+        menuRequire(HouseChoiceMenu::getPartnerClass().empty(),"None partner still launches an AI");
+        // Enemies offer QuantBot difficulties or the Campaign AI, never a role.
+        menuRequire(!menu.enemySelector.roleBox.isVisible(),"Enemy AI offers a role");
+        menu.enemySelector.aiBox.setSelectedItem(1);
+        menuRequire(HouseChoiceMenu::getEnemyClass()=="CampaignAIPlayer" && !menu.enemySelector.difficultyBox.isEnabled(),
+                    "Enemy Campaign AI choice mapping changed");
+        menu.enemySelector.aiBox.setSelectedItem(0);
+        for(int d=0;d<5;++d) {
+            menu.enemySelector.difficultyBox.setSelectedItem(d);
+            menuRequire(HouseChoiceMenu::getEnemyClass()==std::string("qBot")+difficulties[d],"Enemy AI choice mapping changed");
+        }
+        menuRequire(menu.partnerSelector.selectPlayerClass("qBotSupportHard"),"Partner cannot select Builder Hard");
+        menuRequire(menu.enemySelector.selectPlayerClass("qBotHard"),"Enemy cannot select QuantBot Hard");
         menu.startLevelDropDown.setSelectedItem(6);
         // A stale cached callback result must never override the live widgets
         // when the player presses Start.
-        HouseChoiceMenu::s_supportBotIndex=4;
-        HouseChoiceMenu::s_enemyAIIndex=0;
+        HouseChoiceMenu::s_partnerClass="qBotBrutal";
+        HouseChoiceMenu::s_enemyClass="qBotEasy";
         HouseChoiceMenu::s_startLevel=1;
         menu.hostCoopButton.handleMouseLeft(10,10,true);
         menu.hostCoopButton.handleMouseLeft(10,10,false);
-        menuRequire(menu.isQuiting() && HouseChoiceMenu::getSupportBotIndex()==8
-            && HouseChoiceMenu::getEnemyAIIndex()==2 && HouseChoiceMenu::getStartLevel()==7,
+        menuRequire(menu.isQuiting() && HouseChoiceMenu::getPartnerClass()=="qBotSupportHard"
+            && HouseChoiceMenu::getEnemyClass()=="qBotHard" && HouseChoiceMenu::getStartLevel()==7,
             "Start launched stale AI or mission choices");
     }
     {
@@ -572,12 +598,12 @@ int runMenuProbe() {
         menuRequire(HouseChoiceMenu::isOnline(), "Campaign entry must default to online");
         menuRequire(menu.hostCoopButton.getText() == _("Start Campaign"), "Campaign offers a lobby instead of direct launch");
         menuRequire(HouseChoiceMenu::isPublicGame(), "Campaign should default to public");
-        menuRequire(menu.visibilityDropDown.isVisible() && menu.supportBotDropDown.isEnabled(),
+        menuRequire(menu.visibilityDropDown.isVisible() && menu.partnerSelector.aiBox.isEnabled(),
                     "Direct online campaign lost visibility or AI partner selection");
         menuCapture(menu,"campaign-default");
         menu.connectionDropDown.setSelectedItem(0);
         menuRequire(!HouseChoiceMenu::isOnline(), "Campaign cannot be switched offline");
-        menuRequire(!menu.visibilityDropDown.isEnabled() && !menu.visibilityDropDown.isVisible() && menu.supportBotDropDown.isEnabled(),
+        menuRequire(!menu.visibilityDropDown.isEnabled() && !menu.visibilityDropDown.isVisible() && menu.partnerSelector.aiBox.isEnabled(),
                     "Offline campaign controls did not update");
         menu.onHouseButton(1);
         menuRequire(!menu.isQuiting(),"Selecting a house starts the game");
@@ -594,7 +620,8 @@ int runMenuProbe() {
         menuRequire(HouseChoiceMenu::getGameOptions().fogOfWar != effectiveGameOptions.fogOfWar,"Retry lost game rules");
         menuRequire(HouseChoiceMenu::isOnline() && menu.hostCoopButton.getText() == _("Create Lobby"),
                     "Explicit online campaign entry must retain its lobby");
-        menuRequire(!menu.supportBotDropDown.isEnabled(),"Online campaign AI selector should defer to lobby");
+        menuRequire(!menu.partnerSelector.aiBox.isEnabled() && !menu.partnerSelector.difficultyBox.isEnabled()
+                    && !menu.partnerSelector.roleBox.isEnabled(),"Online campaign AI selector should defer to lobby");
         menuCapture(menu,"campaign-online");
         HouseChoiceMenu::s_singleMission = true;
         menu.populateLevels();

@@ -393,9 +393,12 @@ void runCampaignPressureProbe(Game& game) {
     sdl2::texture_ptr imageTarget(SDL_CreateTexture(renderer,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,size.x,size.y));
     require(imageTarget && SDL_SetRenderTarget(renderer,imageTarget.get())==0,"Menu render target failed");
     SDL_RenderSetLogicalSize(renderer,size.x,size.y);
+    const char* const tiers[]={"Easy","Medium","Hard","Brutal"};
     for (int tier=0;tier<4;++tier) {
-        menu.supportBotDropDown.setSelectedItem(5+tier);menu.onSupportBotSelectionChanged(false);
-        menu.enemyAIDropDown.setSelectedItem(tier);menu.onEnemyAISelectionChanged(false);
+        require(menu.partnerSelector.selectPlayerClass(std::string("qBot")+tiers[tier]),"Campaign partner tier missing");
+        menu.onPartnerChanged(false);
+        require(menu.enemySelector.selectPlayerClass(std::string("qBot")+tiers[tier]),"Campaign enemy tier missing");
+        menu.onEnemyChanged(false);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);SDL_RenderClear(renderer);
         menu.draw();auto screenshot=renderReadSurface(renderer);
         const std::string filename="campaign-difficulty-menu-"+std::to_string(tier)+".png";

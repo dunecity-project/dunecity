@@ -24,7 +24,29 @@
 #include <players/QuantBot.h>
 #include <players/Mentat.h>
 
+#include <utility>
+
 std::vector<PlayerFactory::PlayerData> PlayerFactory::playerDataList;
+
+namespace {
+
+const std::pair<const char*, QuantBot::Difficulty> kQuantBotDifficulties[] = {
+    {"Easy", QuantBot::Difficulty::Easy},
+    {"Medium", QuantBot::Difficulty::Medium},
+    {"Hard", QuantBot::Difficulty::Hard},
+    {"Brutal", QuantBot::Difficulty::Brutal},
+    {"Defend", QuantBot::Difficulty::Defend},
+};
+
+const std::pair<const char*, Mentat::Difficulty> kMentatDifficulties[] = {
+    {"Defend", Mentat::Difficulty::Defend},
+    {"Easy", Mentat::Difficulty::Easy},
+    {"Medium", Mentat::Difficulty::Medium},
+    {"Hard", Mentat::Difficulty::Hard},
+    {"Brutal", Mentat::Difficulty::Brutal},
+};
+
+} // namespace
 
 void PlayerFactory::registerAllPlayers() {
 
@@ -33,121 +55,73 @@ void PlayerFactory::registerAllPlayers() {
                                             [](House* house,const std::string& playername) { return std::make_unique<HumanPlayer>(house, playername); },
                                             [](InputStream& inputStream, House* house) { return std::make_unique<HumanPlayer>(inputStream, house); } );
 
-    playerDataList.emplace_back(  "qBotEasy",
-                                            "QuantBot Easy",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Easy); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
+    // The lobby sends a player as its index in this list (ChangeEventList), so a new entry is
+    // appended and changes NETWORK_PROTOCOL_VERSION. The class strings are saved: never rename them.
+    const auto addQuantBot = [](const std::string& prefix, AIRole role, const std::pair<const char*, QuantBot::Difficulty>& level) {
+        const std::string difficulty = level.first;
+        const QuantBot::Difficulty value = level.second;
+        const std::string name = role == AIRole::Both ? "QuantBot " + difficulty
+                                                       : "QuantBot " + difficulty + " (" + aiRoleName(role) + ")";
+        playerDataList.emplace_back(prefix + difficulty, name,
+            [value, role](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, value, role); },
+            [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); },
+            "QuantBot", difficulty, role);
+    };
 
-    playerDataList.emplace_back(  "qBotMedium",
-                                            "QuantBot Medium",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Medium); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotHard",
-                                            "QuantBot Hard",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Hard); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotBrutal",
-                                            "QuantBot Brutal",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Brutal); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotDefend",
-                                            "QuantBot Defend",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Defend); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); } );
-
-    playerDataList.emplace_back(  "qBotSupportDefend",
-                                            "AI Support (Defend)",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Defend, true); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotSupportEasy",
-                                            "AI Support (Easy)",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Easy, true); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotSupportMedium",
-                                            "AI Support (Medium)",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Medium, true); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotSupportHard",
-                                            "AI Support (Hard)",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Hard, true); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
-
-    playerDataList.emplace_back(  "qBotSupportBrutal",
-                                            "AI Support (Brutal)",
-        [](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Brutal, true); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house); });
+    for(const auto& level : kQuantBotDifficulties) addQuantBot("qBot", AIRole::Both, level);
+    // Builders keep the class names of the former "AI Support" players; Defend was registered first.
+    addQuantBot("qBotSupport", AIRole::Builder, kQuantBotDifficulties[4]);
+    for(int i = 0; i < 4; i++) addQuantBot("qBotSupport", AIRole::Builder, kQuantBotDifficulties[i]);
 
     // Mentat (refactored AI)
-    playerDataList.emplace_back("mentatDefend", "Mentat (Defend)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Defend); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatEasy", "Mentat (Easy)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Easy); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatMedium", "Mentat (Medium)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Medium); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatHard", "Mentat (Hard)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Hard); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatBrutal", "Mentat (Brutal)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Brutal); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
+    for(const auto& level : kMentatDifficulties) {
+        const std::string difficulty = level.first;
+        const Mentat::Difficulty value = level.second;
+        playerDataList.emplace_back("mentat" + difficulty, "Mentat (" + difficulty + ")",
+            [value](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, value); },
+            [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); },
+            "Mentat", difficulty, AIRole::Both);
+    }
 
     // Mentat Support variants
-    playerDataList.emplace_back("mentatSupportDefend", "Mentat Support (Defend)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Defend, true); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatSupportEasy", "Mentat Support (Easy)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Easy, true); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatSupportMedium", "Mentat Support (Medium)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Medium, true); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatSupportHard", "Mentat Support (Hard)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Hard, true); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
-
-    playerDataList.emplace_back("mentatSupportBrutal", "Mentat Support (Brutal)",
-        [](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, Mentat::Difficulty::Brutal, true); },
-        [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); });
+    for(const auto& level : kMentatDifficulties) {
+        const std::string difficulty = level.first;
+        const Mentat::Difficulty value = level.second;
+        playerDataList.emplace_back("mentatSupport" + difficulty, "Mentat Support (" + difficulty + ")",
+            [value](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, value, true); },
+            [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); },
+            "Mentat", difficulty, AIRole::Builder);
+    }
 
     playerDataList.emplace_back(  "SmartBot",
                                             "SmartBot",
         [](House* house, const std::string& playername) { return std::make_unique<SmartBot>(house, playername, SmartBot::Difficulty::Normal); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<SmartBot>(inputStream, house); });
+        [](InputStream& inputStream, House* house) { return std::make_unique<SmartBot>(inputStream, house); },
+        "SmartBot");
 
     playerDataList.emplace_back(  "AIPlayerEasy",
                                             "AI Player (easy)",
         [](House* house, const std::string& playername) { return std::make_unique<AIPlayer>(house, playername, AIPlayer::Difficulty::Easy); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); });
+        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); },
+        "AI Player", "Easy");
 
     playerDataList.emplace_back(  "AIPlayerMedium",
                                             "AI Player (medium)",
         [](House* house, const std::string& playername) { return std::make_unique<AIPlayer>(house, playername, AIPlayer::Difficulty::Medium); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); });
+        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); },
+        "AI Player", "Medium");
 
     playerDataList.emplace_back(  "AIPlayerHard",
                                             "AI Player (hard)",
         [](House* house, const std::string& playername) { return std::make_unique<AIPlayer>(house, playername, AIPlayer::Difficulty::Hard); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); });
+        [](InputStream& inputStream, House* house) { return std::make_unique<AIPlayer>(inputStream, house); },
+        "AI Player", "Hard");
 
     playerDataList.emplace_back(  "CampaignAIPlayer",
                                             "CampaignAIPlayer",
         [](House* house, const std::string& playername) { return std::make_unique<CampaignAIPlayer>(house, playername); },
-        [](InputStream& inputStream, House* house) { return std::make_unique<CampaignAIPlayer>(inputStream, house); } );
+        [](InputStream& inputStream, House* house) { return std::make_unique<CampaignAIPlayer>(inputStream, house); },
+        "Campaign AI");
 
+    for(const auto& level : kQuantBotDifficulties) addQuantBot("qBotFighter", AIRole::Fighter, level);
 }

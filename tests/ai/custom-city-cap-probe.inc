@@ -21,7 +21,7 @@ void runCustomCityCapProbe(Game& game) {
         data.techLevel=1;data.upgradeLevel=0;data.prerequisiteStructuresSet.reset();
     }
     game.gameType=GameType::CustomGame;
-    bot->gameMode=QuantBot::GameMode::Custom;bot->supportMode=false;
+    bot->gameMode=QuantBot::GameMode::Custom;bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Easy;
     const int area=currentGameMap->getSizeX()*currentGameMap->getSizeY();
     require(bot->getCityPopulationLimit(area)==QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Easy,area),
@@ -29,9 +29,9 @@ void runCustomCityCapProbe(Game& game) {
     bot->difficulty=QuantBot::Difficulty::Medium;
     const int mediumCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Medium,area);
     require(bot->getCityPopulationLimit(area)==mediumCap,"Shared Medium helper is missing its city ceiling");
-    bot->supportMode=true;
+    bot->role=AIRole::Builder;
     require(bot->getCityPopulationLimit(area)==mediumCap,"Support helper is missing its city ceiling");
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     bot->difficulty=QuantBot::Difficulty::Hard;
     require(bot->getCityPopulationLimit(256*256)==120000,"Hard256 map ceiling must be120000");
     const int hardCap=QuantBotCityPolicy::populationLimit(QuantBotCityPolicy::Hard,area);

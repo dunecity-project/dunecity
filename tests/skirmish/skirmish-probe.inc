@@ -442,7 +442,7 @@ void runSpectate() {
         RandomSkirmishMenu menu;
         skirmishRequire(menu.spectateBox.getParent() != nullptr && menu.spectateBox.isVisible() && !menu.spectateBox.isChecked(),
                         "Spectate is not offered, or starts on, in a fresh profile");
-        skirmishRequire(!menu.spectateAIBox.isVisible() && !menu.spectateAIBox.isEnabled() && !menu.spectateAICaption->isVisible(),
+        skirmishRequire(!menu.spectateAIBox.isVisible() && !menu.spectateAI.aiBox.isEnabled() && !menu.spectateAICaption->isVisible(),
                         "The house AI row is shown while not spectating");
         skirmishRequire(!menu.spectateBox.getTooltipText().empty(), "Spectate has no tooltip");
         for(size_t i = 0; i < menu.availableMods.size(); ++i)
@@ -452,24 +452,35 @@ void runSpectate() {
         probeSelect(menu.alliesBox, 1);
         probeSelect(menu.enemiesBox, 2);
         menu.onPlayersChanged(false);
-        probeSelect(menu.partnerBox, PlayerFactory::getIndexByPlayerClass("qBotSupportMedium"));
+        // The partner may build, fight, or both; this match keeps the Builder.
+        for(const char* partnerClass : {"qBotFighterMedium", "qBotMedium", "qBotSupportMedium"})
+            skirmishRequire(menu.partnerAI.selectPlayerClass(partnerClass) && menu.partnerAI.getPlayerClass() == partnerClass,
+                            std::string("The AI partner choice does not offer ") + partnerClass);
         probeSelect(menu.playerBaseBox, static_cast<int>(BaseSize::Small));
         probeSelect(menu.playerCityBox, 1);
         menu.seedBox.setText("20261018");
         menu.fixedSeedBox.setChecked(true);
         skirmishCapture(menu, "random-skirmish-spectate-off");
         click(menu.spectateBox);
-        skirmishRequire(menu.spectateBox.isChecked() && menu.spectateAIBox.isVisible() && menu.spectateAIBox.isEnabled()
+        skirmishRequire(menu.spectateBox.isChecked() && menu.spectateAIBox.isVisible() && menu.spectateAI.aiBox.isEnabled()
                         && menu.spectateAICaption->isVisible(), "Clicking Spectate did not show the house AI choice");
         skirmishRequire(menu.playerHeader->getText() == _("Your house starts with"), "The player's start header does not follow Spectate");
         // The player's start rows stay live: the watched house still starts with them.
-        skirmishRequire(menu.partnerBox.isEnabled() && menu.playerBaseBox.isEnabled() && menu.playerArmyBox.isEnabled(),
+        skirmishRequire(menu.partnerAI.aiBox.isEnabled() && menu.playerBaseBox.isEnabled() && menu.playerArmyBox.isEnabled(),
                         "Spectate disabled the watched house's start rows");
-        for(int i = 0; i < menu.spectateAIBox.getNumEntries(); ++i) {
-            const std::string c = PlayerFactory::getByIndex(menu.spectateAIBox.getEntryIntData(i))->getPlayerClass();
-            skirmishRequire(c != HUMANPLAYERCLASS && c.find("Support") == std::string::npos, "The house AI choice offers " + c);
+        // The house AI is a house of its own: every AI and difficulty plays Builder + Fighter.
+        for(int i = 0; i < menu.spectateAI.aiBox.getNumEntries(); ++i) {
+            menu.spectateAI.aiBox.setSelectedItem(i);
+            for(int j = 0; j < menu.spectateAI.difficultyBox.getNumEntries(); ++j) {
+                menu.spectateAI.difficultyBox.setSelectedItem(j);
+                const auto* data = PlayerFactory::getByPlayerClass(menu.spectateAI.getPlayerClass());
+                skirmishRequire(data != nullptr && data->getPlayerClass() != HUMANPLAYERCLASS && data->getRole() == AIRole::Both,
+                                "The house AI choice offers " + menu.spectateAI.getPlayerClass());
+            }
         }
-        probeSelect(menu.spectateAIBox, PlayerFactory::getIndexByPlayerClass("qBotHard"));
+        skirmishRequire(!menu.spectateAI.selectPlayerClass("qBotSupportMedium") && !menu.spectateAI.selectPlayerClass("qBotFighterMedium"),
+                        "The house AI choice offers a Builder or Fighter");
+        skirmishRequire(menu.spectateAI.selectPlayerClass("qBotHard"), "The house AI choice does not offer qBotHard");
         skirmishCapture(menu, "random-skirmish-spectate");
         skirmishRequire(menu.prepareStart(watched), "Start could not prepare the spectated match");
     }
@@ -515,8 +526,8 @@ void runSpectate() {
     GameInitSettings played;
     {
         RandomSkirmishMenu again;
-        skirmishRequire(again.spectateBox.isChecked() && again.spectateAIBox.isVisible() && again.spectateAIBox.isEnabled()
-                        && again.spectateAIBox.getSelectedEntryIntData() == PlayerFactory::getIndexByPlayerClass("qBotHard"),
+        skirmishRequire(again.spectateBox.isChecked() && again.spectateAIBox.isVisible() && again.spectateAI.aiBox.isEnabled()
+                        && again.spectateAI.getPlayerClass() == "qBotHard",
                         "Spectate and its house AI were not remembered");
         click(again.spectateBox);
         skirmishRequire(!again.spectateBox.isChecked() && !again.spectateAIBox.isVisible() && !again.spectateAICaption->isVisible()
@@ -568,7 +579,7 @@ void runMultiplayerLobby() {
         RandomSkirmishMenu menu(std::string("dunecity"));
         for(Widget* hidden : std::initializer_list<Widget*>{&menu.alliesBox, &menu.enemiesBox, &menu.enemiesAlliedBox, &menu.houseBox,
                                                             &menu.partnerBox, &menu.allyAIBox, &menu.enemyAIBox, &menu.modBox,
-                                                            &menu.spectateBox, &menu.spectateAIBox,
+                                                            &menu.partnerAI.roleBox, &menu.spectateBox, &menu.spectateAIBox,
                                                             &menu.rulesButton, &menu.saveButton, &menu.startButton})
             skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
         skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
@@ -630,9 +641,8 @@ void runMultiplayerLobby() {
     GameInitSettings hostInit(getBasename(path, true), readCompleteFile(path), hostName + "'s Game", false, host.currentGameOptions);
     CustomGamePlayers lobby(hostInit, true, true);
     skirmishRequire(lobby.numHouses == 4, "The lobby does not offer the four starts");
-    // A seated human's entry data is 0 (PLAYER_HUMAN, private to CustomGamePlayers.cpp).
-    skirmishRequire(lobby.houseInfo[0].player1DropDown.getSelectedEntryIntData() == 0
-                    && lobby.houseInfo[0].player1DropDown.getSelectedEntry() == hostName, "The host is not seated");
+    // A seated human's seat player is 0 (PLAYER_HUMAN, private to CustomGamePlayers.cpp).
+    skirmishRequire(lobby.getSeatPlayer(0) == 0 && lobby.getSeatName(0) == hostName, "The host is not seated");
     // A guest joins: the host seats it on the first open start and sends it the game and roster.
     OMemoryStream joinPacket;
     joinPacket.open();
@@ -640,14 +650,18 @@ void runMultiplayerLobby() {
     // getChangeEventListForNewPlayer() seats a joiner on the first open start (row 1) with
     // setPlayer2Slot() and then broadcasts; there is no socket here, so seat it the same way.
     lobby.setPlayer2Slot(guestName, 2);
-    skirmishRequire(lobby.houseInfo[1].player1DropDown.getSelectedEntry() == guestName, "The guest was not seated on a start");
+    skirmishRequire(lobby.getSeatName(2) == guestName, "The guest was not seated on a start");
     // The other starts get AI; houses and teams are set here: two teams of two.
     const int ai = PlayerFactory::getIndexByPlayerClass("qBotEasy");
     const int houses[] = {HOUSE_ATREIDES, HOUSE_HARKONNEN, HOUSE_INVALID, HOUSE_ORDOS};
     const int teams[] = {1, 2, 1, 2};
     for(int row = 0; row < 4; ++row) {
         auto& info = lobby.houseInfo[row];
-        if(row >= 2) { probeSelect(info.player1DropDown, ai); lobby.onChangePlayerDropDownBoxes(true, 2 * row); }
+        if(row >= 2) {
+            // The AI box's QuantBot with its first difficulty and role, as a user picks it.
+            skirmishRequire(lobby.selectSeatPlayer(2 * row, ai), "The lobby does not offer QuantBot Easy");
+            lobby.onChangePlayerDropDownBoxes(true, 2 * row);
+        }
         probeSelect(info.houseDropDown, houses[row]);
         lobby.onChangeHousesDropDownBoxes(true, row);
         probeSelect(info.teamDropDown, teams[row]);

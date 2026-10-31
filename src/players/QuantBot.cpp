@@ -97,8 +97,8 @@ using QuantBotInternal::mobileCombatItem;
   **/
 
 
-QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, bool supportModeEnabled)
-	: Player(associatedHouse, playername), difficulty(difficulty), supportMode(supportModeEnabled) {
+QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, AIRole role)
+	: Player(associatedHouse, playername), difficulty(difficulty), role(role) {
 
 	// MULTIPLAYER FIX: Use deterministic stagger based on house ID instead of random
 	// This prevents desync issues in multiplayer games
@@ -142,7 +142,7 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 		}
 	}
 
-	if (supportMode) {
+	if (builderOnly()) {
 		gameMode = GameMode::Custom;
 		attackTimer = std::numeric_limits<Sint32>::max();
 	}
@@ -196,7 +196,7 @@ bool QuantBot::overridesMilitaryValueCap() const {
 int QuantBot::configuredCustomHarvesterLimit() const {
     // Custom games the house plays itself only: campaigns keep their scripted fleets and a
     // support controller follows its human partner.
-    if (supportMode || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
+    if (builderOnly() || gameMode != GameMode::Custom || currentGame == nullptr || currentGameMap == nullptr
         || isCampaignGameType(currentGame->gameType)) return 0;
     // Maps above 64x64 (the Large and Huge classes: Easy 8/15, Medium 15/25, Hard 40/40, Brutal
     // 100/50). The Small and Medium class values (2-10 workers) are campaign-era fleet sizes that
@@ -209,7 +209,7 @@ int QuantBot::configuredCustomHarvesterLimit() const {
 }
 
 bool QuantBot::openingCombatBudgetActive() const {
-    if (!botConfig().force.openingCombatBudget || difficulty < Difficulty::Hard || supportMode
+    if (!botConfig().force.openingCombatBudget || difficulty < Difficulty::Hard || builderOnly()
         || gameMode != GameMode::Custom || !currentGame || !currentGameMap
         || isCampaignGameType(currentGame->gameType) || initialMilitaryValue < 0
         || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
@@ -219,7 +219,7 @@ bool QuantBot::openingCombatBudgetActive() const {
 }
 
 bool QuantBot::campaignCombatBudgetActive() const {
-    if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || supportMode
+    if (!botConfig().force.campaignCombatBudget || difficulty < Difficulty::Hard || builderOnly()
         || !currentGame || !isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
         || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
         || campaignWave.launched != 0) return false;
@@ -263,8 +263,9 @@ void QuantBot::update() {
 		return;
 	}
 
-	if (!supportMode && getPlayerclass().rfind("qBotSupport", 0) == 0) {
-		supportMode = true;
+	// Saves from before the role byte only recorded a builder in its class name.
+	if (role == AIRole::Both && getPlayerclass().rfind("qBotSupport", 0) == 0) {
+		role = AIRole::Builder;
 		gameMode = GameMode::Custom;
 		attackTimer = std::numeric_limits<Sint32>::max();
 	}
@@ -275,7 +276,7 @@ void QuantBot::update() {
         gameMode = GameMode::Custom;
         initialMilitaryValue = -1;
         const auto& config = botConfig();
-        attackTimer = supportMode ? std::numeric_limits<Sint32>::max()
+        attackTimer = builderOnly() ? std::numeric_limits<Sint32>::max()
             : isCampaignGameType(currentGame->gameType) ? 0
             : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(config.attackTimerMs),
                 currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
@@ -284,7 +285,7 @@ void QuantBot::update() {
 
     // Allies have no campaign opening grace. Discard a legacy opening timer
     // on load, but preserve the normal 60-second break between their attacks.
-    if (!supportMode && difficulty != Difficulty::Defend && isAlliedWithHuman()
+    if (!builderOnly() && difficulty != Difficulty::Defend && isAlliedWithHuman()
         && isCampaignGameType(currentGame->gameType) && attackTimer > MILLI2CYCLES(60000))
         attackTimer = 0;
 
@@ -318,7 +319,7 @@ void QuantBot::update() {
 				initialItemCount[Structure_LightFactory] = 1;
 			}
 
-			logDebug("Allow Campaign AI one Repair Yard (support: %s)", supportMode ? "yes" : "no");
+			logDebug("Allow Campaign AI one Repair Yard (support: %s)", builderOnly() ? "yes" : "no");
 		}
 
 		// Calculate the total military value of the player
@@ -677,7 +678,10 @@ void QuantBot::update() {
             AITelemetry::PerformanceScope phaseScope("ai.phase.build",
                 scheduleCycle, scheduleHouse);
             const int militaryValue = militaryUnitValue();
-            if (buildTimer <= 0) {
+            if (fighterOnly()) {
+                fighterPass();
+            }
+            else if (buildTimer <= 0) {
                 build(militaryValue);
             }
             else {
@@ -732,13 +736,16 @@ void QuantBot::update() {
     updateCampaignWave();
 	checkAllUnits();
     // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
-    keepPlannedSitesClear();
+    if (!fighterOnly()) keepPlannedSitesClear();
 
 	// Phased custom single-player handled the whole timer block on its own build
 	// phase above and returned; reaching here means this is the unit phase (or a
 	// legacy mode running the original combined pass).
 	if (!phased) {
-		if (buildTimer <= 0) {
+		if (fighterOnly()) {
+			fighterPass();
+		}
+		else if (buildTimer <= 0) {
 			build(militaryValue);
 		}
 		else {
@@ -746,7 +753,7 @@ void QuantBot::update() {
 		}
 	}
 
-	if (!supportMode) {
+	if (!builderOnly()) {
 		if (attackTimer <= 0) {
 			attack(militaryValue);
 		} else {
@@ -756,11 +763,14 @@ void QuantBot::update() {
 		attackTimer = std::numeric_limits<Sint32>::max();
 	}
 
-	if (cityBuildTimer <= 0) {
-		manageCityBuilding();
-		cityBuildTimer = AIUPDATEINTERVAL * 10;
-	} else {
-		cityBuildTimer -= AIUPDATEINTERVAL;
+	// A Fighter never builds city zones or services.
+	if (!fighterOnly()) {
+		if (cityBuildTimer <= 0) {
+			manageCityBuilding();
+			cityBuildTimer = AIUPDATEINTERVAL * 10;
+		} else {
+			cityBuildTimer -= AIUPDATEINTERVAL;
+		}
 	}
 }
 
@@ -860,7 +870,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     // A confirmed hit on a building or worker we own makes the attacker a legal
     // air defence contact for a short grace, so the reload between volleys does
     // not read as the attack having stopped. Bounded: pruned on every air pass.
-    if (!supportMode && !autonomousAircraftRaids() && damage>0
+    if (!builderOnly() && !autonomousAircraftRaids() && damage>0
         && pObject->getOwner()==getHouse() && pObject->getHealth()>0
         && (pObject->isAStructure() || pObject->getItemID()==Unit_Harvester
             || pObject->getItemID()==Unit_RebelHarvester)
@@ -869,14 +879,15 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
         assetAttackerContacts[damagerID]={getGameCycleCount(),pObject->isAStructure()};
     }
     if (pObject->isAStructure()) {
-        doRepair(pObject);
+        // Repair is the builder's spending; a Fighter only defends the building.
+        if (!fighterOnly()) doRepair(pObject);
         // no point scrambling to defend a missile
         if(pDamager->getItemID() != Structure_Palace) {
             scrambleUnitsAndDefend(pDamager,false,pObject);
         }
 
 	}
-	else if (!supportMode && pObject->isAGroundUnit()) {
+	else if (!builderOnly() && pObject->isAGroundUnit()) {
 		const GroundUnit* pGroundUnit = static_cast<const GroundUnit*>(pObject);
 
 		if (pGroundUnit->isAwaitingPickup()) {
@@ -957,7 +968,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		}
 		else if ((pGroundUnit->getItemID() == Unit_Launcher
 			|| pGroundUnit->getItemID() == Unit_Deviator)
-			&& !supportMode && !autonomousAttack) {
+			&& !builderOnly() && !autonomousAttack) {
 			// Keep Launchers/Deviators away from harm when taking damage (not in support mode)
 			doSetAttackMode(pGroundUnit, AREAGUARD);
 			int weaponRange = currentGame->objectData.data[pGroundUnit->getItemID()][getHouse()->getHouseID()].weaponrange;
@@ -1128,7 +1139,18 @@ int QuantBot::militaryUnitValue() const {
             }
         }
     }
-    return militaryValue;
+    // A Fighter's readiness counts only the army it may command: units the human is ordering
+    // would be excluded from the wave and launch it undersized.
+    if (currentGame && fighterOnly()) {
+        for (const auto& order : manualUnitOrders) {
+            const auto* unit = dynamic_cast<const UnitBase*>(getObject(order.first));
+            if (unit && unit->getOwner() == getHouse() && humanControls(unit)
+                && unit->getItemID() != Unit_Carryall && unit->getItemID() != Unit_Harvester
+                && unit->getItemID() != Unit_MCV && unit->getItemID() != Unit_Sandworm)
+                militaryValue -= currentGame->objectData.data[unit->getItemID()][getHouse()->getHouseID()].price;
+        }
+    }
+    return std::max(0, militaryValue);
 }
 
 void QuantBot::onHumanUnitOrder(Uint32 id) {

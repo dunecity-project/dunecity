@@ -48,7 +48,7 @@ void runLauncherKitingProbe(Game& game) {
 
     game.gameType=GameType::CustomGame;
     bot->gameMode=QuantBot::GameMode::Custom;
-    bot->supportMode=false;
+    bot->role=AIRole::Both;
     bot->manualUnitOrders.clear();
     bot->defenceAssignments.clear();
     bot->defenceResponseCycles.clear();
@@ -538,10 +538,10 @@ void runLauncherKitingProbe(Game& game) {
             require(!bot->huntingLauncher(launcher) && !bot->escapeCloseThreatWhileHunting(launcher),
                 "The hunting-launcher escape leaked into a campaign game");
             game.gameType=GameType::CustomGame;
-            bot->supportMode=true;
+            bot->role=AIRole::Builder;
             require(!bot->escapeCloseThreatWhileHunting(launcher),
                 "The hunting-launcher escape leaked into support mode");
-            bot->supportMode=false;
+            bot->role=AIRole::Both;
         }
 
         // ---- Advance past an unreachable aircraft -----------------------
@@ -559,7 +559,7 @@ void runLauncherKitingProbe(Game& game) {
         // still be selected, because that shot is what a launcher is for.
         bot->difficulty=QuantBot::Difficulty::Brutal;
         game.gameType=GameType::CustomGame;
-        bot->supportMode=false;
+        bot->role=AIRole::Both;
         {
             // The earlier phases leave retired fixture units on their tiles until
             // the engine collects them, and a dead unit is still an attackable
@@ -796,10 +796,10 @@ void runLauncherKitingProbe(Game& game) {
                 require(!bot->managesAutonomousRocketHunt(foot),
                     "The rocket filter overrode a human-ordered Trooper");
                 bot->manualUnitOrders.erase(foot->getObjectID());
-                bot->supportMode=true;
+                bot->role=AIRole::Builder;
                 require(!bot->managesAutonomousRocketHunt(foot),
                     "The rocket filter claimed a support helper's Trooper");
-                bot->supportMode=false;
+                bot->role=AIRole::Both;
                 game.gameType=GameType::Campaign;
                 require(!bot->managesAutonomousRocketHunt(foot),
                     "The rocket filter leaked into a campaign game");
