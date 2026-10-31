@@ -129,7 +129,7 @@ parser.add_argument('--capture-mib', type=int, default=1024, help='Diagnostic ca
 parser.add_argument('--wall-timeout', type=int, default=1800, help='Maximum wall seconds for the simulation')
 parser.add_argument('--level', type=int, choices=range(1,10), default=4)
 parser.add_argument('--mod', default='vanilla', help='Installed mod folder (validated by the real ModManager)')
-parser.add_argument('--house', choices=tuple(h for h in house_names if h!='neutral'), default='harkonnen')
+parser.add_argument('--house', choices=house_names, default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
 parser.add_argument('--local-spectator', action='store_true',
                     help='Run a custom-map all-AI match through the real detached spectator setup')
@@ -310,8 +310,8 @@ if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
     parser.error('AI Player has no Brutal controller.')
 if args.strategy_probe and (not args.custom_map or args.prebuilt_probe):
     parser.error('--strategy-probe needs --custom-map and builds its own probe binary.')
-if not (args.custom_map or args.skirmish_ffa_size or args.skirmish) and (args.roster or args.house not in house_names[:3]):
-    parser.error('Explicit rosters and additional houses require --custom-map, --skirmish-ffa-size or --skirmish.')
+if not (args.custom_map or args.skirmish_ffa_size or args.skirmish) and args.roster:
+    parser.error('Explicit rosters require --custom-map, --skirmish-ffa-size or --skirmish.')
 def parse_match_sides(slots):
     """--match-sides as [(house index, label)], one distinct house per slot (any 2-8 if slots is None)."""
     try:

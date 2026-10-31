@@ -66,6 +66,7 @@
 #include "scenario-match.inc"
 #include <FileClasses/INIFile.h>
 #include "../AchievementsTestCase/AchievementRuntimeProbe.inc"
+#include "tornie-campaign-audit.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -145,6 +146,8 @@ int runCampaignBalanceProbe() {
         const ScenarioMatch::Skirmish skirmish=ScenarioMatch::parseSkirmish(skirmishSpec,static_cast<int>(scenarioSides.size()));
         constructionYardOnly=skirmish.constructionYardOnly;
         init=ScenarioMatch::makeSkirmishInit(skirmish,settings.gameOptions);
+        if(std::getenv("BALANCE_TORNIE_COLOURED_SPICE"))
+            init.filedata = tornieColouredSpiceFixture(init.getFiledata());
     }
     if(!scenarioSides.empty() && !customMap && !skirmishSpec) throw std::runtime_error("Scenario sides need a map");
     // Formation duel: a generated Random Skirmish 1v1 instead of a campaign level or map file.
@@ -423,6 +426,7 @@ int runCampaignBalanceProbe() {
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    const TornieCampaignAudit tornieAudit(*game);
     const Uint32 end = MILLI2CYCLES(minutes * 60000);
     std::string outcome;
     const long long setupMs = ProbeDigest::millisecondsSince(probeStart);
@@ -477,6 +481,7 @@ int runCampaignBalanceProbe() {
         SDL_Log("PROBE_TIMING: setup_ms=%lld loop_ms=%lld cycles=%u cycles_per_s=%.0f", setupMs, loopMs, cycles,
                 loopMs > 0 ? cycles * 1000.0 / loopMs : 0.0);
     }
+    tornieAudit.finish(*game);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=%d seed=%u attack_percent=%d partner=%s enemy=%s cycle=%u outcome=%s",
         level, game->getGameInitSettings().getRandomSeed(), percent, partner.c_str(), enemy.c_str(), game->getGameCycleCount(),
         outcome.c_str());
