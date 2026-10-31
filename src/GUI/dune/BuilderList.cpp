@@ -18,6 +18,7 @@
 #include <GUI/dune/BuilderList.h>
 
 #include <globals.h>
+#include <CursorManager.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/FontManager.h>
@@ -283,7 +284,7 @@ bool BuilderList::handleMouseRight(Sint32 x, Sint32 y, bool pressed) {
         if(mouseRightButton == getButton(x,y)) {
             // button released
             assert(pBuilder);
-            if((getItemIDFromIndex(mouseRightButton) == (int) pBuilder->getCurrentProducedItem()) && (pBuilder->isOnHold() == false)) {
+            if(!pointerIsTouch() && (getItemIDFromIndex(mouseRightButton) == (int) pBuilder->getCurrentProducedItem()) && (pBuilder->isOnHold() == false)) {
                 soundPlayer->playSound(Sound_ButtonClick);
                 pBuilder->handleSetOnHoldClick(true);
             } else {

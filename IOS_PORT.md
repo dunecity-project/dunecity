@@ -16,6 +16,8 @@ and hands the game ordinary mouse events, plus pan and zoom for the map:
 
 ```text
 tap                                   -> left click (select, press buttons, place)
+  hold still for 550 ms, then release    -> right click; remove one queued build item
+  hold at an edge of the map             -> scroll until release (20 logical px band)
 drag                                  -> left drag (box-select, minimap)
 two fingers moved together            -> scroll the map
 two fingers spread / pinched          -> zoom in / out one step (75% to 400%)

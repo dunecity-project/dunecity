@@ -3067,7 +3067,11 @@ void Game::doInput()
     SDL_Event event;
     while(SDL_PollEvent(&event)) {
         updateCursorVisibilityForInput(event);
-        if(TouchInput::translateTouchEvent(event)) {
+        const bool mapTouchEnabled = !pInGameMenu && !pInGameMentat
+            && !pWaitingForOtherPlayers && !pInterface->hasChildWindow();
+        if(TouchInput::translateTouchEvent(event,
+                mapTouchEnabled ? &screenborder->getScreenRect() : nullptr,
+                mapTouchEnabled ? &pInterface->getMapViewControlsRect() : nullptr)) {
             continue;
         }
         // check for a key press
@@ -3432,15 +3436,19 @@ case CursorMode_Heal: {
         }
     }
 
-    if((pInGameMenu == nullptr) && (pInGameMentat == nullptr) && (pWaitingForOtherPlayers == nullptr) && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS)) {
+    const bool touchPointer = pointerIsTouch();
+    if((pInGameMenu == nullptr) && (pInGameMentat == nullptr) && (pWaitingForOtherPlayers == nullptr)
+       && !pInterface->hasChildWindow()
+       && (touchPointer || (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS))) {
 
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
         const bool cameraKeys=!chatMode && !pInterface->hasChildWindow();
         const bool wasd=cameraKeys && settings.general.wasdCamera && !(SDL_GetModState() & (KMOD_SHIFT|KMOD_CTRL|KMOD_ALT|KMOD_GUI));
-        scrollDownMode =  (drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_DOWN]) || (wasd && keystate[SDL_SCANCODE_S]);
-        scrollLeftMode = (drawnMouseX <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_LEFT]) || (wasd && keystate[SDL_SCANCODE_A]);
-        scrollRightMode = (drawnMouseX >= getRendererWidth()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_RIGHT]) || (wasd && keystate[SDL_SCANCODE_D]);
-        scrollUpMode = (drawnMouseY <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_UP]) || (wasd && keystate[SDL_SCANCODE_W]);
+        const SDL_Point touchEdge = TouchInput::edgeScroll();
+        scrollDownMode = (touchPointer ? touchEdge.y > 0 : drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_DOWN]) || (wasd && keystate[SDL_SCANCODE_S]);
+        scrollLeftMode = (touchPointer ? touchEdge.x < 0 : drawnMouseX <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_LEFT]) || (wasd && keystate[SDL_SCANCODE_A]);
+        scrollRightMode = (touchPointer ? touchEdge.x > 0 : drawnMouseX >= getRendererWidth()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_RIGHT]) || (wasd && keystate[SDL_SCANCODE_D]);
+        scrollUpMode = (touchPointer ? touchEdge.y < 0 : drawnMouseY <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_UP]) || (wasd && keystate[SDL_SCANCODE_W]);
 
         if(scrollLeftMode && scrollRightMode) {
             // do nothing

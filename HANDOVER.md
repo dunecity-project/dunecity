@@ -1,3 +1,22 @@
+## 2026-10-30 — Android touch follow-up on PR #112
+
+User requested Android map-edge scrolling and convenient build-queue removal,
+and authorized fixes on integrate/zoom-steps plus an APK installed over ADB.
+Start from Stefan's d0d5c375, already including current main. Add a 20-logical-pixel
+map-edge hold that never clicks and stops on release, multitouch, dialogs or focus
+loss. Use the map boundary beside the sidebar, excluding the zoom/view controls;
+keep physical mouse edge scrolling. A stationary 550-ms hold and release emits
+one right click without an initial left click. BuilderList touch right click
+cancels one directly through its existing synchronized command, while physical
+mouse right click keeps pause-then-cancel. Cursor visibility overrides no longer
+freeze physical/touch input identity. Two-finger pan/pinch and box selection stay.
+
+Candidate engine 1.0.858; Android 0.2.33 / 1000553. Regression cases cover holds,
+edge directions/corners, release, selection drag, HUD exclusion and multitouch.
+Hosted validation and APK build pending; no local native compilation. Existing
+phone is connected and currently has Android 0.2.26, so preserve app data and use
+the existing upgrade signing identity. No stable publication/merge requested yet.
+
 ## 2026-10-29 — iPhone/iPad public TestFlight beta (engine 1.0.857)
 
 - **At Stefan's request:** App Store packaging (asset-catalog icon, `PrivacyInfo.xcprivacy`,
