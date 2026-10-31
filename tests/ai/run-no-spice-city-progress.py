@@ -53,7 +53,9 @@ subprocess.run([
     '--custom-map', str(map_file), '--mod', 'dunecity', '--house', 'harkonnen',
     '--partner-difficulty', 'brutal', '--enemy-difficulty', 'brutal',
     '--concrete-required', '--harvester-limit', '0', '--seed', '148680876',
-    '--minutes', '12', '--wall-timeout', '300',
+    # 12 classic city years; Slow City Year (default) makes a year 120 s, so the same
+    # number of budget years takes 24 game minutes.
+    '--minutes', '24', '--wall-timeout', '300',
 ], cwd=root, check=True, timeout=360)
 files = list((out / 'game/profile/ai-decisions').glob('*/events.jsonl'))
 assert len(files) == 1, 'Expected one isolated game capture'

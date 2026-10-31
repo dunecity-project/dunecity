@@ -776,7 +776,9 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-budget-probe)
-        set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        # The fixture states its tax and service bills in classic years (annual == per minute).
+        set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE
+            ENVIRONMENT "BALANCE_GAME_OPTIONS=${CMAKE_SOURCE_DIR}/tests/ai/game-options/classic-city-year.ini")
         # Police reinforcement admission: the unit limit the lobby selected is the only
         # authority for the sidebar status and for deployment, and the station's own
         # garrison restrictions stay independent of it.
