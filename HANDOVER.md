@@ -1,3 +1,28 @@
+## 2026-10-31 — 1.0.860: shared yard queue, Mentat retired into QuantBot, boxed-in MCV fix (OMP integrator)
+
+- **QuantBot build refactor (c446892a):** Mentat's pass/step structure applied to QuantBot as a
+  pure move: `QuantBot::build()` is 42 lines over `QuantBotBuildPass.h`, `QuantBotBuildProducers.cpp`
+  and `QuantBotBuildYard.cpp`. Proof: replay of 440 matrix games against baseline 4edccacc, 373/375
+  common games digest-identical; the 2 differences both ran on mac in the baseline and on the Windows
+  PC in the replay (95 other mac→PC pairs matched). The campaign one (`partner-easy/dunecity/
+  atreides-m11/74708`) replayed on the mini at the final HEAD gives the baseline digest 23e7a1aa,
+  so it is a PC-vs-mac divergence, not the refactor. Open item: the cluster's parity games do not
+  catch that divergence.
+- **Mentat retired (7192a7e0):** the standalone AI and its files are gone; matrix full tier 1,739.
+  Old saves/replays/settings naming `mentat<D>`/`mentatSupport<D>` resolve through a never-listed
+  `PlayerFactory` table to QuantBot Both/Builder (`QuantBot(stream, house, RetiredMentatSave)` reads
+  Mentat's layout, checked against 4edccacc's `Mentat::save`). Not runtime-tested: no Mentat save
+  exists to load. Protocol 105 also covers the moved AI indices.
+- **Boxed-in opening MCV (26a1474c):** generator keeps the MCV footprint + ring free; QuantBot
+  clears its own units off the footprint (`[Force Concentration] ClearMcvFootprint`, default on).
+- **Shared yard queue (Stefan: "each construction yard should pick things off the queue. one shared
+  queue"):** an idle yard takes the earliest planned order waiting in another yard of its house;
+  ghosts are numbered in plan order across yards. Hashed `Shared Yard Queue` (default on, second MOD10
+  byte, off for older streams); queue entries save their plan order (9876). AI never reserves, so AI
+  play is unchanged. `preplace_queue_probe` covers off/on and captures `preplace-shared-queue.png`.
+  See `docs/preplace-queue.md`.
+- Codex's retry fix (bfa66284) reviewed; pre-MOD10 streams read it off (1b5feafa).
+
 ## 2026-10-31 — Planned Construction Yard obstruction recovery (Codex handoff)
 
 - Stefan reported his Air 1.0.859 human Harkonnen game repeatedly stuck at `Place It`. Source path:
