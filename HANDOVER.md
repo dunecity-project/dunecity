@@ -1,3 +1,13 @@
+## 2026-10-31 — Probe games no longer reach the public usage statistics (OMP)
+
+- **2dc819da:** `Game::startMatchAnalytics()` returns early when `DUNECITY_USERDIR` is set. Every
+  probe runner and local multiplayer test uses an isolated profile; ~27 unit/pathfinding/perf probes
+  never pointed the metaserver at a closed port, so 885 synthetic games reached production
+  `games.sqlite` (maps `hunt` 503, `workload` 313, `motion` 42, `movement` 24, plus `hotjoin`/`Host`).
+  Smoke: the same motion-probe binary reported nothing with `DUNECITY_USERDIR` and reported match
+  `m1-65f2126c3682e-5c-188f58254074` (map `motion`, 1.0.860) without it. Those existing rows are
+  still in the production DB; deleting them needs Stefan's approval.
+
 ## 2026-10-31 — 1.0.860: shared yard queue, Mentat retired into QuantBot, boxed-in MCV fix (OMP integrator)
 
 - **QuantBot build refactor (c446892a):** Mentat's pass/step structure applied to QuantBot as a
