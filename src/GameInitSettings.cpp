@@ -208,8 +208,10 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
         houseInfoList.push_back(HouseInfo(stream));
     }
     
-    // Older streams used the 1.0.852 scheduler, independently of future new-game defaults.
+    // Older streams used the 1.0.852 scheduler and the 1.0.859 placement fallback,
+    // independently of future new-game defaults, so their saves and replays stay exact.
     gameOptions.continuousGroundSteps = false;
+    gameOptions.retryPlannedPlacement = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
@@ -451,7 +453,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.planBuildingSites);
     // MOD9: the continuous-ground-steps rule, appended after the MOD8 byte.
     stream.writeBool(gameOptions.continuousGroundSteps);
-    // MOD10: explicit control/on switch; older settings adopt the placement repair.
+    // MOD10: the planned-placement recovery rule; streams without it read as off (legacy).
     stream.writeBool(gameOptions.retryPlannedPlacement);
 }
 

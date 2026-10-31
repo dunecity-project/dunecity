@@ -8,7 +8,8 @@
   `~/.local/state/dunecity-diagnostics/place-it-20261031` (map seed 360270865).
 - At his explicit request, planned plots now keep retrying, clear own/allied units (including Hold),
   and cancel/refund the front finished order if hostile ground units occupy it. The following order
-  continues. Older failed reservations resume; unreserved orders remain manual.
+  continues. Failed reservations resume while the option is on; unreserved orders remain manual.
+  Streams from before MOD10 (older saves/replays) read the option as off and stay exact.
 - Hashed, streamed `Retry Planned Placement` switch, default on, MOD10/MODA; save 9876/protocol105.
   Same-build legacy control plus new regression scenarios are in `preplace_queue_probe`; settings
   off/on round-trip and completion policy tests are included. See `docs/preplace-queue.md`.

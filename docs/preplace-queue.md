@@ -8,8 +8,8 @@ places each finished building on its planned plot automatically.
 The default `Retry Planned Placement` match option is on. A finished planned building keeps its
 plot and retries until it becomes usable, including when it is waiting for a building in another
 yard to supply build range. It never becomes permanently manual because a plot was temporarily
-blocked. A saved reservation with the old `reservationFailed` marker also resumes automatically;
-unreserved orders still use the ordinary manual placement flow.
+blocked. A reservation carrying the old `reservationFailed` marker resumes automatically while the
+option is on; unreserved orders still use the ordinary manual placement flow.
 
 Own and allied ground units are moved off a finished plot once a second, including units in Hold
 or a formation. Idle friendly units are also cleared from queued plots before completion. Enemy
@@ -21,7 +21,8 @@ or cancelled by the player.
 
 The option is available in `[Game Options]` / mod `GameOptions.ini` for same-build control/on
 regressions, is included in the settings hash, and is carried in GameInitSettings MOD10 (`MODA`),
-save 9876 and protocol 105. Settings predating MOD10 adopt the repair. Setting it false retains
+save 9876 and protocol 105. Settings predating MOD10 (older saves and replays) read it as off, so
+they replay exactly as they were played. Setting it false retains
 the legacy fallback/enemy-wait behaviour described below. The real-engine `preplace_queue_probe`
 exercises both policies in one build, including two-yard range dependencies, recovery of a failed
 reservation, a structure removed from a plot, own/allied Hold units, and hostile cancellation with
