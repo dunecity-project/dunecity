@@ -63,10 +63,11 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
 # Houses for N players, in this order (the 7th and 8th custom-game houses last).
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary', 'rebels', 'neutral')
 CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
-           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
+           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard',
+           'MM': 'mentatMedium', 'MH': 'mentatHard', 'MB': 'mentatBrutal'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team')
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'mentat')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error')
@@ -220,6 +221,12 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS):
                                team_slots(['QH'] * players, ['QM'] * players),
                                skirmish=skirmish_spec(size, 'medium', 2), minutes=minutes, expect=('wins', 1),
                                full=team_seeds, swap_teams=True))
+    # 8. QuantBot against Mentat (the June 2026 fork of QuantBot, docs/ai-scenario-matrix.md "Mentat")
+    # at the same difficulty on the long ladder maps, both houses of every seed: reported, no expectation.
+    for strong, weak in (('QM', 'MM'), ('QH', 'MH'), ('QB', 'MB')):
+        for map_name, mod, where in long_maps:
+            cells.append(match('mentat', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak),
+                               full=ladder_seeds // 3, both_sides=True, **where))
     return cells
 
 
@@ -235,7 +242,8 @@ def campaign_missions(first_only):
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517,
+            'mentat': 7307}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
 
@@ -678,8 +686,8 @@ def report(args):
         print()
         if category in ('skirmish', 'cy', 'mp', 'team'):
             class_table(rows, houses)
-        if category == 'ladder':
-            ladder_table(rows, houses, problems)
+        if category in ('ladder', 'mentat'):
+            ladder_table(rows, houses, problems if category == 'ladder' else [])
         if category == 'team':
             team_table(rows, houses, problems)
     print('## Problems\n')
@@ -792,7 +800,7 @@ def subject_score(game, houses, draw_score=match_score.DRAW_SCORE):
     if game['category'] == 'campaign':
         return match_score.duel(game['outcome'] == 'won', game['outcome'] == 'lost', draw_score)[0].score
     name = game['cell'].split('/')[0]
-    code = name.split('-')[0] if game['category'] == 'ladder' else 'QH' if game['category'] == 'team' else None
+    code = name.split('-')[0] if game['category'] in ('ladder', 'mentat') else 'QH' if game['category'] == 'team' else None
     scores = [float(h['score']) for h in houses if h['code'] == code and h['score'] != '']
     return scores[0] if code and scores else None
 
@@ -812,11 +820,11 @@ def compare(args):
         if a is None or b is None:
             continue
         name, mod = game['cell'].split('/')
-        if game['category'] == 'ladder':
+        if game['category'] in ('ladder', 'mentat'):
             strong, _, weak, map_name = name.split('-', 3)
             pair = f'{strong} v {weak}'
-            labels = (f'ladder {pair} {map_name} {mod}',
-                      f'ladder {pair} {"long" if map_name.startswith("long-") else "short"} maps')
+            labels = (f'{game["category"]} {pair} {map_name} {mod}',
+                      f'{game["category"]} {pair} {"long" if map_name.startswith("long-") else "short"} maps')
         elif game['category'] == 'team':
             labels = (f'team {name.split("-")[0]} {mod}', f'team {name.split("-")[0]}')
         else:

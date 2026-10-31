@@ -47,7 +47,8 @@ next run; a crashed game's last log lines go to `failed-*.txt`.
 
 ## The matrix
 
-Controller codes: QE/QM/QH/QB = QuantBot Easy/Medium/Hard/Brutal, AE/AM/AH = AI Player Easy/Medium/Hard.
+Controller codes: QE/QM/QH/QB = QuantBot Easy/Medium/Hard/Brutal, AE/AM/AH = AI Player Easy/Medium/Hard,
+MM/MH/MB = Mentat Medium/Hard/Brutal.
 Houses are Harkonnen, Atreides, Ordos, Sardaukar, Fremen, Mercenary, Rebels, Neutral (first N), rotated
 by the seed's index so every controller plays every house; map-named houses (All against Atreides, the
 6P maps) stay fixed.
@@ -60,6 +61,7 @@ by the seed's index so every controller plays every house; map-named houses (All
 | `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
 | `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE. Long maps (the decision): Random Skirmish 128x128 (75 min) and 160x160 (90 min), vanilla and DuneCity, medium bases, no army, 18 seeds each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair. Short maps (reported): 96x96 small bases vanilla and DuneCity, Habbanya-Penny, a vanilla CY 96x96 start, 9 seeds x both houses: 72 per pair | the stronger QuantBot's placement score interval above 0 over the long maps (the interval resamples seeds); game length per cell |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
+| `mentat` | QuantBot against Mentat (the June 2026 fork of QuantBot's build code, `src/players/Mentat.cpp`) at the same difficulty: QM v MM, QH v MH, QB v MB on the four long ladder maps, 6 seeds x both houses: 48 games per pair | reported only: QuantBot's placement score per pair (ladder table) |
 
 Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
 mandatory test; campaign 80).
@@ -90,7 +92,7 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 
 Every game must also finish without a crash. 10 games, three at a time.
 
-**Full** (`--tier full`, 1,643 games, 1,080 of them ladder): the whole matrix.
+**Full** (`--tier full`, 1,883 games, 1,080 of them ladder, 144 QuantBot v Mentat): the whole matrix.
 
 ## Running
 
