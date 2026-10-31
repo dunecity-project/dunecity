@@ -2377,6 +2377,55 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                     pass.capitalCandidates.push_back(service);
                 }
             }
+            // force.defencePrerequisites: demanded rocket cover this yard cannot
+            // build yet saves for its next unlock step, the yard upgrade and then
+            // the first missing prerequisite (the Radar), instead of leaving every
+            // credit to plots and Starport bargains until aircraft are over the
+            // base. The turret candidates above require the turret to be buildable,
+            // so without this a city whose refinery count never reaches the
+            // proactive unlock rule's three (a no-spice city keeps one storage
+            // refinery) owns no rocket defence when the first wing arrives.
+            if (botConfig().force.defencePrerequisites && pass.citySimEnabled && getHouse()->hasPower()
+                && (pass.airEngaged || pass.uncoveredCoreAssets>0) && pass.routineRocketsAllowed
+                && data[Structure_RocketTurret][houseID].enabled
+                && data[Structure_RocketTurret][houseID].techLevel<=currentGame->techLevel
+                && !campaignAvailableToBuild(builder,Structure_RocketTurret)) {
+                int uncovered=0;
+                if (findCityTurretPlaceLocation(Structure_RocketTurret,&uncovered).isValid() && uncovered>0) {
+                    CapitalCandidate unlock;
+                    unlock.builder=builder->getObjectID();
+                    unlock.score=pass.airEngaged ? 3000 : 2600;
+                    unlock.reason=pass.airEngaged ? "air_coverage" : "core_coverage";
+                    unlock.urgent=pass.airEngaged;
+                    const int rocketUpgrade=data[Structure_RocketTurret][houseID].upgradeLevel;
+                    if (builder->getCurrentUpgradeLevel()<rocketUpgrade) {
+                        if (builder->getMaxUpgradeLevel()>=rocketUpgrade) {
+                            unlock.kind="defence_upgrade";unlock.item=Structure_RocketTurret;
+                            unlock.price=unlock.cost=builder->getUpgradeCost();
+                        }
+                    } else {
+                        // First missing prerequisite this yard can order, walking down
+                        // through prerequisites of prerequisites. A pending order counts.
+                        Uint32 step=Structure_RocketTurret;
+                        for (int depth=0; depth<Structure_LastID && step!=NONE_ID; ++depth) {
+                            Uint32 missing=NONE_ID;
+                            for (Uint32 prerequisite=Structure_FirstID; prerequisite<=Structure_LastID; ++prerequisite)
+                                if (data[step][houseID].prerequisiteStructuresSet[prerequisite]
+                                    && pass.itemCount[prerequisite]==0) { missing=prerequisite; break; }
+                            if (missing==NONE_ID) break;
+                            if (campaignAvailableToBuild(builder,missing)) {
+                                unlock.kind="defence_prerequisite";unlock.item=missing;
+                                unlock.site=findPlaceLocation(missing);
+                                unlock.price=data[missing][houseID].price;unlock.cost=buildingCapitalCost(pass, missing);
+                                break;
+                            }
+                            step=missing;
+                        }
+                    }
+                    if (unlock.price>0 && (unlock.kind==std::string("defence_upgrade") || unlock.site.isValid()))
+                        pass.capitalCandidates.push_back(unlock);
+                }
+            }
             if (pass.itemCount[Structure_RepairYard]>0 && pass.itemCount[Structure_RepairYard]<pass.repairTarget
                 && canAddRepairYard(pass.itemCount[Structure_RepairYard]) && !openingWorkersNeeded(pass)
                 && campaignAvailableToBuild(builder,Structure_RepairYard)) {
@@ -2589,7 +2638,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);
     }
     for (auto& candidate:pass.capitalCandidates) if (isStructure(candidate.item) && candidate.score>0
-        && candidate.kind!=std::string("expansion_upgrade")) {
+        && candidate.kind!=std::string("expansion_upgrade") && candidate.kind!=std::string("defence_upgrade")) {
         const auto* builder=dynamic_cast<const BuilderBase*>(getObject(candidate.builder));
         if (!builder) continue;
         planningBuilder=candidate.builder;clearPlacementCache(false,true);
@@ -2619,10 +2668,16 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // in progress, and its shortfall can persist indefinitely. Letting it own
     // the yard and its savings suppressed the dedicated growth allocation and
     // the zoning fallback on every pass, so the city never developed at all.
+    // The DefencePrerequisites unlock steps are protected too: unlike the
+    // overlap shortfall they are a bounded one-off price (yard upgrades and a
+    // Radar) that ends once paid, and plots or bargains bought from their
+    // savings are what left a no-spice city with no turret at all.
     pass.protectionCapital = pass.capitalChoice >= 0
         && (pass.capitalCandidates[pass.capitalChoice].reason == std::string("crime_prevention")
             || pass.capitalCandidates[pass.capitalChoice].reason == std::string("air_coverage")
-            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion"));
+            || pass.capitalCandidates[pass.capitalChoice].reason == std::string("secure_expansion")
+            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_upgrade")
+            || pass.capitalCandidates[pass.capitalChoice].kind == std::string("defence_prerequisite"));
     pass.cityGrowthProtected = false;
     // With multiple yards, assign one to growth alongside routine investment.
     // Crime protection keeps the winning allocation; growth resumes after its

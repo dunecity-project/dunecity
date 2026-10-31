@@ -395,8 +395,9 @@ int runCampaignBalanceProbe() {
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
-    // Same-build config comparisons, including the strategic-site regression's negative control.
-    if (scenario || std::getenv("BALANCE_STRATEGIC_SITE_PROBE"))
+    // Same-build config comparisons, including the strategic-site regression's negative control,
+    // a continued savegame and a custom-map match (switch off/on on the same position).
+    if (scenario || loadSave || customMap || std::getenv("BALANCE_STRATEGIC_SITE_PROBE"))
         if (const char* style = std::getenv("BALANCE_SCENARIO_STYLE"); style && *style)
             for (int h = 0; h < NUM_HOUSES; ++h)
                 if (House* house = game->getHouse(h))

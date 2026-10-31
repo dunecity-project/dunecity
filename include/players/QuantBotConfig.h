@@ -140,7 +140,7 @@ struct QuantBotConfig {
     /// FinishWeakest, FortifiedWaves, SonicClearLane, SpendAtCap, SiegeStandoff, MassAssault,
     /// FinishWhenLeading, JoinAllyWaves, OpeningCombatBudget, CampaignCombatBudget, CapacityMcvRunway,
     /// RespectServiceOwnership, ClearMcvFootprint, SmallMapYardCap, DeathHandTurrets,
-    /// SpreadVsDeathHand; optional keys, the code defaults
+    /// SpreadVsDeathHand, DefencePrerequisites; optional keys, the code defaults
     /// apply when absent. Hashed for multiplayer.
     struct ForceSettings {
         /// Hunting ground fighters shoot the best target in reach: fighters first, then the
@@ -234,6 +234,11 @@ struct QuantBotConfig {
         /// Campaign survival: while an enemy can fire a Death Hand, the yard, refineries and
         /// factories are placed apart so one missile cannot take out several of them.
         bool spreadVsDeathHand;
+        /// City defence: while uncovered core assets or enemy aircraft over the base demand
+        /// rocket turrets that this yard cannot build yet, the next unlock step (the yard
+        /// upgrade, then a missing prerequisite such as the Radar) becomes a protected capital
+        /// project, so its price is saved instead of spent on bargains or plots.
+        bool defencePrerequisites;
     };
     ForceSettings force;
 

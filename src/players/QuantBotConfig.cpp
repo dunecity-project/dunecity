@@ -329,6 +329,7 @@ QuantBotConfig::QuantBotConfig() {
     force.smallMapYardCap = false;
     force.deathHandTurrets = false;
     force.spreadVsDeathHand = false;
+    force.defencePrerequisites = false;
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
@@ -623,6 +624,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
         iniFile.setBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
         iniFile.setBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
+        iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -731,6 +733,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.smallMapYardCap = iniFile.getBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
     force.deathHandTurrets = iniFile.getBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
+    force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1212,6 +1215,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("smallMapYardCap", force.smallMapYardCap);
     addNamed("deathHandTurrets", force.deathHandTurrets);
     addNamed("spreadVsDeathHand", force.spreadVsDeathHand);
+    addNamed("defencePrerequisites", force.defencePrerequisites);
     configStr += "|/FORCE|";
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);

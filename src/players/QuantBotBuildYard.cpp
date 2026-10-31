@@ -658,17 +658,21 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && pass.protectionCapital && capitalPending(pass)
         && pass.capitalCandidates[pass.capitalChoice].builder == turn.pBuilder->getObjectID()) {
         const auto& service = pass.capitalCandidates[pass.capitalChoice];
-        if (service.kind==std::string("expansion_upgrade")) {
+        const bool defenceUpgrade=service.kind==std::string("defence_upgrade");
+        if (service.kind==std::string("expansion_upgrade") || defenceUpgrade) {
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
-            yardTurn.structureRule="save_expansion_upgrade";
+            yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
                 && upgradeWithLogging(pass, turn, __LINE__)) {
-                pass.capitalConsumed=true;yardTurn.structureRule="expansion_turret_upgrade";
+                pass.capitalConsumed=true;yardTurn.structureRule=defenceUpgrade ? "defence_upgrade" : "expansion_turret_upgrade";
             }
         } else if (campaignAvailableToBuild(turn.pBuilder, service.item) && service.site.isValid()) {
+            const bool prerequisite=service.kind==std::string("defence_prerequisite");
             yardTurn.itemID = pass.money >= service.price + service.foundationCost ? service.item : NONE_ID;
             yardTurn.crimeServiceSite = service.site;
-            yardTurn.structureRule = yardTurn.itemID == NONE_ID ? "save_city_protection" : "city_protection";
+            yardTurn.structureRule = yardTurn.itemID == NONE_ID
+                ? (prerequisite ? "save_defence_prerequisite" : "save_city_protection")
+                : (prerequisite ? "defence_prerequisite" : "city_protection");
             yardTurn.skipRemainingStructureLogic = true;
         }
     }

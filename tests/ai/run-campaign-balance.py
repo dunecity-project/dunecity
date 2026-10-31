@@ -275,7 +275,8 @@ parser.add_argument('--skirmish',
                          'key=value,... (size, base none|cy|outpost|small|medium|large|fortress, army, city, seed, '
                          'tech, rock, spice, credits, symmetric; scenario-match.inc)')
 parser.add_argument('--scenario-style',
-                    help='Scenario game or strategic-site probe: a play style (tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
+                    help='Scenario game, strategic-site probe, --load-save or --custom-map run: a play style '
+                         '(tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
                          'e.g. a candidate config switch (test-only: not saved or hashed)')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
