@@ -568,7 +568,7 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
 
         // An own unit in HOLD must leave when the building is ready. Repeat with an ally
         // from a different house: ownership alone must not classify friendly units as enemies.
-        House* ally = enemyPlayer->getHouse();
+        House* ally = game->getHouse(enemyPlayer->getHouse()->getHouseID());
         const auto oldTeam = ally->teamID;
         ally->teamID = house->getTeamID();
         const Coord ownPlot=site(2,6), allyPlot=site(5,3);

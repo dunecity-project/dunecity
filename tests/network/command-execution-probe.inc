@@ -92,13 +92,13 @@ int runOwnershipProbe() {
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
         std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("9DOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD9 fixture missing");
+        const auto marker = legacy.rfind("ADOM");
+        if(marker == std::string::npos) throw std::runtime_error("MOD10 fixture missing");
         // Everything after MOD4's payload: the yard limit, the original-damage byte,
-        // MOD7's factor count plus one factor per house, MOD8's plan-sites byte and MOD9's
-        // ground-steps byte.
+        // MOD7's factor count plus one factor per house, MOD8's plan-sites byte, MOD9's
+        // ground-steps byte and MOD10's placement-retry byte.
         const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1;
+            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 1;
         legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
         IMemoryStream oldInput(legacy.data(),legacy.size());
         GameInitSettings old(oldInput);
@@ -111,7 +111,7 @@ int runOwnershipProbe() {
             throw std::runtime_error("Yard cap roundtrip lost a house row");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD9 roundtrip and MOD4 defaults pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD10 roundtrip and MOD4 defaults pass");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);
