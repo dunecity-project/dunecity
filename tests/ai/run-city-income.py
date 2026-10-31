@@ -34,6 +34,7 @@ parser.add_argument('--cash', type=int, default=10000, help='Fixture cash inject
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--label', default=None)
 parser.add_argument('--wall-timeout', type=int, default=1800)
+parser.add_argument('--game-options', type=Path, help='INI with a [Game Options] section applied last (e.g. Slow City Year = false)')
 args = parser.parse_args()
 if not 1 <= args.minutes <= 120 or not set(args.mix) <= set('RIC') or not args.mix:
     parser.error('Use 1-120 minutes and a zone mix of R/I/C letters.')
@@ -89,6 +90,7 @@ env = dict({k:v for k,v in os.environ.items() if not k.startswith(('BALANCE_', '
            BALANCE_CITY_INCOME_PROBE='1', CITY_INCOME_MIX=args.mix, CITY_INCOME_MINUTES=str(args.minutes),
            CITY_INCOME_POLICE=str(args.police), CITY_INCOME_TAX=str(args.tax), CITY_INCOME_CASH=str(args.cash),
            CITY_INCOME_LABEL=label)
+if args.game_options: env['BALANCE_GAME_OPTIONS'] = str(args.game_options.resolve())
 runlog = out / f'run-{label}.log'
 with runlog.open('w') as log:
     subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
