@@ -368,8 +368,10 @@ void Bullet::blitToScreen() const
         SDL_Texture* shimmerTex = pGFXManager->getZoomedObjPic(ObjPic_Bullet_SonicTemp, currentZoomlevel);
         SDL_Texture* shimmerMaskTex = pGFXManager->getZoomedObjPic(ObjPic_Bullet_Sonic, currentZoomlevel);
 
-        // switch to texture 'shimmerTex' for rendering
+        // switch to texture 'shimmerTex' for rendering; the shimmer samples the
+        // target the map is being drawn into (the offscreen zoom board between sprite levels)
         SDL_Texture* oldRenderTarget = SDL_GetRenderTarget(renderer);
+        SDL_Texture* const sceneTex = oldRenderTarget != nullptr ? oldRenderTarget : screenTexture;
         SDL_SetRenderTarget(renderer, shimmerTex);
 
         // copy complete mask
@@ -380,12 +382,12 @@ void Bullet::blitToScreen() const
         SDL_SetTextureBlendMode(shimmerMaskTex, SDL_BLENDMODE_BLEND);
 
         // now copy r,g,b colors from screen but don't change alpha values in mask
-        SDL_SetTextureBlendMode(screenTexture, SDL_BLENDMODE_ADD);
+        SDL_SetTextureBlendMode(sceneTex, SDL_BLENDMODE_ADD);
         SDL_Rect source = dest;
         int shimmerOffsetIndex = ((currentGame->getGameCycleCount() + getBulletID()) % 24)/3;
         source.x += shimmerOffset[shimmerOffsetIndex%8]*2;
-        SDL_RenderCopy(renderer, screenTexture, &source, nullptr);
-        SDL_SetTextureBlendMode(screenTexture, SDL_BLENDMODE_NONE);
+        SDL_RenderCopy(renderer, sceneTex, &source, nullptr);
+        SDL_SetTextureBlendMode(sceneTex, SDL_BLENDMODE_NONE);
 
         // switch back to old rendering target (from texture 'shimmerTex')
         SDL_SetRenderTarget(renderer, oldRenderTarget);
