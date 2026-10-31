@@ -23,6 +23,16 @@
   `tornie_object_state_roundtrip`, `tornie_gameplay_state`, `pak_concurrent_read_tests`, achievements
   and Tornie rule tests. Known: Tornie's retained 1.0.545 intros for Jericho/ArcaKev/Lite have
   unpowered enemy factories by authored design (data identical to upstream).
+- Published 2026-11-01: PR #113 merged (a0ae91c3), tag build 41235775304 (13 assets, digests match,
+  DMG signed), SourceForge sync 41237911996, website download links/changelog bumped by the release
+  job (website c563d74) plus hand-written "New in 1.0.863" prose and a Tornie card (8264cf1).
+- Browser: the auto publish (run 41237911964) failed because `dunecity.data` is now 136 MB, over
+  GitHub's 100 MB file limit. PR #114 (bf3ddf4f) makes `package-web.py` commit files over 64 MiB as
+  ordered parts (`build.json` `split`); website 15402e7 adds `deploy/play_parts.py`, which joins them
+  for CI compression and in the server's staged web root. 1.0.863 was packaged by hand from the
+  tag build's Emscripten artifact (website 656b4cc). Live play/build.json is 1.0.863 at a0ae91c3, all
+  8 artifact hashes match, `.data` serves as one file (`br`, 79.7 MB; parts 404), the main menu loads.
+  Android stays 0.2.33 (engine 1.0.858), iOS TestFlight 1.0.857: neither can play online with 1.0.863.
 
 ## 2026-11-01 — 1.0.862: Construction Yards store 1000 credits in city matches (OMP integrator)
 
