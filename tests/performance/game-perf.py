@@ -192,8 +192,8 @@ def telemetry_windows(profile):
 
 # The real launch path (--menu-launch): the player's Random Skirmish choices as Stefan's slow game had
 # them (4P 160x160 DuneCity, three QuantBot Brutal enemies, spectated by a QuantBot Brutal house), with
-# a fixed map seed. The metaserver points at a closed local port, so the Workshop outbox pump and
-# match analytics run their real code without reaching the public service.
+# a fixed map seed. The metaserver points at a closed local port, so the Workshop outbox pump runs its
+# real code without reaching the public service; the isolated profile skips match analytics.
 MENU_LAUNCH_INI = """[General]
 Play Intro = false
 Player Name = perf_regression

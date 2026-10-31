@@ -28,6 +28,7 @@
 #include <misc/CampaignControls.h>
 #include <main.h>
 #include <cstdarg>
+#include <cstdlib>
 #include <ctime>
 #include <chrono>
 #include <cmath>
@@ -1014,6 +1015,11 @@ int Game::retagSandwormsToNatives() {
 void Game::startMatchAnalytics() {
     if (bReplay || gameInitSettings.getGameType() == GameType::LoadSavegame
         || gameInitSettings.getGameType() == GameType::LoadMultiplayer) {
+        return;
+    }
+    // DUNECITY_USERDIR selects an isolated profile, which only probe games and local multiplayer
+    // tests use. Their games must not appear in the public usage statistics.
+    if (const char* isolatedProfile = std::getenv("DUNECITY_USERDIR"); isolatedProfile && *isolatedProfile) {
         return;
     }
     // A multiplayer game is reported by its host only. The reporter is kept
