@@ -50,6 +50,7 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
 }
 #include "user-map-list-probe.inc"
+#include "tornie-family-menu-probe.inc"
 
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
@@ -130,6 +131,12 @@ int runMenuProbe() {
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
                 "Probe did not render at the requested dimensions");
     settings.general.playerName = "Menu tester";
+    if(std::getenv("MENU_TORNIE_FAMILY")) {
+        settings.network.directDevelopmentEndpoint = "";
+        verifyTornieFamilyMenus();
+        SDL_Log("MENU_PROBE_PASS: all six Tornie-family campaign, custom lobby and editor menus");
+        return MENU_QUIT_DEFAULT;
+    }
     verifySavedUserMapLists();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
@@ -658,34 +665,7 @@ int runMenuProbe() {
         menu.populateLevels();
         menuRequire(menu.startLevelDropDown.getNumEntries()==22,"Single mission range wrong");
     }
-    {
-        auto& mods = ModManager::instance();
-        const auto previousMod = mods.getActiveModName();
-        menuRequire(mods.setActiveMod("Tornie"), "Family campaign fixture mod unavailable");
-        {
-            HouseChoiceMenu menu(true);
-            menuRequire(menu.connectionDropDown.getNumEntries() == 3, "Family campaign lacks its additional faction co-op choice");
-            menuRequire(menu.connectionDropDown.getSelectedEntryIntData() == 1
-                        && !HouseChoiceMenu::isSeparateFactionCoop(), "Existing shared-house co-op stopped being the default online route");
-            menuRequire(menu.houseChoices.count == 12 && !menu.houseChoices.contains(HOUSE_NATIVES),
-                        "Full campaign roster is not twelve playable factions");
-            menu.connectionDropDown.setSelectedItem(2);
-            menuRequire(HouseChoiceMenu::isOnline() && HouseChoiceMenu::isSeparateFactionCoop(),
-                        "Explicit faction co-op choice did not select its own route");
-            menuRequire(!menu.partnerSelector.aiBox.isEnabled() && !menu.gameOptionsButton.isEnabled(),
-                        "Faction co-op exposes settings owned by its next screen");
-            menu.connectionDropDown.setSelectedItem(1);
-            menuRequire(!HouseChoiceMenu::isSeparateFactionCoop() && menu.gameOptionsButton.isEnabled(),
-                        "Returning to shared-house co-op did not restore its original controls");
-        }
-        menuRequire(mods.setActiveMod("TornieLite"), "Lite campaign fixture mod unavailable");
-        {
-            HouseChoiceMenu menu(false);
-            menuRequire(menu.houseChoices.count == 6 && !menu.houseChoices.contains(HOUSE_NATIVES),
-                        "Lite campaign roster is not the declared six factions");
-        }
-        menuRequire(mods.setActiveMod(previousMod), "Cannot restore campaign fixture mod");
-    }
+    verifyTornieFamilyMenus();
     CustomPlaySetup setup;
     auto files = getFileNamesList(getDuneLegacyDataDir()+"/maps/multiplayer/","ini",true);
     auto dir = getDuneLegacyDataDir()+"/maps/multiplayer/";
