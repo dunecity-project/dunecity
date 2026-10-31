@@ -59,7 +59,9 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9871 adds the Natives house slot (HOUSE_NATIVES; 9869/9870 are left to parallel branches).
     // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is reserved).
     // 9874 adds the continuous-ground-steps match rule (GameInitSettings MOD9).
-    REQUIRE(SAVEGAMEVERSION == 9874);
+    // 9875 saves the QuantBot role byte in place of the support flag (docs/ai-roles.md).
+    REQUIRE(SAVEGAMEVERSION == 9875);
+    REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
     REQUIRE(SAVEGAMEVERSION >= 9818);

@@ -527,7 +527,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
                                            entryWidth(difficulty.empty() ? std::string("-") : _(difficulty)));
         }
     }
-    for(const char* role : {"Builder + Fighter", "Builder", "Fighter"}) {
+    for(const char* role : {"Both", "Builder", "Fighter"}) {
         seatCols.role = std::max(seatCols.role, entryWidth(_(role)));
     }
     const auto seatWidth = [&] { return seatCols.label + seatCols.box + seatCols.difficulty + seatCols.role; };
@@ -741,6 +741,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             seat.selector.setOnChange(std::bind(&CustomGamePlayers::onChangePlayerDropDownBoxes, this, std::placeholders::_1, slot));
             seat.selector.aiBox.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, slot));
             seat.fixedBox.setOnClick(std::bind(&CustomGamePlayers::onClickPlayerDropDownBox, this, slot));
+            applySeatEnabled(seat);    // the hidden AI box starts disabled too
 
             if(bLoadMultiplayer) {
                 // A loaded game keeps its players: the seat shows only what the save holds.
@@ -2129,7 +2130,7 @@ bool CustomGamePlayers::addPlayerToHouseInfo(GameInitSettings::HouseInfo& newHou
             } else {
                 // The house's second controller is its partner, named for its role like in the
                 // other menus that add one.
-                playerName = getHouseNameByNumber(houseID) + " (" + AIPlayerSelector::roleLabel(pPlayerData->getRole()) + ")";
+                playerName = getHouseNameByNumber(houseID) + " (" + AIPlayerSelector::partnerLabel(*pPlayerData) + ")";
             }
             playerClass = pPlayerData->getPlayerClass();
 
@@ -2698,6 +2699,7 @@ void CustomGamePlayers::setSeatFixed(int slot, const std::string& text, int play
     seat.fixedBox.setSelectedItem(0);
     seat.fixedBox.setVisible(true);
     seat.selector.aiBox.setVisible(false);
+    applySeatEnabled(seat);
 }
 
 void CustomGamePlayers::setSeatChoice(int slot, int player) {
@@ -2706,6 +2708,7 @@ void CustomGamePlayers::setSeatChoice(int slot, int player) {
     seat.fixedBox.clearAllEntries();
     seat.fixedBox.setVisible(false);
     seat.selector.aiBox.setVisible(true);
+    applySeatEnabled(seat);
     if(!selectSeatPlayer(slot, player)) {
         seat.selector.selectSpecial(PLAYER_OPEN);
     }
@@ -2733,10 +2736,19 @@ bool CustomGamePlayers::selectSeatPlayer(int slot, int player) {
 
 void CustomGamePlayers::setSeatEnabled(int slot, bool enabled) {
     Seat& seat = houseInfo[slot / 2].seats[slot % 2];
-    seat.fixedBox.setEnabled(enabled);
+    seat.enabled = enabled;
+    applySeatEnabled(seat);
+}
+
+void CustomGamePlayers::applySeatEnabled(Seat& seat) {
+    // Only the box the seat shows may be enabled. Keyboard focus moves through every enabled
+    // drop-down, visible or not, and a hidden one ignores the Tab that would move it on, so an
+    // enabled hidden box would trap the focus. Disabling one that has the focus passes it on.
+    seat.fixedBox.setEnabled(seat.enabled && seat.fixed);
+    const bool choice = seat.enabled && !seat.fixed;
     // Re-enabling refills Difficulty and Role, so only on a change.
-    if(seat.selector.aiBox.isEnabled() != enabled) {
-        seat.selector.setEnabled(enabled);
+    if(seat.selector.aiBox.isEnabled() != choice) {
+        seat.selector.setEnabled(choice);
     }
 }
 

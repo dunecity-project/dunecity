@@ -145,7 +145,7 @@ private:
     HBox spectateAIBox;                      ///< the AI that plays the player's house while watching (AI, Difficulty)
     DropDownBox skinBox;                     ///< single player: SimCity or Dune2 city-building art for every house
 
-    // Each AI row holds its selector's AI and Difficulty boxes; the partner's Role has its own row.
+    // Each AI row holds its selector's AI and Difficulty boxes; the partner's row also holds its Role.
     HBox partnerBox, allyAIBox, enemyAIBox;
     AIPlayerSelector partnerAI;              ///< None or a QuantBot sharing the player's house, any role
     AIPlayerSelector allyAI, enemyAI;        ///< their own houses: every AI, always Builder + Fighter

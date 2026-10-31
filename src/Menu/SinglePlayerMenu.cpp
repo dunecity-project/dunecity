@@ -153,7 +153,7 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
             humanHouseInfo.addPlayerInfo( GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS) );
 
             if(supportSelected) {
-                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")";
+                std::string allyName = getHouseNameByNumber((HOUSETYPE) houseID) + " (" + AIPlayerSelector::partnerLabel(*partner) + ")";
                 humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partnerClass));
             }
 

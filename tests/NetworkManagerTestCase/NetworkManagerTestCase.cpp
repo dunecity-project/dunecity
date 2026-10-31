@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 103;
+static constexpr int kWireProtocolVersion = 104;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -114,7 +114,9 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // 102 combines both incompatible protocol changes in this batch.
     // 103 adds the hashed continuous-ground-steps match rule in MOD9 (save 9874).
     // Off preserves the previous movement; on corrects chained steps and missed route ticks.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 103);
+    // 104 appends the QuantBot Fighter classes to the PlayerFactory list the lobby indexes
+    // (docs/ai-roles.md, save 9875).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 104);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

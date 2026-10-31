@@ -86,7 +86,7 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
                 info.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
             }
             if(const auto* partner = PlayerFactory::getByPlayerClass(house.partnerClass))
-                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")", house.partnerClass));
+                info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName + " (" + AIPlayerSelector::partnerLabel(*partner) + ")", house.partnerClass));
         } else {
             const auto* player = PlayerFactory::getByPlayerClass(house.playerClass);
             info.addPlayerInfo(GameInitSettings::PlayerInfo(houseName, player ? house.playerClass : std::string(DEFAULTAIPLAYERCLASS)));
@@ -113,7 +113,7 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 18;   ///< Map (7) + Game (5) + You start with (6)
+constexpr int kLeftColumnRows = 17;   ///< Map (7) + Game (5) + You start with (5)
 constexpr int kMultiplayerRows = 12;  ///< Map (7) + Game (4), and a row of slack
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
@@ -282,8 +282,10 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         // A partner shares the player's house: a QuantBot that builds, fights, or does both.
         partnerAI.addSpecial(_("None"), kNoPartner);
         partnerAI.setFamilies({"QuantBot"});
-        partnerBox.addWidget(&partnerAI.aiBox);
-        partnerBox.addWidget(&partnerAI.difficultyBox);
+        // AI, Difficulty and Role share the partner's row; the role labels are the longest.
+        partnerBox.addWidget(&partnerAI.aiBox, 1.0);
+        partnerBox.addWidget(&partnerAI.difficultyBox, 1.0);
+        partnerBox.addWidget(&partnerAI.roleBox, 1.5);
 
         addRow(0, row++, _("Mod"), &modBox);
         addRow(0, row++, _("Your house"), &houseBox);
@@ -292,7 +294,6 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addHeader(0, row++, _("You start with"));
         playerHeader = &captions[usedCaptions - 1];
         addRow(0, row++, _("AI partner"), &partnerBox);
-        addRow(0, row++, _("Partner role"), &partnerAI.roleBox);
         addRow(0, row++, _("Base"), &playerBaseBox);
         addRow(0, row++, _("Army (credits)"), &playerArmyBox);
         addRow(0, row++, _("City"), &playerCityBox);

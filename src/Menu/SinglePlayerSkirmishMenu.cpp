@@ -305,7 +305,7 @@ void SinglePlayerSkirmishMenu::onStart()
             humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(settings.general.playerName, HUMANPLAYERCLASS));
 
             if(partner != nullptr) {
-                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " (" + AIPlayerSelector::roleLabel(partner->getRole()) + ")";
+                std::string allyName = getHouseNameByNumber(static_cast<HOUSETYPE>(houseID)) + " (" + AIPlayerSelector::partnerLabel(*partner) + ")";
                 humanHouseInfo.addPlayerInfo(GameInitSettings::PlayerInfo(allyName, partner->getPlayerClass()));
             }
 

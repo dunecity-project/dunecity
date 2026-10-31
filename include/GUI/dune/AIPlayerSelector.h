@@ -128,14 +128,20 @@ public:
         return playerclass.empty() ? -1 : PlayerFactory::getIndexByPlayerClass(playerclass);
     }
 
-    /// The role as the Role box names it, translated; partner AIs carry it in their player name.
+    /// The role as the Role box names it, translated.
     static std::string roleLabel(AIRole role) {
         switch(role) {
             case AIRole::Builder: return _("Builder");
             case AIRole::Fighter: return _("Fighter");
             case AIRole::Both:
-            default:              return _("Builder + Fighter");
+            default:              return _("Both");
         }
+    }
+
+    /// What a partner AI sharing the human's house is called after the house name: its role, or
+    /// its AI's name when it plays Both.
+    static std::string partnerLabel(const PlayerFactory::PlayerData& partner) {
+        return partner.getRole() == AIRole::Both ? _(partner.getFamily()) : roleLabel(partner.getRole());
     }
 
     DropDownBox aiBox;

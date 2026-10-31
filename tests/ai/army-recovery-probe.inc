@@ -1645,6 +1645,25 @@ void runArmyRecoveryProbe(Game& game) {
             restored.save(again);
             require(std::string(again.getData(),again.getDataLength())==bytes,
                 "Re-saving a loaded bot produced different bytes");
+            // The role byte (save 9875, docs/ai-roles.md): every role round-trips, and an older
+            // save's support flag, stored in the same byte, loads as Builder or Both.
+            for(AIRole role:{AIRole::Fighter,AIRole::Builder,AIRole::Both}) {
+                const AIRole keepRole=bot->role;
+                bot->role=role;
+                OMemoryStream roleOut; roleOut.open();
+                bot->save(roleOut);
+                bot->role=keepRole;
+                const std::string roleBytes(roleOut.getData(),roleOut.getDataLength());
+                IMemoryStream roleIn(roleBytes.data(),roleBytes.size());
+                QuantBot reloaded(roleIn,owner);
+                require(reloaded.role==role,"A save and load changed the AI role");
+                if(role==AIRole::Fighter) continue;
+                currentGame->loadedSavegameVersion=SAVEGAMEVERSION_AI_ROLE-1;
+                IMemoryStream flagIn(roleBytes.data(),roleBytes.size());
+                QuantBot fromFlag(flagIn,owner);
+                currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                require(fromFlag.role==role,"An older save's support flag did not load as Builder or Both");
+            }
             // A legitimate very large wave must survive the round trip. An
             // unlimited or ten-thousand unit override can field far more than a
             // few thousand attackers, so the stream bound is a corruption check

@@ -16,8 +16,10 @@
 #include <ScreenBorder.h>
 #include <Tile.h>
 #include <players/Player.h>
+#include <players/QuantBot.h>
 #include <players/HumanPlayer.h>
 #include <structures/StructureBase.h>
+#include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
 #include <dunecity/CitySimulation.h>
@@ -99,6 +101,12 @@ Params caseParams(const std::string& name) {
     } else if(name == "partner-quantbot") {
         p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
         p.playerSide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
+    } else if(name == "partner-fighter") {
+        // The partner commands the army and never builds (docs/ai-roles.md); the idle human
+        // builds nothing either, so the house's base must not grow.
+        p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
+        p.playerSide = Side{"qBotFighterMedium", BaseSize::Medium, 3, 0};
         p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
     } else {
         skirmishRequire(false, "Unknown probe case " + name);
@@ -197,6 +205,35 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
     }
 }
 
+/// The Fighter partner of @a houseID plays a minute without queueing, upgrading or placing anything.
+void checkFighterPartner(Game& game, int houseID) {
+    const House* house = game.getHouse(houseID);
+    const QuantBot* fighter = nullptr;
+    for(const auto& player : house->getPlayerList())
+        if(const auto* bot = dynamic_cast<const QuantBot*>(player.get())) fighter = bot;
+    skirmishRequire(fighter != nullptr && fighter->getRole() == AIRole::Fighter, "The Fighter partner is not a Fighter QuantBot");
+    auto structuresOf = [&] {
+        int n = 0;
+        for(const StructureBase* s : structureList) n += s->getOwner() == house;
+        return n;
+    };
+    const int start = structuresOf();
+    const Uint32 end = game.getGameCycleCount() + MILLI2CYCLES(60 * 1000);
+    while(!game.finished && game.getGameCycleCount() < end) {
+        game.updateGameState();
+        for(const StructureBase* s : structureList) {
+            const auto* builder = dynamic_cast<const BuilderBase*>(s);
+            if(s->getOwner() != house || builder == nullptr) continue;
+            skirmishRequire(builder->getProductionQueueSize() == 0 && !builder->isUpgrading(),
+                            "The Fighter partner queued production or an upgrade");
+        }
+        skirmishRequire(structuresOf() <= start, "The Fighter partner's house placed a structure");
+    }
+    int hunters = 0;
+    for(const UnitBase* u : unitList) hunters += u->getOwner() == house && u->getAttackMode() == HUNT;
+    SDL_Log("SKIRMISH_PROBE: fighter partner minute structures=%d->%d hunting=%d", start, structuresOf(), hunters);
+}
+
 void runMatch(const std::string& name, bool smoke) {
     const Params params = caseParams(name);
     skirmishRequire(RandomSkirmish::modeForMod(params.mod) == params.mode, "Case mode does not match its mod's city flag");
@@ -222,6 +259,7 @@ void runMatch(const std::string& name, bool smoke) {
             if(s.house == result.houses[0].house && DuneCity::isCityZoneStructure(s.item)) { ++zones; sx += s.x; sy += s.y; }
         if(zones > 0) captureGame(*game, "ingame-player-city", Coord(sx / zones, sy / zones));
     }
+    if(name == "partner-fighter") checkFighterPartner(*game, result.houses[0].house);
 
     if(params.mode == Mode::DuneCity) {
         // Two complete city days: the first scan tallies the placed lots, the second has

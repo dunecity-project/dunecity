@@ -229,7 +229,11 @@ private:
         DropDownBox         fixedBox;
         AIPlayerSelector    selector;
         bool                fixed = true;
+        bool                enabled = true;     ///< whether the seat may be edited; only its shown box is enabled
     };
+
+    /// Enables the box the seat shows if the seat is enabled, and always disables the hidden one.
+    void applySeatEnabled(Seat& seat);
 
     class HouseInfo {
     public:

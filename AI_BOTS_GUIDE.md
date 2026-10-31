@@ -230,10 +230,10 @@ Custom:
 
 ---
 
-## 4. QuantBot Roles: Builder, Fighter, Builder + Fighter
+## 4. QuantBot Roles: Builder, Fighter, Both
 
 ### Overview
-Menus choose an AI, a difficulty and a role (docs/ai-roles.md). Builder + Fighter is the standard
+Menus choose an AI, a difficulty and a role (docs/ai-roles.md). Both is the standard
 QuantBot. The other two are teammate roles for an AI that shares the human's house.
 
 **Builder** (formerly "AI Support", classes `qBotSupport<Difficulty>`): handles base building and
