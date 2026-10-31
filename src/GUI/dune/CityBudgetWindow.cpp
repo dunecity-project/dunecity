@@ -282,7 +282,8 @@ void CityBudgetWindow::updateDisplay() {
     policeCostLabel.setText("Services: -" + credits(paying) + "/yr");
     const FixPoint netAnnual = FixPoint(projected) - paying;
     netLabel.setText(fmt::sprintf("Net Annual: %+.1f/yr", netAnnual.toDouble()));
-    perSecondLabel.setText(fmt::sprintf("Cash Flow: %+.1f/sec", (netAnnual / 60).toDouble()));
+    const int yearSeconds = static_cast<int>(DuneCity::cyclesPerCityYear() * 60 / DuneCity::kCyclesPerMinute);
+    perSecondLabel.setText(fmt::sprintf("Cash Flow: %+.1f/sec", (netAnnual / yearSeconds).toDouble()));
 
     // The slider's pending value is seeded once in the constructor so
     // subsequent +/- clicks edit the pending copy without being clobbered.

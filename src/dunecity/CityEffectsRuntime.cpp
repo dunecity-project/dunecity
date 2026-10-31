@@ -711,7 +711,7 @@ void CitySimulation::runEffectsScans() {
         const int displayedPopulation = houseState_[owner].getTotalPop() * kPopDisplayMultiplier;
         const int meanCrime = dangerousBuildings[index] ? districtCrimeTotal[index]/dangerousBuildings[index] : 0;
         readyStrength[index] = crimeUnrestProgress_[index].advance(cityCrimeUnrestRate(meanCrime,displayedPopulation),
-            districtTroops[index],kCyclesPerCityDay,unrestThreshold);
+            districtTroops[index],cyclesPerCityDay(),unrestThreshold);
     }
     const auto outbreaks=crimeOutbreakGroups(crimeUnrestProgress_,readyStrength,districtWidth,(mapHeight_+15)/16,
         unrestThreshold,MILLI2CYCLES(gatheringMs));
@@ -881,7 +881,7 @@ void CitySimulation::reconcileLoadedMapState(uint32_t gameCycleCount) {
         }
     }
 
-    const uint32_t totalDays = gameCycleCount / kCyclesPerCityDay;
+    const uint32_t totalDays = gameCycleCount / cyclesPerCityDay();
     cityYear_ = static_cast<int>(totalDays / kCityDaysPerYear);
     cityDay_  = static_cast<int>(totalDays % kCityDaysPerYear);
     lastProcessedDay_ = totalDays;
@@ -1057,7 +1057,7 @@ void CitySimulation::runZoneGrowth() {
         if (pLocalHouse && pLocalHouse->getHouseID() == h) {
             const uint8_t notice = civicDemandNotices_[h].update(
                 missingDemandCivics(vi), vo.civicDemandBlocked,
-                currentGame->getGameCycleCount(), kCyclesPerCityYear / 6);
+                currentGame->getGameCycleCount(), cyclesPerCityYear() / 6);
             if (notice == NeedStadium) {
                 currentGame->addUrgentMessageToNewsTicker(
                     _("Residents demand a Stadium. Build one to unlock residential growth."));
@@ -1608,7 +1608,7 @@ void CitySimulation::runDailyBudget() {
     const Map& map = *currentGameMap;
 
     // One structure walk collects the tax base and police costs. Roads have no upkeep.
-    // All annual amounts are paid fractionally over kBudgetTicksPerYear.
+    // All annual amounts are paid fractionally over the city year (cyclesPerCityYear() ticks).
     for (auto& hs : houseState_) {
         hs.taxBaseEighths = 0;
     }
@@ -1670,8 +1670,9 @@ void CitySimulation::runDailyBudget() {
 
         // Per-cycle payout: use FixPoint so fractional credits accumulate
         // smoothly (credits tick up like a harvester unloading spice).
-        const FixPoint tickRevenue = FixPoint(annualRevenue) / kBudgetTicksPerYear;
-        const FixPoint tickPaid    = FixPoint(annualPaid)    / kBudgetTicksPerYear;
+        const int budgetTicksPerYear = static_cast<int>(cyclesPerCityYear() / kCyclesPerBudgetTick);
+        const FixPoint tickRevenue = FixPoint(annualRevenue) / budgetTicksPerYear;
+        const FixPoint tickPaid    = FixPoint(annualPaid)    / budgetTicksPerYear;
         const FixPoint net = tickRevenue - tickPaid;
 
         // Gross receipts are the debriefing statistic: record them before the

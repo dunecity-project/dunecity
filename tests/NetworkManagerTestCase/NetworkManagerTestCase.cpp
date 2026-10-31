@@ -118,7 +118,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // (docs/ai-roles.md, save 9875).
     // 105 adds the MOD10 planned-construction rules (docs/preplace-queue.md, save 9876) and
     // removes the retired Mentat classes from the PlayerFactory list the lobby indexes.
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 105);
+    // 106 adds the MOD11 slow-city-year rule (save 9877).
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 106);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 

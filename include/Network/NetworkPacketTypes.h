@@ -324,7 +324,9 @@
 // 105: MOD10 planned construction: retry obstructions, clear allies, cancel enemies, and the
 //      shared yard queue. An older peer cannot read the two added settings bytes (save 9876).
 //      The Mentat AI is retired: its playerDataList entries are gone, so later AI indices moved.
-#define NETWORK_PROTOCOL_VERSION            105
+// 106: MOD11 slow city year: the city year (budget, zone growth) lasts 120 s. An older peer
+//      cannot read the added settings byte (save 9877).
+#define NETWORK_PROTOCOL_VERSION            106
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (10 * 1024 * 1024)  // 10MB max mod size

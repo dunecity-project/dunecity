@@ -146,7 +146,7 @@ int QuantBot::campaignIncomeForecastPerMinute() const {
     const auto* sim=currentGame->getCitySimulation();
     const auto& state=sim->getHouseState(getHouse()->getHouseID());
     const int tax=sim->getCityTax(),land=state.avgLandValue>0 ? state.avgLandValue : 128;
-    int income=DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,tax,land);
+    int income=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,tax,land));
     // Forecast committed/developing zones using the actual tax and population
     // functions, never a universal credits-per-zone constant.
     for (Uint32 kind:{Structure_ZoneResidential,Structure_ZoneCommercial,Structure_ZoneIndustrial}) {
@@ -158,9 +158,9 @@ int QuantBot::campaignIncomeForecastPerMinute() const {
             const int population=DuneCity::getStructurePopulation(structure,getMap().getTile(pos.x,pos.y)->getCityZoneDensity());
             expectedPopulation+=std::max(0,DuneCity::getZonePopulation(kind,1)-population);
         }
-        income+=DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(kind,expectedPopulation,1),tax,land)/2;
+        income+=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(kind,expectedPopulation,1),tax,land)/2);
     }
-    income-=state.lastPoliceExpense;
+    income-=DuneCity::annualPerMinute(state.lastPoliceExpense);
     if (getHouse()->isPowerRequired()) income-=getHouse()->getPowerRequirement()/8;
     if (campaignMapHasSpice) {
         const int workers=std::max(campaignHarvesterTarget(),campaignCommittedCount(Unit_Harvester)+campaignCommittedCount(Unit_RebelHarvester));

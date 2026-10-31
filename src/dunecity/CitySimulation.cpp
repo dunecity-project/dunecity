@@ -21,6 +21,11 @@
 
 namespace DuneCity {
 
+uint32_t cyclesPerCityYear() {
+    return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().slowCityYear
+        ? 2 * kCyclesPerMinute : kCyclesPerMinute;
+}
+
 CitySimulation::CitySimulation() = default;
 CitySimulation::~CitySimulation() = default;
 
@@ -87,7 +92,7 @@ void CitySimulation::load(InputStream& stream) {
         cityDay_                 = stream.readSint32();
         lastProcessedDay_        = stream.readUint32();
         lastTaxYear_             = stream.readUint32();
-        lastBudgetTick_          = (lastProcessedDay_ * kCyclesPerCityDay) / kCyclesPerBudgetTick;
+        lastBudgetTick_          = (lastProcessedDay_ * cyclesPerCityDay()) / kCyclesPerBudgetTick;
         stream.readSint32(); // retired economic-victory threshold (no population victory); discarded
 
         const int savedCityHouseCount = loadedVersion >= 9823
@@ -121,7 +126,7 @@ void CitySimulation::load(InputStream& stream) {
         cityDay_                 = stream.readSint32();
         lastProcessedDay_        = stream.readUint32();
         lastTaxYear_             = stream.readUint32();
-        lastBudgetTick_          = (lastProcessedDay_ * kCyclesPerCityDay) / kCyclesPerBudgetTick;
+        lastBudgetTick_          = (lastProcessedDay_ * cyclesPerCityDay()) / kCyclesPerBudgetTick;
         stream.readSint32(); // retired economic-victory threshold (no population victory); discarded
 
         // policeFunding / nominalCost / lastExpense / budget come AFTER global fields
@@ -287,9 +292,9 @@ void CitySimulation::advancePhase(uint32_t gameCycleCount) {
     if (!effectsEnabled_ || !initialized_) return;
 
     // City clock — SimCity Classic-style. A year is 48 day-ticks; each
-    // day ticks at gameCycleCount / kCyclesPerCityDay. Day ticks drive
+    // day ticks at gameCycleCount / cyclesPerCityDay(). Day ticks drive
     // effects scans and zone growth; year ticks drive taxes/budget.
-    const uint32_t totalDays = gameCycleCount / kCyclesPerCityDay;
+    const uint32_t totalDays = gameCycleCount / cyclesPerCityDay();
     cityYear_ = static_cast<int>(totalDays / kCityDaysPerYear);
     cityDay_  = static_cast<int>(totalDays % kCityDaysPerYear);
 

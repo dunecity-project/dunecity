@@ -214,7 +214,7 @@ void runCityIncomeProbe(Game& game) {
             startCycle, fixtureCash, startCredits, startReceipts.toDouble(),
             removedStructures, removedUnits, nearestForeign,
             house->getProducedPower(), house->getPowerRequirement(),
-            DuneCity::kCyclesPerCityYear, DuneCity::kCyclesPerCityDay, DuneCity::kBudgetTicksPerYear);
+            DuneCity::cyclesPerCityYear(), DuneCity::cyclesPerCityDay(), DuneCity::cyclesPerCityYear());
 
     auto logSnapshot = [&](const char* kind, Uint32 cycle) {
         const auto& state = sim->getHouseState(houseID);
@@ -240,7 +240,7 @@ void runCityIncomeProbe(Game& game) {
                 "gross_receipts=%.4f city_credits=%.4f other_credits=%.4f credits=%d power_paid=%.4f police_paid=%.4f "
                 "produced_power=%d required_power=%d structures=%d units=%d lots=[%s]",
                 label.c_str(), kind, cycle,
-                double(cycle - startCycle) / double(DuneCity::kCyclesPerCityYear),
+                double(cycle - startCycle) / double(DuneCity::kCyclesPerMinute),
                 sim->getCityYear(), sim->getCityDay(), sim->getCityTax(),
                 state.taxBaseEighths, state.avgLandValue, state.resPop, state.comPop, state.indPop,
                 zonePopulation, densities[0], densities[1], densities[2], densities[3],
@@ -254,10 +254,10 @@ void runCityIncomeProbe(Game& game) {
 
     // --- Controlled cycle loop -------------------------------------------
     // One iteration == one 16 ms game cycle: the same increment the real game
-    // loop uses, so kCyclesPerCityYear (3750) cycles == one simulated minute.
+    // loop uses, so kCyclesPerMinute (3750) cycles == one simulated minute.
     // Only the city simulation and the owning house's budget are advanced; no
     // world/unit/AI/combat update runs, so nothing else can move credits.
-    const Uint32 totalCycles = static_cast<Uint32>(minutes) * DuneCity::kCyclesPerCityYear;
+    const Uint32 totalCycles = static_cast<Uint32>(minutes) * DuneCity::kCyclesPerMinute;
     for(Uint32 step = 1; step <= totalCycles; ++step) {
         const Uint32 cycle = startCycle + step;
         game.gameCycleCount = cycle; // Test-only access, provided by -fno-access-control.
@@ -269,7 +269,7 @@ void runCityIncomeProbe(Game& game) {
         const auto beforeCity = house->getCityCredits();
         sim->advancePhase(cycle);
         measuredPolicePaid += (house->getCityTaxReceipts() - beforeTax) - (house->getCityCredits() - beforeCity);
-        if(step % DuneCity::kCyclesPerCityYear == 0) logSnapshot("minute", cycle);
+        if(step % DuneCity::kCyclesPerMinute == 0) logSnapshot("minute", cycle);
     }
 
     const Uint32 endCycle = game.getGameCycleCount();
@@ -289,8 +289,8 @@ void runCityIncomeProbe(Game& game) {
             label.c_str(), mix.c_str(), lots.size(), minutes, endCycle - startCycle,
             startCycle, endCycle, sim->getCityTax(), grossDelta.toDouble(), policePaid.toDouble(),
             powerPaid.toDouble(), cityDelta.toDouble(), netCredits,
-            grossDelta.toDouble() * DuneCity::kCyclesPerCityYear / double(endCycle - startCycle),
-            double(netCredits) * DuneCity::kCyclesPerCityYear / double(endCycle - startCycle),
+            grossDelta.toDouble() * DuneCity::kCyclesPerMinute / double(endCycle - startCycle),
+            double(netCredits) * DuneCity::kCyclesPerMinute / double(endCycle - startCycle),
             startCredits, house->getCredits(), fixtureCash,
             house->getNumStructures(), house->getNumUnits(),
             int(std::abs((grossDelta - policePaid - powerPaid).toDouble() - double(netCredits)) <= 1.0));

@@ -289,7 +289,7 @@ public:
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
-           continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true)  {
+           continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true), slowCityYear(true)  {
         }
 
 
@@ -313,7 +313,8 @@ public:
                     && (planBuildingSites == goc.planBuildingSites)
                     && (continuousGroundSteps == goc.continuousGroundSteps)
                     && (retryPlannedPlacement == goc.retryPlannedPlacement)
-                    && (sharedYardQueue == goc.sharedYardQueue);
+                    && (sharedYardQueue == goc.sharedYardQueue)
+                    && (slowCityYear == goc.slowCityYear);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -346,6 +347,7 @@ public:
             optStr += "/groundSteps=" + std::to_string(continuousGroundSteps);
             optStr += "/retryPlans=" + std::to_string(retryPlannedPlacement);
             optStr += "/sharedYardQueue=" + std::to_string(sharedYardQueue);
+            optStr += "/slowCityYear=" + std::to_string(slowCityYear);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -397,6 +399,9 @@ public:
         /// Planned orders form one house-wide queue: an idle Construction Yard takes the next
         /// waiting planned order from another yard's queue (docs/preplace-queue.md).
         bool        sharedYardQueue;
+        /// The city year (budget and zone growth) lasts 120 s instead of 60 s, so taxes, police
+        /// costs and growth run at half the classic pace (DuneCity::cyclesPerCityYear).
+        bool        slowCityYear;
 
         /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
         /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.

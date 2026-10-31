@@ -395,13 +395,13 @@ void QuantBot::planCityState(BuildPass& pass) {
         const int recentLosses = std::count_if(recentStructureLosses.begin(),recentStructureLosses.end(),[&](const auto& loss) {
             return getGameCycleCount()-loss.cycle < MILLI2CYCLES(180000);
         });
-        const int taxIncome = DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,sim->getCityTax(),pass.ownAvgLandValue);
+        const int taxIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,sim->getCityTax(),pass.ownAvgLandValue));
         const int powerCost = getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
         // Include queued services, so their completion cannot silently push
         // recurring costs above the limit between periodic city scans.
         int committedPoliceMilli=0;
         for (Uint32 item:{Structure_PoliceStation,Structure_GunTurret,Structure_RocketTurret})
-            committedPoliceMilli+=pass.itemCount[item]*(DuneCity::getPoliceAnnualCost(item)*1000).lround();
+            committedPoliceMilli+=pass.itemCount[item]*DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(item)*1000).lround());
         const int committedPoliceCost=(committedPoliceMilli+999)/1000;
         const int budgetPercent=CityServiceInvestmentPolicy::policingBudgetPercent(pass.money,taxIncome,powerCost,committedPoliceCost);
         const int affordable=CityServiceInvestmentPolicy::affordablePoliceFunding(taxIncome,powerCost,committedPoliceCost,budgetPercent);
@@ -856,7 +856,7 @@ void QuantBot::planCivicNeedAndTrips(BuildPass& pass) {
         }
     pass.fillCycles = (FixPoint(HARVESTERMAXSPICE)/HARVESTSPEED).lround();
     pass.unloadCycles = HARVESTERMAXSPICE*8/5;
-    pass.bayAnnualIncome = int(DuneCity::kCyclesPerCityYear)*15/32;
+    pass.bayAnnualIncome = int(DuneCity::kCyclesPerMinute)*15/32;
 
     pass.cityRefineryCatchup = false; pass.cityRefineryOpening = false;
 }
@@ -1108,7 +1108,7 @@ void QuantBot::forecastSpiceTrip(BuildPass& pass, Coord site) {
 }
 
 int QuantBot::workerAnnualIncome(BuildPass& pass) {
-    return HARVESTERMAXSPICE*int(DuneCity::kCyclesPerCityYear)
+    return HARVESTERMAXSPICE*int(DuneCity::kCyclesPerMinute)
         / std::max(1,pass.fillCycles+pass.unloadCycles+std::max(0,pass.refineryTripCycles));
 }
 
@@ -1121,7 +1121,7 @@ bool QuantBot::factoryPrefersHarvester(BuildPass& pass, const BuilderBase* facto
         std::min(workers*workerAnnualIncome(pass),refs*pass.bayAnnualIncome),
         std::min((workers+1)*workerAnnualIncome(pass),refs*pass.bayAnnualIncome),
         data[Unit_Harvester][houseID].buildtime*15,CityEconomyInvestmentPolicy::horizonCycles,
-        DuneCity::kCyclesPerCityYear)<=data[Unit_Harvester][houseID].price) return false;
+        DuneCity::kCyclesPerMinute)<=data[Unit_Harvester][houseID].price) return false;
     return CityEconomyInvestmentPolicy::preferFactoryHarvester(pass.itemCount[Unit_Harvester],
         pass.citySimEnabled ? pass.fundedHarvesterTarget : pass.spiceHarvesterTarget,pass.militaryValue,pass.militaryBudget,
         data[Unit_Harvester][houseID].price,canBuildMilitaryVehicle(pass, factory),
@@ -1182,18 +1182,18 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             + std::max(0,pass.itemCount[zone]-getHouse()->getNumItems(zone));
         const int demand = zone == Structure_ZoneResidential ? pass.ownResValve : industry ? pass.ownIndValve : pass.ownComValve;
         residential = setupInvestment(zone,site,power);
-        residential.annualIncome = DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(zone,population,level),tax,land);
+        residential.annualIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(zone,population,level),tax,land));
         if (zone != Structure_ZoneResidential) {
             // One C/I job supports eight residents. Credit only half the
             // tax of existing/pending housing currently short of jobs.
             const int waitingR = pass.developingZones[0] + std::max(0,pass.itemCount[Structure_ZoneResidential]
                 - getHouse()->getNumItems(Structure_ZoneResidential));
             const int shortage = std::max(0,pass.ownResPop+waitingR*16-(pass.ownComPop+pass.ownIndPop)*8);
-            residential.annualIncome += DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(
-                Structure_ZoneResidential,std::min(shortage,population*8),0),tax,land)/2;
+            residential.annualIncome += DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(
+                Structure_ZoneResidential,std::min(shortage,population*8),0),tax,land)/2);
         }
         residential.delayCycles = DuneCity::getCityBuildTime(zone,data[zone][houseID].buildtime)*15
-            + DuneCity::kCyclesPerCityYear; // construction plus ~60 s growth/foundation allowance
+            + DuneCity::cyclesPerCityYear(); // construction plus a city year of growth/foundation allowance
         residential.confidence = zoneConfidence(demand,zone==Structure_ZoneResidential ? 2000 : 1500,
             industry ? 0 : pollution,crime,unfinished);
     }
@@ -1222,7 +1222,7 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             const int before=std::min(workers*workerIncome,refs*bayIncome);
             const int after=std::min((workers+int(freeWorker))*workerIncome,(refs+1)*bayIncome);
             const int finiteReturn=QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,before,after,
-                refineryBuildCycles,horizonCycles,DuneCity::kCyclesPerCityYear);
+                refineryBuildCycles,horizonCycles,DuneCity::kCyclesPerMinute);
             refinery.projectedProceeds=std::min(refinery.projectedProceeds,
                 std::max(0,finiteReturn-refinery.annualUpkeep*4));
             if (pass.refineryFieldRisk>0) refinery.confidence/=2;
@@ -1233,15 +1233,15 @@ Uint32 QuantBot::chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, 
             }
         }
     }
-    const int taxIncome = DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,tax,land);
+    const int taxIncome = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,tax,land));
     int developingIncome = 0;
     for (Uint32 kind : {Structure_ZoneResidential,Structure_ZoneCommercial,Structure_ZoneIndustrial}) {
         const int pending = pass.developingZones[kind-Structure_ZoneResidential]
             + std::max(0,pass.itemCount[kind]-getHouse()->getNumItems(kind));
         const int demand = kind==Structure_ZoneResidential ? pass.ownResValve
             : kind==Structure_ZoneCommercial ? pass.ownComValve : pass.ownIndValve;
-        if (demand > 0) developingIncome += pending * DuneCity::computeAnnualTaxRevenue(
-            DuneCity::taxablePopulationEighths(kind,DuneCity::getZonePopulation(kind,1),1),tax,land)/2;
+        if (demand > 0) developingIncome += pending * DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+            DuneCity::taxablePopulationEighths(kind,DuneCity::getZonePopulation(kind,1),1),tax,land)/2);
     }
     const int fleetIncome = workers * workerIncome;
     // Positive demand and marginal return decide growth, independently of
@@ -1720,10 +1720,10 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
             && (victim->isAStructure() || victim->getItemID()==Unit_Harvester
                 || victim->getItemID()==Unit_RebelHarvester)) pass.defendingEconomy=true;
     }
-    pass.forecastTax = pass.citySimEnabled ? DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
-        currentGame->getCitySimulation()->getCityTax(),pass.ownAvgLandValue) : 0;
+    pass.forecastTax = pass.citySimEnabled ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
+        currentGame->getCitySimulation()->getCityTax(),pass.ownAvgLandValue)) : 0;
     pass.forecastUpkeep = pass.citySimEnabled ? getHouse()->getPowerRequirement()/8
-        + currentGame->getCitySimulation()->getHouseState(houseID).lastPoliceExpense : 0;
+        + DuneCity::annualPerMinute(currentGame->getCitySimulation()->getHouseState(houseID).lastPoliceExpense) : 0;
     // Future workers/bays count toward targets and commitments, but their
     // production is not income until delivered. Reforecast every planning pass.
     const int fleetRate=std::min(pass.actualHarvesters*workerAnnualIncome(pass),
@@ -2324,7 +2324,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 economy.cost=buildingCapitalCost(pass, economy.item);
                 economy.delay=data[economy.item][houseID].buildtime*15;
                 economy.proceeds=QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,before,after,
-                    economy.delay,CityEconomyInvestmentPolicy::horizonCycles,DuneCity::kCyclesPerCityYear);
+                    economy.delay,CityEconomyInvestmentPolicy::horizonCycles,DuneCity::kCyclesPerMinute);
                 if (pass.refineryFieldRisk>0) economy.proceeds/=2;
                 const bool useful=CityEconomyInvestmentPolicy::considerRefinery(pass.unloadingBacklog
                     || CityEconomyInvestmentPolicy::processingCapacityNeeded(refs,workers,workerAnnualIncome(pass),pass.bayAnnualIncome),
@@ -2451,7 +2451,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             const int before=std::min(pass.itemCount[Unit_Harvester]*workerAnnualIncome(pass),pass.itemCount[Structure_Refinery]*pass.bayAnnualIncome);
             const int after=std::min((pass.itemCount[Unit_Harvester]+1)*workerAnnualIncome(pass),pass.itemCount[Structure_Refinery]*pass.bayAnnualIncome);
             worker.proceeds=QuantBotSpendingPolicy::marginalSpice(pass.spiceShare,before,after,
-                worker.delay,CityEconomyInvestmentPolicy::horizonCycles,DuneCity::kCyclesPerCityYear);
+                worker.delay,CityEconomyInvestmentPolicy::horizonCycles,DuneCity::kCyclesPerMinute);
             if (pass.refineryFieldRisk>0) worker.proceeds/=2;
             if (!ready) worker.reason="producer_busy";
             else if (!campaignAvailableToBuild(builder,Unit_Harvester)) worker.reason="tech_unavailable";

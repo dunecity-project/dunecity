@@ -53,13 +53,14 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("ADOM");
+        const auto marker = bytes.rfind("BDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
-        // factor per house, MOD8's plan-sites byte, MOD9's ground-steps byte and MOD10's
-        // two planned-construction bytes. Removed so what follows is unmistakably not part of the block.
-        bytes.resize(bytes.size() - (1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2));
+        // factor per house, MOD8's plan-sites byte, MOD9's ground-steps byte, MOD10's two
+        // planned-construction bytes and MOD11's city-year byte. Removed so what follows is
+        // unmistakably not part of the block.
+        bytes.resize(bytes.size() - (1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2 + 1));
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -88,10 +89,10 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("ADOM");
+        const auto marker = bytes.rfind("BDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        std::size_t trailing = 2 + 1 + 1;                                    // MOD10 + MOD9 + MOD8 rule bytes
+        std::size_t trailing = 1 + 2 + 1 + 1;                                // MOD11 + MOD10 + MOD9 + MOD8 rule bytes
         if(older < '7') trailing += 4 + 4 * original.getHouseInfoList().size(); // MOD7
         if(older < '6') trailing += 1;                                       // MOD6 rule byte
         if(older < '5') trailing += 4;                                       // MOD5 yard limit
@@ -105,7 +106,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
 
     SECTION("an announced MOD8 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 4);   // the two MOD10 bytes, the MOD9 byte and the MOD8 byte before them
+        bytes.resize(bytes.size() - 5);   // the MOD11 byte, two MOD10 bytes, the MOD9 byte and the MOD8 byte before them
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -130,10 +131,10 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("ADOM");
+        const auto marker = bytes.rfind("BDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
-        bytes.resize(bytes.size() - 3);   // the MOD9 and two MOD10 bytes MOD8 does not know about
+        bytes.resize(bytes.size() - 4);   // the MOD9, two MOD10 and MOD11 bytes MOD8 does not know about
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -143,7 +144,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("an announced MOD9 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 3);   // the two MOD10 bytes and the MOD9 byte before them
+        bytes.resize(bytes.size() - 4);   // the MOD11 byte, two MOD10 bytes and the MOD9 byte before them
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -182,10 +183,10 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("ADOM");
+        const auto marker = bytes.rfind("BDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        bytes.resize(bytes.size() - (older == '8' ? 3 : 2));
+        bytes.resize(bytes.size() - (older == '8' ? 4 : 3));
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -195,6 +196,56 @@ TEST_CASE("The planned-construction rules participate in match identity and save
     }
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
+        std::string bytes(out.getData(), out.getDataLength());
+        const auto marker = bytes.rfind("BDOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = 'A';
+        bytes.resize(bytes.size() - 2);   // MOD11's byte and the last MOD10 byte
+        IMemoryStream truncated(bytes.data(), bytes.size());
+        REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
+    }
+}
+
+TEST_CASE("Slow City Year participates in match identity and save compatibility",
+          "[citybudget][network][save]") {
+    SettingsClass::GameOptionsClass current;
+    REQUIRE(current.slowCityYear);
+    auto classic = current;
+    classic.slowCityYear = false;
+    REQUIRE(classic != current);
+    REQUIRE(classic.getHash() != current.getHash());
+
+    auto original = makeCoop(true, false);
+    original.setGameOptions(classic);
+    OMemoryStream out; out.open(); original.save(out);
+
+    SECTION("the rule round-trips") {
+        IMemoryStream in(out.getData(), out.getDataLength());
+        GameInitSettings restored(in);
+        REQUIRE_FALSE(restored.getGameOptions().slowCityYear);
+        REQUIRE(restored.getGameOptions().getHash() == classic.getHash());
+    }
+
+    SECTION("MOD10 streams (1.0.860) keep the 60 s year and their planned-construction rules") {
+        auto planned = current;
+        planned.retryPlannedPlacement = false;
+        auto mod10 = makeCoop(true, false);
+        mod10.setGameOptions(planned);
+        OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
+        std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
+        const auto marker = bytes.rfind("BDOM");
+        REQUIRE(marker != std::string::npos);
+        bytes[marker] = 'A';
+        bytes.back() = 't';   // MOD10 does not own the MOD11 byte; it is the following data
+        IMemoryStream oldInput(bytes.data(), bytes.size());
+        GameInitSettings old(oldInput);
+        REQUIRE_FALSE(old.getGameOptions().slowCityYear);
+        REQUIRE_FALSE(old.getGameOptions().retryPlannedPlacement);
+        REQUIRE(old.getGameOptions().sharedYardQueue);
+        REQUIRE(oldInput.readUint8() == static_cast<Uint8>('t'));
+    }
+
+    SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
         bytes.pop_back();
         IMemoryStream truncated(bytes.data(), bytes.size());
@@ -252,11 +303,11 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("ADOM");
+        const auto marker = bytes.rfind("BDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
-        std::size_t trailing = 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD10 + MOD9 + MOD8 + MOD7
+        std::size_t trailing = 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD11 + MOD10 + MOD9 + MOD8 + MOD7
         if(older < '6') trailing += 1;                                   // MOD6 rule byte
         if(older < '5') trailing += 4;                                   // MOD5 yard limit
         bytes.resize(bytes.size() - trailing);
@@ -583,13 +634,13 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD10 fails closed", "[wor
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("ADOM");
+    const auto marker = bytes.find("BDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
         // three strings, two revision integers, yard limit, original damage,
-        // then MOD7's factor count and one factor per house, then MOD8's, MOD9's and MOD10's rule bytes
-        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2);
+        // then MOD7's factor count and one factor per house, then MOD8's, MOD9's, MOD10's and MOD11's rule bytes
+        bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2 - 1);
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
         REQUIRE(restored.getModRevisionHash().empty());

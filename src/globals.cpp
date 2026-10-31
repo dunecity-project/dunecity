@@ -161,6 +161,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Continuous Ground Steps", options.continuousGroundSteps);
     config.setBoolValue(section, "Retry Planned Placement", options.retryPlannedPlacement);
     config.setBoolValue(section, "Shared Yard Queue", options.sharedYardQueue);
+    config.setBoolValue(section, "Slow City Year", options.slowCityYear);
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -193,6 +194,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Continuous Ground Steps", options.continuousGroundSteps);
     readBool("Retry Planned Placement", options.retryPlannedPlacement);
     readBool("Shared Yard Queue", options.sharedYardQueue);
+    readBool("Slow City Year", options.slowCityYear);
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {

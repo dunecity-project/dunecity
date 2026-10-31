@@ -1149,7 +1149,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
                     std::min(pass.itemCount[item]*workerAnnualIncome(pass),pass.itemCount[Structure_Refinery]*pass.bayAnnualIncome),
                     std::min((pass.itemCount[item]+1)*workerAnnualIncome(pass),pass.itemCount[Structure_Refinery]*pass.bayAnnualIncome),
                     MILLI2CYCLES(30000),CityEconomyInvestmentPolicy::horizonCycles,
-                    DuneCity::kCyclesPerCityYear)<=price) return false;
+                    DuneCity::kCyclesPerMinute)<=price) return false;
             if (item == Unit_Harvester && getHouse()->getMaxHarvesters() > 0
                 && pass.itemCount[item] >= getHouse()->getMaxHarvesters()) return false;
             if (price <= 0 || cash < price || choam.getNumAvailable(item) <= 0

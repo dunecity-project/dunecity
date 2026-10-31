@@ -22,9 +22,17 @@ integer truncation of tiny cities. Explicit zero land value earns zero; AI
 forecasts can assume 128 for unknown future land. All values are deterministic
 integer arithmetic. No per-lot tax calculation or new save-format field.
 
-One city year = 3,750 cycles = 60 simulated seconds. Annual credits therefore
-also equal credits per simulated minute in DuneCity. Simulation speed changes
-both taxes and harvesting; do not use wall-clock FPS to compare them.
+One classic city year = 3,750 cycles = 60 simulated seconds, so annual credits
+equal credits per simulated minute. Since 1.0.861 the hashed match rule
+`Slow City Year` (ini key, default on; GameInitSettings MOD11, save 9877,
+protocol 106) doubles the year to 7,500 cycles = 120 seconds: taxes and police
+are paid at half the rate per minute, and zone growth (48 day ticks a year) runs
+at half speed. Games saved before the rule keep the 60-second year. The AI keeps
+the minute as its forecast unit and converts city amounts with
+`DuneCity::annualPerMinute`, so its behaviour is unchanged when the rule is off.
+The per-minute figures below are for the classic year; halve them with the rule.
+Simulation speed changes both taxes and harvesting; do not use wall-clock FPS to
+compare them.
 
 ## Income readout
 

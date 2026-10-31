@@ -1842,14 +1842,15 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 // Grow income before adding another station to an underfunded city.
                 if (gameMode==GameMode::Custom && !builderOnly() && stationCommitted
                     && hs.policeFundingPercent<100) continue;
-                const int annualTax=DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue);
+                const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
                 const int annualPower=getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
                 int committedCost=hs.nominalPoliceCost;
                 for (const auto& plan:reservedStructures)
                     if (plan.first!=planningBuilder)
                         committedCost+=DuneCity::getPoliceAnnualCost(plan.second.item).lround();
+                committedCost=DuneCity::annualPerMinute(committedCost);
                 const bool overBudget=gameMode==GameMode::Custom && !builderOnly()
-                    && committedCost+DuneCity::getPoliceAnnualCost(Structure_PoliceStation).lround()
+                    && committedCost+DuneCity::annualPerMinute(DuneCity::getPoliceAnnualCost(Structure_PoliceStation).lround())
                     > CityServiceInvestmentPolicy::policingAllowance(annualTax,annualPower,
                         CityServiceInvestmentPolicy::policingBudgetPercent(getHouse()->getCredits(),annualTax,annualPower,committedCost));
                 // Prefer cheaper useful relief before accepting another permanent
@@ -2050,7 +2051,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                     value.overlapPenalty += CityServiceInvestmentPolicy::stationOverlapCost(value.buildCost,
                         std::max(std::abs(x-p.x),std::abs(y-p.y)));
             }
-            value.upkeep = (DuneCity::getPoliceAnnualCost(item)*state.policeFundingPercent/100).lround();
+            value.upkeep = DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(item)*state.policeFundingPercent/100).lround());
             const int power = std::max(0,data[item][house].power);
             const int spare = std::max(0,getHouse()->getProducedPower()-getHouse()->getPowerRequirement());
             // Power upkeep (50-second budget year / 15-second power bill) plus
@@ -2088,8 +2089,8 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 if (powered && p.demand > 0 && p.population > 0 && p.nextPopulation > p.population
                     && (p.item == Structure_ZoneResidential || p.item == Structure_ZoneCommercial)
                     && p.pollution < 128 && gain > 0)
-                    growthTax += DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(p.item,p.nextPopulation-p.population,0),
-                        sim->getCityTax(),std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64);
+                    growthTax += DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(p.item,p.nextPopulation-p.population,0),
+                        sim->getCityTax(),std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64));
                 if (powered && item == Structure_RocketTurret && distance <= data[item][house].weaponrange)
                     value.defense += p.threat;
             });

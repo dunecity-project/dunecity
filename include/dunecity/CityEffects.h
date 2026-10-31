@@ -986,25 +986,32 @@ constexpr int kGrowthRateDecay = 1;
 
 // --- Tax / city-year cadence -------------------------------------------------
 
-/// Number of game cycles per simulated city year. At GAMESPEED_DEFAULT
-/// (16 ms/cycle), 60 s of wall-clock = 60000/16 = 3750 cycles. The year
-/// is the budget unit (taxes/police paid annually).
-constexpr uint32_t kCyclesPerCityYear = 3750;
+/// Game cycles per minute at GAMESPEED_DEFAULT (16 ms/cycle): 60000/16 = 3750. The classic
+/// city year; the AI's economic forecasts use it as their fixed time unit.
+constexpr uint32_t kCyclesPerMinute = 3750;
+
+/// Game cycles per simulated city year: the budget unit (taxes and police are annual amounts,
+/// paid a cycle at a time) and the clock of zone growth (48 day ticks a year). 7500 (120 s)
+/// with the Slow City Year match rule, the classic 3750 (60 s) without it or without a game.
+uint32_t cyclesPerCityYear();
 
 /// SimCity Classic divides a year into 48 cityTime units (4 weeks × 12
 /// months). Each unit is a "day tick" — the cadence at which we run
-/// effects scans and roll for zone growth. With kCyclesPerCityYear=3750,
-/// that's ~78 cycles ≈ 1.25 s per day. Zones get ~48 growth attempts
-/// per year, gated stochastically inside runZoneGrowth() so population
-/// climbs gradually rather than in big steps.
+/// effects scans and roll for zone growth (~1.25 s a day with a 60 s year,
+/// ~2.5 s with 120 s). Zones get ~48 growth attempts per year, gated
+/// stochastically inside runZoneGrowth() so population climbs gradually.
 constexpr int      kCityDaysPerYear   = 48;
-constexpr uint32_t kCyclesPerCityDay  = kCyclesPerCityYear / kCityDaysPerYear;
+inline uint32_t cyclesPerCityDay() { return cyclesPerCityYear() / kCityDaysPerYear; }
+
+/// An annual city amount (tax, police cost) in credits per minute, the AI's forecast unit.
+inline int32_t annualPerMinute(int64_t annual) {
+    return static_cast<int32_t>(annual * kCyclesPerMinute / cyclesPerCityYear());
+}
 
 /// Budget tick cadence: every game cycle (smooth credits like harvester
-/// unloading). Each tick pays 1/3750th of the annual budget via FixPoint
-/// arithmetic so fractional credits accumulate correctly.
+/// unloading). Each tick pays 1/cyclesPerCityYear() of the annual budget via
+/// FixPoint arithmetic so fractional credits accumulate correctly.
 constexpr uint32_t kCyclesPerBudgetTick = 1;
-constexpr int      kBudgetTicksPerYear  = static_cast<int>(kCyclesPerCityYear);
 
 /// Micropolis easy tax: (R/8 + C + I) * landValue/120 * taxRate * 1.4.
 /// Input is tax population in EIGHTHS, excluding government except Palace.

@@ -150,7 +150,7 @@ void runGrowthInstallmentProbe(Game& game) {
     // has started, so the clock has to move with it. Calling it repeatedly on one
     // cycle scans once and leaves the populations stale.
     auto advanceCityDay=[&]() {
-        game.gameCycleCount+=DuneCity::kCyclesPerCityDay+1;
+        game.gameCycleCount+=DuneCity::cyclesPerCityDay()+1;
         sim->advancePhase(game.getGameCycleCount());
     };
     for(int i=0;i<16;++i)advanceCityDay();
@@ -194,8 +194,8 @@ void runGrowthInstallmentProbe(Game& game) {
     // own tax tables. Every scenario below is deliberately outside it.
     auto fourMinuteForecast=[&]() {
         const auto& hs=sim->getHouseState(houseID);
-        const int annualTax=DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue);
-        const int upkeep=house->getPowerRequirement()/8+hs.lastPoliceExpense;
+        const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
+        const int upkeep=house->getPowerRequirement()/8+DuneCity::annualPerMinute(hs.lastPoliceExpense);
         return (annualTax-upkeep)*QuantBotSpendingPolicy::horizonMinutes;
     };
     // Pin a small, steady tax base: the point under test is the funding rule, not

@@ -824,6 +824,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Continuous Ground Steps", settings.gameOptions.continuousGroundSteps);
     myINIFile.setBoolValue("Game Options", "Retry Planned Placement", settings.gameOptions.retryPlannedPlacement);
     myINIFile.setBoolValue("Game Options", "Shared Yard Queue", settings.gameOptions.sharedYardQueue);
+    myINIFile.setBoolValue("Game Options", "Slow City Year", settings.gameOptions.slowCityYear);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);

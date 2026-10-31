@@ -7,7 +7,9 @@
 namespace CityEconomyInvestmentPolicy {
 // Compare both investments over four simulated minutes, including the time
 // before their first income. These are forecasts, not measured cash flows.
-constexpr int horizonCycles = 4 * DuneCity::kCyclesPerCityYear;
+// "Annual" amounts here are per minute (DuneCity::annualPerMinute converts city
+// budget amounts, whose year may be longer).
+constexpr int horizonCycles = 4 * DuneCity::kCyclesPerMinute;
 struct Investment {
     int cost = 0;
     int annualIncome = 0;
@@ -20,7 +22,7 @@ struct Investment {
             return int(int64_t(projectedProceeds) * std::clamp(confidence,0,1000) / 1000);
         return static_cast<int>(int64_t(std::max(0,annualIncome-annualUpkeep))
             * std::max(0,horizonCycles-delayCycles) * std::clamp(confidence,0,1000)
-            / (DuneCity::kCyclesPerCityYear * 1000));
+            / (DuneCity::kCyclesPerMinute * 1000));
     }
 };
 // Refinery capacity must follow the fleet, never cap factory production.
@@ -227,8 +229,8 @@ inline int refineryProceeds(int workers, int refineries, bool freeWorker,
     const int addedWorker = marginalSpiceIncome(workers,refineries,freeWorker,workerIncome,bayIncome)-relief;
     const int deliveries = operating/std::max(1,roundTripCycles);
     const int64_t receipts = int64_t(deliveries)*load*addedWorker/std::max(1,workerIncome);
-    const int64_t released = int64_t(relief)*std::max(0,operating-unloadCycles)/DuneCity::kCyclesPerCityYear;
-    const int64_t bills = int64_t(upkeep)*operating/DuneCity::kCyclesPerCityYear;
+    const int64_t released = int64_t(relief)*std::max(0,operating-unloadCycles)/DuneCity::kCyclesPerMinute;
+    const int64_t bills = int64_t(upkeep)*operating/DuneCity::kCyclesPerMinute;
     return int(std::max<int64_t>(0,receipts+released-bills));
 }
 inline int zoneConfidence(int demand, int maximum, int pollution, int crime, int unfinished) {

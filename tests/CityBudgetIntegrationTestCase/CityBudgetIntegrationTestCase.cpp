@@ -223,9 +223,10 @@ TEST_CASE("City tax census retains fractional housing and the Palace dual income
     CHECK(computeAnnualTaxRevenue(home+shop+industry+palace,7,128) == 397);
     // Many small plots are aggregated before rounding; one house has R=2.
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneResidential,2,0),7,128) == 522);
-    // A year of fractional cycle payouts totals the annual bill, not 3750 rounded bills.
-    const FixPoint tick=FixPoint(computeAnnualTaxRevenue(palace,7,128))/kBudgetTicksPerYear;
+    // A year of fractional cycle payouts totals the annual bill, not one rounded bill per cycle.
+    const int ticksPerYear=static_cast<int>(cyclesPerCityYear());
+    const FixPoint tick=FixPoint(computeAnnualTaxRevenue(palace,7,128))/ticksPerYear;
     FixPoint paid=0;
-    for (int n=0;n<kBudgetTicksPerYear;++n) paid+=tick;
+    for (int n=0;n<ticksPerYear;++n) paid+=tick;
     CHECK(paid.toDouble() == Catch::Approx(104).margin(0.001));
 }

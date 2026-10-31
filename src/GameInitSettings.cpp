@@ -40,6 +40,7 @@ constexpr Uint32 GAMEINIT_MOD3_MARKER = 0x4D4F4433;  // "MOD3": graphics-only Du
 constexpr Uint32 GAMEINIT_MOD7_MARKER = 0x4D4F4437; // MOD7: per-house spice income multiplier
 constexpr Uint32 GAMEINIT_MOD8_MARKER = 0x4D4F4438; // MOD8: plan-building-sites match rule
 constexpr Uint32 GAMEINIT_MOD10_MARKER = 0x4D4F4441; // MODA: retry planned placement (MOD10)
+constexpr Uint32 GAMEINIT_MOD11_MARKER = 0x4D4F4442; // MODB: slow city year (MOD11)
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -49,7 +50,8 @@ constexpr bool isKnownModMarker(Uint32 marker) {
         || marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD2 and later carry the per-house colour array.
@@ -62,7 +64,7 @@ constexpr bool markerHasGraphicsSkins(Uint32 marker) {
     return marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
@@ -70,38 +72,46 @@ constexpr bool markerHasGraphicsSkins(Uint32 marker) {
 constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
     return marker == GAMEINIT_MOD4_MARKER || marker == GAMEINIT_MOD5_MARKER
         || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
-        || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD5 and later carry the construction yard limit.
 constexpr bool markerHasYardLimit(Uint32 marker) {
     return marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD6 and later carry the original-unit-damage rule.
 constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
     return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
-        || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD7 and later carry the per-house spice income multipliers.
 constexpr bool markerHasSpiceIncome(Uint32 marker) {
     return marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD8 and later carry the plan-building-sites rule, after the spice income block. Older
 /// markers keep the default (on) and read nothing more.
 constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
-    return marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+    return marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER;
 }
 
 /// MOD9 and later carry the continuous-ground-steps rule, after the plan-building-sites byte.
 /// Older markers keep the default (off: the 1.0.852 movement) and read nothing more.
 constexpr bool markerHasContinuousGroundSteps(Uint32 marker) {
-    return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER;
+    return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+}
+
+/// MOD10 and later carry the planned-construction rules (retry, shared yard queue).
+constexpr bool markerHasPlannedConstruction(Uint32 marker) {
+    return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
 }
 }
 
@@ -213,6 +223,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.continuousGroundSteps = false;
     gameOptions.retryPlannedPlacement = false;
     gameOptions.sharedYardQueue = false;
+    gameOptions.slowCityYear = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
@@ -287,9 +298,12 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             if(markerHasContinuousGroundSteps(modMarker)) {
                 gameOptions.continuousGroundSteps = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD10_MARKER) {
+            if(markerHasPlannedConstruction(modMarker)) {
                 gameOptions.retryPlannedPlacement = stream.readBool();
                 gameOptions.sharedYardQueue = stream.readBool();
+            }
+            if(modMarker == GAMEINIT_MOD11_MARKER) {
+                gameOptions.slowCityYear = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -417,7 +431,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD10_MARKER);
+    stream.writeUint32(GAMEINIT_MOD11_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -458,6 +472,8 @@ void GameInitSettings::save(OutputStream& stream) const {
     // MOD10: the planned-construction rules; streams without them read as off (legacy).
     stream.writeBool(gameOptions.retryPlannedPlacement);
     stream.writeBool(gameOptions.sharedYardQueue);
+    // MOD11: the slow city year; streams without it keep the 60 s year.
+    stream.writeBool(gameOptions.slowCityYear);
 }
 
 

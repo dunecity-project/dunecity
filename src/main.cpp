@@ -1343,6 +1343,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.continuousGroundSteps = myINIFile.getBoolValue("Game Options", "Continuous Ground Steps", false);
             settings.gameOptions.retryPlannedPlacement = myINIFile.getBoolValue("Game Options", "Retry Planned Placement", true);
             settings.gameOptions.sharedYardQueue = myINIFile.getBoolValue("Game Options", "Shared Yard Queue", true);
+            settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();
