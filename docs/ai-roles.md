@@ -4,7 +4,7 @@ Every menu that picks an AI shows three choices instead of one long list:
 
 | Box | Values |
 |---|---|
-| AI | QuantBot, Mentat, SmartBot, AI Player, Campaign AI (each menu offers the ones it supports) |
+| AI | QuantBot, SmartBot, AI Player, Campaign AI (each menu offers the ones it supports) |
 | Difficulty | the AI's levels, e.g. QuantBot Easy, Medium, Hard, Brutal, Defend |
 | Role | Both, Builder, Fighter (only for AIs that implement roles; hidden where only opponents are picked) |
 
@@ -41,11 +41,15 @@ Both behave exactly as the support and normal QuantBot did before.
 The class string stays the identity that saves, replays, lobby events and match reports carry
 (`PlayerFactory`):
 
-| Role | QuantBot class | Mentat class |
-|---|---|---|
-| Both | `qBot<Difficulty>` | `mentat<Difficulty>` |
-| Builder | `qBotSupport<Difficulty>` | `mentatSupport<Difficulty>` |
-| Fighter | `qBotFighter<Difficulty>` | — |
+| Role | QuantBot class |
+|---|---|
+| Both | `qBot<Difficulty>` |
+| Builder | `qBotSupport<Difficulty>` |
+| Fighter | `qBotFighter<Difficulty>` |
+
+The retired Mentat AI's classes (`mentat<Difficulty>`, `mentatSupport<Difficulty>`) are never listed;
+`getByPlayerClass` still resolves them to the QuantBot Both and Builder classes so old saves, replays and
+settings load.
 
 `PlayerFactory::PlayerData` records each class's family, difficulty label and role;
 `getAIFamilies()`, `getDifficulties()`, `getRoles()` and `find()` drive the menus through

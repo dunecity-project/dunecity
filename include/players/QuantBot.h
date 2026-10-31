@@ -71,6 +71,9 @@ public:
 
     QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, AIRole role = AIRole::Both);
     QuantBot(InputStream& stream, House* associatedHouse);
+    /// Tag: the stream holds a player saved by the retired Mentat AI (PlayerFactory's legacy table).
+    struct RetiredMentatSave {};
+    QuantBot(InputStream& stream, House* associatedHouse, RetiredMentatSave);
     void init();
     ~QuantBot();
     void save(OutputStream& stream) const override;
@@ -200,6 +203,9 @@ public:
     void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) override;
 
 private:
+    /// Reads the saved fields both stream constructors start with (difficulty to placeLocations).
+    void loadSavedPrefix(InputStream& stream);
+
 
     struct OrnithopterStrikeTeam {
         int minMembers = 0;

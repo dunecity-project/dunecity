@@ -22,11 +22,12 @@
 #include <players/CampaignAIPlayer.h>
 #include <players/SmartBot.h>
 #include <players/QuantBot.h>
-#include <players/Mentat.h>
 
+#include <tuple>
 #include <utility>
 
 std::vector<PlayerFactory::PlayerData> PlayerFactory::playerDataList;
+std::vector<std::pair<std::string, PlayerFactory::PlayerData>> PlayerFactory::retiredPlayerDataList;
 
 namespace {
 
@@ -36,14 +37,6 @@ const std::pair<const char*, QuantBot::Difficulty> kQuantBotDifficulties[] = {
     {"Hard", QuantBot::Difficulty::Hard},
     {"Brutal", QuantBot::Difficulty::Brutal},
     {"Defend", QuantBot::Difficulty::Defend},
-};
-
-const std::pair<const char*, Mentat::Difficulty> kMentatDifficulties[] = {
-    {"Defend", Mentat::Difficulty::Defend},
-    {"Easy", Mentat::Difficulty::Easy},
-    {"Medium", Mentat::Difficulty::Medium},
-    {"Hard", Mentat::Difficulty::Hard},
-    {"Brutal", Mentat::Difficulty::Brutal},
 };
 
 } // namespace
@@ -73,24 +66,20 @@ void PlayerFactory::registerAllPlayers() {
     addQuantBot("qBotSupport", AIRole::Builder, kQuantBotDifficulties[4]);
     for(int i = 0; i < 4; i++) addQuantBot("qBotSupport", AIRole::Builder, kQuantBotDifficulties[i]);
 
-    // Mentat (refactored AI)
-    for(const auto& level : kMentatDifficulties) {
-        const std::string difficulty = level.first;
-        const Mentat::Difficulty value = level.second;
-        playerDataList.emplace_back("mentat" + difficulty, "Mentat (" + difficulty + ")",
-            [value](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, value); },
-            [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); },
-            "Mentat", difficulty, AIRole::Both);
-    }
-
-    // Mentat Support variants
-    for(const auto& level : kMentatDifficulties) {
-        const std::string difficulty = level.first;
-        const Mentat::Difficulty value = level.second;
-        playerDataList.emplace_back("mentatSupport" + difficulty, "Mentat Support (" + difficulty + ")",
-            [value](House* h, const std::string& n) { return std::make_unique<Mentat>(h, n, value, true); },
-            [](InputStream& s, House* h) { return std::make_unique<Mentat>(s, h); },
-            "Mentat", difficulty, AIRole::Builder);
+    // The Mentat AI was retired on 2026-10-31 (its build structure lives on in QuantBot). Saves,
+    // replays and settings naming its classes resolve to the equivalent QuantBot; its stream is the
+    // QuantBot prefix plus a support flag (QuantBot::RetiredMentatSave). Never listed.
+    for(const auto& [prefix, retiredPrefix, role] : {std::make_tuple("qBot", "mentat", AIRole::Both),
+                                                     std::make_tuple("qBotSupport", "mentatSupport", AIRole::Builder)}) {
+        for(const auto& level : kQuantBotDifficulties) {
+            const std::string difficulty = level.first;
+            const QuantBot::Difficulty value = level.second;
+            retiredPlayerDataList.emplace_back(retiredPrefix + difficulty, PlayerData(prefix + difficulty,
+                role == AIRole::Both ? "QuantBot " + difficulty : "QuantBot " + difficulty + " (" + aiRoleName(role) + ")",
+                [value, role = role](House* house, const std::string& playername) { return std::make_unique<QuantBot>(house, playername, value, role); },
+                [](InputStream& inputStream, House* house) { return std::make_unique<QuantBot>(inputStream, house, QuantBot::RetiredMentatSave{}); },
+                "QuantBot", difficulty, role));
+        }
     }
 
     playerDataList.emplace_back(  "SmartBot",

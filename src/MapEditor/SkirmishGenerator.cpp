@@ -1335,8 +1335,8 @@ int powerBalance(const std::vector<int>& items, int house, int extraDraw, const 
 void addPower(std::vector<int>& items, int house, int techLevel, int extraDraw, const Catalogue& catalogue) {
     int required = extraDraw;
     for(int item : items) required += std::max(0, catalogue.rule(item, house).power);
-    // A tenth spare, the buffer the AI's own city-power rule keeps (MentatBuildOrder), so the
-    // first growth does not black the city out.
+    // A tenth spare, so the first growth does not black the city out; from there QuantBot's
+    // city-power rule (QuantBotBuildPolicy::cityPowerReserve, "CITY-POWER") keeps its own reserve.
     const int deficit = 1 + std::max(0, required) / 10 - powerBalance(items, house, extraDraw, catalogue);
     if(required <= 0 || deficit <= 0) return;
     const ItemRule& trap = catalogue.rule(Structure_WindTrap, house);

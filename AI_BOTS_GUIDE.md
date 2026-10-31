@@ -2,7 +2,9 @@
 
 ## Overview
 
-Dune Legacy includes four AI implementations with varying levels of sophistication. This document explains how each bot operates.
+Dune Legacy includes three AI implementations with varying levels of sophistication. This document explains how each bot operates.
+
+Mentat, a refactored fork of QuantBot, had its `build()` structure merged into QuantBot (a per-pass build context plus per-builder steps in `QuantBotBuild.cpp`, `QuantBotBuildProducers.cpp` and `QuantBotBuildYard.cpp`), and the separate AI was retired on 2026-10-31; old saves naming a Mentat player load as the equivalent QuantBot.
 
 ---
 
@@ -257,56 +259,20 @@ save still loads as Builder.
 
 ---
 
-## 5. Mentat (Advanced AI — City Simulation Aware)
-
-### Difficulty Levels
-- **Easy**: 25% attack force, no orni attacks, 1× harvester multiplier
-- **Medium**: 40% attack force, no orni attacks, 2× harvester multiplier
-- **Hard**: 50% attack force, orni attacks enabled, 2.5× multiplier
-- **Brutal**: 60% attack force, aggressive orni strikes, 3× multiplier
-- **Defend**: Never attacks, purely defensive
-
-### Mentat Support Mode
-Same as QuantBot Support — acts as a cooperative teammate. Handles base-building and economy; never initiates attacks.
-
-### How It Differs from QuantBot
-
-Mentat is QuantBot's refactored successor with **city simulation integration** baked in (~3,900 lines vs QuantBot's ~3,700).
-
-**City-Sim Awareness:**
-- Reads the **pollution density map** — avoids placing buildings in high-pollution zones
-- Reads the **crime rate map** — factors crime impact into structure placement and strategy
-- These checks run as part of the placement scoring system, improving long-term base efficiency
-
-**Nuclear Plant Support:**
-- Can build **Nuclear Plants** for power generation
-- QuantBot only builds Windtraps and WORs for power; Mentat expands options
-
-**Shared with QuantBot:**
-- Squad rally system, kiting, ornithopter strikes, adaptive unit composition (DLR)
-- External configuration via `QuantBot Config.ini` (shared config file)
-- Same 5 difficulty levels + 5 Support variants (10 total entries in the player picker)
-- Counter-ornithopter turret construction
-- Harvester management, Death Hand targeting, MCV deployment logic
-
----
-
 ## Comparison Table
 
-| Feature | AIPlayer | SmartBot | QuantBot | QB Support | Mentat | Mentat Support |
-|---------|----------|----------|----------|------------|--------|----------------|
-| Complexity | Basic | Moderate | Advanced | Advanced | Advanced+ | Advanced+ |
-| Config File | No | No | Yes | Yes | Yes (shared) | Yes (shared) |
-| Squad System | No | No | Yes | Yes (defense) | Yes | Yes (defense) |
-| Adaptive Units | No | Partial | Full DLR | Full | Full DLR | Full |
-| Kiting | No | No | Yes | No | Yes | No |
-| Orni Strikes | No | Partial | Coordinated | No | Coordinated | No |
-| Attack Style | All-in | Delayed | Wave-based | Never | Wave-based | Never |
-| Counter-Orni | No | No | Auto-turrets | Auto-turrets | Auto-turrets | Auto-turrets |
-| Eco Management | Fixed | Dynamic | Map-scaled | Map-scaled | Map-scaled | Map-scaled |
-| City-Sim Aware | No | No | No | No | Yes | Yes |
-| Nuclear Plants | No | No | No | No | Yes | Yes |
-| Code Lines | ~800 | ~900 | ~3,700 | (shared) | ~3,900 | (shared) |
+| Feature | AIPlayer | SmartBot | QuantBot | QB Support |
+|---------|----------|----------|----------|------------|
+| Complexity | Basic | Moderate | Advanced | Advanced |
+| Config File | No | No | Yes | Yes |
+| Squad System | No | No | Yes | Yes (defense) |
+| Adaptive Units | No | Partial | Full DLR | Full |
+| Kiting | No | No | Yes | No |
+| Orni Strikes | No | Partial | Coordinated | No |
+| Attack Style | All-in | Delayed | Wave-based | Never |
+| Counter-Orni | No | No | Auto-turrets | Auto-turrets |
+| Eco Management | Fixed | Dynamic | Map-scaled | Map-scaled |
+| Code Lines | ~800 | ~900 | ~3,700 | (shared) |
 
 ---
 
@@ -316,6 +282,4 @@ Mentat is QuantBot's refactored successor with **city simulation integration** b
 - **SmartBot** = Smarter economy management, some tactical awareness
 - **QuantBot** = Full strategic depth with external configuration
 - **QuantBot Support** = QuantBot as your cooperative teammate
-- **Mentat** = QuantBot's successor — same strategic depth plus city simulation awareness (pollution/crime-aware placement, Nuclear Plant support)
-- **Mentat Support** = Mentat as your cooperative teammate
 

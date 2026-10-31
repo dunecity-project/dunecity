@@ -26,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <utility>
 
 class PlayerFactory {
 public:
@@ -107,6 +108,14 @@ public:
             }
         }
 
+        // A retired class (old save, replay or setting) resolves to its replacement. Its entry
+        // carries the replacement's class string, so a loaded or created player saves as that.
+        for(auto& [retiredClass, player_data] : retiredPlayerDataList) {
+            if(retiredClass == playerclass) {
+                return &player_data;
+            }
+        }
+
         return nullptr;
     }
 
@@ -171,6 +180,8 @@ private:
     static void registerAllPlayers();
 
     static std::vector<PlayerData> playerDataList;
+    /// Retired class string -> its replacement, consulted only by getByPlayerClass. Never listed.
+    static std::vector<std::pair<std::string, PlayerData>> retiredPlayerDataList;
 };
 
 #endif //PLAYERFACTORY_H

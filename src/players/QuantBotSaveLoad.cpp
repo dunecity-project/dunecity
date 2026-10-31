@@ -20,7 +20,9 @@
 #include "QuantBotInternal.h"
 
 
-QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream, associatedHouse) {
+// The fields every QuantBot save starts with. The retired Mentat AI saved exactly these
+// (then one support bool), so both stream constructors share them.
+void QuantBot::loadSavedPrefix(InputStream& stream) {
 	QuantBot::init();
 
 	difficulty = static_cast<Difficulty>(stream.readUint8());
@@ -52,6 +54,29 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
 
         placeLocations.emplace_back(x, y);
     }
+}
+
+// A player saved by the Mentat AI (retired 2026-10-31): the shared prefix and its support flag,
+// nothing more. It keeps the defaults a QuantBot save older than 9827 loads with and plays on as
+// the equivalent QuantBot; its next save is in QuantBot's format.
+QuantBot::QuantBot(InputStream& stream, House* associatedHouse, RetiredMentatSave) : Player(stream, associatedHouse) {
+    loadSavedPrefix(stream);
+    role = stream.readBool() ? AIRole::Builder : AIRole::Both;
+    resetLearningForMeasuredScoring();
+    enemySightings.clear();
+    musters.clear();
+    strategyPicked = false;
+    strategy = QuantBotStrategy::Choice{};
+    strategyPrior = {};
+    resolveStrategyProfile();
+    if (builderOnly()) {
+        gameMode = GameMode::Custom;
+        attackTimer = std::numeric_limits<Sint32>::max();
+    }
+}
+
+QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream, associatedHouse) {
+    loadSavedPrefix(stream);
 
     try {
         if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AI_ROLE) {

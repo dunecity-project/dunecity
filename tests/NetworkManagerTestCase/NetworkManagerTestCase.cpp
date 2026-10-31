@@ -29,7 +29,7 @@ static constexpr int kWireSendGameInfo  = 4;
 static constexpr int kWireClientStats   = 13;
 static constexpr int kWireKeepAlive     = 19;
 static constexpr int kWireCoopMission   = 20;
-static constexpr int kWireProtocolVersion = 104;
+static constexpr int kWireProtocolVersion = 105;
 
 TEST_CASE("NetworkManager: wire constants match the shipped protocol", "[network][protocol]") {
     REQUIRE(NETWORKPACKET_SENDGAMEINFO == kWireSendGameInfo);
@@ -116,6 +116,8 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // Off preserves the previous movement; on corrects chained steps and missed route ticks.
     // 104 appends the QuantBot Fighter classes to the PlayerFactory list the lobby indexes
     // (docs/ai-roles.md, save 9875).
+    // 105 adds the MOD10 planned-construction rules (docs/preplace-queue.md, save 9876) and
+    // removes the retired Mentat classes from the PlayerFactory list the lobby indexes.
     REQUIRE(NETWORK_PROTOCOL_VERSION == 105);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }

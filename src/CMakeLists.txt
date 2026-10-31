@@ -291,8 +291,6 @@ target_sources(dunecity
         players/QuantBotAir.cpp
         players/QuantBotHarvesters.cpp
         players/QuantBotCampaign.cpp
-        players/Mentat.cpp
-        players/MentatBuildOrderMentat.cpp
         players/QuantBotConfig.cpp
         players/SmartBot.cpp
 
