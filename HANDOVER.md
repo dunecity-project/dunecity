@@ -1,3 +1,32 @@
+## 2026-10-31 — 1.0.861: slow city year, three of Stefan's saves fixed, AI tuning verdicts (OMP integrator)
+
+- **Slow City Year (Stefan: "if one budget year is 60 seconds, now make it 120 seconds", growth too):**
+  hashed `Slow City Year` (default on; GameInitSettings MOD11 `MODB`, save 9877, protocol 106; older
+  streams read it off). `DuneCity::cyclesPerCityYear()` is 7500 (3750 classic) and drives budget
+  payout and the 48 day ticks (zone growth). QuantBot keeps the minute (`kCyclesPerMinute`) as its
+  forecast unit and converts city amounts via `DuneCity::annualPerMinute`, so AI play is unchanged
+  with the rule off (growth probe passes both ways). Measured (`run-city-income.py --game-options`):
+  RICRIC 4 min, gross 41.06/min on vs 83.05/min off. Budget window cash flow divides by the year length.
+- **`nomoney.dls`:** no Refinery/Silo, so storage capacity 0 and all city tax discarded (2004 of
+  2273 gross in 3 min) — the documented 817 rule. Fix is UI only: budget window shows
+  `Storage: x/y` and a red "(lost: no Refinery/Silo)" cash-flow line; the ticker names city tax.
+  Open for Stefan: base storage on the Construction Yard (switch) if he wants tax without a Refinery.
+- **`norocketturrets.dls`:** the proactive turret-unlock rule needs 3 refineries, impossible in a
+  no-spice city; savings leaked to Starport bargains and plots. New `[Force Concentration]
+  DefencePrerequisites` (default ON) makes the yard upgrade / Radar a protected capital project.
+  A/B: no-spice 1v1 16 seeds, blue wiped out 8/16 → 0/16, ornithopter kills 3.6 → 0, city gross
+  +6859 [+5679,+8026]; matrix 112 games/arm neutral (time-outs 3 → 6). Leak left: CITY-POWER
+  windtraps still buy while the project saves.
+- **`blocked.dls`:** a finished planned Refinery's range came from two planned Industrial zones the
+  player then cancelled; Retry Planned Placement retried forever and blocked the yard. Now a plan whose
+  range no buildable planned plot can supply is cancelled with refund ("out of build range"). Save
+  verified: the four queued orders behind it complete (cycles 11220–13020).
+- **Tuning (74af1197, switches off vs on, paired):** none accepted, all stay off.
+  `DeathHandTurrets` campaign 192: +0.00 [0,0]; `SpreadVsDeathHand` campaign 192: −0.01 [−0.04,+0.02];
+  FFA cells not scoreable by `--compare`; `SmallMapYardCap` ladder short maps QH-v-QM +0.04
+  [0,+0.12], QB-v-QH −0.04 [−0.19,+0.07]. Six-player FFA (dhturrets) still running at release time.
+  Results: `~/Documents/projects/dunecity-results/tuning-1031/`.
+
 ## 2026-10-31 — Probe games no longer reach the public usage statistics (OMP)
 
 - **2dc819da:** `Game::startMatchAnalytics()` returns early when `DUNECITY_USERDIR` is set. Every
