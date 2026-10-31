@@ -289,7 +289,7 @@ public:
            sandwormsRespawn(false), killedSandwormsDropSpice(false), manualCarryallDrops(false), maximumNumberOfUnitsOverride(-1),
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
-           continuousGroundSteps(false)  {
+           continuousGroundSteps(false), retryPlannedPlacement(true)  {
         }
 
 
@@ -311,7 +311,8 @@ public:
                     && (cityEffects == goc.cityEffects)
                     && (originalUnitDamage == goc.originalUnitDamage)
                     && (planBuildingSites == goc.planBuildingSites)
-                    && (continuousGroundSteps == goc.continuousGroundSteps);
+                    && (continuousGroundSteps == goc.continuousGroundSteps)
+                    && (retryPlannedPlacement == goc.retryPlannedPlacement);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -342,6 +343,7 @@ public:
             optStr += "/originalDamage=" + std::to_string(originalUnitDamage);
             optStr += "/planSites=" + std::to_string(planBuildingSites);
             optStr += "/groundSteps=" + std::to_string(continuousGroundSteps);
+            optStr += "/retryPlans=" + std::to_string(retryPlannedPlacement);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -388,6 +390,8 @@ public:
         /// (UnitBase::navigate). Off (default until its A/B is accepted): the 1.0.760-1.0.852
         /// simulation, drawn through UnitBase::DrawnStepScope as in 1.0.851-1.0.852.
         bool        continuousGroundSteps;
+        /// Retry planned plots, clear friendly units, cancel/refund on hostile occupation.
+        bool        retryPlannedPlacement;
 
         /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
         /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.

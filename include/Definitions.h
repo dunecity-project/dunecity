@@ -196,7 +196,8 @@
 // 9875: QuantBot saves its AI role (docs/ai-roles.md) as a byte where it stored the support
 //       flag: 0 Both, 1 Builder (the former support mode), 2 Fighter. An older save's flag
 //       loads as Builder or Both.
-#define SAVEGAMEVERSION     9875
+// 9876: GameInitSettings MOD10 adds the hashed planned-placement recovery rule.
+#define SAVEGAMEVERSION     9876
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
 /// First save with NATIVES_TEAM's visibility slot and the sandworm's summoner.

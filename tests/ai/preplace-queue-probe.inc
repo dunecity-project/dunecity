@@ -90,6 +90,10 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
     auto& planRule = game->gameInitSettings.gameOptions.planBuildingSites;
     require(planRule, "The plan-building-sites match rule must default to on");
 
+    require(game->gameInitSettings.gameOptions.retryPlannedPlacement, "Placement retry must default on");
+    // Exercise the previous behaviour as the explicit control in this same engine build.
+    game->gameInitSettings.gameOptions.retryPlannedPlacement = false;
+
     // Fixture area: a 14x9 patch (plus a 2-tile margin) away from every object and from the
     // house's own ground, turned into plain rock. The fixture yard sits in its top-left corner,
     // so the yard alone decides the real build range.
@@ -503,6 +507,108 @@ void runPreplaceQueueProbe(std::unique_ptr<Game>& game) {
                 otherYard->getProductionQueue().front().reservationID).executeCommand();
         require(fixtureYard->getProductionQueueSize() == 0 && otherYard->getProductionQueueSize() == 0, "Distribution fixture cleanup failed");
         SDL_Log("PREPLACE_PROBE: planned orders split over two yards and built in parallel");
+    }
+
+    // ---- Repaired rule, in the same build as the legacy control above. ----
+    game->gameInitSettings.gameOptions.retryPlannedPlacement = true;
+    {
+        // Two yards share a chain. The downstream building finishes while its anchor is
+        // on hold: it must remain a plan and place automatically after the anchor arrives.
+        Coord fresh = Coord::Invalid();
+        for(int y = 4; y + 14 < currentGameMap->getSizeY() && fresh.isInvalid(); ++y)
+            for(int x = 4; x + 16 < currentGameMap->getSizeX() && fresh.isInvalid(); ++x) {
+                bool clear = true;
+                for(int dy = -3; dy < 14 && clear; ++dy) for(int dx = -3; dx < 16 && clear; ++dx) {
+                    const Tile* tile = currentGameMap->getTile(x + dx, y + dy);
+                    clear = !tile->hasAGroundObject() && !tile->hasCityZone()
+                        && tile->getOwner() != house->getHouseID();
+                }
+                if(clear) fresh = Coord(x,y);
+            }
+        require(fresh.isValid(), "No clear retry fixture area");
+        auto site = [&](int x, int y) { return Coord(fresh.x+x,fresh.y+y); };
+        for(int y = 0; y < 11; ++y) for(int x = 0; x < 13; ++x) {
+            Tile* tile = currentGameMap->getTile(site(x,y));
+            tile->setType(Terrain_Rock); tile->setRoad(false); tile->setOwner(NONE_ID);
+        }
+        auto* a = dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID, Structure_ConstructionYard,
+            fresh.x, fresh.y, true, true));
+        auto* b = dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID, Structure_ConstructionYard,
+            fresh.x, fresh.y+7, true, true));
+        require(a && b, "Retry fixture yards missing");
+        a->updateBuildList(); b->updateBuildList();
+        const Coord anchor = site(2,0), downstream = site(5,0);
+        require(a->doReservePlacement(Structure_WindTrap,anchor.x,anchor.y), "Anchor reservation refused");
+        a->doSetOnHold(true);
+        require(b->doReservePlacement(Structure_WindTrap,downstream.x,downstream.y), "Chained reservation refused");
+        require(advanceUntil(*game,800,[&] { return b->isReservedPlacementBlocked(); }), "Downstream did not finish");
+        advance(*game,400);
+        require(b->isAwaitingReservedPlacement() && !b->isWaitingToPlace()
+            && !b->getProductionQueue().front().reservationFailed
+            && !structureAt(house,Structure_WindTrap,downstream), "Missing range became permanent Place It");
+        // Simulate the exact state stored by an older build after its failed attempt.
+        b->currentProductionQueue.front().reservationFailed = true;
+        require(b->isAwaitingReservedPlacement(), "Old failed reservation was not re-armed");
+        a->doSetOnHold(false);
+        require(advanceUntil(*game,1200,[&] { return structureAt(house,Structure_WindTrap,downstream) != nullptr; }),
+            "Chained plot did not auto-place after its anchor finished");
+        require(a->getProductionQueueSize()==0 && b->getProductionQueueSize()==0, "Chain did not drain");
+        SDL_Log("PREPLACE_PROBE: retry resumed old failed order after another yard supplied build range");
+
+        const Coord obstruction = site(2,3);
+        require(a->doReservePlacement(Structure_WindTrap,obstruction.x,obstruction.y), "Blocked-site order refused");
+        auto* wall = house->placeStructure(NONE_ID,Structure_Wall,obstruction.x,obstruction.y,true,true);
+        require(wall != nullptr, "Retry wall missing");
+        require(advanceUntil(*game,800,[&] { return a->isReservedPlacementBlocked(); }), "Wall did not block finished order");
+        advance(*game,400);
+        require(a->isAwaitingReservedPlacement() && !a->isWaitingToPlace(), "Wall caused permanent fallback");
+        wall->destroy();
+        require(advanceUntil(*game,300,[&] { return structureAt(house,Structure_WindTrap,obstruction) != nullptr; }),
+            "Building did not auto-place when structure obstruction cleared");
+
+        // An own unit in HOLD must leave when the building is ready. Repeat with an ally
+        // from a different house: ownership alone must not classify friendly units as enemies.
+        House* ally = enemyPlayer->getHouse();
+        const auto oldTeam = ally->teamID;
+        ally->teamID = house->getTeamID();
+        const Coord ownPlot=site(2,6), allyPlot=site(5,3);
+        for(const auto& fixture : {std::make_pair(house,ownPlot),std::make_pair(ally,allyPlot)}) {
+            const Coord plot=fixture.second;
+            require(a->doReservePlacement(Structure_WindTrap,plot.x,plot.y), "Friendly-unit order refused");
+            UnitBase* unit=fixture.first->createUnit(Unit_Quad);
+            unit->deploy(plot); unit->doSetAttackMode(HOLD);
+            require(advanceUntil(*game,1800,[&] { return structureAt(house,Structure_WindTrap,plot) != nullptr; }),
+                "Friendly HOLD unit was not cleared and building auto-placed");
+            require(unit->getLocation()!=plot && a->getProductionQueueSize()==0, "Friendly-unit plan did not complete");
+            unit->destroy();
+        }
+        ally->teamID=oldTeam;
+        SDL_Log("PREPLACE_PROBE: own and allied HOLD units cleared; both buildings auto-placed");
+
+        // Finish behind a harmless wall, then replace it with hostile infantry. Cancellation
+        // must remove only the finished front order and refund its paid progress exactly.
+        const Coord enemyPlot=site(5,6), nextPlot=site(8,3);
+        require(a->doReservePlacement(Structure_WindTrap,enemyPlot.x,enemyPlot.y), "Enemy-plot order refused");
+        require(a->doReservePlacement(Structure_WindTrap,nextPlot.x,nextPlot.y), "Following order refused");
+        wall=house->placeStructure(NONE_ID,Structure_Wall,enemyPlot.x,enemyPlot.y,true,true);
+        require(wall != nullptr, "Cancellation wall missing");
+        require(advanceUntil(*game,800,[&] { return a->isReservedPlacementBlocked(); }), "Cancel fixture did not finish");
+        const Uint32 cancelled=a->getProductionQueue().front().reservationID;
+        const Uint32 following=a->getProductionQueue().back().reservationID;
+        wall->destroy();
+        UnitBase* invader=ally->createUnit(Unit_Soldier);
+        invader->deploy(enemyPlot); invader->setRespondable(false);
+        const FixPoint beforeCancel=totalCredits(house), paid=a->getProductionProgress();
+        a->updateReservedPlacement();
+        require(a->getProductionQueueSize()==1 && entryFor(a,cancelled)==nullptr
+            && a->getProductionQueue().front().reservationID==following, "Hostile occupation cancelled wrong queue entry");
+        require(totalCredits(house)==beforeCancel+paid, "Hostile occupation did not refund exact paid progress");
+        require(!structureAt(house,Structure_WindTrap,enemyPlot), "Building landed under hostile infantry");
+        invader->destroy();
+        require(advanceUntil(*game,1000,[&] { return structureAt(house,Structure_WindTrap,nextPlot)!=nullptr; }),
+            "Queue did not advance after hostile occupation cancellation");
+        require(a->getProductionQueueSize()==0, "Cancellation left queue stuck");
+        SDL_Log("PREPLACE_PROBE: hostile infantry cancelled one finished order, exact refund, next order auto-placed");
     }
 
     // ---- A destroyed yard takes its reservations with it, refunding as a dying builder does today. ----

@@ -294,13 +294,18 @@ void ConstructionYard::handleCancelReservationClick(Uint32 reservationID) {
 }
 
 void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly) {
+    moveUnitsOffPlot(itemID, x, y, idleOnly, false);
+}
+
+void ConstructionYard::moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly, bool includeAllies) {
     // Seeded from the cycle, like the sidebar's version of this request, so every peer
     // picks the same spots without drawing from the game's random generator. The orders
     // are the forced moves UnitBase::handleMoveClick would send, applied in the tick.
     Random tempRandomGen(currentGame->getGameCycleCount());
     const Coord size = ::getStructureSize(itemID);
     const auto moveOff = [&](UnitBase* pUnit) {
-        if(pUnit == nullptr || pUnit->getOwner() != owner || !pUnit->isRespondable()) {
+        if(pUnit == nullptr || !pUnit->isRespondable()
+           || (includeAllies ? pUnit->getOwner()->getTeamID() != owner->getTeamID() : pUnit->getOwner() != owner)) {
             return;
         }
         if(idleOnly && (pUnit->isMoving() || pUnit->getAttackMode() == HOLD
@@ -309,6 +314,10 @@ void ConstructionYard::moveOwnUnitsOffPlot(Uint32 itemID, int x, int y, bool idl
         }
         const Coord destination = currentGameMap->findDeploySpot(pUnit, Coord(x, y), tempRandomGen, pUnit->getLocation(), size);
         if(currentGameMap->tileExists(destination.x, destination.y)) {
+            if(includeAllies) {
+                pUnit->leaveHoldForOrder();
+                pUnit->leaveFormation();
+            }
             pUnit->doMove2Pos(destination.x, destination.y, true);
         }
     };
@@ -338,9 +347,10 @@ void ConstructionYard::keepPlannedPlotsClear() {
     if(period == 0 || (currentGame->getGameCycleCount() + objectID) % period != 0) {
         return;
     }
+    const bool retry = currentGame->getGameInitSettings().getGameOptions().retryPlannedPlacement;
     for(const ProductionQueueItem& entry : currentProductionQueue) {
-        if(entry.reservationID != 0 && !entry.reservationFailed) {
-            moveOwnUnitsOffPlot(entry.itemID, entry.plotX, entry.plotY, true);
+        if(entry.reservationID != 0 && (retry || !entry.reservationFailed)) {
+            moveUnitsOffPlot(entry.itemID, entry.plotX, entry.plotY, true, retry);
         }
     }
 }
@@ -365,6 +375,22 @@ bool ConstructionYard::foreignUnitsOnPlot(Uint32 itemID, int x, int y) const {
     return false;
 }
 
+bool ConstructionYard::hostileUnitsOnPlot(Uint32 itemID, int x, int y) const {
+    const Coord size = ::getStructureSize(itemID);
+    const auto hostile = [&](const ObjectBase* object) {
+        return object != nullptr && object->isAUnit() && object->getOwner() != nullptr
+            && object->getOwner()->getTeamID() != owner->getTeamID();
+    };
+    for(int dy = 0; dy < size.y; ++dy) for(int dx = 0; dx < size.x; ++dx) {
+        const Tile* tile = currentGameMap->getTile(x + dx, y + dy);
+        if(tile == nullptr) continue;
+        if(tile->hasANonInfantryGroundObject() && hostile(tile->getNonInfantryGroundObject())) return true;
+        for(Uint32 id : tile->getInfantryList())
+            if(hostile(currentGame->getObjectManager().getObject(id))) return true;
+    }
+    return false;
+}
+
 void ConstructionYard::updateReservedPlacement() {
     if(!isAwaitingReservedPlacement()) {
         return;
@@ -375,11 +401,30 @@ void ConstructionYard::updateReservedPlacement() {
     const int x = order.plotX;
     const int y = order.plotY;
 
+    const bool retry = currentGame->getGameInitSettings().getGameOptions().retryPlannedPlacement;
+    // Re-arm reservations saved after the old permanent fallback. Never reinterpret
+    // an ordinary unreserved order, which still needs the player to choose a plot.
+    if(retry) order.reservationFailed = false;
     const bool placeableNow = plotPlaceableNow(owner, itemID, x, y);
     const bool placeableIgnoringUnits = !placeableNow
         && plotTilesOk(itemID, x, y) && plotInOwnRange(owner, itemID, x, y);
 
-    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits)) {
+    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits, retry,
+                                                   retry && hostileUnitsOnPlot(itemID, x, y))) {
+        case PlacementReservation::Completion::Cancel: {
+            const Uint32 reservationID = order.reservationID;
+            if(doCancelReservation(reservationID) && owner == pLocalHouse) {
+                currentGame->addToNewsTicker(fmt::sprintf(_("%s cancelled: enemy units are on the planned site"), resolveItemName(itemID)));
+            }
+            return;
+        }
+
+        case PlacementReservation::Completion::Retry: {
+            if(reservedPlacementWaitCycles % MILLI2CYCLES(1000) == 0)
+                moveUnitsOffPlot(itemID, x, y, false, true);
+            reservedPlacementWaitCycles++;
+            return;
+        }
         case PlacementReservation::Completion::Place: {
             // The order is now an ordinary finished building at its planned site; place it
             // through the same path a CMD_PLACE_STRUCTURE takes.
@@ -409,6 +454,11 @@ void ConstructionYard::updateReservedPlacement() {
         case PlacementReservation::Completion::Fallback:
         default:
             break;
+    }
+
+    if(retry) {
+        ++reservedPlacementWaitCycles;
+        return;
     }
 
     // Fall back to today's ready-to-place state: the ghost turns red and the player

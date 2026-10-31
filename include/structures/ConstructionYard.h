@@ -44,10 +44,10 @@ public:
 
     bool update() override;
 
-    /// The finished reserved front order is waiting for units to leave its plot.
+    /// The finished reserved front order is waiting for its plot to become usable.
     bool isReservedPlacementBlocked() const;
 
-    /// A player may place the finished front order by hand: ready to place, or blocked by units.
+    /// A player may place the finished front order by hand: ready to place, or a blocked reservation.
     bool mayPlaceByHand() const override { return isWaitingToPlace() || isReservedPlacementBlocked(); }
 
     /// Structures that go through the pre-placement flow (everything but instant Roads).
@@ -97,13 +97,16 @@ private:
     /// The same placement the CMD_PLACE_STRUCTURE path performs.
     bool placeFinishedStructure(int x, int y);
 
-    /// Places, waits for units, or falls back, once the reserved front order is finished.
+    /// Places, retries, or cancels a finished reservation (legacy fallback when disabled).
     void updateReservedPlacement();
 
     /// Once a second, own idle units are moved off every planned plot of this yard.
     void keepPlannedPlotsClear();
 
-    /// Does a unit of another house stand on the plot?
+    void moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly, bool includeAllies);
+    bool hostileUnitsOnPlot(Uint32 itemID, int x, int y) const;
+
+    /// Legacy control: does a unit of another house stand on the plot?
     bool foreignUnitsOnPlot(Uint32 itemID, int x, int y) const;
 };
 

@@ -16,6 +16,9 @@
 #include <misc/SaveCompat.h>
 #include <mod/ModInfo.h>
 #include <SpiceIncome.h>
+#include <GameInitSettings.h>
+#include <misc/IMemoryStream.h>
+#include <misc/OMemoryStream.h>
 
 // ---------- constant checks ----------
 
@@ -60,7 +63,7 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is reserved).
     // 9874 adds the continuous-ground-steps match rule (GameInitSettings MOD9).
     // 9875 saves the QuantBot role byte in place of the support flag (docs/ai-roles.md).
-    REQUIRE(SAVEGAMEVERSION == 9875);
+    REQUIRE(SAVEGAMEVERSION == 9876);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
@@ -158,5 +161,26 @@ TEST_CASE("Save compat: determineLegacySavedItemCount maps correctly",
     SECTION("9811+ → 0 (self-describing)") {
         REQUIRE(determineLegacySavedItemCount(9811, "dunecity1.0.11") == 0);
         REQUIRE(determineLegacySavedItemCount(9812, "dunecity1.1.0") == 0);
+    }
+}
+
+TEST_CASE("Save compat: planned-placement retry is hashed and round trips", "[save-compat][preplace]") {
+    SettingsClass::GameOptionsClass on, off;
+    off.retryPlannedPlacement = false;
+    REQUIRE(on.retryPlannedPlacement);
+    REQUIRE(on != off);
+    REQUIRE(on.getHash() != off.getHash());
+    for(bool enabled : {false, true}) {
+        auto options = on;
+        options.retryPlannedPlacement = enabled;
+        GameInitSettings original("placement fixture", "", false, options);
+        OMemoryStream out;
+        out.open();
+        original.save(out);
+        IMemoryStream in(out.getData(), out.getDataLength());
+        GameInitSettings restored(in);
+        REQUIRE(restored.getGameOptions().retryPlannedPlacement == enabled);
+        REQUIRE(restored.getGameOptions().getHash() == original.getGameOptions().getHash());
+        REQUIRE(in.getRemainingLength() == 0);
     }
 }

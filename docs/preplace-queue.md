@@ -3,6 +3,34 @@
 Choose where a building goes when you order it. The Construction Yard builds its queue in order and
 places each finished building on its planned plot automatically.
 
+## 2026-10-31: obstruction recovery
+
+The default `Retry Planned Placement` match option is on. A finished planned building keeps its
+plot and retries until it becomes usable, including when it is waiting for a building in another
+yard to supply build range. It never becomes permanently manual because a plot was temporarily
+blocked. A saved reservation with the old `reservationFailed` marker also resumes automatically;
+unreserved orders still use the ordinary manual placement flow.
+
+Own and allied ground units are moved off a finished plot once a second, including units in Hold
+or a formation. Idle friendly units are also cleared from queued plots before completion. Enemy
+units are identified by team, not by house: hostile ground units on a finished plot cancel only
+that reservation, refund its paid production progress through the normal cancellation path, and
+allow the next queue entry to proceed. Flying units do not occupy the building footprint. A blocked
+friendly/terrain/range plan stays amber with `BLOCKED` and can still be placed elsewhere manually
+or cancelled by the player.
+
+The option is available in `[Game Options]` / mod `GameOptions.ini` for same-build control/on
+regressions, is included in the settings hash, and is carried in GameInitSettings MOD10 (`MODA`),
+save 9876 and protocol 105. Settings predating MOD10 adopt the repair. Setting it false retains
+the legacy fallback/enemy-wait behaviour described below. The real-engine `preplace_queue_probe`
+exercises both policies in one build, including two-yard range dependencies, recovery of a failed
+reservation, a structure removed from a plot, own/allied Hold units, and hostile cancellation with
+an exact refund and queue progress. The off/on setting round-trips in the unit tests.
+
+## Legacy control behaviour
+
+The detailed fallback and enemy-wait rules below apply when `Retry Planned Placement=false`.
+
 ## Player flow
 
 - Game rule: **Game Rules → "Plan building sites when ordering"** (Custom Game and Random Skirmish),

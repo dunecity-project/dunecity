@@ -1,3 +1,21 @@
+## 2026-10-31 — Planned Construction Yard obstruction recovery (Codex handoff)
+
+- Stefan reported his Air 1.0.859 human Harkonnen game repeatedly stuck at `Place It`. Source path:
+  `ConstructionYard::updateReservedPlacement` permanently set `reservationFailed` after a failed
+  non-unit placement check, and `BuilderBase::isAwaitingReservedPlacement` then excluded it from
+  every later auto-place attempt. Cross-yard build-range dependencies can encounter this before
+  their anchor is finished. His replay/logs are preserved on the mini under
+  `~/.local/state/dunecity-diagnostics/place-it-20261031` (map seed 360270865).
+- At his explicit request, planned plots now keep retrying, clear own/allied units (including Hold),
+  and cancel/refund the front finished order if hostile ground units occupy it. The following order
+  continues. Older failed reservations resume; unreserved orders remain manual.
+- Hashed, streamed `Retry Planned Placement` switch, default on, MOD10/MODA; save 9876/protocol105.
+  Same-build legacy control plus new regression scenarios are in `preplace_queue_probe`; settings
+  off/on round-trip and completion policy tests are included. See `docs/preplace-queue.md`.
+- Hand back to OMP integrator 01a18c9f on claw.local for the combined build-int build and cluster
+  regression suite. No release, push or Air installation from this chat. Validation status is in
+  the handoff message; this entry does not claim that an unrun test passed.
+
 ## 2026-10-31 — AI roles: Builder, Fighter, Both (local, not pushed)
 
 - **At Stefan's request:** every menu that picks an AI shows AI / Difficulty / Role drop-downs

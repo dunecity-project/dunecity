@@ -1341,6 +1341,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.originalUnitDamage = myINIFile.getBoolValue("Game Options", "Original Unit Damage", false);
             settings.gameOptions.planBuildingSites = myINIFile.getBoolValue("Game Options", "Plan Building Sites", true);
             settings.gameOptions.continuousGroundSteps = myINIFile.getBoolValue("Game Options", "Continuous Ground Steps", false);
+            settings.gameOptions.retryPlannedPlacement = myINIFile.getBoolValue("Game Options", "Retry Planned Placement", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

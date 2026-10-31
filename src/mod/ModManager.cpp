@@ -971,6 +971,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Original Unit Damage") result.originalUnitDamage = parseBool(value);
             else if (key == "Plan Building Sites") result.planBuildingSites = parseBool(value);
             else if (key == "Continuous Ground Steps") result.continuousGroundSteps = parseBool(value);
+            else if (key == "Retry Planned Placement") result.retryPlannedPlacement = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
         }

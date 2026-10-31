@@ -346,7 +346,8 @@ void BuilderBase::setOwner(House *no) {
 }
 
 bool BuilderBase::isAwaitingReservedPlacement() const {
-    if(!PlacementReservation::frontAwaitsReservedPlacement(currentProductionQueue)
+    if(!PlacementReservation::frontAwaitsReservedPlacement(currentProductionQueue,
+            currentGame->getGameInitSettings().getGameOptions().retryPlannedPlacement)
        || currentProducedItem != currentProductionQueue.front().itemID) {
         return false;
     }

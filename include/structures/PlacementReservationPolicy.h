@@ -14,8 +14,8 @@
     answers mean, so the unit tests exercise the same rules the simulation runs:
     - a plot may lean on earlier reservations of the same house for the build-range rule
       (chain planning), but may never overlap one;
-    - a finished reserved building is placed, waits a bounded time for units to clear the
-      plot, or falls back to today's ready-to-place state;
+    - a finished reservation retries obstructions and cancels on hostile units under the
+      repaired match rule; the legacy control waits for units or falls back;
     - cancelling a reservation removes exactly its own queue entry, and only the entry under
       construction has money in it to refund.
 */
@@ -85,18 +85,26 @@ Verdict validate(const Footprint& plot, bool tilesOk, OwnRange ownRange,
 enum class Completion {
     Place,          ///< the plot is valid on the real map: place it now
     WaitForUnits,   ///< only units are in the way: own units are moved off, others are waited for
-    Fallback        ///< the plot itself is unusable: the order becomes ordinary ready-to-place
+    Retry,          ///< retain the plan until terrain, range or a friendly obstruction clears
+    Cancel,         ///< hostile unit on the plot: refund this order and continue the queue
+    Fallback        ///< legacy rule: the order becomes ordinary ready-to-place
 };
 
 /**
-    Units never cancel a plan: a plot blocked only by units waits, however long, until it clears
+    Legacy control: units never cancel a plan; a plot blocked only by units waits until it clears
     (own units are moved off, enemy units are waited out) or the player places the building
     elsewhere by hand. Only a plot that is unusable without any units - a structure on it, or
     lost build range - falls back.
+    With retryBlocked on, all obstructions retain the plan and hostile units cancel it.
     \param  placeableNow            the plot passes the normal placement rules right now
     \param  placeableIgnoringUnits  it would pass if no unit stood on it (range included)
 */
-inline Completion decideCompletion(bool placeableNow, bool placeableIgnoringUnits) {
+inline Completion decideCompletion(bool placeableNow, bool placeableIgnoringUnits,
+                                   bool retryBlocked = false, bool hostileUnit = false) {
+    if(retryBlocked) {
+        if(hostileUnit) return Completion::Cancel;
+        return placeableNow ? Completion::Place : Completion::Retry;
+    }
     if(placeableNow) {
         return Completion::Place;
     }
@@ -178,8 +186,9 @@ std::vector<Ghost> ghostsInQueueOrder(const std::list<Entry>& queue) {
 
 /// True if the front entry is reserved and still expects the simulation to place it.
 template<class Entry>
-bool frontAwaitsReservedPlacement(const std::list<Entry>& queue) {
-    return !queue.empty() && queue.front().reservationID != 0 && !queue.front().reservationFailed;
+bool frontAwaitsReservedPlacement(const std::list<Entry>& queue, bool retryFailed = false) {
+    return !queue.empty() && queue.front().reservationID != 0
+        && (retryFailed || !queue.front().reservationFailed);
 }
 
 /// The next reservation id after current, never 0 (0 means "not reserved").

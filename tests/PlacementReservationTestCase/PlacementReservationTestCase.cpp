@@ -165,3 +165,18 @@ TEST_CASE("Pre-placement: orders spread over the house's Construction Yards", "[
     }
     REQUIRE(picks == std::vector<std::uint32_t>{3, 4, 3, 4});
 }
+
+TEST_CASE("Pre-placement: retry retains obstructions and hostile units cancel", "[preplace][completion]") {
+    REQUIRE(decideCompletion(false, false, true, false) == Completion::Retry);
+    REQUIRE(decideCompletion(false, true, true, false) == Completion::Retry);
+    REQUIRE(decideCompletion(true, true, true, false) == Completion::Place);
+    REQUIRE(decideCompletion(false, true, true, true) == Completion::Cancel);
+    REQUIRE(decideCompletion(true, true, true, true) == Completion::Cancel);
+    REQUIRE(decideCompletion(false, true, false, true) == Completion::WaitForUnits);
+    std::list<Entry> queue = {reserved(18, 1, 5, 5)};
+    queue.front().reservationFailed = true;
+    REQUIRE_FALSE(frontAwaitsReservedPlacement(queue));
+    REQUIRE(frontAwaitsReservedPlacement(queue, true));
+    queue.front().reservationID = 0;
+    REQUIRE_FALSE(frontAwaitsReservedPlacement(queue, true));
+}

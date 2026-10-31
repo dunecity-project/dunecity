@@ -116,7 +116,7 @@ TEST_CASE("NetworkManager: the shipped protocol version is the pinned one",
     // Off preserves the previous movement; on corrects chained steps and missed route ticks.
     // 104 appends the QuantBot Fighter classes to the PlayerFactory list the lobby indexes
     // (docs/ai-roles.md, save 9875).
-    REQUIRE(NETWORK_PROTOCOL_VERSION == 104);
+    REQUIRE(NETWORK_PROTOCOL_VERSION == 105);
     REQUIRE(NETWORKDISCONNECT_PROTOCOL_MISMATCH == 5);
 }
 
