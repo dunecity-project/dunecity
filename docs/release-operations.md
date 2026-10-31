@@ -138,6 +138,13 @@ builds the latest published tag with Emscripten 4.0.14, packages it with
 website deploy. It refuses to overwrite a newer browser version. Check this run
 and the website deployment separately from desktop and SourceForge publishing.
 
+GitHub rejects files over 100 MB, and from 1.0.863 (Tornie-family mods) `dunecity.data`
+exceeds that. `package-web.py` then commits it as ordered 64 MiB parts
+(`dunecity.data.part-000`, ...) listed under `split` in `build.json`, whose `sha256` stays the
+hash of the whole file. The website's `deploy/play_parts.py` joins the parts before CI
+compression and in the server's staged web root, so browsers still download one file;
+`check-web-security.py` hashes the parts in order.
+
 For an authorized browser hotfix, build current committed source locally:
 
 ```sh

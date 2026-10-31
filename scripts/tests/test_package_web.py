@@ -59,5 +59,34 @@ class PackageTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'Missing browser artifact'):
                     packager.package(root/'build', root/'play')
 
+    def test_oversized_data_is_split_into_ordered_parts_and_rejoins_to_the_manifest_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / 'build/bin'
+            output.mkdir(parents=True)
+            (output / 'dunecity.html').write_text('<link href=shell.css><script src=shell.js></script><script src=p2p-direct.js></script><script src=dunecity.js></script>')
+            for name in ('dunecity.js', 'dunecity.wasm', 'p2p-direct.js'):
+                (output / name).write_bytes(b'small')
+            data = bytes(range(256)) * 41  # 10496 bytes
+            (output / 'dunecity.data').write_bytes(data)
+            original = packager.PART_BYTES
+            packager.PART_BYTES = 4096
+            try:
+                packager.package(root/'build', root/'play')
+                manifest = json.loads((root/'play/build.json').read_text())
+                parts = manifest['split']['dunecity.data']
+                self.assertEqual(parts, ['dunecity.data.part-000', 'dunecity.data.part-001', 'dunecity.data.part-002'])
+                self.assertFalse((root/'play/dunecity.data').exists())
+                joined = b''.join((root/'play'/part).read_bytes() for part in parts)
+                self.assertEqual(joined, data)
+                self.assertEqual(hashlib.sha256(joined).hexdigest(), manifest['sha256']['dunecity.data'])
+                # A smaller repackage drops the parts again instead of leaving stale ones.
+                (output / 'dunecity.data').write_bytes(b'small data')
+                packager.package(root/'build', root/'play')
+                self.assertEqual(list((root/'play').glob('dunecity.data.part-*')), [])
+                self.assertNotIn('dunecity.data', json.loads((root/'play/build.json').read_text()).get('split', {}))
+            finally:
+                packager.PART_BYTES = original
+
 
 if __name__ == '__main__': unittest.main()
