@@ -32,6 +32,7 @@
 #include <mod/ModManager.h>
 #include <units/UnitBase.h>
 #include <units/HarvesterHelpers.h>
+#include <structures/Worfinery.h>
 
 #include <players/HumanPlayer.h>
 
@@ -39,12 +40,12 @@
 
 #include <algorithm>
 
-const int BuilderBase::itemOrder[] = {    Unit_ChemicalCarryall,
+const int BuilderBase::itemOrder[] = {    Unit_Troopers5, Unit_Infantry5, Unit_ChemicalCarryall,
                                            Structure_Slab4, Structure_Slab1, Structure_Road, Structure_IX, Structure_StarPort,
                                            Structure_HighTechFactory, Structure_HeavyFactory, Structure_RocketTurret,
                                            Structure_Scoutpost, Structure_Flamepost, Structure_Chemipost, Structure_LoveFactory, Structure_ChaosFactory,
                                            Structure_RepairYard, Structure_GunTurret, Structure_TechCenter, Structure_WOR,
-                                           Structure_Worfinery,
+                                           Structure_Worfinery, Structure_Slowpost, Structure_Doublefinery,
                                            Structure_Barracks, Structure_Wall, Structure_LightFactory,
                                            Structure_Silo, Structure_Radar, Structure_Refinery, Structure_WindTrap,
                                            Structure_AdvancedWindTrap, Structure_AdvancedWindTrapMK2, Structure_AdvancedWindTrapMK3,
@@ -55,8 +56,11 @@ const int BuilderBase::itemOrder[] = {    Unit_ChemicalCarryall,
                                            Unit_EliteLauncher, Unit_EliteSiegeTank, Unit_ChemicalSiegeTank, Unit_FlameTank,
                                            Unit_Launcher, Unit_SiegeTank, Unit_Tank, Unit_MCV,
                                            Unit_RebelHarvester, Unit_Harvester,
+                                           Unit_RaiderQuad, Unit_RangedTank, Unit_SlowTank,
+                                           Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm, Unit_EliteOrnithopter,
                                            Unit_Ornithopter, Unit_Carryall, Unit_Quad, Unit_RocketTrike, Unit_SonicTrike, Unit_RaiderTrike,
-                                           Unit_Trike, Unit_Troopers, Unit_Trooper, Unit_Infantry, Unit_Soldier,
+                                           Unit_Trike, Unit_FlameQuad, Unit_GasInfantry, Unit_FlameTrooper,
+                                           Unit_Troopers, Unit_Trooper, Unit_Infantry, Unit_Soldier,
                                            Unit_Frigate, Unit_Sandworm, Unit_Saboteur, ItemID_Invalid };
 
 namespace {
@@ -233,6 +237,8 @@ BuilderBase::BuilderBase(InputStream& stream) : StructureBase(stream) {
         nextReservationID = stream.readUint32();
         reservedPlacementWaitCycles = stream.readUint32();
     }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546)
+        upgradeProgressFromStartingCredits = stream.readFixPoint();
 }
 
 void BuilderBase::init() {
@@ -274,6 +280,7 @@ void BuilderBase::save(OutputStream& stream) const {
         stream.writeUint32(nextReservationID);
         stream.writeUint32(reservedPlacementWaitCycles);
     }
+    stream.writeFixPoint(upgradeProgressFromStartingCredits);
 }
 
 ObjectInterface* BuilderBase::getInterfaceContainer() {
@@ -285,6 +292,11 @@ ObjectInterface* BuilderBase::getInterfaceContainer() {
 }
 
 void BuilderBase::insertItem(std::list<BuildItem>& buildItemList, std::list<BuildItem>::iterator& iter, Uint32 itemID, int price) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(price == -1) price = currentGame->objectData.data[itemID][getTechnologyHouseID()].price;
+        price = owner->radarUnitPrice(itemID,
+            currentGame->getGameInitSettings().campaignPurchasePrice(price, owner->getHouseID()));
+    }
     if(iter != buildItemList.end()) {
         if(iter->itemID == itemID) {
             if(price != -1) {
@@ -350,6 +362,7 @@ void BuilderBase::setOwner(House *no) {
     // starting cash, so capturing a builder cannot mint starting credits.
     if(no != this->owner) {
         productionProgressFromStartingCredits = 0;
+        upgradeProgressFromStartingCredits = 0;
         for(auto& order : currentProductionQueue) {
             order.startingCreditsPaid = 0;
             // The plots were planned by the previous owner; the new one never saw them.
@@ -368,7 +381,7 @@ bool BuilderBase::isAwaitingReservedPlacement() const {
         return false;
     }
     const BuildItem* tmp = getBuildItem(currentProducedItem);
-    return tmp != nullptr && productionProgress >= tmp->price;
+    return tmp != nullptr && productionProgress >= getCurrentProductionPrice();
 }
 
 bool BuilderBase::isWaitingToPlace() const {
@@ -386,7 +399,7 @@ bool BuilderBase::isWaitingToPlace() const {
     if(tmp == nullptr) {
         return false;
     } else {
-        return (productionProgress >= tmp->price);
+        return productionProgress >= getCurrentProductionPrice();
     }
 }
 
@@ -399,17 +412,25 @@ bool BuilderBase::isUnitLimitReached(Uint32 itemID) const {
 }
 
 
+int BuilderBase::getCurrentProductionPrice() const {
+    if(ModManager::instance().isTornieFamilyContentActive() && !currentProductionQueue.empty()
+       && currentProductionQueue.front().itemID == currentProducedItem)
+        return currentProductionQueue.front().price;
+    const auto* item = getBuildItem(currentProducedItem);
+    return item ? item->price : 0;
+}
+
 void BuilderBase::updateProductionProgress() {
     if(currentProducedItem != ItemID_Invalid) {
-        BuildItem* tmp = getBuildItem(currentProducedItem);
+        const int price = getCurrentProductionPrice();
 
-        if((productionProgress < tmp->price)
+        if((productionProgress < price)
            && ProductionRepeat::productionAdvances(isOnHold(), isUnitLimitReached(currentProducedItem), owner->getCredits() > 0)) {
 
             FixPoint oldProgress = productionProgress;
 
             if(currentGame->getGameInitSettings().getGameOptions().instantBuild == true) {
-                FixPoint totalBuildCosts = tmp->price;
+                FixPoint totalBuildCosts = price;
                 FixPoint buildCosts = totalBuildCosts - productionProgress;
 
                 const auto payment = owner->payCredits(buildCosts);
@@ -418,8 +439,10 @@ void BuilderBase::updateProductionProgress() {
             } else {
 
                 FixPoint buildSpeed = std::min( getHealth() / getMaxHealth(), buildSpeedLimit);
-                FixPoint totalBuildCosts = tmp->price;
-                int buildTime = currentGame->objectData.data[currentProducedItem][originalHouseID].buildtime;
+                FixPoint totalBuildCosts = price;
+                const int technology = ModManager::instance().isTornieFamilyContentActive()
+                    ? getTechnologyHouseID() : originalHouseID;
+                int buildTime = currentGame->objectData.data[currentProducedItem][technology].buildtime;
                 if (currentGame->isCitySimEnabled()) {
                     buildTime = DuneCity::getCityBuildTime(currentProducedItem, buildTime);
                 }
@@ -444,10 +467,10 @@ void BuilderBase::updateProductionProgress() {
                 currentGame->addToNewsTicker(_("Not enough money"));
             }
 
-            if(productionProgress >= tmp->price) {
+            if(productionProgress >= price) {
                 setWaitingToPlace();
             }
-        } else if(owner == pLocalHouse && productionProgress < tmp->price) {
+        } else if(owner == pLocalHouse && productionProgress < price) {
             // The queue is stalled and nothing tells the player why: say so in
             // the log (every 10 s) and on the ticker (every 30 s).
             static Uint32 lastStallLog = 0;
@@ -494,11 +517,20 @@ void BuilderBase::produceNextAvailableItem() {
 }
 
 int BuilderBase::getMaxUpgradeLevel() const {
+    const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
+    const int technology = tornieFamily ? getTechnologyHouseID() : originalHouseID;
+    if(tornieFamily && itemID == Structure_Worfinery) {
+        const auto& squad = currentGame->objectData.data[Unit_Troopers5][technology];
+        return squad.enabled && currentGame->techLevel >= 7
+            && owner->getNumItems(Structure_IX) > 0 ? 1 : 0;
+    }
     int upgradeLevel = 0;
 
     for(int i = ItemID_FirstID; i <= ItemID_LastID; i++) {
         if (!currentGame->isCitySimEnabled() && DuneCity::isCityOnlyStructure(i)) continue;
-        const int dataHouseID = (i == Unit_ChemicalCarryall) ? owner->getHouseID() : originalHouseID;
+        if(!tornieFamily && i >= Unit_Troopers5) continue;
+        const int dataHouseID = tornieFamily ? technology
+            : (i == Unit_ChemicalCarryall ? owner->getHouseID() : originalHouseID);
         const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[i][dataHouseID];
 
         if(objData.enabled && (objData.builder == (int) itemID
@@ -508,11 +540,13 @@ int BuilderBase::getMaxUpgradeLevel() const {
         }
     }
 
-    if(itemID == Structure_HighTechFactory && owner != nullptr
-       && ModManager::instance().isTornieContentActive()
-       && getHouseScenarioLetter(static_cast<HOUSETYPE>(owner->getHouseID())) == 'W'
-       && currentGame->techLevel >= 7) {
-        upgradeLevel = std::max(upgradeLevel, 2);
+    if(itemID == Structure_HighTechFactory && owner != nullptr && tornieFamily
+       && getHouseScenarioLetter(static_cast<HOUSETYPE>(technology)) == 'W') {
+        const int chemicalTech = currentGame->objectData.data[Unit_ChemicalCarryall][technology].techLevel;
+        const bool revisedChemical = chemicalTech == 5 || chemicalTech == 6;
+        const int firstUpgradeTech = revisedChemical ? chemicalTech : 6;
+        if(currentGame->techLevel >= firstUpgradeTech && (revisedChemical || currentGame->techLevel >= 7))
+            upgradeLevel = std::max(upgradeLevel, currentGame->techLevel >= 7 ? 2 : 1);
     }
     return upgradeLevel;
 }
@@ -520,10 +554,31 @@ int BuilderBase::getMaxUpgradeLevel() const {
 void BuilderBase::updateBuildList()
 {
     std::list<BuildItem>::iterator iter = buildList.begin();
+    const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
+    const int technology = tornieFamily ? getTechnologyHouseID() : originalHouseID;
+    const auto contentBase = tornieFamily
+        ? ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) : std::string{};
 
     for(int i = 0; itemOrder[i] != ItemID_Invalid; i++) {
 
         int itemID2Add = itemOrder[i];
+        if(!tornieFamily && itemID2Add >= Unit_Troopers5) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
+        if(tornieFamily && itemID2Add == Structure_Slowpost) {
+            // Slowposts are Scoutpost conversions, not direct yard products.
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
+        if(itemID2Add == Unit_TameSandworm) {
+            const auto* combo = dynamic_cast<const Worfinery*>(this);
+            if(!tornieFamily || !combo || !combo->hasTameWormOffer()
+               || !currentGame->getGameInitSettings().getGameOptions().chaosMode) {
+                removeItem(buildList, iter, itemID2Add);
+                continue;
+            }
+        }
         if ((itemID2Add == Structure_Slab1 || itemID2Add == Structure_Slab4)
             && !currentGame->getGameInitSettings().getGameOptions().concreteRequired) {
             removeItem(buildList, iter, itemID2Add);
@@ -540,29 +595,53 @@ void BuilderBase::updateBuildList()
             continue;
         }
 
-        const bool tornieActive = ModManager::instance().isTornieContentActive();
         const bool specialChemicalCarryall = itemID2Add == Unit_ChemicalCarryall
-            && itemID == Structure_HighTechFactory
-            && owner != nullptr
-            && tornieActive
-            && (isHouseFaction(static_cast<HOUSETYPE>(owner->getHouseID()), HOUSE_WILDSPADE)
-                || owner->getHouseID() == HOUSE_ATREIDES);
+            && itemID == Structure_HighTechFactory && owner != nullptr && tornieFamily
+            && ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled()
+            && (isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_WILDSPADE)
+                || ((contentBase == "Tornie" || contentBase == "TornieLite") && technology == HOUSE_ATREIDES));
         if(itemID2Add == Unit_ChemicalCarryall && !specialChemicalCarryall) {
             removeItem(buildList, iter, itemID2Add);
             continue;
         }
-        const int dataHouseID = (itemID2Add == Unit_ChemicalCarryall) ? owner->getHouseID() : originalHouseID;
+        const bool neutralSaboteur = tornieFamily && itemID2Add == Unit_Saboteur
+            && !ModManager::instance().isTornieFamilyLiteContentActive()
+            && ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled()
+            && owner && isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_NEUTRAL)
+            && itemID == Structure_Worfinery;
+        if(tornieFamily && itemID2Add == Unit_Saboteur && !neutralSaboteur) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
+        const int dataHouseID = (neutralSaboteur || itemID2Add == Unit_TameSandworm)
+            ? owner->getFactionID() : tornieFamily ? technology
+            : itemID2Add == Unit_ChemicalCarryall ? owner->getHouseID() : originalHouseID;
         const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[itemID2Add][dataHouseID];
+        if(itemID2Add == Unit_Infantry5 && (!tornieFamily || itemID != Structure_Barracks
+            || curUpgradeLev < 2 || currentGame->techLevel < 4)) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
+        if(itemID2Add == Unit_Troopers5 && (!tornieFamily || itemID != Structure_Worfinery
+            || curUpgradeLev < 1 || currentGame->techLevel < 7 || owner->getNumItems(Structure_IX) <= 0)) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
 
         const bool itemEnabled = objData.enabled || specialChemicalCarryall;
-        const int requiredUpgrade = specialChemicalCarryall ? 2 : objData.upgradeLevel;
-        const int configuredTechLevel = specialChemicalCarryall ? 1 : objData.techLevel;
+        const bool wildspadeChemical = specialChemicalCarryall
+            && isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_WILDSPADE)
+            && (objData.techLevel == 5 || objData.techLevel == 6);
+        const int requiredUpgrade = specialChemicalCarryall ? (wildspadeChemical ? 1 : 2) : objData.upgradeLevel;
+        const int configuredTechLevel = specialChemicalCarryall ? (wildspadeChemical ? objData.techLevel : 1) : objData.techLevel;
         const int requiredTechLevel = itemID2Add == Structure_ChaosFactory
             ? std::max(9, configuredTechLevel)
             : configuredTechLevel;
         const bool producedHere = objData.builder == static_cast<int>(itemID)
                                || isCityHarkonnenProductBuilder(itemID, itemID2Add, originalHouseID)
                                || isAlternateTornieBuilder(itemID, itemID2Add)
+                               || (tornieFamily && itemID == Structure_Worfinery && objData.builder == Structure_WOR
+                                   && (itemID2Add == Unit_GasInfantry || itemID2Add == Unit_FlameTrooper))
                                || specialChemicalCarryall;
         const bool directWorfineryProduct = itemID == Structure_Worfinery
                                           && isWorfineryDirectProduct(itemID2Add);
@@ -611,7 +690,7 @@ void BuilderBase::updateBuildList()
                 }
             }
 
-            if(specialChemicalCarryall && owner->getNumItems(Structure_IX) <= 0) {
+            if(specialChemicalCarryall && !wildspadeChemical && owner->getNumItems(Structure_IX) <= 0) {
                 bPrerequisitesMet = false;
                 missingPrerequisite = Structure_IX;
             }
@@ -637,8 +716,11 @@ void BuilderBase::updateBuildList()
                 if(traceTechCenter) {
                     logTechCenterBuildGate(this, owner, objData, producedHere, true, ItemID_Invalid, "available", true);
                 }
-                const int buildListPrice = specialChemicalCarryall
-                    ? 950
+                const int buildListPrice = itemID2Add == Unit_Infantry5
+                    ? 3 * currentGame->objectData.data[Unit_Soldier][technology].price
+                    : itemID2Add == Unit_Troopers5
+                    ? 3 * currentGame->objectData.data[Unit_Trooper][technology].price
+                    : specialChemicalCarryall ? 950
                     : (directWorfineryProduct && itemID2Add == Unit_Harvester ? 425 : -1);
                 insertItem(buildList, iter, itemID2Add, buildListPrice);
             } else {
@@ -683,7 +765,9 @@ void BuilderBase::unSetWaitingToPlace() {
 }
 
 int BuilderBase::getUpgradeCost() const {
-    return currentGame->objectData.data[itemID][originalHouseID].price / 2;
+    const int technology = ModManager::instance().isTornieFamilyContentActive()
+        ? getTechnologyHouseID() : originalHouseID;
+    return currentGame->objectData.data[itemID][technology].price / 2;
 }
 
 
@@ -693,7 +777,7 @@ bool BuilderBase::update() {
         return false;
     }
 
-    if(isUnit(currentProducedItem) && (productionProgress >= getBuildItem(currentProducedItem)->price)) {
+    if(isUnit(currentProducedItem) && (productionProgress >= getCurrentProductionPrice())) {
         deployTimer--;
         if(deployTimer == 0) {
             int finishedItemID = currentProducedItem;
@@ -710,11 +794,18 @@ bool BuilderBase::update() {
                 // make three
                 finishedItemID = Unit_Trooper;
                 num2Place = 3;
+            } else if(finishedItemID == Unit_Infantry5) {
+                finishedItemID = Unit_Soldier;
+                num2Place = 5;
+            } else if(finishedItemID == Unit_Troopers5) {
+                finishedItemID = Unit_Trooper;
+                num2Place = 5;
             }
 
             Coord groupDeploySpot = Coord::Invalid();
             for(int i = 0; i < num2Place; i++) {
-                UnitBase* newUnit = getOwner()->createUnit(finishedItemID);
+                UnitBase* newUnit = getOwner()->createUnit(finishedItemID, false,
+                    ModManager::instance().isTornieFamilyContentActive() ? getTechnologyHouseID() : HOUSE_INVALID);
 
                 if(newUnit != nullptr) {
                     Coord unitDestination;
@@ -778,10 +869,14 @@ bool BuilderBase::update() {
 
         if(currentGame->getGameInitSettings().getGameOptions().instantBuild == true) {
             FixPoint upgradePriceLeft = totalUpgradePrice - upgradeProgress;
-            upgradeProgress += owner->takeCredits(upgradePriceLeft);
+            const auto payment = owner->payCredits(upgradePriceLeft);
+            upgradeProgress += payment.total;
+            upgradeProgressFromStartingCredits += payment.fromStarting;
         } else {
             FixPoint totalUpgradeGameTicks = 30 * 100 / 5;
-            upgradeProgress += owner->takeCredits(totalUpgradePrice / totalUpgradeGameTicks);
+            const auto payment = owner->payCredits(totalUpgradePrice / totalUpgradeGameTicks);
+            upgradeProgress += payment.total;
+            upgradeProgressFromStartingCredits += payment.fromStarting;
         }
 
         if(upgradeProgress >= totalUpgradePrice) {
@@ -790,6 +885,7 @@ bool BuilderBase::update() {
             updateBuildList();
 
             upgradeProgress = 0;
+            upgradeProgressFromStartingCredits = 0;
         }
     } else {
         updateProductionProgress();
@@ -877,6 +973,7 @@ bool BuilderBase::doUpgrade() {
     } else if(isAllowedToUpgrade() && (owner->getCredits() >= getUpgradeCost())) {
         upgrading = true;
         upgradeProgress = 0;
+        upgradeProgressFromStartingCredits = 0;
         return true;
     } else {
         return false;

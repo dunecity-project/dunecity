@@ -40,10 +40,9 @@ public:
     void assignToMap(const Coord& pos) override;
     void checkPos() override;
     bool canPass(int xPos, int yPos) const override;
+    void setProductionHouseID(int houseID) override;
 
-    virtual FixPoint getMaxSpeed() const override {
-        return currentMaxSpeed;
-    }
+    FixPoint getMaxSpeed() const override;
 
 protected:
     virtual FixPoint getDestinationAngle() const;

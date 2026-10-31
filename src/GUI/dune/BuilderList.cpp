@@ -30,6 +30,11 @@
 #include <SoundPlayer.h>
 #include <sand.h>
 #include <dunecity/CityConstants.h>
+#include <mod/ModManager.h>
+#include <FileClasses/FileManager.h>
+#include <FileClasses/LoadSavePNG.h>
+#include <GUI/dune/StructureSizePreview.h>
+#include <units/HarvesterHelpers.h>
 
 #include <structures/BuilderBase.h>
 #include <structures/StarPort.h>
@@ -44,6 +49,18 @@ namespace Layout = BuilderListLayout;
 namespace {
 
 constexpr int ArrowX = Layout::BodyLeft + (Layout::BodyWidth - Layout::ArrowButtonWidth)/2;
+
+int productionPortraitSlot(int itemID) {
+    switch(itemID) {
+        case Unit_Soldier: return 0;
+        case Unit_Infantry: return 1;
+        case Unit_Infantry5: return 2;
+        case Unit_Trooper: return 3;
+        case Unit_Troopers: return 4;
+        case Unit_Troopers5: return 5;
+        default: return -1;
+    }
+}
 
 /// Overlay text, lines centred, at the largest font size whose lines fit inside a grid button.
 /// Composed per line so the texture is exactly as large as the text (FontManager's multiline
@@ -152,6 +169,22 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
                 Point(Layout::BodyWidth, Layout::OrderButtonHeight));
     orderButton.setOnClick(std::bind(&BuilderList::onOrder, this));
     orderButton.setText(_("Order"));
+    const auto* builder = dynamic_cast<const BuilderBase*>(currentGame->getObjectManager().getObject(builderObjectID));
+    if(builder && ModManager::instance().isTornieFamilyContentActive()
+       && (builder->getItemID() == Structure_Barracks || builder->getItemID() == Structure_WOR
+           || builder->getItemID() == Structure_Worfinery)) {
+        const char* files[] = {"ProductionSoldier.png", "ProductionInfantry3.png", "ProductionInfantry5.png",
+                               "ProductionTrooper.png", "ProductionTroopers3.png", "ProductionTroopers5.png"};
+        if(isHouseFaction(static_cast<HOUSETYPE>(builder->getTechnologyHouseID()), HOUSE_KLESHMERSH)) {
+            files[3] = "ProductionTrooperFlames.png";
+            files[4] = "ProductionTroopersFlames3.png";
+            files[5] = "ProductionTroopersFlames5.png";
+        }
+        for(int slot = 0; slot < 6; ++slot) if(pFileManager->exists(files[slot])) {
+            auto surface = LoadPNG_RW(pFileManager->openFile(files[slot]).get());
+            if(surface) productionPortraits[slot] = convertSurfaceToTexture(surface.get());
+        }
+    }
 
     currentListPos = 0;
 
@@ -175,6 +208,12 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
 }
 
 BuilderList::~BuilderList() = default;
+
+SDL_Texture* BuilderList::getProductionPortrait(int itemID, int technologyHouse) const {
+    if(auto* portrait = pGFXManager->getFactionTrooperProductionPortrait(itemID, technologyHouse)) return portrait;
+    const int slot = productionPortraitSlot(itemID);
+    return slot < 0 ? nullptr : productionPortraits[slot].get();
+}
 
 void BuilderList::handleMouseMovement(Sint32 x, Sint32 y, bool insideOverlay) {
     StaticContainer::handleMouseMovement(x,y,insideOverlay);
@@ -368,27 +407,40 @@ void BuilderList::draw(Point position) {
             const HOUSETYPE pictureHouse = static_cast<HOUSETYPE>(
                 DuneCity::isCityOnlyStructure(buildItem.itemID) && pBuilder->getOwner()
                     ? pBuilder->getOwner()->getHouseID()
-                    : pBuilder->getOriginalHouseID());
+                    : ModManager::instance().isTornieFamilyContentActive()
+                        ? pBuilder->getTechnologyHouseID() : pBuilder->getOriginalHouseID());
             SDL_Texture* pTexture = resolveItemPicture(buildItem.itemID, pictureHouse);
+            if(auto* portrait = getProductionPortrait(buildItem.itemID, pictureHouse)) pTexture = portrait;
             if(pTexture != nullptr) {
                 drawItemPicture(pTexture, button);
             }
 
-            if(isStructure(buildItem.itemID)) {
+            const auto structureSize = isStructure(buildItem.itemID) ? getStructureSize(buildItem.itemID) : Coord(0, 0);
+            const bool extendedFootprint = ModManager::instance().isTornieFamilyContentActive()
+                && isStructure(buildItem.itemID) && (structureSize.x > 3 || structureSize.y > 3);
+            if(extendedFootprint) {
+                drawStructureSizePreview(renderer, pGFXManager->getUIGraphic(UI_StructureSizeLattice),
+                    pGFXManager->getUIGraphic(UI_StructureSizeConcrete), button.x + 1, button.y + 1,
+                    structureSize.x, structureSize.y, 4);
+            } else if(isStructure(buildItem.itemID)) {
                 // Structure size lattice at two thirds: 6 px cells become 4 px cells.
                 SDL_Texture* pLattice = pGFXManager->getUIGraphic(UI_StructureSizeLattice);
                 SDL_Rect destLattice = { button.x + 1, button.y + 1, (getWidth(pLattice)*2 + 1)/3, (getHeight(pLattice)*2 + 1)/3 };
                 SDL_RenderCopy(renderer, pLattice, nullptr, &destLattice);
 
                 SDL_Texture* pConcrete = pGFXManager->getUIGraphic(UI_StructureSizeConcrete);
-                const auto structureSize = getStructureSize(buildItem.itemID);
                 SDL_Rect srcConcrete = { 0, 0, 1 + structureSize.x*6, 1 + structureSize.y*6 };
                 SDL_Rect destConcrete = { button.x + 1, button.y + 1, 1 + structureSize.x*4, 1 + structureSize.y*4 };
                 SDL_RenderCopy(renderer, pConcrete, &srcConcrete, &destConcrete);
             }
 
             // draw price
-            sdl2::texture_ptr pPriceTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", buildItem.price), COLOR_WHITE, 12);
+            const int shownPrice = buildItem.itemID == pBuilder->getCurrentProducedItem()
+                ? pBuilder->getCurrentProductionPrice() : buildItem.price;
+            const Uint32 priceColor = ModManager::instance().isTornieFamilyContentActive()
+                && (buildItem.itemID == Unit_RaiderTrike || buildItem.itemID == Unit_RocketTrike)
+                ? COLOR_BLACK : COLOR_WHITE;
+            sdl2::texture_ptr pPriceTexture = pFontManager->createTextureWithText(fmt::sprintf("%d", shownPrice), priceColor, 12);
             SDL_Rect drawLocation = calcDrawingRect(pPriceTexture.get(), button.x + 2, button.y + button.h - getHeight(pPriceTexture.get()) + 3);
             SDL_RenderCopy(renderer, pPriceTexture.get(), nullptr, &drawLocation);
 
@@ -412,7 +464,7 @@ void BuilderList::draw(Point position) {
                 drawCentered(pAlreadyBuiltTextTexture.get());
             } else if(buildItem.itemID == pBuilder->getCurrentProducedItem()) {
                 FixPoint progress = pBuilder->getProductionProgress();
-                FixPoint price = buildItem.price;
+                FixPoint price = pBuilder->getCurrentProductionPrice();
                 int max_x = lround((progress/price)*button.w);
 
                 SDL_Rect progressBar = { button.x, button.y, max_x, button.h };
@@ -426,7 +478,7 @@ void BuilderList::draw(Point position) {
                 } else if(pBuilder->isOnHold()) {
                     drawCentered(pOnHoldTextTexture.get());
                 } else if(pBuilder->isUnitLimitReached(buildItem.itemID)) {
-                    const bool harvester = buildItem.itemID == Unit_Harvester || buildItem.itemID == Unit_RebelHarvester;
+                    const bool harvester = isHarvesterLikeUnit(buildItem.itemID);
                     drawCentered(harvester ? pHarvesterLimitReachedTextTexture.get() : pUnitLimitReachedTextTexture.get());
                 }
             }

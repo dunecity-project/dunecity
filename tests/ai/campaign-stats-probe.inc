@@ -31,8 +31,15 @@ void runTaxReceiptsProbe(Game& game) {
            || restored.getHarvestedSpice() != 123 || input.readUint32() != 0x74617831)
             throw std::runtime_error("Tax save roundtrip or following fields changed");
     }
-    // A 9840 House lacks the tax slot, spice income factor and measured deviation counters.
+    // A 9840 House lacks the tax slot, spice income factor, measured deviation
+    // counters and 9878 sale/research tail. Keep the following-stream sentinel.
     std::vector<char> legacy(bytes.getData(), bytes.getData() + bytes.getDataLength());
+    OMemoryStream tornieTail; tornieTail.open();
+    tornieTail.writeUint32(source.getStructuresSold());
+    tornieTail.writeUint32(source.getSaleCredits());
+    source.saveRadarResearch(tornieTail);
+    legacy.erase(legacy.end() - sizeof(Uint32) - tornieTail.getDataLength(),
+                 legacy.end() - sizeof(Uint32));
     // The 9851 prefix is 96 bytes, followed by 56 bytes per item reward record.
     OMemoryStream counterBytes; counterBytes.open(); source.getDeviationCounters().save(counterBytes);
     const size_t counterOffset = 96 + 56 * Num_ItemID;

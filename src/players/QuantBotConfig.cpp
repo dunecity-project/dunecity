@@ -30,6 +30,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <unordered_set>
@@ -243,6 +244,10 @@ QuantBotConfig::QuantBotConfig() {
     registerStructurePriority(Structure_RocketTurret, "RocketTurret", 100, 75);
     registerStructurePriority(Structure_Silo, "Silo", 0, 150);
     registerStructurePriority(Structure_Radar, "Radar", 0, 275);
+    if (ModManager::instance().isTornieFamilyContentActive()) {
+        registerStructurePriority(Structure_Doublefinery, "Doublefinery", 0, 300);
+        registerStructurePriority(Structure_Slowpost, "Slowpost", 75, 150);
+    }
 
     registerUnitPriority(Unit_Carryall, "Carryall", 20, 16);
     registerUnitPriority(Unit_Devastator, "Devastator", 175, 180);
@@ -265,6 +270,20 @@ QuantBotConfig::QuantBotConfig() {
     registerUnitPriority(Unit_Special, "Special", 0, 0);
     registerUnitPriority(Unit_Infantry, "Infantry", 20, 20);
     registerUnitPriority(Unit_Troopers, "Troopers", 50, 50);
+    if (ModManager::instance().isTornieFamilyContentActive()) {
+        registerUnitPriority(Unit_Troopers5, "Troopers5", 50, 50);
+        registerUnitPriority(Unit_Infantry5, "Infantry5", 20, 20);
+        registerUnitPriority(Unit_FlameQuad, "FlameQuad", 60, 60);
+        registerUnitPriority(Unit_GasInfantry, "GasInfantry", 20, 20);
+        registerUnitPriority(Unit_FlameTrooper, "FlameTrooper", 20, 30);
+        registerUnitPriority(Unit_EliteOrnithopter, "EliteOrnithopter", 75, 30);
+        registerUnitPriority(Unit_RaiderQuad, "RaiderQuad", 60, 60);
+        registerUnitPriority(Unit_RangedTank, "RangedTank", 80, 100);
+        registerUnitPriority(Unit_SlowTank, "SlowTank", 80, 100);
+        registerUnitPriority(Unit_CapacityHarvester, "CapacityHarvester", 10, 150);
+        registerUnitPriority(Unit_FastHarvester, "FastHarvester", 10, 150);
+        registerUnitPriority(Unit_TameSandworm, "TameSandworm", 80, 100);
+    }
     
     // === ARMY RECOVERY AND FRONT BATTERIES (Custom Hard/Brutal) ===
     // All PROVISIONAL and untuned. Milliseconds of game time, or basis points.
@@ -648,15 +667,29 @@ bool QuantBotConfig::save(const std::string& filepath) const {
 
 bool QuantBotConfig::load(const std::string& filepath) {
     try {
+        // Missing priorities still use their in-memory defaults, but loading
+        // must not change a pinned revision or an integrity-checked family
+        // bundle (including its Vanilla fallback). Draft/user configs retain
+        // the historical automatic upgrade.
+        const auto folder = std::filesystem::path(filepath).parent_path();
+        const auto metadata = folder / "workshop-revision.ini";
+        const auto& mods = ModManager::instance();
+        const bool immutable = folder.filename().string().rfind("ws-", 0) == 0
+            || (existsFile(metadata.string()) && INIFile(metadata.string()).getBoolValue("Workshop", "Immutable", false));
+        const bool familyBundle = mods.isTornieFamilyContentActive()
+            && (folder == std::filesystem::path(mods.getModPath(mods.getContentBase(mods.getActiveModName())))
+                || folder == std::filesystem::path(mods.getModPath("vanilla")));
+        const bool readOnly = immutable || familyBundle;
         // Try to load from user directory, create defaults if not found
         if (!existsFile(filepath)) {
             SDL_Log("QuantBot config not found: %s", filepath.c_str());
+            if (readOnly) return false;
             SDL_Log("Creating default configuration");
             return save(filepath);
         }
         
         INIFile iniFile(filepath);
-        if (readFrom(iniFile)) {
+        if (readFrom(iniFile) && !readOnly) {
             save(filepath);
         }
         

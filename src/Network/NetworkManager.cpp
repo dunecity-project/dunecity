@@ -46,6 +46,7 @@
 #include <iterator>
 #include <limits>
 #include <set>
+#include <utility>
 
 namespace {
 
@@ -170,6 +171,18 @@ void NetworkManager::installSessionBridges() {
     };
     pOnReceiveCoopMissionBridge = [this](const GameInitSettings& settings) {
         pendingCoopMission = std::make_unique<GameInitSettings>(settings);
+    };
+    pOnReceiveCoopControlBridge = [this](const coop::ControlMessage& message) {
+        auto& queue = message.operation == coop::ControlOperation::Ready
+            ? pendingCoopReady : pendingCoopAdvance;
+        const auto duplicate = std::find_if(queue.begin(), queue.end(),
+            [&](const auto& previous) { return previous.playerName == message.playerName; });
+        if(duplicate == queue.end()) queue.push_back(message);
+        else if(duplicate->value != message.value || duplicate->settingsBlob != message.settingsBlob) {
+            // Conflicting duplicates cannot overwrite an earlier readiness report.
+            duplicate->value = 0;
+            duplicate->settingsBlob.clear();
+        }
     };
 }
 
@@ -310,7 +323,7 @@ void NetworkManager::startServer(bool bLANServer, const std::string& serverName,
         this->bLANServer = false;
         this->numPlayers = numPlayers;
         this->maxPlayers = maxPlayers;
-        pendingCoopMission.reset();
+        clearCoopCampaign();
         this->playerName = playerName;
         this->pGameInitSettings = pGameInitSettings;
 
@@ -399,7 +412,7 @@ void NetworkManager::startServer(bool bLANServer, const std::string& serverName,
     this->bLANServer = bLANServer;
     this->numPlayers = numPlayers;
     this->maxPlayers = maxPlayers;
-    pendingCoopMission.reset();
+    clearCoopCampaign();
     this->playerName = playerName;
     this->pGameInitSettings = pGameInitSettings;
 }
@@ -605,7 +618,7 @@ void NetworkManager::connect(ENetAddress address, const std::string& playerName)
         THROW(std::runtime_error, "NetworkManager: No available peers for initiating a connection.");
     }
 
-    pendingCoopMission.reset();
+    clearCoopCampaign();
     this->playerName = playerName;
 
     connectPeer->data = createPeerData(connectPeer, PeerData::PeerState::WaitingForConnect);
@@ -625,7 +638,7 @@ void NetworkManager::connectWebRtc(const std::string& playerName) {
     bGameInProgress = false;
     simulationSeed = 0;
     pGameInitSettings = nullptr;
-    pendingCoopMission.reset();
+    clearCoopCampaign();
     modTransferState = ModTransferState();
     this->playerName = playerName;
 
@@ -1219,6 +1232,7 @@ NetworkSessionCallbacks NetworkManager::sessionCallbacks() const {
     callbacks.onReceiveMatchControl    = &pOnReceiveMatchControl;
     callbacks.onReceiveMatchResumeRequest = &pOnReceiveMatchResumeRequest;
     callbacks.onReceiveCoopMission     = &pOnReceiveCoopMissionBridge;
+    callbacks.onReceiveCoopControl     = &pOnReceiveCoopControlBridge;
     callbacks.onConfigMismatch         = &pOnConfigMismatch;
     return callbacks;
 }
@@ -1267,7 +1281,7 @@ bool NetworkManager::startDirectSession(const DirectRoomTransport::Config& confi
 
     bGameInProgress = false;
     simulationSeed  = 0;
-    pendingCoopMission.reset();
+    clearCoopCampaign();
     playerName = config.displayName;
 
     auto direct = std::make_unique<DirectRoomTransport>();
@@ -1282,11 +1296,12 @@ bool NetworkManager::isMeshReady() const {
     const DirectRoomTransport* direct = getDirectTransport();
     // On every other transport the question does not arise: the ENet mesh connects every pair
     // itself, and the relay forwards between all of them.
-    return direct == nullptr ? true : direct->meshReady();
+    return direct == nullptr ? true : (!hasPendingCoopSetup() && direct->meshReady());
 }
 
 std::string NetworkManager::getMeshBlockedReason() const {
     const DirectRoomTransport* direct = getDirectTransport();
+    if(direct && hasPendingCoopSetup()) return "Synchronizing the co-op checkpoint with every controller...";
     return direct == nullptr ? std::string() : direct->meshBlockedReason();
 }
 
@@ -1298,7 +1313,7 @@ bool NetworkManager::startRelaySession(const RoomRelayClient::Config& config, st
 
     bGameInProgress = false;
     simulationSeed = 0;
-    pendingCoopMission.reset();
+    clearCoopCampaign();
     playerName = config.displayName;
 
     auto relay = std::make_unique<RoomRelayClient>();
@@ -1331,13 +1346,16 @@ bool NetworkManager::sendPacketOverRelay(NetworkPacketOStream& packetStream, int
                                          std::uint32_t recipient) {
 #ifdef __EMSCRIPTEN__
     // Browser: the buffer already holds the serialized bytes; hand them over directly.
+    if(isDirectSession() && packetStream.getDataLength() > P2PWire::Limits::kMaxGamePayloadBytes)
+        return queueCoopSetup(packetStream.getData(), packetStream.getDataLength(), channel, recipient);
     return pRelayClient && pRelayClient->sendGamePayload(
         packetStream.getData(), packetStream.getDataLength(), channel, recipient);
 #else
     ENetPacket* packet = packetStream.getPacket();
     if(packet == nullptr) return false;
-    const bool accepted = pRelayClient && pRelayClient->sendGamePayload(
-        packet->data, packet->dataLength, channel, recipient);
+    const bool accepted = isDirectSession() && packet->dataLength > P2PWire::Limits::kMaxGamePayloadBytes
+        ? queueCoopSetup(packet->data, packet->dataLength, channel, recipient)
+        : (pRelayClient && pRelayClient->sendGamePayload(packet->data, packet->dataLength, channel, recipient));
     enet_packet_destroy(packet);
     return accepted;
 #endif
@@ -1466,6 +1484,7 @@ void NetworkManager::updateRelaySession() {
     if(pRelayClient->isJoined()) {
         bIsServer = pRelayClient->isHost();
     }
+    updateCoopSetup();
 }
 
 void NetworkManager::handleRelayGamePayload(std::uint32_t peerId,
@@ -1530,6 +1549,10 @@ void NetworkManager::handleRelayGamePayload(std::uint32_t peerId,
                         "NetworkManager: refused relay packet %u from '%s': %s",
                         static_cast<unsigned>(packetType), peerName.c_str(),
                         NetworkPacketPolicy::describeVerdict(verdict));
+            return;
+        }
+        if(packetType == NETWORKPACKET_COOP_SETUP_TRANSFER) {
+            if(isDirectSession()) receiveCoopSetup(peerId, peerIsHost, packetStream);
             return;
         }
 
@@ -1614,6 +1637,10 @@ void NetworkManager::handleRelayGamePayload(std::uint32_t peerId,
         // lobby has to be told rather than only the log.
         payloadContext.contentMustMatch = true;
         payloadContext.coopPartnerIsSolePeer = (peerCount == 1) && peerIsHost;
+        if(isDirectSession() && coopCampaignContext) {
+            payloadContext.coopCampaign = &*coopCampaignContext;
+            payloadContext.coopEpoch = coopCampaignEpoch;
+        }
 
         auto callbacks=sessionCallbacks();
         std::function<void(const std::string&,const std::string&)> chat=[this](const auto& name,const auto& message) {
@@ -2266,6 +2293,10 @@ bool NetworkManager::routeSharedPayload(NetPeer* peer, Uint32 packetType,
     // peer", which is also the connection to the host.
     context.coopPartnerIsSolePeer =
         (!bIsServer) && (peerList.size() == 1) && (peerList.front() == peer);
+    if(coopCampaignContext) {
+        context.coopCampaign = &*coopCampaignContext;
+        context.coopEpoch = coopCampaignEpoch;
+    }
 
     auto callbacks = sessionCallbacks();
     callbacks.onGameInfoAccepted = [this]() {
@@ -2455,6 +2486,59 @@ std::unique_ptr<GameInitSettings> NetworkManager::takeCoopMission() {
     return std::move(pendingCoopMission);
 }
 
+void NetworkManager::configureCoopCampaign(const coop::Context& context, Uint32 epoch) {
+    if(transport == Transport::RoomRelay || !ModManager::instance().isTornieFamilyContentActive() || epoch == 0
+       || context.modName != ModManager::instance().getContentBase(ModManager::instance().getActiveModName()))
+        THROW(std::invalid_argument, "Separate-house co-op requires its active family and direct peers.");
+    pendingCoopReady.clear();
+    pendingCoopAdvance.clear();
+    coopCampaignContext = context;
+    coopCampaignEpoch = epoch;
+}
+
+void NetworkManager::clearCoopCampaign() {
+    coopCampaignContext.reset();
+    coopCampaignEpoch = 0;
+    pendingCoopReady.clear();
+    pendingCoopAdvance.clear();
+    pendingCoopMission.reset();
+    coopSetupOutgoing.clear();
+    coopSetupIncoming = {};
+}
+
+void NetworkManager::sendCoopReady(const std::string& sessionId, int stage, Uint8 outcome) {
+    if(bIsServer || transport == Transport::RoomRelay || !coopCampaignContext
+       || sessionId != coopCampaignContext->sessionId || stage != coopCampaignContext->stage) return;
+    coop::ControlMessage message{coop::ControlOperation::Ready, coopCampaignEpoch, sessionId,
+        stage, outcome, {}, {}};
+    if(!coop::validControl(message)) return;
+    NetworkPacketOStream packet(NETWORK_PACKET_FLAG_RELIABLE);
+    packet.writeUint32(NETWORKPACKET_COOP_CAMPAIGN_CONTROL);
+    coop::writeControl(packet, message);
+    sendPacketToHost(packet);
+}
+
+void NetworkManager::sendCoopAdvance(const std::string& sessionId, int stage, Uint8 action,
+                                   const std::string& settingsBlob) {
+    if(!bIsServer || transport == Transport::RoomRelay || !coopCampaignContext
+       || sessionId != coopCampaignContext->sessionId || stage != coopCampaignContext->stage) return;
+    coop::ControlMessage message{coop::ControlOperation::Advance, coopCampaignEpoch, sessionId,
+        stage, action, settingsBlob, {}};
+    if(!coop::validControl(message)) return;
+    NetworkPacketOStream packet(NETWORK_PACKET_FLAG_RELIABLE);
+    packet.writeUint32(NETWORKPACKET_COOP_CAMPAIGN_CONTROL);
+    coop::writeControl(packet, message);
+    sendPacketToAllConnectedPeers(packet);
+}
+
+std::vector<coop::ControlMessage> NetworkManager::takeCoopReady() {
+    return std::exchange(pendingCoopReady, {});
+}
+
+std::vector<coop::ControlMessage> NetworkManager::takeCoopAdvance() {
+    return std::exchange(pendingCoopAdvance, {});
+}
+
 void NetworkManager::beginSimulation(Uint32 seed) {
     if(bIsServer) { observerTransfers.clear(); observerHistory.clear(); observerHistoryBytes=0; observerEndCycle=0; }
     if(joinLoading) {
@@ -2483,6 +2567,7 @@ void NetworkManager::beginSimulation(Uint32 seed) {
 }
 
 bool NetworkManager::sendStartGame(unsigned int timeLeft) {
+    if(isDirectSession() && hasPendingCoopSetup()) return false;
     if(isRoomSession()) {
         if(!pRelayClient || !pRelayClient->isHost()) return false;
         // Use the worst connected-peer RTT to give every player time to receive the start.
@@ -2804,62 +2889,51 @@ void NetworkManager::sendModFilesToPeer(NetPeer* peer, const std::string& modNam
 
     SDL_Log("NetworkManager: Packaging mod '%s' from path: %s", modName.c_str(), modPath.c_str());
 
-    // Package mod files into a simple format:
-    // [num_files:uint32][file1_name:string][file1_data:string][file2_name:string][file2_data:string]...
+    // Preserve the wire layout, but preflight its full framed size before
+    // allocating. Read each file straight into the single bounded buffer.
     std::string packagedData;
-    
-    // Write number of files placeholder (we'll update this)
     uint32_t numFiles = 0;
-    
-    std::vector<std::pair<std::string, std::string>> fileData;  // name -> content pairs
-
     try {
-        const std::filesystem::path root = std::filesystem::weakly_canonical(modPath);
-        std::vector<std::filesystem::path> paths;
-        for(const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
-            if(entry.is_symlink()) {
-                throw std::runtime_error("mod contains a symbolic link");
-            }
-            if(entry.is_regular_file()) {
-                paths.push_back(entry.path());
-            }
-        }
-        std::sort(paths.begin(), paths.end(), [&](const auto& lhs, const auto& rhs) {
-            return std::filesystem::relative(lhs, root).generic_string()
-                < std::filesystem::relative(rhs, root).generic_string();
-        });
-
-        std::size_t contentBytes = 0;
+        const auto root = std::filesystem::weakly_canonical(modPath);
+        std::vector<std::pair<std::string, uint32_t>> files;
         std::set<std::string> portablePathKeys;
-        for(const auto& filePath : paths) {
-            const std::string filename = std::filesystem::relative(filePath, root).generic_string();
-            if(filename == ".dunecity-managed") {
-                continue;
-            }
-            std::filesystem::path normalizedPath;
-            if(!ModTransferValidation::normalizeRelativeFilePath(filename, normalizedPath)
-               || normalizedPath.generic_string() != filename) {
+        std::size_t packageBytes = sizeof(numFiles);
+        for(const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+            if(entry.is_symlink()) throw std::runtime_error("mod contains a symbolic link");
+            if(!entry.is_regular_file()) continue;
+            std::string filename = std::filesystem::relative(entry.path(), root).generic_string();
+            if(filename == ".dunecity-managed") continue;
+            std::filesystem::path normalized;
+            if(!ModTransferValidation::normalizeRelativeFilePath(filename, normalized)
+               || normalized.generic_string() != filename)
                 throw std::runtime_error("mod contains a non-portable path");
-            }
-            if(!portablePathKeys.insert(
-                   ModTransferValidation::portablePathKey(normalizedPath)).second) {
+            if(!portablePathKeys.insert(ModTransferValidation::portablePathKey(normalized)).second)
                 throw std::runtime_error("mod contains duplicate or case-colliding paths");
-            }
-            if(fileData.size() >= 4096) {
-                throw std::runtime_error("mod exceeds transfer file-count limit");
-            }
-            const auto fileSize = std::filesystem::file_size(filePath);
-            if(fileSize > static_cast<std::uintmax_t>(MAX_MOD_TRANSFER_SIZE)
-               || contentBytes + static_cast<std::size_t>(fileSize) > MAX_MOD_TRANSFER_SIZE) {
-                throw std::runtime_error("This mod is larger than the 10 MiB LAN transfer limit. Connect both players to the community server, share the mod, and download it before joining.");
-            }
-            std::ifstream file(filePath, std::ios::binary);
-            if(!file) {
-                throw std::runtime_error("could not read " + filename);
-            }
-            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            contentBytes += content.size();
-            fileData.push_back({filename, std::move(content)});
+            if(files.size() >= 4096) throw std::runtime_error("mod exceeds transfer file-count limit");
+            const auto size = entry.file_size();
+            if(size > MAX_MOD_TRANSFER_SIZE)
+                throw std::runtime_error("Mod exceeds the bounded direct peer transfer limit");
+            const std::size_t entryBytes = 2 * sizeof(uint32_t) + filename.size() + static_cast<std::size_t>(size);
+            if(entryBytes > MAX_MOD_TRANSFER_SIZE || packageBytes > MAX_MOD_TRANSFER_SIZE - entryBytes)
+                throw std::runtime_error("Mod exceeds the bounded direct peer transfer limit");
+            packageBytes += entryBytes;
+            files.emplace_back(std::move(filename), static_cast<uint32_t>(size));
+        }
+        if(files.empty()) throw std::runtime_error("No mod files found");
+        std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        numFiles = static_cast<uint32_t>(files.size());
+        packagedData.reserve(packageBytes);
+        packagedData.append(reinterpret_cast<const char*>(&numFiles), sizeof(numFiles));
+        for(const auto& [name, size] : files) {
+            const auto nameLength = static_cast<uint32_t>(name.size());
+            packagedData.append(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+            packagedData.append(name);
+            packagedData.append(reinterpret_cast<const char*>(&size), sizeof(size));
+            const auto offset = packagedData.size();
+            packagedData.resize(offset + size);
+            std::ifstream file(root / name, std::ios::binary);
+            if(!file || !file.read(packagedData.data() + offset, size))
+                throw std::runtime_error("could not read " + name);
         }
     } catch(const std::exception& e) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "NetworkManager: Could not package mod '%s': %s",
@@ -2868,53 +2942,6 @@ void NetworkManager::sendModFilesToPeer(NetPeer* peer, const std::string& modNam
         completePacket.writeUint32(NETWORKPACKET_MOD_COMPLETE);
         completePacket.writeBool(false);
         completePacket.writeString(e.what());
-        sendPacketToPeer(peer, completePacket);
-        return;
-    }
-
-    if(fileData.size() > UINT32_MAX) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "NetworkManager: Mod '%s' has too many files", modName.c_str());
-        return;
-    }
-    numFiles = static_cast<uint32_t>(fileData.size());
-
-    if(numFiles == 0) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "NetworkManager: No files found in mod '%s'", modName.c_str());
-        
-        NetworkPacketOStream completePacket(NETWORK_PACKET_FLAG_RELIABLE);
-        completePacket.writeUint32(NETWORKPACKET_MOD_COMPLETE);
-        completePacket.writeBool(false);
-        completePacket.writeString("No mod files found");
-        sendPacketToPeer(peer, completePacket);
-        return;
-    }
-
-    // Build the package
-    // Format: numFiles (4 bytes) + [nameLen (4 bytes) + name + dataLen (4 bytes) + data] * numFiles
-    packagedData.reserve(1024 * 1024);  // Reserve 1MB initially
-    
-    // Write number of files
-    packagedData.append(reinterpret_cast<const char*>(&numFiles), sizeof(numFiles));
-    
-    for(const auto& [name, content] : fileData) {
-        uint32_t nameLen = static_cast<uint32_t>(name.size());
-        uint32_t dataLen = static_cast<uint32_t>(content.size());
-        
-        packagedData.append(reinterpret_cast<const char*>(&nameLen), sizeof(nameLen));
-        packagedData.append(name);
-        packagedData.append(reinterpret_cast<const char*>(&dataLen), sizeof(dataLen));
-        packagedData.append(content);
-    }
-
-    // Check size limit
-    if(packagedData.size() > MAX_MOD_TRANSFER_SIZE) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "NetworkManager: Mod '%s' exceeds size limit (%zu > %d)", 
-                    modName.c_str(), packagedData.size(), MAX_MOD_TRANSFER_SIZE);
-        
-        NetworkPacketOStream completePacket(NETWORK_PACKET_FLAG_RELIABLE);
-        completePacket.writeUint32(NETWORKPACKET_MOD_COMPLETE);
-        completePacket.writeBool(false);
-        completePacket.writeString("Mod exceeds size limit");
         sendPacketToPeer(peer, completePacket);
         return;
     }

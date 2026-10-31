@@ -21,6 +21,7 @@
 #include "Definitions.h"
 #include "DataTypes.h"
 #include "SpiceIncome.h"
+#include <Campaign/CoopCampaignSession.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 
@@ -197,7 +198,29 @@ public:
     void enableCoop(bool campaign, const std::string& serverName);
     static GameInitSettings readSaveSetup(InputStream& stream, HouseInfoList& houses);
     void configureCoopSave(const GameInitSettings& saved, const HouseInfoList& houses);
-    void setScenarioData(const std::string& data) { filedata = data; }
+    void setScenarioData(const std::string& data) {
+        filedata = data;
+        coopContextCached = false;
+        coopHarvestCached = false;
+    }
+    void setMapData(const std::string& data) { setScenarioData(data); }
+    const std::optional<coop::Context>& getCoopCampaignContext() const;
+    struct CoopHarvestObjective {
+        int quota = 0;
+        std::array<int, 4> houses{{-1, -1, -1, -1}};
+    };
+    const CoopHarvestObjective& getCoopHarvestObjective() const;
+    bool isTornieFamilyMatch() const;
+    bool isEasyModeEnabled() const;
+    bool isEasyModeHouse(int ownerHouse) const;
+    int campaignPurchasePrice(int price, int ownerHouse) const;
+    int campaignStartingCredits(int credits, int ownerHouse) const;
+    bool isChaosModeEnabled() const;
+    bool isChaosCampaignEligible() const;
+    void setAllianceOptions(bool control, bool building) {
+        gameOptions.alliedControl = control;
+        gameOptions.alliedBuilding = building;
+    }
 
 
     inline GameType getGameType() const { return gameType; };
@@ -211,13 +234,14 @@ public:
     GameInitSettings networkSnapshot(const std::string& data) const {
         GameInitSettings result(*this);
         result.gameType=GameType::LoadMultiplayer;
-        result.filename="online-resume.dls"; result.filedata=data; result.houseInfoList.clear();
+        result.filename="online-resume.dls"; result.setScenarioData(data); result.houseInfoList.clear();
         // Local observation is a property of this machine's setup screen, never of a snapshot
         // handed to a peer. A network observer is admitted through the spectator grant instead.
         result.localSpectator=false;
         return result;
     }
     inline Uint32 getRandomSeed() const { return randomSeed; };
+    inline void setRandomSeed(Uint32 seed) { randomSeed = seed; }
 
     /**
         Offline Custom Game "Spectate": every map faction is left to an AI and this machine
@@ -231,7 +255,10 @@ public:
     inline bool isMultiplePlayersPerHouse() const { return multiplePlayersPerHouse; };
     inline void setMultiplePlayersPerHouse(bool multiplePlayersPerHouse) { this->multiplePlayersPerHouse = multiplePlayersPerHouse; };
     inline const SettingsClass::GameOptionsClass& getGameOptions() const { return gameOptions; };
-    void setGameOptions(const SettingsClass::GameOptionsClass& options) { gameOptions = options; }
+    void setGameOptions(const SettingsClass::GameOptionsClass& options) {
+        gameOptions = options;
+        chaosCampaignEligible = chaosCampaignEligible && options.chaosMode;
+    }
     inline GraphicsSkin getCampaignGraphicsSkin() const { return campaignGraphicsSkin; };
     inline void setCampaignGraphicsSkin(GraphicsSkin skin) { campaignGraphicsSkin = skin; };
 
@@ -250,7 +277,13 @@ public:
     void setMapRevision(const std::string& hash, Uint32 version, const std::string& manifest) {
         mapRevisionHash = hash; mapRevisionVersion = version; mapRevisionManifest = manifest;
     }
-    void setModIdentity(const std::string& name, const std::string& checksum) { modName = name; modChecksum = checksum; }
+    void setModIdentity(const std::string& name, const std::string& checksum) {
+        modName = name;
+        modChecksum = checksum;
+        tornieFamilyCached = false;
+        coopContextCached = false;
+        coopHarvestCached = false;
+    }
     /// VERSION of the build that wrote the save these settings were read from; empty for a new
     /// game. A shipped mod's pinned revision carries that release's stamp in its mod.ini (see
     /// WorkshopGameContent::resolveMod). Like localSpectator: never serialized, never transmitted.
@@ -296,6 +329,13 @@ private:
     Uint32          randomSeed = 0;
 
     bool            multiplePlayersPerHouse = false;
+    bool            chaosCampaignEligible = false;
+    mutable bool    tornieFamilyCached = false;
+    mutable bool    tornieFamilyMatch = false;
+    mutable bool    coopContextCached = false;
+    mutable std::optional<coop::Context> coopContext;
+    mutable bool    coopHarvestCached = false;
+    mutable CoopHarvestObjective coopHarvestObjective;
 
     /// Local-only; see isLocalSpectator(). Never serialized, never transmitted.
     bool            localSpectator = false;

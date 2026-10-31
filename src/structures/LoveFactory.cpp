@@ -94,7 +94,7 @@ int LoveFactory::getDeliveryMaximum(Uint32 deliveryID) const {
 }
 
 int LoveFactory::getRandomizedPrice(Uint32 deliveryID) const {
-    int basePrice = currentGame->objectData.data[deliveryID][originalHouseID].price;
+    int basePrice = currentGame->objectData.data[deliveryID][getTechnologyHouseID()].price;
     if(basePrice <= 0) {
         basePrice = fallbackBasePrice(deliveryID);
     }
@@ -252,14 +252,16 @@ void LoveFactory::doBuildRandom() {
 
 bool LoveFactory::isDeliveryCandidate(Uint32 unitItemID, Uint32 deliveryID) const {
     if(currentGame == nullptr || !isUnit(unitItemID)
+       || unitItemID == Unit_Infantry5
+       || unitItemID == Unit_Troopers5
        || unitItemID == Unit_ChemicalCarryall
-       || unitItemID == Unit_Frigate || unitItemID == Unit_Ornithopter
-       || unitItemID == Unit_Sandworm || unitItemID == Unit_Special
+       || unitItemID == Unit_Frigate || isOrnithopterUnit(unitItemID)
+       || isSandwormUnit(unitItemID) || unitItemID == Unit_Special
        || isAmbientUnit(unitItemID)) {
         return false;
     }
 
-    const auto& data = currentGame->objectData.data[unitItemID][originalHouseID];
+    const auto& data = currentGame->objectData.data[unitItemID][getTechnologyHouseID()];
     if(!data.enabled || data.builder == ItemID_Invalid
        || (data.techLevel >= 0 && data.techLevel > currentGame->techLevel)) {
         return false;

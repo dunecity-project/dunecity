@@ -28,6 +28,7 @@
 #include <ScreenBorder.h>
 #include <sand.h>
 #include <mod/ModManager.h>
+#include <misc/SpiceGeneration.h>
 
 #include <units/UnitBase.h>
 #include <units/InfantryBase.h>
@@ -40,13 +41,6 @@
 #include <stack>
 #include <set>
 
-namespace {
-
-bool isTornieModActive() {
-    return ModManager::instance().isInitialized() && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Tornie";
-}
-
-} // namespace
 
 Map::Map(int xSize, int ySize)
  : sizeX(xSize), sizeY(ySize), lastSinglySelectedObject(nullptr), pathingRevision(0) {
@@ -318,10 +312,14 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
     if(bulletID == Bullet_Sandworm) {
         // A reinforcement worm's bite takes the whole tile but its summoner's side.
         const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(damagerID));
+        const bool family = ModManager::instance().isTornieFamilyContentActive();
+        const bool tameAttack = family && worm && worm->getItemID() == Unit_TameSandworm;
         for(auto objectID : affectedGroundAndUndergroundUnits) {
             auto pObject = currentGame->getObjectManager().getObject(objectID);
             if(pObject
                 && (pObject->getItemID() != Unit_Sandworm)
+                && (!family || pObject->getItemID() != Unit_TameSandworm)
+                && (!tameAttack || !damagerOwner || pObject->getOwner()->getTeamID() != damagerOwner->getTeamID())
                 && (pObject->isAGroundUnit() || pObject->isInfantry())
                 && (pObject->getLocation() == location)
                 && (worm == nullptr || !worm->spares(*pObject)))
@@ -620,11 +618,13 @@ bool Map::okayToPlaceStructure(int x, int y, int buildingSizeX, int buildingSize
 }
 
 bool Map::isWithinBuildRange(int x, int y, const House* pHouse) const {
-    for (auto i = x - BUILDRANGE; i <= x + BUILDRANGE; i++) {
-        for (auto j = y - BUILDRANGE; j <= y + BUILDRANGE; j++) {
+    const int range = BUILDRANGE + (pHouse->hasRadarResearch(radar::BaseExpansion) ? 2 : 0);
+    for(auto i = x - range; i <= x + range; ++i) {
+        for(auto j = y - range; j <= y + range; ++j) {
             const auto tile = getTile_internal(i, j);
 
-            if (tile && DuneCity::isConstructionAnchor(tile->getOwner(), pHouse->getHouseID()))
+            if(tile && (DuneCity::isConstructionAnchor(tile->getOwner(), pHouse->getHouseID())
+                        || currentGame->canBuildOnAlliedLand(pHouse, tile->getOwner())))
                 return true;
         }
     }
@@ -854,7 +854,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
             lastCheckedObject = nullptr;
         }
 
-        if((lastCheckedObject != nullptr) && (lastCheckedObject->getOwner() == pHouse)) {
+        if(lastCheckedObject && currentGame->canPlayerControlHouse(pHouse, lastCheckedObject->getOwner())) {
             // Buildings have a single-object sidebar. Shift must not combine a
             // building with troops (or another building) into a troop command panel.
             if (lastCheckedObject->isAStructure()) {
@@ -998,6 +998,10 @@ void Map::spiceRemoved(const Coord& coord) {
                     pTile->setType(Terrain_GreenSpice);
                 } else if(pTile->getType() == Terrain_ThickRedSpice) {
                     pTile->setType(Terrain_RedSpice);
+                } else if(pTile->getType() == Terrain_ThickPaleLilacSpice) {
+                    pTile->setType(Terrain_PaleLilacSpice);
+                } else if(pTile->getType() == Terrain_ThickWhiteSpice) {
+                    pTile->setType(Terrain_WhiteSpice);
                 } else {
                     pTile->setType(Terrain_Spice);
                 }
@@ -1055,19 +1059,11 @@ std::pair<int, int> Map::chooseGeneratedSpiceTerrain(int thinSpiceTerrain, int t
     if(currentGame == nullptr
        || thinSpiceTerrain != Terrain_Spice
        || thickSpiceTerrain != Terrain_ThickSpice
-       || !isTornieModActive()) {
+       || !ModManager::instance().isTornieFamilyContentActive()) {
         return std::make_pair(thinSpiceTerrain, thickSpiceTerrain);
     }
 
-    const int roll = currentGame->randomGen.rand(0, 99);
-    if(roll < 10) {
-        return std::make_pair(Terrain_GreenSpice, Terrain_ThickGreenSpice);
-    }
-    if(roll < 20) {
-        return std::make_pair(Terrain_RedSpice, Terrain_ThickRedSpice);
-    }
-
-    return std::make_pair(Terrain_Spice, Terrain_ThickSpice);
+    return generatedSpiceTerrainForRoll(currentGame->randomGen.rand(0, 99), activeSpiceVariantMask());
 }
 
 void Map::createSpiceField(Coord location, int radius, bool centerIsThickSpice, int thinSpiceTerrain, int thickSpiceTerrain) const {

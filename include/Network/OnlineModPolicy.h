@@ -9,8 +9,12 @@
 namespace OnlineModPolicy {
 // These are the approved mods shipped with the game. Editable copies never
 // inherit approval from Base Mod; they must synchronize in a pregame lobby.
-inline const std::array<std::string, 4>& approvedMods() {
-    static const std::array<std::string, 4> names{{"vanilla", "dunecity", "Tornie", "Dune2R"}};
+inline const std::array<std::string, 9>& approvedMods() {
+    // Keep the original four token indices stable.
+    static const std::array<std::string, 9> names{{
+        "vanilla", "dunecity", "Tornie", "Dune2R",
+        "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite"
+    }};
     return names;
 }
 inline bool approved(const std::string& name) {
@@ -22,7 +26,8 @@ inline std::string approvedName(const std::string& fingerprint) {
     if(fingerprint.size() != 64 || fingerprint.find_first_not_of("0123456789abcdef") != std::string::npos
        || fingerprint.compare(0, 15, "d00ec17a0000000") != 0) return {};
     const int index = fingerprint[15] - '1';
-    return index >= 0 && index < 4 ? approvedMods()[index] : std::string();
+    return index >= 0 && static_cast<std::size_t>(index) < approvedMods().size()
+        ? approvedMods()[index] : std::string();
 }
 inline std::string fingerprint() {
     auto& mods = ModManager::instance();

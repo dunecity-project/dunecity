@@ -26,6 +26,7 @@
 #include <Explosion.h>
 #include <Map.h>
 #include <SoundPlayer.h>
+#include <mod/ModManager.h>
 
 #include <players/HumanPlayer.h>
 
@@ -168,7 +169,9 @@ void Devastator::destroy()
 
                 // The blast is the armed house's doing for the whole fuse, and an
                 // unarmed Devastator's death explosion belongs to whoever holds it now.
-                currentGameMap->damage(objectID, owner, realPos, itemID, 150, 16, false, true, NONE_ID,
+                const int blastDamage = ModManager::instance().isTornieFamilyContentActive()
+                    ? owner->radarAttackDamage(itemID, 150) : 150;
+                currentGameMap->damage(objectID, owner, realPos, itemID, blastDamage, 16, false, true, NONE_ID,
                                        armed ? armedProvenance : DeviationReward::liveProvenance(this, getOwner()));
 
                 Uint32 explosionID = currentGame->randomGen.getRandOf({Explosion_Large1, Explosion_Large2});

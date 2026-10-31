@@ -26,13 +26,13 @@
 
 /// A maximal lobby refresh is 7 events per house row - house, team, colour, graphics skin,
 /// spice income, and one event for each of the two player seats - and the lobby has at most
-/// MAX_CUSTOM_GAME_PLAYERS = 9 rows, so 7 * 9 = 63 events.
+/// MAX_CUSTOM_GAME_PLAYERS = 12 rows, so 7 * 12 = 84 events.
 ///
 /// The largest list that is ever sent is one more than that: getChangeEventListForNewPlayer
-/// appends the seat claim for the joining player to a full refresh, which is 64. So this bound
+/// appends the seat claim for the joining player to a full refresh, which is 85. So this bound
 /// is exactly the worst legitimate case, with nothing to spare - adding another per-row event
 /// means raising it. Anything beyond is refused before a single event is allocated.
-#define CHANGEEVENTLIST_MAX_EVENTS 64
+#define CHANGEEVENTLIST_MAX_EVENTS 85
 
 class ChangeEventList {
 public:

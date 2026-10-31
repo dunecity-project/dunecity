@@ -111,6 +111,45 @@ TEST_CASE("Invalid optional Mentat fields disable the override safely",
     REQUIRE_FALSE(ModMentatConfig::isValid(invalidForegroundPath));
 }
 
+TEST_CASE("Animal Mentat patches retain anchors and reject malformed layouts",
+          "[mod][mentat][config][tornie]") {
+    ModMentatInfo info;
+    info.backgroundAsset = "MentatCat_Wildspade.png";
+    info.eyesX = 134; info.eyesY = 137;
+    info.mouthX = 175; info.mouthY = 200;
+    info.eyesWidth = 98; info.eyesHeight = 32; info.eyesCropY = 232; info.eyesCropHeight = 234;
+    info.mouthWidth = 40; info.mouthHeight = 23; info.mouthCropY = 298; info.mouthCropHeight = 190;
+    info.restFromBackground = true;
+    info.doubleEyes = info.doubleMouth = false;
+    REQUIRE(ModMentatConfig::parsePatch(
+        "0,0,43,29;60,314,156,112;43,314,156,112;27,314,156,112;26,314,156,112;27,314,156,112",
+        info.eyesPatches));
+    REQUIRE(ModMentatConfig::parsePolygon("248,268,256,279,265,294,248,400", info.foregroundPolygon));
+    REQUIRE(ModMentatConfig::isValid(info));
+    REQUIRE(info.eyesPatches.front().sources.size() == 5);
+    REQUIRE(info.eyesPatches.front().destination.w == 43);
+
+    SECTION("one source is required for every atlas cell") {
+        info.eyesPatches.front().sources.pop_back();
+        REQUIRE_FALSE(ModMentatConfig::isValid(info));
+    }
+    SECTION("patch anchors must remain within the feature canvas") {
+        info.eyesPatches.front().destination.x = 98;
+        REQUIRE_FALSE(ModMentatConfig::isValid(info));
+    }
+    SECTION("partial and negative rectangles do not append a patch") {
+        const auto count = info.eyesPatches.size();
+        REQUIRE_FALSE(ModMentatConfig::parsePatch("0,0,1,1;-1,0,1,1", info.eyesPatches));
+        REQUIRE_FALSE(ModMentatConfig::parsePatch("0,0,1,1;0,0,1,1;", info.eyesPatches));
+        REQUIRE(info.eyesPatches.size() == count);
+    }
+    SECTION("an invalid polygon does not replace the silhouette") {
+        const auto count = info.foregroundPolygon.size();
+        REQUIRE_FALSE(ModMentatConfig::parsePolygon("1,2,3,4,5", info.foregroundPolygon));
+        REQUIRE(info.foregroundPolygon.size() == count);
+    }
+}
+
 TEST_CASE("Custom-house presentation numbers parse safely and remain bounded",
           "[custom-house][presentation][config]") {
     double value = 1.0;

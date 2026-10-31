@@ -101,7 +101,7 @@ void Frigate::checkPos()
 }
 
 bool Frigate::update() {
-    const FixPoint& maxSpeed = currentGame->objectData.data[itemID][originalHouseID].maxspeed;
+    const FixPoint& maxSpeed = currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed;
 
     FixPoint dist = -1;
     ObjectBase* pTarget = target.getObjPointer();

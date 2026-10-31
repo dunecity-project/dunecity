@@ -22,6 +22,8 @@
 #include <Network/NetworkPacketTypes.h>
 
 #include <GameInitSettings.h>
+#include <Campaign/CoopCampaignSession.h>
+#include <Campaign/CoopCampaignTransition.h>
 #include <Network/GameInitSettingsPolicy.h>
 #include <mod/Workshop.h>
 #include <Network/OnlineModPolicy.h>
@@ -37,6 +39,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <limits>
+#include <algorithm>
 
 namespace {
 
@@ -162,6 +165,49 @@ void handleConfigHash(InputStream& stream, GamePayloadPeer& peer,
     }
 }
 
+bool isCampaignController(const coop::Context& context, const std::string& name) {
+    for(std::size_t i = 0; i < context.slots.size(); ++i) {
+        const auto& slot = context.slots[i];
+        if(!context.isAlliedSlot(i) || slot.playerClass != HUMANPLAYERCLASS) continue;
+        if(slot.controllers.empty()) {
+            if(slot.playerName == name) return true;
+        } else if(std::find(slot.controllers.begin(), slot.controllers.end(), name) != slot.controllers.end()) return true;
+    }
+    return false;
+}
+
+bool isSeparateCampaignContinuation(const coop::Context& current, const GameInitSettings& next, bool inGame) {
+    if(next.getGameType() == GameType::Invalid) return true;
+    if(next.getGameType() != GameType::CustomMultiplayer
+       || !ModManager::instance().isTornieFamilyContent(next.getModName())
+       || ModManager::instance().getContentBase(next.getModName()) != current.modName) return false;
+    const auto context = coop::readContext(next.getFiledata());
+    if(!context || context->sessionId != current.sessionId || context->modName != current.modName
+       || context->campaign != current.campaign || context->seed != current.seed
+       || context->mapLayout != current.mapLayout || (inGame && context->sourceFaction != current.sourceFaction)
+       || context->roster != current.roster || context->alliedCapacity != current.alliedCapacity
+       || context->archon != current.archon || context->alliedControl != current.alliedControl
+       || context->alliedBuilding != current.alliedBuilding || context->easyMode != current.easyMode
+       || context->chaosEligible != current.chaosEligible || context->extraEnemyForces != current.extraEnemyForces
+       || context->extraHardEnemyForces != current.extraHardEnemyForces
+       || context->randomVariants != current.randomVariants
+       || (context->stage != current.stage && context->stage != current.stage + 1)
+       || context->completedMask != (context->stage == current.stage ? current.completedMask
+           : current.completedMask | (1u << (current.stage - 1)))) return false;
+    // The host's final lobby snapshot applies agreed faction/seat choices. Unlike a mission
+    // advance it must not change progression, but source faction and allied names may change.
+    if(!inGame) return context->stage == current.stage && context->completedMask == current.completedMask;
+    const auto oldAllies = current.alliedSlots(), newAllies = context->alliedSlots();
+    for(std::size_t i = 0; i < oldAllies.size(); ++i) {
+        const auto& a = current.slots[oldAllies[i]];
+        const auto& b = context->slots[newAllies[i]];
+        if(a.house != b.house || a.faction != b.faction || a.color != b.color
+           || a.playerName != b.playerName || a.playerClass != b.playerClass
+           || a.controllers != b.controllers) return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool GamePayloadRouter::handle(Uint32 packetType, InputStream& stream, GamePayloadPeer& peer,
@@ -274,11 +320,10 @@ bool GamePayloadRouter::handle(Uint32 packetType, InputStream& stream, GamePaylo
                 (*callbacks.onJoinSync)(peer.clientId(),operation,transaction,offset,data);
         } return true;
         case NETWORKPACKET_COOP_MISSION: {
-            // Co-op has exactly one remote partner and only the host chooses a mission. The
-            // caller has already established that the sender is the host connection; what is
-            // checked here is that it is also the only peer, so a third participant cannot
-            // replace the session.
-            if(context.isHost || !context.coopPartnerIsSolePeer) {
+            // The old same-house campaign still requires its sole remote partner. Only an
+            // explicitly configured family [COOP] session may have several remote peers.
+            if(context.isHost || !peer.isHostPeer()
+               || (!context.coopPartnerIsSolePeer && !context.coopCampaign)) {
                 peer.refuse("campaign continuation from an unexpected peer");
                 return true;
             }
@@ -289,15 +334,41 @@ bool GamePayloadRouter::handle(Uint32 packetType, InputStream& stream, GamePaylo
                 peer.refuse(rejectionReason.c_str());
                 return true;
             }
-            // Empty settings are how the host says "we are leaving the campaign".
-            if(next.getGameType() != GameType::CampaignCoop
-               && next.getGameType() != GameType::Invalid) {
-                peer.refuse("campaign continuation for the wrong game type");
+            const bool correctType = context.coopCampaign
+                ? isSeparateCampaignContinuation(*context.coopCampaign, next, context.inGame)
+                : (next.getGameType() == GameType::CampaignCoop || next.getGameType() == GameType::Invalid);
+            if(!correctType) {
+                peer.refuse("campaign continuation for the wrong game type or session");
                 return true;
             }
             if(callbacks.onReceiveCoopMission && *callbacks.onReceiveCoopMission) {
                 (*callbacks.onReceiveCoopMission)(next);
             }
+        } return true;
+
+        case NETWORKPACKET_COOP_CAMPAIGN_CONTROL: {
+            if(!context.coopCampaign || !context.inGame) {
+                peer.refuse("mission control outside a separate-house campaign");
+                return true;
+            }
+            auto message = coop::readControl(stream);
+            if(!coop::validControl(message) || !payloadFullyConsumed(stream)) {
+                peer.refuse("invalid co-op mission control");
+                return true;
+            }
+            // A late reliable packet from the previous mission is stale, not an order.
+            if(message.epoch != context.coopEpoch || message.sessionId != context.coopCampaign->sessionId
+               || message.stage != context.coopCampaign->stage) return true;
+            const bool ready = message.operation == coop::ControlOperation::Ready;
+            if((ready && (!context.isHost || peer.isHostPeer()))
+               || (!ready && (context.isHost || !peer.isHostPeer()))
+               || !isCampaignController(*context.coopCampaign, peer.name())) {
+                peer.refuse("co-op mission control from an unexpected participant");
+                return true;
+            }
+            message.playerName = peer.name();
+            if(callbacks.onReceiveCoopControl && *callbacks.onReceiveCoopControl)
+                (*callbacks.onReceiveCoopControl)(message);
         } return true;
 
         case NETWORKPACKET_STARTGAME: {

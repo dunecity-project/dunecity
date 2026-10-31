@@ -1,5 +1,11 @@
 # Tornie changelog
 
+## DuneCity integration of upstream 1.0.546
+
+- Imported Tornie authored payload from ce89e53, including current solo/co-op campaigns, unit data and presentation assets.
+- Added DuneCity family-scoped metadata, declared playable roster, integrity/capability hashes, managed refresh and direct transfer support.
+- Retained DuneCity city isolation, fixed faction identities and existing non-family behavior.
+
 ## 1.0.524-23 - 2026-08-13
 
 - Integrated the final tagged Tornie fork payload into DuneCity 1.0.530.

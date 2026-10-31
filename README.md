@@ -23,6 +23,16 @@ cmake --build build -j$(nproc)
 
 The Tornie Mod is **enabled by default** at `mods/Tornie/`. To switch mods (vanilla / dunecity / Tornie), use the in-game **Mods** menu.
 
+### Tornie-family campaigns and co-op
+
+Tornie, Jericho and ArcaKev offer twelve playable factions; their Lite editions use the six-house roster declared by the mod. Derived Workshop copies retain their base edition's roster. Full-family custom games support twelve house slots (humans plus AI); Internet rooms retain the existing eight-human-peer limit. Natives remain a non-player faction.
+
+In the campaign house screen, **Online co-op** keeps DuneCity's existing shared-house campaign. **Online faction co-op** is an additional Tornie-family mode with two or four allied bases. Archon mode adds a second controller to each of four bases, for up to eight players over direct peer-to-peer connections. Allies can choose the same faction or a campaign's authored support-enemy faction without replacing that enemy.
+
+Faction co-op uses the mod's `campaign/coop` mission variants, shared harvest objectives and allied reinforcements. Its setup offers +5 and +10 units for each active enemy, optional allied control/building, Chaos Mode, and Easy Mode (starts at mission two and benefits every active ally). Progress and resumable checkpoints are stored under the profile's `coop` directory, separately from solo campaign progression.
+
+**Extras → Achievements** shows the 73 offline awards. The local profile and run statistics are observational only: achievements do not change simulation state, randomness, multiplayer commands or game rules. The new faction, campaign and achievement behavior is restricted to Tornie-family content; other mods keep their existing selection and lobby limits.
+
 ---
 
 ## What's in the box
@@ -32,7 +42,7 @@ The Tornie Mod is **enabled by default** at `mods/Tornie/`. To switch mods (vani
 | Dune Legacy engine (combat, units, structures) | ✅ Stable | Upstream v0.96 base + 576+ Tornie commits |
 | 16-phase Micropolis city simulation | ✅ Integrated | Runs every tick alongside combat |
 | 8th house **HOUSE_REBELS** | ✅ Stable | Dark grey tint from `Custom_IBM.PAL` |
-| Tornie Mod (campaigns, units, sprites) | ✅ 260 PAK entries | 8 house campaigns × 22 scenarios + custom data |
+| Tornie-family content | Integrated | Twelve-house full editions, six-house Lite editions, solo and separate-faction co-op campaigns |
 | Per-house color tint (units/structures) | ✅ v1.0.426 | Vanilla v1.0.305 path + Custom_IBM.PAL for REBELS |
 | Custom units (FlameTank, EliteSiegeTank, RocketTrike, etc.) | ✅ Loaded | 8-direction palette-indexed strips |
 | Discord Rich Presence | ✅ Optional | Auto-shows current mod + version |

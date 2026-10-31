@@ -711,6 +711,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Preferred Zoom Level = 1    # 0 = no zooming, 1 = 2x, 2 = 3x\n"
                                 "Scaler = ScaleHD            # Scaler to use: ScaleHD = apply manual drawn mask to upscale, Scale2x = smooth edges, ScaleNN = nearest neighbour, \n"
                                 "RotateUnitGraphics = false  # Freely rotate unit graphics, e.g. carryall graphics\n"
+                                "Show Harvester Count = true # Tornie local-house harvester overlay\n"
                                 "\n"
                                 "[Audio]\n"
                                 "# There are three different possibilities to play music\n"
@@ -1253,6 +1254,7 @@ int main(int argc, char *argv[]) {
             settings.video.scaler = myINIFile.getStringValue("Video","Scaler","ScaleHD");
             settings.video.rotateUnitGraphics = myINIFile.getBoolValue("Video","RotateUnitGraphics",false);
             settings.video.showWatermark = myINIFile.getBoolValue("Video","Show Watermark",true);
+            settings.video.showHarvesterCount = myINIFile.getBoolValue("Video", "Show Harvester Count", true);
             settings.video.cursorVisibility = myINIFile.getIntValue("Video","Cursor Visibility",0);
             settings.video.menuPalette = validatedMenuPalette(myINIFile.getIntValue("Video", "Menu Palette", 0));
             settings.video.uiSkin = validatedUISkin(myINIFile.getIntValue("Video", "UI Skin", 2));
@@ -1344,6 +1346,11 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.retryPlannedPlacement = myINIFile.getBoolValue("Game Options", "Retry Planned Placement", true);
             settings.gameOptions.sharedYardQueue = myINIFile.getBoolValue("Game Options", "Shared Yard Queue", true);
             settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
+            settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
+            settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
+            settings.gameOptions.easyMode = myINIFile.getBoolValue("Game Options", "Easy Mode", false);
+            settings.gameOptions.chaosMode = myINIFile.getBoolValue("Game Options", "Chaos Mode", false);
+            settings.gameOptions.sellingBuildings = myINIFile.getBoolValue("Game Options", "Selling Buildings", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
             pTextManager = std::make_unique<TextManager>();

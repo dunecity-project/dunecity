@@ -32,6 +32,14 @@
 #include <misc/draw_util.h>
 
 #include <units/UnitBase.h>
+#include <structures/BuilderBase.h>
+#include <structures/BuildingSale.h>
+#include <structures/RepairYard.h>
+#include <structures/StarPort.h>
+#include <structures/WindTrap.h>
+#include <mod/ModManager.h>
+#include <mod/ChaosMode.h>
+#include <Achievements/AchievementEvents.h>
 
 #include <GUI/ObjectInterfaces/DefaultStructureInterface.h>
 #include <GUI/ObjectInterfaces/CityStatsStructureInterface.h>
@@ -119,6 +127,39 @@ StructureBase::StructureBase(InputStream& stream): ObjectBase(stream) {
     }
 
     cityOccupancy_ = stream.readUint8();
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        scoutpostConversion_ = stream.readBool();
+        const int productionHouse = stream.readSint32();
+        if(productionHouse != HOUSE_INVALID && (productionHouse < 0 || productionHouse >= NUM_HOUSES)) {
+            throw InputStream::error("Invalid structure production house");
+        }
+        productionHouseID_ = productionHouse;
+    }
+}
+
+int StructureBase::getProductionHouseID() const {
+    if(ModManager::instance().isTornieFamilyContentActive()
+       && productionHouseID_ >= 0 && productionHouseID_ < NUM_HOUSES) {
+        return productionHouseID_;
+    }
+    return ObjectBase::getProductionHouseID();
+}
+
+void StructureBase::setProductionHouseID(int houseID) {
+    // An explicit technology column is already a faction. Do not remap it as
+    // a co-op runtime slot, and retain originalHouseID for permanent ownership.
+    productionHouseID_ = (houseID >= 0 && houseID < NUM_HOUSES) ? houseID : HOUSE_INVALID;
+}
+
+int StructureBase::getTechnologyHouseID() const {
+    if(!currentGame || !ModManager::instance().isTornieFamilyContentActive()) {
+        return getProductionHouseID();
+    }
+    if(!ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled()) {
+        return HOUSE_NEUTRAL;
+    }
+    return currentGame->getChaosMode().getTechnologyHouse(getProductionHouseID(),
+        scoutpostConversion_ ? Structure_Scoutpost : itemID);
 }
 
 void StructureBase::init() {
@@ -175,6 +216,8 @@ void StructureBase::save(OutputStream& stream) const {
     }
 
     stream.writeUint8(cityOccupancy_);
+    stream.writeBool(scoutpostConversion_);
+    stream.writeSint32(productionHouseID_);
 }
 
 void StructureBase::assignToMap(const Coord& pos) {
@@ -226,7 +269,7 @@ void StructureBase::blitToScreen() {
     // Loading a map or switching mods invalidates GFXManager's texture cache.
     // Structures keep raw texture pointers, so refresh them before every draw.
     if(owner != nullptr) {
-        graphic = pGFXManager->getObjPic(graphicID, owner->getHouseID());
+        graphic = pGFXManager->getObjPic(graphicID, owner->getHouseID(), usesGreenPowerAnimation());
     }
 
     SDL_Texture* structureTexture = graphic[currentZoomlevel];
@@ -533,6 +576,71 @@ void StructureBase::handleActionClick(int xPos, int yPos) {
     }
 }
 
+bool StructureBase::canSell() const {
+    if(!currentGame || !owner || getHealth() <= 0
+       || !ModManager::instance().isTornieFamilyContentActive()
+       || !currentGame->getGameInitSettings().getGameOptions().sellingBuildings
+       || itemID == Structure_Slab1 || itemID == Structure_Slab4) {
+        return false;
+    }
+    // A dispatched shipment belongs to this port until its last unit deploys.
+    const auto* port = dynamic_cast<const StarPort*>(this);
+    return !port || port->okToOrder();
+}
+
+int StructureBase::getSaleRefund() const {
+    const auto& init = currentGame->getGameInitSettings();
+    const auto& data = currentGame->objectData.data;
+    const bool convertedPost = itemID == Structure_Flamepost || itemID == Structure_Chemipost
+        || (itemID == Structure_Slowpost && scoutpostConversion_);
+    const int baseItem = convertedPost ? Structure_Scoutpost : itemID;
+    const int productionHouse = getProductionHouseID();
+    const int purchasePrice = init.campaignPurchasePrice(data[baseItem][productionHouse].price,
+                                                       owner->getHouseID());
+    const auto* builder = dynamic_cast<const BuilderBase*>(this);
+    const auto* trap = dynamic_cast<const WindTrap*>(this);
+    return BuildingSale::refund(purchasePrice, convertedPost ? data[itemID][productionHouse].price : 0,
+        builder ? builder->getCurrentUpgradeLevel() : 0, builder ? builder->getUpgradeCost() : 0,
+        trap && trap->isPowerUpgraded(), init.isEasyModeHouse(owner->getHouseID()));
+}
+
+void StructureBase::handleSellClick() {
+    if(canSell() && pLocalPlayer && !currentGame->isObserving()
+       && currentGame->canControlHouse(owner)) {
+        currentGame->getCommandManager().addCommand(
+            Command(pLocalPlayer->getPlayerID(), CMD_STRUCTURE_SELL, objectID));
+    }
+}
+
+void StructureBase::doSell() {
+    if(!canSell()) return;
+    const int refund = getSaleRefund();
+    // Use the shared containment interface for Refineries, Doublefineries and
+    // Worfinery bays, so no hidden harvester is deleted with its building.
+    while(getContainedHarvesterUnit() != nullptr) {
+        deployContainedHarvester();
+    }
+    if(auto* yard = dynamic_cast<RepairYard*>(this)) {
+        if(yard->getRepairUnit()) yard->deployRepairUnit();
+    }
+    if(auto* port = dynamic_cast<StarPort*>(this)) {
+        port->doCancelOrder(); // Returns fully paid orders and their CHOAM stock.
+    } else if(auto* builder = dynamic_cast<BuilderBase*>(this)) {
+        const auto pending = BuildingSale::pendingRefund(builder->getProductionQueueSize(),
+            builder->getProductionProgress(), builder->getProductionProgressFromStartingCredits(),
+            builder->isUpgrading(), builder->getUpgradeProgress(),
+            builder->getUpgradeProgressFromStartingCredits());
+        owner->returnCredits(pending.total, pending.fromStarting);
+    }
+    owner->recordBuildingSale(refund);
+    AchievementEvents::sold(owner, refund);
+    selling_ = true;
+    demolishedByOwner_ = true;
+    setHealth(0); // Remove health-scaled output before the virtual destructor.
+    // Sale never detonates a reactor or performs another destruction override.
+    StructureBase::destroy();
+}
+
 void StructureBase::handleRepairClick() {
     currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(), CMD_STRUCTURE_REPAIR,objectID));
 }
@@ -624,11 +732,12 @@ bool StructureBase::update() {
             // Original dune 2 is doing the repair calculation with fix-point math (multiply everything with 256).
             // It is calculating what fraction 2 hitpoints of the maximum health would be.
             int fraction = (2*256)/getMaxHealth();
-            FixPoint repairprice = FixPoint(fraction * currentGame->objectData.data[itemID][originalHouseID].price) / 256;
+            FixPoint repairprice = FixPoint(fraction * currentGame->objectData.data[itemID][getProductionHouseID()].price) / 256;
 
             // Original dune is always repairing 5 hitpoints (for the costs of 2) but we are only repairing 1/30th of that
-            const auto repairHealth = 5_fix/30_fix;
-            owner->takeCredits(repairprice/30);
+            const auto researchFactor = owner->hasRadarSpecialization(HOUSE_NEUTRAL) ? 1.25_fix : 1_fix;
+            const auto repairHealth = 5_fix/30_fix * researchFactor;
+            owner->takeCredits(repairprice/30 * researchFactor);
             FixPoint newHealth = getHealth() + repairHealth;
             if(newHealth >= getMaxHealth()) {
                 setHealth(getMaxHealth());
@@ -680,6 +789,18 @@ void StructureBase::demolish() {
 }
 
 void StructureBase::destroy() {
+    if(selling_) {
+        for(int y = 0; y < structureSize.y; ++y) {
+            for(int x = 0; x < structureSize.x; ++x) {
+                auto* tile = currentGameMap->getTile(location.x + x, location.y + y);
+                tile->setType(Terrain_Slab); // Also removes any destroyed-building overlay.
+                tile->setOwner(owner->getHouseID());
+            }
+        }
+        // No destruction explosions, survivor infantry or synchronized RNG draws.
+        delete this;
+        return;
+    }
     if (currentGame && owner) AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
         "object_destroyed", AITelemetry::Record().set("object", objectID).set("item", itemID)
             .set("x", location.x).set("y", location.y).set("health", getHealth().lround()));

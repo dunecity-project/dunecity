@@ -96,13 +96,14 @@ protected:
         Palace* pPalace = dynamic_cast<Palace*>(pObject);
         if(pPalace != nullptr) {
             int picID;
-            const HOUSETYPE originalHouse = static_cast<HOUSETYPE>(pPalace->getOriginalHouseID());
+            const HOUSETYPE originalHouse = static_cast<HOUSETYPE>(pPalace->getTechnologyHouseID());
 
             if(pPalace->usesTornieMainRebelsRandomSpecial()) {
                 if(!pPalace->isSpecialWeaponReady()) {
                     picID = Picture_PalaceRebelsCharging;
                 } else switch(pPalace->getTornieMainRebelsSpecialWeapon()) {
                     case Palace::TornieRebelsSpecialWeapon::Missile:
+                    case Palace::TornieRebelsSpecialWeapon::Napalm:
                         picID = Picture_DeathHand;
                         break;
 
@@ -129,8 +130,8 @@ protected:
                 }
             } else if(pPalace->usesGuestWildspadeOrnithopterStrike()) {
                 picID = Picture_Ornithopter;
-            } else if(pPalace->usesGuestKleshmershFremenCall()) {
-                picID = Picture_Fremen;
+            } else if(pPalace->usesKleshmershNapalm()) {
+                picID = Picture_DeathHand;
             } else if(pPalace->usesLightVehicleCall()) {
                 picID = Picture_PalaceLightVehicles;
             } else switch(getHouseFallbackHouse(originalHouse)) {
@@ -163,6 +164,7 @@ protected:
             weaponProgressBar.setProgress(pPalace->getPercentComplete());
 
             weaponSelectButton.setVisible(pPalace->isSpecialWeaponReady());
+            weaponSelectButton.setTooltipText(pPalace->usesKleshmershNapalm() ? _("Napalm missile") : "");
 
             int level = static_cast<int>(pPalace->getCityOccupancy());
             if (level < 1) level = 1;

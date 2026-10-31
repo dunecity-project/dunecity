@@ -17,6 +17,11 @@
  */
 
 #include <units/UnitBase.h>
+#include <units/Trooper.h>
+#include <Achievements/AchievementEvents.h>
+#include <mod/ModManager.h>
+#include <mod/RadarResearch.h>
+#include <misc/exceptions.h>
 #include <units/DynastyMovement.h>
 #include <FormationOrders.h>
 
@@ -187,6 +192,15 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         formationResume = stream.readUint8();
         formationPaceItem = stream.readUint32();
     }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        const auto savedProductionHouse = stream.readUint32();
+        if(savedProductionHouse >= NUM_HOUSES) {
+            THROW(std::runtime_error, "Invalid unit production house %u", savedProductionHouse);
+        }
+        productionHouseID = static_cast<int>(savedProductionHouse);
+        slowTimer = std::max(0, stream.readSint32());
+        dynastyStepTimeOffset = stream.readFixPoint();
+    }
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -203,6 +217,8 @@ void UnitBase::registerUnit() {
 }
 
 void UnitBase::init() {
+    productionHouseID = ModManager::instance().isTornieFamilyContentActive()
+        ? House::factionForRuntimeHouse(originalHouseID) : originalHouseID;
     aUnit = true;
     canAttackStuff = true;
 
@@ -219,6 +235,23 @@ void UnitBase::init() {
 
     unitList.push_back(this);
     currentGame->invalidateCarryallCandidateIds();
+}
+
+int UnitBase::getProductionHouseID() const {
+    return ModManager::instance().isTornieFamilyContentActive()
+        ? productionHouseID : originalHouseID;
+}
+
+void UnitBase::setProductionHouseID(int houseID) {
+    // Explicit technology columns are factions, not runtime co-op house slots.
+    productionHouseID = (houseID >= 0 && houseID < NUM_HOUSES) ? houseID
+        : (ModManager::instance().isTornieFamilyContentActive()
+            ? House::factionForRuntimeHouse(originalHouseID) : originalHouseID);
+}
+
+bool UnitBase::canCaptureStructures() const {
+    return itemID == Unit_Soldier || itemID == Unit_Trooper
+        || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper);
 }
 
 UnitBase::~UnitBase() {
@@ -301,6 +334,9 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeSint32(formationFormUp.y);
     stream.writeUint8(formationResume);
     stream.writeUint32(formationPaceItem);
+    stream.writeUint32(productionHouseID);
+    stream.writeSint32(slowTimer);
+    stream.writeFixPoint(dynastyStepTimeOffset);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -367,9 +403,13 @@ bool UnitBase::attack() {
             }
 
             int currentBulletType = bulletType;
-            Sint32 currentWeaponDamage = currentGame->objectData.data[itemID][originalHouseID].weapondamage;
+            Sint32 currentWeaponDamage = currentGame->objectData.data[itemID][getProductionHouseID()].weapondamage;
+            if(ModManager::instance().isTornieFamilyContentActive()) {
+                currentWeaponDamage = owner->radarAttackDamage(itemID, currentWeaponDamage);
+            }
 
-            if(getItemID() == Unit_Trooper && !bAirBullet) {
+            if(getItemID() == Unit_Trooper && !bAirBullet
+               && (!ModManager::instance().isTornieFamilyContentActive() || currentBulletType != Bullet_Flame)) {
                 // Troopers change weapon type depending on distance
 
                 FixPoint distance = distanceFrom(centerPoint, targetCenterPoint);
@@ -385,9 +425,14 @@ bool UnitBase::attack() {
             if(primaryWeaponTimer == 0) {
                 // MULTIPLAYER-SAFE: Track launcher unit firing at ornithopters
                 if((getItemID() == Unit_Launcher || getItemID() == Unit_Deviator) && 
-                   pObject && pObject->getItemID() == Unit_Ornithopter) {
+                   pObject && isOrnithopterUnit(pObject->getItemID())) {
                     currentGame->combatStats.launcherFiresOnOrni++;
                     currentGame->combatStats.launcherRocketsSpawned++;
+                }
+                if(ModManager::instance().isTornieFamilyContentActive()
+                   && (getItemID() == Unit_Trooper || getItemID() == Unit_FlameTrooper)
+                   && currentBulletType == Bullet_Flame) {
+                    currentWeaponDamage = static_cast<Trooper*>(this)->flameWeaponDamage(currentWeaponDamage);
                 }
                 
                 bulletList.push_back( new Bullet( objectID, &centerPoint, &targetCenterPoint, currentBulletType, currentWeaponDamage, bAirBullet, pObject) );
@@ -420,7 +465,7 @@ bool UnitBase::attack() {
             if((numWeapons == 2) && (secondaryWeaponTimer == 0) && canFireSecondaryWeapon()) {
                 // MULTIPLAYER-SAFE: Track launcher unit secondary weapon firing at ornithopters
                 if((getItemID() == Unit_Launcher || getItemID() == Unit_Deviator) && 
-                   pObject && pObject->getItemID() == Unit_Ornithopter) {
+                   pObject && isOrnithopterUnit(pObject->getItemID())) {
                     currentGame->combatStats.launcherFiresOnOrni++;
                     currentGame->combatStats.launcherRocketsSpawned++;
                 }
@@ -575,7 +620,7 @@ void UnitBase::blitToScreen() {
 ObjectInterface* UnitBase::getInterfaceContainer() {
     // isRespondable() still gates the owner's own panel (a unit inside a carryall has no
     // action bar), but an observer inspects any unit's real state regardless.
-    if((pLocalHouse == owner && isRespondable()) || debug
+    if((currentGame->canControlHouse(owner) && isRespondable()) || debug
        || (currentGame != nullptr && currentGame->isObserving())) {
         return UnitInterface::create(objectID);
     } else {
@@ -610,7 +655,7 @@ void UnitBase::deploy(const Coord& newLocation) {
             }
         }
 
-        if(isAGroundUnit() && (getItemID() != Unit_Sandworm)) {
+        if(isAGroundUnit() && !isSandwormUnit(getItemID())) {
             if(currentGameMap->getTile(location)->isSpiceBloom()) {
                 currentGameMap->getTile(location)->triggerSpiceBloom(getOwner());
                 
@@ -655,6 +700,7 @@ void UnitBase::cancelDeployment() {
 }
 
 void UnitBase::destroy() {
+    AchievementEvents::lost(this);
     if (currentGame && owner) AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
         "object_destroyed", AITelemetry::Record().set("object", objectID).set("item", itemID)
             .set("x", location.x).set("y", location.y).set("health", getHealth().lround()));
@@ -668,9 +714,19 @@ void UnitBase::destroy() {
     unitList.remove(this);
     currentGame->invalidateCarryallCandidateIds();
 
-    if(isVisible()) {
+    if(ModManager::instance().isTornieFamilyContentActive() && getHealth() <= 0
+       && owner->hasRadarSpecialization(HOUSE_SARDAUKAR) && radar::tank(itemID)) {
+        if(currentGame->randomGen.rand(1, 100) <= 35 && currentGameMap->tileExists(location)) {
+            if(auto* crew = owner->createUnit(Unit_Trooper, false, owner->getFactionID())) {
+                const Coord spot = currentGameMap->findDeploySpot(crew, location, currentGame->randomGen, location);
+                if(spot.isValid() && currentGameMap->tileExists(spot)) crew->deploy(spot);
+                else crew->cancelDeployment();
+            }
+        }
+    } else if(isVisible()) {
         if(currentGame->randomGen.rand(1,100) <= getInfSpawnProp()) {
-            UnitBase* pNewUnit = currentGame->getHouse(originalHouseID)->createUnit(Unit_Soldier);
+            UnitBase* pNewUnit = currentGame->getHouse(originalHouseID)->createUnit(
+                Unit_Soldier, false, getProductionHouseID());
             pNewUnit->setHealth(pNewUnit->getMaxHealth()/2);
             pNewUnit->deploy(location);
 
@@ -690,6 +746,8 @@ void UnitBase::destroy() {
 }
 
 void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
+    const bool family = ModManager::instance().isTornieFamilyContentActive();
+    const FixPoint healthRatio = family ? getHealth() / getMaxHealth() : 0;
     // A unit changing hands leaves its old house's formation either way.
     leaveFormation();
     if(newOwner->getHouseID() == originalHouseID) {
@@ -715,6 +773,10 @@ void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
         if(isAGroundUnit()) {
             static_cast<GroundUnit*>(this)->cancelCarryallPickup();
         }
+    }
+    if(family) {
+        setHealth(getMaxHealth() * healthRatio);
+        refreshRadarResearch();
     }
 
     // A capture pays nothing by itself. What this unit then does under the new house is
@@ -896,10 +958,12 @@ void UnitBase::engageTarget() {
             // we are going to the repair yard
             // => we do not need to change the destination
             targetAngle = INVALID;
-        } else if(attackMode == CAPTURE) {
+        } else if(attackMode == CAPTURE
+                  || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
             // we want to capture the target building
             setDestination(targetLocation);
             targetAngle = INVALID;
+            if(attackMode == SABOTAGE) return;
         } else if(isTracked() && target.getObjPointer()->isInfantry() && !targetFriendly && currentGameMap->tileExists(targetLocation) && !currentGameMap->getTile(targetLocation)->isMountain() && forced) {
             // we squash the infantry unit because we are forced to
             setDestination(targetLocation);
@@ -939,7 +1003,7 @@ void UnitBase::engageTarget() {
 }
 
 bool UnitBase::usesDynastyGroundTiming() const {
-    return isAGroundUnit() && itemID != Unit_Sandworm && DynastyMovement::factor(itemID) != 0;
+    return isAGroundUnit() && !isSandwormUnit(itemID) && DynastyMovement::factor(itemID) != 0;
 }
 
 Coord UnitBase::movementEndpoint() const {
@@ -948,8 +1012,11 @@ Coord UnitBase::movementEndpoint() const {
 
 bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     const auto* tile=currentGameMap->getTile(nextSpot);
-    const int cargo=itemID==Unit_Harvester
-        ? std::clamp((static_cast<Harvester*>(this)->getAmountOfSpice()*100/HARVESTERMAXSPICE).floor(),0,100) : 0;
+    const bool standardHarvester = itemID == Unit_Harvester
+        || itemID == Unit_CapacityHarvester || itemID == Unit_FastHarvester;
+    const int cargo = standardHarvester
+        ? std::clamp((static_cast<Harvester*>(this)->getAmountOfSpice()*100
+            / static_cast<Harvester*>(this)->getSpiceCapacity()).floor(), 0, 100) : 0;
     const int step=DynastyMovement::step(itemID,
         DynastyMovement::throttle(itemID,static_cast<TERRAINTYPE>(tile->getType())),
         getHealth()<getMaxHealth()/2,cargo);
@@ -959,7 +1026,10 @@ bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     // One Dynasty coordinate unit per20Hz movement tick is0.08 world
     // units per16ms cycle (64/256 *20 *0.016). INI caps remain configurable.
     const FixPoint referenceCap=DynastyMovement::step(itemID,255,false,0)*0.08_fix;
-    FixPoint scale=getMaxSpeed()/referenceCap;
+    // Apply family research and slowing on every cycle, including mid-step impacts.
+    const FixPoint stepSpeed = ModManager::instance().isTornieFamilyContentActive()
+        ? currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed : getMaxSpeed();
+    FixPoint scale=stepSpeed/referenceCap;
     if(tile->isRoad()) scale*=ROADSPEEDMULTIPLIER;
     // Formation pace (docs/formations.md): a member crosses this tile no faster than the
     // group's pace unit would - the same step time for every member, so the block moves at one
@@ -978,6 +1048,7 @@ bool UnitBase::beginDynastyStep(Uint64 routeTick) {
     const Uint64 duration=(routeTick/3*3+ticks*3-routeTick)*50;
     const Uint64 length=std::max<Uint64>(1,lround(FixPoint(static_cast<int>(duration))/scale));
     dynastyStepEnd=dynastyStepStart+std::max(length,paceLength);
+    dynastyStepTimeOffset = 0;
     dynastyStartX=realX-bumpyOffsetX; dynastyStartY=realY-bumpyOffsetY;
     return true;
 }
@@ -987,7 +1058,7 @@ Uint64 UnitBase::formationPaceStepLength(Uint64 routeTick, TERRAINTYPE terrain, 
        || DynastyMovement::factor(formationPaceItem)==0) return 0;
     const int paceStep=DynastyMovement::step(formationPaceItem, DynastyMovement::throttle(formationPaceItem, terrain), false, 0);
     const int paceTicks=DynastyMovement::movementTicks(paceStep, diagonal);
-    const FixPoint paceMax=currentGame->objectData.data[formationPaceItem][originalHouseID].maxspeed;
+    const FixPoint paceMax=currentGame->objectData.data[formationPaceItem][getProductionHouseID()].maxspeed;
     if(paceTicks==0 || paceMax<=0) return 0;
     FixPoint paceScale=paceMax/(DynastyMovement::step(formationPaceItem,255,false,0)*0.08_fix);
     if(road) paceScale*=ROADSPEEDMULTIPLIER;
@@ -1015,7 +1086,16 @@ bool UnitBase::moveDynastyStep() {
     const Uint64 now=static_cast<Uint64>(currentGame->getGameCycleCount())*(GAMESPEED_DEFAULT*3);
     const auto elapsed=now>dynastyStepStart ? now-dynastyStepStart : 0;
     const auto duration=dynastyStepEnd-dynastyStepStart;
-    const FixPoint progress=FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
+    FixPoint progress;
+    const bool family = ModManager::instance().isTornieFamilyContentActive();
+    if(family) {
+        const FixPoint speedFactor = getMovementSpeedFactor() * owner->radarSpeedFactor(itemID);
+        dynastyStepTimeOffset += FixPoint(static_cast<int>(std::min<Uint64>(elapsed, GAMESPEED_DEFAULT*3))) * (speedFactor - 1);
+        const FixPoint effectiveElapsed = FixPoint(static_cast<int>(elapsed)) + dynastyStepTimeOffset;
+        progress = std::clamp(effectiveElapsed / static_cast<int>(duration), 0.0_fix, 1.0_fix);
+    } else {
+        progress = FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
+    }
     realX=dynastyStartX+(dynastyEndpoint.x-dynastyStartX)*progress+bumpyOffsetX;
     realY=dynastyStartY+(dynastyEndpoint.y-dynastyStartY)*progress+bumpyOffsetY;
     if(location!=nextSpot && progress>=0.5_fix) {
@@ -1023,7 +1103,7 @@ bool UnitBase::moveDynastyStep() {
         if(auto* grid=currentGame->getSpatialGrid()) grid->move(*this,getGridHandle(),oldLocation,location);
         currentGameMap->viewMap(owner->getHouseID(),location,getViewRange());
     }
-    if(now>=dynastyStepEnd) {
+    if(family ? progress >= 1 : now >= dynastyStepEnd) {
         realX=dynastyEndpoint.x; realY=dynastyEndpoint.y;
         bumpyOffsetX=0; bumpyOffsetY=0;
         moving=false; justStoppedMoving=true; dynastyStepEnd=0;
@@ -1057,7 +1137,9 @@ UnitBase::DrawnStepScope::DrawnStepScope() {
            || !unit->usesDynastyGroundTiming()) continue;
         const auto elapsed=now>unit->dynastyStepStart ? now-unit->dynastyStepStart : 0;
         const auto duration=unit->dynastyStepEnd-unit->dynastyStepStart;
-        const FixPoint progress=FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
+        const FixPoint progress = ModManager::instance().isTornieFamilyContentActive()
+            ? std::clamp((FixPoint(static_cast<int>(elapsed)) + unit->dynastyStepTimeOffset) / static_cast<int>(duration), 0.0_fix, 1.0_fix)
+            : FixPoint(static_cast<int>(std::min(elapsed,duration)))/static_cast<int>(duration);
         drawnStepSwaps.push_back({unit, unit->realX, unit->realY});
         unit->realX=unit->dynastyStartX+(unit->dynastyEndpoint.x-unit->dynastyStartX)*progress+unit->bumpyOffsetX;
         unit->realY=unit->dynastyStartY+(unit->dynastyEndpoint.y-unit->dynastyStartY)*progress+unit->bumpyOffsetY;
@@ -1100,7 +1182,7 @@ void UnitBase::move() {
                     spatialGrid->move(*this, getGridHandle(), oldLocation, location);
                 }
 
-                if(isAFlyingUnit() == false && itemID != Unit_Sandworm) {
+                if(isAFlyingUnit() == false && !isSandwormUnit(itemID)) {
                     currentGameMap->viewMap(owner->getHouseID(), location, getViewRange());
                 }
             }
@@ -1204,7 +1286,8 @@ void UnitBase::navigate() {
             if(dynastyRouteTick==0) {
                 // UNIT.EMC enters the move loop on its first script update
                 // for harvesters/MCVs and the following update for combat units.
-                dynastyRouteTick=((now+249)/250)*5 + ((itemID==Unit_Harvester || itemID==Unit_MCV) ? 0 : 5);
+                dynastyRouteTick=((now+249)/250)*5 + ((itemID==Unit_Harvester
+                    || itemID==Unit_CapacityHarvester || itemID==Unit_FastHarvester || itemID==Unit_MCV) ? 0 : 5);
                 if(dynastyRouteTick==0) dynastyRouteTick=5;
             } else if(continuousGroundSteps() && now>=(dynastyRouteTick+1)*50) {
                 // Navigating every cycle, a route tick is seen on the cycle it falls due (a cycle is
@@ -1414,7 +1497,8 @@ void UnitBase::handleRequestCarryallDropClick(int xPos, int yPos) {
 
 void UnitBase::doMove2Pos(int xPos, int yPos, bool bForced) {
     huntTowardGoal.invalidate();
-    if(attackMode == CAPTURE || attackMode == HUNT) {
+    if(attackMode == CAPTURE || attackMode == HUNT
+       || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
         doSetAttackMode(GUARD);
     }
 
@@ -1546,7 +1630,9 @@ bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
 
         case UnitOrderType::Capture: {
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
-            return dynamic_cast<const InfantryBase*>(this) != nullptr && pStructure != nullptr
+            return dynamic_cast<const InfantryBase*>(this) != nullptr
+                && (!ModManager::instance().isTornieFamilyContentActive() || canCaptureStructures())
+                && pStructure != nullptr
                 && pStructure->canBeCaptured() && pStructure->getOwner()->getTeamID() != owner->getTeamID();
         }
 
@@ -1726,7 +1812,8 @@ void UnitBase::doMove2Object(const ObjectBase* pTargetObject) {
     }
     huntTowardGoal.invalidate();
 
-    if(attackMode == CAPTURE || attackMode == HUNT) {
+    if(attackMode == CAPTURE || attackMode == HUNT
+       || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
         doSetAttackMode(GUARD);
     }
 
@@ -1756,7 +1843,7 @@ void UnitBase::doAttackPos(int xPos, int yPos, bool bForced) {
     }
     huntTowardGoal.invalidate();
 
-    if(attackMode == CAPTURE) {
+    if(attackMode == CAPTURE || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
         doSetAttackMode(GUARD);
     }
 
@@ -1776,7 +1863,7 @@ void UnitBase::doAttackObject(const ObjectBase* pTargetObject, bool bForced) {
     }
     huntTowardGoal.invalidate();
 
-    if(attackMode == CAPTURE) {
+    if(attackMode == CAPTURE || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
         doSetAttackMode(GUARD);
     }
 
@@ -1807,6 +1894,16 @@ void UnitBase::doAttackObject(Uint32 TargetObjectID, bool bForced) {
 }
 
 void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(newAttackMode == SABOTAGE && !canCaptureStructures()) return;
+        if(newAttackMode == SABOTAGE || (attackMode == SABOTAGE && newAttackMode != SABOTAGE)) {
+            setTarget(nullptr);
+            setForced(false);
+            setDestination(moving && !justStoppedMoving ? nextSpot : location);
+            clearPath();
+            findTargetTimer = 0;
+        }
+    }
     if((newAttackMode >= 0) && (newAttackMode < ATTACKMODE_MAX)) {
         attackMode = newAttackMode;
     }
@@ -1830,7 +1927,8 @@ void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
     }
     
     // When setting HUNT mode, immediately trigger target search
-    if(attackMode == HUNT && !target && pendingTargetRequest == TargetRequestKind::None) {
+    if((attackMode == HUNT || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE))
+       && !target && pendingTargetRequest == TargetRequestKind::None) {
         enqueueTargetRequest(TargetRequestKind::Acquire);
     }
 }
@@ -1926,7 +2024,7 @@ bool UnitBase::isInGuardRange(const ObjectBase* pObject) const  {
         } break;
     }
 
-    if(getItemID() == Unit_Sandworm) {
+    if(isSandwormUnit(getItemID())) {
         checkRange = getViewRange();
     }
 
@@ -1976,7 +2074,7 @@ bool UnitBase::isInAttackRange(const ObjectBase* pObject) const {
         } break;
     }
 
-    if(getItemID() == Unit_Sandworm) {
+    if(isSandwormUnit(getItemID())) {
         checkRange = getViewRange() + 1;
     }
 
@@ -2113,12 +2211,33 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     clearPath();
 }
 
+FixPoint UnitBase::getMovementSpeedFactor() const {
+    if(!ModManager::instance().isTornieFamilyContentActive() || slowTimer <= 0
+       || isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_KLESHMERSH)) {
+        return 1.0_fix;
+    }
+    return isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_REBELS) ? 0.25_fix : 0.5_fix;
+}
+
+void UnitBase::applySlow() {
+    if(!ModManager::instance().isTornieFamilyContentActive()
+       || isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_KLESHMERSH)) return;
+    const bool rebels = isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_REBELS);
+    slowTimer = std::max(slowTimer, MILLI2CYCLES(rebels ? 8000 : 4000));
+    if(currentGameMap->tileExists(location)) setSpeeds();
+}
+
+void UnitBase::refreshRadarResearch() {
+    if(ModManager::instance().isTornieFamilyContentActive() && currentGameMap->tileExists(location)) setSpeeds();
+}
+
 FixPoint UnitBase::getMaxSpeed() const {
-    return currentGame->objectData.data[itemID][originalHouseID].maxspeed;
+    const FixPoint speed = currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed;
+    return ModManager::instance().isTornieFamilyContentActive() ? speed * owner->radarSpeedFactor(itemID) : speed;
 }
 
 FixPoint UnitBase::getTerrainAdjustedSpeed(int cargoPercent) const {
-    FixPoint speed = getMaxSpeed();
+    FixPoint speed = getMaxSpeed() * getMovementSpeedFactor();
     if(isAFlyingUnit()) return speed;
     // Dynasty selects the terrain of the tile being entered.
     const bool dynastyUnit = DynastyMovement::factor(itemID) != 0;
@@ -2422,7 +2541,8 @@ void UnitBase::targeting() {
             }
             
             // Acquire new target if we don't have one
-            if(!target && !attackPos && !moving && !justStoppedMoving && !forced) {
+            if(!target && !attackPos && ((!moving && !justStoppedMoving)
+               || (ModManager::instance().isTornieFamilyContentActive() && isOrnithopterUnit(getItemID()))) && !forced) {
                 const ObjectBase* pNewTarget = findTarget();
                 
                 if(pNewTarget != nullptr) {
@@ -2446,11 +2566,12 @@ void UnitBase::targeting() {
                         doAttackObject(pNewTarget, forceAttack);
                         
                         // Sandworms switch to HUNT after acquiring target
-                        if(getItemID() == Unit_Sandworm) {
+                        if(isSandwormUnit(getItemID())) {
                             doSetAttackMode(HUNT);
                         }
                     }
-                } else if(attackMode == HUNT) {
+                } else if(attackMode == HUNT
+                          && (!ModManager::instance().isTornieFamilyContentActive() || !isOrnithopterUnit(getItemID()))) {
                     // HUNT units with no targets switch back to GUARD
                     setGuardPoint(location);
                     doSetAttackMode(GUARD);
@@ -2494,6 +2615,19 @@ void UnitBase::resolvePendingTargetRequest() {
         return;
     }
 
+    if(ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE && canCaptureStructures()) {
+        if(!target) {
+            if(const auto* building = findTarget()) {
+                setTarget(building);
+                setForced(true);
+                setDestination(building->getClosestPoint(location));
+                clearPath();
+            }
+        }
+        findTargetTimer = MILLI2CYCLES(1000);
+        return;
+    }
+
     if(request == TargetRequestKind::Refresh) {
         if(target && !attackPos && !forced &&
            (attackMode == GUARD || attackMode == AREAGUARD || attackMode == HUNT) &&
@@ -2521,7 +2655,7 @@ void UnitBase::resolvePendingTargetRequest() {
             if(pNewTarget != nullptr) {
                 // MULTIPLAYER-SAFE: Track launcher units acquiring ornithopter targets
                 if((getItemID() == Unit_Launcher || getItemID() == Unit_Deviator) && 
-                   pNewTarget->getItemID() == Unit_Ornithopter) {
+                   isOrnithopterUnit(pNewTarget->getItemID())) {
                     currentGame->combatStats.launcherTargetsOrni++;
                 }
                 
@@ -2530,7 +2664,7 @@ void UnitBase::resolvePendingTargetRequest() {
                 // For other modes, only attack if in guard range
                 bool shouldAttack = false;
                 
-                if(getItemID() == Unit_Sandworm) {
+                if(isSandwormUnit(getItemID())) {
                     // Sandworms: Only hunt within view range, don't chase across map
                     shouldAttack = isInGuardRange(pNewTarget);
                     
@@ -2546,7 +2680,7 @@ void UnitBase::resolvePendingTargetRequest() {
                 
                 if(shouldAttack) {
                     // Switch from AMBUSH to HUNT when attacking (except sandworms - keep them less aggressive)
-                    if(attackMode == AMBUSH && getItemID() != Unit_Sandworm) {
+                    if(attackMode == AMBUSH && !isSandwormUnit(getItemID())) {
                         doSetAttackMode(HUNT);
                     }
                     // Saboteurs need forced=true to pathfind onto occupied tiles (structures/vehicles)
@@ -2555,7 +2689,8 @@ void UnitBase::resolvePendingTargetRequest() {
                 }
             }
 
-            if(pNewTarget==nullptr && attackMode==HUNT) {
+            if(pNewTarget==nullptr && attackMode==HUNT
+               && (!ModManager::instance().isTornieFamilyContentActive() || !isOrnithopterUnit(getItemID()))) {
                 // Match the synchronous targeting path. An empty reachable
                 // target set is not a mission to retry across the whole map.
                 setGuardPoint(location);
@@ -2852,7 +2987,7 @@ bool UnitBase::turnDynastyBody(int wantedAngle) {
     FixPoint difference=FixPoint(wantedAngle)-angle;
     while(difference>4) difference-=8;
     while(difference< -4) difference+=8;
-    const FixPoint step=currentGame->objectData.data[itemID][originalHouseID].turnspeed*25/6;
+    const FixPoint step=currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed*25/6;
     if(FixPoint::abs(difference)<=step+0.00001_fix) angle=wantedAngle;
     else angle += difference>0 ? step : -step;
     while(angle<0) angle+=8;
@@ -2885,7 +3020,7 @@ void UnitBase::turn() {
                 angleLeft = wantedAngle - angle;
             }
 
-            const FixPoint speed=currentGame->objectData.data[itemID][originalHouseID].turnspeed;
+            const FixPoint speed=currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed;
             if(usesDynastyGroundTiming() && std::min(angleLeft,angleRight)<=speed) {
                 angle=wantedAngle; drawnAngle=wantedAngle;
             } else if(angleLeft <= angleRight) {
@@ -2898,7 +3033,7 @@ void UnitBase::turn() {
 }
 
 void UnitBase::turnLeft() {
-    angle += currentGame->objectData.data[itemID][originalHouseID].turnspeed;
+    angle += currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed;
     if(angle >= 7.5_fix) {
         drawnAngle = lround(angle) - NUM_ANGLES;
         angle -= NUM_ANGLES;
@@ -2908,7 +3043,7 @@ void UnitBase::turnLeft() {
 }
 
 void UnitBase::turnRight() {
-    angle -= currentGame->objectData.data[itemID][originalHouseID].turnspeed;
+    angle -= currentGame->objectData.data[itemID][getProductionHouseID()].turnspeed;
     if(angle <= -0.5_fix) {
         drawnAngle = lround(angle) + NUM_ANGLES;
         angle += NUM_ANGLES;
@@ -2921,6 +3056,8 @@ void UnitBase::turnRight() {
 
 void UnitBase::quitDeviation() {
     if(wasDeviated()) {
+        const bool family = ModManager::instance().isTornieFamilyContentActive();
+        const FixPoint healthRatio = family ? getHealth() / getMaxHealth() : 0;
         // revert back to real owner
         removeFromSelectionLists();
         clearOrderQueue();      // the borrowing house's orders end with its control
@@ -2931,6 +3068,10 @@ void UnitBase::quitDeviation() {
         owner = currentGame->getHouse(originalHouseID);
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
         deviationTimer = INVALID;
+        if(family) {
+            setHealth(getMaxHealth() * healthRatio);
+            refreshRadarResearch();
+        }
     }
     // Damage from here on is ordinary combat between the original houses again.
     if(deviationEpisode.active()) {
@@ -3000,6 +3141,8 @@ bool UnitBase::update() {
         tryLongStallCarryallRescue();
     }
 
+    if(ModManager::instance().isTornieFamilyContentActive() && slowTimer > 0 && --slowTimer == 0
+       && currentGameMap->tileExists(location)) setSpeeds();
     if(recalculatePathTimer > 0) recalculatePathTimer--;
     if(findTargetTimer > 0) findTargetTimer--;
     if(primaryWeaponTimer > 0) primaryWeaponTimer--;

@@ -70,12 +70,14 @@ public:
     void playSelectSound() override;
 
     bool canPass(int xPos, int yPos) const override;
+    const ObjectBase* findTarget() const override;
 
     inline int getTilePosition() const { return tilePosition; }
 
 protected:
     void setSpeeds() override;
     Coord movementEndpoint() const override;
+    void targeting() override;
 
     // infantry state
     Sint8   tilePosition;       ///< The position in the current tile (0 to 4)

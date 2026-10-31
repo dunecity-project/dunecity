@@ -330,21 +330,21 @@ void testPathBudgetOrders() {
 void testTrafficBudgets() {
     NetworkPacketPolicy::RateWindow window;
     const Uint32 start = 30000;
-    const Uint64 chunkBytes = 64 * 1024;
+    const Uint64 chunkBytes = MOD_CHUNK_SIZE;
 
     bool burstAccepted = true;
-    for(Uint64 sent = 0; sent < 10ull * 1024 * 1024; sent += chunkBytes) {
+    for(Uint64 sent = 0; sent < MAX_MOD_TRANSFER_SIZE; sent += chunkBytes) {
         if(!window.accept(start, chunkBytes, NetworkPacketPolicy::kMaxModTransferBytesPerWindow,
                           NetworkPacketPolicy::kTrafficWindowMs)) {
             burstAccepted = false;
             break;
         }
     }
-    check(burstAccepted, "a requested 10 MiB mod burst fits the raised budget");
+    check(burstAccepted, "a requested maximum-sized mod burst fits the raised budget");
 
     NetworkPacketPolicy::RateWindow ordinary;
     bool bulkRefused = false;
-    for(Uint64 sent = 0; sent < 10ull * 1024 * 1024; sent += chunkBytes) {
+    for(Uint64 sent = 0; sent < MAX_MOD_TRANSFER_SIZE; sent += chunkBytes) {
         if(!ordinary.accept(start, chunkBytes, NetworkPacketPolicy::kMaxPeerBytesPerWindow,
                             NetworkPacketPolicy::kTrafficWindowMs)) {
             bulkRefused = true;

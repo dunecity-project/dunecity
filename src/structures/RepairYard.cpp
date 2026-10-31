@@ -22,8 +22,10 @@
 
 #include <FileClasses/GFXManager.h>
 #include <House.h>
+#include <Game.h>
 #include <Map.h>
 #include <SoundPlayer.h>
+#include <mod/ModManager.h>
 
 #include <units/Carryall.h>
 #include <units/GroundUnit.h>
@@ -144,8 +146,11 @@ void RepairYard::updateStructureSpecificStuff() {
     if (pRepairUnit) {
 
         if (pRepairUnit->getHealth() * 100 / pRepairUnit->getMaxHealth() < 100) {
-            if (owner->takeCredits(UNIT_REPAIRCOST) > 0) {
-                pRepairUnit->addHealth();
+            const int steps = ModManager::instance().isTornieFamilyContentActive()
+                && owner->hasRadarSpecialization(HOUSE_NEUTRAL)
+                && currentGame->getGameCycleCount() % 4 == 0 ? 2 : 1;
+            for(int step = 0; step < steps && pRepairUnit->getHealth() < pRepairUnit->getMaxHealth(); ++step) {
+                if(owner->takeCredits(UNIT_REPAIRCOST) > 0) pRepairUnit->addHealth();
             }
         } else {
             // Unit is fully repaired - handle deployment

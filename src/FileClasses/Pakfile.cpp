@@ -286,6 +286,9 @@ size_t Pakfile::ReadFile(SDL_RWops* pRWop, void *ptr, size_t size, size_t n) {
         }
     }
 
+    // Graphics and sound load concurrently. Keep the physical seek/read pair
+    // atomic so another entry cannot move the shared archive cursor between them.
+    const std::lock_guard<std::mutex> lock(pPakfile->readMutex);
     if(SDL_RWseek(pPakfile->fPakFile,readstartoffset,SEEK_SET) < 0) {
         return 0;
     }

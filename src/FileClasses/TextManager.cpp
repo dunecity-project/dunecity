@@ -18,6 +18,7 @@
 #include <FileClasses/TextManager.h>
 #include <mod/ModManager.h>
 
+#include <sand.h>
 #include <globals.h>
 
 #include <misc/string_util.h>
@@ -29,6 +30,7 @@
 #include <misc/exceptions.h>
 
 #include <vector>
+#include <utility>
 
 #ifdef _
 #undef _
@@ -74,6 +76,15 @@ TextManager::TextManager() {
 TextManager::~TextManager() = default;
 
 void TextManager::loadData() {
+    campaignTextPlans.clear();
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        INIFile ini(pFileManager->openCampaignFile("CampaignPlan.ini").get());
+        for(const int house : ModManager::instance().getPlayableHouses()) {
+            const auto name = getHouseNameByNumber(static_cast<HOUSETYPE>(house));
+            if(auto plan = campaign::readCampaignPlan(ini, name))
+                campaignTextPlans.emplace(house, std::move(*plan));
+        }
+    }
     origDuneText.clear();
     for(auto& mentatString : mentatStrings) {
         mentatString.reset();
@@ -92,6 +103,92 @@ void TextManager::loadData() {
 }
 
 std::string TextManager::getBriefingText(unsigned int mission, unsigned int texttype, int house) const {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        const bool french = settings.general.language == "fr";
+        const auto name = getHouseNameByNumber(static_cast<HOUSETYPE>(house));
+        const auto entry = campaignTextPlans.find(house);
+        if(mission > 0 && mission <= 9 && entry != campaignTextPlans.end()) {
+            const auto& plan = entry->second;
+            if(mission == 1 && texttype == MISSION_DESCRIPTION) {
+                if(plan.revision != 2) {
+                    return (french ? "Maison " : "House ") + name
+                        + (french ? u8". Établissez votre économie d'épice et protégez vos moissonneuses. "
+                                  : ". Establish your spice economy and protect your harvesters. ")
+                        + (plan.openingQuota > 0 ? (french ? "Objectif : " : "Objective: ")
+                           + std::to_string(plan.openingQuota) + (french ? u8" crédits. " : " credits. ") : "")
+                        + (french ? "Premier adversaire : " : "First opponent: ") + plan.opponents[0] + ".";
+                }
+                const char letter = getHouseScenarioLetter(static_cast<HOUSETYPE>(house));
+                const std::string opening = letter == 'R'
+                    ? (french ? u8". Votre port stellaire et votre petite exploitation remplacent le chantier initial. Achetez un VCM au CHOAM pour commencer les constructions. "
+                              : ". Your starport and small spice operation replace the initial construction yard. Buy an MCV from CHOAM to begin construction. ")
+                    : letter == 'W'
+                    ? (french ? u8". Reconnaissez les approches avec vos appareils prêtés, utilisez le Carryall pour la logistique et gardez vos avions hors de portée des missiles. "
+                              : ". Scout with your loaned aircraft, use the Carryall for logistics and keep your aircraft clear of missiles. ")
+                    : (french ? u8". Établissez votre économie d'épice et protégez vos moissonneuses. "
+                              : ". Establish your spice economy and protect your harvesters. ");
+                return (french ? "Maison " : "House ") + name + opening
+                    + (plan.openingQuota > 0 ? (french ? "Objectif : " : "Objective: ")
+                       + std::to_string(plan.openingQuota) + (french ? u8" crédits. " : " credits. ") : "")
+                    + (french ? "Adversaire principal : " : "Main opponent: ") + plan.stageOpponents[0][0]
+                    + (french ? ", soutenu par " : ", supported by ") + plan.stageOpponents[0][1]
+                    + (french ? u8". Deux petites bases ennemies et des renforts espacés menacent votre exploitation. Vous commencez avec 1 500 crédits ; le quota compte l'épice raffinée."
+                              : ". Two small enemy bases and staggered reinforcements threaten your operation. You start with 1,500 credits; the quota counts refined spice.");
+            }
+            const auto filename = std::string("TEXT") + plan.templateLetter + "." + _("LanguageFileExtension");
+            const auto source = origDuneText.find(filename);
+            const unsigned offset = texttype == MISSION_WIN ? 1 : texttype == MISSION_LOSE ? 2
+                : texttype == MISSION_ADVICE ? 3 : 0;
+            const unsigned index = mission * 4 + offset;
+            if(source != origDuneText.end() && index < source->second->getNumStrings()) {
+                const bool harkonnen = plan.templateLetter == 'H', atreides = plan.templateLetter == 'A';
+                const std::array<std::string_view, 4> names = {
+                    harkonnen ? name : atreides ? plan.opponents[1] : plan.opponents[0],
+                    harkonnen ? plan.opponents[0] : atreides ? name : plan.opponents[1],
+                    harkonnen ? plan.opponents[1] : atreides ? plan.opponents[0] : name,
+                    plan.opponents[2]
+                };
+                auto result = campaign::replaceCampaignHouseNames(source->second->getString(index), names);
+                if(plan.revision == 2 && texttype == MISSION_DESCRIPTION) {
+                    const auto& enemies = plan.stageOpponents[mission - 1];
+                    std::string roster = (french ? "Adversaire principal : " : "Main opponent: ") + enemies[0]
+                        + (french ? ". Soutien permanent : " : ". Persistent support: ") + enemies[1] + ". ";
+                    for(int role = 2; role < 4; ++role) {
+                        if(!enemies[role].empty())
+                            roster += (french ? "Adversaire additionnel : " : "Additional opponent: ") + enemies[role] + ". ";
+                    }
+                    result.insert(0, roster);
+                }
+                return result;
+            }
+            // Some original archives omit the final advice entry; do not reuse a legacy faction's index.
+            if(texttype == MISSION_WIN) return name + (french ? u8" a remporté cette bataille." : " has won this battle.");
+            if(texttype == MISSION_LOSE) return name + (french ? u8" doit reconstruire ses forces et réessayer." : " must rebuild its forces and try again.");
+            return name + (french ? u8" : protégez vos moissonneuses et développez votre base."
+                                 : ": protect your harvesters and develop your base.");
+        }
+        if(house == HOUSE_CUSTOM || (house >= HOUSE_WILDSPADE && house < NUM_PLAYER_HOUSES)) {
+            if(mission == 0) {
+                const char* description = house == HOUSE_WILDSPADE
+                    ? (french ? "Les Wildspade prennent le ciel pour frapper leurs adversaires sur Arrakis."
+                              : "Wildspade takes to the skies to strike its opponents on Arrakis.")
+                    : house == HOUSE_KLESHMERSH
+                    ? (french ? u8"Kleshmersh trace sa propre voie sur Arrakis, entre puissance militaire et commerce de l'épice."
+                              : "Kleshmersh follows its own path on Arrakis through military strength and the spice trade.")
+                    : house == HOUSE_THARPIQUE
+                    ? (french ? u8"Tharpique combine mobilité et technologies spécialisées pour conquérir Arrakis."
+                              : "Tharpique combines mobility and specialized technologies to conquer Arrakis.")
+                    : (french ? u8"Corruptique déploie un arsenal lourd pour prendre le contrôle de l'épice."
+                              : "Corruptique deploys a heavy arsenal to take control of the spice.");
+                return (french ? "Maison " : "House ") + name + "\n" + description;
+            }
+            if(texttype == MISSION_WIN) return name + (french ? u8" a remporté cette opération sur Arrakis." : " has won this operation on Arrakis.");
+            if(texttype == MISSION_LOSE) return name + (french ? u8" a perdu cette bataille. Reconstruisez vos forces et réessayez." : " has lost this battle. Rebuild your forces and try again.");
+            return (french ? "Commandez la maison " : "Command House ") + name
+                + (french ? u8". Développez votre base, protégez vos moissonneuses et accomplissez les objectifs de la mission."
+                          : ". Develop your base, protect your harvesters and complete the mission objectives.");
+        }
+    }
     switch(house) {
         case HOUSE_HARKONNEN: {
             switch(texttype) {

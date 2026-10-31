@@ -25,6 +25,7 @@ class Palace final : public StructureBase
 public:
     explicit Palace(House* newOwner);
     explicit Palace(InputStream& stream);
+    void setOriginalHouseID(int houseID) override;
     void init();
     virtual ~Palace();
 
@@ -61,7 +62,8 @@ public:
         Fremen = 2,
         Saboteur = 3,
         LightVehicles = 4,
-        Ornithopters = 5
+        Ornithopters = 5,
+        Napalm = 6
     };
 
     int getPercentComplete() const {
@@ -71,7 +73,7 @@ public:
     inline bool isSpecialWeaponReady() const { return (specialWeaponTimer <= 0); }
     inline int getSpecialWeaponTimer() const { return specialWeaponTimer; }
     bool usesGuestWildspadeOrnithopterStrike() const;
-    bool usesGuestKleshmershFremenCall() const;
+    bool usesKleshmershNapalm() const;
     bool usesLightVehicleCall() const;
     bool usesTornieMainRebelsCooldown() const;
     bool usesTornieMainRebelsRandomSpecial() const;
@@ -79,7 +81,7 @@ public:
     bool usesTargetedSpecialWeapon() const;
     static int getSpecialWeaponCooldownForHouse(int houseID);
     int getMaxSpecialWeaponTimer() const {
-        return getSpecialWeaponCooldownForHouse(originalHouseID);
+        return getSpecialWeaponCooldownForHouse(getTechnologyHouseID());
     }
 
 protected:
@@ -94,6 +96,7 @@ protected:
     */
     void updateStructureSpecificStuff() override;
 
+    friend struct PalaceNapalmFixture;
 private:
     void selectTornieMainRebelsSpecialWeapon();
 

@@ -17,6 +17,9 @@
 
 #include <GameInitSettings.h>
 #include <misc/CampaignControls.h>
+#include <FileClasses/INIFile.h>
+#include <Network/CustomGamePlayerPolicy.h>
+#include <misc/SDL2pp.h>
 #include <algorithm>
 
 #include <misc/IFileStream.h>
@@ -41,6 +44,7 @@ constexpr Uint32 GAMEINIT_MOD7_MARKER = 0x4D4F4437; // MOD7: per-house spice inc
 constexpr Uint32 GAMEINIT_MOD8_MARKER = 0x4D4F4438; // MOD8: plan-building-sites match rule
 constexpr Uint32 GAMEINIT_MOD10_MARKER = 0x4D4F4441; // MODA: retry planned placement (MOD10)
 constexpr Uint32 GAMEINIT_MOD11_MARKER = 0x4D4F4442; // MODB: slow city year (MOD11)
+constexpr Uint32 GAMEINIT_MOD12_MARKER = 0x4D4F4443; // MODC: Tornie-family match rules
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -51,7 +55,7 @@ constexpr bool isKnownModMarker(Uint32 marker) {
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
-        || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD2 and later carry the per-house colour array.
@@ -64,7 +68,8 @@ constexpr bool markerHasGraphicsSkins(Uint32 marker) {
     return marker == GAMEINIT_MOD3_MARKER || marker == GAMEINIT_MOD4_MARKER
         || marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
@@ -73,45 +78,49 @@ constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
     return marker == GAMEINIT_MOD4_MARKER || marker == GAMEINIT_MOD5_MARKER
         || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
-        || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD5 and later carry the construction yard limit.
 constexpr bool markerHasYardLimit(Uint32 marker) {
     return marker == GAMEINIT_MOD5_MARKER || marker == GAMEINIT_MOD6_MARKER
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD6 and later carry the original-unit-damage rule.
 constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
     return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
-        || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD7 and later carry the per-house spice income multipliers.
 constexpr bool markerHasSpiceIncome(Uint32 marker) {
     return marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
-        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD8 and later carry the plan-building-sites rule, after the spice income block. Older
 /// markers keep the default (on) and read nothing more.
 constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
     return marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
-        || marker == GAMEINIT_MOD11_MARKER;
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD9 and later carry the continuous-ground-steps rule, after the plan-building-sites byte.
 /// Older markers keep the default (off: the 1.0.852 movement) and read nothing more.
 constexpr bool markerHasContinuousGroundSteps(Uint32 marker) {
-    return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+    return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
+        || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER;
 }
 
 /// MOD10 and later carry the planned-construction rules (retry, shared yard queue).
 constexpr bool markerHasPlannedConstruction(Uint32 marker) {
-    return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER;
+    return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER
+        || marker == GAMEINIT_MOD12_MARKER;
 }
 }
 
@@ -134,6 +143,8 @@ GameInitSettings::GameInitSettings() {
 
 GameInitSettings::GameInitSettings(HOUSETYPE newHouseID, const SettingsClass::GameOptionsClass& gameOptions, int startLevel)
  : gameType(GameType::Campaign), houseID(newHouseID), mission(CampaignControls::firstMission(startLevel)), alreadyShownTutorialHints(0), gameOptions(gameOptions) {
+    if(gameOptions.easyMode && ModManager::instance().isTornieFamilyContentActive() && mission == 1) mission = 2;
+    chaosCampaignEligible = gameOptions.chaosMode && ModManager::instance().isTornieFamilyContentActive() && startLevel == 1;
     filename = getScenarioFilename(houseID, mission);
     randomSeed = getRandomInt();
     setModInfo(modName, modChecksum);
@@ -146,7 +157,7 @@ GameInitSettings::GameInitSettings(const GameInitSettings& prevGameInitInfoClass
     this->alreadyPlayedRegions = alreadyPlayedRegions;
     this->alreadyShownTutorialHints = alreadyShownTutorialHints;
     filename = getScenarioFilename(houseID, mission);
-    filedata.clear();
+    setScenarioData({});
     randomSeed = getRandomInt();
 }
 
@@ -302,8 +313,16 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 gameOptions.retryPlannedPlacement = stream.readBool();
                 gameOptions.sharedYardQueue = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD11_MARKER) {
+            if(modMarker == GAMEINIT_MOD11_MARKER || modMarker == GAMEINIT_MOD12_MARKER) {
                 gameOptions.slowCityYear = stream.readBool();
+            }
+            if(modMarker == GAMEINIT_MOD12_MARKER) {
+                gameOptions.alliedControl = stream.readBool();
+                gameOptions.alliedBuilding = stream.readBool();
+                gameOptions.easyMode = stream.readBool();
+                gameOptions.chaosMode = stream.readBool();
+                gameOptions.sellingBuildings = stream.readBool();
+                chaosCampaignEligible = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -319,8 +338,8 @@ void GameInitSettings::configureCoopSave(const GameInitSettings& saved, const Ho
     mission = saved.mission;
     alreadyPlayedRegions = saved.alreadyPlayedRegions;
     gameOptions = saved.gameOptions;
-    modName = saved.modName;
-    modChecksum = saved.modChecksum;
+    chaosCampaignEligible = saved.chaosCampaignEligible;
+    setModIdentity(saved.modName, saved.modChecksum);
     modRevisionHash = saved.modRevisionHash;
     modRevisionVersion = saved.modRevisionVersion;
     savedGameVersion = saved.savedGameVersion;
@@ -396,7 +415,7 @@ GameInitSettings::~GameInitSettings() {
 }
 
 void GameInitSettings::save(OutputStream& stream) const {
-    if(houseInfoList.size() > static_cast<std::size_t>(MAX_CUSTOM_GAME_PLAYERS))
+    if(houseInfoList.size() > static_cast<std::size_t>(CustomGamePlayerPolicy::maxPlayers(isTornieFamilyMatch())))
         THROW(std::runtime_error, "GameInitSettings::save(): too many house rows.");
     stream.writeSint8(static_cast<Sint8>(gameType));
     stream.writeSint8(houseID);
@@ -431,7 +450,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD11_MARKER);
+    stream.writeUint32(GAMEINIT_MOD12_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -474,6 +493,97 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.sharedYardQueue);
     // MOD11: the slow city year; streams without it keep the 60 s year.
     stream.writeBool(gameOptions.slowCityYear);
+    // MOD12 is append-only; map-embedded co-op metadata uses the existing filedata string.
+    stream.writeBool(gameOptions.alliedControl);
+    stream.writeBool(gameOptions.alliedBuilding);
+    stream.writeBool(gameOptions.easyMode);
+    stream.writeBool(gameOptions.chaosMode);
+    stream.writeBool(gameOptions.sellingBuildings);
+    stream.writeBool(chaosCampaignEligible);
+}
+
+bool GameInitSettings::isTornieFamilyMatch() const {
+    if(!tornieFamilyCached) {
+        tornieFamilyMatch = ModManager::instance().isTornieFamilyContent(modName);
+        tornieFamilyCached = true;
+    }
+    return tornieFamilyMatch;
+}
+
+const std::optional<coop::Context>& GameInitSettings::getCoopCampaignContext() const {
+    if(!coopContextCached) {
+        coopContext.reset();
+        // LoadMultiplayer.filedata is a binary checkpoint, never an executable INI map.
+        // Its saved CustomMultiplayer settings are restored before this accessor is used.
+        if(isTornieFamilyMatch()
+           && (gameType == GameType::CustomMultiplayer || gameType == GameType::CustomGame)) {
+            coopContext = coop::readContext(filedata);
+            if(coopContext && coopContext->modName != ModManager::instance().getContentBase(modName))
+                throw std::invalid_argument("Co-op campaign content base does not match the selected mod.");
+        }
+        coopContextCached = true;
+    }
+    return coopContext;
+}
+
+const GameInitSettings::CoopHarvestObjective& GameInitSettings::getCoopHarvestObjective() const {
+    if(!coopHarvestCached) {
+        coopHarvestObjective = {};
+        if(const auto& context = getCoopCampaignContext()) {
+            auto source = sdl2::RWops_ptr{SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size()))};
+            INIFile map(source.get());
+            const int quota = map.getIntValue("COOP_TEMPLATE", "SharedQuota", 0);
+            if(quota > 0 && (map.getIntValue("BASIC", "WinFlags", 3) & WINLOSEFLAGS_QUOTA)) {
+                int active = 0;
+                for(const int index : context->alliedSlots()) {
+                    const auto& slot = context->slots[index];
+                    if(slot.active()) coopHarvestObjective.houses[active++] = slot.house;
+                }
+                coopHarvestObjective.quota = quota * active / 2;
+            }
+        }
+        coopHarvestCached = true;
+    }
+    return coopHarvestObjective;
+}
+
+bool GameInitSettings::isEasyModeEnabled() const {
+    if(!isTornieFamilyMatch() || !gameOptions.easyMode) return false;
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return true;
+    const auto& context = getCoopCampaignContext();
+    return context && context->easyMode;
+}
+
+bool GameInitSettings::isEasyModeHouse(int ownerHouse) const {
+    if(!isEasyModeEnabled()) return false;
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return ownerHouse == houseID;
+    const auto& context = getCoopCampaignContext();
+    for(const int index : context->alliedSlots()) {
+        const auto& slot = context->slots[index];
+        if(slot.active() && slot.house == ownerHouse) return true;
+    }
+    return false;
+}
+
+int GameInitSettings::campaignPurchasePrice(int price, int ownerHouse) const {
+    return isEasyModeHouse(ownerHouse) ? std::max(1, price - 25) : price;
+}
+
+int GameInitSettings::campaignStartingCredits(int credits, int ownerHouse) const {
+    if(!isEasyModeHouse(ownerHouse)) return credits;
+    const auto& context = getCoopCampaignContext();
+    return context || mission == 2 ? credits + 500 : credits;
+}
+
+bool GameInitSettings::isChaosModeEnabled() const {
+    return isTornieFamilyMatch() && gameOptions.chaosMode;
+}
+
+bool GameInitSettings::isChaosCampaignEligible() const {
+    if(!isChaosModeEnabled()) return false;
+    if(gameType == GameType::Campaign || gameType == GameType::CampaignCoop) return chaosCampaignEligible;
+    const auto& context = getCoopCampaignContext();
+    return context && context->chaosEligible;
 }
 
 
@@ -485,7 +595,7 @@ void GameInitSettings::migrateLegacyHouseColorSlots() {
 }
 
 std::string GameInitSettings::getScenarioFilename(HOUSETYPE newHouse, int mission) {
-    if((newHouse < 0) || (newHouse >= NUM_HOUSES) || !isHouseAvailable(newHouse)) {
+    if((newHouse < 0) || (newHouse >= NUM_PLAYER_HOUSES) || !isHouseAvailable(newHouse)) {
         THROW(std::invalid_argument, "GameInitSettings::getScenarioFilename(): Invalid house id " + std::to_string(newHouse) + ".");
     }
 

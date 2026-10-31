@@ -26,6 +26,7 @@
 #include <units/Carryall.h>
 #include <units/GroundUnit.h>
 #include <units/Harvester.h>
+#include <units/MCV.h>
 #include <units/UnitBase.h>
 #include <algorithm>
 #include <fstream>
@@ -135,6 +136,188 @@ int runTransportContainmentProbe() {
         carry->deploy(at);
         return carry;
     };
+
+    if(std::getenv("CONTAINMENT_PROBE_TORNIE_STATE")) {
+        const bool family = ModManager::instance().isTornieFamilyContentActive();
+        if(!family) {
+            // The same factory path used by maps, reinforcements and production must
+            // reject every appended ID outside the six content families.
+            for(int item = Unit_Troopers5; item <= ItemID_LastID; ++item) {
+                if(item == Unit_Troopers5 || item == Unit_Infantry5) continue; // Queue orders, not objects.
+                containmentRequire(ObjectBase::createObject(item, owner, true) == nullptr,
+                                   "A Tornie 546 object leaked into another mod");
+            }
+            auto* tank = owner->createUnit(Unit_Tank, true, HOUSE_MERCENARY);
+            containmentRequire(tank && tank->getProductionHouseID() == HOUSE_ATREIDES,
+                               "Captured production technology changed an unrelated mod");
+            tank->deploy(pocket + Coord(6, 3));
+            tank->applySlow();
+            containmentRequire(tank->getSlowTimer() == 0 && tank->getMovementSpeedFactor() == 1.0_fix,
+                               "Slow effects changed an unrelated mod");
+            SDL_Log("TORNIE_STATE_PROBE_PASS: mod=%s family=0 checks=%d", mod.c_str(), gContainmentChecks);
+            game.reset();
+            currentGame = nullptr;
+            pLocalPlayer = nullptr;
+            pLocalHouse = nullptr;
+            return -1;
+        }
+
+        auto* refinery = dynamic_cast<Refinery*>(owner->placeStructure(
+            NONE_ID, Structure_Doublefinery, pocket.x + 10, pocket.y + 8, true, true));
+        containmentRequire(refinery && refinery->getStructureSize() == Coord(5, 2),
+                           "Doublefinery did not use its five-by-two footprint");
+        auto* fast = dynamic_cast<Harvester*>(owner->createUnit(Unit_FastHarvester, true));
+        auto* capacity = dynamic_cast<Harvester*>(owner->createUnit(Unit_CapacityHarvester, true));
+        containmentRequire(fast && capacity, "Cannot create both harvester variants");
+        fast->deploy(pocket + Coord(2, 4));
+        capacity->deploy(pocket + Coord(4, 4));
+        fast->setAmountOfSpice(175);
+        capacity->setAmountOfSpice(900);
+        containmentRequire(capacity->getSpiceCapacity() == fast->getSpiceCapacity() * 3 / 2,
+                           "Capacity Harvester did not retain its larger cargo hold");
+        fast->setTarget(refinery);
+        fast->setReturned();
+        containmentRequire(refinery->getNumOccupiedBays() == 1 && refinery->isFree(),
+                           "The second Doublefinery bay was not independently free");
+        const Uint32 recoveredBefore = game->getRecoveredPassengerCount();
+        game->reconcileTransportContainment();
+        containmentRequire(!fast->isActive() && game->getRecoveredPassengerCount() == recoveredBefore,
+                           "A half-occupied Doublefinery lost its real bay occupant");
+        capacity->setTarget(refinery);
+        capacity->setReturned();
+        containmentRequire(refinery->getNumOccupiedBays() == 2 && !refinery->isFree(),
+                           "Doublefinery did not accept two independent harvesters");
+
+        // Captured technology is neither the current owner nor deviation's original
+        // owner. The slowdown and fractional Dynasty clock are independent saved state.
+        auto* tank = owner->createUnit(Unit_Tank, false, HOUSE_MERCENARY);
+        containmentRequire(tank && tank->getProductionHouseID() == HOUSE_MERCENARY
+                           && tank->getOriginalHouseID() == HOUSE_ATREIDES && tank->getOwner() == owner,
+                           "A captured blueprint replaced the tank's ownership");
+        tank->deploy(pocket + Coord(7, 3));
+        tank->applySlow();
+        tank->dynastyStepTimeOffset = 0.375_fix;
+        const int slowTimer = tank->getSlowTimer();
+        containmentRequire(slowTimer > 0 && tank->getMovementSpeedFactor() == 0.5_fix,
+                           "Slow did not affect the captured-technology tank");
+        const Coord yardAt = pocket + Coord(2, 8);
+        for(int y = 0; y < 2; ++y) for(int x = 0; x < 2; ++x)
+            currentGameMap->getTile(yardAt + Coord(x, y))->setType(Terrain_Rock);
+        auto* mcv = dynamic_cast<MCV*>(owner->createUnit(Unit_MCV, false, HOUSE_MERCENARY));
+        containmentRequire(mcv != nullptr, "Cannot create a captured-technology MCV");
+        mcv->deploy(yardAt);
+        containmentRequire(mcv->doDeploy(), "Captured-technology MCV could not deploy");
+        StructureBase* capturedYard = nullptr;
+        for(auto* structure : structureList)
+            if(structure->getItemID() == Structure_ConstructionYard && structure->getLocation() == yardAt)
+                capturedYard = structure;
+        containmentRequire(capturedYard && capturedYard->getProductionHouseID() == HOUSE_MERCENARY
+                           && capturedYard->getOriginalHouseID() == HOUSE_ATREIDES
+                           && capturedYard->getOwner() == owner,
+                           "MCV deployment lost its blueprint or replaced structure ownership");
+        const Uint32 capturedYardID = capturedYard->getObjectID();
+        const Uint32 refineryID = refinery->getObjectID(), fastID = fast->getObjectID();
+        const Uint32 capacityID = capacity->getObjectID(), tankID = tank->getObjectID();
+        const int bookings = refinery->getNumBookings();
+        const int variants[] = {Unit_FlameQuad, Unit_GasInfantry, Unit_FlameTrooper,
+            Unit_EliteOrnithopter, Unit_RaiderQuad, Unit_RangedTank, Unit_SlowTank, Unit_TameSandworm};
+        std::vector<std::pair<Uint32, int>> catalogue;
+        for(int index = 0; index < 8; ++index) {
+            auto* unit = owner->createUnit(variants[index], true);
+            containmentRequire(unit && unit->getItemID() == variants[index] && unit->getOwner() == owner,
+                               "A new unit variant factory lost its product type or owner");
+            unit->deploy(pocket + Coord(2 + index, 1));
+            catalogue.emplace_back(unit->getObjectID(), variants[index]);
+        }
+        auto* slowpost = owner->placeStructure(NONE_ID, Structure_Slowpost,
+            pocket.x + 16, pocket.y + 8, true, true);
+        containmentRequire(slowpost != nullptr, "Cannot place the Slowpost variant");
+        catalogue.emplace_back(slowpost->getObjectID(), Structure_Slowpost);
+        const FixPoint normalHarvesterSpeed = game->objectData.data[Unit_Harvester][fast->getProductionHouseID()].maxspeed;
+        containmentRequire(lround(100 * fast->getMaxSpeed() / normalHarvesterSpeed) == 125,
+                           "Fast Harvester did not use its twenty-five-percent speed increase");
+        game->initializeGameLoop();
+        containmentRequire(game->saveGame(gBoundarySave), "Could not save Tornie object state");
+        game.reset();
+        currentGame = nullptr;
+        pLocalPlayer = nullptr;
+        pLocalHouse = nullptr;
+
+        auto loadState = [&](const std::string& filename) {
+            game = std::make_unique<Game>();
+            currentGame = game.get();
+            game->bReplay = true;
+            game->initGame(GameInitSettings(filename));
+            game->bReplay = false;
+            game->initializeGameLoop();
+            containmentRequire(game->getLoadedSavegameVersion() == SAVEGAMEVERSION_TORNIE546,
+                               "Tornie state save did not use the integrated format version");
+        };
+        loadState(gBoundarySave);
+        refinery = dynamic_cast<Refinery*>(game->getObjectManager().getObject(refineryID));
+        fast = dynamic_cast<Harvester*>(game->getObjectManager().getObject(fastID));
+        capacity = dynamic_cast<Harvester*>(game->getObjectManager().getObject(capacityID));
+        tank = dynamic_cast<UnitBase*>(game->getObjectManager().getObject(tankID));
+        containmentRequire(refinery && fast && capacity && tank, "New objects were not restored from the save");
+        containmentRequire(refinery->getNumOccupiedBays() == 2 && refinery->getNumBookings() == bookings
+                           && refinery->getContainedHarvester(0) == fast
+                           && refinery->getContainedHarvester(1) == capacity,
+                           "Doublefinery bay identities/bookings changed across save/load");
+        containmentRequire(fast->getAmountOfSpice() == 175 && capacity->getAmountOfSpice() == 900
+                           && !fast->isActive() && !capacity->isActive(),
+                           "Doublefinery cargo or containment changed across save/load");
+        containmentRequire(tank->getProductionHouseID() == HOUSE_MERCENARY
+                           && tank->getOriginalHouseID() == HOUSE_ATREIDES
+                           && tank->getOwner()->getHouseID() == HOUSE_ATREIDES,
+                           "Captured production technology did not round-trip independently of ownership");
+        capturedYard = dynamic_cast<StructureBase*>(game->getObjectManager().getObject(capturedYardID));
+        containmentRequire(capturedYard && capturedYard->getProductionHouseID() == HOUSE_MERCENARY
+                           && capturedYard->getOriginalHouseID() == HOUSE_ATREIDES
+                           && capturedYard->getOwner()->getHouseID() == HOUSE_ATREIDES,
+                           "Explicit structure production technology did not round-trip");
+        containmentRequire(tank->getSlowTimer() == slowTimer && tank->getMovementSpeedFactor() == 0.5_fix
+                           && tank->dynastyStepTimeOffset == 0.375_fix,
+                           "Slow duration or fractional movement continuation did not round-trip");
+        for(const auto& [id, item] : catalogue) {
+            const auto* object = game->getObjectManager().getObject(id);
+            containmentRequire(object && object->getItemID() == static_cast<Uint32>(item)
+                               && object->getOwner()->getHouseID() == HOUSE_ATREIDES,
+                               "A new object variant did not survive the complete save/load");
+        }
+
+        refinery->deployHarvester();
+        containmentRequire(fast->isActive() && !capacity->isActive()
+                           && refinery->getNumOccupiedBays() == 1
+                           && refinery->getContainedHarvester(1) == capacity,
+                           "Releasing one bay disturbed the other bay");
+        const FixPoint spiceBefore = capacity->getAmountOfSpice();
+        refinery->update();
+        containmentRequire(capacity->getAmountOfSpice() < spiceBefore,
+                           "The second bay stopped unloading when the first bay was released");
+        const FixPoint spiceAfter = capacity->getAmountOfSpice();
+        const std::string secondSave = gBoundarySave + ".second.dls";
+        containmentRequire(game->saveGame(secondSave), "Could not re-save the half-occupied Doublefinery");
+        game.reset();
+        currentGame = nullptr;
+        pLocalPlayer = nullptr;
+        pLocalHouse = nullptr;
+        loadState(secondSave);
+        refinery = dynamic_cast<Refinery*>(game->getObjectManager().getObject(refineryID));
+        capacity = dynamic_cast<Harvester*>(game->getObjectManager().getObject(capacityID));
+        containmentRequire(refinery && capacity && refinery->isFree()
+                           && refinery->getNumOccupiedBays() == 1
+                           && refinery->getContainedHarvester(0) == nullptr
+                           && refinery->getContainedHarvester(1) == capacity
+                           && capacity->getAmountOfSpice() == spiceAfter,
+                           "A partially occupied Doublefinery did not round-trip");
+        SDL_Log("TORNIE_STATE_PROBE_PASS: mod=%s family=1 bays=2 captured_tech=1 slow=1 checks=%d",
+                mod.c_str(), gContainmentChecks);
+        game.reset();
+        currentGame = nullptr;
+        pLocalPlayer = nullptr;
+        pLocalHouse = nullptr;
+        return -1;
+    }
 
     // The orphan shape the regression produced, reproduced exactly: a cargo entry that cannot
     // describe a passenger, and a unit marked as carried anyway.

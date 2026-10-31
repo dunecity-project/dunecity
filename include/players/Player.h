@@ -180,6 +180,8 @@ protected:
         \return true if upgrading was started, false if not possible or already upgrading
     */
     bool doUpgrade(const BuilderBase* pBuilder) const;
+    /// Convert an eligible family Scoutpost without spending another AI order's reserve.
+    bool doUpgradeScoutpost(const StructureBase* pStructure, int spendable) const;
 
     /**
         Start production of the specified item in pBuilder.
@@ -217,11 +219,19 @@ protected:
     void doBuildRandom(const BuilderBase* pBuilder) const;
 
     /**
-        Selects an available Tornie custom unit at a deliberately low frequency.
-        The exact active-mod gate and active ObjectData list keep this path out
-        of Vanilla, DuneCity, Dune2R, and unrelated user mods.
+        Selects an available Tornie-family custom unit at a deliberately low frequency.
+        Active ObjectData and factory prerequisites keep unrelated mods and
+        unavailable captured technology out of this path.
     */
     int chooseLowPriorityCustomUnit(const BuilderBase* pBuilder, int chanceDenominator = 5) const;
+    bool hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const;
+    Uint32 chooseTornieHarvester(const BuilderBase* pBuilder, int money) const;
+
+    /// Existing AI economy targets, extended to the family's worker and refinery variants.
+    int getAIHarvesterCount() const;
+    int getAIRefineryBays() const;
+    /// Prefer an available, affordable family building with the same strategic role.
+    Uint32 chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money) const;
 
     /**
         Send order and wait for delivery to pStarport.

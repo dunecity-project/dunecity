@@ -61,7 +61,10 @@ static const char* DUNECITY_MOD_NAME = "dunecity";
 static const char* TORNIE_MOD_NAME = "Tornie";
 static const char* DUNE2R_MOD_NAME = "Dune2R";
 static const char* MANAGED_MOD_STAMP = ".dunecity-managed";
-static const char* TORNIE_ENGINE_COMPATIBILITY = "dunecity-tornie-engine/1";
+static const char* TORNIE_ENGINE_COMPATIBILITY = "dunecity-tornie-engine/2-save9878-protocol108";
+static constexpr const char* TORNIE_FAMILY_MOD_NAMES[] = {
+    "Tornie", "TornieLite", "Jericho", "JerichoLite", "ArcaKev", "ArcaKevLite"
+};
 
 // Install config file names (with .default suffix)
 static const char* OBJECT_DATA_DEFAULT = "ObjectData.ini.default";
@@ -69,6 +72,11 @@ static const char* QUANTBOT_CONFIG_DEFAULT = "QuantBot Config.ini.default";
 static const char* CUSTOM_HOUSE_CONFIG = "CustomHouse.ini";
 
 namespace {
+bool isTornieFamilyBase(const std::string& name) {
+    return std::any_of(std::begin(TORNIE_FAMILY_MOD_NAMES), std::end(TORNIE_FAMILY_MOD_NAMES),
+                       [&](const char* candidate) { return name == candidate; });
+}
+
 std::filesystem::path findBundledModPath(const std::string& modName) {
     const std::filesystem::path dataRoot = getDuneLegacyDataDir();
     const std::filesystem::path candidates[] = {
@@ -118,7 +126,7 @@ std::string bundledModFingerprint(const std::filesystem::path& source) {
 
     std::vector<std::string> entries;
     for(const auto& entry : std::filesystem::recursive_directory_iterator(source)) {
-        if(entry.is_regular_file()) {
+        if(entry.is_regular_file() && entry.path().filename() != MANAGED_MOD_STAMP) {
             entries.push_back(std::filesystem::relative(entry.path(), source).generic_string()
                               + "\n" + std::to_string(entry.file_size()));
         }
@@ -188,12 +196,12 @@ bool refreshManagedMod(const std::string& modName,
         return false;
     }
 
-    if(modName == TORNIE_MOD_NAME) {
+    if(isTornieFamilyBase(modName)) {
         std::string integrityError;
         if(!ModPayloadIntegrity::verifyChecksummedPayload(source, integrityError,
                                                           MANAGED_MOD_STAMP)) {
-            SDL_Log("ModManager: Warning - bundled Tornie payload failed integrity verification: %s",
-                    integrityError.c_str());
+            SDL_Log("ModManager: Warning - bundled %s payload failed integrity verification: %s",
+                    modName.c_str(), integrityError.c_str());
             return false;
         }
     }
@@ -203,9 +211,16 @@ bool refreshManagedMod(const std::string& modName,
     try {
         std::filesystem::remove_all(staged);
         std::filesystem::remove_all(backup);
-        std::filesystem::copy(source, staged,
-            std::filesystem::copy_options::recursive |
-            std::filesystem::copy_options::overwrite_existing);
+        // Android libc++ lacks recursive filesystem::copy; use the same
+        // explicit tree walk as the portable authored-mod copy path.
+        std::filesystem::create_directories(staged);
+        for(const auto& entry : std::filesystem::recursive_directory_iterator(source)) {
+            const auto target = staged / std::filesystem::relative(entry.path(), source);
+            if(entry.is_directory()) std::filesystem::create_directories(target);
+            else if(entry.is_regular_file())
+                std::filesystem::copy_file(entry.path(), target,
+                    std::filesystem::copy_options::overwrite_existing);
+        }
 
         // File-only packages (including Emscripten preload data) omit empty
         // directories. Recreate the optional asset roots before validating
@@ -277,24 +292,6 @@ bool refreshManagedMod(const std::string& modName,
     }
 }
 
-CustomHouseInfo makeTornieGuestCustomHouse(const std::string& activeModName) {
-    CustomHouseInfo info;
-    if(activeModName != TORNIE_MOD_NAME) {
-        return info;
-    }
-
-    info.enabled = true;
-    info.displayName = "Tharpique";
-    info.scenarioLetter = 'T';
-    info.regionPrefix = "THA";
-    info.paletteIndex = 136;
-    info.fallbackHouse = HOUSE_MERCENARY;
-    info.heraldAsset = "HeraldTharpique.png";
-    info.houseNameVoiceAsset = "OTHARP.VOC";
-    info.voicePlaybackRate = 1.06;
-    info.voiceGain = 1.15;
-    return info;
-}
 
 // Optional presentation media is omitted from shipped packages and preserved
 // across managed reseeds. Downloading it must not change the canonical mod's
@@ -339,7 +336,7 @@ ModManager::~ModManager() = default;
 std::string ModManager::installerContentHash(const std::string& name) const {
     namespace fs = std::filesystem;
     if(name != VANILLA_MOD_NAME && name != DUNECITY_MOD_NAME
-       && name != TORNIE_MOD_NAME && name != DUNE2R_MOD_NAME) return {};
+       && !isTornieFamilyBase(name) && name != DUNE2R_MOD_NAME) return {};
     try {
         // Cache individual file digests, not approval: every check enumerates the
         // payload again and invalidates changed files. No upload or profile stamp
@@ -464,15 +461,10 @@ void ModManager::initialize() {
         refreshBundledDunecityGraphicsSkins();
     }
 
-    // Seed built-in Tornie mod if needed. DuneCity 1.0.492:
-    // both "dunecity" and "Tornie" mods are seeded on first
-    // opening per Tornie's OOB. The Tornie mod contains the
-    // 8-house campaigns, custom units (Deviator/Flame Tank/
-    // Sonic Tank/Elite Siege Tank), custom buildings
-    // (Advanced Windtrap), palettes (Custom_IBM.PAL),
-    // and VOC files.
-    if (!modExists(TORNIE_MOD_NAME) || tornieNeedsReseed()) {
-        seedTornieFromDefaults();
+    for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
+        if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
+            seedTornieFamilyFromDefaults(name);
+        }
     }
 
     // Dune2R is a bundled graphics payload. Refresh stale installed copies so
@@ -502,7 +494,7 @@ void ModManager::initialize() {
     // payload. Preserve user data, but disable the managed mod until a later
     // launch can refresh it successfully.
     const bool activeManagedModInvalid =
-        (activeMod == TORNIE_MOD_NAME && tornieNeedsReseed())
+        (isTornieFamilyBase(activeMod) && tornieFamilyNeedsReseed(activeMod))
         || (activeMod == DUNE2R_MOD_NAME && dune2rNeedsReseed());
 
     // Verify the selected mod before any of its metadata or assets are read.
@@ -521,18 +513,21 @@ void ModManager::initialize() {
             ? activeInfo : readModIni(verifiedModPath);
         activeDune2RRemasterPresentation = dune2rUsesRemasterPresentation(
             activeMod, activeContentBase, verifiedInfo.baseMod.empty());
-        activeCustomHouse = activeInfo.customHouse;
-        activeGuestCustomHouse = makeTornieGuestCustomHouse(getContentBase(activeMod));
-        activeMentats = activeInfo.mentats;
+        loadActiveContentMetadata(verifiedInfo);
     } catch(const std::exception& e) {
         SDL_Log("ModManager: Active mod '%s' metadata is invalid, falling back to vanilla: %s",
                 activeMod.c_str(), e.what());
         activeMod = VANILLA_MOD_NAME;
         activeContentBase = VANILLA_MOD_NAME;
         activeDune2RRemasterPresentation = false;
+        activeTornieFamily = false;
+        activeTornieFamilyLite = false;
+        activeSpiceVariantMask = 0;
+        activeTornieCustomUnitsAndBuildings = false;
         activeCustomHouse = {};
         activeGuestCustomHouse = {};
         activeMentats.clear();
+        activePlayableHouses.clear();
         saveActiveMod();
     }
     initialized = true;
@@ -541,6 +536,45 @@ void ModManager::initialize() {
 
 std::string ModManager::getActiveModName() const {
     return activeMod;
+}
+
+bool ModManager::isTornieFamilyContent(const std::string& name) const {
+    if(initialized && name == activeMod) return activeTornieFamily;
+    return isTornieFamilyBase(getContentBase(name));
+}
+
+
+void ModManager::loadActiveContentMetadata(const ModInfo& info) {
+    activeTornieFamily = isTornieFamilyBase(activeContentBase);
+    activeTornieFamilyLite = activeContentBase == "TornieLite"
+        || activeContentBase == "JerichoLite" || activeContentBase == "ArcaKevLite";
+    activeCustomHouse = info.customHouse;
+    activeGuestCustomHouse = {};
+    activeMentats = info.mentats;
+    activePlayableHouses = info.playableHouses;
+    activeSpiceVariantMask = 0;
+    activeTornieCustomUnitsAndBuildings = activeTornieFamily && info.customUnitsAndBuildings;
+    if(activeTornieFamily) {
+        activeGuestCustomHouse = info.guestCustomHouse;
+        unsigned inheritedSpice = activeContentBase.compare(0, 7, "Jericho") == 0 ? 10u
+            : activeContentBase.compare(0, 7, "ArcaKev") == 0 ? 9u : 5u;
+        if(activeMod != activeContentBase) {
+            const ModInfo base = readModIni(getModPath(activeContentBase));
+            if(activePlayableHouses.empty()) activePlayableHouses = base.playableHouses;
+            if(!activeCustomHouse.enabled) activeCustomHouse = base.customHouse;
+            if(!activeGuestCustomHouse.enabled) activeGuestCustomHouse = base.guestCustomHouse;
+            inheritedSpice = (inheritedSpice & ~base.spiceVariantOverrideMask) | base.spiceVariantMask;
+            if(!info.customUnitsAndBuildingsOverride)
+                activeTornieCustomUnitsAndBuildings = base.customUnitsAndBuildings;
+        }
+        activeSpiceVariantMask = (inheritedSpice & ~info.spiceVariantOverrideMask) | info.spiceVariantMask;
+        if(activePlayableHouses.empty()) {
+            throw std::runtime_error("Tornie-family content has no playable house roster");
+        }
+    } else if(activePlayableHouses.empty()) {
+        for(int house = HOUSE_HARKONNEN; house < NUM_CAMPAIGN_HOUSES; ++house)
+            activePlayableHouses.push_back(house);
+    }
 }
 
 const CustomHouseInfo& ModManager::getActiveCustomHouseInfo() const {
@@ -552,7 +586,7 @@ const CustomHouseInfo& ModManager::getCustomHouseInfo(int house) const {
     if(house == HOUSE_CUSTOM) {
         return activeCustomHouse;
     }
-    if(isTornieContentActive() && house == HOUSE_THARPIQUE) {
+    if(isTornieFamilyContentActive() && house == HOUSE_THARPIQUE) {
         return activeGuestCustomHouse;
     }
     return noHouse;
@@ -568,7 +602,8 @@ bool ModManager::isCustomHouseRegistered(int house) const {
 
 const ModMentatInfo& ModManager::getActiveMentatInfo(int house) const {
     static const ModMentatInfo noOverride;
-    if(isTornieContentActive() && house >= HOUSE_WILDSPADE && house <= HOUSE_THARPIQUE) {
+    if(isTornieFamilyContentActive() && house >= HOUSE_WILDSPADE && house <= HOUSE_THARPIQUE
+       && (static_cast<std::size_t>(house) >= activeMentats.size() || !activeMentats[house].enabled)) {
         house = HOUSE_NEUTRAL + (house - HOUSE_WILDSPADE);
     }
     if(!initialized || house < 0 || static_cast<std::size_t>(house) >= activeMentats.size()) {
@@ -586,7 +621,7 @@ int ModManager::getEffectiveMentatIdentity(int house) const {
     if(identity == HOUSE_CUSTOM) {
         const CustomHouseInfo& info = getCustomHouseInfo(house);
         identity = info.enabled ? info.fallbackHouse : HOUSE_HARKONNEN;
-    } else if(isTornieContentActive()
+    } else if(isTornieFamilyContentActive()
               && identity >= HOUSE_WILDSPADE && identity <= HOUSE_THARPIQUE) {
         const int localIdentity = HOUSE_NEUTRAL + (identity - HOUSE_WILDSPADE);
         if(localIdentity == HOUSE_CUSTOM) {
@@ -630,12 +665,12 @@ bool ModManager::setActiveMod(const std::string& name) {
         SDL_Log("ModManager: Cannot activate mod '%s' - does not exist", name.c_str());
         return false;
     }
-    if(name == TORNIE_MOD_NAME) {
+    if(isTornieFamilyBase(name)) {
         std::string integrityError;
         if(!ModPayloadIntegrity::verifyChecksummedPayload(getModPath(name), integrityError,
                                                           MANAGED_MOD_STAMP)) {
-            SDL_Log("ModManager: Cannot activate Tornie - integrity verification failed: %s",
-                    integrityError.c_str());
+            SDL_Log("ModManager: Cannot activate %s - integrity verification failed: %s",
+                    name.c_str(), integrityError.c_str());
             return false;
         }
     }
@@ -643,9 +678,14 @@ bool ModManager::setActiveMod(const std::string& name) {
     const std::string previousMod = activeMod;
     const std::string previousContentBase = activeContentBase;
     const bool previousDune2RRemasterPresentation = activeDune2RRemasterPresentation;
+    const bool previousTornieFamily = activeTornieFamily;
+    const bool previousTornieFamilyLite = activeTornieFamilyLite;
+    const unsigned previousSpiceVariantMask = activeSpiceVariantMask;
+    const bool previousCustomUnitsAndBuildings = activeTornieCustomUnitsAndBuildings;
     const CustomHouseInfo previousCustomHouse = activeCustomHouse;
     const CustomHouseInfo previousGuestCustomHouse = activeGuestCustomHouse;
     const std::vector<ModMentatInfo> previousMentats = activeMentats;
+    const std::vector<int> previousPlayableHouses = activePlayableHouses;
 
     try {
         activeMod = name;
@@ -658,9 +698,7 @@ bool ModManager::setActiveMod(const std::string& name) {
             ? activeInfo : readModIni(verifiedModPath);
         activeDune2RRemasterPresentation = dune2rUsesRemasterPresentation(
             activeMod, activeContentBase, verifiedInfo.baseMod.empty());
-        activeCustomHouse = activeInfo.customHouse;
-        activeGuestCustomHouse = makeTornieGuestCustomHouse(getContentBase(activeMod));
-        activeMentats = activeInfo.mentats;
+        loadActiveContentMetadata(verifiedInfo);
         checksumsDirty = true;
         resetHouseVisualHouseMapping();
         loadCustomPalette();
@@ -682,9 +720,14 @@ bool ModManager::setActiveMod(const std::string& name) {
         activeMod = previousMod;
         activeContentBase = previousContentBase;
         activeDune2RRemasterPresentation = previousDune2RRemasterPresentation;
+        activeTornieFamily = previousTornieFamily;
+        activeTornieFamilyLite = previousTornieFamilyLite;
+        activeSpiceVariantMask = previousSpiceVariantMask;
+        activeTornieCustomUnitsAndBuildings = previousCustomUnitsAndBuildings;
         activeCustomHouse = previousCustomHouse;
         activeGuestCustomHouse = previousGuestCustomHouse;
         activeMentats = previousMentats;
+        activePlayableHouses = previousPlayableHouses;
         checksumsDirty = true;
         resetHouseVisualHouseMapping();
         loadCustomPalette();
@@ -976,6 +1019,11 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Slow City Year") result.slowCityYear = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
+            else if (key == "Selling Buildings") result.sellingBuildings = parseBool(value);
+            else if (key == "Allied Control") result.alliedControl = parseBool(value);
+            else if (key == "Allied Building") result.alliedBuilding = parseBool(value);
+            else if (key == "Easy Mode") result.easyMode = parseBool(value);
+            else if (key == "Chaos Mode") result.chaosMode = parseBool(value);
         }
         
         file.close();
@@ -1056,20 +1104,9 @@ bool ModManager::installedObjectDataDiffersFromDefaults(const std::string& modNa
     const std::string installed = getModPath(modName) + "/" + OBJECT_DATA_FILE;
     std::string defaults = getInstallConfigPath() + "/" + OBJECT_DATA_DEFAULT;
 
-    if (modName == TORNIE_MOD_NAME) {
-        const std::string candidatePaths[] = {
-            getDuneLegacyDataDir() + "/mods/" + TORNIE_MOD_NAME,
-            getDuneLegacyDataDir() + "/../mods/" + TORNIE_MOD_NAME,
-            getDuneLegacyDataDir() + "/../../mods/" + TORNIE_MOD_NAME,
-            getDuneLegacyDataDir() + "/../../../mods/" + TORNIE_MOD_NAME
-        };
-        for (const std::string& candidatePath : candidatePaths) {
-            const std::string candidateObjectData = candidatePath + "/" + OBJECT_DATA_FILE;
-            if (existsFile(candidateObjectData)) {
-                defaults = candidateObjectData;
-                break;
-            }
-        }
+    if(isTornieFamilyBase(modName)) {
+        const auto bundled = findBundledModPath(modName);
+        if(!bundled.empty()) defaults = (bundled / OBJECT_DATA_FILE).string();
     }
 
     if (!existsFile(installed) || !existsFile(defaults)) {
@@ -1138,7 +1175,7 @@ std::string ModManager::computeCombinedChecksumForDirectory(const std::string& m
         : std::string();
 
     std::string engineCompatibility;
-    if (modName == TORNIE_MOD_NAME) {
+    if(isTornieFamilyBase(modName) || isTornieFamilyBase(readModIni(root).baseMod)) {
         const std::string manifestPath = root + "/manifest.json";
         const std::string checksumsPath = root + "/checksums.sha256";
         engineCompatibility = TORNIE_ENGINE_COMPATIBILITY;
@@ -1150,6 +1187,7 @@ std::string ModManager::computeCombinedChecksumForDirectory(const std::string& m
         engineCompatibility += existsFile(checksumsPath)
             ? Dune2RAssetManager::sha256File(checksumsPath)
             : "CHECKSUMS_NOT_FOUND";
+        engineCompatibility += ':' + hashFileCanonical(root + "/" + MOD_INI_FILE);
     }
 
     return combineChecksumParts(objectDataHash, quantBotHash, gameOptionsHash,
@@ -1177,7 +1215,7 @@ void ModManager::updateChecksums() {
         : std::string();
 
     std::string engineCompatibility;
-    if(isTornieContentActive()) {
+    if(isTornieFamilyContentActive()) {
         const std::string manifestPath = getModPath(activeMod) + "/manifest.json";
         const std::string checksumsPath = getModPath(activeMod) + "/checksums.sha256";
         engineCompatibility = TORNIE_ENGINE_COMPATIBILITY;
@@ -1189,10 +1227,11 @@ void ModManager::updateChecksums() {
         engineCompatibility += existsFile(checksumsPath)
             ? Dune2RAssetManager::sha256File(checksumsPath)
             : "CHECKSUMS_NOT_FOUND";
+        engineCompatibility += ':' + hashFileCanonical(getModPath(activeMod) + "/" + MOD_INI_FILE);
     }
 
-    // The compatibility suffix is empty outside Tornie, preserving every
-    // existing mod checksum while rejecting incompatible Tornie engines.
+    // Leave all non-family checksums unchanged; family peers additionally pin
+    // the engine capability, manifest and complete checksummed payload.
     cachedChecksums.combined = combineChecksumParts(cachedChecksums.objectData,
                                                     cachedChecksums.quantBotConfig,
                                                     cachedChecksums.gameOptions,
@@ -1452,13 +1491,13 @@ bool ModManager::saveReceivedMod(const std::string& modName, const std::string& 
     if(!std::filesystem::is_regular_file(stagedPath / MOD_INI_FILE)) {
         return fail("Received mod does not contain mod.ini");
     }
-    if(modName == TORNIE_MOD_NAME) {
+    if(isTornieFamilyBase(modName)) {
         std::string integrityError;
         if(!ModPayloadIntegrity::verifyChecksummedPayload(stagedPath, integrityError,
                                                           MANAGED_MOD_STAMP)) {
-            SDL_Log("ModManager: Received Tornie payload failed integrity verification: %s",
-                    integrityError.c_str());
-            return fail("Received Tornie payload failed integrity verification");
+            SDL_Log("ModManager: Received %s payload failed integrity verification: %s",
+                    modName.c_str(), integrityError.c_str());
+            return fail("Received family payload failed integrity verification");
         }
     }
 
@@ -1759,14 +1798,9 @@ bool ModManager::clearDunecityGraphicsCache() const {
     return true;
 }
 
-// DuneCity 1.0.492: seed the Tornie mod. The source files
-// (mod.ini, ObjectData.ini, campaign/) are shipped in the
-// install at mods/Tornie/. We register this directory as
-// a mod so it appears in the Mods menu and can be activated.
-void ModManager::seedTornieFromDefaults() {
-    SDL_Log("ModManager: Seeding Tornie mod from install defaults...");
-    refreshManagedMod(TORNIE_MOD_NAME, getModPath(TORNIE_MOD_NAME),
-                      findBundledModPath(TORNIE_MOD_NAME));
+void ModManager::seedTornieFamilyFromDefaults(const std::string& name) {
+    SDL_Log("ModManager: Seeding %s mod from bundled install...", name.c_str());
+    refreshManagedMod(name, getModPath(name), findBundledModPath(name));
 }
 
 void ModManager::seedDune2RFromDefaults() {
@@ -1868,69 +1902,30 @@ bool ModManager::dunecityNeedsReseed() const {
     return false;
 }
 
-bool ModManager::tornieNeedsReseed() const {
-    // DuneCity 1.0.494: re-seed on version mismatch (same
-    // pattern as dunecityNeedsReseed). Without this, the
-    // Tornie mod files seeded by an older version (e.g.
-    // v1.0.492 which had the wrong install path) would
-    // persist in the user mods dir even after a new version
-    // is installed.
-    std::string torniePath = getModPath(TORNIE_MOD_NAME);
+bool ModManager::tornieFamilyNeedsReseed(const std::string& name) const {
+    const std::filesystem::path installed = getModPath(name);
+    const auto bundled = findBundledModPath(name);
+    if(managedModNeedsRefresh(installed, bundled)) return true;
 
-    std::string modIniPath = torniePath + "/" + MOD_INI_FILE;
-    std::string objectDataPath = torniePath + "/" + OBJECT_DATA_FILE;
-    std::string gameOptionsPath = torniePath + "/" + GAME_OPTIONS_FILE;
-    std::string customHousePath = torniePath + "/" + CUSTOM_HOUSE_CONFIG;
-    std::string manifestPath = torniePath + "/manifest.json";
-    std::string checksumsPath = torniePath + "/checksums.sha256";
-
-    const std::filesystem::path bundled = findBundledModPath(TORNIE_MOD_NAME);
-    if(managedModNeedsRefresh(torniePath, bundled)) {
-        SDL_Log("ModManager: Tornie managed payload changed, needs reseed");
-        return true;
+    for(const char* file : {MOD_INI_FILE, OBJECT_DATA_FILE, QUANTBOT_CONFIG_FILE,
+                           GAME_OPTIONS_FILE, CUSTOM_HOUSE_CONFIG, "manifest.json",
+                           "checksums.sha256"}) {
+        if(!std::filesystem::is_regular_file(installed / file)) return true;
     }
-
-    if (!existsFile(modIniPath)) {
-        SDL_Log("ModManager: Tornie missing %s, needs reseed", MOD_INI_FILE);
-        return true;
-    }
-    if (!existsFile(objectDataPath)) {
-        SDL_Log("ModManager: Tornie missing %s, needs reseed", OBJECT_DATA_FILE);
-        return true;
-    }
-    if (!existsFile(gameOptionsPath)) {
-        SDL_Log("ModManager: Tornie missing %s, needs reseed", GAME_OPTIONS_FILE);
-        return true;
-    }
-    if (!existsFile(customHousePath) || !existsFile(manifestPath) || !existsFile(checksumsPath)
-        || !std::filesystem::is_directory(std::filesystem::path(torniePath) / "campaign")
-        || !std::filesystem::is_directory(std::filesystem::path(torniePath) / "data")) {
-        SDL_Log("ModManager: Tornie payload is incomplete, needs reseed");
-        return true;
-    }
-
-    const std::string bundledChecksums = (bundled / "checksums.sha256").string();
-    if(existsFile(bundledChecksums)
-       && hashFileCanonical(checksumsPath) != hashFileCanonical(bundledChecksums)) {
-        SDL_Log("ModManager: Tornie bundled checksum manifest changed, needs reseed");
-        return true;
-    }
+    if(!std::filesystem::is_directory(installed / "campaign")
+       || !std::filesystem::is_directory(installed / "data")) return true;
+    if(!bundled.empty()
+       && hashFileCanonical((installed / "checksums.sha256").string())
+          != hashFileCanonical((bundled / "checksums.sha256").string())) return true;
 
     std::string integrityError;
-    if(!ModPayloadIntegrity::verifyChecksummedPayload(torniePath, integrityError,
+    if(!ModPayloadIntegrity::verifyChecksummedPayload(installed, integrityError,
                                                       MANAGED_MOD_STAMP)) {
-        SDL_Log("ModManager: Tornie payload integrity check failed (%s), needs reseed",
-                integrityError.c_str());
+        SDL_Log("ModManager: %s payload integrity check failed (%s), needs refresh",
+                name.c_str(), integrityError.c_str());
         return true;
     }
-
-    // Check if installed Tornie ObjectData.ini differs from defaults
-    if (installedObjectDataDiffersFromDefaults(TORNIE_MOD_NAME)) {
-        SDL_Log("ModManager: Tornie %s drifted from defaults, needs reseed", OBJECT_DATA_FILE);
-        return true;
-    }
-
-    return false;
+    return installedObjectDataDiffersFromDefaults(name);
 }
 
 
@@ -2043,6 +2038,25 @@ ModInfo ModManager::readModIni(const std::string& modPath) const {
     info.baseMod = metadata.getStringValue("Mod", "Base Mod", "");
     info.gameVersion = metadata.getStringValue("Mod", "Game Version", "");
     info.enablesCityMode = metadata.getBoolValue("Mod", "Enables City Mode", false);
+    std::istringstream roster(metadata.getStringValue("Content Options", "Playable Houses", ""));
+    std::string houseValue;
+    while(std::getline(roster, houseValue, ',')) {
+        trim(houseValue);
+        int house = -1;
+        if(CustomHouseConfig::parseInteger(houseValue, house) && isPlayerHouseID(house)
+           && std::find(info.playableHouses.begin(), info.playableHouses.end(), house) == info.playableHouses.end())
+            info.playableHouses.push_back(house);
+    }
+    for(const auto& option : {std::pair{"Green Spice", 1u}, std::pair{"Red Spice", 2u},
+                             std::pair{"Purple Spice", 4u}, std::pair{"Blue Spice", 8u}}) {
+        if(metadata.hasKey("Content Options", option.first)) {
+            info.spiceVariantOverrideMask |= option.second;
+            if(metadata.getBoolValue("Content Options", option.first, false))
+                info.spiceVariantMask |= option.second;
+        }
+    }
+    info.customUnitsAndBuildingsOverride = metadata.hasKey("Content Options", "Custom Units and Buildings");
+    info.customUnitsAndBuildings = metadata.getBoolValue("Content Options", "Custom Units and Buildings", true);
     file.close();
     std::string line;
 
@@ -2107,6 +2121,7 @@ ModInfo ModManager::readModIni(const std::string& modPath) const {
             }
             else if(mentatKey == "Identity House") parseIntegerField(mentat.identityHouse);
             else if(mentatKey == "Background") mentat.backgroundAsset = mentatValue;
+            else if(mentatKey == "Foreground") mentat.foregroundAsset = mentatValue;
             else if(mentatKey == "Eyes") mentat.eyesAsset = mentatValue;
             else if(mentatKey == "Eyes Frames") parseIntegerField(mentat.eyesFrames);
             else if(mentatKey == "Eyes Frame Rate") parseDoubleField(mentat.eyesFrameRate);
@@ -2122,6 +2137,28 @@ ModInfo ModManager::readModIni(const std::string& modPath) const {
             else if(mentatKey == "Mouth X") parseIntegerField(mentat.mouthX);
             else if(mentatKey == "Mouth Y") parseIntegerField(mentat.mouthY);
             else if(mentatKey == "Use Base Extras") parseBooleanField(mentat.useBaseExtras);
+            else if(mentatKey == "Eyes Crop Y") parseIntegerField(mentat.eyesCropY);
+            else if(mentatKey == "Eyes Crop Height") parseIntegerField(mentat.eyesCropHeight);
+            else if(mentatKey == "Eyes Width") parseIntegerField(mentat.eyesWidth);
+            else if(mentatKey == "Eyes Height") parseIntegerField(mentat.eyesHeight);
+            else if(mentatKey == "Mouth Crop Y") parseIntegerField(mentat.mouthCropY);
+            else if(mentatKey == "Mouth Crop Height") parseIntegerField(mentat.mouthCropHeight);
+            else if(mentatKey == "Mouth Width") parseIntegerField(mentat.mouthWidth);
+            else if(mentatKey == "Mouth Height") parseIntegerField(mentat.mouthHeight);
+            else if(mentatKey == "Eyes Brightness") parseIntegerField(mentat.eyesBrightness);
+            else if(mentatKey == "Mouth Brightness") parseIntegerField(mentat.mouthBrightness);
+            else if(mentatKey == "Rest From Background") parseBooleanField(mentat.restFromBackground);
+            else if(mentatKey == "Faction Tint") parseBooleanField(mentat.factionTint);
+            else if(mentatKey == "Eyes Patch") {
+                if(!ModMentatConfig::parsePatch(mentatValue, mentat.eyesPatches))
+                    mentatFieldsValid[mentatHouse] = false;
+            } else if(mentatKey == "Mouth Patch") {
+                if(!ModMentatConfig::parsePatch(mentatValue, mentat.mouthPatches))
+                    mentatFieldsValid[mentatHouse] = false;
+            } else if(mentatKey == "Foreground Polygon") {
+                if(!ModMentatConfig::parsePolygon(mentatValue, mentat.foregroundPolygon))
+                    mentatFieldsValid[mentatHouse] = false;
+            }
         }
     }
 
@@ -2135,90 +2172,72 @@ ModInfo ModManager::readModIni(const std::string& modPath) const {
         }
     }
 
+    // Keep the existing raw House-field parsing semantics for non-family mods.
+    // The second registration uses exactly the same validation and path rules.
     std::ifstream customFile(modPath + "/" + CUSTOM_HOUSE_CONFIG);
     if(customFile.is_open()) {
-        std::string section;
-        bool requestedEnabled = false;
-        bool numericFieldsValid = true;
+        CustomHouseInfo* registrations[] = {&info.customHouse, &info.guestCustomHouse};
+        bool requestedEnabled[] = {false, false};
+        bool numericFieldsValid[] = {true, true};
+        int registration = -1;
         while(std::getline(customFile, line)) {
             trim(line);
             if(line.empty() || line[0] == '#' || line[0] == ';') continue;
             if(line.front() == '[' && line.back() == ']') {
-                section = line.substr(1, line.size() - 2);
+                std::string section = line.substr(1, line.size() - 2);
                 trim(section);
+                registration = section == "House" ? 0 : section == "Guest House" ? 1 : -1;
                 continue;
             }
-            if(section != "House") continue;
-
-            const size_t customEqualsPos = line.find('=');
-            if(customEqualsPos == std::string::npos) continue;
-            std::string customKey = line.substr(0, customEqualsPos);
-            std::string customValue = line.substr(customEqualsPos + 1);
-            trim(customKey);
-            trim(customValue);
-
-            if(customKey == "Enabled") {
-                requestedEnabled = (customValue == "true" || customValue == "1" || customValue == "yes");
-            } else if(customKey == "Display Name") {
-                info.customHouse.displayName = customValue;
-            } else if(customKey == "Scenario Letter" && customValue.size() == 1) {
-                char value = customValue[0];
-                info.customHouse.scenarioLetter = (value >= 'a' && value <= 'z') ? static_cast<char>(value - 'a' + 'A') : value;
-            } else if(customKey == "Region Prefix") {
-                info.customHouse.regionPrefix = customValue;
-                for(char& value : info.customHouse.regionPrefix) {
-                    if(value >= 'a' && value <= 'z') value = static_cast<char>(value - 'a' + 'A');
-                }
-            } else if(customKey == "Palette Index") {
-                if(!CustomHouseConfig::parseInteger(customValue, info.customHouse.paletteIndex)) {
-                    numericFieldsValid = false;
-                }
-            } else if(customKey == "Fallback House") {
-                if(!CustomHouseConfig::parseInteger(customValue, info.customHouse.fallbackHouse)) {
-                    numericFieldsValid = false;
-                }
-            } else if(customKey == "Herald") {
-                if(CustomHouseConfig::isSafeAssetPath(customValue)) {
-                    info.customHouse.heraldAsset = customValue;
-                } else {
-                    SDL_Log("ModManager: Ignoring unsafe custom-house herald path in %s", modPath.c_str());
-                }
-            } else if(customKey == "House Name Voice") {
-                if(CustomHouseConfig::isSafeAssetPath(customValue)) {
-                    info.customHouse.houseNameVoiceAsset = customValue;
-                } else {
-                    SDL_Log("ModManager: Ignoring unsafe custom-house voice path in %s", modPath.c_str());
-                }
-            } else if(customKey == "Voice Playback Rate") {
-                double parsedValue = info.customHouse.voicePlaybackRate;
-                if(CustomHouseConfig::parseDouble(customValue, parsedValue)
-                   && CustomHouseConfig::isValidVoicePlaybackRate(parsedValue)) {
-                    info.customHouse.voicePlaybackRate = parsedValue;
-                } else {
-                    SDL_Log("ModManager: Ignoring invalid custom-house voice playback rate in %s",
-                            modPath.c_str());
-                }
-            } else if(customKey == "Voice Gain") {
-                double parsedValue = info.customHouse.voiceGain;
-                if(CustomHouseConfig::parseDouble(customValue, parsedValue)
-                   && CustomHouseConfig::isValidVoiceGain(parsedValue)) {
-                    info.customHouse.voiceGain = parsedValue;
-                } else {
-                    SDL_Log("ModManager: Ignoring invalid custom-house voice gain in %s", modPath.c_str());
-                }
+            if(registration < 0) continue;
+            const auto equals = line.find('=');
+            if(equals == std::string::npos) continue;
+            std::string key = line.substr(0, equals), value = line.substr(equals + 1);
+            trim(key);
+            trim(value);
+            CustomHouseInfo& house = *registrations[registration];
+            if(key == "Enabled") {
+                requestedEnabled[registration] = value == "true" || value == "1" || value == "yes";
+            } else if(key == "Display Name") {
+                house.displayName = value;
+            } else if(key == "Scenario Letter" && value.size() == 1) {
+                const char c = value[0];
+                house.scenarioLetter = c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
+            } else if(key == "Region Prefix") {
+                house.regionPrefix = value;
+                for(char& c : house.regionPrefix) if(c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+            } else if(key == "Palette Index") {
+                if(!CustomHouseConfig::parseInteger(value, house.paletteIndex)) numericFieldsValid[registration] = false;
+            } else if(key == "Fallback House") {
+                if(!CustomHouseConfig::parseInteger(value, house.fallbackHouse)) numericFieldsValid[registration] = false;
+            } else if(key == "Herald") {
+                if(CustomHouseConfig::isSafeAssetPath(value)) house.heraldAsset = value;
+                else SDL_Log("ModManager: Ignoring unsafe custom-house herald path in %s", modPath.c_str());
+            } else if(key == "House Name Voice") {
+                if(CustomHouseConfig::isSafeAssetPath(value)) house.houseNameVoiceAsset = value;
+                else SDL_Log("ModManager: Ignoring unsafe custom-house voice path in %s", modPath.c_str());
+            } else if(key == "Voice Playback Rate") {
+                double parsed = house.voicePlaybackRate;
+                if(CustomHouseConfig::parseDouble(value, parsed) && CustomHouseConfig::isValidVoicePlaybackRate(parsed))
+                    house.voicePlaybackRate = parsed;
+                else SDL_Log("ModManager: Ignoring invalid custom-house voice playback rate in %s", modPath.c_str());
+            } else if(key == "Voice Gain") {
+                double parsed = house.voiceGain;
+                if(CustomHouseConfig::parseDouble(value, parsed) && CustomHouseConfig::isValidVoiceGain(parsed))
+                    house.voiceGain = parsed;
+                else SDL_Log("ModManager: Ignoring invalid custom-house voice gain in %s", modPath.c_str());
             }
         }
-
-        const bool letterValid = info.customHouse.scenarioLetter >= 'A' && info.customHouse.scenarioLetter <= 'Z';
-        const bool prefixValid = info.customHouse.regionPrefix.size() == 3
-            && info.customHouse.regionPrefix.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos;
-        const bool paletteValid = info.customHouse.paletteIndex >= 0 && info.customHouse.paletteIndex <= 248;
-        const bool fallbackValid = info.customHouse.fallbackHouse >= 0
-            && info.customHouse.fallbackHouse < NUM_LEGACY_HOUSES;
-        info.customHouse.enabled = requestedEnabled && !info.customHouse.displayName.empty()
-            && numericFieldsValid && letterValid && prefixValid && paletteValid && fallbackValid;
-        if(requestedEnabled && !info.customHouse.enabled) {
-            SDL_Log("ModManager: Ignoring invalid generic custom-house registration in %s", modPath.c_str());
+        for(int i = 0; i < 2; ++i) {
+            CustomHouseInfo& house = *registrations[i];
+            house.enabled = requestedEnabled[i] && !house.displayName.empty() && numericFieldsValid[i]
+                && house.scenarioLetter >= 'A' && house.scenarioLetter <= 'Z'
+                && house.regionPrefix.size() == 3
+                && house.regionPrefix.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos
+                && house.paletteIndex >= 0 && house.paletteIndex <= 248
+                && house.fallbackHouse >= 0 && house.fallbackHouse < NUM_LEGACY_HOUSES;
+            if(requestedEnabled[i] && !house.enabled)
+                SDL_Log("ModManager: Ignoring invalid generic custom-house registration in %s", modPath.c_str());
         }
     }
     return info;

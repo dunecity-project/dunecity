@@ -25,6 +25,7 @@
 #include <Map.h>
 #include <SoundPlayer.h>
 #include <ScreenBorder.h>
+#include <mod/ModManager.h>
 
 #include <units/TrackedUnit.h>
 #include <units/UnitBase.h>
@@ -36,6 +37,9 @@
 
 Worfinery::Worfinery(House* newOwner) : BuilderBase(newOwner) {
     Worfinery::init();
+    if(ModManager::instance().isTornieFamilyContentActive()
+       && currentGame->getGameInitSettings().getGameOptions().chaosMode)
+        tameWormOffer = currentGame->randomGen.rand(0, 9) == 0;
 
     setHealth(getMaxHealth());
 }
@@ -59,6 +63,8 @@ Worfinery::Worfinery(InputStream& stream) : BuilderBase(stream) {
     } else {
         startAnimate();
     }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546)
+        tameWormOffer = stream.readBool();
     firstRun = false;
 }
 
@@ -105,6 +111,7 @@ void Worfinery::save(OutputStream& stream) const {
     stream.writeBool(extractingSpice);
     harvester.save(stream);
     stream.writeUint32(bookings);
+    stream.writeBool(tameWormOffer);
 }
 
 ObjectInterface* Worfinery::getInterfaceContainer() {

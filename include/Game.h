@@ -24,6 +24,7 @@
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 #include <ObjectData.h>
+#include <mod/ChaosMode.h>
 #include <ObjectManager.h>
 #include <CommandManager.h>
 #include <Network/MatchControlState.h>
@@ -93,6 +94,11 @@ class Game
 {
 public:
     CursorAppearance::Action getHoverCursorAction() const;
+    const ChaosMode& getChaosMode() const { return chaosMode; }
+    bool canPlayerControlHouse(const House* playerHouse, const House* owner) const;
+    bool canPlayerControlHouse(Uint8 playerID, const House* owner) const;
+    bool canControlHouse(const House* owner) const;
+    bool canBuildOnAlliedLand(const House* builderHouse, int landHouse) const;
 
     /**
         Default constructor. Call initGame() or initReplay() afterwards.
@@ -438,6 +444,23 @@ public:
     void initializeSpatialGrid(int mapWidth, int mapHeight);
 
     const GameInitSettings& getGameInitSettings() const { return gameInitSettings; };
+    const std::optional<coop::Context>& getCoopCampaignContext() const {
+        return gameInitSettings.getCoopCampaignContext();
+    }
+    bool isCoopCampaign() const { return getCoopCampaignContext().has_value(); }
+    bool hasFinished() const { return finished && !bQuitGame; }
+    bool hasWon() const { return hasFinished() && won; }
+    void updateCoopParticipants(const std::string& mapData,
+                               const GameInitSettings::HouseInfoList& participants) {
+        gameInitSettings.setScenarioData(mapData);
+        gameInitSettings.clearHouseInfo();
+        for(const auto& participant : participants) gameInitSettings.addHouseInfo(participant);
+        for(auto& setup : houseInfoListSetup) {
+            for(const auto& participant : participants) {
+                if(setup.houseID == participant.houseID) setup.playerInfoList = participant.playerInfoList;
+            }
+        }
+    }
     void setNextGameInitSettings(const GameInitSettings& nextGameInitSettings) { this->nextGameInitSettings = nextGameInitSettings; };
 
     /**
@@ -968,6 +991,7 @@ public:
     int         loseFlags = 0;
 
     Random      randomGen;          ///< This is the random number generator for this game
+    ChaosMode chaosMode;
     ObjectData  objectData;         ///< This contains all the unit/structure data
 
     GameState   gameState = GameState::Start;
@@ -1286,6 +1310,9 @@ private:
 
     bool    finished = false;                   ///< Is the game finished (won or lost) and we are just waiting for the end message to be shown
     bool    won = false;                        ///< If the game is finished, is it won or lost
+    // Local profile checkpoint identity only; never serialized or used by simulation.
+    std::string achievementCheckpointKey;
+    bool achievementResumed = false;
     Uint32  finishedLevelCycle = 0;             ///< MULTIPLAYER FIX (Issue #9): Cycle-based (was finishedLevelTime)
     bool    finishedLevel = false;              ///< Set, when the game is really finished and the end message was shown
     /// Runtime only, never saved or sent: see setWatchedGameOver(). -1 while no watched game is over.

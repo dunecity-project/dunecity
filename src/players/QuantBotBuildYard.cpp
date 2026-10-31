@@ -28,7 +28,9 @@ namespace {
 // Check the real build-list gates while allowing only this missing prerequisite.
 bool prerequisiteBlocksBuild(const BuilderBase* builder, Uint32 goal, Uint32 prerequisite) {
     if (!builder || !builder->getOwner() || !currentGame || goal >= Num_ItemID) return false;
-    const auto& data = currentGame->objectData.data[goal][builder->getOriginalHouseID()];
+    const int technology = ModManager::instance().isTornieFamilyContentActive()
+        ? builder->getTechnologyHouseID() : builder->getOriginalHouseID();
+    const auto& data = currentGame->objectData.data[goal][technology];
     if (prerequisite >= data.prerequisiteStructuresSet.size()
         || !data.enabled || data.builder != static_cast<int>(builder->getItemID())
         || data.techLevel > currentGame->techLevel
@@ -100,6 +102,9 @@ void QuantBot::planYardLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     for (const auto unit : {Unit_Tank, Unit_SiegeTank, Unit_Launcher,
             Unit_Devastator, Unit_SonicTank, Unit_Deviator})
         heavyValue += pass.itemCount[unit] * data[unit][houseID].price;
+    if (ModManager::instance().isTornieFamilyContentActive())
+        for (const Uint32 unit : {Unit_RangedTank, Unit_SlowTank, Unit_TameSandworm})
+            heavyValue += pass.itemCount[unit] * data[unit][houseID].price;
     yardTurn.heavyDeficit = std::max(0,
         (fundedArmy * (pass.tankPercent + pass.siegePercent + pass.launcherPercent + pass.specialPercent)).lround() - heavyValue);
     yardTurn.lightDeficit = std::max<int64_t>(0,int64_t(fundedArmy)*pass.lightVehicleBps/10000-pass.lightVehicleValue);
@@ -108,7 +113,9 @@ void QuantBot::planYardLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             pass.itemCount[Structure_LightFactory],pass.activeLightFactoryCount,yardTurn.lightDeficit,
             pass.money,pass.economyReserve,data[Structure_LightFactory][houseID].price);
     yardTurn.airDeficit = std::max(0, (fundedArmy * pass.ornithopterPercent).lround()
-        - pass.itemCount[Unit_Ornithopter] * data[Unit_Ornithopter][houseID].price);
+        - pass.itemCount[Unit_Ornithopter] * data[Unit_Ornithopter][houseID].price
+        - (ModManager::instance().isTornieFamilyContentActive()
+            ? pass.itemCount[Unit_EliteOrnithopter] * data[Unit_EliteOrnithopter][houseID].price : 0));
     yardTurn.heavyBacklog = !getHouse()->isGroundUnitLimitReached()
         && QuantBotBuildPolicy::needsProductionLane(getHouse()->getNumItems(Structure_HeavyFactory),
             pass.itemCount[Structure_HeavyFactory], pass.activeHeavyFactoryCount, yardTurn.heavyDeficit,
@@ -134,7 +141,7 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         const int taxIncome = pass.citySimEnabled
             ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths, balanceCity ? balanceCity->getCityTax() : 7, pass.ownAvgLandValue)) / 60 : 0;
         int factoryTarget = QuantBotBuildPolicy::desiredHeavyFactories(pass.citySimEnabled, taxIncome, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
-        if (pass.vanillaEconomy) factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getHouse()->getNumItems(Unit_Harvester), pass.money);
+        if (pass.vanillaEconomy) factoryTarget = DuneCity::vanillaFactoryTarget(factoryTarget, getAIHarvesterCount(), pass.money);
         const int tech = currentGame ? currentGame->techLevel : 8;
         const bool policyPrerequisites = pass.citySimEnabled || pass.vanillaEconomy || tech <= 4
             || (pass.itemCount[Structure_RepairYard] > 0 && (tech <= 6 || pass.itemCount[Structure_IX] > 0));
@@ -156,7 +163,7 @@ void QuantBot::traceYardStatus(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             .set("high_tech_air_capable", pass.ornithopterCapableFactoryCount)
             .set("air_army_room", pass.militaryBudget-pass.militaryValue)
             .set("high_tech_building_ornithopters", pass.ornithopterFactoryCount)
-            .set("heavy_economy_target", pass.vanillaEconomy ? std::max(1, getHouse()->getNumItems(Unit_Harvester) / 3) : 0)
+            .set("heavy_economy_target", pass.vanillaEconomy ? std::max(1, getAIHarvesterCount() / 3) : 0)
             .set("heavy_cash_target", pass.vanillaEconomy ? 1 + std::max(0, pass.money - 10000) / 4000 : 0)
             .set("heavy_opening_target", pass.vanillaEconomy ? std::min(factoryTarget, 2 * std::clamp(pass.itemCount[Structure_ConstructionYard], 1, 8)) : 0)
             .set("heavy_losses_2min", recentFactoryLossCount())
@@ -186,16 +193,23 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
         return true;
     }
 
-    for (int i = Structure_FirstID; i <= Structure_LastID; i++) {
-        if (pass.itemCount[i] < initialItemCount[i]
-            && campaignAvailableToBuild(turn.pBuilder,i)
-            && findPlaceLocation(i).isValid()
+    const int lastStructure = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
+    for (int i = Structure_FirstID; i <= lastStructure; i++) {
+        const Uint32 rebuildItem = i == Structure_Slowpost ? Uint32(Structure_Scoutpost) : Uint32(i);
+        if (isStructure(i) && pass.itemCount[i] < initialItemCount[i]
+            && (i != Structure_Slowpost || pass.itemCount[Structure_Scoutpost] == 0)
+            && campaignAvailableToBuild(turn.pBuilder,rebuildItem)
+            && findPlaceLocation(rebuildItem).isValid()
             && !turn.pBuilder->isUpgrading()
             && turn.pBuilder->getProductionQueueSize() < 1) {
 
-            if (queueCampaignWindtrap(pass, turn, std::max(0,data[i][houseID].power))) break;
+            if (queueCampaignWindtrap(pass, turn, std::max(0,data[rebuildItem][houseID].power))) break;
             logDebug("***CampAI Build itemID: %o structure count: %o, initial count: %o", i, pass.itemCount[i], initialItemCount[i]);
-            if (queueFoundedStructure(pass, turn, i, __LINE__)) pass.itemCount[i]++;  // Increment immediately to prevent multiple CYs from building same item
+            if (queueFoundedStructure(pass, turn, rebuildItem, __LINE__)) {
+                ++pass.itemCount[rebuildItem];
+                if (i == Structure_Doublefinery) pass.itemCount[Structure_Refinery] += 2;
+                else if (i == Structure_Worfinery) ++pass.itemCount[Structure_Refinery];
+            }
         }
     }
 
@@ -360,6 +374,8 @@ void QuantBot::chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn
             const House* pHouse = currentGame->getHouse(i);
             if (pHouse && pHouse->getTeamID() != getHouse()->getTeamID()) {
                 int houseOrnis = pHouse->getNumItems(Unit_Ornithopter);
+                if (ModManager::instance().isTornieFamilyContentActive())
+                    houseOrnis += pHouse->getNumItems(Unit_EliteOrnithopter);
                 totalEnemyOrnithopters += houseOrnis;
                 if (houseOrnis > yardTurn.maxEnemyOrnithopters) {
                     yardTurn.maxEnemyOrnithopters = houseOrnis;
@@ -1212,7 +1228,7 @@ void QuantBot::chooseYardServicesAndRefineries(BuildPass& pass, BuilderTurn& tur
         && gameMode == GameMode::Custom && canAddRepairYard(pass.itemCount[Structure_RepairYard])
         && !openingWorkersNeeded(pass)
         && pass.itemCount[Structure_RepairYard] < pass.repairBaseline
-        && getHouse()->getNumItems(Structure_Refinery) > 0
+        && getAIRefineryBays() > 0
         && pass.money >= data[Structure_RepairYard][houseID].price + 1000
         && campaignAvailableToBuild(turn.pBuilder,Structure_RepairYard)
         && findPlaceLocation(Structure_RepairYard).isValid()) {
@@ -1324,7 +1340,7 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         const int target = DuneCity::vanillaFactoryTarget(
             QuantBotBuildPolicy::desiredHeavyFactories(false, 0, pass.money,
                 getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount()),
-            getHouse()->getNumItems(Unit_Harvester), pass.money);
+            getAIHarvesterCount(), pass.money);
         if (DuneCity::prioritizeVanillaFactory(pass.money, pass.itemCount[Structure_HeavyFactory],
                 pass.itemCount[Structure_ConstructionYard], target)
             && findPlaceLocation(Structure_HeavyFactory).isValid()) {
@@ -1690,7 +1706,7 @@ void QuantBot::chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, Ya
         }
         int desiredHFs = QuantBotBuildPolicy::desiredHeavyFactories(yardTurn.isCitySim, creditsPerSec, pass.money, getHouse()->getNumItems(Structure_HeavyFactory), pass.activeHeavyFactoryCount, recentFactoryLossCount());
 
-        if (pass.vanillaEconomy) desiredHFs = DuneCity::vanillaFactoryTarget(desiredHFs, getHouse()->getNumItems(Unit_Harvester), pass.money);
+        if (pass.vanillaEconomy) desiredHFs = DuneCity::vanillaFactoryTarget(desiredHFs, getAIHarvesterCount(), pass.money);
         const bool needMore = pass.itemCount[Structure_HeavyFactory] < desiredHFs
             && pass.militaryValue < pass.militaryBudget && !getHouse()->isGroundUnitLimitReached();
 
@@ -2059,6 +2075,13 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
 }
 
 bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    const Uint32 variant = yardTurn.itemID != NONE_ID || !yardTurn.skipRemainingStructureLogic
+        ? chooseTornieStructure(turn.pBuilder, yardTurn.itemID, pass.money) : Uint32(NONE_ID);
+    if (variant != yardTurn.itemID && campaignAvailableToBuild(turn.pBuilder,variant)
+        && findPlaceLocation(variant).isValid()) {
+        yardTurn.itemID = variant;
+        yardTurn.crimeServiceSite = Coord::Invalid();
+    }
     Coord selectedPlaceLocation = Coord::Invalid();
     if (yardTurn.itemID != NONE_ID && campaignAvailableToBuild(turn.pBuilder,yardTurn.itemID)) {
         if (yardTurn.crimeServiceSite.isValid()) selectedPlaceLocation = yardTurn.crimeServiceSite;
@@ -2250,15 +2273,20 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                     .set("x",selectedPlaceLocation.x).set("y",selectedPlaceLocation.y)
                     .set("lot",clearanceLots.empty() ? Uint32(NONE_ID) : clearanceLots.front())
                     .set("foundation_orders",int(foundations.size())));
-            if (yardTurn.itemID==Structure_Refinery && (pass.engineHarvesterLimit==0
-                || pass.itemCount[Unit_Harvester]+pass.itemCount[Unit_RebelHarvester]<pass.engineHarvesterLimit))
-                ++pass.itemCount[Unit_Harvester];
+            if (yardTurn.itemID==Structure_Refinery || yardTurn.itemID==Structure_Doublefinery) {
+                const int freeWorkers = yardTurn.itemID == Structure_Doublefinery ? 2 : 1;
+                pass.itemCount[Unit_Harvester] += pass.engineHarvesterLimit == 0 ? freeWorkers
+                    : std::min(freeWorkers, std::max(0,pass.engineHarvesterLimit
+                        - pass.itemCount[Unit_Harvester] - pass.itemCount[Unit_RebelHarvester]));
+            }
             reservedStructures[planningBuilder] = {yardTurn.itemID, selectedPlaceLocation};
             if (yardTurn.placeLocations->empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
             traceDecision("site_reserved", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", yardTurn.itemID).set("x", selectedPlaceLocation.x).set("y", selectedPlaceLocation.y));
             pass.orderedThisTick.insert(yardTurn.itemID);
             pass.itemCount[yardTurn.itemID]++;
+            if (yardTurn.itemID == Structure_Doublefinery) pass.itemCount[Structure_Refinery] += 2;
+            else if (yardTurn.itemID == Structure_Worfinery) ++pass.itemCount[Structure_Refinery];
 
             if (yardTurn.itemID == pass.strategicReserveItem) pass.strategicReserveCost = 0;
             clearPlacementCache();

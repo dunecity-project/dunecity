@@ -5,6 +5,16 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <sstream>
+#include <vector>
+#include <utility>
+
+struct ModMentatRect { int x, y, w, h; };
+struct ModMentatPatch {
+    ModMentatRect destination;
+    std::vector<ModMentatRect> sources;
+};
+struct ModMentatPoint { int x, y; };
 
 struct ModMentatInfo {
     bool enabled = false;
@@ -26,6 +36,13 @@ struct ModMentatInfo {
     int mouthX = -1;
     int mouthY = -1;
     bool useBaseExtras = false;
+    int eyesCropY = 0, eyesCropHeight = 0, eyesWidth = 0, eyesHeight = 0;
+    int mouthCropY = 0, mouthCropHeight = 0, mouthWidth = 0, mouthHeight = 0;
+    bool restFromBackground = false;
+    bool factionTint = false;
+    int eyesBrightness = 255, mouthBrightness = 255;
+    std::vector<ModMentatPatch> eyesPatches, mouthPatches;
+    std::vector<ModMentatPoint> foregroundPolygon;
 };
 
 namespace ModMentatConfig {
@@ -95,9 +112,79 @@ inline bool isSafeAssetPath(const std::string& path) {
     return true;
 }
 
+inline bool parseNumbers(const std::string& text, std::vector<int>& numbers) {
+    std::istringstream input(text);
+    int value;
+    while(input >> value) {
+        if(value < 0 || value > 8192) return false;
+        numbers.push_back(value);
+        input >> std::ws;
+        if(input.eof()) return true;
+        char separator;
+        if(!(input >> separator) || separator != ',') return false;
+        input >> std::ws;
+        if(input.eof()) return false;
+    }
+    return false;
+}
+
+inline bool parsePatch(const std::string& text, std::vector<ModMentatPatch>& patches) {
+    if(text.empty() || text.back() == ';') return false;
+    ModMentatPatch patch{};
+    std::istringstream input(text);
+    std::string rectangle;
+    bool first = true;
+    while(std::getline(input, rectangle, ';')) {
+        std::vector<int> values;
+        if(!parseNumbers(rectangle, values) || values.size() != 4
+           || values[2] == 0 || values[3] == 0) return false;
+        const ModMentatRect rect{values[0], values[1], values[2], values[3]};
+        if(first) patch.destination = rect;
+        else patch.sources.push_back(rect);
+        first = false;
+    }
+    if(patch.sources.empty() || patch.sources.size() > 64 || patches.size() >= 8) return false;
+    patches.push_back(std::move(patch));
+    return true;
+}
+
+inline bool parsePolygon(const std::string& text, std::vector<ModMentatPoint>& polygon) {
+    std::vector<int> values;
+    if(!parseNumbers(text, values) || values.size() < 6 || values.size() > 128
+       || values.size() % 2) return false;
+    std::vector<ModMentatPoint> points;
+    for(std::size_t i = 0; i < values.size(); i += 2) points.push_back({values[i], values[i + 1]});
+    polygon = std::move(points);
+    return true;
+}
+
 inline bool isValid(const ModMentatInfo& info) {
     const auto validCoordinate = [](int value) { return value == -1 || (value >= 0 && value <= 4096); };
     const auto validColorKey = [](int value) { return value >= -1 && value <= 255; };
+    const auto validLayout = [](int y, int cropHeight, int width, int height) {
+        return y >= 0 && y <= 8192 && cropHeight >= 0 && cropHeight <= 8192
+            && width >= 0 && width <= 4096 && height >= 0 && height <= 4096
+            && ((cropHeight == 0 && width == 0 && height == 0)
+                || (cropHeight > 0 && width > 0 && height > 0));
+    };
+    const auto validPatches = [](const std::vector<ModMentatPatch>& patches, int frames, int width, int height) {
+        if(patches.size() > 8) return false;
+        for(const auto& patch : patches) {
+            const auto& d = patch.destination;
+            if(d.x < 0 || d.y < 0 || d.w <= 0 || d.h <= 0 || d.x + d.w > width || d.y + d.h > height
+               || patch.sources.size() != static_cast<std::size_t>(frames)) return false;
+            for(const auto& s : patch.sources)
+                if(s.x < 0 || s.y < 0 || s.w <= 0 || s.h <= 0 || s.x + s.w > 8192 || s.y + s.h > 8192)
+                    return false;
+        }
+        return true;
+    };
+    if(!info.foregroundPolygon.empty()) {
+        if(info.foregroundPolygon.size() < 3 || info.foregroundPolygon.size() > 64
+           || info.backgroundAsset.empty()) return false;
+        for(const auto& point : info.foregroundPolygon)
+            if(point.x < 0 || point.y < 0 || point.x > 4096 || point.y > 4096) return false;
+    }
 
     return info.identityHouse >= -1 && info.identityHouse < 8
         && isSafeAssetPath(info.backgroundAsset)
@@ -113,7 +200,18 @@ inline bool isValid(const ModMentatInfo& info) {
         && validCoordinate(info.eyesX)
         && validCoordinate(info.eyesY)
         && validCoordinate(info.mouthX)
-        && validCoordinate(info.mouthY);
+        && validCoordinate(info.mouthY)
+        && validLayout(info.eyesCropY, info.eyesCropHeight, info.eyesWidth, info.eyesHeight)
+        && validLayout(info.mouthCropY, info.mouthCropHeight, info.mouthWidth, info.mouthHeight)
+        && info.eyesBrightness >= 0 && info.eyesBrightness <= 255
+        && info.mouthBrightness >= 0 && info.mouthBrightness <= 255
+        && validPatches(info.eyesPatches, info.eyesFrames, info.eyesWidth, info.eyesHeight)
+        && validPatches(info.mouthPatches, info.mouthFrames, info.mouthWidth, info.mouthHeight)
+        && ((info.eyesPatches.empty() && info.mouthPatches.empty()) || info.restFromBackground)
+        && (!info.restFromBackground || (!info.backgroundAsset.empty()
+            && info.eyesX >= 0 && info.eyesY >= 0 && info.mouthX >= 0 && info.mouthY >= 0
+            && info.eyesWidth > 0 && info.mouthWidth > 0
+            && !info.doubleEyes && !info.doubleMouth));
 }
 
 } // namespace ModMentatConfig

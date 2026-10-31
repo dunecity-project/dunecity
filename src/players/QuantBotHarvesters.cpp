@@ -103,7 +103,7 @@ bool QuantBot::manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache
     std::vector<Coord> peers;
     for (const auto* unit : getUnitList())
         if (unit != harvester && unit->isActive() && unit->getOwner() == getHouse()
-            && unit->getItemID() == Unit_Harvester)
+            && QuantBotInternal::harvesterItem(unit->getItemID()))
         {
             const auto peer = harvesterSafety.find(unit->getObjectID());
             const Coord reserved = peer != harvesterSafety.end() && peer->second.controlled
@@ -314,7 +314,7 @@ void QuantBot::updateHarvesterStrikeTelemetry(bool final) {
                     || guard->getOwner()->getTeamID() != target->getOwner()->getTeamID()) continue;
                 if (blockDistance(target->getLocation(), guard->getLocation())
                     <= std::max(6, guard->getWeaponRange() + 2))
-                    targetDefence += currentGame->objectData.data[guard->getItemID()][guard->getOriginalHouseID()].price;
+                    targetDefence += currentGame->objectData.data[guard->getItemID()][guard->getProductionHouseID()].price;
             }
         }
         const bool targetDefended = protectedByTurret || targetDefence > 2000;

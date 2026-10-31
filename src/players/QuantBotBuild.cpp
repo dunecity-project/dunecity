@@ -184,7 +184,9 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
                     && campaignAvailableToBuild(pBuilder,Unit_Carryall)) pass.carryallBuildAvailable = true;
                 if (pBuilder->getItemID() == Structure_HighTechFactory && pBuilder->getHealth() > 0
                     && !pBuilder->isUpgrading() && !pBuilder->isOnHold()
-                    && campaignAvailableToBuild(pBuilder,Unit_Ornithopter)) ++pass.ornithopterCapableFactoryCount;
+                    && (campaignAvailableToBuild(pBuilder,Unit_Ornithopter)
+                        || (ModManager::instance().isTornieFamilyContentActive()
+                            && campaignAvailableToBuild(pBuilder,Unit_EliteOrnithopter)))) ++pass.ornithopterCapableFactoryCount;
                 if (pBuilder->getItemID() == Structure_HeavyFactory && pBuilder->getHealth() > 0
                     && campaignAvailableToBuild(pBuilder,Unit_Harvester)) pass.harvesterFactories.push_back(pBuilder);
                 if (pBuilder->getItemID() == Structure_HeavyFactory && pBuilder->getHealth() > 0
@@ -199,7 +201,8 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
                         pass.itemCount[queued.itemID] += queued.num;
                         builderQueuedCost += queued.num * queued.price;
                         if (QuantBotBuildPolicy::militaryItem(queued.itemID))
-                            pass.queuedMilitaryValue += queued.num * data[queued.itemID][houseID].price;
+                            pass.queuedMilitaryValue += queued.num * data[queued.itemID][ModManager::instance().isTornieFamilyContentActive()
+                                ? pBuilder->getTechnologyHouseID() : houseID].price;
                     }
                     // Starport cargo is paid for when ordered. It still counts
                     // toward the fleet, but must not reserve the same cash again.
@@ -213,7 +216,7 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
                     }
                     else if (pBuilder->getItemID() == Structure_HighTechFactory) {
                         pass.activeHighTechFactoryCount++;
-                        if (pBuilder->getCurrentProducedItem() == Unit_Ornithopter
+                        if (QuantBotInternal::ornithopterItem(pBuilder->getCurrentProducedItem())
                             && !pBuilder->isOnHold() && !pBuilder->isUpgrading()) ++pass.ornithopterFactoryCount;
                     }
                 }
@@ -232,6 +235,23 @@ void QuantBot::planBuildInventory(BuildPass& pass) {
 
 
     }
+    if (ModManager::instance().isTornieFamilyContentActive()) {
+        // The existing economy plans in workers and unload bays, not raw building
+        // IDs. Preserve the variant entries as well for reconstruction and queues.
+        pass.itemCount[Unit_Harvester] += pass.itemCount[Unit_CapacityHarvester] + pass.itemCount[Unit_FastHarvester];
+        pass.itemCount[Structure_Refinery] += 2 * pass.itemCount[Structure_Doublefinery] + pass.itemCount[Structure_Worfinery];
+    }
+}
+
+int QuantBot::rawPlannedItemCount(const BuildPass& pass, Uint32 item) const {
+    int count = pass.itemCount[item];
+    if ((item == Structure_Refinery || item == Unit_Harvester) && ModManager::instance().isTornieFamilyContentActive()) {
+        if (item == Structure_Refinery)
+            count -= 2 * pass.itemCount[Structure_Doublefinery] + pass.itemCount[Structure_Worfinery];
+        else if (item == Unit_Harvester)
+            count -= pass.itemCount[Unit_CapacityHarvester] + pass.itemCount[Unit_FastHarvester];
+    }
+    return count;
 }
 
 void QuantBot::planBuildBudget(BuildPass& pass) {
@@ -248,7 +268,7 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.militaryBudgetOverridden = overridesMilitaryValueCap();
     int largestMilitaryUnitValue = 0;
     if (pass.militaryBudgetOverridden)
-        for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item)
+        for (Uint32 item = Unit_FirstID; item <= (ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID); ++item)
             if (QuantBotBuildPolicy::militaryItem(item) && data[item][houseID].enabled)
                 largestMilitaryUnitValue = std::max(largestMilitaryUnitValue, data[item][houseID].price);
     pass.militaryBudget = planningMilitaryBudget(pass.militaryValue, pass.money, largestMilitaryUnitValue);
@@ -300,17 +320,17 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     // INVALID is an absent/disabled market entry; zero is merely sold out and
     // will restock. Check the catalogue, not whether a factory already exists.
     pass.starportMarketAvailable = [&] {
-        for (int item=Unit_FirstID;item<=Unit_LastID;++item)
-            if (data[item][houseID].enabled && getHouse()->getChoam().getNumAvailable(item)>=0) return true;
+        for (int item=Unit_FirstID;item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID);++item)
+            if (isUnit(item) && data[item][houseID].enabled && getHouse()->getChoam().getNumAvailable(item)>=0) return true;
         return false;
     }();
     // A queued refinery supplies a free worker when placed. Reserve that
     // worker alongside factory production and paid imports in every game mode.
     pass.engineHarvesterLimit = getHouse()->getMaxHarvesters();
-    pass.actualHarvesters = getHouse()->getNumItems(Unit_Harvester)
-        + getHouse()->getNumItems(Unit_RebelHarvester);
-    const int pendingRefineries = std::max(0,pass.itemCount[Structure_Refinery]
-        - getHouse()->getNumItems(Structure_Refinery));
+    pass.actualHarvesters = getAIHarvesterCount() + getHouse()->getNumItems(Unit_RebelHarvester);
+    int pendingRefineries = std::max(0,pass.itemCount[Structure_Refinery] - getAIRefineryBays());
+    if (ModManager::instance().isTornieFamilyContentActive())
+        pendingRefineries -= std::max(0,pass.itemCount[Structure_Worfinery] - getHouse()->getNumItems(Structure_Worfinery));
     pass.itemCount[Unit_Harvester] += pass.engineHarvesterLimit > 0
         ? std::min(pendingRefineries, std::max(0,pass.engineHarvesterLimit
             - pass.itemCount[Unit_Harvester] - pass.itemCount[Unit_RebelHarvester]))
@@ -333,6 +353,17 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     }
     for (const auto* structure:getStructureList()) {
         if (structure->getOwner()!=getHouse()) continue;
+        if (structure->getItemID() == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive()) {
+            const auto* refinery = static_cast<const Refinery*>(structure);
+            for (int bay = 0; bay < refinery->getNumBays(); ++bay) {
+                const auto* unit = dynamic_cast<const Harvester*>(refinery->getContainedHarvester(bay));
+                if (unit && unit->getAmountOfSpice() <= 0 && unit->getGuardPoint().isValid()
+                    && !unit->hasBookedCarrier()
+                    && blockDistance(structure->getLocation(),unit->getGuardPoint()) >= MIN_CARRYALL_LIFT_DISTANCE)
+                    pass.pickupQueue.insert(unit->getObjectID());
+            }
+            continue;
+        }
         const GroundUnit* returnUnit=nullptr;
         if (structure->getItemID()==Structure_RepairYard) {
             const auto* unit=static_cast<const RepairYard*>(structure)->getRepairUnit();
@@ -549,21 +580,37 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         : pass.citySpiceWorkerTarget;
     pass.spiceHarvesterTarget = pass.citySimEnabled ? pass.mapSpiceHarvesterTarget
         : QuantBotBuildPolicy::refineryThroughputHarvesterTarget(
-            pass.spiceShare,pass.mapSpiceHarvesterTarget,getHouse()->getNumItems(Structure_Refinery),harvesterLimit);
+            pass.spiceShare,pass.mapSpiceHarvesterTarget,getAIRefineryBays(),harvesterLimit);
     pass.fundedHarvesterTarget = pass.citySimEnabled
         ? CityEconomyInvestmentPolicy::factoryHarvesterTarget(pass.spiceHarvesterTarget,harvesterLimit)
-        : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getHouse()->getNumItems(Structure_Refinery));
+        : QuantBotBuildPolicy::fundedSpiceHarvesters(pass.mapSpiceHarvesterTarget,getAIRefineryBays());
     pass.busyRefineries = 0; pass.freeRefineries = 0; pass.unbookedRefineries = 0; pass.waitingHarvesters = 0; pass.waitingCargo = 0; pass.blockedRefineryReturns = 0;
     pass.fieldReturnersBlocked = 0;
-    auto refineryWaitingForTransport=[](const StructureBase* structure) {
+    auto refineryWaitingForTransport=[](const StructureBase* structure) -> int {
         const auto* refinery=dynamic_cast<const Refinery*>(structure);
+        if (refinery && ModManager::instance().isTornieFamilyContentActive()) {
+            int waiting = 0;
+            for (int bay = 0; bay < refinery->getNumBays(); ++bay) {
+                const auto* worker = dynamic_cast<const Harvester*>(refinery->getContainedHarvester(bay));
+                if (worker && worker->getAmountOfSpice() <= 0) ++waiting;
+            }
+            return waiting;
+        }
         const auto* worker=refinery ? dynamic_cast<const Harvester*>(refinery->getContainedHarvester()) : nullptr;
         return worker && worker->getAmountOfSpice()<=0;
     };
     {
         for(const auto* structure:getStructureList()) if(structure->getOwner()==getHouse()&&structure->acceptsHarvesterDropoff()) {
-            if(structure->isHarvesterDropoffFree())++pass.freeRefineries;else ++pass.busyRefineries;
-            if(structure->isHarvesterDropoffFree() && structure->getHarvesterDropoffBookings()==0)++pass.unbookedRefineries;
+            const auto* refinery = dynamic_cast<const Refinery*>(structure);
+            if (refinery && ModManager::instance().isTornieFamilyContentActive()) {
+                const int busy = refinery->getNumOccupiedBays(), free = refinery->getNumBays() - busy;
+                pass.busyRefineries += busy;
+                pass.freeRefineries += free;
+                pass.unbookedRefineries += std::max(0,free - int(structure->getHarvesterDropoffBookings()));
+            } else {
+                if(structure->isHarvesterDropoffFree())++pass.freeRefineries;else ++pass.busyRefineries;
+                if(structure->isHarvesterDropoffFree() && structure->getHarvesterDropoffBookings()==0)++pass.unbookedRefineries;
+            }
             pass.blockedRefineryReturns+=refineryWaitingForTransport(structure);
             pass.refineryQueues.set(std::to_string(structure->getObjectID()),AITelemetry::Record()
                 .set("x",structure->getX()).set("y",structure->getY()).set("busy",!structure->isHarvesterDropoffFree())
@@ -586,7 +633,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     if(pass.waitingHarvesters<pass.unbookedRefineries+2)refineryQueueSince=std::numeric_limits<Uint32>::max();
     else if(refineryQueueSince==std::numeric_limits<Uint32>::max())refineryQueueSince=getGameCycleCount();
     pass.unloadingBacklog = CityEconomyInvestmentPolicy::unloadingQueueNeedsBay(pass.waitingHarvesters,pass.unbookedRefineries,
-        pass.itemCount[Structure_Refinery]-getHouse()->getNumItems(Structure_Refinery),
+        pass.itemCount[Structure_Refinery]-getAIRefineryBays(),
         refineryQueueSince!=std::numeric_limits<Uint32>::max()&&getGameCycleCount()-refineryQueueSince>=MILLI2CYCLES(10000));
     if(pass.citySimEnabled&&(rockSurveyCycle==std::numeric_limits<Uint32>::max()
         || getGameCycleCount()-rockSurveyCycle>=MILLI2CYCLES(15000))) {
@@ -652,7 +699,7 @@ int QuantBot::harvesterInvestmentReserve(BuildPass& pass) {
     if (!isCampaignGameType(currentGame->gameType) || !isAlliedWithHuman()
         || gameMode != GameMode::Custom || builderOnly() || !(pass.vanillaEconomy || pass.citySimEnabled)
         || lastCalculatedSpice <= 0 || getHouse()->isGroundUnitLimitReached()
-        || getHouse()->getNumItems(Structure_Refinery) == 0
+        || getAIRefineryBays() == 0
         || (pass.harvesterFactories.empty() && getHouse()->getNumItems(Structure_StarPort) == 0)) return 0;
     int target = pass.vanillaEconomy ? pass.spiceHarvesterTarget : pass.fundedHarvesterTarget;
     const auto& market = getHouse()->getChoam();
@@ -669,7 +716,7 @@ bool QuantBot::needsFirstTransport(BuildPass& pass) {
     if (pass.brutalEconomy ? CityEconomyInvestmentPolicy::openingWorkersNeeded(pass.itemCount[Unit_Harvester],pass.fundedHarvesterTarget)
                           : openingWorkersNeeded(pass)) return false;
     return QuantBotBuildPolicy::firstTransportNeeded(pass.transportTechAvailable,
-        pass.itemCount[Structure_HeavyFactory],getHouse()->getNumItems(Unit_Harvester),
+        pass.itemCount[Structure_HeavyFactory],getAIHarvesterCount(),
         pass.itemCount[Unit_Carryall]);
 }
 
@@ -684,11 +731,11 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
     pass.currentZonePower = 0; pass.matureZonePower = 0; pass.committedPowerDemand = 0;
     for (const auto* structure : getStructureList()) {
         if (structure->getOwner() != getHouse()) continue;
-        const int power = data[structure->getItemID()][structure->getOriginalHouseID()].power;
+        const int power = data[structure->getItemID()][structure->getProductionHouseID()].power;
         if (power < 0) {
             pass.largestGenerator = std::max(pass.largestGenerator, -power);
             const auto size = getStructureSize(structure->getItemID());
-            const int generationCost = data[structure->getItemID()][structure->getOriginalHouseID()].price
+            const int generationCost = data[structure->getItemID()][structure->getProductionHouseID()].price
                 + size.x*size.y*data[Structure_Slab1][houseID].price;
             pass.generationCostPerThousand = std::min(pass.generationCostPerThousand,1000*generationCost/-power);
         }
@@ -703,8 +750,8 @@ void QuantBot::planPowerAndYards(BuildPass& pass) {
             pass.matureZonePower += DuneCity::getZonePower(structure->getItemID(), 3);
         }
     }
-    if (pass.citySimEnabled) for (Uint32 item=Structure_FirstID; item<=Structure_LastID; ++item)
-        pass.committedPowerDemand += std::max(0,pass.itemCount[item]-getHouse()->getNumItems(item))
+    if (pass.citySimEnabled) for (Uint32 item=Structure_FirstID; item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID); ++item)
+        if (isStructure(item)) pass.committedPowerDemand += std::max(0,rawPlannedItemCount(pass,item)-getHouse()->getNumItems(item))
             * (DuneCity::isCityZoneStructure(item) ? DuneCity::getZonePower(item,3) : std::max(0,data[item][houseID].power));
     pass.zoneGrowthHeadroom = QuantBotBuildPolicy::cityGrowthPowerHeadroom(
         pass.currentZonePower,pass.matureZonePower,projectedPowerDemandGrowth,pass.committedPowerDemand);
@@ -891,11 +938,11 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("city_mcv_working_reserve", pass.citySimEnabled ? std::max(1000, pass.cityWorkingReserve) : 0)
         .set("city_mcv_shortfall", pass.citySimEnabled ? std::max(0, pass.cityYardTarget - pass.cityConstructionCapacity) : 0)
         .set("vanilla_yard_target", pass.vanillaEconomy ? DuneCity::vanillaYardTarget(
-            pass.money, getHouse()->getNumItems(Unit_Harvester)) : 0)
+            pass.money, getAIHarvesterCount()) : 0)
         .set("mcv_upgrade_in_progress", pass.mcvUpgradesInProgress > 0)
         .set("mcv_upgrades_in_progress", pass.mcvUpgradesInProgress)
         .set("mcv_shortfall", pass.vanillaEconomy ? DuneCity::vanillaMcvShortfall(
-            pass.money, getHouse()->getNumItems(Unit_Harvester), pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV]) : 0)
+            pass.money, getAIHarvesterCount(), pass.itemCount[Structure_ConstructionYard], pass.itemCount[Unit_MCV]) : 0)
         .set("construction_plans_first", pass.citySimEnabled)
         .set("res_demand", pass.ownResValve).set("com_demand", pass.ownComValve).set("ind_demand", pass.ownIndValve)
         .set("res_pop", pass.ownResPop).set("com_pop", pass.ownComPop).set("ind_pop", pass.ownIndPop)
@@ -903,7 +950,7 @@ AITelemetry::Record QuantBot::decisionState(BuildPass& pass) {
         .set("spice_share", pass.spiceShare).set("map_harvester_target", pass.mapSpiceHarvesterTarget)
         .set("harvester_target", pass.spiceHarvesterTarget).set("refinery_harvester_target",
             QuantBotBuildPolicy::refineryThroughputHarvesterTarget(pass.spiceShare, 0,
-                getHouse()->getNumItems(Structure_Refinery), harvesterLimit))
+                getAIRefineryBays(), harvesterLimit))
         .set("repair_baseline",pass.repairBaseline).set("repair_target",pass.repairTarget)
         .set("combat_vehicles",pass.combatVehicles).set("repair_waiting",pass.waitingRepairVehicles)
         .set("harvester_investment_reserve", harvesterInvestmentReserve(pass))
@@ -930,8 +977,8 @@ bool QuantBot::campaignPowerNeeded(BuildPass& pass, int nextDemand) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     int demand=0;
-    for (Uint32 item=Structure_FirstID;item<=Structure_LastID;++item)
-        demand+=std::max(0,pass.itemCount[item]-getHouse()->getNumItems(item))*std::max(0,data[item][houseID].power);
+    for (Uint32 item=Structure_FirstID;item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID);++item)
+        if (isStructure(item)) demand+=std::max(0,rawPlannedItemCount(pass,item)-getHouse()->getNumItems(item))*std::max(0,data[item][houseID].power);
     return pass.campaignPowerBudget && CampaignDifficultyPolicy::needsWindtrap(
         getHouse()->getProducedPower(),getHouse()->getPowerRequirement(),demand,nextDemand,
         pass.itemCount[Structure_WindTrap]>getHouse()->getNumItems(Structure_WindTrap)
@@ -1292,14 +1339,14 @@ void QuantBot::traceBuildState(BuildPass& pass) {
             if (gameMode == GameMode::Custom) {
                 logDebug("Stats: %d  crdt: %d  mVal: %d/%d  built: %d  kill: %d  loss: %d remaining spice: %d hvstr: %d/%d",
                     attackTimer, getHouse()->getCredits(), pass.militaryValue, militaryValueLimit, getHouse()->getUnitBuiltValue(),
-                    getHouse()->getKillValue(), getHouse()->getLossValue(), lastCalculatedSpice, getHouse()->getNumItems(Unit_Harvester), harvesterLimit);
+                    getHouse()->getKillValue(), getHouse()->getLossValue(), lastCalculatedSpice, getAIHarvesterCount(), harvesterLimit);
             } else {
                 // Campaign mode - include initial military value and multiplier
                 const QuantBotConfig& config = botConfig();
                 const QuantBotConfig::DifficultySettings& diffSettings = config.getSettings(static_cast<int>(difficulty));
                 logDebug("Stats: %d  crdt: %d  mVal: %d/%d (init: %d, mult: %.1fx)  built: %d  kill: %d  loss: %d hvstr: %d/%d",
                     attackTimer, getHouse()->getCredits(), pass.militaryValue, militaryValueLimit, initialMilitaryValue, diffSettings.militaryValueMultiplier,
-                    getHouse()->getUnitBuiltValue(), getHouse()->getKillValue(), getHouse()->getLossValue(), getHouse()->getNumItems(Unit_Harvester), harvesterLimit);
+                    getHouse()->getUnitBuiltValue(), getHouse()->getKillValue(), getHouse()->getLossValue(), getAIHarvesterCount(), harvesterLimit);
             }
             lastStatsLogCycle = currentCycle;
         }
@@ -1402,7 +1449,7 @@ void QuantBot::traceBuildState(BuildPass& pass) {
                         .set("pollution_emission",DuneCity::getPollutionEmission(item,level))
                         .set("land_value_bonus",DuneCity::getParkLandValueBonus(item))
                         .set("police_strength",DuneCity::getPoliceCoverage(item)).set("police_cost",DuneCity::getPoliceAnnualCost(item).lround()).set("police_cost_milli",(DuneCity::getPoliceAnnualCost(item)*1000).lround())
-                        .set("power_nominal",currentGame->objectData.data[item][structure->getOriginalHouseID()].power)
+                        .set("power_nominal",currentGame->objectData.data[item][structure->getProductionHouseID()].power)
                         .set("power_generated",generation));
                     ++count;
                 }
@@ -1616,6 +1663,16 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     pass.lightVehicleCount = pass.itemCount[Unit_Trike] + pass.itemCount[Unit_RaiderTrike] + pass.itemCount[Unit_Quad];
     pass.infantryCount = pass.itemCount[Unit_Soldier] + pass.itemCount[Unit_Infantry]
         + pass.itemCount[Unit_Trooper] + pass.itemCount[Unit_Troopers];
+    if (ModManager::instance().isTornieFamilyContentActive()) {
+        for (const Uint32 item : {Unit_Troopers5, Unit_Infantry5, Unit_GasInfantry, Unit_FlameTrooper}) {
+            pass.infantryValue += data[item][houseID].price * pass.itemCount[item];
+            pass.infantryCount += pass.itemCount[item];
+        }
+        for (const Uint32 item : {Unit_FlameQuad, Unit_RaiderQuad}) {
+            pass.lightVehicleValue += data[item][houseID].price * pass.itemCount[item];
+            pass.lightVehicleCount += pass.itemCount[item];
+        }
+    }
 
 
     const int productionCash = std::max(0, pass.money
@@ -1685,7 +1742,9 @@ bool QuantBot::infantryQuotaAdmits(BuildPass& pass, int value) {
 // nothing may rank, reserve cash for or order them once the observed wing is gone.
 bool QuantBot::cityInfantryItem(BuildPass& pass, Uint32 item) {
     return pass.citySimEnabled && (item == Unit_Soldier || item == Unit_Infantry
-        || item == Unit_Trooper || item == Unit_Troopers);
+        || item == Unit_Trooper || item == Unit_Troopers
+        || (ModManager::instance().isTornieFamilyContentActive()
+            && (item == Unit_Troopers5 || item == Unit_Infantry5 || item == Unit_GasInfantry || item == Unit_FlameTrooper)));
 }
 
 // Check troop content and its existing prerequisites; the new WOR supplies itself.
@@ -1717,7 +1776,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
             || unit->getOwner()->getTeamID()==getHouse()->getTeamID()) continue;
         const auto* victim=unit->getTarget();
         if (victim && victim->getOwner()==getHouse() && unit->isInWeaponRange(victim)
-            && (victim->isAStructure() || victim->getItemID()==Unit_Harvester
+            && (victim->isAStructure() || QuantBotInternal::harvesterItem(victim->getItemID())
                 || victim->getItemID()==Unit_RebelHarvester)) pass.defendingEconomy=true;
     }
     pass.forecastTax = pass.citySimEnabled ? DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(pass.ownTaxBaseEighths,
@@ -1727,7 +1786,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // Future workers/bays count toward targets and commitments, but their
     // production is not income until delivered. Reforecast every planning pass.
     const int fleetRate=std::min(pass.actualHarvesters*workerAnnualIncome(pass),
-        getHouse()->getNumItems(Structure_Refinery)*pass.bayAnnualIncome);
+        getAIRefineryBays()*pass.bayAnnualIncome);
     pass.forecastSpice = std::min(pass.spiceShare,fleetRate*QuantBotSpendingPolicy::horizonMinutes);
     pass.forecastNetIncome = pass.forecastSpice+(pass.forecastTax-pass.forecastUpkeep)*QuantBotSpendingPolicy::horizonMinutes;
     pass.forecastFunding = std::max(0,pass.money+pass.forecastNetIncome);
@@ -1747,7 +1806,8 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         for (const auto& offer:builder->getBuildList()) {
             const Uint32 item=offer.itemID;
             if (!port) unpaid+=offer.num*int(offer.price);
-            int buildtime=data[item][builder->getOriginalHouseID()].buildtime;
+            int buildtime=data[item][ModManager::instance().isTornieFamilyContentActive()
+                ? builder->getTechnologyHouseID() : builder->getOriginalHouseID()].buildtime;
             if (pass.citySimEnabled) buildtime=DuneCity::getCityBuildTime(item,buildtime);
             if (port || buildtime<=0) continue;
             const int cost=(FixPoint(offer.price)*speed*CityEconomyInvestmentPolicy::horizonCycles/(buildtime*15)).lround();
@@ -1866,7 +1926,7 @@ std::vector<QuantBotFoundationPolicy::SlabOrder> QuantBot::foundationOrders(cons
 // actually bills them.
 Sint32 QuantBot::repairPrice(const StructureBase* structure) {
     auto& data = currentGame->objectData.data;
-    return data[structure->getItemID()][structure->getOriginalHouseID()].price;
+    return data[structure->getItemID()][structure->getProductionHouseID()].price;
 }
 
 bool QuantBot::repairPolicyMaintains(BuildPass& pass, const StructureBase* structure) {
@@ -1940,9 +2000,9 @@ void QuantBot::planCityBootstrap(BuildPass& pass) {
     // bought for its vault and its tech, never to feed a harvester, and the
     // distinction is in the rule that buys it, not in the building.
     pass.cityStorageCapacityIncludingQueued = getHouse()->getCapacity();
-    for (Uint32 item = Structure_FirstID; item <= Structure_LastID; ++item)
-        pass.cityStorageCapacityIncludingQueued += std::max(0,
-            pass.itemCount[item] - getHouse()->getNumItems(item)) * std::max(0, data[item][houseID].capacity);
+    for (Uint32 item = Structure_FirstID; item <= (ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID); ++item)
+        if (isStructure(item)) pass.cityStorageCapacityIncludingQueued += std::max(0,
+            rawPlannedItemCount(pass,item) - getHouse()->getNumItems(item)) * std::max(0, data[item][houseID].capacity);
     // City-match Construction Yards store 1000 credits (1.0.862), a buffer for the
     // player's opening. The AI still buys its first real storage (the Refinery,
     // which also unlocks the Silo and on a cramped base extends its build range)
@@ -2054,9 +2114,9 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
         for (int prerequisite=Structure_FirstID;prerequisite<=Structure_LastID;++prerequisite)
             if (data[item][houseID].prerequisiteStructuresSet[prerequisite]) factorySteps.push_back(prerequisite);
     }
-    for (int item=Unit_FirstID;item<=Unit_LastID;++item) {
+    for (int item=Unit_FirstID;item<=(ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID);++item) {
         const auto& info=data[item][houseID];
-        if (!info.enabled || info.builder!=Structure_HeavyFactory || info.techLevel>currentGame->techLevel
+        if (!isUnit(item) || !info.enabled || info.builder!=Structure_HeavyFactory || info.techLevel>currentGame->techLevel
             || info.upgradeLevel>0 || info.buildtime<=0 || item==Unit_MCV) continue;
         const int time=pass.citySimEnabled ? DuneCity::getCityBuildTime(item,info.buildtime) : info.buildtime;
         pass.firstFactoryProduction=std::max(pass.firstFactoryProduction,
@@ -2240,7 +2300,7 @@ bool QuantBot::storageExpansionNeeded(BuildPass& pass) {
     // A bay already ordered brings its own storage, so count that pending
     // capacity instead of cancelling every silo while refineries expand.
     const int pendingCapacity=std::max(0,pass.itemCount[Structure_Refinery]
-        -getHouse()->getNumItems(Structure_Refinery))*data[Structure_Refinery][houseID].capacity;
+        -getAIRefineryBays())*data[Structure_Refinery][houseID].capacity;
     const int projectedCapacity=capacity+pendingCapacity;
     // Where the tech level has no heavy factory yet (DuneCity campaign levels 1-3), storage
     // is not deferred for one: taxes fill the store and the spice quota waits on it.
@@ -2542,7 +2602,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             transport.price=purchasePrice(builder,Unit_Carryall);transport.cost=transport.price;
             transport.delay=port ? MILLI2CYCLES(30000) : data[Unit_Carryall][houseID].buildtime*15;
             if (pass.itemCount[Unit_Carryall]>=pass.transportTarget) transport.reason="transport_target_met";
-            else if ((getHouse()->getNumItems(Unit_Harvester)==0 || getHouse()->getNumItems(Structure_Refinery)==0)
+            else if ((getAIHarvesterCount()==0 || getAIRefineryBays()==0)
                 && (pass.militaryValue==0 || pass.itemCount[Structure_RepairYard]==0))
                 transport.reason="no_working_spice_fleet";
             else if (lastCalculatedSpice<=0 && (pass.militaryValue==0 || pass.itemCount[Structure_RepairYard]==0)) transport.reason="spice_depleted";

@@ -140,7 +140,7 @@ std::unique_ptr<MapEditorOperation> MapEditorStructurePlaceOperation::perform(Ma
         newID = minID-1;
     }
 
-    structures.emplace_back(newID, house, itemID, health, position);
+    structures.emplace_back(newID, house, itemID, health, position, powerUpgraded);
 
     return std::make_unique<MapEditorRemoveStructureOperation>(newID);
 }
@@ -153,7 +153,7 @@ std::unique_ptr<MapEditorOperation> MapEditorRemoveStructureOperation::perform(M
 
     for(auto iter = structures.begin(); iter != structures.end(); ++iter) {
         if(iter->id == id) {
-            auto redoOperation = std::make_unique<MapEditorStructurePlaceOperation>(iter->id, iter->position, iter->house, iter->itemID, iter->health);
+            auto redoOperation = std::make_unique<MapEditorStructurePlaceOperation>(iter->id, iter->position, iter->house, iter->itemID, iter->health, iter->powerUpgraded);
 
             structures.erase(iter);
 
@@ -208,10 +208,14 @@ std::unique_ptr<MapEditorOperation> MapEditorEditStructureOperation::perform(Map
     MapEditor::Structure* pStructure = pMapEditor->getStructure(id);
 
     int oldHealth = pStructure->health;
+    const bool oldPowerUpgraded = pStructure->powerUpgraded;
 
     pStructure->health = health;
+    if(powerUpgraded.has_value()) {
+        pStructure->powerUpgraded = *powerUpgraded;
+    }
 
-    return std::make_unique<MapEditorEditStructureOperation>(id, oldHealth);
+    return std::make_unique<MapEditorEditStructureOperation>(id, oldHealth, oldPowerUpgraded);
 }
 
 

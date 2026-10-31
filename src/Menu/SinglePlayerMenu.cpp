@@ -33,6 +33,8 @@
 #include <Menu/CustomGameMenu.h>
 #include <Menu/SinglePlayerSkirmishMenu.h>
 #include <Menu/HouseChoiceMenu.h>
+#include <Menu/CoopCampaignMenu.h>
+#include <mod/ModManager.h>
 #include <Network/OnlineModPolicy.h>
 
 #include <GUI/dune/LoadSaveWindow.h>
@@ -124,6 +126,11 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
 
     if(player < 0) {
         return;
+    }
+    if(ModManager::instance().isTornieFamilyContentActive() && HouseChoiceMenu::isSeparateFactionCoop()) {
+        if(CoopCampaignMenu(false).showMenu() == MENU_QUIT_GAME_FINISHED) return;
+        online = true;
+        continue;
     }
 
     // Get AI settings from HouseChoiceMenu static storage

@@ -30,6 +30,7 @@
 #include <structures/ConstructionYard.h>
 #include <structures/Palace.h>
 #include <structures/TurretBase.h>
+#include <structures/Scoutpost.h>
 #include <units/UnitBase.h>
 #include <FormationOrders.h>
 #include <units/GroundUnit.h>
@@ -190,7 +191,7 @@ void Player::doBuildRandom(const BuilderBase* pBuilder) const {
 }
 
 int Player::chooseLowPriorityCustomUnit(const BuilderBase* pBuilder, int chanceDenominator) const {
-    if(!ModManager::instance().isTornieContentActive()
+    if(!ModManager::instance().isTornieFamilyContentActive()
        || pBuilder == nullptr || pBuilder->getOwner() != getHouse() || !pBuilder->isActive()) {
         return ItemID_Invalid;
     }
@@ -204,26 +205,26 @@ int Player::chooseLowPriorityCustomUnit(const BuilderBase* pBuilder, int chanceD
         Unit_EliteSiegeTank,
         Unit_ChemicalSiegeTank,
         Unit_ChemicalCarryall,
-        Unit_RebelHarvester
+        Unit_RebelHarvester,
+        Unit_Troopers5, Unit_Infantry5, Unit_FlameQuad, Unit_GasInfantry,
+        Unit_FlameTrooper, Unit_EliteOrnithopter, Unit_RaiderQuad, Unit_RangedTank,
+        Unit_SlowTank, Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm,
+        Unit_Saboteur
     };
     Uint32 availableUnits[sizeof(customUnits) / sizeof(customUnits[0])] = {};
     int numAvailable = 0;
 
     for(const Uint32 itemID : customUnits) {
-        if(!pBuilder->isAvailableToBuild(itemID)) {
+        if(!pBuilder->isAvailableToBuild(itemID) || pBuilder->isUnitLimitReached(itemID)) {
             continue;
         }
         if(itemID == Unit_ChemicalCarryall) {
-            if(getHouse()->isAirUnitLimitReached() || getHouse()->getNumItems(itemID) >= 1) {
-                continue;
-            }
-        } else {
-            if(getHouse()->isGroundUnitLimitReached()) {
-                continue;
-            }
-            if(itemID == Unit_RebelHarvester && getHouse()->getNumItems(itemID) >= 3) {
-                continue;
-            }
+            if(getHouse()->getNumItems(itemID) >= 1) continue;
+        } else if(itemID == Unit_RebelHarvester) {
+            if(getHouse()->getNumItems(itemID) >= 3) continue;
+        } else if(itemID == Unit_CapacityHarvester || itemID == Unit_FastHarvester) {
+            const int ceiling = getHouse()->getMaxHarvesters();
+            if(getAIHarvesterCount() >= (ceiling > 0 ? ceiling : 3)) continue;
         }
 
         availableUnits[numAvailable++] = itemID;
@@ -237,6 +238,90 @@ int Player::chooseLowPriorityCustomUnit(const BuilderBase* pBuilder, int chanceD
     }
 
     return static_cast<int>(availableUnits[getRandomGen().rand(0, numAvailable - 1)]);
+}
+
+bool Player::hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const {
+    if(!ModManager::instance().isTornieFamilyContentActive() || !pBuilder
+        || pBuilder->getOwner() != getHouse() || !pBuilder->isActive()) return false;
+    const int technology = pBuilder->getTechnologyHouseID();
+    const int currentUpgrade = pBuilder->getCurrentUpgradeLevel(), maxUpgrade = pBuilder->getMaxUpgradeLevel();
+    const bool customContent = ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
+    for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item) {
+        if(!isUnit(item)) continue;
+        if(!customContent && item != Unit_Troopers5 && item != Unit_Infantry5) continue;
+        const auto& spec = currentGame->objectData.data[item][technology];
+        if(!spec.enabled || spec.builder != static_cast<int>(pBuilder->getItemID())
+            || spec.techLevel > currentGame->techLevel
+            || spec.upgradeLevel <= currentUpgrade || spec.upgradeLevel > maxUpgrade) continue;
+        bool prerequisites = true;
+        for(int prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+            if(isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
+                && getHouse()->getNumItems(prerequisite) == 0) prerequisites = false;
+        if(prerequisites) return true;
+    }
+    return false;
+}
+
+Uint32 Player::chooseTornieHarvester(const BuilderBase* pBuilder, int money) const {
+    if(!ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled() || !pBuilder) return Unit_Harvester;
+    Uint32 selected = Unit_Harvester;
+    const int technology = pBuilder->getTechnologyHouseID();
+    for(const Uint32 item : {Unit_CapacityHarvester, Unit_FastHarvester})
+        if(pBuilder->isAvailableToBuild(item) && !pBuilder->isUnitLimitReached(item)
+            && currentGame->objectData.data[item][technology].price <= money
+            && (selected == Unit_Harvester || getHouse()->getNumItems(item) < getHouse()->getNumItems(selected)))
+            selected = item;
+    return selected;
+}
+
+int Player::getAIHarvesterCount() const {
+    int count = getHouse()->getNumItems(Unit_Harvester);
+    if(ModManager::instance().isTornieFamilyContentActive())
+        count += getHouse()->getNumItems(Unit_CapacityHarvester) + getHouse()->getNumItems(Unit_FastHarvester);
+    return count;
+}
+
+int Player::getAIRefineryBays() const {
+    int bays = getHouse()->getNumItems(Structure_Refinery);
+    if(ModManager::instance().isTornieFamilyContentActive())
+        bays += 2 * getHouse()->getNumItems(Structure_Doublefinery) + getHouse()->getNumItems(Structure_Worfinery);
+    return bays;
+}
+
+Uint32 Player::chooseTornieStructure(const BuilderBase* pBuilder, Uint32 itemID, int money) const {
+    if(!ModManager::instance().isTornieFamilyContentActive() || !pBuilder) return itemID;
+    const Uint32 alternative = itemID == Structure_Refinery ? Structure_Doublefinery
+        : itemID == Structure_WOR ? Structure_Worfinery
+        : itemID == Structure_GunTurret && pBuilder->getTechnologyHouseID() == HOUSE_NEUTRAL ? Structure_Scoutpost : itemID;
+    if(alternative != itemID && pBuilder->isAvailableToBuild(alternative)
+        && currentGame->objectData.data[alternative][pBuilder->getTechnologyHouseID()].price <= money)
+        return alternative;
+    if(itemID == NONE_ID && money > 1500 && getHouse()->getNumItems(Structure_HeavyFactory) > 0) {
+        for(const Uint32 candidate : {Structure_Worfinery, Structure_Scoutpost}) {
+            if(candidate == Structure_Scoutpost
+                && (pBuilder->getTechnologyHouseID() != HOUSE_NEUTRAL
+                    || getHouse()->getNumItems(Structure_Slowpost) > 0)) continue;
+            if(getHouse()->getNumItems(candidate) > 0 || !pBuilder->isAvailableToBuild(candidate)
+                || currentGame->objectData.data[candidate][pBuilder->getTechnologyHouseID()].price > money) continue;
+            bool pending = false;
+            for(const auto* structure : getStructureList()) {
+                if(structure->getOwner() != getHouse() || !structure->isABuilder()) continue;
+                for(const auto& offer : static_cast<const BuilderBase*>(structure)->getBuildList())
+                    if(offer.itemID == candidate && offer.num > 0) pending = true;
+            }
+            if(!pending) return candidate;
+        }
+    }
+    return itemID;
+}
+
+bool Player::doUpgradeScoutpost(const StructureBase* pStructure, int spendable) const {
+    if(!ModManager::instance().isTornieFamilyContentActive() || !pStructure
+        || pStructure->getOwner() != getHouse() || !pStructure->isActive()) return false;
+    const auto* scoutpost = dynamic_cast<const Scoutpost*>(pStructure);
+    if(!scoutpost || !scoutpost->canUpgradeToSlowpost() || scoutpost->getSlowpostUpgradeCost() > spendable) return false;
+    const_cast<Scoutpost*>(scoutpost)->doUpgradeToSlowpost();
+    return true;
 }
 
 void Player::doPlaceOrder(const StarPort* pStarport) const {

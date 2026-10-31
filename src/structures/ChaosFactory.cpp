@@ -82,9 +82,11 @@ void ChaosFactory::save(OutputStream& stream) const {
 
 bool ChaosFactory::isOfferCandidate(Uint32 candidate) const {
     if(currentGame == nullptr || !isUnit(candidate)
-       || candidate == Unit_Sandworm
+       || isSandwormUnit(candidate)
        || candidate == Unit_Saboteur
        || candidate == Unit_Soldier
+       || candidate == Unit_Infantry5
+       || candidate == Unit_Troopers5
        || candidate == Unit_Infantry
        || candidate == Unit_Frigate
        || candidate == Unit_Special
@@ -118,7 +120,7 @@ int ChaosFactory::getBasePrice(Uint32 candidate) const {
         return 0;
     }
     const int ownerPrice =
-        currentGame->objectData.data[candidate][originalHouseID].price;
+        currentGame->objectData.data[candidate][getTechnologyHouseID()].price;
     if(ownerPrice > 0) {
         return ownerPrice;
     }

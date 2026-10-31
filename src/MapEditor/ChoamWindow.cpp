@@ -29,23 +29,12 @@
 #include <FileClasses/TextManager.h>
 #include <mod/ModManager.h>
 
-static const ItemID_enum allChoamUnits[] = { Unit_Carryall, Unit_ChemicalCarryall, Unit_Ornithopter,
-                                           Unit_Harvester, Unit_MCV,
-                                           Unit_Trike,     Unit_RaiderTrike,
-                                           Unit_Quad,      Unit_Tank,
-                                           Unit_Launcher,  Unit_SiegeTank,
-                                           Unit_Devastator,Unit_Deviator,
-                                           Unit_SonicTank, Unit_RocketTrike, Unit_SonicTrike,
-                                           Unit_FlameTank, Unit_EliteLauncher,
-                                           Unit_EliteSiegeTank, Unit_ChemicalSiegeTank, Unit_RebelHarvester,
-                                           ItemID_Invalid
-                                          };
 
 ChoamWindow::ChoamWindow(MapEditor* pMapEditor, HOUSETYPE currentHouse) : Window(0,0,0,0), pMapEditor(pMapEditor), house(currentHouse) {
 
-    const bool tornieActive = ModManager::instance().isTornieContentActive();
+    const bool customUnitsEnabled = ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
     for(const ItemID_enum itemID : allChoamUnits) {
-        if(itemID != ItemID_Invalid && (tornieActive || !isTornieExclusiveItem(itemID))) {
+        if(customUnitsEnabled || !isTornieExclusiveItem(itemID)) {
             choamUnits_.push_back(itemID);
         }
     }
@@ -81,6 +70,9 @@ ChoamWindow::ChoamWindow(MapEditor* pMapEditor, HOUSETYPE currentHouse) : Window
     centralVBox.addWidget(VSpacer::create(4));
 
     std::map<int,int>& choam = pMapEditor->getChoam();
+    rowsScroll.setPreserveContentWidth(true);
+    rowsScroll.setContent(&rowsVBox);
+    centralVBox.addWidget(&rowsScroll, 1.0);
 
     const int numChoamItems = static_cast<int>(choamUnits_.size());
     const int numChoamRows = (numChoamItems + 1) / 2;
@@ -89,7 +81,7 @@ ChoamWindow::ChoamWindow(MapEditor* pMapEditor, HOUSETYPE currentHouse) : Window
         ItemID_enum unit1 = choamUnits_[i*2];
         ItemID_enum unit2 = i*2 + 1 < numChoamItems ? choamUnits_[i*2+1] : ItemID_Invalid;
 
-        centralVBox.addWidget(VSpacer::create(2));
+        rowsVBox.addWidget(VSpacer::create(2));
 
         choamRows[i].Checkbox_Unit1.setText(resolveItemName(unit1));
         choamRows[i].Checkbox_Unit1.setTextColor(color);
@@ -119,11 +111,10 @@ ChoamWindow::ChoamWindow(MapEditor* pMapEditor, HOUSETYPE currentHouse) : Window
             choamRows[i].HBox_Unit.addWidget(&choamRows[i].TextBox_Unit2, 65);
         }
 
-        centralVBox.addWidget(&choamRows[i].HBox_Unit);
+        rowsVBox.addWidget(&choamRows[i].HBox_Unit, 24);
 
     }
 
-    centralVBox.addWidget(Spacer::create());
 
     mainVBox.addWidget(VSpacer::create(5));
 

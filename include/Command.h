@@ -82,6 +82,12 @@ typedef enum {
     CMD_UNIT_FORMATION_MOVE,          ///< UNIT_FORMATION_MOVE(OBJECT_ID,X,Y,FACING<<28|GROUP_TOKEN), forced move to a formation slot (docs/formations.md)
     CMD_UNIT_FORMATION_HUNT,          ///< UNIT_FORMATION_HUNT(OBJECT_ID,X,Y,FACING<<28|KIND<<24|GROUP_TOKEN), attack-move (kind 1) or patrol (kind 2) to a slot, hunting in formation
 
+    // Tornie-family commands; append to preserve every existing wire id.
+    CMD_STRUCTURE_SELL,               ///< STRUCTURE_SELL(OBJECT_ID)
+    CMD_WINDTRAP_POWER_UPGRADE,        ///< WINDTRAP_POWER_UPGRADE(OBJECT_ID)
+    CMD_SCOUTPOST_SLOWPOST_UPGRADE,    ///< SCOUTPOST_SLOWPOST_UPGRADE(OBJECT_ID)
+    CMD_RADAR_RESEARCH,               ///< RADAR_RESEARCH(OBJECT_ID, RESEARCH_KIND)
+
     CMD_MAX
 } CMDTYPE;
 

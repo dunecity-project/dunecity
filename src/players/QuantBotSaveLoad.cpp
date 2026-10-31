@@ -248,6 +248,15 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
         if ((total != 0 && total != 10000) || (total != 0 && !resolves))
             throw std::runtime_error("Invalid QuantBot strategy starting mix");
     }
+    // Keep the historical 1..26 prefix and freeze the 9878 tail at IDs 27..87.
+    // Old saves consume no tail; non-family reloads retain their old defaults.
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        const bool family = ModManager::instance().isTornieFamilyContentActive();
+        for (Uint32 item = Structure_LastID + 1; item <= Unit_TameSandworm; ++item) {
+            const Uint32 count = stream.readUint32();
+            if (family) initialItemCount[item] = count;
+        }
+    }
     resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
@@ -391,6 +400,8 @@ void QuantBot::save(OutputStream& stream) const {
     stream.writeUint8(static_cast<Uint8>(strategy.tempo));
     // SAVEGAMEVERSION 9866: the resolved Tuned/Bounded starting ratios (all zero otherwise).
     for (const int share : strategyPrior) stream.writeUint16(static_cast<Uint16>(share));
+    for (Uint32 item = Structure_LastID + 1; item <= Unit_TameSandworm; ++item)
+        stream.writeUint32(ModManager::instance().isTornieFamilyContentActive() ? initialItemCount[item] : 0);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

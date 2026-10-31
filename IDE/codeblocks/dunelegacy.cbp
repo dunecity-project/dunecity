@@ -335,6 +335,9 @@
 		<Unit filename="../../src/Bullet.cpp" />
 		<Unit filename="../../src/Choam.cpp" />
 		<Unit filename="../../src/Command.cpp" />
+		<Unit filename="../../src/CommandData.cpp" />
+		<Unit filename="../../src/mod/ChaosMode.cpp" />
+		<Unit filename="../../src/mod/RadarResearch.cpp" />
 		<Unit filename="../../src/CommandManager.cpp" />
 		<Unit filename="../../src/CutScenes/CrossBlendVideoEvent.cpp" />
 		<Unit filename="../../src/CutScenes/CutScene.cpp" />

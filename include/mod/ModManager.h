@@ -78,8 +78,15 @@ public:
         return initialized && activeDune2RRemasterPresentation;
     }
     bool isTornieContentActive() const {
-        return getContentBase(getActiveModName()) == "Tornie";
+        return activeContentBase == "Tornie";
     }
+    // Includes immutable/derived Workshop copies through their declared content base.
+    bool isTornieFamilyContent(const std::string& name) const;
+    bool isTornieFamilyContentActive() const { return activeTornieFamily; }
+    bool isTornieFamilyLiteContentActive() const { return activeTornieFamilyLite; }
+    const std::vector<int>& getPlayableHouses() const { return activePlayableHouses; }
+    unsigned getActiveSpiceVariantMask() const { return activeSpiceVariantMask; }
+    bool isTornieCustomUnitsAndBuildingsEnabled() const { return activeTornieCustomUnitsAndBuildings; }
     const CustomHouseInfo& getActiveCustomHouseInfo() const;
     const CustomHouseInfo& getCustomHouseInfo(int house) const;
     bool isCustomHouseRegistered() const;
@@ -259,8 +266,7 @@ public:
      */
     bool clearDunecityGraphicsCache() const;
 
-    // DuneCity 1.0.492: seed the Tornie mod
-    void seedTornieFromDefaults();
+    void seedTornieFamilyFromDefaults(const std::string& name);
     void seedDune2RFromDefaults();
 
     /**
@@ -269,8 +275,8 @@ public:
      */
     bool dunecityNeedsReseed() const;
 
-    // DuneCity 1.0.492: Tornie mod reseed check
-    bool tornieNeedsReseed() const;
+    bool tornieFamilyNeedsReseed(const std::string& name) const;
+    void loadActiveContentMetadata(const ModInfo& info);
 
     /**
      * Return true when the installed bundled Dune2R payload is incomplete or
@@ -360,9 +366,14 @@ private:
     std::string activeMod;
     std::string activeContentBase; // Capability identity, refreshed on activation; no per-tile filesystem reads.
     bool activeDune2RRemasterPresentation = false;
+    bool activeTornieFamily = false;
+    bool activeTornieFamilyLite = false;
+    unsigned activeSpiceVariantMask = 0;
+    bool activeTornieCustomUnitsAndBuildings = false;
     CustomHouseInfo activeCustomHouse;           ///< Active mod's campaign custom house
     CustomHouseInfo activeGuestCustomHouse;      ///< Tornie guest custom house for custom games
     std::vector<ModMentatInfo> activeMentats;     ///< Mentat overrides owned by the active mod
+    std::vector<int> activePlayableHouses;        ///< Mod-declared roster, excluding the Natives
     mutable ModChecksums cachedChecksums;  ///< Cached checksums
     mutable bool checksumsDirty;     ///< Do checksums need recalculation?
     bool initialized;                ///< Has initialize() been called?

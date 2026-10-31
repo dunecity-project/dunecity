@@ -24,6 +24,8 @@
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <misc/exceptions.h>
+#include <House.h>
+#include <mod/ModManager.h>
 
 #define CYCLES_PER_FRAME    5
 
@@ -91,6 +93,14 @@ Explosion::Explosion(InputStream& stream)
             persistentDamage = 1;
         }
         damageRadius = TILESIZE;
+    }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_TORNIE546) {
+        extraFireCycles = stream.readSint32();
+        fireExtensionGranted = stream.readBool();
+        extendingFire = stream.readBool();
+        if(extraFireCycles < 0 || extraFireCycles > MILLI2CYCLES(2000)) {
+            THROW(std::runtime_error, "Invalid extended flame lifetime");
+        }
     }
 }
 
@@ -185,6 +195,9 @@ void Explosion::save(OutputStream& stream) const
     stream.writeSint32(persistentDamage);
     stream.writeSint32(damageRadius);
     provenance.save(stream);
+    stream.writeSint32(extraFireCycles);
+    stream.writeBool(fireExtensionGranted);
+    stream.writeBool(extendingFire);
 }
 
 void Explosion::blitToScreen() const
@@ -205,11 +218,32 @@ void Explosion::blitToScreen() const
 
 void Explosion::update()
 {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(explosionID == Explosion_FlameImpact && persistentDamage > 0 && !fireExtensionGranted
+           && currentFrame < FLAME_IMPACT_FADE_FIRST_FRAME) {
+            const auto* owner = currentGame->getHouse(house);
+            if(owner && owner->hasRadarSpecialization(HOUSE_KLESHMERSH)) {
+                fireExtensionGranted = true;
+                extraFireCycles = MILLI2CYCLES(2000);
+            }
+        }
+        if(extendingFire && --extraFireCycles <= 0) {
+            extraFireCycles = 0;
+            extendingFire = false;
+            currentFrame = FLAME_IMPACT_FADE_FIRST_FRAME;
+            frameTimer = CYCLES_PER_FRAME + 1;
+        }
+    }
     frameTimer--;
 
     if(frameTimer < 0) {
         frameTimer = CYCLES_PER_FRAME;
         currentFrame++;
+        if(ModManager::instance().isTornieFamilyContentActive() && explosionID == Explosion_FlameImpact
+           && currentFrame == FLAME_IMPACT_FADE_FIRST_FRAME && extraFireCycles > 0) {
+            extendingFire = true;
+            currentFrame = FLAME_IMPACT_FADE_FIRST_FRAME - FLAME_IMPACT_LOOP_FRAMES;
+        }
 
         if(explosionID == Explosion_FlameImpact
            && persistentDamage > 0

@@ -23,6 +23,7 @@
 #include <GUI/StaticContainer.h>
 #include <GUI/Spacer.h>
 #include <GUI/TextButton.h>
+#include <GUI/AircraftCountButton.h>
 #include <GUI/PictureButton.h>
 #include <GUI/PictureLabel.h>
 #include <GUI/Label.h>
@@ -37,6 +38,7 @@
 #include <RadarView.h>
 
 class ObjectInterface;
+class House;
 
 /// Deliberately distinct from the routine sidebar controls.
 class SkipMissionButton : public TextButton {
@@ -119,6 +121,7 @@ public:
     void toggleCityStatsOverlay() { showCityStatsOverlay = !showCityStatsOverlay; }
 
 private:
+    void refreshAircraftButtons();
     void removeOldContainer();
     /// Disables the freshly created object panel while observing, so every panel type is
     /// read-only from one place. See the definition for why disabling the container is enough.
@@ -160,12 +163,17 @@ private:
     TextButton          pollutionOverlayButton;
     TextButton          statsButton;            ///< Opens the read-only match statistics window
     SkipMissionButton   skipMissionButton;
-    TextButton          ornithopterSelectButton;///< Button that selects all owned ornithopters
-    TextButton          chemicalCarryallSelectButton;///< Button that selects all owned chemical carryalls
+    AircraftCountButton ornithopterSelectButton;///< Select all controllable, responding ornithopters
+    AircraftCountButton chemicalCarryallSelectButton;///< Select all controllable, responding chemical carryalls
+    bool                tornieFamilyPresentation = false;
+    Uint32              aircraftCountCycle = static_cast<Uint32>(-1);
+    const House*        aircraftCountHouse = nullptr;
 
     bool                showCityStatsOverlay;   ///< Whether to show the city stats overlay
 
     Label               modVersionLabel;        ///< High-contrast active match mod/version badge.
+    Label               harvesterCountLabel;    ///< Local-house count, independent of watermark visibility
+    int                 displayedHarvesterCount = -1;
     Label               populationLabel;        ///< Always-visible "Pop: N" pill (city sim mode only). Refreshed in update().
     Label               rciDemandLabel;         ///< RCI demand readout (city sim mode only), sits just below populationLabel.
     int                 lastShownPopulation = -1; ///< Tracks last value pushed to populationLabel; avoids redundant setText.

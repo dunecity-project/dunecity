@@ -33,6 +33,8 @@
 #include <units/UnitBase.h>
 #include <units/MCV.h>
 #include <units/Harvester.h>
+#include <units/HarvesterHelpers.h>
+#include <mod/ModManager.h>
 
 #include <algorithm>
 
@@ -124,7 +126,8 @@ void AIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     if(pObject->isAStructure()) {
         //scramble some free units to defend
         scrambleUnitsAndDefend(pDamager);
-    } else if(pObject->getItemID() == Unit_Harvester) {
+    } else if(pObject->getItemID() == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
+        && (pObject->getItemID() == Unit_CapacityHarvester || pObject->getItemID() == Unit_FastHarvester))) {
         //scramble some free units to defend
         scrambleUnitsAndDefend(pDamager);
 
@@ -146,6 +149,8 @@ void AIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 void AIPlayer::scrambleUnitsAndDefend(const ObjectBase* pIntruder) {
     for(const UnitBase* pUnit : getUnitList()) {
         if(pUnit->isRespondable() && (pUnit->getOwner() == getHouse())) {
+            if (ModManager::instance().isTornieFamilyContentActive()
+                && (pUnit->getAttackMode() == SABOTAGE || isHarvesterLikeUnit(pUnit->getItemID()))) continue;
             if((pUnit->getAttackMode() != HUNT) && !pUnit->hasATarget()) {
                 Uint32 itemID = pUnit->getItemID();
                 if((itemID != Unit_Harvester) && (itemID != Unit_MCV) && (itemID != Unit_Carryall)
@@ -224,6 +229,7 @@ Coord AIPlayer::findPlaceLocation(Uint32 itemID) {
                     rating = 10000000;
                 } break;
 
+                case Structure_Doublefinery:
                 case Structure_Refinery: {
                     // place near spice
                     Coord spicePos;
@@ -394,6 +400,7 @@ void AIPlayer::build() {
             if((pStructure->isRepairing() == false) && (pStructure->getHealth() < pStructure->getMaxHealth())) {
                 doRepair(pStructure);
             }
+            if (doUpgradeScoutpost(pStructure, getHouse()->getCredits())) continue;
 
             if(pStructure->isABuilder()) {
                 const BuilderBase* pBuilder = static_cast<const BuilderBase*>(pStructure);
@@ -442,8 +449,8 @@ void AIPlayer::build() {
                     case Structure_HeavyFactory: {
                         if(isAllowedToArm() && (pBuilder->getProductionQueueSize() < 1) && (pBuilder->getBuildListSize() > 0)) {
 
-                            if(getHouse()->getNumItems(Unit_Harvester) < getMaxHarvester()) {
-                                doProduceItem(pBuilder, Unit_Harvester);
+                            if(getAIHarvesterCount() < getMaxHarvester()) {
+                                doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                             } else if(getHouse()->getCredits() > 1500) {
                                 int numTanks = getHouse()->getNumItems(Unit_Devastator) + getHouse()->getNumItems(Unit_SiegeTank) + getHouse()->getNumItems(Unit_Tank);
                                 int numLauncher = getHouse()->getNumItems(Unit_Launcher) + getHouse()->getNumItems(Unit_Deviator);
@@ -470,7 +477,7 @@ void AIPlayer::build() {
                     case Structure_HighTechFactory: {
                         if(isAllowedToArm() && (getHouse()->getCredits() > 800) && (pBuilder->getProductionQueueSize() < 1)) {
 
-                            if(getHouse()->getNumItems(Unit_Carryall) < (getHouse()->getNumItems(Unit_Harvester)+1)/2) {
+                            if(getHouse()->getNumItems(Unit_Carryall) < (getAIHarvesterCount()+1)/2) {
                                 doProduceItem(pBuilder, Unit_Carryall);
                             } else if(getHouse()->getCredits() > 2500) {
                                 doProduceItem(pBuilder, Unit_Ornithopter);
@@ -483,15 +490,15 @@ void AIPlayer::build() {
                         if(isAllowedToArm() && pStarPort->okToOrder())  {
                             const Choam& choam = getHouse()->getChoam();
 
-                            if(getHouse()->getNumItems(Unit_Harvester) < getMaxHarvester() && choam.getNumAvailable(Unit_Harvester) > 0) {
+                            if(getAIHarvesterCount() < getMaxHarvester() && choam.getNumAvailable(Unit_Harvester) > 0) {
                                 if(getHouse()->getCredits() > 300) {
-                                    doProduceItem(pBuilder, Unit_Harvester);
+                                    doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                                     if(getHouse()->getCredits() > 300 && choam.getNumAvailable(Unit_Harvester) > 0) {
-                                        doProduceItem(pBuilder, Unit_Harvester);
+                                        doProduceItem(pBuilder, chooseTornieHarvester(pBuilder, getHouse()->getCredits()));
                                     }
                                     doPlaceOrder(pStarPort);
                                 }
-                            } else if(getHouse()->getNumItems(Unit_Carryall) < (getHouse()->getNumItems(Unit_Harvester)+1)/2 && choam.getNumAvailable(Unit_Carryall) > 0) {
+                            } else if(getHouse()->getNumItems(Unit_Carryall) < (getAIHarvesterCount()+1)/2 && choam.getNumAvailable(Unit_Carryall) > 0) {
                                 if(getHouse()->getCredits() > 800) {
                                     doProduceItem(pBuilder, Unit_Carryall);
                                     doPlaceOrder(pStarPort);
@@ -533,7 +540,7 @@ void AIPlayer::build() {
                                     Uint32 itemID = NONE_ID;
                                     if((getHouse()->getNumItems(Structure_WindTrap) == 0 || (getHouse()->isPowerRequired() && getHouse()->getProducedPower() - getHouse()->getPowerRequirement() < 50)) && pBuilder->isAvailableToBuild(Structure_WindTrap)) {
                                         itemID = Structure_WindTrap;
-                                    } else if(getHouse()->getNumItems(Structure_Refinery) < 3 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
+                                    } else if(getAIRefineryBays() < 3 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
                                         itemID = Structure_Refinery;
                                     } else if((getHouse()->hasRadar() == false) && pBuilder->isAvailableToBuild(Structure_Radar)) {
                                         itemID = Structure_Radar;
@@ -571,9 +578,9 @@ void AIPlayer::build() {
                                         itemID = Structure_Silo;
                                     } else if(getHouse()->getCredits() > 2000 && (getHouse()->getNumItems(Structure_RepairYard) < 2) && pBuilder->isAvailableToBuild(Structure_RepairYard)) {
                                         itemID = Structure_RepairYard;
-                                    } else if(((difficulty == Difficulty::Medium) || (difficulty == Difficulty::Hard)) && getHouse()->getNumItems(Structure_Refinery) < 4 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
+                                    } else if(((difficulty == Difficulty::Medium) || (difficulty == Difficulty::Hard)) && getAIRefineryBays() < 4 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
                                         itemID = Structure_Refinery;
-                                    } else if((difficulty == Difficulty::Hard) && getHouse()->getNumItems(Structure_Refinery) < 5 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
+                                    } else if((difficulty == Difficulty::Hard) && getAIRefineryBays() < 5 && pBuilder->isAvailableToBuild(Structure_Refinery)) {
                                         itemID = Structure_Refinery;
                                     } else if((getHouse()->getNumItems(Structure_HeavyFactory) < 3) && pBuilder->isAvailableToBuild(Structure_HeavyFactory)) {
                                         itemID = Structure_HeavyFactory;
@@ -583,6 +590,8 @@ void AIPlayer::build() {
                                         itemID = Structure_RocketTurret;
                                     }
 
+                                    const Uint32 variant = chooseTornieStructure(pBuilder, itemID, getHouse()->getCredits());
+                                    if (variant != itemID && findPlaceLocation(variant).isValid()) itemID = variant;
                                     if(itemID != NONE_ID) {
                                         Coord location = findPlaceLocation(itemID);
 
@@ -686,6 +695,7 @@ void AIPlayer::attack() {
     const UnitBase* pLeaderUnit = nullptr;
     std::vector<const UnitBase*> wave;
     for(const UnitBase *pUnit : getUnitList()) {
+        if (ModManager::instance().isTornieFamilyContentActive() && isHarvesterLikeUnit(pUnit->getItemID())) continue;
         if (pUnit->isRespondable()
             && (pUnit->getOwner() == getHouse())
             && pUnit->isActive()
@@ -740,7 +750,9 @@ void AIPlayer::checkAllUnits() {
     for(const UnitBase* pUnit : getUnitList()) {
         if(pUnit->getItemID() == Unit_Sandworm) {
                 for(const UnitBase* pUnit2 : getUnitList()) {
-                    if(pUnit2->getOwner() == getHouse() && pUnit2->getItemID() == Unit_Harvester) {
+                    if(pUnit2->getOwner() == getHouse() && (pUnit2->getItemID() == Unit_Harvester
+                        || (ModManager::instance().isTornieFamilyContentActive()
+                            && (pUnit2->getItemID() == Unit_CapacityHarvester || pUnit2->getItemID() == Unit_FastHarvester)))) {
                         const Harvester* pHarvester = static_cast<const Harvester*>(pUnit2);
                         if( getMap().tileExists(pHarvester->getLocation())
                             && !getMap().getTile(pHarvester->getLocation())->isRock()
@@ -769,9 +781,11 @@ void AIPlayer::checkAllUnits() {
                 }
             } break;
 
+            case Unit_CapacityHarvester:
+            case Unit_FastHarvester:
             case Unit_Harvester: {
                 const Harvester* pHarvester = static_cast<const Harvester*>(pUnit);
-                if(getHouse()->getNumItems(Unit_Harvester) < 3 && pHarvester->getAmountOfSpice() >= HARVESTERMAXSPICE/2) {
+                if(getAIHarvesterCount() < 3 && pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity()/2) {
                     doReturn(pHarvester);
                 }
             } break;
@@ -825,16 +839,16 @@ bool AIPlayer::isAllowedToArm() const {
 int AIPlayer::getMaxHarvester() const {
     switch(difficulty) {
         case Difficulty::Easy: {
-            return getHouse()->getNumItems(Structure_Refinery);
+            return getAIRefineryBays();
         }
 
         case Difficulty::Medium: {
-            return (2*getHouse()->getNumItems(Structure_Refinery)+1)/3;
+            return (2*getAIRefineryBays()+1)/3;
         }
 
         case Difficulty::Hard:
         default: {
-            return 2*getHouse()->getNumItems(Structure_Refinery);
+            return 2*getAIRefineryBays();
         }
     }
 }

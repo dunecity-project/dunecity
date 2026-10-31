@@ -28,6 +28,8 @@
 #include <structures/BuilderBase.h>
 #include <units/UnitBase.h>
 #include <FormationOrders.h>
+#include <units/HarvesterHelpers.h>
+#include <mod/ModManager.h>
 #include <algorithm>
 #include <array>
 
@@ -86,6 +88,19 @@ const ItemArray<int, Num_ItemID> buildPriorityMap = []() {
     data[Structure_RocketTurret] = 100;  // Dynasty structureinfo.c line 1103
     data[Structure_Silo] = 0;
     data[Structure_Radar] = 0;
+    data[Unit_Troopers5] = data[Unit_Troopers];
+    data[Unit_Infantry5] = data[Unit_Infantry];
+    data[Unit_FlameQuad] = data[Unit_Quad];
+    data[Unit_GasInfantry] = data[Unit_Soldier];
+    data[Unit_FlameTrooper] = data[Unit_Trooper];
+    data[Unit_EliteOrnithopter] = data[Unit_Ornithopter];
+    data[Unit_RaiderQuad] = data[Unit_Quad];
+    data[Unit_RangedTank] = data[Unit_Tank];
+    data[Unit_SlowTank] = data[Unit_Tank];
+    data[Unit_CapacityHarvester] = data[Unit_Harvester];
+    data[Unit_FastHarvester] = data[Unit_Harvester];
+    data[Unit_TameSandworm] = data[Unit_Tank];
+    data[Structure_Slowpost] = data[Structure_GunTurret];
 
     return data;
 }();
@@ -136,6 +151,20 @@ const ItemArray<int, Num_ItemID> targetPriorityMap = []() {
     data[Structure_RocketTurret] = 175;
     data[Structure_Silo] = 150;
     data[Structure_Radar] = 275;
+    data[Unit_Troopers5] = data[Unit_Troopers];
+    data[Unit_Infantry5] = data[Unit_Infantry];
+    data[Unit_FlameQuad] = data[Unit_Quad];
+    data[Unit_GasInfantry] = data[Unit_Soldier];
+    data[Unit_FlameTrooper] = data[Unit_Trooper];
+    data[Unit_EliteOrnithopter] = data[Unit_Ornithopter];
+    data[Unit_RaiderQuad] = data[Unit_Quad];
+    data[Unit_RangedTank] = data[Unit_Tank];
+    data[Unit_SlowTank] = data[Unit_Tank];
+    data[Unit_CapacityHarvester] = data[Unit_Harvester];
+    data[Unit_FastHarvester] = data[Unit_Harvester];
+    data[Unit_TameSandworm] = data[Unit_Tank];
+    data[Structure_Doublefinery] = data[Structure_Refinery];
+    data[Structure_Slowpost] = data[Structure_GunTurret];
 
     return data;
 }();
@@ -235,6 +264,7 @@ void CampaignAIPlayer::onObjectWasBuilt(const ObjectBase* pObject) {
 }
 
 void CampaignAIPlayer::onDecrementStructures(int itemID, const Coord& location) {
+    if (itemID == Structure_Slowpost && ModManager::instance().isTornieFamilyContentActive()) itemID = Structure_Scoutpost;
     // ORIGINAL AI: Add to 5-slot rebuild queue (structure.c:340-354)
     if(rebuildQueue.size() < 5) {
         rebuildQueue.emplace_back(itemID, location);
@@ -261,6 +291,7 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
     }
     
     const UnitBase* pUnit = static_cast<const UnitBase*>(pObject);
+    if (ModManager::instance().isTornieFamilyContentActive() && pUnit->getAttackMode() == SABOTAGE) return;
     const ObjectBase* pDamager = getObject(damagerID);
     if(!pDamager || !pDamager->getOwner()) {
         return;
@@ -276,7 +307,8 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
     if(!pDamager->getOwner()->isNatives()) attackTriggered = true;
 
     // Guard harvesters aggressively (Original AI behaviour tweak)
-    if(pObject->getItemID() == Unit_Harvester) {
+    if(pObject->getItemID() == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
+        && isHarvesterLikeUnit(pObject->getItemID()))) {
         scrambleUnitsAndDefend(pDamager);
     }
     
@@ -296,6 +328,8 @@ void CampaignAIPlayer::scrambleUnitsAndDefend(const ObjectBase* pIntruder) {
     }
     
     for(const UnitBase* pUnit : getUnitList()) {
+        if (ModManager::instance().isTornieFamilyContentActive()
+            && (pUnit->getAttackMode() == SABOTAGE || isHarvesterLikeUnit(pUnit->getItemID()))) continue;
         if(pUnit->getOwner() != getHouse() || !pUnit->isRespondable() || pUnit->wasForced()) {
             continue;
         }
@@ -377,6 +411,7 @@ void CampaignAIPlayer::updateStructures() {
             continue;
         }
         
+        if (doUpgradeScoutpost(pStructure, getHouse()->getCredits())) continue;
         // Handle builders
         if(pStructure->isABuilder()) {
             const BuilderBase* pBuilder = static_cast<const BuilderBase*>(pStructure);
@@ -560,6 +595,8 @@ void CampaignAIPlayer::updateUnits() {
     // Collect idle combat units for attack team staging; a wave still marching on its target
     // in formation is not idle.
     for(const UnitBase* pUnit : getUnitList()) {
+        if (ModManager::instance().isTornieFamilyContentActive()
+            && (pUnit->getAttackMode() == SABOTAGE || isHarvesterLikeUnit(pUnit->getItemID()))) continue;
         if(pUnit->getOwner() != getHouse() || 
            pUnit->wasForced() || 
            !pUnit->isRespondable() || 
@@ -682,6 +719,8 @@ void CampaignAIPlayer::triggerFullScaleAttack() {
     
     // Set all combat units to HUNT mode
     for(const UnitBase* pUnit : getUnitList()) {
+        if (ModManager::instance().isTornieFamilyContentActive()
+            && (pUnit->getAttackMode() == SABOTAGE || isHarvesterLikeUnit(pUnit->getItemID()))) continue;
         if(pUnit->getOwner() != pHouse) continue;
         
         // Skip non-combat units

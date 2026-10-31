@@ -311,6 +311,7 @@ if(NOT APPLE)
     else()
         install(FILES 
             config/ObjectData.ini.default
+            config/Achievements.ini
             "config/QuantBot Config.ini.default"
             "config/Dune City.ini"
             config/README.md

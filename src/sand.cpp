@@ -18,6 +18,7 @@
 
 #include <sand.h>
 #include <Network/NetworkManager.h>
+#include <Campaign/CoopCampaignRuntime.h>
 
 #include <globals.h>
 #include <mod/ModManager.h>
@@ -49,6 +50,12 @@
     \return the surface corresponding. This surface should not be freed or modified. nullptr on error.
 */
 SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        if(auto* portrait = pGFXManager->getFactionTrooperPortrait(itemID, house)) return portrait;
+        if((itemID == Unit_Trooper || itemID == Unit_Troopers || itemID == Unit_Troopers5)
+           && isHouseFaction(house, HOUSE_KLESHMERSH))
+            return pGFXManager->getSmallDetailPic(Picture_FlameTrooper, house);
+    }
     int newPicID;
 
     switch(itemID) {
@@ -85,6 +92,8 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Structure_Chemipost:          newPicID = Picture_Chemipost;           break;
         case Structure_LoveFactory:        newPicID = Picture_LoveFactory;       break;
         case Structure_ChaosFactory:       newPicID = Picture_ChaosFactory;      break;
+        case Structure_Doublefinery:       newPicID = Picture_Doublefinery;       break;
+        case Structure_Slowpost:           newPicID = Picture_Slowpost;           break;
         case Structure_ZoneResidential:    newPicID = Picture_ZoneResidential;    break;
         case Structure_ZoneCommercial:     newPicID = Picture_ZoneCommercial;     break;
         case Structure_ZoneIndustrial:     newPicID = Picture_ZoneIndustrial;     break;
@@ -121,6 +130,18 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Unit_EliteSiegeTank:           newPicID = Picture_EliteSiegeTank;      break;
         case Unit_ChemicalSiegeTank:        newPicID = Picture_ChemicalSiegeTank;   break;
         case Unit_RebelHarvester:           newPicID = Picture_Harvestank;          break;
+        case Unit_FlameQuad:               newPicID = Picture_FlameQuad;          break;
+        case Unit_GasInfantry:             newPicID = Picture_GasInfantry;        break;
+        case Unit_FlameTrooper:            newPicID = Picture_FlameTrooper;       break;
+        case Unit_EliteOrnithopter:        newPicID = Picture_Ornithopter;        break;
+        case Unit_RaiderQuad:              newPicID = Picture_RaiderQuad;         break;
+        case Unit_RangedTank:              newPicID = Picture_RangedTank;        break;
+        case Unit_SlowTank:                newPicID = Picture_SlowTank;          break;
+        case Unit_CapacityHarvester:       newPicID = Picture_CapacityHarvester;  break;
+        case Unit_FastHarvester:           newPicID = Picture_FastHarvester;      break;
+        case Unit_TameSandworm:            newPicID = Picture_Sandworm;           break;
+        case Unit_Infantry5:               newPicID = Picture_Soldier;            break;
+        case Unit_Troopers5:               newPicID = Picture_Trooper;            break;
         case Unit_Soldier:                  newPicID = Picture_Soldier;             break;
         case Unit_Trooper: {
             switch(house) {
@@ -224,6 +245,7 @@ Coord getStructureSize(int itemID) {
         case Structure_Palace:              return Coord(3,3); break;
         case Structure_Radar:               return Coord(2,2); break;
         case Structure_Refinery:            return Coord(3,2); break;
+        case Structure_Doublefinery:        return Coord(5,2); break;
         case Structure_RepairYard:          return Coord(3,2); break;
         case Structure_RocketTurret:        return Coord(1,1); break;
         case Structure_Silo:                return Coord(2,2); break;
@@ -249,6 +271,7 @@ Coord getStructureSize(int itemID) {
         case Structure_TechCenter:          return Coord(3,2); break;
         case Structure_Scoutpost:           return Coord(1,1); break;
         case Structure_Flamepost:           return Coord(1,1); break;
+        case Structure_Slowpost:            return Coord(1,1); break;
         case Structure_Chemipost:           return Coord(1,1); break;
         case Structure_LoveFactory:         return Coord(2,3); break;
         case Structure_ChaosFactory:        return Coord(3,2); break;
@@ -276,6 +299,7 @@ Uint32  getItemIDByName(const std::string& name) {
     else if(lowerName == "palace")                                              return Structure_Palace;
     else if((lowerName == "outpost") || (lowerName == "radar"))                 return Structure_Radar;
     else if(lowerName == "refinery")                                            return Structure_Refinery;
+    else if(lowerName == "doublefinery")                                        return Structure_Doublefinery;
     else if((lowerName == "repair") || (lowerName == "repair yard"))            return Structure_RepairYard;
     else if((lowerName == "spice silo") || (lowerName == "silo"))               return Structure_Silo;
     else if((lowerName == "concrete") || (lowerName == "slab1"))                return Structure_Slab1;
@@ -300,6 +324,7 @@ Uint32  getItemIDByName(const std::string& name) {
     else if((lowerName == "tech center") || (lowerName == "techcenter"))          return Structure_TechCenter;
     else if((lowerName == "scoutpost") || (lowerName == "scout post") || (lowerName == "green post") || (lowerName == "sentinel post") || (lowerName == "avant-poste") || (lowerName == "avant poste")) return Structure_Scoutpost;
     else if((lowerName == "flamepost") || (lowerName == "flame post"))              return Structure_Flamepost;
+    else if(lowerName == "slowpost")                                            return Structure_Slowpost;
     else if((lowerName == "chemipost") || (lowerName == "chemi post"))              return Structure_Chemipost;
     else if((lowerName == "love factory") || (lowerName == "lovefactory"))       return Structure_LoveFactory;
     else if((lowerName == "chaos factory") || (lowerName == "chaosfactory"))     return Structure_ChaosFactory;
@@ -331,6 +356,18 @@ Uint32  getItemIDByName(const std::string& name) {
     else if(lowerName == "special")                                             return Unit_Special;
     else if(lowerName == "infantry")                                            return Unit_Infantry;
     else if(lowerName == "troopers")                                            return Unit_Troopers;
+    else if(lowerName == "infantry5")                                           return Unit_Infantry5;
+    else if(lowerName == "troopers5")                                           return Unit_Troopers5;
+    else if(lowerName == "elite ornithopter")                                    return Unit_EliteOrnithopter;
+    else if(lowerName == "raider quad")                                         return Unit_RaiderQuad;
+    else if(lowerName == "ranged tank")                                         return Unit_RangedTank;
+    else if(lowerName == "slow tank")                                           return Unit_SlowTank;
+    else if(lowerName == "capacity harvester")                                  return Unit_CapacityHarvester;
+    else if(lowerName == "fast harvester")                                      return Unit_FastHarvester;
+    else if(lowerName == "tame sandworm")                                       return Unit_TameSandworm;
+    else if(lowerName == "flame quad")                                          return Unit_FlameQuad;
+    else if(lowerName == "gas infantry")                                        return Unit_GasInfantry;
+    else if(lowerName == "flame trooper")                                       return Unit_FlameTrooper;
     else if((lowerName == "ambient airplane") || (lowerName == "city airplane")) return Unit_AmbientAirplane;
     else if((lowerName == "ambient helicopter") || (lowerName == "city helicopter")) return Unit_AmbientHelicopter;
     else if(lowerName == "rocket trike")                                        return Unit_RocketTrike;
@@ -361,6 +398,7 @@ std::string getItemNameByID(Uint32 itemID) {
         case Structure_Palace:              return "Palace";            break;
         case Structure_Radar:               return "Outpost";           break;
         case Structure_Refinery:            return "Refinery";          break;
+        case Structure_Doublefinery:        return "Doublefinery";      break;
         case Structure_RepairYard:          return "Repair";            break;
         case Structure_RocketTurret:        return "R-Turret";          break;
         case Structure_Silo:                return "Spice Silo";        break;
@@ -386,6 +424,7 @@ std::string getItemNameByID(Uint32 itemID) {
         case Structure_TechCenter:          return "Tech Center";       break;
         case Structure_Scoutpost:           return "Scoutpost";         break;
         case Structure_Flamepost:           return "Flamepost";         break;
+        case Structure_Slowpost:            return "Slowpost";          break;
         case Structure_Chemipost:           return "Chemipost";         break;
         case Structure_LoveFactory:         return "Love Factory";      break;
         case Structure_ChaosFactory:        return "Chaos Factory";     break;
@@ -416,6 +455,18 @@ std::string getItemNameByID(Uint32 itemID) {
         case Unit_Special:                  return "Special";           break;
         case Unit_Infantry:                 return "Infantry";          break;
         case Unit_Troopers:                 return "Troopers";          break;
+        case Unit_Infantry5:                return "Infantry5";         break;
+        case Unit_Troopers5:                return "Troopers5";         break;
+        case Unit_EliteOrnithopter:         return "Elite Ornithopter";  break;
+        case Unit_RaiderQuad:               return "Raider Quad";       break;
+        case Unit_RangedTank:               return "Ranged Tank";       break;
+        case Unit_SlowTank:                 return "Slow Tank";         break;
+        case Unit_CapacityHarvester:        return "Capacity Harvester"; break;
+        case Unit_FastHarvester:            return "Fast Harvester";    break;
+        case Unit_TameSandworm:             return "Tame Sandworm";      break;
+        case Unit_FlameQuad:                return "Flame Quad";         break;
+        case Unit_GasInfantry:              return "Gas Infantry";       break;
+        case Unit_FlameTrooper:             return "Flame Trooper";      break;
         case Unit_AmbientAirplane:          return "Ambient Airplane";  break;
         case Unit_AmbientHelicopter:        return "Ambient Helicopter";break;
         case Unit_RocketTrike:              return "Rocket Trike";      break;
@@ -472,9 +523,11 @@ std::string resolveItemName(int itemID) {
         case Structure_AdvancedWindTrapMK2: return _("Advanced Windtrap");                 break;
         case Structure_AdvancedWindTrapMK3: return _("Advanced Windtrap");                 break;
         case Structure_Worfinery:           return _("Worfinery");                         break;
+        case Structure_Doublefinery:        return _("Doublefinery");                       break;
         case Structure_TechCenter:          return _("Tech Center");                       break;
         case Structure_Scoutpost:           return _("Scoutpost");                         break;
         case Structure_Flamepost:           return _("Flamepost");                         break;
+        case Structure_Slowpost:            return settings.general.language == "fr" ? "Poste ralentisseur" : "Slowpost";
         case Structure_Chemipost:           return _("Chemipost");                         break;
         case Structure_LoveFactory:         return _("Love Factory");
         case Structure_ChaosFactory:        return _("Chaos Factory");             break;
@@ -505,6 +558,18 @@ std::string resolveItemName(int itemID) {
         case Unit_Special:                  return _("Sonic/Devast./Devia.");              break;
         case Unit_Infantry:                 return _("@DUNE.ENG|199#Infantry");            break;
         case Unit_Troopers:                 return _("@DUNE.ENG|201#Troopers");            break;
+        case Unit_Infantry5:                return _("Super Infantry Squad");                break;
+        case Unit_Troopers5:                return _("Super Heavy Trooper Squad");           break;
+        case Unit_EliteOrnithopter:         return settings.general.language == "fr" ? "Ornithoptère élite" : "Elite Ornithopter";
+        case Unit_RaiderQuad:               return settings.general.language == "fr" ? "Quad rapide" : "Raider Quad";
+        case Unit_RangedTank:               return settings.general.language == "fr" ? "Tank longue portée" : "Ranged Tank";
+        case Unit_SlowTank:                 return settings.general.language == "fr" ? "Tank ralentisseur" : "Slow Tank";
+        case Unit_CapacityHarvester:        return settings.general.language == "fr" ? "Moissonneuse grande capacité" : "Capacity Harvester";
+        case Unit_FastHarvester:            return settings.general.language == "fr" ? "Moissonneuse rapide" : "Fast Harvester";
+        case Unit_TameSandworm:             return settings.general.language == "fr" ? "Ver apprivoisé" : "Tame Sandworm";
+        case Unit_FlameQuad:                return settings.general.language == "fr" ? "Quad lance-flammes" : "Flame Quad";
+        case Unit_GasInfantry:              return settings.general.language == "fr" ? "Infanterie à gaz" : "Gas Infantry";
+        case Unit_FlameTrooper:             return settings.general.language == "fr" ? "Trooper lance-flammes" : "Flame Trooper";
         case Unit_AmbientAirplane:          return _("City Airplane");                     break;
         case Unit_AmbientHelicopter:        return _("City Helicopter");                   break;
         case Unit_RocketTrike:              return _("Rocket Trike");                      break;
@@ -539,9 +604,9 @@ HOUSETYPE getHouseByName(const std::string& name) {
     else if(lowerName == "mercenary")    return HOUSE_MERCENARY;
     else if(lowerName == "neutral")      return HOUSE_NEUTRAL;
     else if((lowerName == "rebel") || (lowerName == "rebels")) return HOUSE_REBELS;
-    else if(ModManager::instance().isTornieContentActive() && lowerName == "wildspade") return HOUSE_WILDSPADE;
-    else if(ModManager::instance().isTornieContentActive() && lowerName == "kleshmersh") return HOUSE_KLESHMERSH;
-    else if(ModManager::instance().isTornieContentActive() && lowerName == "tharpique") return HOUSE_THARPIQUE;
+    else if(ModManager::instance().isTornieFamilyContentActive() && lowerName == "wildspade") return HOUSE_WILDSPADE;
+    else if(ModManager::instance().isTornieFamilyContentActive() && lowerName == "kleshmersh") return HOUSE_KLESHMERSH;
+    else if(ModManager::instance().isTornieFamilyContentActive() && lowerName == "tharpique") return HOUSE_THARPIQUE;
     else if(isHouseAvailable(HOUSE_CUSTOM)
             && lowerName == strToLower(ModManager::instance().getActiveCustomHouseInfo().displayName)) return HOUSE_CUSTOM;
     else                                return HOUSE_INVALID;
@@ -565,7 +630,7 @@ std::string getHouseNameByNumber(HOUSETYPE house) {
         };
         return houseName[house];
     }
-    if(ModManager::instance().isTornieContentActive()) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
         if(house == HOUSE_WILDSPADE) return "Wildspade";
         if(house == HOUSE_KLESHMERSH) return "Kleshmersh";
         if(house == HOUSE_THARPIQUE) return "Tharpique";
@@ -623,6 +688,12 @@ Uint32 getColorByTerrainType(int terrainType) {
         case Terrain_RedSpice:      color = COLOR_RGB(154, 48, 38); break;
         case Terrain_ThickRedSpice: color = COLOR_RGB(154, 48, 38); break;
         case Terrain_RedSpiceBloom: color = COLOR_RGB(154, 48, 38); break;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_PaleLilacSpiceBloom: color = COLOR_RGB(82, 62, 148); break;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice:
+        case Terrain_WhiteSpiceBloom: color = COLOR_RGB(72, 132, 148); break;
         case Terrain_SpiceBloom:    color = COLOR_BLOOM;       break;
         case Terrain_SpecialBloom:  color = COLOR_BLOOM;       break;
         case Terrain_Slab:          color = COLOR_ROCK;        break;
@@ -820,6 +891,10 @@ void startReplay(const std::string& filename) {
 */
 void startSinglePlayerGame(const GameInitSettings& init)
 {
+    if(coop::isCoopCampaignSettings(init)) {
+        coop::runMultiplayerSession(init);
+        return;
+    }
     GameInitSettings currentGameInitInfo = init;
 
     while(1) {
@@ -856,11 +931,11 @@ void startSinglePlayerGame(const GameInitSettings& init)
                         if(currentGameInitInfo.getGameType() == GameType::Campaign) {
                             const int level = missionNumberToLevelNumber(currentGameInitInfo.getMission());
 
-                            if(level == 4 && (houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
+                            if(level == 4 && (ModManager::instance().isTornieFamilyContentActive() || houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
                                 SDL_Log("Playing meanwhile...");
                                 Meanwhile meanwhile(houseID,true);
                                 meanwhile.run();
-                            } else if(level == 8 && (houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
+                            } else if(level == 8 && (ModManager::instance().isTornieFamilyContentActive() || houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
                                 SDL_Log("Playing meanwhile...");
                                 Meanwhile meanwhile(houseID,false);
                                 meanwhile.run();
@@ -936,6 +1011,10 @@ private:
 
 void startMultiPlayerGame(const GameInitSettings& init)
 {
+    if(coop::isCoopCampaignSettings(init)) {
+        coop::runMultiplayerSession(init);
+        return;
+    }
     GameInitSettings currentGameInitInfo = init;
     try {
         while(true) {
@@ -959,7 +1038,7 @@ void startMultiPlayerGame(const GameInitSettings& init)
                     if(currentGameInitInfo.getGameType() == GameType::CampaignCoop) {
                         const auto house = currentGameInitInfo.getHouseID();
                         if((level == 4 || level == 8)
-                           && (house == HOUSE_HARKONNEN || house == HOUSE_ATREIDES || house == HOUSE_ORDOS))
+                           && (ModManager::instance().isTornieFamilyContentActive() || house == HOUSE_HARKONNEN || house == HOUSE_ATREIDES || house == HOUSE_ORDOS))
                             Meanwhile(house, level == 4).run();
                         else if(level == 9) Finale(house).run();
                     }

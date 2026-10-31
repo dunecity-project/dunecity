@@ -19,6 +19,9 @@
 		1358FE2113D3B72F00FAD5B7 /* Bullet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD5B13D3B72E00FAD5B7 /* Bullet.cpp */; };
 		1358FE2213D3B72F00FAD5B7 /* Choam.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD5C13D3B72E00FAD5B7 /* Choam.cpp */; };
 		1358FE2313D3B72F00FAD5B7 /* Command.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD5D13D3B72E00FAD5B7 /* Command.cpp */; };
+		546000010000000000000001 /* CommandData.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 546000020000000000000001 /* CommandData.cpp */; };
+		546000010000000000000002 /* ChaosMode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 546000020000000000000002 /* ChaosMode.cpp */; };
+		546000010000000000000003 /* RadarResearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 546000020000000000000003 /* RadarResearch.cpp */; };
 		1358FE2413D3B72F00FAD5B7 /* CommandManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD5E13D3B72E00FAD5B7 /* CommandManager.cpp */; };
 		1358FE2413D3B72F00FAD5C8 /* CursorManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD5E13D3B72E00FAD5C8 /* CursorManager.cpp */; };
 		1358FE2513D3B72F00FAD5B7 /* CrossBlendVideoEvent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1358FD6013D3B72E00FAD5B7 /* CrossBlendVideoEvent.cpp */; };
@@ -674,6 +677,9 @@
 		1358FD5B13D3B72E00FAD5B7 /* Bullet.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Bullet.cpp; sourceTree = "<group>"; };
 		1358FD5C13D3B72E00FAD5B7 /* Choam.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Choam.cpp; sourceTree = "<group>"; };
 		1358FD5D13D3B72E00FAD5B7 /* Command.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Command.cpp; sourceTree = "<group>"; };
+		546000020000000000000001 /* CommandData.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CommandData.cpp; sourceTree = "<group>"; };
+		546000020000000000000002 /* ChaosMode.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = mod/ChaosMode.cpp; sourceTree = "<group>"; };
+		546000020000000000000003 /* RadarResearch.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = mod/RadarResearch.cpp; sourceTree = "<group>"; };
 		1358FD5E13D3B72E00FAD5B7 /* CommandManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CommandManager.cpp; sourceTree = "<group>"; };
 		1358FD5E13D3B72E00FAD5C8 /* CursorManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CursorManager.cpp; sourceTree = "<group>"; };
 		1358FD6013D3B72E00FAD5B7 /* CrossBlendVideoEvent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CrossBlendVideoEvent.cpp; sourceTree = "<group>"; };
@@ -1473,6 +1479,9 @@
 				1358FD5B13D3B72E00FAD5B7 /* Bullet.cpp */,
 				1358FD5C13D3B72E00FAD5B7 /* Choam.cpp */,
 				1358FD5D13D3B72E00FAD5B7 /* Command.cpp */,
+				546000020000000000000001 /* CommandData.cpp */,
+				546000020000000000000002 /* ChaosMode.cpp */,
+				546000020000000000000003 /* RadarResearch.cpp */,
 				1358FD5E13D3B72E00FAD5B7 /* CommandManager.cpp */,
 				1358FD5E13D3B72E00FAD5C8 /* CursorManager.cpp */,
 				1358FD5F13D3B72E00FAD5B7 /* CutScenes */,
@@ -2123,6 +2132,9 @@
 				1358FE2113D3B72F00FAD5B7 /* Bullet.cpp in Sources */,
 				1358FE2213D3B72F00FAD5B7 /* Choam.cpp in Sources */,
 				1358FE2313D3B72F00FAD5B7 /* Command.cpp in Sources */,
+				546000010000000000000001 /* CommandData.cpp in Sources */,
+				546000010000000000000002 /* ChaosMode.cpp in Sources */,
+				546000010000000000000003 /* RadarResearch.cpp in Sources */,
 				1358FE2413D3B72F00FAD5B7 /* CommandManager.cpp in Sources */,
 				1358FE2413D3B72F00FAD5C8 /* CursorManager.cpp in Sources */,
 				1358FE2513D3B72F00FAD5B7 /* CrossBlendVideoEvent.cpp in Sources */,

@@ -25,15 +25,18 @@ class QuantBot;
 class Ornithopter final : public AirUnit
 {
 public:
-    explicit Ornithopter(House* newOwner);
-    explicit Ornithopter(InputStream& stream);
-    void init();
+    explicit Ornithopter(House* newOwner, int unitType = Unit_Ornithopter);
+    explicit Ornithopter(InputStream& stream, int unitType = Unit_Ornithopter);
+    void init(int unitType);
     virtual ~Ornithopter();
 
     void save(OutputStream& stream) const override;
 
     void checkPos() override;
     bool canAttack(const ObjectBase* object) const override;
+    void doAttackPos(int xPos, int yPos, bool forced) override;
+    using AirUnit::doAttackObject;
+    void doAttackObject(const ObjectBase* object, bool forced) override;
 
     bool canPass(int xPos, int yPos) const override;
 

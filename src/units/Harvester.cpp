@@ -17,6 +17,9 @@
 
 #include <units/Harvester.h>
 #include <units/UnitMovementPolicy.h>
+#include <Achievements/AchievementEvents.h>
+#include <misc/SpiceEffects.h>
+#include <mod/ModManager.h>
 
 #include <globals.h>
 
@@ -49,9 +52,9 @@
 /* number spice output frames - 1 */
 #define LASTSANDFRAME 2
 
-Harvester::Harvester(House* newOwner) : TrackedUnit(newOwner)
+Harvester::Harvester(House* newOwner, int unitType) : TrackedUnit(newOwner)
 {
-    Harvester::init();
+    Harvester::init(unitType);
 
     setHealth(getMaxHealth());
 
@@ -65,9 +68,9 @@ Harvester::Harvester(House* newOwner) : TrackedUnit(newOwner)
     attackMode = GUARD;
 }
 
-Harvester::Harvester(InputStream& stream) : TrackedUnit(stream)
+Harvester::Harvester(InputStream& stream, int unitType) : TrackedUnit(stream)
 {
-    Harvester::init();
+    Harvester::init(unitType);
 
     harvestingMode = stream.readBool();
     returningToRefinery = stream.readBool();
@@ -77,14 +80,16 @@ Harvester::Harvester(InputStream& stream) : TrackedUnit(stream)
     returnPathFailCounter = 0;  // Runtime counter - not persisted
 }
 
-void Harvester::init()
+void Harvester::init(int unitType)
 {
-    itemID = Unit_Harvester;
+    itemID = unitType;
     registerUnit();
 
     canAttackStuff = false;
 
-    graphicID = ObjPic_Harvester;
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
+    graphicID = familyActive && itemID == Unit_CapacityHarvester ? ObjPic_CapacityHarvester
+        : familyActive && itemID == Unit_FastHarvester ? ObjPic_FastHarvester : ObjPic_Harvester;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
 
     numImagesX = NUM_ANGLES;
@@ -92,6 +97,11 @@ void Harvester::init()
 }
 
 Harvester::~Harvester() = default;
+
+int Harvester::getSpiceCapacity() const {
+    return itemID == Unit_CapacityHarvester
+        && ModManager::instance().isTornieFamilyContentActive() ? HARVESTERMAXSPICE * 3 / 2 : HARVESTERMAXSPICE;
+}
 
 void Harvester::save(OutputStream& stream) const
 {
@@ -154,6 +164,7 @@ void Harvester::blitToScreen()
 void Harvester::checkPos()
 {
     TrackedUnit::checkPos();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
 
     // Log LONG-TERM stuck harvesters (30+ seconds) - ANY harvester not moving
     static std::map<Uint32, int> idleLogCounters;
@@ -218,7 +229,7 @@ void Harvester::checkPos()
                 // Check if path to refinery is blocked - request carryall if stuck.
                 // Waiting for the scheduler to compute a route is not a failure.
                 if(!awaitingPickup && !moving && pathList.empty() && destination != location
-                   && !hasPendingPathRequest()) {
+                   && !hasPendingPathRequest() && (!familyActive || !nextSpotFound)) {
                     // Not moving, no path, but has a destination - path is likely blocked
                     returnPathFailCounter++;
                     if(returnPathFailCounter >= 3) {
@@ -255,7 +266,8 @@ void Harvester::checkPos()
                             returnPathFailCounter = 0;
                         }
                     }
-                } else if(moving || !pathList.empty()) {
+                } else if(moving || !pathList.empty()
+                          || (familyActive && (nextSpotFound || hasPendingPathRequest()))) {
                     // Successfully moving or have path - reset counter
                     returnPathFailCounter = 0;
                 }
@@ -294,8 +306,9 @@ void Harvester::checkPos()
             }
         } else if (harvestingMode && !hasBookedCarrier() && destination.isValid() && (blockDistance(location, destination) >= MIN_CARRYALL_LIFT_DISTANCE)) {
             requestCarryall();
-        } else if(harvestingMode && destination != location && pathList.empty() && !moving) {
-            // Stuck in harvesting mode with unreachable destination
+        } else if(harvestingMode && destination != location && pathList.empty() && !moving
+                  && (!familyActive || (!nextSpotFound && !hasPendingPathRequest()))) {
+            // A queued route or staged final waypoint is still navigation, not a blockage.
             // Give pathfinding a few cycles to resolve, then try carryall or give up
             pathFailCounter++;
             if(pathFailCounter >= 3) {
@@ -312,7 +325,8 @@ void Harvester::checkPos()
                 }
                 // If already has a booked carrier, just wait
             }
-        } else if(harvestingMode && (!pathList.empty() || moving)) {
+        } else if(harvestingMode && (!pathList.empty() || moving
+                  || (familyActive && (nextSpotFound || hasPendingPathRequest())))) {
             // Successfully moving or have path - reset counter
             pathFailCounter = 0;
         } else if(respondable && !harvestingMode && attackMode != STOP) {
@@ -444,7 +458,7 @@ void Harvester::drawSelectionBox()
 
     if((getOwner() == pLocalHouse) && (spice > 0)) {
         for(int i=1;i<=currentZoomlevel+1;i++) {
-            renderDrawHLine(renderer, dest.x+1, dest.y-i-(currentZoomlevel+1), dest.x+1 + (lround(((spice)/HARVESTERMAXSPICE)*(dest.w-3))), COLOR_ORANGE);
+            renderDrawHLine(renderer, dest.x+1, dest.y-i-(currentZoomlevel+1), dest.x+1 + (lround(((spice)/getSpiceCapacity())*(dest.w-3))), COLOR_ORANGE);
         }
     }
 }
@@ -479,7 +493,7 @@ void Harvester::doReturn()
 
 void Harvester::setAmountOfSpice(FixPoint newSpice)
 {
-    if((newSpice >= 0) && (newSpice <= HARVESTERMAXSPICE)) {
+    if((newSpice >= 0) && (newSpice <= getSpiceCapacity())) {
         spice = newSpice;
     }
 }
@@ -557,6 +571,7 @@ void Harvester::setReturned()
 void Harvester::move()
 {
     TrackedUnit::move();
+    const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
     
     // Log harvesters sitting on spice tiles
     static std::map<Uint32, int> onSpiceCounter;
@@ -566,14 +581,21 @@ void Harvester::move()
         if(harvestingMode) {
             // Track stuck harvesters (removed spammy 5-second logging)
             if(location == destination) {
-                if(spice < HARVESTERMAXSPICE) {
+                if(spice < getSpiceCapacity()) {
 
                     Tile* tile = currentGameMap->getTile(location);
 
                     if(tile->hasSpice()) {
 
+                        AchievementEvents::spice(getOwner(), tile);
                         int beforeTileType = tile->getType();
-                        spice += tile->harvestSpice();
+                        const bool healingSpice = familyActive && tile->isPaleLilacSpice();
+                        const FixPoint harvested = tile->harvestSpice();
+                        spice += harvested;
+                        if(healingSpice && harvested > 0
+                           && spiceHealingTick(currentGame->getGameCycleCount(), getObjectID())) {
+                            addHealth();
+                        }
                         int afterTileType = tile->getType();
 
                         if(beforeTileType != afterTileType) {
@@ -598,7 +620,7 @@ void Harvester::move()
                 } else {
                     doReturn();
                 }
-            } else if(pathList.empty()) {
+            } else if(pathList.empty() && (!familyActive || (!nextSpotFound && !hasPendingPathRequest()))) {
                 // Stuck: in harvesting mode with a destination, but can't path there.
                 // If a carryall is coming to deliver us, preserve harvestingMode so
                 // checkPos() doesn't reset guardPoint/destination back to the old tile.
@@ -612,7 +634,7 @@ void Harvester::move()
 
 bool Harvester::isHarvesting() const {
     return  harvestingMode
-            && (spice < HARVESTERMAXSPICE)
+            && (spice < getSpiceCapacity())
             && (blockDistance(location, destination) <= FixPt_SQRT2)
             && currentGameMap->tileExists(location) && currentGameMap->getTile(location)->hasSpice();
 }
@@ -640,14 +662,9 @@ FixPoint Harvester::extractSpice(FixPoint extractionSpeed)
 
 void Harvester::setSpeeds()
 {
-    const int cargoPercent = std::clamp((spice*100/HARVESTERMAXSPICE).floor(),0,100);
+    const int cargoPercent = std::clamp((spice*100/getSpiceCapacity()).floor(),0,100);
+    // All three blueprints share harvester terrain/cargo timing; ObjectData sets base speed.
     FixPoint speed = getTerrainAdjustedSpeed(cargoPercent);
-    if(itemID != Unit_Harvester) {
-        // Preserve the explicit behavior of mod-only harvester derivatives.
-        speed = getMaxSpeed() * (1-0.4_fix*spice/HARVESTERMAXSPICE);
-        if(isBadlyDamaged()) speed *= HEAVILYDAMAGEDSPEEDMULTIPLIER;
-        if(currentGameMap->getTile(location)->isRoad()) speed *= ROADSPEEDMULTIPLIER;
-    }
 
     switch(drawnAngle){
         case LEFT:      xSpeed = -speed;                    ySpeed = 0;         break;

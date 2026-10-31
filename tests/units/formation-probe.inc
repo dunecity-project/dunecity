@@ -1066,6 +1066,7 @@ int runFormationProbe() {
         constexpr size_t kFormationRecord = 4 + 8 + 8;     // group, slot, speed cap (9857)
         constexpr size_t kHuntFields = 1 + 1;              // hunt flag and facing (9859)
         constexpr size_t kFormUpFields = 8 + 1 + 4;        // form-up tile, resume kind and pace unit type (9860)
+        constexpr size_t kTornieFields = 4 + 4 + 8;        // production house, slow timer and step offset (9878)
         FormationOrders::join({tank, tank}, FormationPlanner::makeGroupID(1, 0x123456), {Coord(1, 2), Coord(1, 2)}, true, 3,
                               FormationOrders::Resume::Walk);
         tank->formationFormUp = Coord(3, 4);
@@ -1082,14 +1083,17 @@ int runFormationProbe() {
         size_t last = current.size();
         while(last > first && current[last - 1] == plain[last - 1]) --last;
         constexpr size_t kAll = kFormationRecord + kHuntFields + kFormUpFields;
-        require(last - first <= kAll && first + kAll <= current.size()
+        constexpr size_t kAllWithTornie = kAll + kTornieFields;
+        require(last - first <= kAll && first + kAllWithTornie <= current.size()
                 && first >= kEmptyOrderQueueBlock, "The formation record is not where expected");
+        // Old records also omit the 9878 technology/slow-state tail before the derived fields.
+        const std::string derived = current.substr(first + kAllWithTornie);
         // 9854: neither the order queue nor the formation record with its later fields.
-        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock) + current.substr(first + kAll);
+        const std::string old9854 = current.substr(0, first - kEmptyOrderQueueBlock) + derived;
         // 9857: the formation record without the hunt flag, facing and form-up after it.
-        const std::string old9857 = current.substr(0, first + kFormationRecord) + current.substr(first + kAll);
+        const std::string old9857 = current.substr(0, first + kFormationRecord) + derived;
         // 9859: everything but the form-up tile, resume kind and pace unit type.
-        const std::string old9859 = current.substr(0, first + kFormationRecord + kHuntFields) + current.substr(first + kAll);
+        const std::string old9859 = current.substr(0, first + kFormationRecord + kHuntFields) + derived;
         game->loadedSavegameVersion = 9859;
         {
             IMemoryStream in(old9859.data(), old9859.size());

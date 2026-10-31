@@ -41,7 +41,9 @@ int tiles(Coord a, Coord b) { return blockDistance(a, b).lround(); }
 
 bool lightItem(Uint32 item) {
     return QuantBotBuildPolicy::isLightRaider(item) || item == Unit_Infantry || item == Unit_Soldier
-        || item == Unit_Trooper || item == Unit_Troopers;
+        || item == Unit_Trooper || item == Unit_Troopers
+        || (ModManager::instance().isTornieFamilyContentActive()
+            && (item == Unit_Troopers5 || item == Unit_Infantry5 || item == Unit_GasInfantry || item == Unit_FlameTrooper));
 }
 
 bool launcherItem(Uint32 item) {
@@ -50,7 +52,7 @@ bool launcherItem(Uint32 item) {
 
 bool enemyHarvester(const ObjectBase* object) {
     return object && object->isAUnit()
-        && (object->getItemID() == Unit_Harvester || object->getItemID() == Unit_RebelHarvester);
+        && isHarvesterLikeUnit(object->getItemID());
 }
 
 } // namespace

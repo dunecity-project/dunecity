@@ -79,6 +79,12 @@ struct ModInfo {
     std::string gameVersion;     ///< Game version this mod was created for
     ModChecksums checksums;      ///< Cached checksums
     CustomHouseInfo customHouse; ///< Optional generic ninth-house registration
+    CustomHouseInfo guestCustomHouse; ///< Optional additional named house registration
+    std::vector<int> playableHouses; ///< Optional explicit playable roster, in declaration order
+    unsigned spiceVariantMask = 0;
+    unsigned spiceVariantOverrideMask = 0;
+    bool customUnitsAndBuildings = true;
+    bool customUnitsAndBuildingsOverride = false;
     std::vector<ModMentatInfo> mentats; ///< Optional active-mod Mentat presentations by house ID
     
     unsigned revisionVersion = 0; ///< Saved Workshop revision, separate from legacy author version.

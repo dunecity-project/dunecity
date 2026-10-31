@@ -34,7 +34,7 @@ public:
     void save(OutputStream& stream) const;
     void load(InputStream& stream);
 
-    int getPrice(Uint32 itemID) const;
+    int getPrice(Uint32 itemID, bool applyResearch = true) const;
     bool isCheap(Uint32 itemID) const;
     int getNumAvailable(Uint32 itemID) const;
 

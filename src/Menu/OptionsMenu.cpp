@@ -267,6 +267,16 @@ OptionsMenu::OptionsMenu() : MenuBase()
     flagsHBox.addWidget(Spacer::create(), 0.5);
     pages[0].addWidget(&flagsHBox, 32);
     pages[0].addWidget(VSpacer::create(6));
+    showHarvesterCountCheckbox.setText(_("Show Harvester Count"));
+    showHarvesterCountCheckbox.setChecked(settings.video.showHarvesterCount);
+    showHarvesterCountCheckbox.setOnClick(std::bind(&OptionsMenu::onChangeOption, this, true));
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        harvesterCountHBox.addWidget(Spacer::create(), 0.5);
+        harvesterCountHBox.addWidget(&showHarvesterCountCheckbox, 480);
+        harvesterCountHBox.addWidget(Spacer::create(), 0.5);
+        pages[1].addWidget(&harvesterCountHBox, 32);
+        pages[1].addWidget(VSpacer::create(6));
+    }
     videoHBox2.addWidget(optionLabel(_("Cursor")), 110);
     cursorVisibilityDropDownBox.addEntry(_("Auto"), 0);
     cursorVisibilityDropDownBox.addEntry(_("Hidden"), 1);
@@ -557,6 +567,7 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
     bChanged |= (settings.video.frameLimit != frameLimitCheckbox.isChecked());
     bChanged |= (settings.video.scaler != scalerDropDownBox.getSelectedEntry());
     bChanged |= (settings.video.showWatermark != showWatermarkCheckbox.isChecked());
+    bChanged |= (settings.video.showHarvesterCount != showHarvesterCountCheckbox.isChecked());
     bChanged |= (settings.video.cursorVisibility != cursorVisibilityDropDownBox.getSelectedEntryIntData());
     bChanged |= (settings.video.cursorScale != cursorScaleDropDownBox.getSelectedEntryIntData());
     bChanged |= (settings.video.menuPalette != paletteDropDownBox.getSelectedEntryIntData());
@@ -672,6 +683,7 @@ void OptionsMenu::onOptionsOK() {
     settings.video.fullscreen = fullScreenCheckbox.isChecked();
     settings.video.frameLimit = frameLimitCheckbox.isChecked();
     settings.video.showWatermark = showWatermarkCheckbox.isChecked();
+    settings.video.showHarvesterCount = showHarvesterCountCheckbox.isChecked();
     settings.video.cursorVisibility = cursorVisibilityDropDownBox.getSelectedEntryIntData();
     settings.video.cursorScale = cursorScaleDropDownBox.getSelectedEntryIntData();
     settings.video.menuPalette = validatedMenuPalette(paletteDropDownBox.getSelectedEntryIntData());
@@ -790,6 +802,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setStringValue("Video","Scaler",settings.video.scaler);
     myINIFile.setBoolValue("Video","RotateUnitGraphics",settings.video.rotateUnitGraphics);
     myINIFile.setBoolValue("Video","Show Watermark",settings.video.showWatermark);
+    myINIFile.setBoolValue("Video","Show Harvester Count",settings.video.showHarvesterCount);
     myINIFile.setIntValue("Video","Cursor Visibility",settings.video.cursorVisibility);
     myINIFile.setIntValue("Video","Cursor Scale",settings.video.cursorScale);
     myINIFile.setIntValue("Video","Menu Palette",settings.video.menuPalette);

@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include <globals.h>
+#include <House.h>
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/Vocfile.h>
@@ -51,6 +52,7 @@ SFXManager::SFXManager() {
 SFXManager::~SFXManager() = default;
 
 void SFXManager::reloadVoices() {
+    kleshmershNameVoice.reset();
     // Reload language-specific voices after an active-mod switch so optional
     // mod assets cannot leak into another mod.
     if(settings.general.language == "de") {
@@ -63,6 +65,8 @@ void SFXManager::reloadVoices() {
 }
 
 Mix_Chunk* SFXManager::getVoice(Voice_enum id, int house) {
+    if(ModManager::instance().isTornieFamilyContentActive())
+        house = House::factionForRuntimeHouse(house);
     if(settings.general.language == "de" || settings.general.language == "fr") {
         return getNonEnglishVoice(id,house);
     } else {
@@ -93,7 +97,8 @@ void SFXManager::loadEnglishVoice() {
     lngVoice.resize(NUM_VOICE*NUM_HOUSES);
 
     const bool tornieVoiceFx = ModManager::instance().isInitialized()
-        && ModManager::instance().isTornieContentActive();
+        && ModManager::instance().isTornieFamilyContentActive()
+        && !ModManager::instance().isTornieFamilyLiteContentActive();
 
     // now we can load
     for(auto house = 0; house < NUM_HOUSES; house++) {
@@ -381,6 +386,8 @@ Mix_Chunk* SFXManager::getEnglishVoice(Voice_enum id, int house) const {
 }
 
 void SFXManager::loadNonEnglishVoice(const std::string& languagePrefix) {
+    if(ModManager::instance().isTornieFamilyContentActive() && pFileManager->exists("KLESHMERSH.VOC"))
+        kleshmershNameVoice = getChunkFromFile("KLESHMERSH.VOC");
     lngVoice.clear();
     lngVoice.resize(NUM_VOICE);
 
@@ -416,7 +423,18 @@ void SFXManager::loadNonEnglishVoice(const std::string& languagePrefix) {
     lngVoice[BloomLocated] = getChunkFromFile(languagePrefix + "BLOOM.VOC");
 
     // "Warning Wormsign"
-    if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        lngVoice[WarningWormSign] = getChunkFromFile(languagePrefix + "WARNING.VOC");
+        if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
+            try {
+                auto worm = getChunkFromFile(languagePrefix + "WORMY.VOC");
+                lngVoice[WarningWormSign] = concat2Chunks(lngVoice[WarningWormSign].get(), worm.get());
+            } catch(const std::runtime_error& e) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO, "Optional '%sWORMY.VOC' unavailable: %s",
+                            languagePrefix.c_str(), e.what());
+            }
+        }
+    } else if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
         auto WarningChunk = getChunkFromFile(languagePrefix + "WARNING.VOC");
         auto WormSignChunk = getChunkFromFile(languagePrefix + "WORMY.VOC");
         lngVoice[WarningWormSign] = concat2Chunks(WarningChunk.get(), WormSignChunk.get());
@@ -512,5 +530,9 @@ Mix_Chunk* SFXManager::getNonEnglishVoice(Voice_enum id, int house) const {
     if(id < 0 || id >= NUM_VOICE)
         return nullptr;
 
+    if(id == HouseHarkonnen && kleshmershNameVoice
+       && house >= 0 && house < NUM_HOUSES
+       && getHouseFactionIdentity(static_cast<HOUSETYPE>(house)) == HOUSE_KLESHMERSH)
+        return kleshmershNameVoice.get();
     return lngVoice[id].get();
 }

@@ -11,6 +11,8 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
+        AchievementsTestCase/AchievementsTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/Achievements/AchievementManager.cpp
         # Random Skirmish generator: the pure generator over the real map generator/mirror.
         SkirmishGeneratorTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/MapEditor/SkirmishGenerator.cpp
@@ -21,6 +23,11 @@ target_sources(dunelegacy_tests
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
         CoopGameSettingsTestCase.cpp
+        CustomGamePlayerPolicyTestCase.cpp
+        CampaignPlanTestCase.cpp
+        CoopCampaignRuntimeTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignSession.cpp
+        ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignTransition.cpp
         ${CMAKE_SOURCE_DIR}/src/GameInitSettings.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/IFileStream.cpp
         MapCatalogueTestCase.cpp
@@ -57,6 +64,11 @@ target_sources(dunelegacy_tests
         GroundAccessPolicyTestCase.cpp
         NuclearBlastPolicyTestCase.cpp
         RepairYardJobTestCase.cpp
+        BuildingSaleTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/CommandData.cpp
+        ChaosModeTestCase.cpp
+        RadarResearchTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/mod/ChaosMode.cpp
         ${CMAKE_SOURCE_DIR}/src/players/AIDecisionLog.cpp
         PathBudgetTestCase/PathBudgetTestCase.cpp
         NetworkManagerTestCase/NetworkManagerTestCase.cpp
@@ -102,6 +114,8 @@ target_sources(dunelegacy_tests
         StructureDegradationTestCase/StructureDegradationTestCase.cpp
         NeutralHouseTestCase/NeutralHouseTestCase.cpp
         Dune2RAssetManagerTestCase/Dune2RAssetManagerTestCase.cpp
+        PakfileConcurrentReadTestCase/PakfileConcurrentReadTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/FileClasses/Pakfile.cpp
         EnhancedAtlasCacheTestCase/EnhancedAtlasCacheTestCase.cpp
         EnhancedBuildingGeometryTestCase/EnhancedBuildingGeometryTestCase.cpp
         Dune2RPresentationTestCase.cpp
@@ -202,10 +216,14 @@ target_compile_options(dunelegacy_tests
 # The dedicated skirmish_generator_tests below runs every [skirmish] case.
 # Exclude that group here to avoid repeating its expensive generator matrices.
 add_test(NAME dunelegacy_tests COMMAND dunelegacy_tests "~[skirmish]")
+add_test(NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
 add_test(NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
 add_test(NAME workshop_store_tests COMMAND dunelegacy_tests "[workshop]")
 add_test(NAME preplace_queue_tests COMMAND dunelegacy_tests "[preplace]")
+add_test(NAME tornie_building_sale_tests COMMAND dunelegacy_tests "[tornie][sale]")
+add_test(NAME tornie_chaos_persistence_tests COMMAND dunelegacy_tests "[tornie][chaos]")
+add_test(NAME tornie_radar_command_tests COMMAND dunelegacy_tests "[tornie][radar]")
 # Map chooser/editor catalogue rules: duplicate collapse, revision sidecars are not
 # map rows, and a locally edited workshop map keeps its authored mod in the filter.
 add_test(NAME map_chooser_tests COMMAND dunelegacy_tests "[maps][chooser]")
@@ -447,6 +465,13 @@ endif()
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        foreach(achievement_mod IN ITEMS Tornie vanilla dunecity Dune2R)
+            add_test(NAME achievements_events_${achievement_mod} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --achievements-probe --repeatable
+                --mod ${achievement_mod} --no-ai-telemetry --build-dir ${CMAKE_BINARY_DIR}
+                --output-dir ${CMAKE_BINARY_DIR}/achievements-${achievement_mod}-probe)
+            set_tests_properties(achievements_events_${achievement_mod} PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        endforeach()
         add_test(NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/test_match_score.py)
         set_tests_properties(quantbot_match_score PROPERTIES TIMEOUT 30)
@@ -636,6 +661,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
         set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # Real production objects and full saves: two independent refinery bays,
+        # captured production blueprints, slow status and movement continuation.
+        add_test(NAME tornie_object_state_roundtrip COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
+            --tornie-state --mods Tornie,vanilla,dunecity,Dune2R --worker-counts 1
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tornie-object-state-probe)
+        set_tests_properties(tornie_object_state_roundtrip PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # A unit that is not on the map belongs to one carrier or one busy structure bay: the
         # pickup of a badly damaged booked passenger enrols that unit even though its own repair
         # order can promise it to another aircraft, and units already hidden inside nothing are

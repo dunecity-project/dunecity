@@ -17,6 +17,7 @@
 #include <RadarView.h>
 
 #include <structures/StructureBase.h>
+#include <structures/WindTrap.h>
 #include <units/UnitBase.h>
 #include <structures/ZoneStructure.h>
 #include <INIMap/ZoneStartLevel.h>
@@ -27,6 +28,9 @@
 
 #include <misc/format.h>
 #include <misc/exceptions.h>
+#include <misc/SpiceGeneration.h>
+#include <misc/ModContentPolicy.h>
+#include <INIMap/SpiceVariants.h>
 
 #include <SpecialVehicle.h>
 
@@ -42,11 +46,25 @@ namespace {
 
 bool isTornieContentActive() {
     return ModManager::instance().isInitialized()
-        && ModManager::instance().isTornieContentActive();
+        && ModManager::instance().isTornieFamilyContentActive();
 }
 
 bool isTornieMapObject(int itemID) {
     switch(itemID) {
+        case Unit_Troopers5:
+        case Unit_Infantry5:
+        case Structure_Doublefinery:
+        case Unit_FlameQuad:
+        case Unit_GasInfantry:
+        case Unit_FlameTrooper:
+        case Unit_EliteOrnithopter:
+        case Unit_RaiderQuad:
+        case Unit_RangedTank:
+        case Unit_SlowTank:
+        case Structure_Slowpost:
+        case Unit_CapacityHarvester:
+        case Unit_FastHarvester:
+        case Unit_TameSandworm:
         case Unit_RocketTrike:
         case Unit_SonicTrike:
         case Unit_FlameTank:
@@ -71,35 +89,16 @@ bool isTornieMapObject(int itemID) {
     }
 }
 
-int normalizeVanillaSpiceTerrain(int terrainType) {
-    if(isTornieContentActive()) {
-        return terrainType;
-    }
-
-    switch(terrainType) {
-        case Terrain_GreenSpice:
-        case Terrain_RedSpice:
-            return Terrain_Spice;
-        case Terrain_ThickGreenSpice:
-        case Terrain_ThickRedSpice:
-            return Terrain_ThickSpice;
-        case Terrain_GreenSpiceBloom:
-        case Terrain_RedSpiceBloom:
-            return Terrain_SpiceBloom;
-        default:
-            return terrainType;
-    }
-}
-
 int chooseSpecialVehicle(Game* pGame, int houseID) {
     if(pGame == nullptr || houseID < 0 || houseID >= NUM_HOUSES) {
         return ItemID_Invalid;
     }
 
-    const bool modInitialized = ModManager::instance().isInitialized();
-    const bool tornieActive = modInitialized && ModManager::instance().isTornieContentActive();
+    const bool tornieActive = ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
+    const bool neutralContent = isTornieContentActive() && !tornieActive;
+    const int faction = House::factionForRuntimeHouse(houseID);
     const auto objectDataIxCandidates = discoverHouseSpecialVehicleCandidates([&](int candidate) {
-        const auto& data = pGame->objectData.data[candidate][houseID];
+        const auto& data = pGame->objectData.data[candidate][faction];
         return HouseSpecialVehicleCandidateData{
             data.enabled,
             data.builder,
@@ -108,13 +107,13 @@ int chooseSpecialVehicle(Game* pGame, int houseID) {
     });
 
     const auto pool = resolveSpecialVehiclePoolForHouse(
-        houseID, tornieActive, objectDataIxCandidates);
+        neutralContent ? HOUSE_NEUTRAL : faction, tornieActive, objectDataIxCandidates);
 
     std::vector<int> enabledPool;
     enabledPool.reserve(pool.size());
 
     for(const int candidate : pool) {
-        if(isSpecialVehicleSelectionCandidate(candidate) && pGame->objectData.data[candidate][houseID].enabled) {
+        if(isSpecialVehicleSelectionCandidate(candidate) && pGame->objectData.data[candidate][faction].enabled) {
             enabledPool.push_back(candidate);
         }
     }
@@ -136,6 +135,62 @@ int chooseSpecialVehicle(Game* pGame, int houseID) {
         static_cast<Sint32>(enabledPool.size() - 1));
 
     return enabledPool[static_cast<size_t>(randomIndex)];
+}
+
+int resolveCoopGuestUnit(Game* game, int houseID, int itemID) {
+    const int faction = House::factionForRuntimeHouse(houseID);
+    const auto available = [&](int candidate) {
+        return candidate != ItemID_Invalid && isUnit(candidate)
+            && game->objectData.data[candidate][faction].enabled;
+    };
+    if(available(itemID)) return itemID;
+    const auto firstAvailable = [&](std::initializer_list<int> candidates) {
+        for(const int candidate : candidates) if(available(candidate)) return candidate;
+        return static_cast<int>(ItemID_Invalid);
+    };
+    switch(itemID) {
+        case Unit_RaiderQuad:
+        case Unit_Trike:
+        case Unit_RaiderTrike:
+        case Unit_RocketTrike:
+        case Unit_SonicTrike:
+        case Unit_Quad:
+            return firstAvailable({Unit_Trike, Unit_RaiderTrike, Unit_RocketTrike, Unit_SonicTrike, Unit_Quad});
+        case Unit_CapacityHarvester:
+        case Unit_FastHarvester:
+        case Unit_Harvester:
+        case Unit_RebelHarvester:
+            return firstAvailable({Unit_Harvester, Unit_RebelHarvester});
+        case Unit_Soldier:
+        case Unit_Trooper:
+        case Unit_Saboteur:
+            return firstAvailable({Unit_Trooper, Unit_Soldier});
+        case Unit_Carryall:
+        case Unit_ChemicalCarryall:
+            return firstAvailable({Unit_Carryall, Unit_ChemicalCarryall});
+        case Unit_EliteOrnithopter:
+        case Unit_Ornithopter:
+        case Unit_Frigate:
+            return firstAvailable({Unit_Ornithopter, Unit_Carryall, Unit_ChemicalCarryall});
+        case Unit_MCV:
+            return ItemID_Invalid;
+        case Unit_RangedTank:
+        case Unit_SlowTank:
+        case Unit_Devastator:
+        case Unit_Deviator:
+        case Unit_SonicTank:
+        case Unit_FlameTank:
+        case Unit_EliteLauncher:
+        case Unit_EliteSiegeTank:
+        case Unit_ChemicalSiegeTank:
+            return chooseSpecialVehicle(game, houseID);
+        case Unit_Tank:
+        case Unit_SiegeTank:
+        case Unit_Launcher:
+            return firstAvailable({Unit_Tank, Unit_SiegeTank, Unit_Launcher});
+        default:
+            return ItemID_Invalid;
+    }
 }
 
 } // namespace
@@ -160,6 +215,7 @@ void INIMapLoader::load() {
     loadHouses();
     loadUnits();
     loadStructures();
+    loadExtraCoopForces();
     loadReinforcements();
     loadAITeams();
     loadView();
@@ -171,6 +227,7 @@ void INIMapLoader::load() {
 */
 void INIMapLoader::loadMap() {
     version = inifile->getIntValue("BASIC", "Version", 1);
+    const unsigned spiceMask = activeSpiceVariantMask();
 
     pGame->winFlags = inifile->getIntValue("BASIC","WinFlags",3);
     pGame->loseFlags = inifile->getIntValue("BASIC","LoseFlags",1);
@@ -442,6 +499,14 @@ void INIMapLoader::loadMap() {
                         // Tornie red spice bloom
                         type = Terrain_RedSpiceBloom;
                     } break;
+                    case 'l':
+                    case 'L':
+                    case 'i':
+                    case 'w':
+                    case 'W':
+                    case 'x':
+                        type = spiceTerrainForMapChar(rowString.at(x));
+                        break;
 
                     case '%': {
                         // Rock
@@ -470,13 +535,55 @@ void INIMapLoader::loadMap() {
                 }
 
                 currentGameMap->getTile(x,y)->setType(
-                    normalizeVanillaSpiceTerrain(type));
+                    allowedSpiceTerrain(type, spiceMask));
             }
         }
 
         currentGameMap->createSandRegions();
     }
 
+    const int variantPercent = inifile->getIntValue("MAP", "SpiceVariantPercent", 0);
+    if(spiceMask != 0 && variantPercent > 0) {
+        const int width = currentGameMap->getSizeX();
+        const int height = currentGameMap->getSizeY();
+        std::string terrain(static_cast<size_t>(width) * height, '-');
+        for(int y = 0; y < height; ++y) {
+            for(int x = 0; x < width; ++x) {
+                const int type = currentGameMap->getTile(x, y)->getType();
+                terrain[static_cast<size_t>(y) * width + x] =
+                    type == Terrain_Spice ? '~' : type == Terrain_ThickSpice ? '+' : '-';
+            }
+        }
+        const auto variants = SpiceVariants::apply(std::move(terrain), width, variantPercent,
+            static_cast<uint32_t>(inifile->getIntValue("MAP", "SpiceVariantSeed", 0)),
+            inifile->getIntValue("MAP", "SpiceVariantVersion", 1));
+        for(int y = 0; y < height; ++y) {
+            for(int x = 0; x < width; ++x) {
+                const int type = allowedSpiceTerrain(
+                    spiceTerrainForMapChar(variants[static_cast<size_t>(y) * width + x]), spiceMask);
+                auto* tile = currentGameMap->getTile(x, y);
+                if(type == Terrain_Sand || type == tile->getType()) continue;
+                const auto amount = tile->getSpice();
+                tile->setType(type);
+                tile->setSpice(amount);
+            }
+        }
+    }
+
+    const auto startRock = inifile->getStringValue("MAP", "CoopStartRock", "");
+    if(!startRock.empty() && pGame->getCoopCampaignContext()) {
+        if(pGame->getCoopCampaignContext()->alliedCapacity != 4)
+            throw std::runtime_error("Invalid optional co-op terrain");
+        for(const auto& value : splitStringToStringVector(startRock)) {
+            int position = -1;
+            if(!parseString(value, position) || !currentGameMap->tileExists(getXPos(position), getYPos(position)))
+                throw std::runtime_error("Invalid optional co-op rock position");
+            auto* tile = currentGameMap->getTile(getXPos(position), getYPos(position));
+            if(tile->getType() != Terrain_Sand && tile->getType() != Terrain_Dunes && tile->getType() != Terrain_Rock)
+                throw std::runtime_error("Optional co-op start overwrites protected terrain");
+            tile->setType(Terrain_Rock);
+        }
+    }
     screenborder->adjustScreenBorderToMapsize(currentGameMap->getSizeX(), currentGameMap->getSizeY());
 }
 
@@ -486,10 +593,24 @@ void INIMapLoader::loadMap() {
 void INIMapLoader::loadHouses()
 {
     const GameInitSettings::HouseInfoList& houseInfoList = pGame->getGameInitSettings().getHouseInfoList();
+    const auto& coopContext = pGame->getCoopCampaignContext();
+    originalCoopOwners = coopContext && coopContext->followsOriginalCampaign();
+    if(coopContext && houseInfoList.size() != static_cast<std::size_t>(
+        std::count_if(coopContext->slots.begin(), coopContext->slots.end(), [](const coop::Slot& slot) { return slot.active(); })))
+        throw std::runtime_error("Invalid co-op campaign house setup.");
+    if(originalCoopOwners) {
+        const auto wildlife = strToLower(inifile->getStringValue("COOP_TEMPLATE", "WildlifeOwner", ""));
+        if(!wildlife.empty()) {
+            if(wildlife != "coopwildlife") logError("Invalid co-op wildlife owner.");
+            // DuneCity already reserves an independent, unselectable wildlife house.
+            housename2house["coopwildlife"] = HOUSE_NATIVES;
+        }
+    }
 
     // find "player?" sections
     std::vector<std::string> playerSectionsOnMap;
-    for(int i=1;i<=getNumAvailableHouses();i++) {
+    const int playerSectionLimit = coopContext ? MAX_CUSTOM_GAME_PLAYERS : getNumAvailableHouses();
+    for(int i=1;i<=playerSectionLimit;i++) {
         std::string sectionname = "player" + std::to_string(i);
         if(inifile->hasSection(sectionname)) {
             playerSectionsOnMap.push_back(sectionname);
@@ -551,14 +672,22 @@ void INIMapLoader::loadHouses()
 
         int colorOfHouse = houseInfo.colorOfHouse;
         if(!isValidHouseColorSlot(colorOfHouse)) {
-            colorOfHouse = getDefaultHouseColorSlot(houseID);
+            const int faction = coopContext ? coop::factionForHouse(*coopContext, houseID) : houseID;
+            colorOfHouse = getDefaultHouseColorSlot(static_cast<HOUSETYPE>(faction));
         }
         resolvedHouseInfo.colorOfHouse = colorOfHouse;
 
         std::string houseName = getHouseNameByNumber(houseID);
         convertToLower(houseName);
 
-        if(inifile->hasSection(houseName) == false) {
+        if(coopContext) {
+            const int slot = coop::mapSlotForHouse(*coopContext, houseID);
+            if(slot < 1 || pGame->house[houseID]) throw std::runtime_error("Invalid or duplicate co-op house slot.");
+            houseName = "player" + std::to_string(slot);
+            const auto section = std::find(playerSectionsOnMap.begin(), playerSectionsOnMap.end(), houseName);
+            if(section == playerSectionsOnMap.end()) throw std::runtime_error("Missing co-op map player section.");
+            playerSectionsOnMap.erase(section);
+        } else if(inifile->hasSection(houseName) == false) {
             // select one of the Player sections
             if(playerSectionsOnMap.empty()) {
                 // skip this house
@@ -584,6 +713,11 @@ void INIMapLoader::loadHouses()
         housename2house[houseName] = houseID;
 
         int startingCredits = inifile->getIntValue(houseName,"Credits",DEFAULT_STARTINGCREDITS);
+        if(coopContext && coopContext->alliedCapacity == 4) {
+            const int slot = coop::mapSlotForHouse(*coopContext, houseID) - 1;
+            if(slot >= 0 && coopContext->isAlliedSlot(slot))
+                startingCredits = inifile->getIntValue("Player1", "Credits", DEFAULT_STARTINGCREDITS);
+        }
 
         int maxUnits = 0;
         if(currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride >= 0) {
@@ -657,6 +791,8 @@ void INIMapLoader::loadChoam()
     if(!inifile->hasSection("CHOAM")) {
         return;
     }
+    const bool familyContent = ModManager::instance().isTornieFamilyContentActive();
+    const bool customUnitsEnabled = ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
 
     for(const INIFile::Key& key : inifile->getSection("CHOAM")) {
         Uint32 unitID = getItemIDByName(key.getKeyName());
@@ -664,6 +800,8 @@ void INIMapLoader::loadChoam()
             logWarning(key.getLineNumber(), "Invalid unit string: '" + key.getKeyName() + "'");
             continue;
         }
+        if((unitID >= Unit_Troopers5 && !familyContent)
+           || (familyContent && !customUnitsEnabled && isTornieExclusiveItem(unitID))) continue;
 
         int num = key.getIntValue(-2);
         if(num == -2) {
@@ -694,12 +832,19 @@ void INIMapLoader::loadUnits()
         return;
     }
 
+    const bool neutralContent = isTornieContentActive()
+        && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
+    const auto& coopContext = pGame->getCoopCampaignContext();
     for(const INIFile::Key& key : inifile->getSection("UNITS")) {
         if(key.getKeyName().find("ID") == 0) {
             std::string HouseStr, UnitStr, health, PosStr, rotation, mode;
             splitString(key.getStringValue(), HouseStr, UnitStr, health, PosStr, rotation, mode);
 
             int houseID = getHouseID(HouseStr);
+            const bool wildlife = coopContext && coopContext->followsOriginalCampaign()
+                && strToLower(HouseStr) == "coopwildlife";
+            if(wildlife && strToLower(UnitStr) != "sandworm")
+                logError(key.getLineNumber(), "Invalid independent co-op wildlife unit.");
             if(houseID == HOUSE_UNUSED) {
                 // skip unit for unused house
                 continue;
@@ -707,9 +852,15 @@ void INIMapLoader::loadUnits()
                 logWarning(key.getLineNumber(), "Invalid house string for '" + UnitStr + "': '" + HouseStr + "'!");
                 continue;
             }
+            const bool guestCopy = coopContext && coopContext->followsOriginalCampaign()
+                && houseID != coopContext->slots[0].house
+                && std::any_of(coopContext->slots.begin(), coopContext->slots.end(), [&](const coop::Slot& slot) {
+                    return slot.allied && slot.active() && slot.house == houseID;
+                }) && key.getKeyName().rfind("IDCOOP", 0) == 0;
 
             int pos;
             if(!parseString(PosStr, pos) || (pos < 0)) {
+                if(guestCopy || wildlife) logError(key.getLineNumber(), "Invalid required co-op unit position.");
                 logWarning(key.getLineNumber(), "Invalid position string for '" + UnitStr + "': '" + PosStr + "'!");
                 continue;
             }
@@ -726,11 +877,26 @@ void INIMapLoader::loadUnits()
             int Num2Place = 1;
             int itemID = getItemIDByName(UnitStr);
             if((itemID == ItemID_Invalid) || !isUnit(itemID)) {
+                if(guestCopy || wildlife) logError(key.getLineNumber(), "Invalid required co-op unit type.");
                 logWarning(key.getLineNumber(), "Invalid unit string: '" + UnitStr + "'!");
                 continue;
             }
 
-            if(itemID == Unit_Infantry) {
+            if(neutralContent) {
+                itemID = neutralVanillaMapItem(itemID);
+            }
+
+            if(isTornieMapObject(itemID) && !isTornieContentActive()) {
+                continue;
+            }
+
+            if(itemID == Unit_Infantry5) {
+                itemID = Unit_Soldier;
+                Num2Place = 5;
+            } else if(itemID == Unit_Troopers5) {
+                itemID = Unit_Trooper;
+                Num2Place = 5;
+            } else if(itemID == Unit_Infantry) {
                 // make three
                 itemID = Unit_Soldier;
                 Num2Place = 3;
@@ -741,19 +907,30 @@ void INIMapLoader::loadUnits()
             } else if(itemID == Unit_Special) {
                 itemID = chooseSpecialVehicle(pGame, houseID);
                 if(itemID == ItemID_Invalid) {
+                    if(guestCopy) logError(key.getLineNumber(), "No enabled Special unit for the co-op guest.");
                     continue;
                 }
             }
 
+            if(neutralContent) {
+                itemID = neutralVanillaMapItem(itemID);
+            }
+
             if(isTornieMapObject(itemID) && !isTornieContentActive()) {
                 continue;
+            }
+            if(guestCopy) {
+                itemID = resolveCoopGuestUnit(pGame, houseID, itemID);
+                if(itemID == ItemID_Invalid)
+                    logError(key.getLineNumber(), "No compatible unit for the co-op guest: '" + UnitStr + "'.");
             }
 
             // Editor-placed Chemical Carryalls are valid for every faction;
             // production availability remains controlled separately by the builder rules.
             const bool editorPlacedChemicalCarryall =
                 itemID == Unit_ChemicalCarryall && isTornieContentActive();
-            if(!pGame->objectData.data[itemID][houseID].enabled && !editorPlacedChemicalCarryall) {
+            if(!pGame->objectData.data[itemID][House::factionForRuntimeHouse(houseID)].enabled && !editorPlacedChemicalCarryall) {
+                if(guestCopy || wildlife) logError(key.getLineNumber(), "Required co-op unit is disabled.");
                 continue;
             }
 
@@ -778,6 +955,8 @@ void INIMapLoader::loadUnits()
             for(int i = 0; i < Num2Place; i++) {
                 UnitBase* newUnit = placer->placeUnit(itemID, getXPos(pos), getYPos(pos), true);
                 if(newUnit == nullptr) {
+                    if(guestCopy || wildlife)
+                        logError(key.getLineNumber(), "Cannot place required co-op unit '" + UnitStr + "' at " + std::to_string(pos));
                     logWarning(key.getLineNumber(), "Invalid or occupied position for '" + UnitStr + "': '" + std::to_string(pos) + "'!");
                     continue;
                 } else {
@@ -807,6 +986,8 @@ void INIMapLoader::loadStructures()
         return;
     }
 
+    const bool neutralContent = isTornieContentActive()
+        && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
     for(const INIFile::Key& key : inifile->getSection("STRUCTURES")) {
         std::string tmpkey = key.getKeyName();
         std::string tmp = key.getStringValue();
@@ -832,14 +1013,15 @@ void INIMapLoader::loadStructures()
                 continue;
             }
 
-            if(BuildingStr == "Concrete" && pGame->objectData.data[Structure_Slab1][houseID].enabled) {
+            const int faction = House::factionForRuntimeHouse(houseID);
+            if(BuildingStr == "Concrete" && pGame->objectData.data[Structure_Slab1][faction].enabled) {
                 getOrCreateHouse(houseID)->placeStructure(NONE_ID, Structure_Slab1, getXPos(pos), getYPos(pos), true);
-            } else if(BuildingStr == "Wall" && pGame->objectData.data[Structure_Wall][houseID].enabled) {
+            } else if(BuildingStr == "Wall" && pGame->objectData.data[Structure_Wall][faction].enabled) {
                 if(getOrCreateHouse(houseID)->placeStructure(NONE_ID, Structure_Wall, getXPos(pos), getYPos(pos), true) == nullptr) {
                     logWarning(key.getLineNumber(), "Invalid or occupied position for '" + BuildingStr + "': '" + PosStr + "'!");
                     continue;
                 }
-            } else if(BuildingStr == "Road" && pGame->objectData.data[Structure_Road][houseID].enabled) {
+            } else if(BuildingStr == "Road" && pGame->objectData.data[Structure_Road][faction].enabled) {
                 getOrCreateHouse(houseID)->placeStructure(NONE_ID, Structure_Road, getXPos(pos), getYPos(pos), true);
             } else if((BuildingStr != "Concrete") && (BuildingStr != "Wall") && (BuildingStr != "Road")) {
                 logWarning(key.getLineNumber(), "Invalid building string: '" + BuildingStr + "'!");
@@ -879,17 +1061,28 @@ void INIMapLoader::loadStructures()
                 continue;
             }
 
+            if(neutralContent) {
+                itemID = neutralVanillaMapItem(itemID);
+            }
+
             if(isTornieMapObject(itemID) && !isTornieContentActive()) {
                 continue;
             }
 
-            if (itemID != 0 && pGame->objectData.data[itemID][houseID].enabled) {
+            const int faction = House::factionForRuntimeHouse(houseID);
+            if (itemID != 0 && pGame->objectData.data[itemID][faction].enabled) {
                 ObjectBase* newStructure = getOrCreateHouse(houseID)->placeStructure(NONE_ID, itemID, getXPos(pos), getYPos(pos), true);
                 if(newStructure == nullptr) {
                     logWarning(key.getLineNumber(), "Invalid or occupied position for '" + BuildingStr + "': '" + PosStr + "'!");
                     continue;
                 } else {
                     newStructure->setHealth(newStructure->getMaxHealth() * percentHealth);
+                    if(auto* trap = dynamic_cast<WindTrap*>(newStructure);
+                       trap && isTornieContentActive()
+                            && WindTrap::supportsPowerUpgrade(static_cast<HOUSETYPE>(trap->getTechnologyHouseID()))
+                            && inifile->getBoolValue("WINDTRAPUPGRADES", tmpkey, false)) {
+                        trap->inheritPowerUpgrade(true);
+                    }
                     // Optional fifth field: a pre-developed zone (INIMap/ZoneStartLevel.h).
                     // Entries without it keep the empty lot every older map relies on.
                     const int startLevel = ZoneStartLevel::parse(tmp);
@@ -906,6 +1099,54 @@ void INIMapLoader::loadStructures()
     }
 }
 
+void INIMapLoader::loadExtraCoopForces() {
+    const auto& context = pGame->getCoopCampaignContext();
+    if(!context || (!context->extraEnemyForces && !context->extraHardEnemyForces)) return;
+    for(std::size_t slot = 2; slot < context->enemyPresent.size() + 2; ++slot) {
+        if(!context->enemyPresent[slot - 2]) continue;
+        const auto& binding = context->slots[slot];
+        auto* house = pGame->getHouse(binding.house);
+        if(!house) continue;
+        std::vector<Coord> anchors;
+        for(const auto* structure : structureList)
+            if(structure->getOwner() == house) anchors.push_back(structure->getLocation());
+        for(const auto* unit : unitList)
+            if(unit->getOwner() == house) anchors.push_back(unit->getLocation());
+        if(anchors.empty()) {
+            const auto host = pGame->getHouse(context->slots[0].house)->getCenterOfMainBase();
+            anchors.emplace_back(host.x < currentGameMap->getSizeX()/2 ? currentGameMap->getSizeX()-2 : 1,
+                                 host.y < currentGameMap->getSizeY()/2 ? currentGameMap->getSizeY()-2 : 1);
+        }
+        std::array<int, 6> pool{};
+        int poolSize = 0;
+        for(const int item : {Unit_Trooper, Unit_Quad, Unit_Tank, Unit_SiegeTank, Unit_Launcher, Unit_Soldier}) {
+            const auto& data = pGame->objectData.data[item][binding.faction];
+            if(data.enabled && data.techLevel <= pGame->techLevel) pool[poolSize++] = item;
+        }
+        if(poolSize == 0) throw std::runtime_error("No technology-appropriate co-op enemy unit.");
+        const int count = (context->extraEnemyForces ? 5 : 0) + (context->extraHardEnemyForces ? 10 : 0);
+        for(int index = 0; index < count; ++index) {
+            auto* unit = house->createUnit(pool[index % poolSize], true);
+            if(!unit) throw std::runtime_error("Cannot create extra co-op enemy unit.");
+            bool placed = false;
+            const auto origin = anchors[index % anchors.size()];
+            const int maxRadius = std::max(currentGameMap->getSizeX(), currentGameMap->getSizeY());
+            for(int radius = 1; radius < maxRadius && !placed; ++radius)
+                for(int y = origin.y-radius; y <= origin.y+radius && !placed; ++y)
+                    for(int x = origin.x-radius; x <= origin.x+radius && !placed; ++x) {
+                        if(std::max(std::abs(x-origin.x), std::abs(y-origin.y)) != radius
+                           || !currentGameMap->tileExists(x, y)) continue;
+                        const auto* tile = currentGameMap->getTile(x, y);
+                        if(tile->hasAGroundObject() || !unit->canPass(x, y)) continue;
+                        unit->deploy(Coord(x, y));
+                        unit->doSetAttackMode(AREAGUARD);
+                        placed = true;
+                    }
+            if(!placed) throw std::runtime_error("No free tile for extra co-op enemy unit.");
+        }
+    }
+}
+
 /**
     This method loads the reinforcements from the [REINFORCEMENTS] section.
 */
@@ -915,6 +1156,8 @@ void INIMapLoader::loadReinforcements()
         return;
     }
 
+    const bool neutralContent = isTornieContentActive()
+        && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
     for(const INIFile::Key& key : inifile->getSection("REINFORCEMENTS")) {
         std::string strHouseName;
         std::string strUnitName;
@@ -945,11 +1188,21 @@ void INIMapLoader::loadReinforcements()
             continue;
         }
 
+        if(neutralContent) {
+            itemID = neutralVanillaMapItem(itemID);
+        }
+
         if(isTornieMapObject(static_cast<int>(itemID)) && !isTornieContentActive()) {
             continue;
         }
 
-        if(itemID == Unit_Infantry) {
+        if(itemID == Unit_Infantry5) {
+            itemID = Unit_Soldier;
+            Num2Drop = 5;
+        } else if(itemID == Unit_Troopers5) {
+            itemID = Unit_Trooper;
+            Num2Drop = 5;
+        } else if(itemID == Unit_Infantry) {
             // make three
             itemID = Unit_Soldier;
             Num2Drop = 3;
@@ -959,7 +1212,9 @@ void INIMapLoader::loadReinforcements()
             Num2Drop = 3;
         }
 
-        if(!pGame->objectData.data[itemID][houseID].enabled) {
+        const auto& context = pGame->getCoopCampaignContext();
+        const bool hostDelivery = context && houseID == context->slots[0].house;
+        if(!pGame->objectData.data[itemID][House::factionForRuntimeHouse(houseID)].enabled && !hostDelivery) {
             continue;
         }
 
@@ -978,29 +1233,35 @@ void INIMapLoader::loadReinforcements()
 
         bool bRepeat = (strTime.rfind('+') == (strTime.length() - 1)) || (strPlus == "+");
 
-        for(int i=0;i<Num2Drop;i++) {
-            // check if there is a similar trigger at the same time
-
-            bool bInserted = false;
-            for(const auto& pTrigger : pGame->getTriggerManager().getTriggers()) {
-                ReinforcementTrigger* pReinforcementTrigger = dynamic_cast<ReinforcementTrigger*>(pTrigger.get());
-
-                if(pReinforcementTrigger != nullptr
-                    && pReinforcementTrigger->getCycleNumber() == dropCycle
-                    && pReinforcementTrigger->getHouseID() == houseID
-                    && pReinforcementTrigger->isRepeat() == bRepeat
-                    && pReinforcementTrigger->getDropLocation() == dropLocation) {
-
-                    // add the new reinforcement to this reinforcement (call only one carryall)
-                    pReinforcementTrigger->addUnit(itemID);
-                    bInserted = true;
-                    break;
+        const auto addDelivery = [&](int recipient, Uint32 unit) {
+            for(int i=0;i<Num2Drop;i++) {
+                bool inserted = false;
+                for(const auto& trigger : pGame->getTriggerManager().getTriggers()) {
+                    auto* reinforcement = dynamic_cast<ReinforcementTrigger*>(trigger.get());
+                    if(reinforcement && reinforcement->getCycleNumber() == dropCycle
+                       && reinforcement->getHouseID() == recipient
+                       && reinforcement->isRepeat() == bRepeat
+                       && reinforcement->getDropLocation() == dropLocation) {
+                        reinforcement->addUnit(unit);
+                        inserted = true;
+                        break;
+                    }
+                }
+                if(!inserted) {
+                    getOrCreateHouse(recipient);
+                    pGame->getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(
+                        recipient, unit, dropLocation, bRepeat, dropCycle));
                 }
             }
-
-            if(bInserted == false) {
-                getOrCreateHouse(houseID);  // create house if not yet available
-                pGame->getTriggerManager().addTrigger(std::make_unique<ReinforcementTrigger>(houseID, itemID, dropLocation, bRepeat, dropCycle));
+        };
+        if(pGame->objectData.data[itemID][House::factionForRuntimeHouse(houseID)].enabled)
+            addDelivery(houseID, itemID);
+        if(hostDelivery) {
+            for(const int index : context->alliedSlots()) {
+                if(index == 0 || !context->slots[index].active()) continue;
+                const int guest = context->slots[index].house;
+                const int adapted = resolveCoopGuestUnit(pGame, guest, itemID);
+                if(adapted != ItemID_Invalid) addDelivery(guest, adapted);
             }
         }
     }
@@ -1173,6 +1434,13 @@ House* INIMapLoader::getOrCreateHouse(int houseID) {
 HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
     std::string lowerName = strToLower(name);
 
+    if(originalCoopOwners) {
+        const auto owner = housename2house.find(lowerName);
+        if(owner == housename2house.end() || owner->second < 0
+           || (lowerName != "coopwildlife" && lowerName.rfind("player", 0) != 0))
+            logError("Unmapped original co-op owner: '" + name + "'.");
+        return owner->second;
+    }
     if(housename2house.count(lowerName) > 0) {
         return housename2house[lowerName];
     } else {

@@ -113,14 +113,32 @@ std::string legacyBundledModHash(const ShippedMod& mod, const std::string& gameV
                             [&](const char* known) { return SDL_strcasecmp(name.c_str(), known) == 0; })) return {};
         }
     }
-    auto rw = sdl2::RWops_ptr{SDL_RWFromConstMem(legacy.data(), static_cast<int>(legacy.size()))};
-    if(!rw) return {};
-    INIFile metadata(rw.get());
-    if(current.getStringValue("Mod", "Base Mod") != metadata.getStringValue("Mod", "Base Mod")
-       || current.getBoolValue("Mod", "Enables City Mode", false)
-            != metadata.getBoolValue("Mod", "Enables City Mode", false)) return {};
+    if(!current.getStringValue("Mod", "Base Mod").empty()
+       || current.getBoolValue("Mod", "Enables City Mode", false) != (mod.name == "dunecity")) return {};
+
+    // Historical metadata is opaque checksum input, not valid INI: its blank Version
+    // must remain byte-identical without sending it through the parser. Serialize only
+    // the valid stamp fragment so quoting and its final newline still follow INIFile.
+    static constexpr std::string_view stamp = "Game Version = 1.0.851\n";
+    const auto stampOffset = legacy.find(stamp);
+    const auto suffix = legacy.substr(stampOffset + stamp.size());
+    auto input = sdl2::RWops_ptr{SDL_RWFromConstMem(stamp.data(), static_cast<int>(stamp.size()))};
+    if(!input) return {};
+    INIFile metadata(input.get());
+    metadata.setStringValue("", "Game Version", gameVersion);
+    std::map<std::string, std::string> replaced;
+    auto& bytes = replaced["mod.ini"];
+    bytes.resize(legacy.size() + gameVersion.size() + 2, '\0');
+    std::copy_n(legacy.data(), stampOffset, bytes.data());
+    auto output = sdl2::RWops_ptr{SDL_RWFromMem(bytes.data() + stampOffset,
+                                             static_cast<int>(bytes.size() - stampOffset))};
+    if(!output || !metadata.saveChangesTo(output.get())) return {};
+    const auto size = SDL_RWtell(output.get());
+    if(size < 0) return {};
+    bytes.resize(stampOffset + static_cast<size_t>(size));
+    bytes.append(suffix.data(), suffix.size());
     // All rules/assets remain the installed bytes. A changed payload cannot recreate the pin.
-    return hashStampedMetadata(mod, metadata, legacy.size(), gameVersion, earlier);
+    return contentHash("mod", "", revisionName(mod), mod.base, "", mod.path, replaced, earlier);
 }
 
 namespace {

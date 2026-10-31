@@ -303,7 +303,8 @@ struct QuantBotConfig {
     // Constructor with default values
     QuantBotConfig();
     
-    // Load from INI file (creates default file if not exists)
+    // Load from INI, upgrading writable user/draft files when defaults are missing.
+    // Immutable revisions and checksummed family bundles use defaults in memory only.
     bool load(const std::string& filepath);
 
     /// Test-only (tests/ai play styles): applies the keys present in an INI file on top of this

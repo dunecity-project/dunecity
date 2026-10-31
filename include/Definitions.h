@@ -199,7 +199,11 @@
 // 9876: GameInitSettings MOD10 adds the hashed planned-construction rules (placement retry,
 //       shared yard queue); production queue entries add their shared-queue plan order.
 // 9877: GameInitSettings MOD11 adds the hashed slow-city-year rule (a 120 s city year).
-#define SAVEGAMEVERSION     9877
+// 9878: Tornie 1.0.546 integration: production technology, slow effects, Doublefinery bays,
+//       family gameplay rules, research, campaign options and expanded cooperative state.
+#define SAVEGAMEVERSION     9878
+/// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
+#define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
 #define SAVEGAMEVERSION_NATIVES 9871
 /// First save with NATIVES_TEAM's visibility slot and the sandworm's summoner.

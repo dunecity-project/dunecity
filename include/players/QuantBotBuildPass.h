@@ -75,6 +75,8 @@ struct QuantBot::BuildPass {
     int militaryValue;
 
     // planBuildInventory()
+    // Family economy projects the two original slots as worker/unload-bay
+    // totals. Use rawPlannedItemCount() when pricing actual objects or queues.
     int itemCount[Num_ItemID]{};
     int activeHeavyFactoryCount{};
     std::vector<const BuilderBase*> harvesterFactories{};

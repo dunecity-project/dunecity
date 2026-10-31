@@ -24,6 +24,7 @@
 #include <Command.h>
 #include <misc/MenuPalette.h>
 #include <GUI/TextButton.h>
+#include <mod/ModManager.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -58,6 +59,14 @@ protected:
         });
         destroyButton.setVisible(false);
         topBox.addWidget(&destroyButton, Point(28,0), Point(SIDEBARWIDTH-53,22));
+        sellButton.setText("$");
+        sellButton.setVisible(false);
+        sellButton.setOnClick([this]() {
+            auto* structure = dynamic_cast<StructureBase*>(
+                currentGame->getObjectManager().getObject(this->objectID));
+            if(structure) structure->handleSellClick();
+        });
+        topBox.addWidget(&sellButton, Point(SIDEBARWIDTH - 47, 2), Point(20, 18));
     }
 
     void draw(Point position) override {
@@ -75,6 +84,21 @@ protected:
         StructureBase* pStructure = dynamic_cast<StructureBase*>(pObject);
         if(pStructure != nullptr) {
             pStructure->handleRepairClick();
+        }
+    }
+
+    void updateSellButton(StructureBase* structure) {
+        const bool enabled = ModManager::instance().isTornieFamilyContentActive()
+            && currentGame->getGameInitSettings().getGameOptions().sellingBuildings;
+        sellButton.setVisible(enabled && !currentGame->isObserving() && pLocalPlayer
+                              && currentGame->canControlHouse(structure->getOwner()));
+        sellButton.setEnabled(structure->canSell());
+        if(enabled) {
+            destroyButton.setVisible(false);
+            sellButton.setTooltipText(_("Sell") + ": " + std::to_string(structure->getSaleRefund())
+                + " " + _("credits") + " ("
+                + std::to_string(currentGame->getGameInitSettings().isEasyModeHouse(
+                    structure->getOwner()->getHouseID()) ? 75 : 50) + "%)");
         }
     }
 
@@ -106,6 +130,7 @@ protected:
                 repairButton.setVisible(true);
                 repairButton.setToggleState(pStructure->isRepairing());
             }
+            updateSellButton(pStructure);
         }
 
         return true;
@@ -113,6 +138,7 @@ protected:
 
     PictureButton   repairButton;
     TextButton destroyButton;
+    TextButton sellButton;
 };
 
 #endif // DEFAULTSTRUCTUREINTERFACE_H

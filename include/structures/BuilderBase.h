@@ -217,8 +217,10 @@ public:
     inline int getCurrentUpgradeLevel() const { return curUpgradeLev; }
     int getUpgradeCost() const;
     inline FixPoint getUpgradeProgress() const { return upgradeProgress; }
+    FixPoint getUpgradeProgressFromStartingCredits() const { return upgradeProgressFromStartingCredits; }
 
     inline Uint32 getCurrentProducedItem() const { return currentProducedItem; }
+    int getCurrentProductionPrice() const;
     inline bool isOnHold() const { return bCurrentItemOnHold; }
     bool isWaitingToPlace() const;
     /// May a player place the finished front order by hand now? (ConstructionYard adds plots blocked by units.)
@@ -276,6 +278,7 @@ protected:
     // structure state
     bool     upgrading;              ///< Currently upgrading?
     FixPoint upgradeProgress;        ///< The current state of the upgrade progress (measured in money spent)
+    FixPoint upgradeProgressFromStartingCredits = 0; ///< Exempt cash paid into the current upgrade (9878)
     Uint8    curUpgradeLev;          ///< Current upgrade level
 
     bool     bCurrentItemOnHold;     ///< Is the currently produced item on hold?

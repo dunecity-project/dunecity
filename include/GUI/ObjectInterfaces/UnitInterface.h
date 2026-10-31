@@ -86,7 +86,8 @@ protected:
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
         captureButton.setTooltipText(UnitCommandTooltips::capture());
-        captureButton.setVisible((itemID == Unit_Soldier) || (itemID == Unit_Trooper));
+        captureButton.setVisible(itemID == Unit_Soldier || itemID == Unit_Trooper
+            || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&UnitInterface::onCapture, this));
 
@@ -106,7 +107,7 @@ protected:
         destructButton.setOnClick(std::bind(&UnitInterface::onDestruct, this));
 
         healButton.setVisible(false);
-        if(ModManager::instance().isTornieContentActive()) {
+        if(ModManager::instance().isTornieFamilyContentActive()) {
 
             healButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Heal)});
             healButton.setTooltipText(_("Heal an allied unit"));
@@ -190,6 +191,19 @@ protected:
         retreatButton.setToggleButton(true);
         retreatButton.setOnClick(std::bind(&UnitInterface::onRetreat, this));
         buttonVBox.addWidget(&retreatButton,26);
+
+        if(ModManager::instance().isTornieFamilyContentActive()
+           && (itemID == Unit_Soldier || itemID == Unit_Trooper || itemID == Unit_FlameTrooper)) {
+            buttonVBox.addWidget(VSpacer::create(buttonGap));
+            sabotageButton.setText(_("Sabotage"));
+            sabotageButton.setTextColor(color);
+            sabotageButton.setTooltipText(_("Unit will hunt enemy buildings to capture them"));
+            sabotageButton.setToggleButton(true);
+            sabotageButton.setOnClick(std::bind(&UnitInterface::onSabotage, this));
+            buttonVBox.addWidget(&sabotageButton, 26);
+        } else {
+            sabotageButton.setVisible(false);
+        }
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
         buttonVBox.addWidget(Spacer::create());
@@ -279,6 +293,10 @@ protected:
         setAttackMode(HUNT);
     }
 
+    void onSabotage() {
+        setAttackMode(SABOTAGE);
+    }
+
     void onRetreat(){
         setAttackMode(RETREAT);
     }
@@ -331,6 +349,7 @@ protected:
             ambushButton.setToggleState( AttackMode == AMBUSH );
             huntButton.setToggleState( AttackMode == HUNT );
             retreatButton.setToggleState( AttackMode == RETREAT );
+            sabotageButton.setToggleState(AttackMode == SABOTAGE);
         }
 
         return true;
@@ -359,6 +378,7 @@ protected:
     TextButton      ambushButton;
     TextButton      huntButton;
     TextButton      retreatButton;
+    TextButton      sabotageButton;
 
 };
 

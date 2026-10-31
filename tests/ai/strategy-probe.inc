@@ -336,16 +336,22 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
                     "A QuantBot block lost its strategy or its starting mix");
             require(botBytes(restored) == bytes, "A QuantBot block does not round-trip byte-identically");
         }
-        // The strategy (9865: picked flag, mix, tempo) and its resolved starting mix (9868: ten
-        // 16-bit basis points, one slot per special) are the last 23 bytes of the block.
+        // SAVEGAMEVERSION 9878 appends fixed-width family initial counts after the
+        // strategy. Earlier blocks end with the 9865 choice and 9868 ten-slot mix.
+        constexpr size_t kFamilyCountBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
         constexpr size_t kPriorBytes = 2 * UnitMixPolicy::kSlots, kStrategyBytes = 3 + kPriorBytes;
-        const size_t at = bytes.size() - kStrategyBytes;
-        require(bytes.size() > kStrategyBytes && Uint8(bytes[at]) == 1 && Uint8(bytes[at + 1]) == Uint8(bot->strategy.mix)
-                && Uint8(bytes[at + 2]) == Uint8(bot->strategy.tempo), "The strategy is not at the end of the QuantBot block");
+        require(bytes.size() > kFamilyCountBytes + kStrategyBytes, "The QuantBot block lacks its strategy and 9878 tail");
+        const std::string before9878 = bytes.substr(0, bytes.size() - kFamilyCountBytes);
+        const size_t at = before9878.size() - kStrategyBytes;
+        require(Uint8(bytes[at]) == 1 && Uint8(bytes[at + 1]) == Uint8(bot->strategy.mix)
+                && Uint8(bytes[at + 2]) == Uint8(bot->strategy.tempo), "The strategy is not before the QuantBot 9878 tail");
+        if (!ModManager::instance().isTornieFamilyContentActive())
+            require(std::all_of(bytes.begin() + before9878.size(), bytes.end(), [](char byte) { return byte == 0; }),
+                    "Family initial counts leaked into a nonfamily QuantBot save");
         for (size_t i = 0; i < UnitMixPolicy::kSlots; ++i)
             require(Uint8(bytes[at + 3 + 2 * i]) + 256 * Uint8(bytes[at + 4 + 2 * i]) == bot->strategyPrior[i]
                     || Uint8(bytes[at + 4 + 2 * i]) + 256 * Uint8(bytes[at + 3 + 2 * i]) == bot->strategyPrior[i],
-                    "The starting mix is not the last 20 bytes of the QuantBot block");
+                    "The starting mix is not immediately before the QuantBot 9878 tail");
         // A 9866 block: the eight group slots (one special share). It loads with the special share
         // split between the specials the house can build - for a house with one special, exactly the
         // mix it had - and re-saves as a current block.
@@ -355,10 +361,12 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             OMemoryStream tail;
             tail.open();
             for (const auto share : group) tail.writeUint16(static_cast<Uint16>(share));
-            const std::string v9866 = bytes.substr(0, bytes.size() - kPriorBytes) + std::string(tail.getData(), tail.getDataLength());
+            const std::string v9866 = before9878.substr(0, before9878.size() - kPriorBytes)
+                + std::string(tail.getData(), tail.getDataLength());
             currentGame->loadedSavegameVersion = 9866;
             IMemoryStream in(v9866.data(), v9866.size());
             QuantBot restored(in, owner);
+            require(in.getRemainingLength() == 0, "A 9866 QuantBot block lost stream alignment");
             const auto expanded = UnitMixPolicy::expandGroups(group, bot->fieldableMixSlots());
             UnitMixPolicy::Mix expected{};
             for (size_t i = 0; i < expected.size(); ++i) expected[i] = int(expanded[i]);
@@ -372,11 +380,12 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         }
         // A 9865 block: the same bytes without the starting mix. It keeps the strategy; none of the
         // 9865 mixes needs a resolved mix (a Tuned/Bounded pick here plays the configured opening).
-        const std::string v9865 = bytes.substr(0, bytes.size() - kPriorBytes);
+        const std::string v9865 = before9878.substr(0, before9878.size() - kPriorBytes);
         currentGame->loadedSavegameVersion = 9865;
         {
             IMemoryStream in(v9865.data(), v9865.size());
             QuantBot restored(in, owner);
+            require(in.getRemainingLength() == 0, "A 9865 QuantBot block lost stream alignment");
             require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == UnitMixPolicy::Mix{},
                     "A 9865 block did not load with its strategy and no starting mix");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
@@ -384,11 +393,12 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         }
         // A 9864 block: no strategy at all. It loads unpicked and picks the same strategy and the
         // same starting mix (the Bounded draw is a pure function of seed and house).
-        const std::string old = bytes.substr(0, bytes.size() - kStrategyBytes);
+        const std::string old = before9878.substr(0, before9878.size() - kStrategyBytes);
         currentGame->loadedSavegameVersion = 9864;
         {
             IMemoryStream in(old.data(), old.size());
             QuantBot restored(in, owner);
+            require(in.getRemainingLength() == 0, "A 9864 QuantBot block lost stream alignment");
             require(!restored.strategyPicked && restored.strategy == Choice{}, "A 9864 block loaded with a strategy");
             require(restored.strategyMix() == nullptr && restored.strategyTempo() == nullptr, "An unpicked 9864 bot plays a strategy");
             restored.pickStrategy();

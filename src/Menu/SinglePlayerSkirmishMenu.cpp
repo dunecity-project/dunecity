@@ -38,33 +38,16 @@
 #include <GUI/MsgBox.h>
 
 namespace {
-const int houseOrder[] = {
-    HOUSE_ATREIDES,
-    HOUSE_ORDOS,
-    HOUSE_HARKONNEN,
-    HOUSE_MERCENARY,
-    HOUSE_FREMEN,
-    HOUSE_SARDAUKAR,
-    HOUSE_NEUTRAL,
-    HOUSE_REBELS,
-    HOUSE_CUSTOM
-};
 
 constexpr int kVisibleHouseButtons = 3;
-int getHouseChoiceCount() {
-    const int capacity = sizeof(houseOrder) / sizeof(houseOrder[0]);
-    return isHouseAvailable(HOUSE_CUSTOM) ? capacity : capacity - 1;
-}
-
-int getMaxHouseScrollPos() {
-    return getHouseChoiceCount() - kVisibleHouseButtons;
-}
 
 constexpr int kNoPartner = 0;
 } // namespace
 
 SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase(), campaignCoop(campaignCoop)
 {
+    houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
+        isHouseAvailable(HOUSE_CUSTOM), ModManager::instance().getPlayableHouses());
     currentHouseChoiceScrollPos = 0;
     selectedButton = 1;
     mission = 1;
@@ -220,9 +203,7 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     houseRightButton.setOnClick(std::bind(&SinglePlayerSkirmishMenu::onHouseRight, this));
     houseChoiceContainer.addWidget( &houseRightButton, Point(houseChoiceContainer.getSize().x/2 + 85, 160), getTextureSize(pArrowRight));
 
-    updateHouseChoice();
-
-    onSelectHouseButton(1);
+    onSelectHouseButton(houseChoices.count > 1 ? 1 : 0);
 
 
     // setup +/- Buttons to select misson
@@ -284,7 +265,9 @@ void SinglePlayerSkirmishMenu::onChildWindowClose(Window* pChildWindow) {
 
 void SinglePlayerSkirmishMenu::onStart()
 {
-    HOUSETYPE houseChoice = static_cast<HOUSETYPE>(houseOrder[currentHouseChoiceScrollPos + selectedButton]);
+    const int index = currentHouseChoiceScrollPos + selectedButton;
+    if(index < 0 || index >= houseChoices.count) return;
+    const HOUSETYPE houseChoice = static_cast<HOUSETYPE>(houseChoices[index]);
 
     const auto* partner = PlayerFactory::getByPlayerClass(partnerSelector.getPlayerClass());
     std::string enemyAIClass = enemySelector.getPlayerClass();
@@ -374,13 +357,7 @@ void SinglePlayerSkirmishMenu::onSelectHouseButton(int button)
     house2Button.setEnabled( (selectedButton != 1) );
     house3Button.setEnabled( (selectedButton != 2) );
 
-    house1Picture.setVisible( (selectedButton != 0) );
-    house2Picture.setVisible( (selectedButton != 1) );
-    house3Picture.setVisible( (selectedButton != 2) );
-
-    house1SelectedPicture.setVisible( (selectedButton == 0) );
-    house2SelectedPicture.setVisible( (selectedButton == 1) );
-    house3SelectedPicture.setVisible( (selectedButton == 2) );
+    updateHouseChoice();
 }
 
 void SinglePlayerSkirmishMenu::onHouseLeft()
@@ -389,7 +366,6 @@ void SinglePlayerSkirmishMenu::onHouseLeft()
         currentHouseChoiceScrollPos--;
         selectedButton++;
         onSelectHouseButton(selectedButton);
-        updateHouseChoice();
 
         houseLeftButton.setVisible( (currentHouseChoiceScrollPos > 0) );
         houseRightButton.setVisible(true);
@@ -398,14 +374,13 @@ void SinglePlayerSkirmishMenu::onHouseLeft()
 
 void SinglePlayerSkirmishMenu::onHouseRight()
 {
-    if(currentHouseChoiceScrollPos < getMaxHouseScrollPos()) {
+    if(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count) {
         currentHouseChoiceScrollPos++;
         selectedButton--;
         onSelectHouseButton(selectedButton);
-        updateHouseChoice();
 
         houseLeftButton.setVisible(true);
-        houseRightButton.setVisible( (currentHouseChoiceScrollPos < getMaxHouseScrollPos()) );
+        houseRightButton.setVisible(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count);
     }
 }
 
@@ -449,15 +424,22 @@ void SinglePlayerSkirmishMenu::onGameOptions()
 
 void SinglePlayerSkirmishMenu::updateHouseChoice()
 {
-    // House1 button
-    house1Picture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Grey, houseOrder[currentHouseChoiceScrollPos+0]));
-    house1SelectedPicture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Colored, houseOrder[currentHouseChoiceScrollPos+0]));
-
-    // House2 button
-    house2Picture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Grey, houseOrder[currentHouseChoiceScrollPos+1]));
-    house2SelectedPicture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Colored, houseOrder[currentHouseChoiceScrollPos+1]));
-
-    // House3 button
-    house3Picture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Grey, houseOrder[currentHouseChoiceScrollPos+2]));
-    house3SelectedPicture.setTexture(pGFXManager->getUIGraphic(UI_Herald_Colored, houseOrder[currentHouseChoiceScrollPos+2]));
+    InvisibleButton* buttons[] = {&house1Button, &house2Button, &house3Button};
+    PictureLabel* pictures[] = {&house1Picture, &house2Picture, &house3Picture};
+    PictureLabel* selectedPictures[] = {&house1SelectedPicture, &house2SelectedPicture, &house3SelectedPicture};
+    for(int i = 0; i < kVisibleHouseButtons; ++i) {
+        const int index = currentHouseChoiceScrollPos + i;
+        const bool visible = index < houseChoices.count;
+        buttons[i]->setVisible(visible);
+        pictures[i]->setVisible(visible && i != selectedButton);
+        selectedPictures[i]->setVisible(visible && i == selectedButton);
+        if(visible) {
+            pictures[i]->setTexture(pGFXManager->getUIGraphic(UI_Herald_Grey, houseChoices[index]));
+            selectedPictures[i]->setTexture(pGFXManager->getUIGraphic(UI_Herald_Colored, houseChoices[index]));
+        }
+    }
+    houseLeftButton.setVisible(currentHouseChoiceScrollPos > 0);
+    houseRightButton.setVisible(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count);
+    startButton.setEnabled(houseChoices.count > 0);
+    hostCoopButton.setEnabled(houseChoices.count > 0);
 }

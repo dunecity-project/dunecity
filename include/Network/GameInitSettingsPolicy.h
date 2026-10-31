@@ -21,6 +21,8 @@
 #include <DataTypes.h>
 #include <Definitions.h>
 #include <GameInitSettings.h>
+#include <Network/CustomGamePlayerPolicy.h>
+#include <mod/ModManager.h>
 
 #include <cstddef>
 #include <string>
@@ -124,8 +126,10 @@ inline bool isAcceptableReceivedGameInitSettings(const GameInitSettings& setting
         return false;
     }
 
+    const int playerLimit = CustomGamePlayerPolicy::maxPlayers(
+        ModManager::instance().isTornieFamilyContent(settings.getModName()));
     const GameInitSettings::HouseInfoList& houses = settings.getHouseInfoList();
-    if(houses.size() > static_cast<std::size_t>(MAX_CUSTOM_GAME_PLAYERS)) {
+    if(houses.size() > static_cast<std::size_t>(playerLimit)) {
         reason = "too many houses";
         return false;
     }
@@ -148,7 +152,7 @@ inline bool isAcceptableReceivedGameInitSettings(const GameInitSettings& setting
             reason = "reserved house colour";
             return false;
         }
-        if(houseInfo.team < -1 || houseInfo.team > MAX_CUSTOM_GAME_PLAYERS) {
+        if(houseInfo.team < -1 || houseInfo.team > playerLimit) {
             reason = "team out of range";
             return false;
         }

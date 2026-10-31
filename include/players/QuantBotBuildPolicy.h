@@ -36,6 +36,7 @@ inline bool replaceHarvestAnchor(bool safe, int currentWorkers, int bestWorkers,
 struct AllocationCandidate { int price, committedValue, targetBps; bool available; };
 inline bool militaryItem(Uint32 item) {
     return isUnit(item) && item != Unit_Carryall && item != Unit_Harvester
+        && item != Unit_CapacityHarvester && item != Unit_FastHarvester
         && item != Unit_MCV && item != Unit_Sandworm;
 }
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
@@ -378,7 +379,7 @@ inline bool healthScaledOutput(Uint32 item, bool citySim) {
     if (item == Structure_NuclearPlant) return citySim;
     return item == Structure_WindTrap || item == Structure_AdvancedWindTrap
         || item == Structure_AdvancedWindTrapMK2 || item == Structure_AdvancedWindTrapMK3
-        || item == Structure_Refinery || item == Structure_Worfinery;
+        || item == Structure_Refinery || item == Structure_Worfinery || item == Structure_Doublefinery;
 }
 
 // Emplacements spend health as armour, and a one-tile footprint is the
@@ -386,7 +387,7 @@ inline bool healthScaledOutput(Uint32 item, bool citySim) {
 inline bool defensiveEmplacement(Uint32 item) {
     return item == Structure_GunTurret || item == Structure_RocketTurret
         || item == Structure_Scoutpost || item == Structure_Flamepost
-        || item == Structure_Chemipost;
+        || item == Structure_Chemipost || item == Structure_Slowpost;
 }
 
 // Whenever concrete is in play, everything that is not a tile state is founded
@@ -591,22 +592,26 @@ inline bool needsKiting(int distance, int weaponRange, bool easy, bool groundTar
 
 inline bool isLightRaider(Uint32 item) {
     return item == Unit_Trike || item == Unit_RaiderTrike || item == Unit_Quad
-        || item == Unit_RocketTrike || item == Unit_SonicTrike;
+        || item == Unit_RocketTrike || item == Unit_SonicTrike
+        || item == Unit_FlameQuad || item == Unit_RaiderQuad;
 }
 
 inline bool isArmoredTank(Uint32 item) {
     return item == Unit_Tank || item == Unit_SiegeTank || item == Unit_Devastator
         || item == Unit_SonicTank || item == Unit_FlameTank || item == Unit_EliteSiegeTank
-        || item == Unit_ChemicalSiegeTank;
+        || item == Unit_ChemicalSiegeTank || item == Unit_RangedTank || item == Unit_SlowTank;
 }
 
 inline bool isLightRaiderPreferredTarget(Uint32 item) {
     return item == Unit_Launcher || item == Unit_EliteLauncher
         || item == Unit_Harvester || item == Unit_RebelHarvester
+        || item == Unit_CapacityHarvester || item == Unit_FastHarvester
         || item == Unit_Trike || item == Unit_RaiderTrike || item == Unit_Quad
         || item == Unit_RocketTrike || item == Unit_SonicTrike
         || item == Unit_Infantry || item == Unit_Soldier || item == Unit_Trooper
-        || item == Unit_Troopers;
+        || item == Unit_Troopers || item == Unit_Troopers5 || item == Unit_Infantry5
+        || item == Unit_GasInfantry || item == Unit_FlameTrooper
+        || item == Unit_FlameQuad || item == Unit_RaiderQuad;
 }
 
 inline int baselineRepairYards(int combatVehicles, int workers) {

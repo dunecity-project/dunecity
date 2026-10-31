@@ -62,8 +62,8 @@ struct MapMetadata {
         for(const char* tornie:{"advanced windtrap","advanced wind trap","advanced windtrap 3x3","advanced wind trap 3x3",
                                 "advanced windtrap mk2","advanced wind trap mk2","advanced windtrap 2x3","advanced wind trap 2x3",
                                 "advanced windtrap mk3","advanced wind trap mk3","advanced windtrap 3x2","advanced wind trap 3x2",
-                                "worfinery","tech center","techcenter","scoutpost","scout post","green post",
-                                "sentinel post","avant-poste","avant poste","flamepost","flame post",
+                                "worfinery","doublefinery","tech center","techcenter","scoutpost","scout post","green post",
+                                "sentinel post","avant-poste","avant poste","flamepost","flame post","slowpost",
                                 "chemipost","chemi post","love factory","lovefactory","chaos factory","chaosfactory"})
             if(n==tornie) return BuildingClass::Tornie;
         return BuildingClass::Vanilla;
@@ -75,6 +75,8 @@ struct MapMetadata {
         int result=0;
         for(const char* name:{"Harkonnen","Atreides","Ordos","Fremen","Sardaukar","Mercenary","Neutral","Rebels","Custom","Wildspade","Kleshmersh","Tharpique"})
             if(ini.hasSection(name)) ++result;
+        // The family payload names its generic ninth slot Corruptique, never an extra thirteenth faction.
+        if(!ini.hasSection("Custom") && ini.hasSection("Corruptique")) ++result;
         for(int i=1;i<=12;++i) if(ini.hasSection("Player"+std::to_string(i))) ++result;
         return result;
     }

@@ -122,7 +122,7 @@ void recordAbsorbed(ObjectBase* victim, int64_t beforeHpMilli, int damage,
         && damagerID != unit->getObjectID()
         && damagerOwner->getTeamID() != controller->getTeamID();
     const auto reward = CombatReward::hit(
-        currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price,
+        currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price,
         int64_t(unit->getMaxHealth())*1000, beforeHpMilli, (unit->getHealth()*1000).lround(),
         hostile, /*unitTarget*/false); // losing a borrowed unit is not a killing blow for its captor
     auto& counters = controller->deviationCounters_();
@@ -157,7 +157,7 @@ void creditCommandedDetonation(const Provenance& armed, const ObjectBase& devast
     ++counters.detonations;
     const bool hostile = beneficiary->getTeamID() != original->getTeamID();
     const int price = currentGame->objectData
-        .data[devastator.getItemID()][devastator.getOriginalHouseID()].price;
+        .data[devastator.getItemID()][devastator.getProductionHouseID()].price;
     // Only the hit points still present are paid, so damage already booked is not paid twice.
     // The completion is a killing blow on the Devastator's own natural type under its
     // original owner, so it reads exactly the record an ordinary lethal hit would read.
@@ -165,7 +165,7 @@ void creditCommandedDetonation(const Provenance& armed, const ObjectBase& devast
         (devastator.getHealth()*1000).lround(), 0, hostile, true,
         hostile && devastator.getHealth() > 0
             ? House::killBonusPermilleForVictim(devastator.getItemID(),
-                devastator.getOriginalHouseID(), price)
+                devastator.getProductionHouseID(), price)
             : CombatReward::kBaselineBonusPermille);
     if (reward.hits == 0) { ++counters.excluded; return; }
 

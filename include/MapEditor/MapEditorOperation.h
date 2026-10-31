@@ -28,6 +28,7 @@
 
 #include <vector>
 #include <memory>
+#include <optional>
 
 class MapEditor;
 
@@ -194,8 +195,8 @@ public:
 class MapEditorStructurePlaceOperation : public MapEditorOperation {
 public:
 
-    MapEditorStructurePlaceOperation(int preferredID, Coord position, HOUSETYPE house, int itemID, int health)
-     : MapEditorOperation(), preferredID(preferredID), position(position), house(house), itemID(itemID), health(health) {
+    MapEditorStructurePlaceOperation(int preferredID, Coord position, HOUSETYPE house, int itemID, int health, bool powerUpgraded = false)
+     : MapEditorOperation(), preferredID(preferredID), position(position), house(house), itemID(itemID), health(health), powerUpgraded(powerUpgraded) {
     }
 
     MapEditorStructurePlaceOperation(Coord position, HOUSETYPE house, int itemID, int health)
@@ -211,6 +212,7 @@ public:
     HOUSETYPE       house;
     int             itemID;
     int             health;
+    bool            powerUpgraded = false;
 };
 
 class MapEditorRemoveStructureOperation : public MapEditorOperation {
@@ -269,8 +271,8 @@ public:
 class MapEditorEditStructureOperation : public MapEditorOperation {
 public:
 
-    MapEditorEditStructureOperation(int id, int health)
-     : MapEditorOperation(), id(id), health(health) {
+    MapEditorEditStructureOperation(int id, int health, std::optional<bool> powerUpgraded = std::nullopt)
+     : MapEditorOperation(), id(id), health(health), powerUpgraded(powerUpgraded) {
     }
 
     virtual ~MapEditorEditStructureOperation() = default;
@@ -279,6 +281,7 @@ public:
 
     int             id;
     int             health;
+    std::optional<bool> powerUpgraded;
 };
 
 

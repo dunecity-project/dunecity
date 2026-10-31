@@ -23,6 +23,7 @@
 #include <GUI/TextButton.h>
 #include <GUI/dune/BuilderListLayout.h>
 #include <misc/SDL2pp.h>
+#include <array>
 
 class BuilderList : public StaticContainer {
 public:
@@ -135,6 +136,7 @@ private:
     /// Build-list index of the item under (x,y), or -1 for gaps, margins and empty slots.
     int getButton(int x, int y);
     int getItemIDFromIndex(int i) const;
+    SDL_Texture* getProductionPortrait(int itemID, int technologyHouse) const;
 
     void onUp();
     void onDown();
@@ -151,6 +153,7 @@ private:
     int mouseLeftButton;
     int mouseRightButton;
 
+    std::array<sdl2::texture_ptr, 6> productionPortraits;
     sdl2::texture_ptr    pSoldOutTextTexture;
     sdl2::texture_ptr    pAlreadyBuiltTextTexture;
     sdl2::texture_ptr    pPlaceItTextTexture;

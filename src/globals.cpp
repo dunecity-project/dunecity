@@ -98,7 +98,7 @@ namespace {
 
 bool tornieGuestHousesActive() {
     return ModManager::instance().isInitialized()
-        && ModManager::instance().isTornieContentActive();
+        && ModManager::instance().isTornieFamilyContentActive();
 }
 
 const std::array<SDL_Color, 8> wildspadeRamp{{
@@ -162,6 +162,11 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Retry Planned Placement", options.retryPlannedPlacement);
     config.setBoolValue(section, "Shared Yard Queue", options.sharedYardQueue);
     config.setBoolValue(section, "Slow City Year", options.slowCityYear);
+    config.setBoolValue(section, "Allied Control", options.alliedControl);
+    config.setBoolValue(section, "Allied Building", options.alliedBuilding);
+    config.setBoolValue(section, "Easy Mode", options.easyMode);
+    config.setBoolValue(section, "Chaos Mode", options.chaosMode);
+    config.setBoolValue(section, "Selling Buildings", options.sellingBuildings);
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -195,6 +200,11 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Retry Planned Placement", options.retryPlannedPlacement);
     readBool("Shared Yard Queue", options.sharedYardQueue);
     readBool("Slow City Year", options.slowCityYear);
+    readBool("Allied Control", options.alliedControl);
+    readBool("Allied Building", options.alliedBuilding);
+    readBool("Easy Mode", options.easyMode);
+    readBool("Chaos Mode", options.chaosMode);
+    readBool("Selling Buildings", options.sellingBuildings);
 }
 
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {
@@ -396,6 +406,11 @@ void applyCustomPaletteRuntimeHouseRamps() {
     }
 }
 bool isHouseAvailable(HOUSETYPE house) {
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        const auto& roster = ModManager::instance().getPlayableHouses();
+        return isPlayerHouseID(house)
+            && std::find(roster.begin(), roster.end(), house) != roster.end();
+    }
     if(house >= HOUSE_HARKONNEN && house < NUM_LEGACY_HOUSES) return true;
     return house == HOUSE_CUSTOM
         && ModManager::instance().isInitialized()
@@ -403,17 +418,17 @@ bool isHouseAvailable(HOUSETYPE house) {
 }
 
 int getNumAvailableHouses() {
+    if(ModManager::instance().isTornieFamilyContentActive())
+        return static_cast<int>(ModManager::instance().getPlayableHouses().size());
     return NUM_LEGACY_HOUSES + (isHouseAvailable(HOUSE_CUSTOM) ? 1 : 0);
 }
 
 bool isCustomGameHouseAvailable(HOUSETYPE house) {
-    if(isHouseAvailable(house)) return true;
-    return tornieGuestHousesActive()
-        && house >= HOUSE_WILDSPADE && house <= HOUSE_THARPIQUE;
+    return isHouseAvailable(house);
 }
 
 int getNumCustomGameHouses() {
-    return tornieGuestHousesActive() ? NUM_PLAYER_HOUSES : getNumAvailableHouses();
+    return getNumAvailableHouses();
 }
 
 HOUSETYPE getHouseFactionIdentity(HOUSETYPE house) {

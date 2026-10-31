@@ -155,6 +155,8 @@ parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), d
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
+parser.add_argument('--achievements-probe', action='store_true',
+                    help='Verify local achievement event hooks, family isolation, profile checkpoints and simulation neutrality')
 parser.add_argument('--stats-ui-probe', action='store_true',
                     help='Exercise the Stats window, observer house browsing and the sidebar layout')
 parser.add_argument('--viewport', default=None, metavar='WIDTHxHEIGHT',
@@ -628,6 +630,7 @@ if args.load_save:
 (out/'setup.json').write_text(json.dumps({**vars(args), 'resolved_roster': roster,
                                        'policy_comparison': policy_comparison}, default=str, indent=2)+'\n')
 if args.shared_spending_probe: env['BALANCE_SHARED_SPENDING_PROBE'] = '1'
+if args.achievements_probe: env['BALANCE_ACHIEVEMENTS_PROBE'] = '1'
 if args.harvester_safety_probe: env['BALANCE_HARVESTER_SAFETY_PROBE'] = '1'
 if args.sourceforge_probe: env['BALANCE_SOURCEFORGE_PROBE'] = '1'
 if args.preplace_probe:
@@ -648,7 +651,7 @@ if args.ffa_screenshot:
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
 if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
-        or args.real_video or args.ffa_screenshot):
+        or args.achievements_probe or args.real_video or args.ffa_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480

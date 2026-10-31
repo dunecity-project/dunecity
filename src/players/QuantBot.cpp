@@ -249,6 +249,8 @@ bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
     if (!currentGame || militaryValueLimit <= 0) return false;
     int value = 0;
     // Match the production allocator's military valuation, including new batch members.
+    if (ModManager::instance().isTornieFamilyContentActive()) value = militaryUnitValue();
+    else
     for (Uint32 item = Unit_FirstID; item <= Unit_LastID; ++item) {
         if (item != Unit_Carryall && item != Unit_Harvester && item != Unit_MCV && item != Unit_Sandworm)
             value += getHouse()->getNumItems(item)
@@ -325,6 +327,8 @@ void QuantBot::update() {
 		// Calculate the total military value of the player
 		initialMilitaryValue = 0;
 		if (currentGame) {
+            if (ModManager::instance().isTornieFamilyContentActive()) initialMilitaryValue = militaryUnitValue();
+            else
 			for (Uint32 i = Unit_FirstID; i <= Unit_LastID; i++) {
 				if (i != Unit_Carryall
 					&& i != Unit_Harvester
@@ -349,7 +353,7 @@ void QuantBot::update() {
 	switch (gameMode) {
 	case GameMode::Campaign: {
 		// Use config values for campaign mode
-		harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialItemCount[Structure_Refinery];
+        harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 		militaryValueLimit = lround(initialMilitaryValue * diffSettings.militaryValueMultiplier);
 
 		logDebug("  Difficulty: %s", 
@@ -377,16 +381,16 @@ void QuantBot::update() {
 			else if (difficulty == Difficulty::Hard) {
 				initialItemCount[Structure_Refinery] = 2;
 				militaryValueLimit = 10000;
-				harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialItemCount[Structure_Refinery];
+                harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 				logDebug("  Mission 21+ override: Refineries=2, MilitaryValueLimit=10000");
 			}
 		}
 
 		// Refinery top-up: Ensure AI has at least the minimum refineries for difficulty
-		if (diffSettings.refineryMinimum > 0 && initialItemCount[Structure_Refinery] < diffSettings.refineryMinimum) {
-			int refineriesToAdd = diffSettings.refineryMinimum - initialItemCount[Structure_Refinery];
-			initialItemCount[Structure_Refinery] = diffSettings.refineryMinimum;
-			harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialItemCount[Structure_Refinery];
+        if (diffSettings.refineryMinimum > 0 && initialRefineryBays() < diffSettings.refineryMinimum) {
+            int refineriesToAdd = diffSettings.refineryMinimum - initialRefineryBays();
+            initialItemCount[Structure_Refinery] += refineriesToAdd;
+            harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 			logDebug("  Refinery top-up: Had %d, topped up to %d (granted %d refineries)", 
 				initialItemCount[Structure_Refinery] - refineriesToAdd, 
 				diffSettings.refineryMinimum,
@@ -420,7 +424,7 @@ void QuantBot::update() {
 					if (pUnit->getOwner() == getHouse()
 						&& pUnit->getItemID() != Unit_Carryall
 						&& pUnit->getItemID() != Unit_Sandworm
-						&& pUnit->getItemID() != Unit_Harvester
+						&& !QuantBotInternal::harvesterItem(pUnit->getItemID())
 						&& pUnit->getItemID() != Unit_MCV
 						&& pUnit->getItemID() != Unit_Frigate
                         && pUnit->getItemID() != Unit_Saboteur) {
@@ -591,7 +595,7 @@ void QuantBot::update() {
         // Game Options supplies an engine ceiling, not permission for an Easy
         // campaign opponent to expand to a skirmish-sized harvester fleet.
         baseHarvesterLimit=std::max(0,diffSettings.harvesterLimitPerRefineryMultiplier
-            * initialItemCount[Structure_Refinery]);
+            * initialRefineryBays());
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;
@@ -872,7 +876,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     // not read as the attack having stopped. Bounded: pruned on every air pass.
     if (!builderOnly() && !autonomousAircraftRaids() && damage>0
         && pObject->getOwner()==getHouse() && pObject->getHealth()>0
-        && (pObject->isAStructure() || pObject->getItemID()==Unit_Harvester
+        && (pObject->isAStructure() || QuantBotInternal::harvesterItem(pObject->getItemID())
             || pObject->getItemID()==Unit_RebelHarvester)
         && pDamager->getOwner()!=nullptr
         && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID()) {
@@ -902,7 +906,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
 		// driving: a colonist halted under fire is the one that does not arrive.
 		if (!autonomousAttack && unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free && pGroundUnit->wasForced()
-			&& pGroundUnit->getItemID() != Unit_Harvester && pGroundUnit->getItemID() != Unit_MCV) {
+			&& !QuantBotInternal::harvesterItem(pGroundUnit->getItemID()) && pGroundUnit->getItemID() != Unit_MCV) {
 			doMove2Pos(pGroundUnit,
 				pGroundUnit->getLocation().x,
 				pGroundUnit->getLocation().y,
@@ -926,7 +930,7 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
             scrambleUnitsAndDefend(pDamager);
         }
 
-		if (pGroundUnit->getItemID() == Unit_Harvester) {
+		if (QuantBotInternal::harvesterItem(pGroundUnit->getItemID())) {
 			// Always keep Harvesters away from harm
 			// Defend the harvester!
 			const Harvester* pHarvester = static_cast<const Harvester*>(pGroundUnit);
@@ -1123,18 +1127,25 @@ int QuantBot::dangerAt(Coord pos, Coord size, bool losses) const {
     return danger;
 }
 
+int QuantBot::initialRefineryBays() const {
+    return initialItemCount[Structure_Refinery] + (ModManager::instance().isTornieFamilyContentActive()
+        ? 2 * initialItemCount[Structure_Doublefinery] + initialItemCount[Structure_Worfinery] : 0);
+}
+
 int QuantBot::militaryUnitValue() const {
-    // The original inline sum, unchanged: every unit type except carryalls,
-    // harvesters, MCVs and sandworms, counted at this house's price. Shared by
-    // the legacy combined pass and the phased build phase so both see the same
-    // figure computed the same way, live, with no cached or latched value.
+    // Preserve the original house-priced sum outside the family. Tornie armies
+    // include non-contiguous custom IDs and the technology of each produced unit.
+    // Both scheduling modes read the same live value, without cached state.
     int militaryValue = 0;
     if (currentGame) {
-        for (Uint32 i = Unit_FirstID; i <= Unit_LastID; i++) {
-            if (i != Unit_Carryall
-                && i != Unit_Harvester
-                && i != Unit_MCV
-                && i != Unit_Sandworm) {
+        if (ModManager::instance().isTornieFamilyContentActive()) {
+            for (const auto* unit : getUnitList())
+                if (unit->getOwner() == getHouse() && QuantBotBuildPolicy::militaryItem(unit->getItemID())
+                    && !isAmbientUnit(unit->getItemID()))
+                    militaryValue += currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
+        } else {
+            for (Uint32 i = Unit_FirstID; i <= Unit_LastID; i++) {
+                if (i != Unit_Carryall && i != Unit_Harvester && i != Unit_MCV && i != Unit_Sandworm)
                     militaryValue += getHouse()->getNumItems(i) * currentGame->objectData.data[i][getHouse()->getHouseID()].price;
             }
         }
@@ -1145,9 +1156,10 @@ int QuantBot::militaryUnitValue() const {
         for (const auto& order : manualUnitOrders) {
             const auto* unit = dynamic_cast<const UnitBase*>(getObject(order.first));
             if (unit && unit->getOwner() == getHouse() && humanControls(unit)
-                && unit->getItemID() != Unit_Carryall && unit->getItemID() != Unit_Harvester
+                && unit->getItemID() != Unit_Carryall && !QuantBotInternal::harvesterItem(unit->getItemID())
                 && unit->getItemID() != Unit_MCV && unit->getItemID() != Unit_Sandworm)
-                militaryValue -= currentGame->objectData.data[unit->getItemID()][getHouse()->getHouseID()].price;
+                militaryValue -= currentGame->objectData.data[unit->getItemID()][ModManager::instance().isTornieFamilyContentActive()
+                    ? unit->getProductionHouseID() : getHouse()->getHouseID()].price;
         }
     }
     return std::max(0, militaryValue);
@@ -1160,6 +1172,8 @@ void QuantBot::onHumanUnitOrder(Uint32 id) {
 }
 
 bool QuantBot::humanControls(const UnitBase* unit) const {
+    // A captured technology unit's persistent capture order is its own authority.
+    if (ModManager::instance().isTornieFamilyContentActive() && unit->getAttackMode() == SABOTAGE) return true;
     const auto it = manualUnitOrders.find(unit->getObjectID());
     return it != manualUnitOrders.end() && (getGameCycleCount()-it->second < MILLI2CYCLES(120000)
         || unit->wasForced() || unit->isMoving() || unit->hasATarget());

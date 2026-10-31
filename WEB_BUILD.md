@@ -4,6 +4,22 @@ DuneCity can be compiled to WebAssembly with Emscripten and published as a
 static browser application. The browser package includes the base game data,
 configuration, JavaScript loader, and WebAssembly executable.
 
+The bundled mods include Tornie, TornieLite, Jericho, JerichoLite, ArcaKev, and
+ArcaKevLite alongside the existing Vanilla, DuneCity, and Dune2R content. The
+native, Android, iOS, and browser packaging rules include the whole `mods/`
+tree; Dune2R's optional downloadable artwork remains excluded.
+
+Verify an already-built browser archive before publishing it:
+
+```sh
+python3 scripts/check-web-mods.py --build-root <browser-build>
+```
+
+This checks each Tornie-family mod against its own `checksums.sha256`, reports
+verified file counts and payload bytes per mod, verifies the twelve shared
+`data/frames/` faction images (downloaded once, not duplicated per mod), and
+retains the DuneCity skins/maps and Dune2R base-content checks.
+
 ## Build
 
 Install the pinned Emscripten SDK on the D: drive:

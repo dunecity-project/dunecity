@@ -30,6 +30,7 @@
 #include <units/HarvesterHelpers.h>
 #include <sand.h>
 #include <Definitions.h>
+#include <mod/ModManager.h>
 
 #include <iterator>
 
@@ -53,26 +54,26 @@ bool isHumanControlledHouse(const House* house) {
 
 } // namespace
 
-Ornithopter::Ornithopter(House* newOwner) : AirUnit(newOwner) {
+Ornithopter::Ornithopter(House* newOwner, int unitType) : AirUnit(newOwner) {
 
-    Ornithopter::init();
+    Ornithopter::init(unitType);
 
     setHealth(getMaxHealth());
 
     timeLastShot = 0;
 }
 
-Ornithopter::Ornithopter(InputStream& stream) : AirUnit(stream) {
-    Ornithopter::init();
+Ornithopter::Ornithopter(InputStream& stream, int unitType) : AirUnit(stream) {
+    Ornithopter::init(unitType);
 
     timeLastShot = stream.readUint32();
 }
 
-void Ornithopter::init() {
-    itemID = Unit_Ornithopter;
+void Ornithopter::init(int unitType) {
+    itemID = unitType;
     registerUnit();
 
-    graphicID = ObjPic_Ornithopter;
+    graphicID = itemID == Unit_EliteOrnithopter ? ObjPic_EliteOrnithopter : ObjPic_Ornithopter;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
     shadowGraphic = pGFXManager->getObjPic(ObjPic_OrnithopterShadow,getOwner()->getHouseID());
 
@@ -82,7 +83,7 @@ void Ornithopter::init() {
     numWeapons = 1;
     bulletType = Bullet_SmallRocket;
 
-    currentMaxSpeed = currentGame->objectData.data[itemID][originalHouseID].maxspeed;
+    currentMaxSpeed = currentGame->objectData.data[itemID][getProductionHouseID()].maxspeed;
 }
 
 Ornithopter::~Ornithopter() = default;
@@ -151,6 +152,24 @@ bool Ornithopter::canAttack(const ObjectBase* object) const {
         return true;
     else
         return false;
+}
+
+void Ornithopter::doAttackPos(int xPos, int yPos, bool forced) {
+    AirUnit::doAttackPos(xPos, yPos, forced);
+    if(ModManager::instance().isTornieFamilyContentActive() && forced
+       && isHumanControlledHouse(owner) && currentGameMap->tileExists(xPos, yPos)) {
+        setForced(false);
+        doSetAttackMode(HUNT);
+    }
+}
+
+void Ornithopter::doAttackObject(const ObjectBase* object, bool forced) {
+    AirUnit::doAttackObject(object, forced);
+    if(ModManager::instance().isTornieFamilyContentActive() && forced
+       && isHumanControlledHouse(owner) && canAttack(object)) {
+        setForced(false);
+        doSetAttackMode(HUNT);
+    }
 }
 
 void Ornithopter::destroy() {

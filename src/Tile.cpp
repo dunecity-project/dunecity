@@ -16,6 +16,7 @@
  */
 
 #include <Tile.h>
+#include <Achievements/AchievementEvents.h>
 
 #include <globals.h>
 
@@ -44,13 +45,17 @@ namespace {
 bool isThinSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_Spice
         || terrainType == Terrain_GreenSpice
-        || terrainType == Terrain_RedSpice;
+        || terrainType == Terrain_RedSpice
+        || terrainType == Terrain_PaleLilacSpice
+        || terrainType == Terrain_WhiteSpice;
 }
 
 bool isThickSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_ThickSpice
         || terrainType == Terrain_ThickGreenSpice
-        || terrainType == Terrain_ThickRedSpice;
+        || terrainType == Terrain_ThickRedSpice
+        || terrainType == Terrain_ThickPaleLilacSpice
+        || terrainType == Terrain_ThickWhiteSpice;
 }
 
 bool isSpiceTerrain(int terrainType) noexcept {
@@ -65,6 +70,12 @@ int getThinSpiceTerrain(int terrainType) noexcept {
         case Terrain_RedSpice:
         case Terrain_ThickRedSpice:
         case Terrain_RedSpiceBloom: return Terrain_RedSpice;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_PaleLilacSpiceBloom: return Terrain_PaleLilacSpice;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice:
+        case Terrain_WhiteSpiceBloom: return Terrain_WhiteSpice;
         default: return Terrain_Spice;
     }
 }
@@ -77,6 +88,12 @@ int getThickSpiceTerrain(int terrainType) noexcept {
         case Terrain_RedSpice:
         case Terrain_ThickRedSpice:
         case Terrain_RedSpiceBloom: return Terrain_ThickRedSpice;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_PaleLilacSpiceBloom: return Terrain_ThickPaleLilacSpice;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice:
+        case Terrain_WhiteSpiceBloom: return Terrain_ThickWhiteSpice;
         default: return Terrain_ThickSpice;
     }
 }
@@ -95,6 +112,14 @@ unsigned int getTerrainObjPic(int terrainType) noexcept {
         case Terrain_ThickRedSpice:
         case Terrain_RedSpiceBloom:
             return ObjPic_Terrain_RedSpice;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_PaleLilacSpiceBloom:
+            return ObjPic_Terrain_PaleLilacSpice;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice:
+        case Terrain_WhiteSpiceBloom:
+            return ObjPic_Terrain_WhiteSpice;
         default:
             return ObjPic_Terrain;
     }
@@ -960,7 +985,7 @@ void Tile::setType(int newType) {
 }
 
 
-void Tile::squash() const {
+void Tile::squash(UnitBase* crusher) const {
     if (!hasInfantry()) return;
 
     auto iter = assignedInfantryList.begin();
@@ -971,6 +996,7 @@ void Tile::squash() const {
         if(current == nullptr)
             continue;
 
+        AchievementEvents::crushed(current, crusher);
         current->squash();
     } while(iter != assignedInfantryList.end());
 }
@@ -1137,6 +1163,7 @@ ObjectBase* Tile::getObjectWithID(Uint32 objectID) const {
 
 void Tile::triggerSpiceBloom(House* pTrigger) {
     if (!isSpiceBloom()) return;
+    AchievementEvents::bloom(pTrigger);
 
     const int bloomType = type;
     std::pair<int, int> generatedSpiceTerrain;
@@ -1144,6 +1171,10 @@ void Tile::triggerSpiceBloom(House* pTrigger) {
         generatedSpiceTerrain = std::make_pair(Terrain_GreenSpice, Terrain_ThickGreenSpice);
     } else if(bloomType == Terrain_RedSpiceBloom) {
         generatedSpiceTerrain = std::make_pair(Terrain_RedSpice, Terrain_ThickRedSpice);
+    } else if(bloomType == Terrain_PaleLilacSpiceBloom) {
+        generatedSpiceTerrain = std::make_pair(Terrain_PaleLilacSpice, Terrain_ThickPaleLilacSpice);
+    } else if(bloomType == Terrain_WhiteSpiceBloom) {
+        generatedSpiceTerrain = std::make_pair(Terrain_WhiteSpice, Terrain_ThickWhiteSpice);
     } else {
         generatedSpiceTerrain = currentGameMap->chooseGeneratedSpiceTerrain();
     }
@@ -1443,7 +1474,9 @@ int Tile::getTerrainTile() const {
 
     case Terrain_Spice:
     case Terrain_GreenSpice:
-    case Terrain_RedSpice: {
+    case Terrain_RedSpice:
+    case Terrain_PaleLilacSpice:
+    case Terrain_WhiteSpice: {
         // determine which surrounding tiles are spice
         bool up = (currentGameMap->tileExists(location.x, location.y - 1) == false) || isSameSpiceFamily(currentGameMap->getTile(location.x, location.y - 1)->getType(), terrainType);
         bool right = (currentGameMap->tileExists(location.x + 1, location.y) == false) || isSameSpiceFamily(currentGameMap->getTile(location.x + 1, location.y)->getType(), terrainType);
@@ -1455,7 +1488,9 @@ int Tile::getTerrainTile() const {
 
     case Terrain_ThickSpice:
     case Terrain_ThickGreenSpice:
-    case Terrain_ThickRedSpice: {
+    case Terrain_ThickRedSpice:
+    case Terrain_ThickPaleLilacSpice:
+    case Terrain_ThickWhiteSpice: {
         // determine which surrounding tiles are thick spice
         bool up = (currentGameMap->tileExists(location.x, location.y - 1) == false) || (currentGameMap->getTile(location.x, location.y - 1)->getType() == terrainType);
         bool right = (currentGameMap->tileExists(location.x + 1, location.y) == false) || (currentGameMap->getTile(location.x + 1, location.y)->getType() == terrainType);
@@ -1467,7 +1502,9 @@ int Tile::getTerrainTile() const {
 
     case Terrain_SpiceBloom:
     case Terrain_GreenSpiceBloom:
-    case Terrain_RedSpiceBloom: {
+    case Terrain_RedSpiceBloom:
+    case Terrain_PaleLilacSpiceBloom:
+    case Terrain_WhiteSpiceBloom: {
         return TerrainTile_SpiceBloom;
     } break;
 
@@ -1527,7 +1564,8 @@ void Tile::selectFilter(int houseID, ObjectBase** lastCheckedObject, ObjectBase*
     const auto selectUnit = [&](Uint32 objectID) {
                                 obj = currentGame->getObjectManager().getObject(objectID);
 
-                                if (obj->isSelected() || houseID != obj->getOwner()->getHouseID())
+                                if (obj->isSelected()
+                                    || !currentGame->canPlayerControlHouse(currentGame->getHouse(houseID), obj->getOwner()))
                                     return;
 
                                 if (!predicate(obj))

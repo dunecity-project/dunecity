@@ -65,6 +65,7 @@
 #include "../performance/game-perf.inc"
 #include "scenario-match.inc"
 #include <FileClasses/INIFile.h>
+#include "../AchievementsTestCase/AchievementRuntimeProbe.inc"
 
 int runCampaignBalanceProbe() {
     const auto probeStart = ProbeDigest::Clock::now();
@@ -116,6 +117,10 @@ int runCampaignBalanceProbe() {
         const INIFile optionsFile(options);
         if (!optionsFile.hasSection("Game Options")) throw std::runtime_error("No [Game Options] in BALANCE_GAME_OPTIONS");
         applyGameOptionsFromConfig(optionsFile, "Game Options", settings.gameOptions);
+    }
+    if(std::getenv("BALANCE_ACHIEVEMENTS_PROBE")) {
+        runAchievementRuntimeProbe();
+        return MENU_QUIT_DEFAULT;
     }
     GameInitSettings init(humanHouse, settings.gameOptions, level);
     // Scenario matrix: a campaign mission other than the level's first (levels 2-8 have three).

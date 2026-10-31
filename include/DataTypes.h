@@ -131,7 +131,7 @@ typedef enum {
     AMBUSH = 2,     ///< Ambush means a unit will remain in position until sighted by the enemy, and then proceed to attack any enemy units it might find on the map.
     HUNT = 3,       ///< Hunt makes a unit start from its position towards enemy units, even if the player has not sighted the AI (normally the AI will not attack until there has been a contact between the player's and the AI's units). Also works for human units, they'll go towards any enemy units on the map just as the mission starts.
     HARVEST = 4,    ///< Only used by the map editor
-    SABOTAGE = 5,   ///< Only used by the map editor
+    SABOTAGE = 5,   ///< Tornie-family infantry hunts enemy buildings to capture; otherwise editor-only
     STOP = 6,
     CAPTURE = 7,    ///< Capture is only used for infantry units when ordered to capture a building
     CARRYALLREQUESTED = 8, ///< This allows a unit to keep requesting a carryall even if one isn't available right now
@@ -222,6 +222,7 @@ public:
         std::string scaler;
         bool        rotateUnitGraphics;
         bool        showWatermark;      ///< Show mod/version watermark during gameplay (default: true)
+        bool        showHarvesterCount = true; ///< Tornie local-house overlay; never synchronized.
         int         cursorVisibility;   ///< Cursor visibility: 0=auto, 1=hidden, 2=visible
         int         cursorScale;        ///< Cursor scale factor in window units: 0=1.5x default, 1=1x, 2=2x, 3=3x, 4=4x
     } video;
@@ -314,7 +315,12 @@ public:
                     && (continuousGroundSteps == goc.continuousGroundSteps)
                     && (retryPlannedPlacement == goc.retryPlannedPlacement)
                     && (sharedYardQueue == goc.sharedYardQueue)
-                    && (slowCityYear == goc.slowCityYear);
+                    && (slowCityYear == goc.slowCityYear)
+                    && (alliedControl == goc.alliedControl)
+                    && (alliedBuilding == goc.alliedBuilding)
+                    && (easyMode == goc.easyMode)
+                    && (chaosMode == goc.chaosMode)
+                    && (sellingBuildings == goc.sellingBuildings);
         }
 
         bool operator!=(const GameOptionsClass& goc) const {
@@ -348,6 +354,11 @@ public:
             optStr += "/retryPlans=" + std::to_string(retryPlannedPlacement);
             optStr += "/sharedYardQueue=" + std::to_string(sharedYardQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
+            optStr += "/alliedControl=" + std::to_string(alliedControl);
+            optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
+            optStr += "/easyMode=" + std::to_string(easyMode);
+            optStr += "/chaosMode=" + std::to_string(chaosMode);
+            optStr += "/sellingBuildings=" + std::to_string(sellingBuildings);
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -403,6 +414,13 @@ public:
         /// costs and growth run at half the classic pace (DuneCity::cyclesPerCityYear).
         bool        slowCityYear;
 
+        /// Tornie-family rules; ignored by other content families.
+        bool        alliedControl = false;
+        bool        alliedBuilding = false;
+        bool        easyMode = false;
+        bool        chaosMode = false;
+        bool        sellingBuildings = true;
+
         /// The lobby's per-house harvester ceiling, or 0 for none. Unchecked (-1) and 0 both mean
         /// unlimited, as the Game Options tooltip says: each AI then chooses its own economic target.
         /// Every engine and AI reader goes through this, so no reader can take 0 as "zero harvesters".
@@ -442,7 +460,8 @@ constexpr int NUM_LEGACY_HOUSES = 8;
 constexpr int NUM_CAMPAIGN_HOUSES = HOUSE_CUSTOM + 1;
 /// Houses a player can hold. Saves before SAVEGAMEVERSION 9871 stored exactly this many.
 constexpr int NUM_PLAYER_HOUSES = HOUSE_NATIVES;
-constexpr int MAX_CUSTOM_GAME_PLAYERS = 9;
+/// Storage capacity; CustomGamePlayerPolicy keeps non-family lobbies at nine rows.
+constexpr int MAX_CUSTOM_GAME_PLAYERS = NUM_PLAYER_HOUSES;
 constexpr int NUM_BASE_HOUSE_COLOR_SLOTS = NUM_CAMPAIGN_HOUSES;
 
 constexpr bool isNativesHouse(int house) noexcept { return house == HOUSE_NATIVES; }

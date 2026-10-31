@@ -143,7 +143,8 @@ AITelemetry::Record siteQualityRecord(const SiteQuality& q) {
 // force.spreadVsDeathHand: the buildings one Death Hand must not take out together.
 bool deathHandCritical(Uint32 item) {
     return item == Structure_ConstructionYard || item == Structure_Refinery || item == Structure_HeavyFactory
-        || item == Structure_LightFactory || item == Structure_HighTechFactory || item == Structure_Palace;
+        || item == Structure_LightFactory || item == Structure_HighTechFactory || item == Structure_Palace
+        || (item == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive());
 }
 // Clear tiles kept between two of them. Bullet::detonateDeathHand() lands its blast centres up to
 // two tiles (128 world units) from the impact, and a structure is hit when a centre lies on it, so
@@ -380,7 +381,8 @@ bool needsGroundExit(Uint32 item) {
     return item == Structure_HeavyFactory || item == Structure_LightFactory
         || item == Structure_Refinery || item == Structure_RepairYard
         || item == Structure_Barracks || item == Structure_WOR
-        || item == Structure_StarPort || item == Structure_PoliceStation;
+        || item == Structure_StarPort || item == Structure_PoliceStation
+        || (item == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive());
 }
 bool blocksGroundAccess(Uint32 item) {
     return item != Structure_Road && item != Structure_Slab1 && item != Structure_Slab4;
@@ -707,7 +709,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 
 	// Pre-collect spice tile positions for refinery placement (avoids O(N^2) inner loop)
 	std::vector<Coord> spiceTiles;
-	if (itemID == Structure_Refinery) {
+    if (itemID == Structure_Refinery || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive())) {
 		// Only scan spice in a wider area around the base (no need for full map)
 		int spiceRadius = searchRadius + 30;
 		int spStartX = std::max(0, baseCenter.x - spiceRadius);
@@ -997,7 +999,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 		&& itemID != Structure_Wall
 		&& itemID != Structure_Slab1
 		&& itemID != Structure_Slab4
-		&& itemID != Structure_Refinery;
+        && itemID != Structure_Refinery && itemID != Structure_Doublefinery;
 	if (supportsVariedSpacing) {
 		const int spacingStyle = (getHouse()->getHouseID() * 37 + itemID * 17
 			+ getHouse()->getNumStructures()) % 3;
@@ -1024,7 +1026,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
             if (!factoryPlacement)
 			    locationScore -= lround(blockDistance(squadRallyLocation, Coord(placeLocationX, placeLocationY)));
 			locationScore -= lround(blockDistance(baseCenter, Coord(placeLocationX, placeLocationY)));
-		} else if (itemID == Structure_Refinery) {
+        } else if (itemID == Structure_Refinery || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive())) {
 			// Refineries prefer being close to spice deposits
 			int closestSpiceDistance = 10000;
 			for (const auto& spiceCoord : spiceTiles) {
@@ -1530,7 +1532,7 @@ QuantBot::BatteryGeometry QuantBot::batteryGeometry(Coord anchor, Coord forward)
                         isExpansionYard(structure->getItemID(), structure->getObjectID(), anchorYard));
             return demand;
         }()),
-        getHouse()->getNumItems(Structure_Refinery),
+        getAIRefineryBays(),
         getHouse()->getNumItems(Structure_HeavyFactory),
         getHouse()->getNumItems(Structure_RepairYard)));
     return geometry;
@@ -2776,7 +2778,7 @@ Coord QuantBot::findPlaceLocationSimple(Uint32 itemID) {
 						score += 30 - distanceToRally * 2; // Bonus for being close to rally point
 					}
 				}
-				else if (itemID == Structure_Refinery) {
+                else if (itemID == Structure_Refinery || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive())) {
 					// Refineries prefer being close to spice deposits
 					FixPoint closestSpiceDistance = FixPt_MAX;
 					for (int spiceX = 0; spiceX < getMap().getSizeX(); spiceX++) {

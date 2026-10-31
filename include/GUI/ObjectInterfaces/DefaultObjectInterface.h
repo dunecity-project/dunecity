@@ -72,7 +72,7 @@ protected:
         const HOUSETYPE pictureHouse = static_cast<HOUSETYPE>(
             DuneCity::isCityOnlyStructure(itemID) && pObject->getOwner()
                 ? pObject->getOwner()->getHouseID()
-                : pObject->getOriginalHouseID());
+                : pObject->getProductionHouseID());
         objPicture.setTexture(resolveItemPicture(itemID, pictureHouse));
 
         topBoxHBox.addWidget(Spacer::create());

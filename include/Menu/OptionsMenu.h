@@ -112,6 +112,8 @@ private:
     Checkbox    showTutorialHintsCheckbox;
     HBox        videoHBox2;
     Checkbox    showWatermarkCheckbox;
+    HBox        harvesterCountHBox;
+    Checkbox    showHarvesterCountCheckbox;
     DropDownBox cursorVisibilityDropDownBox;
     DropDownBox cursorScaleDropDownBox;
     HBox        paletteHBox;

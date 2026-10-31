@@ -16,6 +16,7 @@
  */
 
 #include <units/InfantryBase.h>
+#include <Achievements/AchievementEvents.h>
 
 #include <globals.h>
 
@@ -33,9 +34,11 @@
 #include <structures/StructureBase.h>
 #include <structures/Refinery.h>
 #include <structures/RepairYard.h>
+#include <structures/WindTrap.h>
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/TrackedUnit.h>
+#include <array>
 
 // the position on the tile
 Coord tilePositionOffset[5] = { Coord(0,0), Coord(-TILESIZE/4,-TILESIZE/4), Coord(TILESIZE/4,-TILESIZE/4), Coord(-TILESIZE/4,TILESIZE/4), Coord(TILESIZE/4,TILESIZE/4)};
@@ -66,6 +69,42 @@ void InfantryBase::init() {
 
 InfantryBase::~InfantryBase() = default;
 
+const ObjectBase* InfantryBase::findTarget() const {
+    if(!ModManager::instance().isTornieFamilyContentActive()
+       || attackMode != SABOTAGE || !canCaptureStructures()) return GroundUnit::findTarget();
+    const StructureBase* closest = nullptr;
+    FixPoint distance = FixPt_MAX;
+    for(const auto* structure : structureList) {
+        if(!structure->isActive() || !structure->canBeCaptured()
+           || structure->getOwner()->getTeamID() == owner->getTeamID()
+           || !structure->isVisible(owner->getTeamID())) continue;
+        const FixPoint candidateDistance = blockDistance(location, structure->getClosestPoint(location));
+        if(candidateDistance < distance || (candidateDistance == distance
+           && closest && structure->getObjectID() < closest->getObjectID())) {
+            closest = structure;
+            distance = candidateDistance;
+        }
+    }
+    return closest;
+}
+
+void InfantryBase::targeting() {
+    if(!ModManager::instance().isTornieFamilyContentActive()
+       || attackMode != SABOTAGE || !canCaptureStructures()) {
+        GroundUnit::targeting();
+        return;
+    }
+    const bool hadTarget = target.getObjectID() != NONE_ID;
+    const auto* structure = dynamic_cast<const StructureBase*>(target.getObjPointer());
+    if(!structure || !structure->isActive() || !structure->canBeCaptured()
+       || structure->getOwner()->getTeamID() == owner->getTeamID()
+       || !structure->isVisible(owner->getTeamID())) {
+        if(hadTarget) releaseTarget();
+        if(findTargetTimer == 0) enqueueTargetRequest(TargetRequestKind::Acquire);
+    }
+    engageTarget();
+}
+
 
 void InfantryBase::save(OutputStream& stream) const {
 
@@ -76,7 +115,7 @@ void InfantryBase::save(OutputStream& stream) const {
 }
 
 void InfantryBase::handleCaptureClick(int xPos, int yPos) {
-    if(respondable && ((getItemID() == Unit_Soldier) || (getItemID() == Unit_Trooper))) {
+    if(respondable && canCaptureStructures()) {
         if (currentGameMap->tileExists(xPos, yPos)) {
             if (currentGameMap->getTile(xPos,yPos)->hasAnObject()) {
                 // capture structure
@@ -96,7 +135,9 @@ void InfantryBase::doCaptureStructure(Uint32 targetStructureID) {
 
 void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
 
-    if((pStructure == nullptr) || (pStructure->canBeCaptured() == false) || (pStructure->getOwner()->getTeamID() == getOwner()->getTeamID())) {
+    if((ModManager::instance().isTornieFamilyContentActive() && !canCaptureStructures())
+       || (pStructure == nullptr) || (pStructure->canBeCaptured() == false)
+       || (pStructure->getOwner()->getTeamID() == getOwner()->getTeamID())) {
         // does not exist anymore, cannot be captured or is a friendly building
         return;
     }
@@ -228,6 +269,7 @@ void InfantryBase::checkPos() {
                     int posX = pCapturedStructure->getX();
                     int posY = pCapturedStructure->getY();
                     int origHouse = pCapturedStructure->getOriginalHouseID();
+                    const int productionHouse = pCapturedStructure->getProductionHouseID();
                     int oldHealth = lround(pCapturedStructure->getHealth());
                     bool isSelected = pCapturedStructure->isSelected();
                     bool isSelectedByOtherPlayer = pCapturedStructure->isSelectedByOtherPlayer();
@@ -235,8 +277,19 @@ void InfantryBase::checkPos() {
                     FixPoint capturedSpice = 0;
 
                     UnitBase* pContainedUnit = nullptr;
+                    struct CapturedCargo { int id; int technology; FixPoint health; FixPoint spice; };
+                    std::array<CapturedCargo, 2> additionalCargo{};
+                    std::size_t additionalCargoCount = 0;
+                    if(ModManager::instance().isTornieFamilyContentActive() && targetID == Structure_Doublefinery) {
+                        for(auto* unit : static_cast<Refinery*>(pCapturedStructure)->getContainedHarvesters()) {
+                            additionalCargo[additionalCargoCount++] = {unit->getItemID(), unit->getProductionHouseID(),
+                                unit->getHealth(), harvesterGetAmountOfSpice(unit)};
+                        }
+                    }
 
-                    if((targetID == Structure_Silo || targetID == Structure_Refinery) && pOwner->getCapacity() > 0) {
+                    if((targetID == Structure_Silo || targetID == Structure_Refinery
+                        || (ModManager::instance().isTornieFamilyContentActive() && targetID == Structure_Doublefinery))
+                       && pOwner->getCapacity() > 0) {
                         capturedSpice = currentGame->objectData.data[targetID][pOwner->getHouseID()].capacity
                             * (pOwner->getEarnedCredits() / pOwner->getCapacity());
                     }
@@ -255,9 +308,11 @@ void InfantryBase::checkPos() {
                     Uint32 containedUnitID = NONE_ID;
                     FixPoint containedUnitHealth = 0;
                     FixPoint containedHarvesterSpice = 0;
+                    int containedTechnology = origHouse;
                     if(pContainedUnit != nullptr) {
                         containedUnitID = pContainedUnit->getItemID();
                         containedUnitHealth = pContainedUnit->getHealth();
+                        containedTechnology = pContainedUnit->getProductionHouseID();
                         if(isHarvesterLikeUnit(containedUnitID)) {
                             containedHarvesterSpice = harvesterGetAmountOfSpice(pContainedUnit);
                         }
@@ -294,6 +349,12 @@ void InfantryBase::checkPos() {
                         }
                     }
 
+                    AchievementEvents::captured(getOwner(), pOwner);
+                    if(!immortalityEnabled || getOwner() != pLocalHouse) AchievementEvents::lost(this);
+                    const auto* oldWindtrap = dynamic_cast<const WindTrap*>(pCapturedStructure);
+                    const bool upgradedWindtrap = ModManager::instance().isTornieFamilyContentActive()
+                        && oldWindtrap && oldWindtrap->isPowerUpgraded();
+                    const bool scoutpostConversion = pCapturedStructure->isScoutpostConversion();
 
                     // Transfer its share before removing capacity, so it is not
                     // discarded by the cap and then charged a second time.
@@ -304,10 +365,15 @@ void InfantryBase::checkPos() {
                     delete pCapturedStructure;
 
                     // ... and create a new one
-                    StructureBase* pNewStructure = owner->placeStructure(NONE_ID, targetID, posX, posY, false, true);
+                    StructureBase* pNewStructure = owner->placeStructure(
+                        NONE_ID, targetID, posX, posY, false, true, productionHouse);
 
                     pNewStructure->setOriginalHouseID(origHouse);
                     pNewStructure->setHealth(oldHealth);
+                    if(ModManager::instance().isTornieFamilyContentActive()) {
+                        if(auto* windtrap = dynamic_cast<WindTrap*>(pNewStructure)) windtrap->inheritPowerUpgrade(upgradedWindtrap);
+                        if(scoutpostConversion) pNewStructure->markScoutpostConversion();
+                    }
                     if(isSelected == true) {
                         pNewStructure->setSelected(true);
                         currentGame->getSelectedList().insert(pNewStructure->getObjectID());
@@ -320,7 +386,7 @@ void InfantryBase::checkPos() {
                     }
 
                     if(containedUnitID != NONE_ID) {
-                        UnitBase* pNewUnit = owner->createUnit(containedUnitID);
+                        UnitBase* pNewUnit = owner->createUnit(containedUnitID, false, containedTechnology);
 
                         pNewUnit->setRespondable(false);
                         pNewUnit->setActive(false);
@@ -341,6 +407,18 @@ void InfantryBase::checkPos() {
                             pRepairYard->assignUnit(pNewUnit);
                         }
                     }
+                    for(std::size_t i = 0; i < additionalCargoCount; ++i) {
+                        const auto& cargo = additionalCargo[i];
+                        UnitBase* unit = owner->createUnit(cargo.id, false, cargo.technology);
+                        unit->setRespondable(false);
+                        unit->setActive(false);
+                        unit->setVisible(VIS_ALL, false);
+                        unit->setHealth(cargo.health);
+                        harvesterSetAmountOfSpice(unit, cargo.spice);
+                        auto* refinery = static_cast<Refinery*>(pNewStructure);
+                        refinery->book();
+                        refinery->assignHarvester(static_cast<TrackedUnit*>(unit));
+                    }
 
                     // steal credits
                     owner->addCredits(capturedSpice, false);
@@ -360,13 +438,20 @@ void InfantryBase::checkPos() {
                 
                 if(!isImmortal) {
                     // destroy unit indirectly (normal behavior: engineer is consumed)
+                    AchievementEvents::lost(this);
                     setTarget(nullptr);
                     setHealth(0);
                 } else {
                     // Immortal engineer survives the capture attempt
                     setTarget(nullptr);
-                    // Move the engineer away from the structure so it doesn't keep trying to capture
-                    doMove2Pos(guardPoint, false);
+                    if(ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE) {
+                        setForced(false);
+                        clearPath();
+                        setDestination(location);
+                        findTargetTimer = 0;
+                    } else {
+                        doMove2Pos(guardPoint, false);
+                    }
                 }
                 return;
             }

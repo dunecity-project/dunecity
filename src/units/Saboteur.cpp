@@ -16,6 +16,7 @@
  */
 
 #include <units/Saboteur.h>
+#include <Achievements/AchievementEvents.h>
 
 #include <globals.h>
 
@@ -112,6 +113,7 @@ bool Saboteur::update() {
                     }
 
                     ObjectBase* pObject = target.getObjPointer();
+                    AchievementEvents::damage(pObject, getObjectID(), getOwner(), true);
                     destroy();
                     pObject->setHealth(0);
                     pObject->destroy();

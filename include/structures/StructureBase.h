@@ -96,6 +96,17 @@ public:
     */
     virtual void handleRepairClick();
 
+    bool canSell() const;
+    int getSaleRefund() const;
+    void handleSellClick();
+    void doSell();
+
+    int getTechnologyHouseID() const;
+    int getProductionHouseID() const override;
+    void setProductionHouseID(int houseID);
+    void markScoutpostConversion() { scoutpostConversion_ = true; }
+    bool isScoutpostConversion() const { return scoutpostConversion_; }
+
     /**
         Set the deploy position of this structure. Units produced in this structure will move directly to
         this position x,y after being deployed.
@@ -179,6 +190,10 @@ public:
 
 protected:
     bool demolishedByOwner_ = false; // transient removal cause; never survives removal
+    bool selling_ = false; ///< Transient sale removal; never serialized.
+    bool scoutpostConversion_ = false;
+    int productionHouseID_ = HOUSE_INVALID; ///< Explicit faction column, never a runtime house slot.
+    virtual bool usesGreenPowerAnimation() const { return false; }
     /**
         Used for updating things that are specific to that particular structure. Is called from
         StructureBase::update() before the check if this structure is still alive.

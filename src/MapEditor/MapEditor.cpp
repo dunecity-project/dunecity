@@ -58,13 +58,17 @@ namespace {
 bool isThinSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_Spice
         || terrainType == Terrain_GreenSpice
-        || terrainType == Terrain_RedSpice;
+        || terrainType == Terrain_RedSpice
+        || terrainType == Terrain_PaleLilacSpice
+        || terrainType == Terrain_WhiteSpice;
 }
 
 bool isThickSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_ThickSpice
         || terrainType == Terrain_ThickGreenSpice
-        || terrainType == Terrain_ThickRedSpice;
+        || terrainType == Terrain_ThickRedSpice
+        || terrainType == Terrain_ThickPaleLilacSpice
+        || terrainType == Terrain_ThickWhiteSpice;
 }
 
 bool isSpiceTerrain(int terrainType) noexcept {
@@ -77,6 +81,10 @@ int getThinSpiceTerrain(int terrainType) noexcept {
         case Terrain_ThickGreenSpice: return Terrain_GreenSpice;
         case Terrain_RedSpice:
         case Terrain_ThickRedSpice: return Terrain_RedSpice;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice: return Terrain_PaleLilacSpice;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice: return Terrain_WhiteSpice;
         default: return Terrain_Spice;
     }
 }
@@ -95,6 +103,14 @@ unsigned int getTerrainObjPic(int terrainType) noexcept {
         case Terrain_ThickRedSpice:
         case Terrain_RedSpiceBloom:
             return ObjPic_Terrain_RedSpice;
+        case Terrain_PaleLilacSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_PaleLilacSpiceBloom:
+            return ObjPic_Terrain_PaleLilacSpice;
+        case Terrain_WhiteSpice:
+        case Terrain_ThickWhiteSpice:
+        case Terrain_WhiteSpiceBloom:
+            return ObjPic_Terrain_WhiteSpice;
         default:
             return ObjPic_Terrain;
     }
@@ -106,9 +122,11 @@ unsigned int getMapEditorStructureUIGraphic(int itemID) noexcept {
         case Structure_AdvancedWindTrapMK2: return UI_MapEditor_AdvancedWindTrapMK2;
         case Structure_AdvancedWindTrapMK3: return UI_MapEditor_AdvancedWindTrapMK3;
         case Structure_Worfinery:           return UI_MapEditor_Worfinery;
+        case Structure_Doublefinery:        return UI_MapEditor_Doublefinery;
         case Structure_TechCenter:          return UI_MapEditor_TechCenter;
         case Structure_Scoutpost:           return UI_MapEditor_Scoutpost;
         case Structure_Flamepost:           return UI_MapEditor_Flamepost;
+        case Structure_Slowpost:           return NUM_UIGRAPHICS;
         case Structure_Chemipost:           return UI_MapEditor_Chemipost;
         case Structure_LoveFactory:         return UI_MapEditor_LoveFactory;
         case Structure_ChaosFactory:        return UI_MapEditor_ChaosFactory;
@@ -272,7 +290,7 @@ void MapEditor::setMap(const MapData& mapdata, const MapInfo& newMapInfo) {
         players.push_back(Player(getHouseNameByNumber(HOUSE_MERCENARY),HOUSE_MERCENARY,HOUSE_MERCENARY,false,false,"CPU",25));
         players.push_back(Player(getHouseNameByNumber(HOUSE_NEUTRAL),HOUSE_NEUTRAL,HOUSE_NEUTRAL,false,false,"CPU",25));
         players.push_back(Player(getHouseNameByNumber(HOUSE_REBELS),HOUSE_REBELS,HOUSE_REBELS,false,false,"CPU",25));
-        if(isHouseAvailable(HOUSE_CUSTOM)) {
+        if(isHouseAvailable(HOUSE_CUSTOM) || ModManager::instance().isTornieFamilyContentActive()) {
             players.push_back(Player(getHouseNameByNumber(HOUSE_CUSTOM),HOUSE_CUSTOM,HOUSE_CUSTOM,false,false,"CPU",25));
         }
     } else {
@@ -284,8 +302,16 @@ void MapEditor::setMap(const MapData& mapdata, const MapInfo& newMapInfo) {
         players.push_back(Player(getHouseNameByNumber(HOUSE_MERCENARY),HOUSE_MERCENARY,HOUSE_MERCENARY,false,false,"Team6"));
         players.push_back(Player(getHouseNameByNumber(HOUSE_NEUTRAL),HOUSE_NEUTRAL,HOUSE_NEUTRAL,false,false,"Team7"));
         players.push_back(Player(getHouseNameByNumber(HOUSE_REBELS),HOUSE_REBELS,HOUSE_REBELS,false,false,"Team8"));
-        if(isHouseAvailable(HOUSE_CUSTOM)) {
+        if(isHouseAvailable(HOUSE_CUSTOM) || ModManager::instance().isTornieFamilyContentActive()) {
             players.push_back(Player(getHouseNameByNumber(HOUSE_CUSTOM),HOUSE_CUSTOM,HOUSE_CUSTOM,false,false,"Team9"));
+        }
+    }
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        for(int h = HOUSE_WILDSPADE; h < NUM_PLAYER_HOUSES; ++h) {
+            const auto house = static_cast<HOUSETYPE>(h);
+            const auto brain = getMapVersion() < 2 ? "CPU" : "Team" + std::to_string(h + 1);
+            players.emplace_back(getHouseNameByNumber(house), house, static_cast<HOUSETYPE>(getDefaultHouseColorSlot(house)),
+                                 false, false, brain, 25);
         }
     }
 
@@ -471,8 +497,15 @@ void MapEditor::loadMap(const std::string& filepath) {
     players.push_back(Player(getHouseNameByNumber(HOUSE_MERCENARY),HOUSE_MERCENARY,HOUSE_MERCENARY,false,false,"Team6"));
     players.push_back(Player(getHouseNameByNumber(HOUSE_NEUTRAL),HOUSE_NEUTRAL,HOUSE_NEUTRAL,false,false,"Team7"));
     players.push_back(Player(getHouseNameByNumber(HOUSE_REBELS),HOUSE_REBELS,HOUSE_REBELS,false,false,"Team8"));
-    if(isHouseAvailable(HOUSE_CUSTOM)) {
+    if(isHouseAvailable(HOUSE_CUSTOM) || ModManager::instance().isTornieFamilyContentActive()) {
         players.push_back(Player(getHouseNameByNumber(HOUSE_CUSTOM),HOUSE_CUSTOM,HOUSE_CUSTOM,false,false,"Team9"));
+    }
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        for(int h = HOUSE_WILDSPADE; h < NUM_PLAYER_HOUSES; ++h) {
+            const auto house = static_cast<HOUSETYPE>(h);
+            players.emplace_back(getHouseNameByNumber(house), house, static_cast<HOUSETYPE>(getDefaultHouseColorSlot(house)),
+                                 false, false, "Team" + std::to_string(h + 1));
+        }
     }
 
     // load map
@@ -688,6 +721,12 @@ void MapEditor::saveMap(const std::string& filepath) {
                         // Tornie red spice bloom
                         row += 'B';
                     } break;
+                    case Terrain_PaleLilacSpice: row += 'l'; break;
+                    case Terrain_ThickPaleLilacSpice: row += 'L'; break;
+                    case Terrain_PaleLilacSpiceBloom: row += 'i'; break;
+                    case Terrain_WhiteSpice: row += 'w'; break;
+                    case Terrain_ThickWhiteSpice: row += 'W'; break;
+                    case Terrain_WhiteSpiceBloom: row += 'x'; break;
 
                     case Terrain_Rock: {
                         // Rock
@@ -823,6 +862,7 @@ void MapEditor::saveMap(const std::string& filepath) {
     }
 
     loadedINIFile->clearSection("STRUCTURES");
+    loadedINIFile->removeSection("WINDTRAPUPGRADES");
     for(const Structure& structure : structures) {
         int position = (logicalOffsetY+structure.position.y) * logicalSizeX + (logicalOffsetX+structure.position.x);
 
@@ -840,6 +880,9 @@ void MapEditor::saveMap(const std::string& filepath) {
             std::string structureValue = house2housename[structure.house] + "," + getItemNameByID(structure.itemID) + "," + std::to_string(structure.health) + "," + std::to_string(position);
 
             loadedINIFile->setStringValue("STRUCTURES", structureKey, structureValue, false);
+            if(structure.itemID == Structure_WindTrap && structure.powerUpgraded) {
+                loadedINIFile->setBoolValue("WINDTRAPUPGRADES", structureKey, true);
+            }
         }
     }
 
@@ -1195,12 +1238,15 @@ void MapEditor::performMapEdit(int xpos, int ypos, bool bRepeated) {
                 }
 
                 int currentHouse = currentEditorMode.house;
+                const int houseSlots = ModManager::instance().isTornieFamilyContentActive() ? NUM_PLAYER_HOUSES : getNumAvailableHouses();
                 bool bHouseIsActive = players[currentHouse].bActive;
                 for(int i=0;i<mapMirror->getSize();i++) {
 
                     int nextHouse = HOUSE_INVALID;
-                    for(int k = currentHouse; k < currentHouse+getNumAvailableHouses();k++) {
-                        if(players[k%getNumAvailableHouses()].bActive == bHouseIsActive) {
+                    for(int k = currentHouse; k < currentHouse + houseSlots; k++) {
+                        const auto candidate = static_cast<HOUSETYPE>(k % houseSlots);
+                        if(ModManager::instance().isTornieFamilyContentActive() && !isHouseAvailable(candidate)) continue;
+                        if(players[candidate].bActive == bHouseIsActive) {
                             nextHouse = k;
                             break;
                         }
@@ -1209,7 +1255,7 @@ void MapEditor::performMapEdit(int xpos, int ypos, bool bRepeated) {
                     if(nextHouse != HOUSE_INVALID) {
                         Coord position = mapMirror->getCoord( Coord(xpos, ypos), i, structureSize);
 
-                        MapEditorStructurePlaceOperation placeOperation(position, (HOUSETYPE) (nextHouse%getNumAvailableHouses()), currentEditorMode.itemID, currentEditorMode.health);
+                        MapEditorStructurePlaceOperation placeOperation(position, static_cast<HOUSETYPE>(nextHouse % houseSlots), currentEditorMode.itemID, currentEditorMode.health);
 
                         addUndoOperation(placeOperation.perform(this));
 
@@ -1237,12 +1283,15 @@ void MapEditor::performMapEdit(int xpos, int ypos, bool bRepeated) {
 
 
                 int currentHouse = currentEditorMode.house;
+                const int houseSlots = ModManager::instance().isTornieFamilyContentActive() ? NUM_PLAYER_HOUSES : getNumAvailableHouses();
                 bool bHouseIsActive = players[currentHouse].bActive;
                 for(int i=0;i<mapMirror->getSize();i++) {
 
                     int nextHouse = HOUSE_INVALID;
-                    for(int k = currentHouse; k < currentHouse+getNumAvailableHouses();k++) {
-                        if(players[k%getNumAvailableHouses()].bActive == bHouseIsActive) {
+                    for(int k = currentHouse; k < currentHouse + houseSlots; k++) {
+                        const auto candidate = static_cast<HOUSETYPE>(k % houseSlots);
+                        if(ModManager::instance().isTornieFamilyContentActive() && !isHouseAvailable(candidate)) continue;
+                        if(players[candidate].bActive == bHouseIsActive) {
                             nextHouse = k;
                             break;
                         }
@@ -1253,7 +1302,7 @@ void MapEditor::performMapEdit(int xpos, int ypos, bool bRepeated) {
 
                         int angle =  mapMirror->getAngle(currentEditorMode.angle, i);
 
-                        MapEditorUnitPlaceOperation placeOperation(position, (HOUSETYPE) (nextHouse%getNumAvailableHouses()), currentEditorMode.itemID, currentEditorMode.health, angle, currentEditorMode.attackmode);
+                        MapEditorUnitPlaceOperation placeOperation(position, static_cast<HOUSETYPE>(nextHouse % houseSlots), currentEditorMode.itemID, currentEditorMode.health, angle, currentEditorMode.attackmode);
 
                         addUndoOperation(placeOperation.perform(this));
                         currentHouse = nextHouse + 1;
@@ -1300,7 +1349,9 @@ void MapEditor::performTerrainChange(int x, int y, TERRAINTYPE terrainType) {
 
         case Terrain_ThickSpice:
         case Terrain_ThickGreenSpice:
-        case Terrain_ThickRedSpice: {
+        case Terrain_ThickRedSpice:
+        case Terrain_ThickPaleLilacSpice:
+        case Terrain_ThickWhiteSpice: {
             const auto thinSpice = static_cast<TERRAINTYPE>(getThinSpiceTerrain(terrainType));
             if(map.isInsideMap(x-1, y) && !isSameSpiceFamily(map(x-1,y), terrainType))     performTerrainChange(x-1,y,thinSpice);
             if(map.isInsideMap(x, y-1) && !isSameSpiceFamily(map(x,y-1), terrainType))     performTerrainChange(x,y-1,thinSpice);
@@ -1317,7 +1368,9 @@ void MapEditor::performTerrainChange(int x, int y, TERRAINTYPE terrainType) {
 
         case Terrain_Spice:
         case Terrain_GreenSpice:
-        case Terrain_RedSpice: {
+        case Terrain_RedSpice:
+        case Terrain_PaleLilacSpice:
+        case Terrain_WhiteSpice: {
             if(map.isInsideMap(x-1, y) && (map(x-1,y) == Terrain_Mountain))     performTerrainChange(x-1,y,Terrain_Rock);
             if(map.isInsideMap(x, y-1) && (map(x,y-1) == Terrain_Mountain))     performTerrainChange(x,y-1,Terrain_Rock);
             if(map.isInsideMap(x+1, y) && (map(x+1,y) == Terrain_Mountain))     performTerrainChange(x+1,y,Terrain_Rock);
@@ -1329,6 +1382,8 @@ void MapEditor::performTerrainChange(int x, int y, TERRAINTYPE terrainType) {
         case Terrain_SpiceBloom:
         case Terrain_GreenSpiceBloom:
         case Terrain_RedSpiceBloom:
+        case Terrain_PaleLilacSpiceBloom:
+        case Terrain_WhiteSpiceBloom:
         case Terrain_SpecialBloom: {
             if(map.isInsideMap(x-1, y) && (map(x-1,y) == Terrain_Mountain))     performTerrainChange(x-1,y,Terrain_Rock);
             if(map.isInsideMap(x, y-1) && (map(x,y-1) == Terrain_Mountain))     performTerrainChange(x,y-1,Terrain_Rock);
@@ -1819,7 +1874,9 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
 
                 case Terrain_Spice:
                 case Terrain_GreenSpice:
-                case Terrain_RedSpice: {
+                case Terrain_RedSpice:
+                case Terrain_PaleLilacSpice:
+                case Terrain_WhiteSpice: {
                     //determine which surounding tiles are spice
                     bool up = (y-1 < 0) || isSameSpiceFamily(getTerrain(x, y-1), terrainType);
                     bool right = (x+1 >= map.getSizeX()) || isSameSpiceFamily(getTerrain(x+1, y), terrainType);
@@ -1831,7 +1888,9 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
 
                 case Terrain_ThickSpice:
                 case Terrain_ThickGreenSpice:
-                case Terrain_ThickRedSpice: {
+                case Terrain_ThickRedSpice:
+                case Terrain_ThickPaleLilacSpice:
+                case Terrain_ThickWhiteSpice: {
                     //determine which surounding tiles are thick spice
                     bool up = (y-1 < 0) || (getTerrain(x, y-1) == terrainType);
                     bool right = (x+1 >= map.getSizeX()) || (getTerrain(x+1, y) == terrainType);
@@ -1843,7 +1902,9 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
 
                 case Terrain_SpiceBloom:
                 case Terrain_GreenSpiceBloom:
-                case Terrain_RedSpiceBloom: {
+                case Terrain_RedSpiceBloom:
+                case Terrain_PaleLilacSpiceBloom:
+                case Terrain_WhiteSpiceBloom: {
                     tile = Tile::TerrainTile_SpiceBloom;
                 } break;
 
@@ -2003,6 +2064,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
                 case Structure_Palace:              objectPic = ObjPic_Palace;              break;
                 case Structure_Radar:               objectPic = ObjPic_Radar;               break;
                 case Structure_Refinery:            objectPic = ObjPic_Refinery;            break;
+                case Structure_Doublefinery:        objectPic = ObjPic_Doublefinery;        break;
                 case Structure_RepairYard:          objectPic = ObjPic_RepairYard;          break;
                 case Structure_RocketTurret:        objectPic = ObjPic_RocketTurret;        break;
                 case Structure_Silo:                objectPic = ObjPic_Silo;                break;
@@ -2024,13 +2086,18 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
                 case Structure_TechCenter:          objectPic = ObjPic_TechCenter;          break;
                 case Structure_Scoutpost:           objectPic = ObjPic_Scoutpost;           break;
                 case Structure_Flamepost:           objectPic = ObjPic_Flamepost;           break;
+                case Structure_Slowpost:            objectPic = ObjPic_Slowpost;            break;
                 case Structure_Chemipost:           objectPic = ObjPic_Chemipost;           break;
                 case Structure_LoveFactory:         objectPic = ObjPic_LoveFactory;         break;
                 case Structure_ChaosFactory:        objectPic = ObjPic_ChaosFactory;        break;
                 default:                            objectPic = 0;                          break;
             }
 
-            SDL_Texture* ObjectSprite = pGFXManager->getZoomedObjPic(objectPic, structure.house, currentZoomlevel);
+            const bool greenWindtrap = structure.itemID == Structure_WindTrap && structure.powerUpgraded
+                && ModManager::instance().isTornieFamilyContentActive();
+            SDL_Texture* ObjectSprite = greenWindtrap
+                ? pGFXManager->getObjPic(objectPic, structure.house, true)[currentZoomlevel]
+                : pGFXManager->getZoomedObjPic(objectPic, structure.house, currentZoomlevel);
 
             Coord frameSize = world2zoomedWorld(getStructureSize(structure.itemID)*TILESIZE);
 
@@ -2104,7 +2171,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
     }
 
     const bool tornieActive = ModManager::instance().isInitialized()
-        && ModManager::instance().isTornieContentActive();
+        && ModManager::instance().isTornieFamilyContentActive();
 
     for(const Unit& unit : units) {
 
@@ -2189,6 +2256,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
             case Unit_Soldier:          objectPicBase = ObjPic_Soldier;         framesX = 4;    framesY = 3;                                                    break;
             case Unit_Launcher:         objectPicBase = ObjPic_Tank_Base;       objectPicGun = ObjPic_Launcher_Gun;     gunOffset = launcherTurretOffset;       break;
             case Unit_MCV:              objectPicBase = ObjPic_MCV;                                                                                             break;
+            case Unit_EliteOrnithopter: objectPicBase = ObjPic_EliteOrnithopter; framesY = 3;                                                                    break;
             case Unit_Ornithopter:      objectPicBase = ObjPic_Ornithopter;     framesY = 3;                                                                    break;
             case Unit_Quad:             objectPicBase = ObjPic_Quad;                                                                                            break;
             case Unit_Saboteur:         objectPicBase = ObjPic_Saboteur;        framesX = 4;    framesY = 3;                                                    break;
@@ -2200,8 +2268,19 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
             case Unit_RaiderTrike:      objectPicBase = ObjPic_Trike;                                                                                           break;
             case Unit_Trooper:          objectPicBase = ObjPic_Trooper;         framesX = 4;    framesY = 3;                                                    break;
             case Unit_Special:          objectPicBase = ObjPic_Devastator_Base; objectPicGun = ObjPic_Devastator_Gun;   gunOffset = devastatorTurretOffset;     break;
+            case Unit_Infantry5:
             case Unit_Infantry:         objectPicBase = ObjPic_Infantry;         framesX = 4;    framesY = 4;                                                   break;
+            case Unit_Troopers5:
             case Unit_Troopers:         objectPicBase = ObjPic_Troopers;         framesX = 4;    framesY = 4;                                                   break;
+            case Unit_RaiderQuad:       objectPicBase = ObjPic_RaiderQuad;                                                                                       break;
+            case Unit_RangedTank:      objectPicBase = ObjPic_RangedTankBase; objectPicGun = ObjPic_RangedTankTurret; gunOffset = tankTurretOffset;               break;
+            case Unit_SlowTank:        objectPicBase = ObjPic_SlowTankBase; objectPicGun = ObjPic_SlowTankTurret; gunOffset = tankTurretOffset;                   break;
+            case Unit_CapacityHarvester: objectPicBase = ObjPic_CapacityHarvester;                                                                               break;
+            case Unit_FastHarvester:   objectPicBase = ObjPic_FastHarvester;                                                                                     break;
+            case Unit_TameSandworm:    objectPicBase = ObjPic_TameSandworm; framesX = 1; framesY = 9;                                                            break;
+            case Unit_FlameQuad:       objectPicBase = ObjPic_FlameQuad;                                                                                        break;
+            case Unit_GasInfantry:     objectPicBase = ObjPic_GasInfantry; framesX = 4; framesY = 3;                                                             break;
+            case Unit_FlameTrooper:    objectPicBase = ObjPic_Trooper; framesX = 4; framesY = 3;                                                                 break;
             case Unit_RocketTrike:      objectPicBase = ObjPic_RocketTrike;                                                                                       break;
             case Unit_SonicTrike:       objectPicBase = ObjPic_SonicTrike;                                                                                        break;
             case Unit_FlameTank:        objectPicBase = ObjPic_Tank_Base;       objectPicGun = tornieActive ? ObjPic_FlameTankGunTornie : ObjPic_Launcher_Gun; objectPicGunHouse = tornieActive ? HOUSE_HARKONNEN : unit.house; gunOffset = launcherTurretOffset; break;
@@ -2214,7 +2293,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
 
         int angle = unit.angle / (NUM_ANGLES/framesX);
 
-        int frame = (unit.itemID == Unit_Sandworm) ? 5 : 0;
+        int frame = (unit.itemID == Unit_Sandworm || unit.itemID == Unit_TameSandworm) ? 5 : 0;
 
         SDL_Rect source = calcSpriteSourceRect(pObjectSprite, angle, framesX, frame, framesY);
         int frameSizeX = source.w;

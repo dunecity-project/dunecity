@@ -63,7 +63,9 @@ std::string mapID(const std::string& name,const std::string& data) {
     return hashBytes("legacy-map/"+store().owner()+"/"+name+"/"+ini.getStringValue("BASIC","Author","")).substr(0,32);
 }
 bool bundledMod(const std::string& modName) {
-    return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R";
+    return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R"
+        ||modName=="TornieLite"||modName=="Jericho"||modName=="JerichoLite"
+        ||modName=="ArcaKev"||modName=="ArcaKevLite";
 }
 }
 Store& store() { static Store value(userPath("workshop")); return value; }

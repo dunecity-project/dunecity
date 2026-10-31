@@ -382,37 +382,50 @@ sdl2::RWops_ptr FileManager::openFile(const std::string& filename) {
 }
 
 sdl2::RWops_ptr FileManager::openCampaignFile(const std::string& filename) {
-    const bool isTornieCampaign = isCampaignFile(filename) && isTornieModActive();
+    const auto upperFilename = strToUpper(filename);
+    const bool familyData = upperFilename == "CAMPAIGNPLAN.INI"
+        || (upperFilename.rfind("COOP/", 0) == 0 && hasIniExtension(filename));
+    const bool isTornieCampaign = ModManager::instance().isTornieFamilyContentActive()
+        && (isCampaignFile(filename) || familyData);
 
     if(isTornieCampaign) {
-        const std::string activeModName = ModManager::instance().getActiveModName();
+        const auto& manager = ModManager::instance();
+        const std::string activeModName = manager.getActiveModName();
+        const std::string contentBase = manager.getContentBase(activeModName);
         std::vector<std::string> candidates;
-        addCampaignCandidates(candidates, ModManager::instance().getModPath(activeModName) + "/campaign", filename);
-
-        for(const auto& searchPath : getSearchPath()) {
-            addCampaignCandidates(candidates, searchPath + "/mods/" + activeModName + "/campaign", filename);
-            addCampaignCandidates(candidates, searchPath + "/../mods/" + activeModName + "/campaign", filename);
-        }
+        const auto addModCandidates = [&](const std::string& name) {
+            for(const auto& folder : {"/campaign", "/data"}) {
+                addCampaignCandidates(candidates, manager.getModPath(name) + folder, filename);
+                for(const auto& searchPath : getSearchPath()) {
+                    addCampaignCandidates(candidates, searchPath + "/mods/" + name + folder, filename);
+                    addCampaignCandidates(candidates, searchPath + "/../mods/" + name + folder, filename);
+                }
+            }
+        };
+        addModCandidates(activeModName);
+        if(contentBase != activeModName) addModCandidates(contentBase);
 
         for(const auto& candidate : candidates) {
             auto rwop = openExternalFileIfPresent(candidate);
             if(rwop) {
-                SDL_Log("FileManager: using Tornie campaign file '%s' from '%s'", filename.c_str(), candidate.c_str());
+                SDL_Log("FileManager: using %s campaign file '%s' from '%s'", contentBase.c_str(), filename.c_str(), candidate.c_str());
                 return rwop;
             }
         }
 
-        if(auto rwop = openFromNamedPakCaseInsensitive(pakFiles, filename, "TORNIE.PAK")) {
-            SDL_Log("FileManager: using Tornie campaign file '%s' from Tornie.PAK", filename.c_str());
-            return rwop;
+        // Preserve Tornie's original archive fallback for its solo campaigns only.
+        // Other editions must never borrow a mission from an unrelated campaign.
+        if(contentBase == "Tornie" && isCampaignFile(filename)) {
+            if(auto rwop = openFromNamedPakCaseInsensitive(pakFiles, filename, "TORNIE.PAK")) {
+                SDL_Log("FileManager: using Tornie campaign file '%s' from Tornie.PAK", filename.c_str());
+                return rwop;
+            }
+            if(auto rwop = openFromNamedPakCaseInsensitive(pakFiles, filename, "EXTRA.PAK")) {
+                SDL_Log("FileManager: using fallback campaign file '%s' from Extra.PAK while Tornie is active", filename.c_str());
+                return rwop;
+            }
         }
-
-        if(auto rwop = openFromNamedPakCaseInsensitive(pakFiles, filename, "EXTRA.PAK")) {
-            SDL_Log("FileManager: using fallback campaign file '%s' from Extra.PAK while Tornie is active", filename.c_str());
-            return rwop;
-        }
-
-        THROW(io_error, "Cannot find Tornie campaign file '%s' in the Tornie campaign folder, Tornie.PAK, or Extra.PAK!", filename);
+        THROW(io_error, "Cannot find campaign file '%s' for content family '%s'!", filename, contentBase);
     }
 
     if(!isTornieCampaign && isVanillaAddonCampaignFile(filename)) {

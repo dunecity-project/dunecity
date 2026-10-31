@@ -2,11 +2,11 @@
 
 ## Overview
 
-This directory contains **READ-ONLY TEMPLATE FILES** for Dune Legacy configuration. These files are part of the game installation and should not be modified directly.
+This directory contains **READ-ONLY TEMPLATE FILES** for Dune Legacy configuration and the bundled achievement catalog. These files are part of the game installation and should not be modified directly.
 
 ## User Configuration Location
 
-The game automatically copies these template files to your user configuration directory on first run. To customize game behavior, you should edit the files in your **user directory**, not here.
+The game automatically copies the configuration templates to your user configuration directory on first run. To customize game behavior, you should edit the files in your **user directory**, not here. The achievement catalog stays installed; its separate local progress profile is described below.
 
 ### User Configuration Directories by Platform
 
@@ -43,11 +43,30 @@ General game configuration including:
 - Game options (concrete required, fog of war, etc.)
 - Player name and language
 
+### Achievements.ini
+
+The installed catalog contains Tornie_Panther's 73 offline achievements, including
+English and French names, descriptions and rule thresholds. A built-in copy keeps
+the catalog available if the installed file is missing.
+
+With Tornie, TornieLite, Jericho, JerichoLite, ArcaKev or ArcaKevLite active
+(including derived content copies), open **Extras → Achievements** for awards and
+lifetime statistics. Progress is stored locally in lowercase `achievements.ini`
+beside your user `Dune City.ini`; it is not uploaded or shared with other players.
+Browser builds retain it in the browser's local persistent filesystem.
+
+Only eligible, non-observer games collect progress. Replays, cheat mode and
+single-player immortality do not earn achievements. Save checkpoints are tracked
+in the local profile without adding achievement state to saves or network packets;
+an older save with no matching profile checkpoint cannot earn unknown-history
+pacifism or no-casualty awards. Achievement observations never change gameplay or
+consume the game RNG. Other content families do not collect or show achievements.
+
 ## How It Works
 
 1. **First Run**: When you launch the game for the first time (or when a config file is missing), Dune Legacy automatically copies the template from this directory to your user directory.
 
-2. **Subsequent Runs**: The game always loads configuration from your user directory, ignoring files in this installation directory.
+2. **Subsequent Runs**: The game loads user configuration from your user directory. The achievement catalog is read from the installation, with a built-in fallback.
 
 3. **Resetting Configuration**: To reset a configuration file to defaults, simply delete it from your user directory. The game will recreate it from the template on next launch.
 
@@ -97,6 +116,7 @@ For detailed documentation about configuration options and modding, visit:
 - `Dune Legacy.ini` - **Template file** - General game settings
 - `ObjectData.ini` - **Template file** - Unit/structure properties
 - `QuantBot Config.ini` - **Template file** - AI behavior configuration
+- `Achievements.ini` - **Bundled catalog** - Offline awards; lowercase `achievements.ini` in the user directory holds progress
 
-**Remember**: These are templates. Edit the copies in your user directory, not these files!
+**Remember**: Edit user copies of configuration templates, not the installed files. The achievement progress profile is local data, not a template.
 

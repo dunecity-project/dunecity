@@ -72,7 +72,7 @@ public:
             InfSpawnProp = 45<br>
         \param filename the INI-File to load.
     */
-    void loadFromINIFile(const std::string& filename, bool preferUserConfig = true);
+    void loadFromINIFile(const std::string& filename, bool preferUserConfig = true, bool applyContentPolicy = true);
 
     /**
         Saves all stored data out into a binary stream.
@@ -148,6 +148,7 @@ private:
     std::string loadStringValue(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, const std::string& defaultValue = "");
     int loadItemID(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, int defaultValue = ItemID_Invalid);
     std::bitset<Structure_LastID + 1> loadPrerequisiteStructuresSet(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, std::bitset<Structure_LastID + 1> defaultValue = std::bitset<Structure_LastID + 1>());
+    void applyNeutralVanillaRules();
 };
 
 #endif // OBJECTDATA_H

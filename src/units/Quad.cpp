@@ -26,24 +26,24 @@
 #include <Explosion.h>
 #include <SoundPlayer.h>
 
-Quad::Quad(House* newOwner) : GroundUnit(newOwner) {
-    Quad::init();
+Quad::Quad(House* newOwner, int unitType) : GroundUnit(newOwner) {
+    Quad::init(unitType);
 
     setHealth(getMaxHealth());
 }
 
-Quad::Quad(InputStream& stream) : GroundUnit(stream) {
-    Quad::init();
+Quad::Quad(InputStream& stream, int unitType) : GroundUnit(stream) {
+    Quad::init(unitType);
 }
 
-void Quad::init() {
-    itemID = Unit_Quad;
+void Quad::init(int unitType) {
+    itemID = unitType;
     registerUnit();
 
     numWeapons = 2;
     bulletType = Bullet_ShellSmall;
 
-    graphicID = ObjPic_Quad;
+    graphicID = itemID == Unit_RaiderQuad ? ObjPic_RaiderQuad : ObjPic_Quad;
     graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
 
     numImagesX = NUM_ANGLES;

@@ -121,6 +121,8 @@ typedef enum {
     ObjPic_Terrain,
     ObjPic_Terrain_GreenSpice,
     ObjPic_Terrain_RedSpice,
+    ObjPic_Terrain_PaleLilacSpice,
+    ObjPic_Terrain_WhiteSpice,
     ObjPic_DestroyedStructure,
     ObjPic_RockDamage,
     ObjPic_SandDamage,
@@ -153,6 +155,21 @@ typedef enum {
     ObjPic_ChaosFactory,            ///< Tornie: animated 3x2 Chaos Factory atlas
     ObjPic_CityHelicopter, ///< DuneCity: original Micropolis traffic helicopter (8 headings, 32x32)
     ObjPic_CityAirplane,   ///< DuneCity: Micropolis airplane (16 headings in 2 rows + 3 take-off rows, 48x48)
+    ObjPic_Doublefinery,
+    ObjPic_FlameQuad,
+    ObjPic_GasInfantry,
+    ObjPic_EliteOrnithopter,
+    ObjPic_RaiderQuad,
+    ObjPic_RangedTankBase,
+    ObjPic_RangedTankTurret,
+    ObjPic_SlowTankBase,
+    ObjPic_SlowTankTurret,
+    ObjPic_Slowpost,
+    ObjPic_CapacityHarvester,
+    ObjPic_FastHarvester,
+    ObjPic_TameSandworm,
+    ObjPic_NapalmRocket,
+    ObjPic_SlowRocket,
     NUM_OBJPICS
 } ObjPic_enum;
 
@@ -165,12 +182,16 @@ static const std::array<std::string, NUM_OBJPICS> ObjPicNames =  { { "Tank_Base"
     "Bullet_SmallRocket", "Bullet_MediumRocket", "Bullet_LargeRocket", "Bullet_Small", "Bullet_Medium", "Bullet_Large", "Bullet_Sonic",
     "Bullet_SonicTemp", "Hit_Gas", "Hit_ShellSmall", "Hit_ShellMedium", "Hit_ShellLarge", "ExplosionSmall", "ExplosionMedium1",
     "ExplosionMedium2", "ExplosionLarge1", "ExplosionLarge2", "ExplosionSmallUnit", "ExplosionFlames", "ExplosionSpiceBloom",
-    "DeadInfantry", "DeadAirUnit", "Smoke", "SandwormShimmerMask", "SandwormShimmerTemp", "Terrain", "Terrain_GreenSpice", "Terrain_RedSpice", "DestroyedStructure", "RockDamage",
+    "DeadInfantry", "DeadAirUnit", "Smoke", "SandwormShimmerMask", "SandwormShimmerTemp", "Terrain", "Terrain_GreenSpice", "Terrain_RedSpice",
+    "Terrain_PaleLilacSpice", "Terrain_WhiteSpice", "DestroyedStructure", "RockDamage",
     "SandDamage", "Terrain_Hidden", "Terrain_HiddenFog", "Terrain_Tracks", "Star", "RebelHarvester", "Worfinery", "TechCenter", "Scoutpost", "LoveFactory",
     "ZoneResidential", "ZoneCommercial", "ZoneIndustrial", "CityRoad", "NuclearPlant", "PoliceStation",
     "Stadium", "Airport", "Hospital", "Church", "SonicTrike", "EliteLauncherGunTornie", "RebelSonicTankGun",
     "HarvestankGunTornie", "ChemicalCarryall", "Flamepost", "Chemipost", "ChaosFactory",
-    "CityHelicopter", "CityAirplane" } };
+    "CityHelicopter", "CityAirplane", "Doublefinery", "FlameQuad", "GasInfantry",
+    "EliteOrnithopter", "RaiderQuad", "RangedTankBase", "RangedTankTurret", "SlowTankBase",
+    "SlowTankTurret", "Slowpost", "CapacityHarvester", "FastHarvester", "TameSandworm",
+    "NapalmRocket", "SlowRocket" } };
 
 #define GROUNDUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+3)|TILE_FLIPV, (i+4)|TILE_NORMAL,(i+3)|TILE_NORMAL
 #define AIRUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+1)|TILE_ROTATE, i|TILE_FLIPH,(i+1)|TILE_FLIPH
@@ -254,6 +275,16 @@ typedef enum {
     Picture_ChaosFactory,          ///< Tornie: Chaos Factory portrait
     Picture_Hospital,              ///< DuneCity: auto-placed civic Hospital portrait
     Picture_Church,                ///< DuneCity: auto-placed civic Church portrait
+    Picture_Doublefinery,
+    Picture_FlameQuad,
+    Picture_GasInfantry,
+    Picture_FlameTrooper,
+    Picture_RaiderQuad,
+    Picture_RangedTank,
+    Picture_SlowTank,
+    Picture_CapacityHarvester,
+    Picture_FastHarvester,
+    Picture_Slowpost,
     NUM_SMALLDETAILPICS
 } SmallDetailPics_Enum;
 
@@ -455,6 +486,12 @@ typedef enum {
     UI_MapEditor_RedSpice,
     UI_MapEditor_ThickRedSpice,
     UI_MapEditor_RedSpiceBloom,
+    UI_MapEditor_PaleLilacSpice,
+    UI_MapEditor_ThickPaleLilacSpice,
+    UI_MapEditor_PaleLilacSpiceBloom,
+    UI_MapEditor_WhiteSpice,
+    UI_MapEditor_ThickWhiteSpice,
+    UI_MapEditor_WhiteSpiceBloom,
     UI_MapEditor_SpiceBloom,
     UI_MapEditor_Slab,
     UI_MapEditor_Rock,
@@ -526,6 +563,20 @@ typedef enum {
     UI_MapEditor_PoliceStation,
     UI_MapEditor_Stadium,
     UI_MapEditor_Airport,
+    UI_MapEditor_Infantry5,
+    UI_MapEditor_Troopers5,
+    UI_MapEditor_Doublefinery,
+    UI_MapEditor_FlameQuad,
+    UI_MapEditor_GasInfantry,
+    UI_MapEditor_FlameTrooper,
+    UI_MapEditor_EliteOrnithopter,
+    UI_MapEditor_RaiderQuad,
+    UI_MapEditor_RangedTank,
+    UI_MapEditor_SlowTank,
+    UI_MapEditor_CapacityHarvester,
+    UI_MapEditor_FastHarvester,
+    UI_MapEditor_TameSandworm,
+    UI_MapEditor_Slowpost,
     NUM_UIGRAPHICS
 } UIGraphics_Enum;
 
@@ -669,7 +720,7 @@ public:
 
     SDL_Texture*     getZoomedObjPic(unsigned int id, int house, unsigned int z);
     SDL_Texture*     getZoomedObjPic(unsigned int id, unsigned int z) { return getZoomedObjPic(id, HOUSE_HARKONNEN, z); };
-    zoomable_texture getObjPic(unsigned int id, int house=HOUSE_HARKONNEN);
+    zoomable_texture getObjPic(unsigned int id, int house=HOUSE_HARKONNEN, bool greenWindtrap=false);
     bool             drawHDObjPic(unsigned int id, int house, unsigned int z,
                                   int col, int numCols, int row, int numRows,
                                   int x, int y);
@@ -717,6 +768,8 @@ public:
     void             resetDuneCityGraphicsSkins();
     void             setDuneCityHouseGraphicsSkin(int house, bool useDune2);
     bool             isDuneCityHouseUsingDune2(int house) const;
+    SDL_Texture* getFactionTrooperPortrait(int itemID, int technologyHouse);
+    SDL_Texture* getFactionTrooperProductionPortrait(int itemID, int technologyHouse);
 
     // DuneCity 1.0.487: invalidate sprite texture cache
     // (objPicTex + objPic, NOT uiGraphic). Re-applied per
@@ -735,6 +788,7 @@ public:
     SDL_Texture*     getMapChoicePiece(unsigned int num, int house);
 
     SDL_Surface*     getUIGraphicSurface(unsigned int id, int house=HOUSE_HARKONNEN);
+    sdl2::surface_ptr createFactionFrameBackground(unsigned int id, int house);
     SDL_Surface*     getMapChoicePieceSurface(unsigned int num, int house);
 
     SDL_Surface*     getBackgroundSurface() { return pBackgroundSurface.get(); };
@@ -743,7 +797,7 @@ public:
 
 private:
     std::unique_ptr<Animation>  loadAnimationFromWsa(const std::string& filename) const;
-    sdl2::surface_ptr           generateWindtrapAnimationFrames(SDL_Surface* windtrapPic) const;
+    sdl2::surface_ptr           generateWindtrapAnimationFrames(SDL_Surface* windtrapPic, bool green=false) const;
     sdl2::surface_ptr           generateMapChoiceArrowFrames(SDL_Surface* arrowPic, int house=HOUSE_HARKONNEN) const;
 
     std::unique_ptr<Shpfile>  loadShpfile(const std::string& filename) const;
@@ -946,6 +1000,7 @@ private:
 
     // Textures
     std::array<std::array<std::array<sdl2::texture_ptr, NUM_ZOOMLEVEL>, NUM_HOUSE_COLOR_SLOTS>, NUM_OBJPICS> objPicTex;
+    std::array<std::array<sdl2::texture_ptr, NUM_ZOOMLEVEL>, NUM_HOUSE_COLOR_SLOTS> greenWindtrapTex{};
     std::array<HDObjPicOverride, NUM_OBJPICS> hdObjPicOverrides;
     std::vector<EnhancedUnitDefinition> enhancedUnitDefinitions;
     Dune2RInfantryOverlay enhancedInfantryOverlay;
@@ -969,6 +1024,8 @@ private:
     Uint8 dune2rVisualBlend = SDL_ALPHA_OPAQUE;
     Uint32 dune2rVisualTransitionStartTicks = 0;
     std::array<sdl2::texture_ptr, NUM_SMALLDETAILPICS> smallDetailPicTex;
+    std::array<std::array<sdl2::texture_ptr, 3>, 2> factionTrooperProductionPortraits;
+    std::array<sdl2::texture_ptr, 2> factionTrooperSelectionPortraits;
     std::array<std::array<sdl2::texture_ptr, NUM_HOUSE_COLOR_SLOTS>, NUM_SMALLDETAILPICS> houseSmallDetailPicTex;
     std::array<std::array<sdl2::texture_ptr, NUM_HOUSES>, NUM_SMALLDETAILPICS> duneCityDune2DetailPicTex;
     std::array<sdl2::texture_ptr, NUM_TINYPICTURE> tinyPictureTex;

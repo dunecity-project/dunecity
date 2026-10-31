@@ -1,5 +1,6 @@
 #include <Network/NetworkManager.h>
 #include <Network/WorkshopGameContent.h>
+#include <Network/CustomGamePlayerPolicy.h>
 #include <misc/OMemoryStream.h>
 #include <fstream>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
@@ -155,6 +156,36 @@ int runMenuProbe() {
         }
         for(const auto& name : OnlineModPolicy::approvedMods()) {
             menuRequire(mods.setActiveMod(name), "Approved mod is not installed");
+            const bool family = mods.isTornieFamilyContentActive();
+            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R"),
+                        "Family capability leaked across mod activation");
+            if(family) {
+                const bool lite = name.size() >= 4 && name.compare(name.size() - 4, 4, "Lite") == 0;
+                const auto& roster = mods.getPlayableHouses();
+                menuRequire(roster.size() == (lite ? 6u : 12u)
+                            && mods.isTornieFamilyLiteContentActive() == lite,
+                            "Edition roster or Lite capability was not loaded from metadata");
+                menuRequire(!mods.isCityModeActive(), "Family mod enabled DuneCity city simulation");
+                ObjectData units;
+                units.loadFromINIFile(mods.getActiveObjectDataPath(), false);
+                for(int house : roster) {
+                    menuRequire(isPlayerHouseID(house), "Edition roster exposed the Natives house");
+                    menuRequire(pGFXManager->createFactionFrameBackground(UI_MapChoiceScreen, house) != nullptr,
+                                "Shared faction region frame cannot load");
+                }
+                if(!lite) {
+                    const auto& cat = mods.getActiveMentatInfo(HOUSE_WILDSPADE);
+                    const auto& husky = mods.getActiveMentatInfo(HOUSE_KLESHMERSH);
+                    menuRequire(cat.enabled && cat.restFromBackground && cat.eyesPatches.size() == 2
+                                && cat.eyesWidth == 98 && cat.foregroundPolygon.size() == 10,
+                                "Guest cat identity lost fitted patch/polygon metadata");
+                    menuRequire(husky.enabled && husky.backgroundAsset == "MentatHusky_Kleshmersh.png",
+                                "Guest husky identity was remapped to a legacy mentat");
+                    menuRequire(mods.getCustomHouseInfo(HOUSE_CUSTOM).scenarioLetter == 'C'
+                                && mods.getCustomHouseInfo(HOUSE_THARPIQUE).scenarioLetter == 'T',
+                                "Edition metadata changed canonical DuneCity faction identities");
+                }
+            }
             if(name == "vanilla" || name == "dunecity" || name == "Dune2R") {
                 // Exercise the installed mod path and real fixed-point loader:
                 // Dune2R inherits Vanilla, while Dune City has a seeded copy.
@@ -626,6 +657,34 @@ int runMenuProbe() {
         HouseChoiceMenu::s_singleMission = true;
         menu.populateLevels();
         menuRequire(menu.startLevelDropDown.getNumEntries()==22,"Single mission range wrong");
+    }
+    {
+        auto& mods = ModManager::instance();
+        const auto previousMod = mods.getActiveModName();
+        menuRequire(mods.setActiveMod("Tornie"), "Family campaign fixture mod unavailable");
+        {
+            HouseChoiceMenu menu(true);
+            menuRequire(menu.connectionDropDown.getNumEntries() == 3, "Family campaign lacks its additional faction co-op choice");
+            menuRequire(menu.connectionDropDown.getSelectedEntryIntData() == 1
+                        && !HouseChoiceMenu::isSeparateFactionCoop(), "Existing shared-house co-op stopped being the default online route");
+            menuRequire(menu.houseChoices.count == 12 && !menu.houseChoices.contains(HOUSE_NATIVES),
+                        "Full campaign roster is not twelve playable factions");
+            menu.connectionDropDown.setSelectedItem(2);
+            menuRequire(HouseChoiceMenu::isOnline() && HouseChoiceMenu::isSeparateFactionCoop(),
+                        "Explicit faction co-op choice did not select its own route");
+            menuRequire(!menu.partnerSelector.aiBox.isEnabled() && !menu.gameOptionsButton.isEnabled(),
+                        "Faction co-op exposes settings owned by its next screen");
+            menu.connectionDropDown.setSelectedItem(1);
+            menuRequire(!HouseChoiceMenu::isSeparateFactionCoop() && menu.gameOptionsButton.isEnabled(),
+                        "Returning to shared-house co-op did not restore its original controls");
+        }
+        menuRequire(mods.setActiveMod("TornieLite"), "Lite campaign fixture mod unavailable");
+        {
+            HouseChoiceMenu menu(false);
+            menuRequire(menu.houseChoices.count == 6 && !menu.houseChoices.contains(HOUSE_NATIVES),
+                        "Lite campaign roster is not the declared six factions");
+        }
+        menuRequire(mods.setActiveMod(previousMod), "Cannot restore campaign fixture mod");
     }
     CustomPlaySetup setup;
     auto files = getFileNamesList(getDuneLegacyDataDir()+"/maps/multiplayer/","ini",true);
@@ -1165,7 +1224,7 @@ int runMenuProbe() {
         };
 
         // A nine-row lobby: the widest shipped map has six house sections, so three numbered
-        // Player sections are appended to it to reach MAX_CUSTOM_GAME_PLAYERS.
+        // Player sections are appended to it to reach the legacy nine-row limit.
         const auto nineRowMap = std::string(std::getenv("MENU_PROBE_OUT")) + "/nine-row-map.ini";
         {
             const auto sixRowMap = dir + "6P - 128x128 - Enclaves.ini";
@@ -1188,14 +1247,14 @@ int runMenuProbe() {
                 menu.update();
                 if(!shared) menuCapture(menu,"custom-spice-income-"+mod);
             }
-            // Nine rows, the most the lobby can ever show.
+            // Nine rows: the legacy limit, and a partial twelve-row family lobby.
             {
                 auto nineSetup = setup;
                 nineSetup.players = ChangeEventList{};
                 GameInitSettings nineInit(getBasename(nineRowMap,true),
                                           readCompleteFile(nineRowMap),false,setup.rules);
                 CustomGamePlayers menu(nineInit,true,false,&nineSetup);
-                menuRequire(menu.numHouses == MAX_CUSTOM_GAME_PLAYERS,
+                menuRequire(menu.numHouses == CustomGamePlayerPolicy::maxPlayers(false),
                     "The nine-row fixture map did not produce nine rows");
                 checkRows(menu, mod + " nine rows", getRendererHeight() > 480);
                 menu.update();

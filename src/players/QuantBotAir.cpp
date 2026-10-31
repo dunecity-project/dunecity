@@ -27,7 +27,7 @@ int QuantBot::visibleHostileAircraft() const {
     const int myTeam=getHouse()->getTeamID();
     int seen=0;
     for (const auto* unit : getUnitList()) {
-        if (unit->getItemID()!=Unit_Ornithopter) continue;
+        if (!QuantBotInternal::ornithopterItem(unit->getItemID())) continue;
         if (unit->getHealth()<=0 || !unit->isActive()) continue;
         if (!unit->getOwner() || unit->getOwner()->getTeamID()==myTeam) continue;
         // Observation only. An aircraft we cannot see does not justify spending.
@@ -41,7 +41,7 @@ bool QuantBot::availableAirDefender(const UnitBase* unit, const UnitBase* aircra
     if (!unit || !aircraft || unit->getOwner()!=getHouse() || !unit->isActive()
         || !unit->isRespondable() || unit->isAFlyingUnit()) return false;
     const Uint32 item=unit->getItemID();
-    if (item==Unit_Saboteur || item==Unit_Harvester || item==Unit_RebelHarvester
+    if (item==Unit_Saboteur || isHarvesterLikeUnit(item)
         || item==Unit_MCV || item==Unit_Carryall || item==Unit_Frigate
         || item==Unit_Sandworm) return false;
     // canAttack settles which weapons reach the sky: launchers and rocket
@@ -292,7 +292,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
     const Map& map=getMap();
     std::vector<const UnitBase*> aircraft;
     for(const auto* unit:getUnitList())
-        if(unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
+        if(unit->getOwner()==getHouse() && QuantBotInternal::ornithopterItem(unit->getItemID())
             && unit->isActive() && unit->getHealth()>0
             && unit->isRespondable() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free) aircraft.push_back(unit);
     ornithopterStrikeTeam.reset(); // Old saved mass-Hunt missions no longer grant permission to attack.
@@ -374,7 +374,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
             defendedAssets.push_back(structure);
     for(const auto* worker:getUnitList())
         if(worker->getOwner()==getHouse() && worker->isActive() && worker->getHealth()>0
-            && (worker->getItemID()==Unit_Harvester || worker->getItemID()==Unit_RebelHarvester))
+            && isHarvesterLikeUnit(worker->getItemID()))
             defendedAssets.push_back(worker);
     LocalPointIndex defendedIndex(map.getSizeX(),map.getSizeY());
     int largestAsset=1;
@@ -402,8 +402,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         const auto* victim=object->getTarget();
         const bool engagingAsset=victim && victim->isActive()
             && victim->getHealth()>0 && victim->getOwner()==getHouse()
-            && (victim->isAStructure() || victim->getItemID()==Unit_Harvester
-                || victim->getItemID()==Unit_RebelHarvester)
+            && (victim->isAStructure() || isHarvesterLikeUnit(victim->getItemID()))
             && object->canAttack(victim)
             && blockDistance(object->getLocation(),victim->getClosestPoint(object->getLocation()))
                 <= object->getWeaponRange()+3;
@@ -663,7 +662,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
 }
 
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
-    return unit && unit->getOwner()==getHouse() && unit->getItemID()==Unit_Ornithopter
+    return unit && unit->getOwner()==getHouse() && QuantBotInternal::ornithopterItem(unit->getItemID())
         && !builderOnly() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
@@ -689,8 +688,7 @@ bool QuantBot::aircraftDefenceTarget(const ObjectBase* candidate) const {
     const auto* victim=candidate->getTarget();
     if(!victim || victim->getHealth()<=0 || !victim->isActive()
         || victim->getOwner()!=getHouse()) return false;
-    if(!victim->isAStructure() && victim->getItemID()!=Unit_Harvester
-        && victim->getItemID()!=Unit_RebelHarvester) return false;
+    if(!victim->isAStructure() && !isHarvesterLikeUnit(victim->getItemID())) return false;
     if(!candidate->canAttack(victim)) return false;
     return blockDistance(candidate->getLocation(),victim->getClosestPoint(candidate->getLocation()))
         <= candidate->getWeaponRange()+3;

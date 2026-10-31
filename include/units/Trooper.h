@@ -23,16 +23,22 @@
 class Trooper final : public InfantryBase
 {
 public:
-    explicit Trooper(House* newOwner);
-    explicit Trooper(InputStream& stream);
-    void init();
+    explicit Trooper(House* newOwner, int product = Unit_Trooper);
+    explicit Trooper(InputStream& stream, int product = Unit_Trooper);
+    void init(int product);
     virtual ~Trooper();
 
     bool canAttack(const ObjectBase* object) const override;
+    void setProductionHouseID(int houseID) override;
+    void save(OutputStream& stream) const override;
+    Sint32 flameWeaponDamage(Sint32 base);
 
     bool hasBumpyMovementOnRock() const override { return true; }
 
     void playAttackSound() override;
+private:
+    Uint8 flameDamageRemainder = 0;
 };
+
 
 #endif //TROOPER_H

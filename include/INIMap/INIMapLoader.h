@@ -46,6 +46,7 @@ private:
     void loadUnits();
     void loadStructures();
     void loadReinforcements();
+    void loadExtraCoopForces();
     void loadAITeams();
     void loadView();
 
@@ -53,6 +54,7 @@ private:
     HOUSETYPE getHouseID(const std::string& name);
 
     Game* pGame;
+    bool originalCoopOwners = false;
     std::map<std::string, HOUSETYPE> housename2house;
 };
 

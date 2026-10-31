@@ -23,25 +23,25 @@
 #include <FileClasses/SFXManager.h>
 #include <House.h>
 
-GunTurret::GunTurret(House* newOwner) : TurretBase(newOwner) {
-    GunTurret::init();
+GunTurret::GunTurret(House* newOwner, int unitType) : TurretBase(newOwner) {
+    GunTurret::init(unitType);
 
     setHealth(getMaxHealth());
 }
 
-GunTurret::GunTurret(InputStream& stream) : TurretBase(stream) {
-    GunTurret::init();
+GunTurret::GunTurret(InputStream& stream, int unitType) : TurretBase(stream) {
+    GunTurret::init(unitType);
 }
 
-void GunTurret::init() {
-    itemID = Structure_GunTurret;
+void GunTurret::init(int unitType) {
+    itemID = unitType;
     owner->incrementStructures(itemID);
 
-    attackSound = Sound_ExplosionSmall;
-    bulletType = Bullet_ShellTurret;
+    attackSound = itemID == Structure_Slowpost ? Sound_RocketSmall : Sound_ExplosionSmall;
+    bulletType = itemID == Structure_Slowpost ? Bullet_Slow : Bullet_ShellTurret;
 
-    graphicID = ObjPic_GunTurret;
-    graphic = pGFXManager->getObjPic(ObjPic_GunTurret,getOwner()->getHouseID());
+    graphicID = itemID == Structure_Slowpost ? ObjPic_Slowpost : ObjPic_GunTurret;
+    graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
     numImagesX = 10;
     numImagesY = 1;
     curAnimFrame = firstAnimFrame = lastAnimFrame = ((10-drawnAngle) % 8) + 2;

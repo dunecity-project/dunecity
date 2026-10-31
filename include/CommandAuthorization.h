@@ -41,9 +41,9 @@
         player is a no-op, not an exception);
       - the acting object must exist and be of the type the command requires (that is what the
         existing dynamic_cast already establishes);
-      - the acting object must belong to the issuer's house. Two humans sharing a house in
-        co-op therefore both keep control, and a deviated unit follows its temporary owner
-        because deviation reassigns ObjectBase::owner;
+      - the object belongs to the issuer's house, or the synchronized Tornie alliance rule
+        explicitly grants control. Two humans sharing a house keep control, and a deviated
+        unit follows its temporary owner because deviation reassigns ObjectBase::owner;
       - target parameters are deliberately not constrained: attacking, capturing or moving to
         an enemy object is the point of the game.
 */
@@ -67,6 +67,7 @@ struct ActorContext {
     bool objectTypeMatches  = false;    ///< the command's dynamic_cast succeeded
     bool objectHasOwner     = false;
     int  objectOwnerHouseID = -1;
+    bool alliedControl      = false;    ///< resolved from synchronized match/alliance state
 };
 
 /**
@@ -85,8 +86,9 @@ inline Decision authorizeActor(const ActorContext& context) {
     }
     // Natives objects (worms, crime troopers) belong to no controller: the Natives house never
     // has players (Game::getOrCreateNativesHouse), and even one registered there may not act.
-    if(!context.objectHasOwner || context.objectOwnerHouseID != context.issuerHouseID
-       || !isPlayerHouseID(context.issuerHouseID)) {
+    if(!context.objectHasOwner || !isPlayerHouseID(context.objectOwnerHouseID)
+       || !isPlayerHouseID(context.issuerHouseID)
+       || (context.objectOwnerHouseID != context.issuerHouseID && !context.alliedControl)) {
         return Decision::NotOwner;
     }
     return Decision::Allow;
@@ -136,6 +138,10 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_BUILDER_CANCEL_RESERVATION:
         case CMD_UNIT_FORMATION_MOVE:
         case CMD_UNIT_FORMATION_HUNT:
+        case CMD_STRUCTURE_SELL:
+        case CMD_WINDTRAP_POWER_UPGRADE:
+        case CMD_SCOUTPOST_SLOWPOST_UPGRADE:
+        case CMD_RADAR_RESEARCH:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city

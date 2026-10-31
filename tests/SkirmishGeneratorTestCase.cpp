@@ -1271,3 +1271,105 @@ TEST_CASE("Random skirmish: the multiplayer screen keeps its own choices", "[ski
     hostedAgain.starts = 12; hostedAgain.clamp(5); REQUIRE(hostedAgain.starts == 5);
     hostedAgain.starts = 0; hostedAgain.clamp(8); REQUIRE(hostedAgain.starts == kMinStarts);
 }
+
+namespace {
+Catalogue familyCatalogue(int count) {
+    Catalogue result = vanilla();
+    result.tornieFamily = true;
+    result.houses.clear();
+    const char* names[] = {"Harkonnen", "Atreides", "Ordos", "Fremen", "Sardaukar", "Mercenary",
+                           "Neutral", "Rebels", "Corruptique", "Wildspade", "Kleshmersh", "Tharpique"};
+    for(int house = 0; house < count; ++house) {
+        result.houses.push_back(house);
+        result.houseNames[house] = names[house];
+        if(house >= NUM_LEGACY_HOUSES) {
+            for(int item = 0; item < Num_ItemID; ++item)
+                result.rules[item][house] = result.rules[item][HOUSE_HARKONNEN];
+        }
+    }
+    return result;
+}
+}
+
+TEST_CASE("Random skirmish: only family catalogues lift the original eight-house cap",
+          "[skirmish][generator][tornie][isolation]") {
+    REQUIRE(maxStarts(12) == 8);
+    REQUIRE(maxOtherHouses(12) == 7);
+    REQUIRE(maxStarts(12, true) == 12);
+    REQUIRE(maxOtherHouses(12, true) == 11);
+    Params requested = params(256, 4, 7, Mode::Vanilla, 9, 546);
+    requested.house = HOUSE_WILDSPADE;
+    requested.playerSide.army = 0;
+    requested.allySide.army = 0;
+    requested.enemySide.army = 0;
+    const Catalogue full = familyCatalogue(12);
+    const Result twelve = generate(requested, full);
+    REQUIRE(twelve.houses.size() == 12);
+    REQUIRE(twelve.houses.front().house == HOUSE_WILDSPADE);
+    std::set<int> houses;
+    for(const auto& house : twelve.houses) {
+        REQUIRE(isPlayerHouseID(house.house));
+        REQUIRE(houses.insert(house.house).second);
+    }
+    REQUIRE(houses.count(HOUSE_NATIVES) == 0);
+    REQUIRE(twelve.ini == generate(requested, full).ini);
+    const ParsedMap parsed(twelve.ini);
+    REQUIRE(MapMetadata::countPlayers(*parsed.ini) == 12);
+    requireLegal(twelve, full);
+
+    const Catalogue lite = familyCatalogue(6);
+    requested.house = HOUSE_ATREIDES;
+    requested.allies = 0;
+    requested.enemies = 11;
+    const Result six = generate(requested, lite);
+    REQUIRE(six.houses.size() == 6);
+    for(const auto& house : six.houses) REQUIRE(house.house < HOUSE_NEUTRAL);
+
+    requested.starts = 12;
+    requested.clamp(12, false);
+    REQUIRE(requested.starts == 8);
+    REQUIRE(requested.allies + requested.enemies <= 7);
+}
+
+TEST_CASE("Random skirmish: ten through twelve mirrored starts have distinct legal positions",
+          "[skirmish][generator][tornie][multiplayer]") {
+    const Catalogue full = familyCatalogue(12);
+    for(int count : {10, 11, 12}) {
+        INFO(count);
+        const auto requested = multiplayerParams(count, 256, Mode::Vanilla, BaseSize::Small, 0, 0, true, 9, 546);
+        const Catalogue starts = startCatalogue(full, count);
+        const Result result = generate(requested, full);
+        REQUIRE(static_cast<int>(result.houses.size()) == count);
+        REQUIRE(starts.tornieFamily);
+        REQUIRE(result.ini == generate(requested, full).ini);
+        requireLegal(result, starts);
+        std::set<std::pair<int, int>> positions;
+        std::vector<Coord> centres;
+        for(int i = 0; i < count; ++i) {
+            const auto& house = result.houses[i];
+            REQUIRE(house.house == i);
+            REQUIRE(house.house != HOUSE_NATIVES);
+            REQUIRE(house.skipped == 0);
+            REQUIRE(positions.insert({house.start.x, house.start.y}).second);
+            centres.push_back(house.start);
+        }
+        REQUIRE(groundConnected(result.map, centres));
+        const ParsedMap parsed(result.ini);
+        REQUIRE(MapMetadata::countPlayers(*parsed.ini) == count);
+        for(int i = 1; i <= count; ++i) REQUIRE(parsed.ini->hasSection("Player" + std::to_string(i)));
+        for(int y = 0; y < 256; ++y) for(int x = 0; x < 256; ++x) {
+            REQUIRE(result.map(x, y) == result.map(255 - x, y));
+            REQUIRE(result.map(x, y) == result.map(255 - x, 255 - y));
+        }
+    }
+}
+
+TEST_CASE("Random skirmish: existing start counts keep their exact layout in family mode",
+          "[skirmish][generator][tornie][isolation]") {
+    Catalogue family = vanilla();
+    family.tornieFamily = true;
+    for(int count : {2, 8}) {
+        const auto requested = multiplayerParams(count, 192, Mode::Vanilla, BaseSize::Small, 0, 0, true, 9, 546);
+        REQUIRE(generate(requested, family).ini == generate(requested, vanilla()).ini);
+    }
+}

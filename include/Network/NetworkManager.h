@@ -18,6 +18,8 @@
 #ifndef NETWORKMANAGER_H
 #define NETWORKMANAGER_H
 
+#include <Campaign/CoopCampaignSession.h>
+#include <Campaign/CoopCampaignTransition.h>
 #include <Network/SnapshotTransfer.h>
 #include <Network/NetworkTransportTypes.h>
 #include <Network/ChangeEventList.h>
@@ -262,6 +264,19 @@ public:
     bool sendStartGame(unsigned int timeLeft);
     void sendCoopMission(const GameInitSettings& settings);
     std::unique_ptr<GameInitSettings> takeCoopMission();
+    void configureCoopCampaign(const coop::Context& context, Uint32 epoch);
+    void clearCoopCampaign();
+    Uint32 getCoopCampaignEpoch() const { return coopCampaignEpoch; }
+    void sendCoopReady(const std::string& sessionId, int stage, Uint8 outcome);
+    void sendCoopAdvance(const std::string& sessionId, int stage, Uint8 action,
+                         const std::string& settingsBlob = {});
+    std::vector<coop::ControlMessage> takeCoopReady();
+    std::vector<coop::ControlMessage> takeCoopAdvance();
+    bool hasPendingCoopSetup() const {
+        return !coopSetupOutgoing.empty() || coopSetupIncoming.transaction != 0;
+    }
+    /// Called after the guest lobby has installed its callbacks, including after browser yields.
+    void markCoopSetupLobbyReady();
 
     /**
         Called on every peer (host and clients) when the match starts. Besides the simulation
@@ -788,6 +803,28 @@ private:
     static constexpr std::size_t MAX_ENET_WAITING_DATA = 16u * 1024 * 1024;
 
     std::unique_ptr<GameInitSettings> pendingCoopMission;
+    std::optional<coop::Context> coopCampaignContext;
+    Uint32 coopCampaignEpoch = 0;
+    std::vector<coop::ControlMessage> pendingCoopReady, pendingCoopAdvance;
+    struct CoopSetupPayload { std::string bytes, header; };
+    struct CoopSetupOutgoing {
+        std::shared_ptr<const CoopSetupPayload> payload;
+        Uint32 transaction = 0, nextOffset = 0, expectedAck = 0, deadline = 0;
+        bool readyToSend = false;
+    };
+    struct CoopSetupIncoming {
+        std::string bytes;
+        Uint32 transaction = 0, total = 0, decodedSize = 0, deadline = 0, hostPeer = 0;
+        bool awaitingLobby = false;
+    } coopSetupIncoming;
+    std::map<Uint32, CoopSetupOutgoing> coopSetupOutgoing;
+    Uint32 nextCoopSetupTransaction = 0;
+    bool queueCoopSetup(const std::uint8_t* payload, std::size_t length, int channel, Uint32 recipient);
+    bool sendCoopSetupRecord(Uint32 recipient, Uint8 operation, Uint32 transaction,
+                             Uint32 offset, const std::string& data);
+    void receiveCoopSetup(Uint32 peer, bool peerIsHost, InputStream& stream);
+    void updateCoopSetup();
+    void failCoopSetup(const char* reason);
     Transport transport = Transport::EnetMesh;
     std::unique_ptr<RoomSessionTransport> pRelayClient;
     Uint32 nextClientId = 1;        ///< source of the stable per-connection client ids
@@ -839,6 +876,7 @@ private:
     std::function<void (const std::string&, std::uint8_t, const std::uint8_t*, std::size_t)> pOnReceiveRelayDiagnostic;
     /// Bridges the shared payload handling back into pendingCoopMission; set by both constructors.
     std::function<void (const GameInitSettings&)>                          pOnReceiveCoopMissionBridge;
+    std::function<void (const coop::ControlMessage&)> pOnReceiveCoopControlBridge;
 
     /// Installs the callbacks the shared payload handling needs from the session itself.
     void installSessionBridges();

@@ -41,6 +41,7 @@
 #include <string>
 
 class GameInitSettings;
+namespace coop { struct Context; struct ControlMessage; }
 
 /**
     The callbacks the game installs on its network session. Held by pointer so both transports
@@ -68,6 +69,7 @@ struct NetworkSessionCallbacks {
     const std::function<void (const std::string&, Uint32)>*                       onReceiveMatchResumeRequest = nullptr;
     /// Campaign continuation chosen by the host; empty settings mean "leave the campaign".
     const std::function<void (const GameInitSettings&)>*                          onReceiveCoopMission = nullptr;
+    const std::function<void (const coop::ControlMessage&)>* onReceiveCoopControl = nullptr;
     const std::function<void (Uint32, Uint32, Uint32, Uint32, const std::string&)>* onJoinSync = nullptr;
     /**
         A peer's game content does not match ours and this transport cannot fix that.
@@ -136,11 +138,14 @@ struct GamePayloadContext {
     /**
         Whether the peer that sent a campaign continuation is this client's only remote partner.
 
-        Co-op is a two-player arrangement and the continuation replaces the whole session, so
-        it is only accepted when there is exactly one remote peer and it is the sender. The
-        caller decides this because "how many peers are there" is transport bookkeeping.
+        The existing same-house campaign keeps its two-player restriction. Separate-house
+        Tornie-family campaigns instead provide an explicit authenticated campaign context.
+        The caller owns peer-count and transport bookkeeping.
     */
     bool   coopPartnerIsSolePeer = false;
+    /// Set only by an active family [COOP] runtime on a direct transport, never the relay.
+    const coop::Context* coopCampaign = nullptr;
+    Uint32 coopEpoch = 0;
     /**
         Whether a client answers a received config hash with its own.
 
@@ -196,6 +201,7 @@ inline bool handles(Uint32 packetType) {
         case NETWORKPACKET_JOIN_SYNC:
         case NETWORKPACKET_JOIN_ACK:
         case NETWORKPACKET_COOP_MISSION:
+        case NETWORKPACKET_COOP_CAMPAIGN_CONTROL:
         case NETWORKPACKET_STARTGAME:
         case NETWORKPACKET_COMMANDLIST:
         case NETWORKPACKET_SELECTIONLIST:
