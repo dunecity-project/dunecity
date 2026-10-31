@@ -13,9 +13,18 @@ freeze physical/touch input identity. Two-finger pan/pinch and box selection sta
 
 Candidate engine 1.0.858; Android 0.2.33 / 1000553. Regression cases cover holds,
 edge directions/corners, release, selection drag, HUD exclusion and multitouch.
-Hosted validation and APK build pending; no local native compilation. Existing
-phone is connected and currently has Android 0.2.26, so preserve app data and use
-the existing upgrade signing identity. No stable publication/merge requested yet.
+PR checks 41150440890 passed all platforms and all 16 Linux sanitizer CTests.
+Android runner 41150433814 passed. Signed APK has 5,147 canonical payload files,
+including all 902 DuneCity skin files; signature and 16 KiB alignment verified.
+No local native compilation. Installed over Android 0.2.26 with app data retained.
+USB dropped during large transfers; resumable chunks and full on-device SHA256
+verification completed successfully. The user tested edge scrolling and queue
+removal and explicitly approved publication. Do not keep driving the phone UI.
+
+Application source: cdffc059563a25d24e31e2f35479d6d52cdd6a1b.
+APK SHA256: bf1aca4be8caf37be16102838c55d9be7dee06214c0bae80927689b567748590.
+Proceed with PR #112 merge, stable desktop/browser release 1.0.858 and Android
+0.2.33 publication, preserving the separately maintained iOS TestFlight links.
 
 ## 2026-10-29 — iPhone/iPad public TestFlight beta (engine 1.0.857)
 
