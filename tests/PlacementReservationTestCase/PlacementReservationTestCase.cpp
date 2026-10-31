@@ -194,6 +194,11 @@ TEST_CASE("Pre-placement: retry retains obstructions and hostile units cancel", 
     REQUIRE(decideCompletion(false, true, true, true) == Completion::Cancel);
     REQUIRE(decideCompletion(true, true, true, true) == Completion::Cancel);
     REQUIRE(decideCompletion(false, true, false, true) == Completion::WaitForUnits);
+    // Build range nothing can still supply (blocked.dls, 1.0.860): cancel and refund instead of
+    // holding up the queue forever. A placeable plot is still placed; the legacy rule ignores it.
+    REQUIRE(decideCompletion(false, false, true, false, true) == Completion::Cancel);
+    REQUIRE(decideCompletion(true, true, true, false, true) == Completion::Place);
+    REQUIRE(decideCompletion(false, false, false, false, true) == Completion::Fallback);
     std::list<Entry> queue = {reserved(18, 1, 5, 5)};
     queue.front().reservationFailed = true;
     REQUIRE_FALSE(frontAwaitsReservedPlacement(queue));

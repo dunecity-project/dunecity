@@ -121,6 +121,10 @@ private:
 
     void moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOnly, bool includeAllies);
     bool hostileUnitsOnPlot(Uint32 itemID, int x, int y) const;
+    /// Can another planned plot of the house still be built and bring this front plot into build
+    /// range? Any planned plot in another yard counts; one behind this yard's front only when
+    /// another yard can take it (Shared Yard Queue).
+    bool plannedRangeCanArrive(Uint32 itemID, int x, int y) const;
 
     /// Legacy control: does a unit of another house stand on the plot?
     bool foreignUnitsOnPlot(Uint32 itemID, int x, int y) const;

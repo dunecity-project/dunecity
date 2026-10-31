@@ -86,7 +86,7 @@ enum class Completion {
     Place,          ///< the plot is valid on the real map: place it now
     WaitForUnits,   ///< only units are in the way: own units are moved off, others are waited for
     Retry,          ///< retain the plan until terrain, range or a friendly obstruction clears
-    Cancel,         ///< hostile unit on the plot: refund this order and continue the queue
+    Cancel,         ///< hostile unit on the plot, or unreachable build range: refund this order and continue the queue
     Fallback        ///< legacy rule: the order becomes ordinary ready-to-place
 };
 
@@ -95,15 +95,21 @@ enum class Completion {
     (own units are moved off, enemy units are waited out) or the player places the building
     elsewhere by hand. Only a plot that is unusable without any units - a structure on it, or
     lost build range - falls back.
-    With retryBlocked on, all obstructions retain the plan and hostile units cancel it.
+    With retryBlocked on, all obstructions retain the plan and hostile units cancel it. So does a
+    plot whose build range nothing can still supply (rangeUnreachable: out of the house's own
+    range and no other planned plot that can still be built is within range of it, e.g. after the
+    player cancelled the order it was chain-planned on): it would otherwise wait forever and hold
+    up every order behind it.
     \param  placeableNow            the plot passes the normal placement rules right now
     \param  placeableIgnoringUnits  it would pass if no unit stood on it (range included)
 */
 inline Completion decideCompletion(bool placeableNow, bool placeableIgnoringUnits,
-                                   bool retryBlocked = false, bool hostileUnit = false) {
+                                   bool retryBlocked = false, bool hostileUnit = false,
+                                   bool rangeUnreachable = false) {
     if(retryBlocked) {
         if(hostileUnit) return Completion::Cancel;
-        return placeableNow ? Completion::Place : Completion::Retry;
+        if(placeableNow) return Completion::Place;
+        return rangeUnreachable ? Completion::Cancel : Completion::Retry;
     }
     if(placeableNow) {
         return Completion::Place;

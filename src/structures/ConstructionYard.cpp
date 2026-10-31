@@ -505,6 +505,35 @@ bool ConstructionYard::hostileUnitsOnPlot(Uint32 itemID, int x, int y) const {
     return false;
 }
 
+bool ConstructionYard::plannedRangeCanArrive(Uint32 itemID, int x, int y) const {
+    // Chain planning lets a plot lean on another planned plot for build range. That plot only
+    // helps if it can still be built: anywhere in another yard, or behind this yard's front
+    // when another yard can take it from the shared queue. This yard's front is this order.
+    const Coord size = ::getStructureSize(itemID);
+    const PlacementReservation::Footprint plot{x, y, size.x, size.y};
+    const bool othersTakeWork = currentGame->getGameInitSettings().getGameOptions().sharedYardQueue
+        && owner->getNumItems(Structure_ConstructionYard) >= 2;
+    for(const StructureBase* structure : structureList) {
+        if(structure->getOwner() != owner || structure->getItemID() != Structure_ConstructionYard) {
+            continue;
+        }
+        const auto* yard = static_cast<const ConstructionYard*>(structure);
+        bool front = true;
+        for(const ProductionQueueItem& entry : yard->getProductionQueue()) {
+            const bool isFront = front;
+            front = false;
+            if(entry.reservationID == 0 || (yard == this && (isFront || !othersTakeWork))) {
+                continue;
+            }
+            const Coord other = ::getStructureSize(entry.itemID);
+            if(PlacementReservation::withinRange(plot, {entry.plotX, entry.plotY, other.x, other.y}, BUILDRANGE)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void ConstructionYard::updateReservedPlacement() {
     if(!isAwaitingReservedPlacement()) {
         return;
@@ -522,13 +551,19 @@ void ConstructionYard::updateReservedPlacement() {
     const bool placeableNow = plotPlaceableNow(owner, itemID, x, y);
     const bool placeableIgnoringUnits = !placeableNow
         && plotTilesOk(itemID, x, y) && plotInOwnRange(owner, itemID, x, y);
+    const bool hostile = retry && hostileUnitsOnPlot(itemID, x, y);
+    // Nothing will ever bring the plot into range (e.g. the order it was chain-planned on was
+    // cancelled): waiting would hold up the whole queue, so it is cancelled and refunded.
+    const bool rangeUnreachable = retry && !placeableNow && !plotInOwnRange(owner, itemID, x, y)
+        && !plannedRangeCanArrive(itemID, x, y);
 
-    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits, retry,
-                                                   retry && hostileUnitsOnPlot(itemID, x, y))) {
+    switch(PlacementReservation::decideCompletion(placeableNow, placeableIgnoringUnits, retry, hostile, rangeUnreachable)) {
         case PlacementReservation::Completion::Cancel: {
             const Uint32 reservationID = order.reservationID;
             if(doCancelReservation(reservationID) && owner == pLocalHouse) {
-                currentGame->addToNewsTicker(fmt::sprintf(_("%s cancelled: enemy units are on the planned site"), resolveItemName(itemID)));
+                currentGame->addToNewsTicker(fmt::sprintf(hostile
+                    ? _("%s cancelled: enemy units are on the planned site")
+                    : _("%s cancelled: the planned site is out of build range"), resolveItemName(itemID)));
             }
             return;
         }

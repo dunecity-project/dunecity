@@ -19,6 +19,15 @@ allow the next queue entry to proceed. Flying units do not occupy the building f
 friendly/terrain/range plan stays amber with `BLOCKED` and can still be placed elsewhere manually
 or cancelled by the player.
 
+A plot out of the house's own build range waits only while another planned plot that can still be
+built is within range of it (in another yard, or behind this yard's front when Shared Yard Queue
+lets another yard take it). When nothing can supply the range any more - typically the player
+cancelled the order it was chain-planned on - the finished building would wait forever and hold up
+every order behind it, so it is cancelled and refunded like a hostile-occupied plot, with the
+ticker "`<Building> cancelled: the planned site is out of build range`"
+(`ConstructionYard::plannedRangeCanArrive`; found in Stefan's 1.0.860 `blocked.dls`: a Refinery
+chain-planned on two Industrial zones he later cancelled stalled a single yard's queue).
+
 The option is available in `[Game Options]` / mod `GameOptions.ini` for same-build control/on
 regressions, is included in the settings hash, and is carried in GameInitSettings MOD10 (`MODA`),
 save 9876 and protocol 105. Settings predating MOD10 (older saves and replays) read it as off, so
