@@ -668,6 +668,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --tornie-state --mods Tornie,vanilla,dunecity,Dune2R --worker-counts 1
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tornie-object-state-probe)
         set_tests_properties(tornie_object_state_roundtrip PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        # Real manufacturing/combat commands, explicit aircraft targets and complete
+        # Tornie rule-state continuation, alongside nonfamily control cases.
+        add_test(NAME tornie_gameplay_state COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-tornie-state.py --repeatable
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/tornie-gameplay-state)
+        set_tests_properties(tornie_gameplay_state PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # A unit that is not on the map belongs to one carrier or one busy structure bay: the
         # pickup of a badly damaged booked passenger enrols that unit even though its own repair
         # order can promise it to another aircraft, and units already hidden inside nothing are

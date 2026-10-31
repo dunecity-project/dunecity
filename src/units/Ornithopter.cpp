@@ -167,7 +167,9 @@ void Ornithopter::doAttackObject(const ObjectBase* object, bool forced) {
     AirUnit::doAttackObject(object, forced);
     if(ModManager::instance().isTornieFamilyContentActive() && forced
        && isHumanControlledHouse(owner) && canAttack(object)) {
-        setForced(false);
+        // Keep the selected target forced while closing on it: an unforced
+        // Hunt refresh may replace a player's worker target with autonomous prey.
+        // releaseTarget() clears forced when that target dies; HUNT then persists.
         doSetAttackMode(HUNT);
     }
 }
