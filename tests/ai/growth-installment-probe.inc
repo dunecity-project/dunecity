@@ -657,20 +657,25 @@ void runGrowthInstallmentProbe(Game& game) {
     setItemEnabled(Structure_Airport,true);
     preparePriorityPass(false,civicHeadroom);
     require(sim->getHouseState(houseID).resPop>500,"Measurement pass needs the residential cap back");
-    // Declared bound: the yard must act on an unanswered cap within two of its
-    // own planning passes, not eventually.
+    // Declared bound: the house must act on an unanswered cap within two planning
+    // passes, not eventually. One capital plan assigns work to both yards, and which
+    // yard draws which project is a tie-break, so the civic may land on either; what
+    // it must not do is lose its yard to the competing project.
     int civicPasses=0;
-    while(civicPasses<2 && queuedOn(yard,Structure_Stadium)==0) {
+    while(civicPasses<2 && queuedAnywhere(Structure_Stadium)==0) {
         ++civicPasses;
         bot->planningBuilder=yard->getObjectID();bot->clearPlacementCache();
         bot->build(0);
     }
-    SDL_Log("GROWTH_INSTALLMENT: civic claimed the yard after %d pass(es), "
-            "competing item=%u still queued=%d mask=%u",
-        civicPasses,controlChoice,queuedOn(yard,controlChoice),unsigned(measuredMask));
-    require(queuedOn(yard,Structure_Stadium)==1,
+    BuilderBase* civicYard=queuedOn(yard,Structure_Stadium)>0 ? yard
+        : queuedOn(secondYard,Structure_Stadium)>0 ? secondYard : nullptr;
+    SDL_Log("GROWTH_INSTALLMENT: civic claimed builder %d after %d pass(es), "
+            "competing item=%u queued there=%d mask=%u",
+        civicYard ? int(civicYard->getObjectID()) : -1,civicPasses,controlChoice,
+        civicYard ? queuedOn(civicYard,controlChoice) : -1,unsigned(measuredMask));
+    require(civicYard!=nullptr && queuedAnywhere(Structure_Stadium)==1,
         "A required civic lost the yard to the live competing investment rule");
-    require(queuedOn(yard,controlChoice)==0,
+    require(queuedOn(civicYard,controlChoice)==0,
         "The competing investment the control chose pre-empted a required civic");
 
     if(priorityOnly) {

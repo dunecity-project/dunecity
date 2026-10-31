@@ -2094,12 +2094,12 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 if (powered && item == Structure_RocketTurret && distance <= data[item][house].weaponrange)
                     value.defense += p.threat;
             });
-            value.tax = CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,sim->getCityTax(),valueGainSum,sampleCount);
+            value.tax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,sim->getCityTax(),valueGainSum,sampleCount));
             value.growthTax = growthTax;
             if (item == Structure_RocketTurret) {
                 if (value.crime <= 0) continue; // Civic turrets must reduce actual crime.
-                value.neighbourhoodTax = CityServiceInvestmentPolicy::annualTaxGain(
-                    totalTaxBaseEighths,sim->getCityTax(),neighbourhoodGainSum,sampleCount);
+                value.neighbourhoodTax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(
+                    totalTaxBaseEighths,sim->getCityTax(),neighbourhoodGainSum,sampleCount));
             }
             for (unsigned resultMode=0;resultMode<results.size();++resultMode) {
                 if (!value.useful(resultMode == 1)) continue;

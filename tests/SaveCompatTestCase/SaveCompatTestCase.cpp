@@ -63,7 +63,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9873 adds NATIVES_TEAM's visibility slot and the sandworm's summoner (9872 is reserved).
     // 9874 adds the continuous-ground-steps match rule (GameInitSettings MOD9).
     // 9875 saves the QuantBot role byte in place of the support flag (docs/ai-roles.md).
-    REQUIRE(SAVEGAMEVERSION == 9876);
+    // 9876 adds the MOD10 planned-construction rules; 9877 adds the MOD11 slow city year.
+    REQUIRE(SAVEGAMEVERSION == 9877);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);

@@ -332,7 +332,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("an announced MOD7 block that is not there is a truncated stream, not an old one") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - 4 - 4);   // lose the MOD10, MOD9 and MOD8 bytes and the last factor
+        bytes.resize(bytes.size() - 4 - 5);   // lose the MOD11, MOD10, MOD9 and MOD8 bytes and the last factor
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -340,10 +340,10 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("an explicitly encoded factor outside the range is refused, never clamped") {
         const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
         std::string bytes(out.getData(), out.getDataLength());
-        REQUIRE(bytes.size() > 8);
-        // The four bytes before the trailing MOD8, MOD9 and two MOD10 rule bytes are the final row's factor.
+        REQUIRE(bytes.size() > 9);
+        // The four bytes before the trailing MOD8, MOD9, two MOD10 and MOD11 rule bytes are the final row's factor.
         for(int shift = 0; shift < 4; ++shift) {
-            bytes[bytes.size() - 8 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
+            bytes[bytes.size() - 9 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
         }
         IMemoryStream hostile(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(hostile); }());
