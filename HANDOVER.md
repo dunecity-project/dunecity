@@ -1,3 +1,31 @@
+## 2026-10-30 — Approved touch/zoom release 1.0.858 and Android 0.2.33
+
+PR #112 merged at 46fe5a3551acbc6762e9622dd4f6330d341f9217 and immutable
+v1.0.858 was published by stable workflow 41160055892 after all platforms,
+Linux sanitizer CTests, Mac renderer/cache/performance probes and Mac signing/
+notarization passed. Main's duplicate build 41159972485 was cancelled. All eight
+public desktop package sizes/hashes, three signed updater feeds, appcasts and
+both historical repository redirects were verified. Windows/Mac/Linux archives
+retain all 902 DuneCity skin files byte-identical to source.
+
+Android 0.2.33 / 1000553 is public, using engine 1.0.858 and the exact APK the
+user approved on the connected phone. Public SHA256 matches the installed file:
+bf1aca4be8caf37be16102838c55d9be7dee06214c0bae80927689b567748590.
+Existing upgrade certificate, signature schemes and 16 KiB alignment verified;
+5,147 canonical payload files include all 902 skin files. App data was retained.
+The user explicitly confirmed both edge scrolling and unstacking work correctly.
+
+SourceForge mirror 41161671724 succeeded, read back seven packages and confirmed
+all OS defaults. Website a14bc0f publishes the exact stable-run browser artifact
+and Android links/release copy; TestFlight links and its 1.0.857 label are retained.
+All browser asset hashes and security policy pass locally and in staged Git blobs.
+Redundant browser rebuild 41161671779 was cancelled. Deployment 41161986457 passed.
+Live release pages show the new Android links and versions; the browser manifest
+points to the tagged source. All eight live browser artifacts, including the
+88,255,572-byte data archive, passed HTTPS readback SHA256 verification. Desktop
+remains GitHub latest after the Android publication. Publication complete.
+No iOS/TestFlight upload in this task.
+
 ## 2026-10-30 — Android touch follow-up on PR #112
 
 User requested Android map-edge scrolling and convenient build-queue removal,
